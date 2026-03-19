@@ -11,8 +11,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **CONN-01**: User can auto-detect supported USB serial LED controllers
 - [x] **CONN-02**: User can manually select a serial port when auto-detect fails
-- [ ] **CONN-03**: User session auto-recovers after cable unplug/replug without app restart
-- [ ] **CONN-04**: User can run a connection health check during setup and see pass/fail status
+- [x] **CONN-03**: User session auto-recovers after cable unplug/replug without app restart
+- [x] **CONN-04**: User can run a connection health check during setup and see pass/fail status
 
 ### Calibration
 
@@ -81,8 +81,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | CONN-01 | Phase 2 | Complete |
 | CONN-02 | Phase 2 | Complete |
-| CONN-03 | Phase 3 | Pending |
-| CONN-04 | Phase 3 | Pending |
+| CONN-03 | Phase 3 | Complete |
+| CONN-04 | Phase 3 | Complete |
 | CAL-01 | Phase 4 | Pending |
 | CAL-02 | Phase 4 | Pending |
 | CAL-03 | Phase 4 | Pending |

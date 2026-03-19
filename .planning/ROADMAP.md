@@ -60,10 +60,11 @@ Plans:
   1. User can unplug and replug the cable and the session recovers without app restart.
   2. User can run a setup health check and receive clear pass/fail status.
   3. User can understand current connection condition from in-app status feedback.
-**Plans**: 2 plans
+**Plans**: 3 plans
 Plans:
 - [ ] 03-01-PLAN.md - Implement test-backed recovery/health orchestration contracts and controller+backend behavior for CONN-03 and CONN-04
 - [ ] 03-02-PLAN.md - Wire Device panel health-check/reconnecting status UX with deterministic mapping and EN/TR parity
+- [ ] 03-03-PLAN.md - Close verification gap by rendering full health-check step outcomes in Device panel with deterministic status mapping
 
 ### Phase 4: Calibration Workflow
 **Goal**: Kullanici ilk kurulumda wizard ile, sonrasinda ileri panel ile LED geometri ve yonlendirmeyi dogru kalibre edebilir.
@@ -122,7 +123,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
-| 3. Connection Resilience and Health | 2/2 | Complete    | 2026-03-19 |
+| 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
 | 4. Calibration Workflow | 0/TBD | Not started | - |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
