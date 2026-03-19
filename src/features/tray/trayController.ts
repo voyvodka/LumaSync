@@ -10,7 +10,14 @@
 
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { TRAY_MENU_IDS } from "../../shared/contracts/shell";
+
+const SET_TRAY_STARTUP_CHECKED_COMMAND = "set_tray_startup_checked";
+
+export async function setStartupTrayChecked(checked: boolean): Promise<void> {
+  await invoke(SET_TRAY_STARTUP_CHECKED_COMMAND, { checked });
+}
 
 // ---------------------------------------------------------------------------
 // Startup toggle
@@ -21,9 +28,11 @@ export async function toggleStartup(): Promise<boolean> {
   const enabled = await isEnabled();
   if (enabled) {
     await disable();
+    await setStartupTrayChecked(false);
     return false;
   } else {
     await enable();
+    await setStartupTrayChecked(true);
     return true;
   }
 }

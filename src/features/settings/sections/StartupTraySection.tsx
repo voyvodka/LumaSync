@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import {
   getStartupEnabled,
   listenStartupToggle,
+  setStartupTrayChecked,
   toggleStartup,
 } from "../../tray/trayController";
 
@@ -18,6 +19,7 @@ export function StartupTraySection() {
       try {
         const enabled = await getStartupEnabled();
         setStartupEnabled(enabled);
+        await setStartupTrayChecked(enabled);
       } catch {
         setStartupEnabled(false);
       } finally {

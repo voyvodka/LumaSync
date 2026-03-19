@@ -14,6 +14,9 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime,
 };
 
+const TRAY_ICON_ID: &str = "main-tray";
+const STARTUP_TOGGLE_ITEM_ID: &str = "startup-toggle";
+
 // ---------------------------------------------------------------------------
 // Helper: show-and-focus the main settings window
 // ---------------------------------------------------------------------------
@@ -30,6 +33,25 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 // ---------------------------------------------------------------------------
 fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
     app.exit(0);
+}
+
+#[tauri::command]
+fn set_tray_startup_checked<R: Runtime>(app: AppHandle<R>, checked: bool) -> Result<(), String> {
+    let tray = app
+        .tray_by_id(TRAY_ICON_ID)
+        .ok_or_else(|| "Tray icon not found".to_string())?;
+
+    let startup_item = tray
+        .get_item(STARTUP_TOGGLE_ITEM_ID)
+        .ok_or_else(|| "Startup tray item not found".to_string())?;
+
+    let check_item = startup_item
+        .as_check_menuitem()
+        .ok_or_else(|| "Startup tray item is not checkable".to_string())?;
+
+    check_item
+        .set_checked(checked)
+        .map_err(|error| format!("Failed to set startup tray check state: {error}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +124,7 @@ pub fn run() {
 
             // Build tray icon
             TrayIconBuilder::new()
+                .id(TRAY_ICON_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("LumaSync")
@@ -142,7 +165,7 @@ pub fn run() {
                 let _ = window.emit("shell:close-to-tray", ());
             }
         })
-        .invoke_handler(tauri::generate_handler![])
+        .invoke_handler(tauri::generate_handler![set_tray_startup_checked])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
