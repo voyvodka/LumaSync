@@ -49,11 +49,8 @@ export function DeviceSection() {
     !canConnect || isScanning || (connectButtonLabel === "connected" && connectedPort === selectedPort);
 
   const statusVariant = statusCard?.variant ?? "info";
-  const isRefreshRateLimited = statusCard?.code === "REFRESH_RATE_LIMITED";
   const statusTitle =
-    isRefreshRateLimited
-      ? t("device.status.rateLimitedTitle")
-      : statusCard?.code === "SELECTED_PORT_MISSING"
+    statusCard?.code === "SELECTED_PORT_MISSING"
       ? t("device.status.missingTitle")
       : statusVariant === "success"
         ? t("device.status.connectedTitle")
@@ -63,9 +60,7 @@ export function DeviceSection() {
             ? t("device.status.scanningTitle")
             : t("device.status.idleTitle");
   const statusBody =
-    isRefreshRateLimited
-      ? t("device.status.rateLimitedBody")
-      : statusCard?.code === "SELECTED_PORT_MISSING"
+    statusCard?.code === "SELECTED_PORT_MISSING"
       ? t("device.status.missingBody")
       : statusVariant === "success"
         ? t("device.status.connectedBody", {
@@ -79,9 +74,7 @@ export function DeviceSection() {
 
   const refreshHint = isScanning
     ? t("device.actions.scanning")
-    : isRefreshRateLimited
-      ? t("device.actions.refreshLimited")
-      : t("device.actions.ready");
+    : t("device.actions.ready");
 
   const renderPortRows = (kind: "supported" | "other") => {
     const list = kind === "supported" ? groupedPorts.supported : groupedPorts.other;
@@ -161,11 +154,7 @@ export function DeviceSection() {
           onClick={() => {
             void refreshPorts();
           }}
-          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-            isRefreshRateLimited
-              ? "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
-              : "border-slate-300 bg-white text-slate-900 hover:border-slate-900 hover:bg-slate-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-          }`}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
           disabled={isScanning}
         >
           {isScanning ? t("device.actions.scanning") : t("device.actions.refresh")}
@@ -229,9 +218,7 @@ export function DeviceSection() {
 
       <div
         className={`mt-6 rounded-xl border p-4 ${
-          isRefreshRateLimited
-            ? "border-amber-200 bg-amber-50/80 dark:border-amber-500/50 dark:bg-amber-900/20"
-            : statusVariant === "success"
+          statusVariant === "success"
             ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
             : statusVariant === "error"
               ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
