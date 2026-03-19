@@ -59,6 +59,24 @@ pub struct SerialConnectionStatus {
     pub updated_at_unix_ms: u128,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthStepResult {
+    pub step: String,
+    pub pass: bool,
+    pub code: String,
+    pub message: String,
+    pub details: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthCheckResult {
+    pub pass: bool,
+    pub steps: Vec<HealthStepResult>,
+    pub checked_at_unix_ms: u128,
+}
+
 pub struct SerialConnectionState {
     last_status: Mutex<SerialConnectionStatus>,
 }
@@ -252,6 +270,140 @@ pub fn get_serial_connection_status(
         .map_err(|error| {
             format!("STATUS_READ_FAILED: Could not read serial connection status ({error})")
         })
+}
+
+#[tauri::command]
+pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
+    let mut steps = Vec::new();
+
+    let ports = match available_ports() {
+        Ok(ports) => ports,
+        Err(error) => {
+            steps.push(HealthStepResult {
+                step: "PORT_VISIBLE".to_string(),
+                pass: false,
+                code: "LIST_PORTS_FAILED".to_string(),
+                message: "Could not read serial ports for health check.".to_string(),
+                details: Some(error.to_string()),
+            });
+
+            return HealthCheckResult {
+                pass: false,
+                steps,
+                checked_at_unix_ms: now_unix_ms(),
+            };
+        }
+    };
+
+    let selected_port = ports.into_iter().find(|port| port.port_name == port_name);
+    let selected_port = match selected_port {
+        Some(port) => {
+            steps.push(HealthStepResult {
+                step: "PORT_VISIBLE".to_string(),
+                pass: true,
+                code: "PORT_VISIBLE".to_string(),
+                message: "Port is visible in serial inventory.".to_string(),
+                details: None,
+            });
+            port
+        }
+        None => {
+            steps.push(HealthStepResult {
+                step: "PORT_VISIBLE".to_string(),
+                pass: false,
+                code: "PORT_NOT_FOUND".to_string(),
+                message: "Selected serial port is not visible.".to_string(),
+                details: Some("Refresh ports and verify cable connection.".to_string()),
+            });
+
+            return HealthCheckResult {
+                pass: false,
+                steps,
+                checked_at_unix_ms: now_unix_ms(),
+            };
+        }
+    };
+
+    match selected_port.port_type {
+        SerialPortType::UsbPort(usb_info) => {
+            if is_supported_usb(usb_info.vid, usb_info.pid) {
+                steps.push(HealthStepResult {
+                    step: "PORT_SUPPORTED".to_string(),
+                    pass: true,
+                    code: "PORT_SUPPORTED".to_string(),
+                    message: "Port matches supported USB adapter allowlist.".to_string(),
+                    details: Some(format!(
+                        "VID={:04X}, PID={:04X}",
+                        usb_info.vid, usb_info.pid
+                    )),
+                });
+            } else {
+                steps.push(HealthStepResult {
+                    step: "PORT_SUPPORTED".to_string(),
+                    pass: false,
+                    code: "PORT_UNSUPPORTED".to_string(),
+                    message: "Port is visible but not in supported adapter allowlist.".to_string(),
+                    details: Some(format!(
+                        "VID={:04X}, PID={:04X}",
+                        usb_info.vid, usb_info.pid
+                    )),
+                });
+
+                return HealthCheckResult {
+                    pass: false,
+                    steps,
+                    checked_at_unix_ms: now_unix_ms(),
+                };
+            }
+        }
+        _ => {
+            steps.push(HealthStepResult {
+                step: "PORT_SUPPORTED".to_string(),
+                pass: false,
+                code: "PORT_UNSUPPORTED".to_string(),
+                message: "Only supported USB serial adapters are eligible.".to_string(),
+                details: None,
+            });
+
+            return HealthCheckResult {
+                pass: false,
+                steps,
+                checked_at_unix_ms: now_unix_ms(),
+            };
+        }
+    }
+
+    let open_result = serialport::new(&port_name, DEFAULT_CONNECT_BAUD_RATE)
+        .timeout(Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS))
+        .open();
+
+    match open_result {
+        Ok(_port_handle) => {
+            steps.push(HealthStepResult {
+                step: "CONNECT_AND_VERIFY".to_string(),
+                pass: true,
+                code: "CONNECT_OK".to_string(),
+                message: "Connect and immediate verification succeeded.".to_string(),
+                details: None,
+            });
+        }
+        Err(error) => {
+            steps.push(HealthStepResult {
+                step: "CONNECT_AND_VERIFY".to_string(),
+                pass: false,
+                code: connect_error_code(&error).to_string(),
+                message: "Connect and immediate verification failed.".to_string(),
+                details: Some(error.to_string()),
+            });
+        }
+    }
+
+    let pass = steps.iter().all(|step| step.pass);
+    HealthCheckResult {
+        pass,
+        steps,
+        checked_at_unix_ms: now_unix_ms(),
+    }
 }
 
 fn is_supported_usb(vid: u16, pid: u16) -> bool {

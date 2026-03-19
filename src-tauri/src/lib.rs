@@ -20,7 +20,8 @@ mod commands {
 }
 
 use commands::device_connection::{
-    connect_serial_port, get_serial_connection_status, list_serial_ports, SerialConnectionState,
+    connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
+    SerialConnectionState,
 };
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -196,7 +197,8 @@ pub fn run() {
             set_tray_startup_checked,
             list_serial_ports,
             connect_serial_port,
-            get_serial_connection_status
+            get_serial_connection_status,
+            run_serial_health_check
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
