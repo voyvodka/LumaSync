@@ -89,4 +89,15 @@ describe("resolveInitialLanguage()", () => {
     // Assert — unknown locale not in supported list, policy falls back to 'en'
     expect(result).toBe("en");
   });
+
+  it("Test 4: storage load failure falls back to 'en'", async () => {
+    // Arrange: simulate persistence layer load error
+    vi.mocked(shellStore.load).mockRejectedValue(new Error("store unavailable"));
+
+    // Act
+    const result = await resolveInitialLanguage();
+
+    // Assert
+    expect(result).toBe("en");
+  });
 });
