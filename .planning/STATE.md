@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-03-19T22:02:16.807Z"
+stopped_at: Completed 04-06-PLAN.md
+last_updated: "2026-03-19T22:23:22.423Z"
 last_activity: 2026-03-19
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 18
-  completed_plans: 17
+  total_plans: 19
+  completed_plans: 18
   percent: 94
 ---
 
@@ -65,6 +65,7 @@ Progress: [█████████░] 94%
 | Phase 04 P03 | 5 min | 2 tasks | 11 files |
 | Phase 04 P04 | 0 min | 2 tasks | 4 files |
 | Phase 04 P05 | 3 min | 1 tasks | 3 files |
+| Phase 04 P06 | 1 min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -111,6 +112,8 @@ Recent decisions affecting current work:
 - [Phase 04]: bottomGapPx editor input clamps invalid and negative values at input boundary to keep state valid-by-default
 - [Phase 04]: Kept generic testPatternFlow callback signature unchanged and resolved hardware ledIndexes inside createDefaultTestPatternFlow via buildLedSequence.
 - [Phase 04]: CalibrationOverlay now pushes editorState.current into flow.setConfig so each next toggle uses latest calibration mapping.
+- [Phase 04]: Introduced resolveLedSequenceItem as shared marker-index normalization contract for calibration mapping consumers.
+- [Phase 04]: Overlay marker segment and segment-order pills now derive from one memoized buildLedSequence output for deterministic parity.
 
 ### Pending Todos
 
@@ -122,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T22:02:16.805Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-calibration-workflow/04-CONTEXT.md
+Last session: 2026-03-19T22:23:22.421Z
+Stopped at: Completed 04-06-PLAN.md
+Resume file: None
