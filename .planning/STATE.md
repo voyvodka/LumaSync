@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-03-19T10:00:57.021Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-19T10:09:10.477Z"
 last_activity: 2026-03-19 - Initial roadmap and requirement traceability created
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: Stable
 | Phase 01-app-shell-and-baseline-defaults P01 | 8min | 2 tasks | 10 files |
 | Phase 01-app-shell-and-baseline-defaults P03 | 4min | 2 tasks | 11 files |
+| Phase 01-app-shell-and-baseline-defaults P02 | 4min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 01-app-shell-and-baseline-defaults]: Shell contracts file (shell.ts) is single source of truth for all tray/section IDs — Downstream modules must import from contracts file, never use magic strings
 - [Phase 01-app-shell-and-baseline-defaults]: SettingsLayout as controlled component — App.tsx owns section state for persistence — Section state is owned by the shell, not SettingsLayout — cleaner separation
 - [Phase 01-app-shell-and-baseline-defaults]: CSS design tokens via :root variables — no Tailwind framework to keep bundle lean — Tailwind not set up; plain CSS tokens provide light/dark support without framework overhead
+- [Phase 01-app-shell-and-baseline-defaults]: resolveInitialLanguage() enforces English on first launch — I18N-02 wins over context system-locale preference; one-line switch-point documented for future migration
+- [Phase 01-app-shell-and-baseline-defaults]: i18next initialised before React render (main.tsx bootstrap) to prevent hydration flicker — language available synchronously on first render
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T10:00:57.019Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-03-19T10:09:00.568Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None

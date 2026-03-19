@@ -41,7 +41,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Localization
 
 - [ ] **I18N-01**: User can use the app in English and Turkish
-- [ ] **I18N-02**: App defaults to English on first launch
+- [x] **I18N-02**: App defaults to English on first launch
 
 ## v2 Requirements
 
@@ -96,7 +96,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UX-01 | Phase 1 | Complete |
 | UX-02 | Phase 4 | Pending |
 | I18N-01 | Phase 7 | Pending |
-| I18N-02 | Phase 1 | Pending |
+| I18N-02 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 18 total
