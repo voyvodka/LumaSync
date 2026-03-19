@@ -76,11 +76,13 @@ Plans:
   3. User can configure edge LED counts and physical gap regions to match real hardware.
   4. User can validate LED mapping with live preview/test pattern before saving.
   5. User can revisit and adjust calibration later from an advanced settings panel.
-**Plans**: 3 plans
+**Plans**: 5 plans
 Plans:
 - [ ] 04-01-PLAN.md - Build test-backed calibration contracts, template catalog, and deterministic LED mapping engine
 - [ ] 04-02-PLAN.md - Deliver shared wizard/advanced calibration overlay flow with explicit save and dirty-exit guard
 - [ ] 04-03-PLAN.md - Add live test-pattern preview + hardware command bridge with disconnected-safe fallback
+- [ ] 04-04-PLAN.md - [gap] Wire validation to save handler and add bottomGapPx editor input (CAL-03)
+- [ ] 04-05-PLAN.md - [gap] Connect buildLedSequence to test pattern physical payload (CAL-04)
 
 ### Phase 5: Core Lighting Modes
 **Goal**: Kullanici ana kullanim modlarini secip LED cikisini amacina gore degistirebilir.
