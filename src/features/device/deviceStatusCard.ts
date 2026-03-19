@@ -1,11 +1,44 @@
 import type { HealthCheckResult } from "./deviceConnectionApi";
 
+const HEALTH_STEP_ORDER = ["PORT_VISIBLE", "PORT_SUPPORTED", "CONNECT_AND_VERIFY"] as const;
+
+type HealthStep = HealthCheckResult["steps"][number];
+
+export interface DeviceStatusHealthStepModel {
+  step: HealthStep["step"];
+  pass: boolean;
+  message: string;
+  details: string | null;
+}
+
 export interface DeviceStatusCardModel {
   variant: "success" | "error" | "info";
   code: string;
   titleKey: string;
   bodyKey: string;
   details?: string;
+  healthSteps?: DeviceStatusHealthStepModel[];
+}
+
+function mapHealthSteps(healthCheck: HealthCheckResult): DeviceStatusHealthStepModel[] {
+  const rank = new Map<string, number>(HEALTH_STEP_ORDER.map((step, index) => [step, index]));
+  return [...healthCheck.steps]
+    .sort((left, right) => {
+      const leftRank = rank.get(left.step) ?? Number.MAX_SAFE_INTEGER;
+      const rightRank = rank.get(right.step) ?? Number.MAX_SAFE_INTEGER;
+
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+
+      return left.step.localeCompare(right.step);
+    })
+    .map((step) => ({
+      step: step.step,
+      pass: step.pass,
+      message: step.message,
+      details: step.details,
+    }));
 }
 
 export interface DeviceStatusCardInput {
@@ -50,6 +83,7 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       titleKey: "device.healthCheck.failTitle",
       bodyKey: "device.healthCheck.failBody",
       details: firstFailed?.message ?? firstFailed?.details ?? undefined,
+      healthSteps: mapHealthSteps(healthCheck),
     };
   }
 
@@ -59,6 +93,7 @@ export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatu
       code: "HEALTH_CHECK_PASS",
       titleKey: "device.healthCheck.passTitle",
       bodyKey: "device.healthCheck.passBody",
+      healthSteps: mapHealthSteps(healthCheck),
     };
   }
 
