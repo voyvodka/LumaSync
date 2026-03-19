@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 2
-status: in_progress
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-19T18:20:30.951Z"
+current_plan: 3
+status: executing
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-03-19T18:31:59.104Z"
 last_activity: 2026-03-19
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 87
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 4 of 8 (Calibration Workflow)
-Current Plan: 2
+Current Plan: 3
 Total Plans in Phase: 3
 Status: Ready to execute
 Last activity: 2026-03-19
@@ -61,6 +61,7 @@ Progress: [█████████░] 87%
 | Phase 02 P04 | 3 min | 2 tasks | 5 files |
 | Phase 03 P03 | 2 min | 2 tasks | 5 files |
 | Phase 04 P01 | 4 min | 2 tasks | 8 files |
+| Phase 04 P02 | 5 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Health-check step order is deterministic: PORT_VISIBLE, PORT_SUPPORTED, CONNECT_AND_VERIFY.
 - [Phase 04]: Canonical LED traversal order is top -> right -> bottomRight -> bottomLeft -> left before anchor/direction transforms.
 - [Phase 04]: Validation keeps bottomGapPx visual-only and enforces totalLeds from segment count sums.
+- [Phase 04]: Wizard auto-open now derives from persisted connected-device state plus missing calibration snapshot.
+- [Phase 04]: Calibration persistence remains explicit-save only; cancel and close never write shell state.
+- [Phase 04]: Dirty-exit confirmation is centralized in calibrationEditorState normalized comparison helpers for deterministic behavior.
 
 ### Pending Todos
 
@@ -108,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T18:19:42.586Z
-Stopped at: Completed 04-01-PLAN.md
+Last session: 2026-03-19T18:31:59.102Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None
