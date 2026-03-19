@@ -71,7 +71,7 @@ Each task was committed atomically:
 1. **Task 1: RED - calibration model davranis testlerini yaz** - `5faf29a` (test)
 2. **Task 2: GREEN - contracts, templates, mapping ve validation implement et** - `21de9c3` (feat)
 
-**Plan metadata:** `TBD` (docs: complete plan)
+**Plan metadata:** `db9ce30` (docs: complete plan)
 
 _Note: Bu TDD plani RED ve GREEN asamalarinda iki commit uretti._
 
@@ -91,7 +91,20 @@ _Note: Bu TDD plani RED ve GREEN asamalarinda iki commit uretti._
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Auto-fixed Issues
+
+**1. [Rule 3 - Blocking] STATE.md parse formati state advance-plan komutunu engelledi**
+- **Found during:** Plan closure (state update step)
+- **Issue:** `state advance-plan` komutu `Current Plan` ve `Total Plans in Phase` alanlarini parse edemedi.
+- **Fix:** `STATE.md` current-position alanina parse edilebilir alanlar eklendi ve komut yeniden calistirildi.
+- **Files modified:** `.planning/STATE.md`
+- **Verification:** `state advance-plan` ikinci denemede basarili dondu (`current_plan: 2`).
+- **Committed in:** `db9ce30` (plan metadata commit)
+
+---
+
+**Total deviations:** 1 auto-fixed (1 blocking)
+**Impact on plan:** Sadece plan metadata/state ilerletme adimini etkiledi; kod teslim kapsaminda degisiklik yok.
 
 ## Issues Encountered
 None.
