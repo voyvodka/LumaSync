@@ -101,10 +101,13 @@ _Note: This can be tested by editing the store file directly and setting windowX
 1. On macOS, open settings window
 2. Enter native fullscreen mode
 3. Click the window close button (X)
+4. Reopen the window from tray using **Open Settings**
+5. Repeat steps 2-4 at least 3 cycles
 
 - [ ] Window exits fullscreen and hides to tray cleanly
 - [ ] No black-screen artifact remains on desktop/workspace
-- [ ] Reopening from tray shows a responsive window
+- [ ] Reopening from tray always shows the same responsive settings window
+- [ ] No duplicate window appears across repeated fullscreen close/reopen cycles
 
 ---
 

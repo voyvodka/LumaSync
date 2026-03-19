@@ -8,6 +8,7 @@
 //   5. tray icon + menu construction
 //   6. close-to-tray interception via on_window_event
 
+use std::{thread, time::Duration};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -36,6 +37,11 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 // ---------------------------------------------------------------------------
 fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
     app.exit(0);
+}
+
+fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
+    let _ = window.hide();
+    let _ = window.emit("shell:close-to-tray", ());
 }
 
 #[tauri::command]
@@ -160,12 +166,21 @@ pub fn run() {
 
                 if cfg!(target_os = "macos") && window.is_fullscreen().unwrap_or(false) {
                     let _ = window.set_fullscreen(false);
+                    let app_handle = window.app_handle().clone();
+                    let window_label = window.label().to_string();
+
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_millis(120));
+                        if let Some(main_window) = app_handle.get_webview_window(&window_label) {
+                            let _ = main_window.hide();
+                            let _ = main_window.emit("shell:close-to-tray", ());
+                        }
+                    });
+
+                    return;
                 }
 
-                let _ = window.hide();
-
-                // Emit event so frontend can show one-time tray hint if needed
-                let _ = window.emit("shell:close-to-tray", ());
+                hide_to_tray(window);
             }
         })
         .invoke_handler(tauri::generate_handler![set_tray_startup_checked])
