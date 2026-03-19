@@ -72,6 +72,8 @@
       "idleBody": "Bir port seçip hazır olduğunda Bağlan'ı kullan.",
       "scanningTitle": "Serial portlar yenileniyor",
       "scanningBody": "Tarama arkada çalışırken mevcut liste ekranda kalır.",
+      "reconnectingTitle": "Son cihazına yeniden bağlanılıyor",
+      "reconnectingBody": "Auto-recovery kısa aralıklarla çalışıyor. İstediğin an manuel bağlanmaya geçebilirsin.",
       "connectedTitle": "Bağlantı kuruldu",
       "connectedBody": "{{port}} üzerinden bağlandı. Sonraki açılışta aynı portu kullanabilirsin.",
       "missingTitle": "Önceki seçili port kayıp",
@@ -79,6 +81,16 @@
       "errorTitle": "Bağlantı denemesi başarısız",
       "errorBody": "Bağlantı tamamlanamadı. Yenile, farklı bir port seç ve tekrar dene.",
       "nextSteps": "İpucu: Hatırlanan port yeniden görünürse otomatik olarak tekrar seçilir."
+    },
+    "healthCheck": {
+      "runAction": "Sağlık Kontrolü Çalıştır",
+      "runningAction": "Sağlık Kontrolü Çalışıyor...",
+      "inProgressTitle": "Sağlık kontrolü sürüyor",
+      "inProgressBody": "Görünürlük, destek durumu ve bağlantı doğrulanıyor.",
+      "passTitle": "Sağlık kontrolü geçti",
+      "passBody": "Seçili port için tüm kurulum kontrolleri başarıyla geçti.",
+      "failTitle": "Sağlık kontrolü başarısız",
+      "failBody": "Başarısız adım detayını inceleyip yenile, farklı port seç veya tekrar dene."
     }
   }
 }

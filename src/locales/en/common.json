@@ -72,6 +72,8 @@
       "idleBody": "Select a port and use Connect when ready.",
       "scanningTitle": "Refreshing serial ports",
       "scanningBody": "We keep your list visible while scan runs in the background.",
+      "reconnectingTitle": "Reconnecting to your last device",
+      "reconnectingBody": "Auto-recovery is running with short retries. You can switch to manual connect anytime.",
       "connectedTitle": "Connection established",
       "connectedBody": "Connected on {{port}}. You can keep using this port for the next start.",
       "missingTitle": "Previously selected port is missing",
@@ -79,6 +81,16 @@
       "errorTitle": "Connection attempt failed",
       "errorBody": "Connection was not completed. Refresh, pick another port, and try again.",
       "nextSteps": "Tip: if your remembered port appears again, it will be selected automatically."
+    },
+    "healthCheck": {
+      "runAction": "Run Health Check",
+      "runningAction": "Running Health Check...",
+      "inProgressTitle": "Health check in progress",
+      "inProgressBody": "We are validating visibility, support, and connection status.",
+      "passTitle": "Health check passed",
+      "passBody": "All setup checks passed for the selected port.",
+      "failTitle": "Health check failed",
+      "failBody": "Review the failed step details, then refresh, choose another port, or retry."
     }
   }
 }

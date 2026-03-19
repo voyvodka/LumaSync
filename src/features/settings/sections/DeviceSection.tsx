@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
 import { useDeviceConnection } from "../../device/useDeviceConnection";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
@@ -28,11 +29,15 @@ export function DeviceSection() {
     connectedPort,
     isScanning,
     isConnecting,
+    isReconnecting,
+    isHealthChecking,
     canConnect,
     statusCard,
+    latestHealthCheck,
     refreshPorts,
     selectPort,
     connectSelectedPort,
+    runHealthCheck,
     connectButtonLabel,
   } = useDeviceConnection();
 
@@ -48,33 +53,25 @@ export function DeviceSection() {
   const connectDisabled =
     !canConnect || isScanning || (connectButtonLabel === "connected" && connectedPort === selectedPort);
 
-  const statusVariant = statusCard?.variant ?? "info";
-  const statusTitle =
-    statusCard?.code === "SELECTED_PORT_MISSING"
-      ? t("device.status.missingTitle")
-      : statusVariant === "success"
-        ? t("device.status.connectedTitle")
-        : statusVariant === "error"
-          ? t("device.status.errorTitle")
-          : status === "scanning"
-            ? t("device.status.scanningTitle")
-            : t("device.status.idleTitle");
-  const statusBody =
-    statusCard?.code === "SELECTED_PORT_MISSING"
-      ? t("device.status.missingBody")
-      : statusVariant === "success"
-        ? t("device.status.connectedBody", {
-            port: connectedPort ?? selectedPort ?? "-",
-          })
-        : statusVariant === "error"
-          ? t("device.status.errorBody")
-          : status === "scanning"
-            ? t("device.status.scanningBody")
-            : t("device.status.idleBody");
+  const statusModel = buildDeviceStatusCard({
+    status,
+    statusCard,
+    connectedPort,
+    isReconnecting,
+    isHealthChecking,
+    latestHealthCheck,
+  });
+  const statusVariant = statusModel.variant;
+  const statusTitle = t(statusModel.titleKey);
+  const statusBody = t(statusModel.bodyKey, {
+    port: connectedPort ?? selectedPort ?? "-",
+  });
 
   const refreshHint = isScanning
     ? t("device.actions.scanning")
     : t("device.actions.ready");
+
+  const healthActionDisabled = isScanning || isConnecting || isReconnecting || isHealthChecking || !selectedPort;
 
   const renderPortRows = (kind: "supported" | "other") => {
     const list = kind === "supported" ? groupedPorts.supported : groupedPorts.other;
@@ -161,6 +158,19 @@ export function DeviceSection() {
         </button>
       </div>
 
+      <div className="mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            void runHealthCheck();
+          }}
+          disabled={healthActionDisabled}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+        >
+          {isHealthChecking ? t("device.healthCheck.runningAction") : t("device.healthCheck.runAction")}
+        </button>
+      </div>
+
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{t("device.groups.supportedTitle")}</h3>
@@ -227,7 +237,7 @@ export function DeviceSection() {
       >
         <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{statusTitle}</h3>
         <p className="mt-1 text-sm text-slate-700 dark:text-zinc-200">{statusBody}</p>
-        {statusCard?.details ? <p className="mt-2 text-xs text-slate-500 dark:text-zinc-400">{statusCard.details}</p> : null}
+        {statusModel.details ? <p className="mt-2 text-xs text-slate-500 dark:text-zinc-400">{statusModel.details}</p> : null}
         <p className="mt-3 text-xs text-slate-600 dark:text-zinc-300">{t("device.status.nextSteps")}</p>
       </div>
     </section>

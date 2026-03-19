@@ -12,7 +12,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
 
 - [x] **Phase 1: App Shell and Baseline Defaults** - Tray tabanli uygulama acilir, ayarlar penceresi erisilebilir ve ilk acilis varsayimlari oturur. (completed 2026-03-19)
 - [x] **Phase 2: USB Connection Setup** - Cihaz auto-detect ve manuel port fallback ile baglanti kurulabilir. (completed 2026-03-19)
-- [ ] **Phase 3: Connection Resilience and Health** - Kopma-sonrasi toparlanma ve setup sirasinda saglik kontrolu guvenilir calisir.
+- [x] **Phase 3: Connection Resilience and Health** - Kopma-sonrasi toparlanma ve setup sirasinda saglik kontrolu guvenilir calisir. (completed 2026-03-19)
 - [ ] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar.
 - [ ] **Phase 5: Core Lighting Modes** - Realtime Ambilight ve solid-color modlari kullanilabilir olur.
 - [ ] **Phase 6: Runtime Quality Controls** - Smoothing ve adaptif gonderim davranisi ile deneyim daha yumusak ve hafif olur.
@@ -60,7 +60,10 @@ Plans:
   1. User can unplug and replug the cable and the session recovers without app restart.
   2. User can run a setup health check and receive clear pass/fail status.
   3. User can understand current connection condition from in-app status feedback.
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 03-01-PLAN.md - Implement test-backed recovery/health orchestration contracts and controller+backend behavior for CONN-03 and CONN-04
+- [ ] 03-02-PLAN.md - Wire Device panel health-check/reconnecting status UX with deterministic mapping and EN/TR parity
 
 ### Phase 4: Calibration Workflow
 **Goal**: Kullanici ilk kurulumda wizard ile, sonrasinda ileri panel ile LED geometri ve yonlendirmeyi dogru kalibre edebilir.
@@ -119,7 +122,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
-| 3. Connection Resilience and Health | 0/TBD | Not started | - |
+| 3. Connection Resilience and Health | 2/2 | Complete   | 2026-03-19 |
 | 4. Calibration Workflow | 0/TBD | Not started | - |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
