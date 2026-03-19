@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 4
+current_plan: 5
 status: executing
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-03-19T19:39:10.184Z"
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-03-19T19:46:32.903Z"
 last_activity: 2026-03-19
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 17
-  completed_plans: 16
+  completed_plans: 17
   percent: 94
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 4 of 8 (Calibration Workflow)
-Current Plan: 4
+Current Plan: 5
 Total Plans in Phase: 5
 Status: Ready to execute
 Last activity: 2026-03-19
@@ -64,6 +64,7 @@ Progress: [█████████░] 94%
 | Phase 04 P02 | 5 min | 2 tasks | 12 files |
 | Phase 04 P03 | 5 min | 2 tasks | 11 files |
 | Phase 04 P04 | 0 min | 2 tasks | 4 files |
+| Phase 04 P05 | 3 min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Calibration command IDs are appended to shared DEVICE_COMMANDS contract for TS/Rust parity.
 - [Phase 04]: Validation errors are rendered as code+field pairs from validation.ts for immediate gap closure without new i18n surface
 - [Phase 04]: bottomGapPx editor input clamps invalid and negative values at input boundary to keep state valid-by-default
+- [Phase 04]: Kept generic testPatternFlow callback signature unchanged and resolved hardware ledIndexes inside createDefaultTestPatternFlow via buildLedSequence.
+- [Phase 04]: CalibrationOverlay now pushes editorState.current into flow.setConfig so each next toggle uses latest calibration mapping.
 
 ### Pending Todos
 
@@ -119,6 +122,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T19:39:10.182Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-03-19T19:46:32.901Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None
