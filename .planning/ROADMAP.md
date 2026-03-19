@@ -76,7 +76,11 @@ Plans:
   3. User can configure edge LED counts and physical gap regions to match real hardware.
   4. User can validate LED mapping with live preview/test pattern before saving.
   5. User can revisit and adjust calibration later from an advanced settings panel.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 04-01-PLAN.md - Build test-backed calibration contracts, template catalog, and deterministic LED mapping engine
+- [ ] 04-02-PLAN.md - Deliver shared wizard/advanced calibration overlay flow with explicit save and dirty-exit guard
+- [ ] 04-03-PLAN.md - Add live test-pattern preview + hardware command bridge with disconnected-safe fallback
 
 ### Phase 5: Core Lighting Modes
 **Goal**: Kullanici ana kullanim modlarini secip LED cikisini amacina gore degistirebilir.
@@ -124,7 +128,7 @@ Plans:
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
-| 4. Calibration Workflow | 0/TBD | Not started | - |
+| 4. Calibration Workflow | 1/3 | In Progress | - |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
 | 7. Telemetry and Full Localization | 0/TBD | Not started | - |
