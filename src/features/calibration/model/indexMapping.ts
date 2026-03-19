@@ -61,8 +61,8 @@ export function buildLedSequence(config: LedCalibrationConfig): LedSequenceItem[
   const rotated = rotateSequence(canonical, anchorIndex);
   const oriented = config.direction === "cw" ? rotated : [...rotated].reverse();
 
-  return oriented.map((item, index) => ({
-    index,
+  return oriented.map((item) => ({
+    index: item.index,
     segment: item.segment,
     localIndex: item.localIndex,
   }));

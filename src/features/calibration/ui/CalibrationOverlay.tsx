@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
 import type { LedCalibrationConfig } from "../model/contracts";
+import { buildLedSequence } from "../model/indexMapping";
 import { applyTemplate, resetToManual } from "../model/templates";
 import {
   validateCalibrationConfig,
@@ -23,7 +24,6 @@ import type { CalibrationOverlayStep } from "../state/entryFlow";
 import { CalibrationEditorCanvas } from "./CalibrationEditorCanvas";
 import { CalibrationTemplateStep } from "./CalibrationTemplateStep";
 import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
-import type { LedSegmentCounts } from "../model/contracts";
 
 interface CalibrationOverlayProps {
   open: boolean;
@@ -37,18 +37,14 @@ function buildInitialEditorState(initialConfig?: LedCalibrationConfig): Calibrat
   return createCalibrationEditorState(initialConfig ?? resetToManual());
 }
 
-function resolveMarkerSegment(markerIndex: number, counts: LedSegmentCounts): keyof LedSegmentCounts {
-  const order: Array<keyof LedSegmentCounts> = ["top", "right", "bottomRight", "bottomLeft", "left"];
-  let cursor = markerIndex;
-  for (const segment of order) {
-    const size = Math.max(0, counts[segment]);
-    if (cursor < size) {
-      return segment;
-    }
-    cursor -= size;
+function resolveMarkerSegment(markerIndex: number, config: LedCalibrationConfig) {
+  const sequence = buildLedSequence(config);
+  if (sequence.length === 0) {
+    return "top";
   }
 
-  return "top";
+  const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
+  return sequence[normalizedMarkerIndex]?.segment ?? "top";
 }
 
 export function CalibrationOverlay({
@@ -107,7 +103,7 @@ export function CalibrationOverlay({
     };
   }, []);
 
-  const markerSegment = resolveMarkerSegment(testPattern.markerIndex, editorState.current.counts);
+  const markerSegment = resolveMarkerSegment(testPattern.markerIndex, editorState.current);
 
   const shell = useMemo(() => {
     if (!open) {

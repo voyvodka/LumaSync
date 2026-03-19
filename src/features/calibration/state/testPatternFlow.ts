@@ -21,7 +21,7 @@ interface TestPatternConnectionStatus {
 
 interface CreateTestPatternFlowDeps {
   getConnectionStatus: () => Promise<TestPatternConnectionStatus>;
-  startPhysicalPattern: () => Promise<void>;
+  startPhysicalPattern: (markerIndex: number) => Promise<void>;
   stopPhysicalPattern: () => Promise<void>;
   initialConfig?: LedCalibrationConfig;
   onConfigChange?: (config: LedCalibrationConfig) => void;
@@ -129,7 +129,7 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
 
         const status = await deps.getConnectionStatus();
         if (status.connected) {
-          await deps.startPhysicalPattern();
+          await deps.startPhysicalPattern(snapshot.markerIndex);
           snapshot = {
             ...snapshot,
             mode: "sending",
@@ -172,7 +172,7 @@ export function createDefaultTestPatternFlow(
 ): TestPatternFlow {
   let currentConfig: LedCalibrationConfig | null = initialConfig ?? null;
 
-  const resolvePhysicalIndex = () => {
+  const resolvePhysicalIndex = (markerIndex: number) => {
     if (!currentConfig) {
       return 0;
     }
@@ -182,7 +182,8 @@ export function createDefaultTestPatternFlow(
       return 0;
     }
 
-    return sequence[0].index;
+    const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
+    return sequence[normalizedMarkerIndex]?.index ?? 0;
   };
 
   return createTestPatternFlow({
@@ -191,9 +192,9 @@ export function createDefaultTestPatternFlow(
     onConfigChange: (config) => {
       currentConfig = config;
     },
-    startPhysicalPattern: async () => {
+    startPhysicalPattern: async (markerIndex) => {
       await startCalibrationTestPattern({
-        ledIndexes: [resolvePhysicalIndex()],
+        ledIndexes: [resolvePhysicalIndex(markerIndex)],
         frameMs: MARKER_ADVANCE_MS,
         brightness: 64,
       });
