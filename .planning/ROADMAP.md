@@ -45,11 +45,12 @@ Plans:
   1. User can see supported controllers detected automatically when connected.
   2. User can manually choose a COM/serial port when auto-detection misses.
   3. User can complete initial device connection without restarting the app.
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
 - [ ] 02-01-PLAN.md - Define device contracts and test-backed port classification/selection memory rules
 - [ ] 02-02-PLAN.md - Implement Rust serial list/connect commands and register Tauri capability surface
 - [ ] 02-03-PLAN.md - Deliver Device panel scan-select-connect UX with status card and EN/TR copy parity
+- [ ] 02-04-PLAN.md - Close verification gaps for Refresh button contrast and refresh spam-control feedback
 
 ### Phase 3: Connection Resilience and Health
 **Goal**: Baglanti kesintileri sonrasinda oturum kullaniciyi yarida birakmadan toparlanir ve baglanti durumu dogrulanabilir olur.
@@ -117,7 +118,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
-| 2. USB Connection Setup | 3/3 | Complete   | 2026-03-19 |
+| 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 0/TBD | Not started | - |
 | 4. Calibration Workflow | 0/TBD | Not started | - |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
