@@ -35,13 +35,22 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - Kullanıcı isterse "Sıfırla / Şablon seç" butonu ile şablon seçim ekranına dönebiliyor.
 - Şablon sistemi v1'de hardcoded; dış dosya/konfig yükleme sonraki faz.
 
-### Canlı Doğrulama (Test Pattern)
+### Canlı Doğrulama (Test Pattern) ve Preview Davranışı
 - LED map editor ekranında bir "Test Pattern" toggle/butonu var.
-- Test pattern aktifken: overlay üzerinden segment sırasını izleyen gradient animasyon dönüyor; aynı anda fiziksel LED'lere de aynı animasyon gönderiliyor.
-- Kullanıcı ekranda gördüğü sıra ile fiziksel şeridi karşılaştırarak doğrulama yapabiliyor.
-- Animasyon tarzı ve hızı Claude'a bırakılıyor — görsel doğrulama için en açık senkronizasyonu sağlayacak seçim.
-- "Kaydet" butonu her zaman görünür; test pattern zorunlu değil (görsel yardımcı, kilid değil).
-- Cihaz bağlı değilken editor açılabiliyor; sadece fiziksel test pattern gönderimi devre dışı kalıyor, harita yine kaydedilebiliyor.
+- Çoklu ekran varsa kullanıcı hedef ekranı mini ekran kartları (Display no + çözünürlük/konum) üzerinden seçiyor.
+- Test pattern açılınca seçilen ekranda OS-level overlay anında açılıyor; kapanınca overlay tamamen kapanıyor.
+- Test pattern açıkken hedef ekran değiştirilirse eski ekrandaki overlay kapanır, yeni seçilen ekranda anında açılır (aynı anda tek aktif overlay).
+- Preview görseli app penceresinden bağımsızdır; app küçük olsa da seçilen fiziksel ekranın kenarlarında görünür.
+- Seçilen ekranın kenarlarında, her kenar için ayarlanan LED sayısı kadar eşit aralıklı küçük kapsül LED gösterilir.
+- Başlangıç ve bitiş LED noktaları işaretli görünür; index etiketi (0 ve N-1) ve akış yönü okları aynı anda gösterilir.
+- Kenar LED sayısı, başlangıç, yön ve gap değiştiğinde preview anında (live) güncellenir; Apply adımı yok.
+- Renk deneme açıldığında LED kapsüller görünür kalır; arka plan test pattern moduna göre gradient/renk katmanıyla güncellenir.
+- V1 test pattern modları: Gradient Flow, Gradient Static, Single Color, Segment Colors.
+- V1 test pattern kontrolleri: Mode, hız, parlaklık, renk seçimi.
+- Overlay görsel dili: merkez şeffaf kalır; yalnızca kenar katmanında LED kapsüller ve pattern katmanı görünür.
+- OS-level overlay açılamıyorsa test pattern bu fazda bloke edilir (fallback preview ile devam edilmez).
+- "Kaydet" butonu her zaman görünür; test pattern zorunlu değildir (doğrulama yardımcısıdır).
+- Cihaz bağlı değilken editor açılabilir; fiziksel gönderim uygun değilse preview-only statüsü açıkça belirtilir.
 
 ### Kalibrasyon Verisi Kalıcılığı
 - Kalibrasyon verisi `ShellState`'e yeni bir `ledCalibration?: LedCalibrationConfig` alanı olarak ekleniyor — mevcut plugin-store altyapısı yeniden kullanılıyor.
@@ -50,7 +59,6 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - Settings > Calibration bölümü özet bilgi (kaç LED, hangi şablon) + "Düzenle" butonu gösteriyor.
 
 ### Claude's Discretion
-- Test pattern animasyonunun tam tarzı ve hızı (görsel doğrulama için uygun olan).
 - Segment pixel sayıları için UI input tasarımı (spinner, sayı alanı vb.).
 - Overlay z-index yönetimi ve Tauri pencere katmanlama detayları.
 - EN/TR kalibrasyon copy wording (mevcut ton kararlarıyla uyumlu).
@@ -65,6 +73,7 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - Alt kenarda monitör ayağı nedeniyle LED bant bölünebiliyor: Bottom-Left ve Bottom-Right ayrı segmentler, ortada gap. Bu gerçek bir kullanım senaryosu olarak tasarımda yer almalı.
 - LED map editor şeffaf overlay üzerinde çalışıyor — kullanıcı editörü açıkken arkada ekranını görebiliyor.
 - Test pattern: overlay'deki gradient animasyon ile fiziksel LED'lerdeki animasyon eşleşiyor — senkronizasyon doğrulaması için.
+- "Preview'i yanlış anlamışsın; seçilen ekranın kenarlarında LED pixel dağılımını net görmek istiyorum" geri bildirimi kilit UX kriteri olarak eklendi.
 
 </specifics>
 
@@ -77,6 +86,9 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - `src/features/persistence/shellStore.ts` + `src/features/shell/windowLifecycle.ts`: Mevcut `ShellState` persist paterni — `ledCalibration` alanı buraya eklenecek.
 - `src/App.tsx`: `lifecycleReady` ve section state burada yönetiliyor — wizard overlay trigger mantığı buraya entegre edilecek.
 - `src/features/device/useDeviceConnection.ts`: Cihaz bağlantı durumu buradan okunabilir — wizard'ın "ilk bağlantıda otomatik aç" tetikleyicisi için.
+- `src/features/calibration/ui/CalibrationOverlay.tsx`: test pattern toggle, preview chip/segment göstergesi ve canlı state güncellemesi için ana UI yüzeyi.
+- `src/features/calibration/state/testPatternFlow.ts`: markerIndex tabanlı preview/physical pattern state orkestrasyonu.
+- `src/features/calibration/model/indexMapping.ts`: preview ve fiziksel payload için ortak sequence kaynağı (`buildLedSequence`).
 
 ### Established Patterns
 - Shell contracts file (`shell.ts`) tek doğruluk kaynağı — tüm yeni ID'ler buraya eklenmeli.
@@ -85,6 +97,7 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - i18n: `src/locales/en/common.json` + `src/locales/tr/common.json` — kalibrasyon copy ikisine de eşit eklenmeli.
 - Explicit action-first pattern (Faz 2): test pattern toggle explicit buton ile, otomatik tetikleme yok.
 - Quiet-by-default UX tonu (Faz 1-3): kaydet onayı ve bağlantısız mod bildirimi bu tona uygun olmalı.
+- Preview ve fiziksel test pattern aynı mapping kaynağından türetilmeli (parity-first karar).
 
 ### Integration Points
 - `src/App.tsx` → wizard overlay state yönetimi; ilk bağlantı sonrası `hasCalibration` kontrolü.
@@ -94,6 +107,8 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - `src-tauri/src/commands/` → yeni `calibration.rs` veya mevcut `device_connection.rs` genişletmesi — test pattern gönderimi için.
 - `src-tauri/src/lib.rs` → yeni calibration command kaydı.
 - `src/locales/en/common.json` + `src/locales/tr/common.json` → kalibrasyon copy.
+- `src/features/calibration/ui/CalibrationOverlay.tsx` ↔ ekran seçici UI + OS-level overlay lifecycle kontrolü.
+- `src/features/calibration/state/testPatternFlow.ts` ↔ `buildLedSequence` ile marker/sıra parity bağlantısı.
 
 </code_context>
 
@@ -103,6 +118,7 @@ Kullanıcı ilk kurulumda otomatik açılan interaktif LED map editor'ü aracıl
 - Profil kaydetme/yükleme (birden fazla kalibrasyon profili) — v2 PROF-01 gereksinimi.
 - Dış JSON/YAML dosyasından şablon yükleme — v1'de hardcoded, sonraki faz genişletilir.
 - Çoklu monitör kalibrasyonu — v2 MMON-01 gereksinimi.
+- Test pattern modlarına ileri efekt setleri (ek gradient presetleri, daha zengin hareket tipleri) — v1 sonrası genişletme.
 
 </deferred>
 
