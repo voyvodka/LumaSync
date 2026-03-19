@@ -1,0 +1,11 @@
+# macOS
+.DS_Store
+
+# General dependencies
+node_modules/
+
+# OpenCode local runtime artifacts
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/settings.json
