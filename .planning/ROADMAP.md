@@ -122,7 +122,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
-| 3. Connection Resilience and Health | 2/2 | Complete   | 2026-03-19 |
+| 3. Connection Resilience and Health | 2/2 | Complete    | 2026-03-19 |
 | 4. Calibration Workflow | 0/TBD | Not started | - |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
