@@ -7,6 +7,18 @@ export interface LedSequenceItem {
   localIndex: number;
 }
 
+export function resolveLedSequenceItem(
+  sequence: LedSequenceItem[],
+  markerIndex: number,
+): LedSequenceItem | null {
+  if (sequence.length === 0) {
+    return null;
+  }
+
+  const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
+  return sequence[normalizedMarkerIndex] ?? null;
+}
+
 const SEGMENT_ORDER: LedSegmentKey[] = ["top", "right", "bottomRight", "bottomLeft", "left"];
 
 const SEGMENT_ANCHOR_TO_KEY: Record<LedStartAnchor, { segment: LedSegmentKey; localIndex: "start" | "end" }> = {
@@ -59,11 +71,5 @@ export function buildLedSequence(config: LedCalibrationConfig): LedSequenceItem[
   const canonical = buildCanonicalSequence(config);
   const anchorIndex = resolveAnchorIndex(canonical, config.startAnchor);
   const rotated = rotateSequence(canonical, anchorIndex);
-  const oriented = config.direction === "cw" ? rotated : [...rotated].reverse();
-
-  return oriented.map((item) => ({
-    index: item.index,
-    segment: item.segment,
-    localIndex: item.localIndex,
-  }));
+  return config.direction === "cw" ? rotated : [...rotated].reverse();
 }

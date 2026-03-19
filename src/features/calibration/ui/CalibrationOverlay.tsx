@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
 import type { LedCalibrationConfig } from "../model/contracts";
-import { buildLedSequence } from "../model/indexMapping";
+import { buildLedSequence, resolveLedSequenceItem } from "../model/indexMapping";
 import { applyTemplate, resetToManual } from "../model/templates";
 import {
   validateCalibrationConfig,
@@ -37,16 +37,6 @@ function buildInitialEditorState(initialConfig?: LedCalibrationConfig): Calibrat
   return createCalibrationEditorState(initialConfig ?? resetToManual());
 }
 
-function resolveMarkerSegment(markerIndex: number, config: LedCalibrationConfig) {
-  const sequence = buildLedSequence(config);
-  if (sequence.length === 0) {
-    return "top";
-  }
-
-  const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
-  return sequence[normalizedMarkerIndex]?.segment ?? "top";
-}
-
 function areSnapshotsEqual(left: TestPatternSnapshot, right: TestPatternSnapshot) {
   return (
     left.isEnabled === right.isEnabled &&
@@ -57,8 +47,7 @@ function areSnapshotsEqual(left: TestPatternSnapshot, right: TestPatternSnapshot
   );
 }
 
-function buildSegmentOrder(config: LedCalibrationConfig) {
-  const sequence = buildLedSequence(config);
+function buildSegmentOrder(sequence: ReturnType<typeof buildLedSequence>) {
   const seen = new Set<string>();
   const order: string[] = [];
 
@@ -153,8 +142,9 @@ export function CalibrationOverlay({
     };
   }, []);
 
-  const markerSegment = resolveMarkerSegment(testPattern.markerIndex, editorState.current);
-  const segmentOrder = useMemo(() => buildSegmentOrder(editorState.current), [editorState.current]);
+  const sequence = useMemo(() => buildLedSequence(editorState.current), [editorState.current]);
+  const markerSegment = resolveLedSequenceItem(sequence, testPattern.markerIndex)?.segment ?? "top";
+  const segmentOrder = useMemo(() => buildSegmentOrder(sequence), [sequence]);
 
   const shell = useMemo(() => {
     if (!open) {

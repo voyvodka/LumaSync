@@ -3,7 +3,7 @@ import {
   stopCalibrationTestPattern,
 } from "../calibrationApi";
 import type { LedCalibrationConfig } from "../model/contracts";
-import { buildLedSequence } from "../model/indexMapping";
+import { buildLedSequence, resolveLedSequenceItem } from "../model/indexMapping";
 
 export type TestPatternMode = "sending" | "preview-only";
 
@@ -178,12 +178,7 @@ export function createDefaultTestPatternFlow(
     }
 
     const sequence = buildLedSequence(currentConfig);
-    if (sequence.length === 0) {
-      return 0;
-    }
-
-    const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
-    return sequence[normalizedMarkerIndex]?.index ?? 0;
+    return resolveLedSequenceItem(sequence, markerIndex)?.index ?? 0;
   };
 
   return createTestPatternFlow({
