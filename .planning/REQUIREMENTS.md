@@ -35,7 +35,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### UX & App Behavior
 
-- [ ] **UX-01**: User can run the app from system tray and open full settings window on demand
+- [x] **UX-01**: User can run the app from system tray and open full settings window on demand
 - [ ] **UX-02**: User can complete first-time setup via guided wizard and later use advanced settings panel
 
 ### Localization
@@ -93,7 +93,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | QUAL-02 | Phase 6 | Pending |
 | QUAL-03 | Phase 7 | Pending |
 | QUAL-04 | Phase 8 | Pending |
-| UX-01 | Phase 1 | Pending |
+| UX-01 | Phase 1 | Complete |
 | UX-02 | Phase 4 | Pending |
 | I18N-01 | Phase 7 | Pending |
 | I18N-02 | Phase 1 | Pending |
