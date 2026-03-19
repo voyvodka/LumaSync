@@ -46,3 +46,59 @@ export function shouldPersistLastSuccessfulPort(
 ): boolean {
   return Boolean(selectedPort) && connectionSucceeded;
 }
+
+export function shouldTriggerConnectOnSelectionChange(): false {
+  return false;
+}
+
+export function canConnectSelectedPort(
+  selectedPort: string | null,
+  isScanning: boolean,
+): boolean {
+  if (isScanning) {
+    return false;
+  }
+
+  return selectedPort !== null;
+}
+
+export interface RefreshSelectionResolution {
+  selectedPort: string | null;
+  missingSelection: boolean;
+}
+
+export function resolveSelectionAfterRefresh(
+  ports: DevicePort[],
+  currentSelectedPort: string | null,
+  lastSuccessfulPort?: string,
+): RefreshSelectionResolution {
+  const ordered = [...groupAndSortPorts(ports).supported, ...groupAndSortPorts(ports).other];
+  const hasPort = (portName: string | null | undefined): portName is string =>
+    Boolean(portName) && ordered.some((port) => port.portName === portName);
+
+  if (hasPort(currentSelectedPort)) {
+    return {
+      selectedPort: currentSelectedPort,
+      missingSelection: false,
+    };
+  }
+
+  if (currentSelectedPort) {
+    return {
+      selectedPort: null,
+      missingSelection: true,
+    };
+  }
+
+  if (hasPort(lastSuccessfulPort)) {
+    return {
+      selectedPort: lastSuccessfulPort,
+      missingSelection: false,
+    };
+  }
+
+  return {
+    selectedPort: null,
+    missingSelection: false,
+  };
+}
