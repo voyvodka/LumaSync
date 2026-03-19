@@ -19,7 +19,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **CAL-01**: User can complete setup using predefined monitor LED templates
 - [x] **CAL-02**: User can set LED start index and direction for correct strip orientation
 - [x] **CAL-03**: User can configure edge LED counts and gap areas (for example bottom center gap)
-- [ ] **CAL-04**: User can validate mapping using live preview/test pattern before saving
+- [x] **CAL-04**: User can validate mapping using live preview/test pattern before saving
 
 ### Lighting Modes
 
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAL-01 | Phase 4 | Complete |
 | CAL-02 | Phase 4 | Complete |
 | CAL-03 | Phase 4 | Complete |
-| CAL-04 | Phase 4 | Pending |
+| CAL-04 | Phase 4 | Complete |
 | MODE-01 | Phase 5 | Pending |
 | MODE-02 | Phase 5 | Pending |
 | QUAL-01 | Phase 6 | Pending |

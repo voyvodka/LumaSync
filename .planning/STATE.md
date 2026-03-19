@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 3
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-19T18:31:59.104Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-19T18:41:09.155Z"
 last_activity: 2026-03-19
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 14
+  completed_plans: 15
   percent: 87
 ---
 
@@ -62,6 +62,7 @@ Progress: [█████████░] 87%
 | Phase 03 P03 | 2 min | 2 tasks | 5 files |
 | Phase 04 P01 | 4 min | 2 tasks | 8 files |
 | Phase 04 P02 | 5 min | 2 tasks | 12 files |
+| Phase 04 P03 | 5 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -101,6 +102,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Wizard auto-open now derives from persisted connected-device state plus missing calibration snapshot.
 - [Phase 04]: Calibration persistence remains explicit-save only; cancel and close never write shell state.
 - [Phase 04]: Dirty-exit confirmation is centralized in calibrationEditorState normalized comparison helpers for deterministic behavior.
+- [Phase 04]: Test pattern animation uses requestAnimationFrame timing instead of interval polling.
+- [Phase 04]: Disconnected hardware path returns preview-only mode and never blocks calibration save.
+- [Phase 04]: Calibration command IDs are appended to shared DEVICE_COMMANDS contract for TS/Rust parity.
 
 ### Pending Todos
 
@@ -112,6 +116,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T18:31:59.102Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-19T18:41:09.153Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None
