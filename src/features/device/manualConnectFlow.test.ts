@@ -249,4 +249,113 @@ describe("manual connect flow", () => {
     expect(controller.getState().selectedPort).toBe("COM5");
     expect(controller.getState().statusCard).toBeNull();
   });
+
+  it("refresh throttles rapid retries before the minimum interval", async () => {
+    let nowMs = 1_000;
+    const response = listResponse([
+      {
+        name: "COM3",
+        kind: "usb",
+        isSupported: true,
+        supportReason: "Supported USB serial adapter",
+        usb: {
+          vid: 0x1a86,
+          pid: 0x7523,
+          manufacturer: "QinHeng",
+          product: "USB Serial",
+          serialNumber: null,
+        },
+      },
+    ]);
+
+    const listSerialPorts = vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue(response);
+
+    const controller = createDeviceConnectionController({
+      listSerialPorts,
+      connectSerialPort: vi.fn(),
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+      refreshMinIntervalMs: 250,
+      now: () => nowMs,
+    });
+
+    await controller.initialize();
+    await controller.refreshPorts();
+    await controller.refreshPorts();
+
+    expect(listSerialPorts).toHaveBeenCalledTimes(2);
+  });
+
+  it("refresh exposes info status when a retry is blocked by rate limit", async () => {
+    let nowMs = 500;
+    const listSerialPorts = vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue(
+      listResponse([
+        {
+          name: "COM4",
+          kind: "usb",
+          isSupported: true,
+          supportReason: "Supported USB serial adapter",
+          usb: {
+            vid: 0x1a86,
+            pid: 0x7523,
+            manufacturer: null,
+            product: null,
+            serialNumber: null,
+          },
+        },
+      ]),
+    );
+
+    const controller = createDeviceConnectionController({
+      listSerialPorts,
+      connectSerialPort: vi.fn(),
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+      refreshMinIntervalMs: 250,
+      now: () => nowMs,
+    });
+
+    await controller.initialize();
+    await controller.refreshPorts();
+    await controller.refreshPorts();
+
+    expect(controller.getState().isScanning).toBe(false);
+    expect(controller.getState().statusCard?.variant).toBe("info");
+    expect(controller.getState().statusCard?.code).toBe("REFRESH_RATE_LIMITED");
+    expect(controller.getState().statusCard?.message).toBe("Refresh is temporarily limited.");
+  });
+
+  it("refresh allows retry again after the minimum interval passes", async () => {
+    let nowMs = 2_000;
+    const listSerialPorts = vi.fn<() => Promise<SerialPortListResponse>>().mockResolvedValue(
+      listResponse([
+        {
+          name: "COM9",
+          kind: "unknown",
+          isSupported: false,
+          supportReason: "Unknown serial port type",
+          usb: null,
+        },
+      ]),
+    );
+
+    const controller = createDeviceConnectionController({
+      listSerialPorts,
+      connectSerialPort: vi.fn(),
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+      refreshMinIntervalMs: 250,
+      now: () => nowMs,
+    });
+
+    await controller.initialize();
+    await controller.refreshPorts();
+    await controller.refreshPorts();
+
+    nowMs += 260;
+    await controller.refreshPorts();
+
+    expect(listSerialPorts).toHaveBeenCalledTimes(3);
+    expect(controller.getState().status).toBe("ready");
+  });
 });
