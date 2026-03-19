@@ -29,11 +29,12 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
   1. User can launch the app and see it running in the system tray.
   2. User can open the full settings window from the tray at any time.
   3. User sees English as the default language on first launch.
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
 - [ ] 01-01-PLAN.md - Build tray-first runtime lifecycle and shell contracts for UX-01
 - [ ] 01-03-PLAN.md - Implement settings scaffold and shell persistence baseline for UX-01
 - [ ] 01-02-PLAN.md - Implement first-launch English i18n baseline with explicit I18N-02 conflict alignment handling
+- [ ] 01-04-PLAN.md - Close diagnosed UAT gaps for single tray icon, startup toggle sync, and macOS fullscreen close-to-tray reliability
 
 ### Phase 2: USB Connection Setup
 **Goal**: Kullanici desteklenen USB serial kontrolcuyu hizli sekilde bulup baglayabilir.
