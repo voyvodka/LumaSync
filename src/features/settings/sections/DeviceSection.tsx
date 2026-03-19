@@ -49,8 +49,11 @@ export function DeviceSection() {
     !canConnect || isScanning || (connectButtonLabel === "connected" && connectedPort === selectedPort);
 
   const statusVariant = statusCard?.variant ?? "info";
+  const isRefreshRateLimited = statusCard?.code === "REFRESH_RATE_LIMITED";
   const statusTitle =
-    statusCard?.code === "SELECTED_PORT_MISSING"
+    isRefreshRateLimited
+      ? t("device.status.rateLimitedTitle")
+      : statusCard?.code === "SELECTED_PORT_MISSING"
       ? t("device.status.missingTitle")
       : statusVariant === "success"
         ? t("device.status.connectedTitle")
@@ -60,7 +63,9 @@ export function DeviceSection() {
             ? t("device.status.scanningTitle")
             : t("device.status.idleTitle");
   const statusBody =
-    statusCard?.code === "SELECTED_PORT_MISSING"
+    isRefreshRateLimited
+      ? t("device.status.rateLimitedBody")
+      : statusCard?.code === "SELECTED_PORT_MISSING"
       ? t("device.status.missingBody")
       : statusVariant === "success"
         ? t("device.status.connectedBody", {
@@ -71,6 +76,12 @@ export function DeviceSection() {
           : status === "scanning"
             ? t("device.status.scanningBody")
             : t("device.status.idleBody");
+
+  const refreshHint = isScanning
+    ? t("device.actions.scanning")
+    : isRefreshRateLimited
+      ? t("device.actions.refreshLimited")
+      : t("device.actions.ready");
 
   const renderPortRows = (kind: "supported" | "other") => {
     const list = kind === "supported" ? groupedPorts.supported : groupedPorts.other;
@@ -144,13 +155,17 @@ export function DeviceSection() {
       <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-300">{t("device.description")}</p>
 
       <div className="mt-6 flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-600 dark:text-zinc-300">{isScanning ? t("device.actions.scanning") : t("device.actions.ready")}</p>
+        <p className="text-sm text-slate-600 dark:text-zinc-300">{refreshHint}</p>
         <button
           type="button"
           onClick={() => {
             void refreshPorts();
           }}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500"
+          className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            isRefreshRateLimited
+              ? "border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20"
+              : "border-slate-300 bg-white text-slate-900 hover:border-slate-900 hover:bg-slate-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+          }`}
           disabled={isScanning}
         >
           {isScanning ? t("device.actions.scanning") : t("device.actions.refresh")}
@@ -214,7 +229,9 @@ export function DeviceSection() {
 
       <div
         className={`mt-6 rounded-xl border p-4 ${
-          statusVariant === "success"
+          isRefreshRateLimited
+            ? "border-amber-200 bg-amber-50/80 dark:border-amber-500/50 dark:bg-amber-900/20"
+            : statusVariant === "success"
             ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
             : statusVariant === "error"
               ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"

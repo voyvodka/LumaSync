@@ -39,6 +39,7 @@
     "actions": {
       "refresh": "Refresh",
       "ready": "Device scan is ready.",
+      "refreshLimited": "Refresh is briefly limited. Please wait a moment.",
       "scanning": "Scanning ports...",
       "connect": "Connect",
       "reconnect": "Reconnect",
@@ -72,6 +73,8 @@
       "idleBody": "Select a port and use Connect when ready.",
       "scanningTitle": "Refreshing serial ports",
       "scanningBody": "We keep your list visible while scan runs in the background.",
+      "rateLimitedTitle": "Refresh is temporarily limited",
+      "rateLimitedBody": "You clicked Refresh too quickly. Wait for the short cooldown, then try again.",
       "connectedTitle": "Connection established",
       "connectedBody": "Connected on {{port}}. You can keep using this port for the next start.",
       "missingTitle": "Previously selected port is missing",

@@ -39,6 +39,7 @@
     "actions": {
       "refresh": "Yenile",
       "ready": "Cihaz taraması hazır.",
+      "refreshLimited": "Yenileme kısa süreli sınırlı. Lütfen biraz bekle.",
       "scanning": "Portlar taranıyor...",
       "connect": "Bağlan",
       "reconnect": "Yeniden bağlan",
@@ -72,6 +73,8 @@
       "idleBody": "Bir port seçip hazır olduğunda Bağlan'ı kullan.",
       "scanningTitle": "Serial portlar yenileniyor",
       "scanningBody": "Tarama arkada çalışırken mevcut liste ekranda kalır.",
+      "rateLimitedTitle": "Yenileme geçici olarak sınırlı",
+      "rateLimitedBody": "Yenile'ye çok hızlı bastın. Kısa bekleme bitince tekrar dene.",
       "connectedTitle": "Bağlantı kuruldu",
       "connectedBody": "{{port}} üzerinden bağlandı. Sonraki açılışta aynı portu kullanabilirsin.",
       "missingTitle": "Önceki seçili port kayıp",
