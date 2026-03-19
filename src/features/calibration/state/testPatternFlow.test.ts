@@ -95,4 +95,25 @@ describe("createTestPatternFlow", () => {
     expect(snapshot.isBlockingSave).toBe(false);
     expect(startPhysicalPattern).not.toHaveBeenCalled();
   });
+
+  it("uses configured led count to loop preview marker", async () => {
+    const raf = createRafHarness();
+    const flow = createTestPatternFlow({
+      getConnectionStatus: async () => ({ connected: false }),
+      startPhysicalPattern: async () => undefined,
+      stopPhysicalPattern: async () => undefined,
+      now: raf.now,
+      scheduleFrame: raf.scheduleFrame,
+      cancelFrame: raf.cancelFrame,
+    });
+
+    flow.setTotalLeds(2);
+    await flow.toggle(true);
+
+    raf.advanceBy(130);
+    expect(flow.getSnapshot().markerIndex).toBe(1);
+
+    raf.advanceBy(130);
+    expect(flow.getSnapshot().markerIndex).toBe(0);
+  });
 });
