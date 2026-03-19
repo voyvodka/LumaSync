@@ -14,6 +14,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
+import { CalibrationOverlay } from "./features/calibration/ui/CalibrationOverlay";
+import {
+  deriveCalibrationOverlayEntry,
+  startCalibrationFromSettings,
+  type CalibrationOverlayStep,
+} from "./features/calibration/state/entryFlow";
+import type { LedCalibrationConfig } from "./features/calibration/model/contracts";
 import {
   initWindowLifecycle,
   loadShellState,
@@ -26,6 +33,9 @@ import {
 
 function App() {
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.GENERAL);
+  const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [overlayStep, setOverlayStep] = useState<CalibrationOverlayStep>("editor");
   const [lifecycleReady, setLifecycleReady] = useState(false);
 
   useEffect(() => {
@@ -33,6 +43,16 @@ function App() {
       try {
         const state = await loadShellState();
         setActiveSection(state.lastSection);
+        setSavedCalibration(state.ledCalibration);
+
+        const entry = deriveCalibrationOverlayEntry({
+          hasConnectedDevice: Boolean(state.lastSuccessfulPort),
+          savedCalibration: state.ledCalibration,
+        });
+        if (entry.open) {
+          setOverlayStep(entry.step);
+          setOverlayOpen(true);
+        }
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
@@ -59,13 +79,34 @@ function App() {
     } catch {}
   }, []);
 
+  const handleOpenCalibration = useCallback(() => {
+    const entry = startCalibrationFromSettings(savedCalibration);
+    setOverlayStep(entry.step);
+    setOverlayOpen(entry.open);
+  }, [savedCalibration]);
+
   void lifecycleReady;
 
   return (
-    <SettingsLayout
-      activeSection={activeSection}
-      onSectionChange={handleSectionChange}
-    />
+    <>
+      <SettingsLayout
+        activeSection={activeSection}
+        onSectionChange={handleSectionChange}
+        calibration={savedCalibration}
+        onOpenCalibration={handleOpenCalibration}
+      />
+      <CalibrationOverlay
+        open={overlayOpen}
+        initialStep={overlayStep}
+        initialConfig={savedCalibration}
+        onClose={() => {
+          setOverlayOpen(false);
+        }}
+        onSaved={(config) => {
+          setSavedCalibration(config);
+        }}
+      />
+    </>
   );
 }
 

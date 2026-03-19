@@ -22,6 +22,8 @@ interface EditorConfigPatch {
   direction?: LedDirection;
 }
 
+type CalibrationDraftModel = Omit<LedCalibrationConfig, "totalLeds">;
+
 function normalizeConfig(config: LedCalibrationConfig): LedCalibrationConfig {
   const counts = {
     top: config.counts.top,
@@ -39,6 +41,13 @@ function normalizeConfig(config: LedCalibrationConfig): LedCalibrationConfig {
     direction: config.direction,
     totalLeds: sumSegmentCounts(counts),
   };
+}
+
+function normalizeDraft(config: CalibrationDraftModel): LedCalibrationConfig {
+  return normalizeConfig({
+    ...config,
+    totalLeds: sumSegmentCounts(config.counts),
+  });
 }
 
 function modelFingerprint(config: LedCalibrationConfig): string {
@@ -92,6 +101,13 @@ export function updateEditorConfig(
   };
 
   return buildState(state.baseline, next);
+}
+
+export function loadEditorConfig(
+  state: CalibrationEditorState,
+  model: CalibrationDraftModel,
+): CalibrationEditorState {
+  return buildState(state.baseline, normalizeDraft(model));
 }
 
 export function saveEditorCalibration(state: CalibrationEditorState): CalibrationEditorState {

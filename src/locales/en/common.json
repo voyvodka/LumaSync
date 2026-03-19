@@ -6,7 +6,8 @@
       "startupTray": "Startup & Tray",
       "language": "Language",
       "aboutLogs": "About & Logs",
-      "device": "Device"
+      "device": "Device",
+      "calibration": "Calibration"
     }
   },
   "language": {
@@ -102,6 +103,50 @@
           "pass": "Pass",
           "fail": "Fail"
         }
+      }
+    }
+  },
+  "calibration": {
+    "section": {
+      "title": "Calibration",
+      "description": "Reuse the same editor for first-time setup and advanced adjustments.",
+      "template": "Template",
+      "totalLeds": "Total LEDs",
+      "notConfigured": "Not configured",
+      "edit": "Edit calibration"
+    },
+    "overlay": {
+      "title": "Calibration Editor",
+      "close": "Close",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving...",
+      "unsavedTitle": "Unsaved changes",
+      "unsavedDescription": "You have unsaved calibration changes. Discard and close?",
+      "keepEditing": "Keep editing",
+      "discard": "Discard"
+    },
+    "template": {
+      "title": "Pick a monitor template",
+      "description": "Start with a template or skip to manual setup.",
+      "ledCount": "{{count}} LEDs",
+      "skip": "Skip and configure manually"
+    },
+    "editor": {
+      "title": "LED map editor",
+      "description": "Adjust edge counts, start anchor, and direction before saving.",
+      "dirty": "Unsaved",
+      "saved": "Saved",
+      "startAnchor": "Start anchor",
+      "direction": "Direction",
+      "totalLeds": "Total LEDs: {{count}}",
+      "changeTemplate": "Change template",
+      "counts": {
+        "top": "Top",
+        "left": "Left",
+        "right": "Right",
+        "bottomLeft": "Bottom left",
+        "bottomRight": "Bottom right"
       }
     }
   }

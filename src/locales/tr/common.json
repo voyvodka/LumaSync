@@ -6,7 +6,8 @@
       "startupTray": "Başlangıç & Tepsi",
       "language": "Dil",
       "aboutLogs": "Hakkında & Günlükler",
-      "device": "Cihaz"
+      "device": "Cihaz",
+      "calibration": "Kalibrasyon"
     }
   },
   "language": {
@@ -102,6 +103,50 @@
           "pass": "Geçti",
           "fail": "Kaldı"
         }
+      }
+    }
+  },
+  "calibration": {
+    "section": {
+      "title": "Kalibrasyon",
+      "description": "Ilk kurulum ve ileri duzenleme icin ayni editoru kullan.",
+      "template": "Sablon",
+      "totalLeds": "Toplam LED",
+      "notConfigured": "Yapilandirilmadi",
+      "edit": "Kalibrasyonu duzenle"
+    },
+    "overlay": {
+      "title": "Kalibrasyon Editoru",
+      "close": "Kapat",
+      "cancel": "Iptal",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor...",
+      "unsavedTitle": "Kaydedilmemis degisiklik",
+      "unsavedDescription": "Kaydedilmemis kalibrasyon degisiklikleri var. Kapatip vazgecmek istiyor musun?",
+      "keepEditing": "Duzenlemeye devam et",
+      "discard": "Vazgec"
+    },
+    "template": {
+      "title": "Monitor sablonu sec",
+      "description": "Bir sablonla basla veya manuel kuruluma gec.",
+      "ledCount": "{{count}} LED",
+      "skip": "Atla ve manuel ayarla"
+    },
+    "editor": {
+      "title": "LED harita editoru",
+      "description": "Kaydetmeden once kenar sayilarini, baslangic noktasini ve yonu duzenle.",
+      "dirty": "Kaydedilmedi",
+      "saved": "Kaydedildi",
+      "startAnchor": "Baslangic noktasi",
+      "direction": "Yon",
+      "totalLeds": "Toplam LED: {{count}}",
+      "changeTemplate": "Sablon degistir",
+      "counts": {
+        "top": "Ust",
+        "left": "Sol",
+        "right": "Sag",
+        "bottomLeft": "Alt sol",
+        "bottomRight": "Alt sag"
       }
     }
   }

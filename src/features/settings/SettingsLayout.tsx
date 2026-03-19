@@ -6,6 +6,8 @@ import { StartupTraySection } from "./sections/StartupTraySection";
 import { LanguageSection } from "./sections/LanguageSection";
 import { AboutLogsSection } from "./sections/AboutLogsSection";
 import { DeviceSection } from "./sections/DeviceSection";
+import { CalibrationSection } from "./sections/CalibrationSection";
+import type { LedCalibrationConfig } from "../calibration/model/contracts";
 
 interface SectionMeta {
   id: SectionId;
@@ -13,7 +15,15 @@ interface SectionMeta {
   marker: string;
 }
 
-function SectionContent({ sectionId }: { sectionId: SectionId }) {
+function SectionContent({
+  sectionId,
+  calibration,
+  onOpenCalibration,
+}: {
+  sectionId: SectionId;
+  calibration?: LedCalibrationConfig;
+  onOpenCalibration: () => void;
+}) {
   switch (sectionId) {
     case SECTION_IDS.GENERAL:
       return <GeneralSection />;
@@ -25,6 +35,8 @@ function SectionContent({ sectionId }: { sectionId: SectionId }) {
       return <AboutLogsSection />;
     case SECTION_IDS.DEVICE:
       return <DeviceSection />;
+    case SECTION_IDS.CALIBRATION:
+      return <CalibrationSection calibration={calibration} onEdit={onOpenCalibration} />;
     default:
       return <GeneralSection />;
   }
@@ -33,9 +45,16 @@ function SectionContent({ sectionId }: { sectionId: SectionId }) {
 interface SettingsLayoutProps {
   activeSection: SectionId;
   onSectionChange: (sectionId: SectionId) => void;
+  calibration?: LedCalibrationConfig;
+  onOpenCalibration: () => void;
 }
 
-export function SettingsLayout({ activeSection, onSectionChange }: SettingsLayoutProps) {
+export function SettingsLayout({
+  activeSection,
+  onSectionChange,
+  calibration,
+  onOpenCalibration,
+}: SettingsLayoutProps) {
   const { t } = useTranslation("common");
 
   const sectionMeta = useMemo<Record<SectionId, SectionMeta>>(
@@ -64,6 +83,11 @@ export function SettingsLayout({ activeSection, onSectionChange }: SettingsLayou
         id: SECTION_IDS.DEVICE,
         label: t("settings.sections.device"),
         marker: "DV",
+      },
+      [SECTION_IDS.CALIBRATION]: {
+        id: SECTION_IDS.CALIBRATION,
+        label: t("settings.sections.calibration"),
+        marker: "CL",
       },
     }),
     [t],
@@ -115,7 +139,11 @@ export function SettingsLayout({ activeSection, onSectionChange }: SettingsLayou
       </nav>
 
       <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:py-8" role="main">
-        <SectionContent sectionId={activeSection} />
+        <SectionContent
+          sectionId={activeSection}
+          calibration={calibration}
+          onOpenCalibration={onOpenCalibration}
+        />
       </main>
     </div>
   );
