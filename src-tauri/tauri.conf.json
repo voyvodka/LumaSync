@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ambilight",
+  "productName": "Ambilight",
   "version": "0.1.0",
   "identifier": "com.ambilight.app",
   "build": {
@@ -12,13 +12,23 @@
   "app": {
     "windows": [
       {
-        "title": "ambilight",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "Ambilight Settings",
+        "width": 900,
+        "height": 620,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true,
+        "center": true,
+        "visible": true
       }
     ],
     "security": {
       "csp": null
+    },
+    "trayIcon": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": true
     }
   },
   "bundle": {
