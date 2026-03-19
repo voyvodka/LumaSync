@@ -79,10 +79,18 @@ Each task was committed atomically:
 - **Verification:** `cargo check --manifest-path src-tauri/Cargo.toml`
 - **Committed in:** `19e635e` (part of Task 1 commit)
 
+**2. [Rule 3 - Blocking] Patched STATE current-position section after `state advance-plan` parse failure**
+- **Found during:** Plan metadata/state update
+- **Issue:** `gsd-tools state advance-plan` could not parse existing STATE current-plan format (`Cannot parse Current Plan or Total Plans in Phase from STATE.md`).
+- **Fix:** Updated `Current Position`, `Last activity`, and phase metrics manually to reflect completed 01-05 execution.
+- **Files modified:** `.planning/STATE.md`
+- **Verification:** Re-read `STATE.md` and confirmed plan position is `5 of 5` with updated activity/metrics.
+- **Committed in:** `567e487` (metadata commit)
+
 ---
 
-**Total deviations:** 1 auto-fixed (1 blocking)
-**Impact on plan:** Blocking fixes were strictly implementation-level and required to complete planned fullscreen staging.
+**Total deviations:** 2 auto-fixed (2 blocking)
+**Impact on plan:** Both fixes were necessary to complete implementation and metadata finalization without changing planned scope.
 
 ## Issues Encountered
 None.
