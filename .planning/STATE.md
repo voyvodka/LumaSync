@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-19T15:05:18.883Z"
-last_activity: 2026-03-19 - Completed 02-01 device contracts and selection rules
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-03-19T15:15:41.988Z"
+last_activity: 2026-03-19 - Completed 02-03 device panel scan-select-connect UX
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 2 - USB Connection Setup
+**Current focus:** Phase 3 - Connection Resilience and Health
 
 ## Current Position
 
 Phase: 2 of 8 (USB Connection Setup)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-03-19 - Completed 02-01 device contracts and selection rules
+Plan: 3 of 3 in current phase
+Status: Complete (ready for next phase)
+Last activity: 2026-03-19 - Completed 02-03 device panel scan-select-connect UX
 
-Progress: [█████████░] 88%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -55,6 +55,7 @@ Progress: [█████████░] 88%
 | Phase 01 P05 | 1 min | 2 tasks | 3 files |
 | Phase 02 P02 | 4 min | 2 tasks | 5 files |
 | Phase 02 P01 | 4 min | 2 tasks | 7 files |
+| Phase 02 P03 | 6 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Recent decisions affecting current work:
 - [Phase 02]: Supported and unsupported ports are split into deterministic groups with supported listed first.
 - [Phase 02]: Initial selection prefers lastSuccessfulPort when present; otherwise first supported port.
 - [Phase 02]: Remembered port persistence remains success-only and explicit connect is never auto-triggered on selection.
+- [Phase 02]: Device connection behavior now runs through a controller+hook state machine for testability
+- [Phase 02]: Refresh keeps existing port rows visible while status changes to scanning
+- [Phase 02]: Remembered port persistence remains success-only after explicit connect
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T15:05:18.881Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-19T15:15:41.986Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None

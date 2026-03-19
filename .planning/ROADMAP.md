@@ -11,7 +11,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: App Shell and Baseline Defaults** - Tray tabanli uygulama acilir, ayarlar penceresi erisilebilir ve ilk acilis varsayimlari oturur. (completed 2026-03-19)
-- [ ] **Phase 2: USB Connection Setup** - Cihaz auto-detect ve manuel port fallback ile baglanti kurulabilir.
+- [x] **Phase 2: USB Connection Setup** - Cihaz auto-detect ve manuel port fallback ile baglanti kurulabilir. (completed 2026-03-19)
 - [ ] **Phase 3: Connection Resilience and Health** - Kopma-sonrasi toparlanma ve setup sirasinda saglik kontrolu guvenilir calisir.
 - [ ] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar.
 - [ ] **Phase 5: Core Lighting Modes** - Realtime Ambilight ve solid-color modlari kullanilabilir olur.
@@ -117,7 +117,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
-| 2. USB Connection Setup | 2/3 | In Progress|  |
+| 2. USB Connection Setup | 3/3 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 0/TBD | Not started | - |
 | 4. Calibration Workflow | 0/TBD | Not started | - |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
