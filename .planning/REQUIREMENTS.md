@@ -79,30 +79,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONN-01 | Phase TBD | Pending |
-| CONN-02 | Phase TBD | Pending |
-| CONN-03 | Phase TBD | Pending |
-| CONN-04 | Phase TBD | Pending |
-| CAL-01 | Phase TBD | Pending |
-| CAL-02 | Phase TBD | Pending |
-| CAL-03 | Phase TBD | Pending |
-| CAL-04 | Phase TBD | Pending |
-| MODE-01 | Phase TBD | Pending |
-| MODE-02 | Phase TBD | Pending |
-| QUAL-01 | Phase TBD | Pending |
-| QUAL-02 | Phase TBD | Pending |
-| QUAL-03 | Phase TBD | Pending |
-| QUAL-04 | Phase TBD | Pending |
-| UX-01 | Phase TBD | Pending |
-| UX-02 | Phase TBD | Pending |
-| I18N-01 | Phase TBD | Pending |
-| I18N-02 | Phase TBD | Pending |
+| CONN-01 | Phase 2 | Pending |
+| CONN-02 | Phase 2 | Pending |
+| CONN-03 | Phase 3 | Pending |
+| CONN-04 | Phase 3 | Pending |
+| CAL-01 | Phase 4 | Pending |
+| CAL-02 | Phase 4 | Pending |
+| CAL-03 | Phase 4 | Pending |
+| CAL-04 | Phase 4 | Pending |
+| MODE-01 | Phase 5 | Pending |
+| MODE-02 | Phase 5 | Pending |
+| QUAL-01 | Phase 6 | Pending |
+| QUAL-02 | Phase 6 | Pending |
+| QUAL-03 | Phase 7 | Pending |
+| QUAL-04 | Phase 8 | Pending |
+| UX-01 | Phase 1 | Pending |
+| UX-02 | Phase 4 | Pending |
+| I18N-01 | Phase 7 | Pending |
+| I18N-02 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-19*
-*Last updated: 2026-03-19 after initial definition*
+*Last updated: 2026-03-19 after roadmap mapping*
