@@ -1,0 +1,91 @@
+/**
+ * Shell Contracts
+ *
+ * Single source of truth for tray menu IDs, sidebar section IDs,
+ * and persisted shell state fields.
+ *
+ * All consumer modules MUST import from here — never use magic strings.
+ */
+
+// ---------------------------------------------------------------------------
+// Tray Menu IDs
+// ---------------------------------------------------------------------------
+
+/** Canonical identifiers for tray menu items */
+export const TRAY_MENU_IDS = {
+  OPEN_SETTINGS: "open-settings",
+  STATUS_INDICATOR: "status-indicator",
+  STARTUP_TOGGLE: "startup-toggle",
+  QUIT: "quit",
+} as const;
+
+export type TrayMenuId = (typeof TRAY_MENU_IDS)[keyof typeof TRAY_MENU_IDS];
+
+// ---------------------------------------------------------------------------
+// Settings Sidebar Section IDs
+// ---------------------------------------------------------------------------
+
+/** Phase 1 baseline sidebar section identifiers */
+export const SECTION_IDS = {
+  GENERAL: "general",
+  STARTUP_TRAY: "startup-tray",
+  LANGUAGE: "language",
+  ABOUT_LOGS: "about-logs",
+  DEVICE: "device",
+} as const;
+
+export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS];
+
+/** Ordered list of sidebar sections for rendering */
+export const SECTION_ORDER: SectionId[] = [
+  SECTION_IDS.GENERAL,
+  SECTION_IDS.STARTUP_TRAY,
+  SECTION_IDS.LANGUAGE,
+  SECTION_IDS.ABOUT_LOGS,
+  SECTION_IDS.DEVICE,
+];
+
+// ---------------------------------------------------------------------------
+// Persisted Shell State Contract
+// ---------------------------------------------------------------------------
+
+/** Shape of shell state persisted to disk via plugin-store */
+export interface ShellState {
+  /** Window geometry (pixels) */
+  windowWidth: number;
+  windowHeight: number;
+  /** Window position — null means use OS default / centered */
+  windowX: number | null;
+  windowY: number | null;
+  /** Last active sidebar section */
+  lastSection: SectionId;
+  /** Whether the user has already seen the "minimized to tray" one-time hint */
+  trayHintShown: boolean;
+  /** Whether to launch at OS login */
+  startupEnabled: boolean;
+}
+
+/** Default shell state for first launch */
+export const DEFAULT_SHELL_STATE: ShellState = {
+  windowWidth: 900,
+  windowHeight: 620,
+  windowX: null,
+  windowY: null,
+  lastSection: SECTION_IDS.GENERAL,
+  trayHintShown: false,
+  startupEnabled: false,
+};
+
+// ---------------------------------------------------------------------------
+// Store Keys
+// ---------------------------------------------------------------------------
+
+/** Key used by plugin-store to persist shell state */
+export const SHELL_STORE_KEY = "shell-state";
+
+// ---------------------------------------------------------------------------
+// Window Constraints
+// ---------------------------------------------------------------------------
+
+export const WINDOW_MIN_WIDTH = 720;
+export const WINDOW_MIN_HEIGHT = 480;
