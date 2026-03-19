@@ -90,7 +90,19 @@
       "passTitle": "Sağlık kontrolü geçti",
       "passBody": "Seçili port için tüm kurulum kontrolleri başarıyla geçti.",
       "failTitle": "Sağlık kontrolü başarısız",
-      "failBody": "Başarısız adım detayını inceleyip yenile, farklı port seç veya tekrar dene."
+      "failBody": "Başarısız adım detayını inceleyip yenile, farklı port seç veya tekrar dene.",
+      "steps": {
+        "title": "Adım sonuçları",
+        "labels": {
+          "PORT_VISIBLE": "Port görünürlüğü",
+          "PORT_SUPPORTED": "Port desteği",
+          "CONNECT_AND_VERIFY": "Bağlan ve doğrula"
+        },
+        "outcome": {
+          "pass": "Geçti",
+          "fail": "Kaldı"
+        }
+      }
     }
   }
 }

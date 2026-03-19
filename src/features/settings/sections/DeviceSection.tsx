@@ -66,6 +66,8 @@ export function DeviceSection() {
   const statusBody = t(statusModel.bodyKey, {
     port: connectedPort ?? selectedPort ?? "-",
   });
+  const healthStepOutcomes = statusModel.healthSteps ?? [];
+  const showHealthStepOutcomes = latestHealthCheck !== null && healthStepOutcomes.length > 0;
 
   const refreshHint = isScanning
     ? t("device.actions.scanning")
@@ -238,6 +240,35 @@ export function DeviceSection() {
         <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">{statusTitle}</h3>
         <p className="mt-1 text-sm text-slate-700 dark:text-zinc-200">{statusBody}</p>
         {statusModel.details ? <p className="mt-2 text-xs text-slate-500 dark:text-zinc-400">{statusModel.details}</p> : null}
+        {showHealthStepOutcomes ? (
+          <div className="mt-3 rounded-lg border border-slate-200/80 bg-white/60 p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-zinc-300">
+              {t("device.healthCheck.steps.title")}
+            </p>
+            <ul className="mt-2 space-y-2">
+              {healthStepOutcomes.map((stepOutcome) => (
+                <li key={stepOutcome.step} className="rounded-md border border-slate-200/70 bg-slate-50/80 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-slate-800 dark:text-zinc-100">
+                      {t(`device.healthCheck.steps.labels.${stepOutcome.step}`)}
+                    </span>
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                        stepOutcome.pass
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+                          : "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300"
+                      }`}
+                    >
+                      {stepOutcome.pass ? t("device.healthCheck.steps.outcome.pass") : t("device.healthCheck.steps.outcome.fail")}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-zinc-300">{stepOutcome.message}</p>
+                  {stepOutcome.details ? <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">{stepOutcome.details}</p> : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <p className="mt-3 text-xs text-slate-600 dark:text-zinc-300">{t("device.status.nextSteps")}</p>
       </div>
     </section>

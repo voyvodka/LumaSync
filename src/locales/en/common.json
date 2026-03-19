@@ -90,7 +90,19 @@
       "passTitle": "Health check passed",
       "passBody": "All setup checks passed for the selected port.",
       "failTitle": "Health check failed",
-      "failBody": "Review the failed step details, then refresh, choose another port, or retry."
+      "failBody": "Review the failed step details, then refresh, choose another port, or retry.",
+      "steps": {
+        "title": "Step outcomes",
+        "labels": {
+          "PORT_VISIBLE": "Port visibility",
+          "PORT_SUPPORTED": "Port support",
+          "CONNECT_AND_VERIFY": "Connect and verify"
+        },
+        "outcome": {
+          "pass": "Pass",
+          "fail": "Fail"
+        }
+      }
     }
   }
 }
