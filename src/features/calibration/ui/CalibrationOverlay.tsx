@@ -5,6 +5,10 @@ import { shellStore } from "../../persistence/shellStore";
 import type { LedCalibrationConfig } from "../model/contracts";
 import { applyTemplate, resetToManual } from "../model/templates";
 import {
+  validateCalibrationConfig,
+  type CalibrationValidationError,
+} from "../model/validation";
+import {
   createCalibrationEditorState,
   keepEditing,
   loadEditorConfig,
@@ -67,6 +71,7 @@ export function CalibrationOverlay({
     }),
   );
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
+  const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -75,6 +80,7 @@ export function CalibrationOverlay({
 
     setActiveStep(initialStep);
     setEditorState(buildInitialEditorState(initialConfig));
+    setValidationErrors(null);
     flowRef.current.setTotalLeds((initialConfig ?? resetToManual()).totalLeds);
     setTestPattern(flowRef.current.getSnapshot());
   }, [open, initialStep, initialConfig]);
@@ -153,15 +159,19 @@ export function CalibrationOverlay({
                     },
                   }),
                 );
+                setValidationErrors(null);
               }}
               onStartAnchorChange={(startAnchor) => {
                 setEditorState((prev) => updateEditorConfig(prev, { startAnchor }));
+                setValidationErrors(null);
               }}
               onDirectionChange={(direction) => {
                 setEditorState((prev) => updateEditorConfig(prev, { direction }));
+                setValidationErrors(null);
               }}
               onBottomGapChange={(px) => {
                 setEditorState((prev) => updateEditorConfig(prev, { bottomGapPx: px }));
+                setValidationErrors(null);
               }}
               onResetTemplate={() => {
                 setActiveStep("template");
@@ -198,6 +208,15 @@ export function CalibrationOverlay({
               </span>
             ) : null}
           </div>
+          {validationErrors && validationErrors.length > 0 ? (
+            <ul className="mr-auto flex flex-col gap-1 text-xs text-rose-400">
+              {validationErrors.map((error) => (
+                <li key={`${error.code}:${error.field}`}>
+                  {error.code}: {error.field}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <button
             type="button"
             onClick={() => {
@@ -218,6 +237,13 @@ export function CalibrationOverlay({
             disabled={isSaving}
             onClick={async () => {
               setIsSaving(true);
+              const result = validateCalibrationConfig(editorState.current);
+              if (!result.ok) {
+                setValidationErrors(result.errors);
+                setIsSaving(false);
+                return;
+              }
+              setValidationErrors(null);
               try {
                 const savedState = saveEditorCalibration(editorState);
                 await shellStore.save({ ledCalibration: savedState.current });
@@ -273,7 +299,7 @@ export function CalibrationOverlay({
         ) : null}
       </div>
     );
-  }, [activeStep, editorState, initialConfig, initialStep, isSaving, onClose, onSaved, open, t]);
+  }, [activeStep, editorState, initialConfig, initialStep, isSaving, onClose, onSaved, open, t, validationErrors]);
 
   if (!open) {
     return null;
