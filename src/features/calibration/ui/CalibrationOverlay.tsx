@@ -47,6 +47,32 @@ function resolveMarkerSegment(markerIndex: number, config: LedCalibrationConfig)
   return sequence[normalizedMarkerIndex]?.segment ?? "top";
 }
 
+function areSnapshotsEqual(left: TestPatternSnapshot, right: TestPatternSnapshot) {
+  return (
+    left.isEnabled === right.isEnabled &&
+    left.mode === right.mode &&
+    left.markerIndex === right.markerIndex &&
+    left.totalLeds === right.totalLeds &&
+    left.isBlockingSave === right.isBlockingSave
+  );
+}
+
+function buildSegmentOrder(config: LedCalibrationConfig) {
+  const sequence = buildLedSequence(config);
+  const seen = new Set<string>();
+  const order: string[] = [];
+
+  for (const item of sequence) {
+    if (seen.has(item.segment)) {
+      continue;
+    }
+    seen.add(item.segment);
+    order.push(item.segment);
+  }
+
+  return order;
+}
+
 export function CalibrationOverlay({
   open,
   initialStep,
@@ -88,6 +114,30 @@ export function CalibrationOverlay({
   }, [editorState.current]);
 
   useEffect(() => {
+    if (!open || !testPattern.isEnabled) {
+      return;
+    }
+
+    let frameId: number | null = null;
+    const syncSnapshot = () => {
+      const latest = flowRef.current.getSnapshot();
+      setTestPattern((prev) => (areSnapshotsEqual(prev, latest) ? prev : latest));
+
+      if (latest.isEnabled) {
+        frameId = window.requestAnimationFrame(syncSnapshot);
+      }
+    };
+
+    frameId = window.requestAnimationFrame(syncSnapshot);
+
+    return () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [open, testPattern.isEnabled]);
+
+  useEffect(() => {
     if (open) {
       return;
     }
@@ -104,6 +154,7 @@ export function CalibrationOverlay({
   }, []);
 
   const markerSegment = resolveMarkerSegment(testPattern.markerIndex, editorState.current);
+  const segmentOrder = useMemo(() => buildSegmentOrder(editorState.current), [editorState.current]);
 
   const shell = useMemo(() => {
     if (!open) {
@@ -191,13 +242,33 @@ export function CalibrationOverlay({
               <span>{t("calibration.overlay.testPatternToggle")}</span>
             </label>
             {testPattern.isEnabled ? (
-              <span className="rounded-md bg-white/15 px-2 py-1">
-                {t("calibration.overlay.previewProgress", {
-                  led: testPattern.markerIndex + 1,
-                  total: Math.max(1, testPattern.totalLeds),
-                  segment: t(`calibration.editor.counts.${markerSegment}`),
-                })}
-              </span>
+              <>
+                <span className="rounded-md bg-white/15 px-2 py-1">
+                  {t("calibration.overlay.previewProgress", {
+                    led: testPattern.markerIndex + 1,
+                    total: Math.max(1, testPattern.totalLeds),
+                    segment: t(`calibration.editor.counts.${markerSegment}`),
+                  })}
+                </span>
+                <div className="flex items-center gap-1 rounded-md border border-cyan-300/45 bg-cyan-500/10 px-1.5 py-1">
+                  {segmentOrder.map((segment) => {
+                    const isActive = markerSegment === segment;
+
+                    return (
+                      <span
+                        key={segment}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${
+                          isActive
+                            ? "bg-cyan-300 text-slate-900"
+                            : "bg-white/10 text-white/80"
+                        }`}
+                      >
+                        {t(`calibration.editor.counts.${segment}`)}
+                      </span>
+                    );
+                  })}
+                </div>
+              </>
             ) : null}
             {testPattern.isEnabled && testPattern.mode === "preview-only" ? (
               <span className="rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-amber-100">
@@ -296,7 +367,21 @@ export function CalibrationOverlay({
         ) : null}
       </div>
     );
-  }, [activeStep, editorState, initialConfig, initialStep, isSaving, onClose, onSaved, open, t, validationErrors]);
+  }, [
+    activeStep,
+    editorState,
+    initialConfig,
+    initialStep,
+    isSaving,
+    markerSegment,
+    onClose,
+    onSaved,
+    open,
+    segmentOrder,
+    t,
+    testPattern,
+    validationErrors,
+  ]);
 
   if (!open) {
     return null;
