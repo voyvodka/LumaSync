@@ -63,6 +63,11 @@ export interface ShellState {
   trayHintShown: boolean;
   /** Whether to launch at OS login */
   startupEnabled: boolean;
+  /**
+   * User-selected language code (e.g. "en", "tr").
+   * Absent on first launch → languagePolicy defaults to "en" per I18N-02.
+   */
+  language?: string;
 }
 
 /** Default shell state for first launch */
