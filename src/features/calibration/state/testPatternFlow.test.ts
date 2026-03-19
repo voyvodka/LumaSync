@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildLedSequence } from "../model/indexMapping";
+import { buildLedSequence, resolveLedSequenceItem } from "../model/indexMapping";
 import type { LedCalibrationConfig } from "../model/contracts";
 import { createDefaultTestPatternFlow, createTestPatternFlow } from "./testPatternFlow";
 
@@ -164,6 +164,28 @@ describe("createTestPatternFlow", () => {
 });
 
 describe("createDefaultTestPatternFlow", () => {
+  it("normalizes marker index lookup through shared sequence helper", () => {
+    const config = createConfig({
+      startAnchor: "bottom-left-end",
+      direction: "ccw",
+    });
+    const sequence = buildLedSequence(config);
+
+    const first = resolveLedSequenceItem(sequence, 0);
+    const wrappedForward = resolveLedSequenceItem(sequence, config.totalLeds);
+    const wrappedBackward = resolveLedSequenceItem(sequence, -1);
+
+    expect(first).toEqual(sequence[0]);
+    expect(wrappedForward).toEqual(sequence[0]);
+    expect(wrappedBackward).toEqual(sequence[config.totalLeds - 1]);
+  });
+
+  it("returns null for marker lookup when sequence is empty", () => {
+    expect(resolveLedSequenceItem([], 0)).toBeNull();
+    expect(resolveLedSequenceItem([], 12)).toBeNull();
+    expect(resolveLedSequenceItem([], -3)).toBeNull();
+  });
+
   it("preserves canonical physical indexes across orientation changes", () => {
     const cwConfig = createConfig({
       startAnchor: "left-end",
@@ -202,6 +224,7 @@ describe("createDefaultTestPatternFlow", () => {
       frameMs: 120,
       brightness: 64,
     });
+    expect(buildLedSequence(config)[snapshot.markerIndex].index).not.toBe(0);
   });
 
   it("setConfig updates ledIndexes on next toggle", async () => {
