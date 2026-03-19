@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Completed 01-app-shell-and-baseline-defaults-01-PLAN.md
-last_updated: "2026-03-19T09:53:30.831Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-03-19T10:00:57.021Z"
 last_activity: 2026-03-19 - Initial roadmap and requirement traceability created
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0%
 - Last 5 plans: -
 - Trend: Stable
 | Phase 01-app-shell-and-baseline-defaults P01 | 8min | 2 tasks | 10 files |
+| Phase 01-app-shell-and-baseline-defaults P03 | 4min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,8 @@ Recent decisions affecting current work:
 - Stability certification is isolated as final release gate.
 - [Phase 01-app-shell-and-baseline-defaults]: Used official Tauri v2 plugins over hand-rolled alternatives — Registered single-instance plugin first in builder chain (required per plugin docs)
 - [Phase 01-app-shell-and-baseline-defaults]: Shell contracts file (shell.ts) is single source of truth for all tray/section IDs — Downstream modules must import from contracts file, never use magic strings
+- [Phase 01-app-shell-and-baseline-defaults]: SettingsLayout as controlled component — App.tsx owns section state for persistence — Section state is owned by the shell, not SettingsLayout — cleaner separation
+- [Phase 01-app-shell-and-baseline-defaults]: CSS design tokens via :root variables — no Tailwind framework to keep bundle lean — Tailwind not set up; plain CSS tokens provide light/dark support without framework overhead
 
 ### Pending Todos
 
@@ -73,6 +76,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T09:53:30.829Z
-Stopped at: Completed 01-app-shell-and-baseline-defaults-01-PLAN.md
+Last session: 2026-03-19T10:00:57.019Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
