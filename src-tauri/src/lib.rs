@@ -15,6 +15,14 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime, State,
 };
 
+mod commands {
+    pub mod device_connection;
+}
+
+use commands::device_connection::{
+    connect_serial_port, get_serial_connection_status, list_serial_ports, SerialConnectionState,
+};
+
 const TRAY_ICON_ID: &str = "main-tray";
 
 struct TrayState<R: Runtime> {
@@ -126,6 +134,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             app.manage(TrayState { startup_toggle });
+            app.manage(SerialConnectionState::default());
 
             // Build tray icon
             TrayIconBuilder::with_id(TRAY_ICON_ID)
@@ -183,7 +192,12 @@ pub fn run() {
                 hide_to_tray(window);
             }
         })
-        .invoke_handler(tauri::generate_handler![set_tray_startup_checked])
+        .invoke_handler(tauri::generate_handler![
+            set_tray_startup_checked,
+            list_serial_ports,
+            connect_serial_port,
+            get_serial_connection_status
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
