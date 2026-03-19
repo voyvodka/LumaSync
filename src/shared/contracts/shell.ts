@@ -1,3 +1,5 @@
+import type { LedCalibrationConfig } from "../../features/calibration/model/contracts";
+
 /**
  * Shell Contracts
  *
@@ -32,6 +34,7 @@ export const SECTION_IDS = {
   LANGUAGE: "language",
   ABOUT_LOGS: "about-logs",
   DEVICE: "device",
+  CALIBRATION: "calibration",
 } as const;
 
 export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS];
@@ -43,6 +46,7 @@ export const SECTION_ORDER: SectionId[] = [
   SECTION_IDS.LANGUAGE,
   SECTION_IDS.ABOUT_LOGS,
   SECTION_IDS.DEVICE,
+  SECTION_IDS.CALIBRATION,
 ];
 
 // ---------------------------------------------------------------------------
@@ -73,6 +77,11 @@ export interface ShellState {
    * Updated only after a successful connection attempt.
    */
   lastSuccessfulPort?: string;
+  /**
+   * Last saved LED calibration model.
+   * Absent until user completes calibration flow.
+   */
+  ledCalibration?: LedCalibrationConfig;
 }
 
 /** Default shell state for first launch */

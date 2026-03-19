@@ -1,5 +1,7 @@
 export type LedDirection = "cw" | "ccw";
 
+export type LedSegmentKey = "top" | "left" | "right" | "bottomLeft" | "bottomRight";
+
 export type LedStartAnchor =
   | "top-start"
   | "top-end"
@@ -32,5 +34,12 @@ export interface LedCalibrationConfig {
 export interface CalibrationTemplate {
   id: string;
   label: string;
-  config: LedCalibrationConfig;
+  counts: LedSegmentCounts;
+  bottomGapPx: number;
+  startAnchor: LedStartAnchor;
+  direction: LedDirection;
+}
+
+export function sumSegmentCounts(counts: LedSegmentCounts): number {
+  return counts.top + counts.left + counts.right + counts.bottomLeft + counts.bottomRight;
 }

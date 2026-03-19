@@ -1,4 +1,5 @@
 import type { LedCalibrationConfig } from "./contracts";
+import { sumSegmentCounts } from "./contracts";
 
 export type CalibrationValidationCode =
   | "COUNTS_REQUIRED"
@@ -17,8 +18,32 @@ export interface CalibrationValidationResult {
 }
 
 export function validateCalibrationConfig(_config: LedCalibrationConfig): CalibrationValidationResult {
+  const errors: CalibrationValidationError[] = [];
+
+  const counts = _config.counts;
+  if (!counts) {
+    errors.push({ code: "COUNTS_REQUIRED", field: "counts" });
+    return { ok: false, errors };
+  }
+
+  const entries = Object.entries(counts) as Array<[string, number]>;
+  for (const [segment, value] of entries) {
+    if (!Number.isInteger(value) || value <= 0) {
+      errors.push({ code: "SEGMENT_NON_POSITIVE", field: `counts.${segment}` });
+    }
+  }
+
+  if (!Number.isInteger(_config.bottomGapPx) || _config.bottomGapPx < 0) {
+    errors.push({ code: "BOTTOM_GAP_NEGATIVE", field: "bottomGapPx" });
+  }
+
+  const expectedTotal = sumSegmentCounts(counts);
+  if (_config.totalLeds !== expectedTotal) {
+    errors.push({ code: "TOTAL_MISMATCH", field: "totalLeds" });
+  }
+
   return {
-    ok: true,
-    errors: [],
+    ok: errors.length === 0,
+    errors,
   };
 }
