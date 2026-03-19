@@ -68,7 +68,7 @@ export function CalibrationOverlay({
     createDefaultTestPatternFlow(async () => {
       const status = await getSerialConnectionStatus();
       return { connected: status.connected };
-    }),
+    }, initialConfig),
   );
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
@@ -86,9 +86,10 @@ export function CalibrationOverlay({
   }, [open, initialStep, initialConfig]);
 
   useEffect(() => {
+    flowRef.current.setConfig(editorState.current);
     flowRef.current.setTotalLeds(editorState.current.totalLeds);
     setTestPattern(flowRef.current.getSnapshot());
-  }, [editorState.current.totalLeds]);
+  }, [editorState.current]);
 
   useEffect(() => {
     if (open) {

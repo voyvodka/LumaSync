@@ -2,6 +2,8 @@ import {
   startCalibrationTestPattern,
   stopCalibrationTestPattern,
 } from "../calibrationApi";
+import type { LedCalibrationConfig } from "../model/contracts";
+import { buildLedSequence } from "../model/indexMapping";
 
 export type TestPatternMode = "sending" | "preview-only";
 
@@ -21,6 +23,8 @@ interface CreateTestPatternFlowDeps {
   getConnectionStatus: () => Promise<TestPatternConnectionStatus>;
   startPhysicalPattern: () => Promise<void>;
   stopPhysicalPattern: () => Promise<void>;
+  initialConfig?: LedCalibrationConfig;
+  onConfigChange?: (config: LedCalibrationConfig) => void;
   now?: () => number;
   scheduleFrame?: (callback: FrameRequestCallback) => number;
   cancelFrame?: (frameId: number) => void;
@@ -31,6 +35,7 @@ const MARKER_ADVANCE_MS = 120;
 export interface TestPatternFlow {
   getSnapshot: () => TestPatternSnapshot;
   setTotalLeds: (totalLeds: number) => TestPatternSnapshot;
+  setConfig: (config: LedCalibrationConfig) => void;
   toggle: (enabled: boolean) => Promise<TestPatternSnapshot>;
   dispose: () => Promise<void>;
 }
@@ -60,7 +65,6 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
 
   let frameId: number | null = null;
   let lastMarkerAt = now();
-
   const stopAnimation = () => {
     if (frameId === null) {
       return;
@@ -108,6 +112,9 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
         markerIndex: snapshot.markerIndex % normalizedTotal,
       };
       return snapshot;
+    },
+    setConfig: (config) => {
+      deps.onConfigChange?.(config);
     },
     toggle: async (enabled) => {
       if (enabled) {
@@ -161,12 +168,32 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
 
 export function createDefaultTestPatternFlow(
   getConnectionStatus: () => Promise<TestPatternConnectionStatus>,
+  initialConfig?: LedCalibrationConfig,
 ): TestPatternFlow {
+  let currentConfig: LedCalibrationConfig | null = initialConfig ?? null;
+
+  const resolvePhysicalIndex = () => {
+    if (!currentConfig) {
+      return 0;
+    }
+
+    const sequence = buildLedSequence(currentConfig);
+    if (sequence.length === 0) {
+      return 0;
+    }
+
+    return sequence[0].index;
+  };
+
   return createTestPatternFlow({
     getConnectionStatus,
+    initialConfig,
+    onConfigChange: (config) => {
+      currentConfig = config;
+    },
     startPhysicalPattern: async () => {
       await startCalibrationTestPattern({
-        ledIndexes: [0],
+        ledIndexes: [resolvePhysicalIndex()],
         frameMs: MARKER_ADVANCE_MS,
         brightness: 64,
       });
