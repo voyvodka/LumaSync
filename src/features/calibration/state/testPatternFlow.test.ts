@@ -1,6 +1,51 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createTestPatternFlow } from "./testPatternFlow";
+import { buildLedSequence } from "../model/indexMapping";
+import type { LedCalibrationConfig } from "../model/contracts";
+import { createDefaultTestPatternFlow, createTestPatternFlow } from "./testPatternFlow";
+
+vi.mock("../calibrationApi", () => ({
+  startCalibrationTestPattern: vi.fn(async () => undefined),
+  stopCalibrationTestPattern: vi.fn(async () => undefined),
+}));
+
+const calibrationApiModule = await import("../calibrationApi");
+
+const startCalibrationTestPatternMock = vi.mocked(calibrationApiModule.startCalibrationTestPattern);
+const stopCalibrationTestPatternMock = vi.mocked(calibrationApiModule.stopCalibrationTestPattern);
+
+beforeEach(() => {
+  (globalThis as { window?: Window & typeof globalThis }).window = {
+    requestAnimationFrame: (() => 1) as typeof window.requestAnimationFrame,
+    cancelAnimationFrame: (() => undefined) as typeof window.cancelAnimationFrame,
+  } as Window & typeof globalThis;
+});
+
+const BASE_COUNTS = {
+  top: 4,
+  right: 3,
+  bottomRight: 2,
+  bottomLeft: 2,
+  left: 3,
+} as const;
+
+function createConfig(overrides?: Partial<LedCalibrationConfig>): LedCalibrationConfig {
+  const totalLeds =
+    BASE_COUNTS.top +
+    BASE_COUNTS.right +
+    BASE_COUNTS.bottomRight +
+    BASE_COUNTS.bottomLeft +
+    BASE_COUNTS.left;
+
+  return {
+    counts: { ...BASE_COUNTS },
+    bottomGapPx: 24,
+    startAnchor: "left-end",
+    direction: "cw",
+    totalLeds,
+    ...overrides,
+  };
+}
 
 function createRafHarness(startMs = 1_000) {
   let nowMs = startMs;
@@ -115,5 +160,50 @@ describe("createTestPatternFlow", () => {
 
     raf.advanceBy(130);
     expect(flow.getSnapshot().markerIndex).toBe(0);
+  });
+});
+
+describe("createDefaultTestPatternFlow", () => {
+  it("uses buildLedSequence result for physical ledIndexes on toggle", async () => {
+    startCalibrationTestPatternMock.mockClear();
+    stopCalibrationTestPatternMock.mockClear();
+    const config = createConfig();
+    const flow = createDefaultTestPatternFlow(async () => ({ connected: true }), config);
+
+    await flow.toggle(true);
+
+    expect(startCalibrationTestPatternMock).toHaveBeenCalledTimes(1);
+    expect(startCalibrationTestPatternMock).toHaveBeenLastCalledWith({
+      ledIndexes: [buildLedSequence(config)[0].index],
+      frameMs: 120,
+      brightness: 64,
+    });
+  });
+
+  it("setConfig updates ledIndexes on next toggle", async () => {
+    startCalibrationTestPatternMock.mockClear();
+    stopCalibrationTestPatternMock.mockClear();
+    const initialConfig = createConfig();
+    const nextConfig = createConfig({
+      startAnchor: "bottom-right-end",
+      direction: "ccw",
+    });
+    const flow = createDefaultTestPatternFlow(async () => ({ connected: true }), initialConfig);
+
+    await flow.toggle(true);
+    await flow.toggle(false);
+    flow.setConfig(nextConfig);
+    await flow.toggle(true);
+
+    expect(startCalibrationTestPatternMock).toHaveBeenNthCalledWith(1, {
+      ledIndexes: [buildLedSequence(initialConfig)[0].index],
+      frameMs: 120,
+      brightness: 64,
+    });
+    expect(startCalibrationTestPatternMock).toHaveBeenNthCalledWith(2, {
+      ledIndexes: [buildLedSequence(nextConfig)[0].index],
+      frameMs: 120,
+      brightness: 64,
+    });
   });
 });
