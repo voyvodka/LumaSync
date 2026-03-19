@@ -164,17 +164,41 @@ describe("createTestPatternFlow", () => {
 });
 
 describe("createDefaultTestPatternFlow", () => {
+  it("preserves canonical physical indexes across orientation changes", () => {
+    const cwConfig = createConfig({
+      startAnchor: "left-end",
+      direction: "cw",
+    });
+    const ccwConfig = createConfig({
+      startAnchor: "left-end",
+      direction: "ccw",
+    });
+
+    const cwSequence = buildLedSequence(cwConfig);
+    const ccwSequence = buildLedSequence(ccwConfig);
+
+    expect(cwSequence[0]?.index).toBe(13);
+    expect(ccwSequence[0]?.index).toBe(12);
+
+    const expectedIndexes = Array.from({ length: cwConfig.totalLeds }, (_, index) => index);
+    expect([...cwSequence.map((item) => item.index)].sort((a, b) => a - b)).toEqual(expectedIndexes);
+    expect([...ccwSequence.map((item) => item.index)].sort((a, b) => a - b)).toEqual(expectedIndexes);
+  });
+
   it("uses buildLedSequence result for physical ledIndexes on toggle", async () => {
     startCalibrationTestPatternMock.mockClear();
     stopCalibrationTestPatternMock.mockClear();
-    const config = createConfig();
+    const config = createConfig({
+      startAnchor: "left-end",
+      direction: "cw",
+    });
     const flow = createDefaultTestPatternFlow(async () => ({ connected: true }), config);
 
-    await flow.toggle(true);
+    const snapshot = await flow.toggle(true);
 
     expect(startCalibrationTestPatternMock).toHaveBeenCalledTimes(1);
     expect(startCalibrationTestPatternMock).toHaveBeenLastCalledWith({
-      ledIndexes: [buildLedSequence(config)[0].index],
+      ledIndexes: [buildLedSequence(config)[snapshot.markerIndex].index],
       frameMs: 120,
       brightness: 64,
     });
@@ -205,5 +229,6 @@ describe("createDefaultTestPatternFlow", () => {
       frameMs: 120,
       brightness: 64,
     });
+    expect(buildLedSequence(initialConfig)[0].index).not.toBe(buildLedSequence(nextConfig)[0].index);
   });
 });
