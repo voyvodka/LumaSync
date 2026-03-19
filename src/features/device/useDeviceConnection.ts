@@ -43,6 +43,8 @@ export interface DeviceConnectionControllerDeps {
   getSerialConnectionStatus: () => Promise<SerialConnectionStatus>;
   persistLastSuccessfulPort: (portName: string) => Promise<void>;
   initialLastSuccessfulPort?: string;
+  refreshMinIntervalMs?: number;
+  now?: () => number;
 }
 
 export interface DeviceConnectionController {
@@ -64,6 +66,10 @@ const DEFAULT_STATE: DeviceConnectionControllerState = {
   isScanning: false,
   isConnecting: false,
 };
+
+const REFRESH_MIN_INTERVAL_DEFAULT_MS = 250;
+const REFRESH_MIN_INTERVAL_MIN_MS = 100;
+const REFRESH_MIN_INTERVAL_MAX_MS = 300;
 
 function toSortKey(port: SerialPortListResponse["ports"][number]): string {
   const hint = [port.usb?.product, port.usb?.manufacturer, port.name].filter(Boolean).join("-");
@@ -127,6 +133,14 @@ export function createDeviceConnectionController(
 
   let initialized = false;
   let refreshToken = 0;
+  let lastUserRefreshAtMs = Number.NEGATIVE_INFINITY;
+
+  const refreshMinIntervalMs = Math.max(
+    REFRESH_MIN_INTERVAL_MIN_MS,
+    Math.min(REFRESH_MIN_INTERVAL_MAX_MS, deps.refreshMinIntervalMs ?? REFRESH_MIN_INTERVAL_DEFAULT_MS),
+  );
+
+  const now = deps.now ?? Date.now;
 
   const notify = () => {
     const snapshot = withDerivedFlags(state);
@@ -155,9 +169,15 @@ export function createDeviceConnectionController(
     return resolveSelectionAfterRefresh(ports, state.selectedPort, state.lastSuccessfulPort);
   };
 
-  const refreshPorts = async () => {
+  const buildRefreshRateLimitedCard = (waitMs: number): DeviceStatusCard => ({
+    variant: "info",
+    code: "REFRESH_RATE_LIMITED",
+    message: "Refresh is temporarily limited.",
+    details: `Please wait ${waitMs}ms before trying again.`,
+  });
+
+  const runRefresh = async (isInitialScan: boolean) => {
     const currentToken = ++refreshToken;
-    const isInitialScan = !initialized;
 
     setState((prev) => ({
       ...prev,
@@ -210,8 +230,30 @@ export function createDeviceConnectionController(
     }
   };
 
+  const refreshPorts = async () => {
+    if (!initialized) {
+      await runRefresh(true);
+      return;
+    }
+
+    const elapsedMs = now() - lastUserRefreshAtMs;
+    if (elapsedMs < refreshMinIntervalMs) {
+      const waitMs = Math.max(1, Math.ceil(refreshMinIntervalMs - elapsedMs));
+      setState((prev) => ({
+        ...prev,
+        status: nextStatusForReadyState(prev.ports),
+        isScanning: false,
+        statusCard: buildRefreshRateLimitedCard(waitMs),
+      }));
+      return;
+    }
+
+    lastUserRefreshAtMs = now();
+    await runRefresh(false);
+  };
+
   const initialize = async () => {
-    await refreshPorts();
+    await runRefresh(true);
 
     try {
       const status = await deps.getSerialConnectionStatus();
