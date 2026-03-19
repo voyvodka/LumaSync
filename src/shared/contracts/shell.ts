@@ -68,6 +68,11 @@ export interface ShellState {
    * Absent on first launch → languagePolicy defaults to "en" per I18N-02.
    */
   language?: string;
+  /**
+   * Last port name that connected successfully.
+   * Updated only after a successful connection attempt.
+   */
+  lastSuccessfulPort?: string;
 }
 
 /** Default shell state for first launch */
