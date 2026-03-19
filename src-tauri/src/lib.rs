@@ -16,9 +16,11 @@ use tauri::{
 };
 
 mod commands {
+    pub mod calibration;
     pub mod device_connection;
 }
 
+use commands::calibration::{start_calibration_test_pattern, stop_calibration_test_pattern};
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
     SerialConnectionState,
@@ -198,7 +200,9 @@ pub fn run() {
             list_serial_ports,
             connect_serial_port,
             get_serial_connection_status,
-            run_serial_health_check
+            run_serial_health_check,
+            start_calibration_test_pattern,
+            stop_calibration_test_pattern
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

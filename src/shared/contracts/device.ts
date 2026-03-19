@@ -8,6 +8,8 @@ export const DEVICE_COMMANDS = {
   DISCONNECT_PORT: "disconnect_serial_port",
   GET_CONNECTION_STATUS: "get_serial_connection_status",
   RUN_HEALTH_CHECK: "run_serial_health_check",
+  START_CALIBRATION_TEST_PATTERN: "start_calibration_test_pattern",
+  STOP_CALIBRATION_TEST_PATTERN: "stop_calibration_test_pattern",
 } as const;
 
 export const DEVICE_STATUS = {

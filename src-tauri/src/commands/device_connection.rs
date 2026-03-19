@@ -78,7 +78,7 @@ pub struct HealthCheckResult {
 }
 
 pub struct SerialConnectionState {
-    last_status: Mutex<SerialConnectionStatus>,
+    pub(crate) last_status: Mutex<SerialConnectionStatus>,
 }
 
 impl Default for SerialConnectionState {
