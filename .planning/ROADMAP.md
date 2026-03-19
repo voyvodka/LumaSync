@@ -10,7 +10,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: App Shell and Baseline Defaults** - Tray tabanli uygulama acilir, ayarlar penceresi erisilebilir ve ilk acilis varsayimlari oturur.
+- [x] **Phase 1: App Shell and Baseline Defaults** - Tray tabanli uygulama acilir, ayarlar penceresi erisilebilir ve ilk acilis varsayimlari oturur. (completed 2026-03-19)
 - [ ] **Phase 2: USB Connection Setup** - Cihaz auto-detect ve manuel port fallback ile baglanti kurulabilir.
 - [ ] **Phase 3: Connection Resilience and Health** - Kopma-sonrasi toparlanma ve setup sirasinda saglik kontrolu guvenilir calisir.
 - [ ] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar.
@@ -29,12 +29,13 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
   1. User can launch the app and see it running in the system tray.
   2. User can open the full settings window from the tray at any time.
   3. User sees English as the default language on first launch.
-**Plans**: 4 plans
+**Plans**: 5 plans
 Plans:
 - [ ] 01-01-PLAN.md - Build tray-first runtime lifecycle and shell contracts for UX-01
 - [ ] 01-03-PLAN.md - Implement settings scaffold and shell persistence baseline for UX-01
 - [ ] 01-02-PLAN.md - Implement first-launch English i18n baseline with explicit I18N-02 conflict alignment handling
 - [ ] 01-04-PLAN.md - Close diagnosed UAT gaps for single tray icon, startup toggle sync, and macOS fullscreen close-to-tray reliability
+- [ ] 01-05-PLAN.md - Close remaining fullscreen close runtime gap with staged macOS hide flow and add I18N-02 fallback regression guard
 
 ### Phase 2: USB Connection Setup
 **Goal**: Kullanici desteklenen USB serial kontrolcuyu hizli sekilde bulup baglayabilir.
@@ -111,7 +112,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. App Shell and Baseline Defaults | 0/TBD | Not started | - |
+| 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 0/TBD | Not started | - |
 | 3. Connection Resilience and Health | 0/TBD | Not started | - |
 | 4. Calibration Workflow | 0/TBD | Not started | - |
