@@ -140,6 +140,7 @@
       "description": "Adjust edge counts, start anchor, and direction before saving.",
       "dirty": "Unsaved",
       "saved": "Saved",
+      "bottomGap": "Bottom gap (px)",
       "startAnchor": "Start anchor",
       "direction": "Direction",
       "totalLeds": "Total LEDs: {{count}}",

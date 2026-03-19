@@ -10,6 +10,7 @@ interface CalibrationEditorCanvasProps {
   config: LedCalibrationConfig;
   isDirty: boolean;
   onCountChange: (segment: "top" | "left" | "right" | "bottomLeft" | "bottomRight", value: number) => void;
+  onBottomGapChange: (px: number) => void;
   onStartAnchorChange: (anchor: LedStartAnchor) => void;
   onDirectionChange: (direction: LedDirection) => void;
   onResetTemplate: () => void;
@@ -32,6 +33,7 @@ export function CalibrationEditorCanvas({
   config,
   isDirty,
   onCountChange,
+  onBottomGapChange,
   onStartAnchorChange,
   onDirectionChange,
   onResetTemplate,
@@ -86,6 +88,24 @@ export function CalibrationEditorCanvas({
             />
           </label>
         ))}
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+            {t("calibration.editor.bottomGap")}
+          </span>
+          <input
+            type="number"
+            min={0}
+            value={config.bottomGapPx}
+            onChange={(event) => {
+              const value = Number(event.target.value);
+              onBottomGapChange(Number.isFinite(value) ? Math.max(0, value) : 0);
+            }}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+        </label>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">

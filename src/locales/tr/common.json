@@ -140,6 +140,7 @@
       "description": "Kaydetmeden once kenar sayilarini, baslangic noktasini ve yonu duzenle.",
       "dirty": "Kaydedilmedi",
       "saved": "Kaydedildi",
+      "bottomGap": "Alt bosluk (px)",
       "startAnchor": "Baslangic noktasi",
       "direction": "Yon",
       "totalLeds": "Toplam LED: {{count}}",

@@ -160,6 +160,9 @@ export function CalibrationOverlay({
               onDirectionChange={(direction) => {
                 setEditorState((prev) => updateEditorConfig(prev, { direction }));
               }}
+              onBottomGapChange={(px) => {
+                setEditorState((prev) => updateEditorConfig(prev, { bottomGapPx: px }));
+              }}
               onResetTemplate={() => {
                 setActiveStep("template");
               }}
