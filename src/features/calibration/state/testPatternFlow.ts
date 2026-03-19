@@ -30,6 +30,7 @@ const MARKER_ADVANCE_MS = 120;
 
 export interface TestPatternFlow {
   getSnapshot: () => TestPatternSnapshot;
+  setTotalLeds: (totalLeds: number) => TestPatternSnapshot;
   toggle: (enabled: boolean) => Promise<TestPatternSnapshot>;
   dispose: () => Promise<void>;
 }
@@ -99,6 +100,15 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
 
   return {
     getSnapshot: () => snapshot,
+    setTotalLeds: (totalLeds) => {
+      const normalizedTotal = Number.isFinite(totalLeds) ? Math.max(1, Math.floor(totalLeds)) : 1;
+      snapshot = {
+        ...snapshot,
+        totalLeds: normalizedTotal,
+        markerIndex: snapshot.markerIndex % normalizedTotal,
+      };
+      return snapshot;
+    },
     toggle: async (enabled) => {
       if (enabled) {
         snapshot = {

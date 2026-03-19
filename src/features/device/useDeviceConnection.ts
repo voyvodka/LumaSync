@@ -673,6 +673,7 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
 
 export interface UseDeviceConnectionResult extends DeviceConnectionControllerState {
   groupedPorts: ReturnType<typeof groupAndSortPorts>;
+  isConnected: boolean;
   refreshPorts: () => Promise<void>;
   selectPort: (portName: string | null) => void;
   connectSelectedPort: () => Promise<void>;
@@ -752,6 +753,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
   return {
     ...state,
     groupedPorts,
+    isConnected: Boolean(state.connectedPort),
     refreshPorts: controller.refreshPorts,
     selectPort: controller.selectPort,
     connectSelectedPort: controller.connectSelectedPort,

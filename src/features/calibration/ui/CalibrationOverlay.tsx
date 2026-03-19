@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
@@ -14,9 +14,12 @@ import {
   discardEditorChanges,
   type CalibrationEditorState,
 } from "../state/calibrationEditorState";
+import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
 import type { CalibrationOverlayStep } from "../state/entryFlow";
 import { CalibrationEditorCanvas } from "./CalibrationEditorCanvas";
 import { CalibrationTemplateStep } from "./CalibrationTemplateStep";
+import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
+import type { LedSegmentCounts } from "../model/contracts";
 
 interface CalibrationOverlayProps {
   open: boolean;
@@ -28,6 +31,20 @@ interface CalibrationOverlayProps {
 
 function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
   return createCalibrationEditorState(initialConfig ?? resetToManual());
+}
+
+function resolveMarkerSegment(markerIndex: number, counts: LedSegmentCounts): keyof LedSegmentCounts {
+  const order: Array<keyof LedSegmentCounts> = ["top", "right", "bottomRight", "bottomLeft", "left"];
+  let cursor = markerIndex;
+  for (const segment of order) {
+    const size = Math.max(0, counts[segment]);
+    if (cursor < size) {
+      return segment;
+    }
+    cursor -= size;
+  }
+
+  return "top";
 }
 
 export function CalibrationOverlay({
@@ -43,6 +60,13 @@ export function CalibrationOverlay({
     buildInitialEditorState(initialConfig),
   );
   const [isSaving, setIsSaving] = useState(false);
+  const flowRef = useRef(
+    createDefaultTestPatternFlow(async () => {
+      const status = await getSerialConnectionStatus();
+      return { connected: status.connected };
+    }),
+  );
+  const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
 
   useEffect(() => {
     if (!open) {
@@ -51,7 +75,32 @@ export function CalibrationOverlay({
 
     setActiveStep(initialStep);
     setEditorState(buildInitialEditorState(initialConfig));
+    flowRef.current.setTotalLeds((initialConfig ?? resetToManual()).totalLeds);
+    setTestPattern(flowRef.current.getSnapshot());
   }, [open, initialStep, initialConfig]);
+
+  useEffect(() => {
+    flowRef.current.setTotalLeds(editorState.current.totalLeds);
+    setTestPattern(flowRef.current.getSnapshot());
+  }, [editorState.current.totalLeds]);
+
+  useEffect(() => {
+    if (open) {
+      return;
+    }
+
+    void flowRef.current.dispose().then(() => {
+      setTestPattern(flowRef.current.getSnapshot());
+    });
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      void flowRef.current.dispose();
+    };
+  }, []);
+
+  const markerSegment = resolveMarkerSegment(testPattern.markerIndex, editorState.current.counts);
 
   const shell = useMemo(() => {
     if (!open) {
@@ -68,6 +117,8 @@ export function CalibrationOverlay({
               const closeState = requestEditorClose(editorState);
               setEditorState(closeState);
               if (closeState.shouldClose) {
+                void flowRef.current.dispose();
+                setTestPattern(flowRef.current.getSnapshot());
                 onClose();
               }
             }}
@@ -117,12 +168,41 @@ export function CalibrationOverlay({
         </div>
 
         <div className="mt-4 flex items-center justify-end gap-3 rounded-xl border border-white/20 bg-black/30 px-4 py-3">
+          <div className="mr-auto flex flex-wrap items-center gap-2 text-xs text-white/90">
+            <label className="inline-flex items-center gap-2 rounded-md border border-white/30 px-2 py-1">
+              <input
+                type="checkbox"
+                checked={testPattern.isEnabled}
+                onChange={async (event) => {
+                  const next = await flowRef.current.toggle(event.target.checked);
+                  setTestPattern(next);
+                }}
+              />
+              <span>{t("calibration.overlay.testPatternToggle")}</span>
+            </label>
+            {testPattern.isEnabled ? (
+              <span className="rounded-md bg-white/15 px-2 py-1">
+                {t("calibration.overlay.previewProgress", {
+                  led: testPattern.markerIndex + 1,
+                  total: Math.max(1, testPattern.totalLeds),
+                  segment: t(`calibration.editor.counts.${markerSegment}`),
+                })}
+              </span>
+            ) : null}
+            {testPattern.isEnabled && testPattern.mode === "preview-only" ? (
+              <span className="rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-amber-100">
+                {t("calibration.overlay.previewOnly")}
+              </span>
+            ) : null}
+          </div>
           <button
             type="button"
             onClick={() => {
               const closeState = requestEditorClose(editorState);
               setEditorState(closeState);
               if (closeState.shouldClose) {
+                void flowRef.current.dispose();
+                setTestPattern(flowRef.current.getSnapshot());
                 onClose();
               }
             }}
@@ -140,6 +220,8 @@ export function CalibrationOverlay({
                 await shellStore.save({ ledCalibration: savedState.current });
                 onSaved(savedState.current);
                 setEditorState(savedState);
+                await flowRef.current.dispose();
+                setTestPattern(flowRef.current.getSnapshot());
                 onClose();
               } finally {
                 setIsSaving(false);
@@ -172,10 +254,12 @@ export function CalibrationOverlay({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditorState((prev) => discardEditorChanges(prev));
-                    onClose();
-                  }}
+                    onClick={() => {
+                      setEditorState((prev) => discardEditorChanges(prev));
+                      void flowRef.current.dispose();
+                      setTestPattern(flowRef.current.getSnapshot());
+                      onClose();
+                    }}
                   className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white"
                 >
                   {t("calibration.overlay.discard")}
