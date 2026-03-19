@@ -11,11 +11,14 @@
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Runtime,
+    AppHandle, Emitter, Manager, Runtime, State,
 };
 
 const TRAY_ICON_ID: &str = "main-tray";
-const STARTUP_TOGGLE_ITEM_ID: &str = "startup-toggle";
+
+struct TrayState<R: Runtime> {
+    startup_toggle: CheckMenuItem<R>,
+}
 
 // ---------------------------------------------------------------------------
 // Helper: show-and-focus the main settings window
@@ -36,20 +39,12 @@ fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
 }
 
 #[tauri::command]
-fn set_tray_startup_checked<R: Runtime>(app: AppHandle<R>, checked: bool) -> Result<(), String> {
-    let tray = app
-        .tray_by_id(TRAY_ICON_ID)
-        .ok_or_else(|| "Tray icon not found".to_string())?;
-
-    let startup_item = tray
-        .get_item(STARTUP_TOGGLE_ITEM_ID)
-        .ok_or_else(|| "Startup tray item not found".to_string())?;
-
-    let check_item = startup_item
-        .as_check_menuitem()
-        .ok_or_else(|| "Startup tray item is not checkable".to_string())?;
-
-    check_item
+fn set_tray_startup_checked(
+    tray_state: State<'_, TrayState<tauri::Wry>>,
+    checked: bool,
+) -> Result<(), String> {
+    tray_state
+        .startup_toggle
         .set_checked(checked)
         .map_err(|error| format!("Failed to set startup tray check state: {error}"))
 }
@@ -57,7 +52,7 @@ fn set_tray_startup_checked<R: Runtime>(app: AppHandle<R>, checked: bool) -> Res
 // ---------------------------------------------------------------------------
 // Build tray menu
 // ---------------------------------------------------------------------------
-fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
+fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, CheckMenuItem<R>)> {
     let open = MenuItem::with_id(app, "open-settings", "Open Settings", true, None::<&str>)?;
     let separator1 = PredefinedMenuItem::separator(app)?;
     // Status indicator — disabled label (Phase 1: always "Idle")
@@ -74,7 +69,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let separator3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
-    Menu::with_items(
+    let menu = Menu::with_items(
         app,
         &[
             &open,
@@ -85,7 +80,9 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &separator3,
             &quit,
         ],
-    )
+    )?;
+
+    Ok((menu, startup))
 }
 
 // ---------------------------------------------------------------------------
@@ -119,12 +116,13 @@ pub fn run() {
     builder
         .setup(|app| {
             // Build tray menu
-            let menu = build_tray_menu(app.handle())?;
+            let (menu, startup_toggle) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();
 
+            app.manage(TrayState { startup_toggle });
+
             // Build tray icon
-            TrayIconBuilder::new()
-                .id(TRAY_ICON_ID)
+            TrayIconBuilder::with_id(TRAY_ICON_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("LumaSync")
@@ -159,6 +157,11 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Prevent default close (process exit) and hide to tray instead
                 api.prevent_close();
+
+                if cfg!(target_os = "macos") && window.is_fullscreen().unwrap_or(false) {
+                    let _ = window.set_fullscreen(false);
+                }
+
                 let _ = window.hide();
 
                 // Emit event so frontend can show one-time tray hint if needed

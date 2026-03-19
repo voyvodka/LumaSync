@@ -97,6 +97,15 @@ _Note: This can be tested by editing the store file directly and setting windowX
 - [ ] Window closes to tray
 - [ ] No duplicate hint output (one-time only)
 
+### 4.3 macOS fullscreen close regression
+1. On macOS, open settings window
+2. Enter native fullscreen mode
+3. Click the window close button (X)
+
+- [ ] Window exits fullscreen and hides to tray cleanly
+- [ ] No black-screen artifact remains on desktop/workspace
+- [ ] Reopening from tray shows a responsive window
+
 ---
 
 ## 5. Section State Persistence
@@ -118,7 +127,7 @@ _Note: This can be tested by editing the store file directly and setting windowX
 - [ ] If window is already open, it comes to focus (not duplicated)
 
 ### 6.2 Startup Toggle from tray menu
-- [ ] Right-click tray icon → "Startup Toggle" changes autostart state
+- [ ] Right-click tray icon → "Start at Login" changes autostart state
 - [ ] Startup & Tray settings section reflects the updated state when opened
 
 ### 6.3 Quit
