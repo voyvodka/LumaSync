@@ -55,4 +55,50 @@ describe("buildLedSequence", () => {
     expect(withLargeGap.length).toBe(BASE_CONFIG.totalLeds);
     expect(withLargeGap.length).toBe(withSmallGap.length);
   });
+
+  it("preserves physical index set across orientation changes", () => {
+    const combinations: Array<Pick<LedCalibrationConfig, "startAnchor" | "direction">> = [
+      { startAnchor: "top-start", direction: "cw" },
+      { startAnchor: "top-start", direction: "ccw" },
+      { startAnchor: "bottom-right-end", direction: "cw" },
+      { startAnchor: "bottom-right-end", direction: "ccw" },
+    ];
+
+    const expectedIndexes = Array.from({ length: BASE_CONFIG.totalLeds }, (_, index) => index);
+
+    for (const combination of combinations) {
+      const sequence = buildLedSequence({
+        ...BASE_CONFIG,
+        ...combination,
+      });
+
+      expect(sequence).toHaveLength(BASE_CONFIG.totalLeds);
+      expect([...sequence.map((item) => item.index)].sort((a, b) => a - b)).toEqual(expectedIndexes);
+    }
+  });
+
+  it("returns deterministic first physical indexes for anchor and direction pairs", () => {
+    const cases: Array<{
+      startAnchor: LedCalibrationConfig["startAnchor"];
+      direction: LedCalibrationConfig["direction"];
+      expectedFirstIndex: number;
+    }> = [
+      { startAnchor: "top-start", direction: "cw", expectedFirstIndex: 0 },
+      { startAnchor: "top-start", direction: "ccw", expectedFirstIndex: 10 },
+      { startAnchor: "left-end", direction: "cw", expectedFirstIndex: 10 },
+      { startAnchor: "left-end", direction: "ccw", expectedFirstIndex: 9 },
+      { startAnchor: "bottom-right-end", direction: "cw", expectedFirstIndex: 6 },
+      { startAnchor: "bottom-right-end", direction: "ccw", expectedFirstIndex: 5 },
+    ];
+
+    for (const testCase of cases) {
+      const sequence = buildLedSequence({
+        ...BASE_CONFIG,
+        startAnchor: testCase.startAnchor,
+        direction: testCase.direction,
+      });
+
+      expect(sequence[0]?.index).toBe(testCase.expectedFirstIndex);
+    }
+  });
 });

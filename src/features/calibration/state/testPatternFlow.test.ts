@@ -227,6 +227,50 @@ describe("createDefaultTestPatternFlow", () => {
     expect(buildLedSequence(config)[snapshot.markerIndex].index).not.toBe(0);
   });
 
+  it("uses active markerIndex for ledIndexes payload when connection resolves", async () => {
+    startCalibrationTestPatternMock.mockClear();
+    stopCalibrationTestPatternMock.mockClear();
+
+    let rafCallback: FrameRequestCallback | null = null;
+    (globalThis as { window?: Window & typeof globalThis }).window = {
+      requestAnimationFrame: ((callback: FrameRequestCallback) => {
+        rafCallback = callback;
+        return 1;
+      }) as typeof window.requestAnimationFrame,
+      cancelAnimationFrame: (() => undefined) as typeof window.cancelAnimationFrame,
+    } as Window & typeof globalThis;
+
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    let resolveConnection: ((value: { connected: boolean }) => void) | null = null;
+    const pendingConnection = new Promise<{ connected: boolean }>((resolve) => {
+      resolveConnection = resolve;
+    });
+
+    const config = createConfig({
+      startAnchor: "left-end",
+      direction: "cw",
+    });
+    const flow = createDefaultTestPatternFlow(async () => pendingConnection, config);
+
+    const togglePromise = flow.toggle(true);
+    expect(startCalibrationTestPatternMock).not.toHaveBeenCalled();
+
+    rafCallback?.(1_130);
+    resolveConnection?.({ connected: true });
+    const snapshot = await togglePromise;
+
+    const expectedPhysicalIndex = buildLedSequence(config)[snapshot.markerIndex].index;
+    expect(snapshot.markerIndex).toBe(1);
+    expect(startCalibrationTestPatternMock).toHaveBeenCalledTimes(1);
+    expect(startCalibrationTestPatternMock).toHaveBeenLastCalledWith({
+      ledIndexes: [expectedPhysicalIndex],
+      frameMs: 120,
+      brightness: 64,
+    });
+
+    nowSpy.mockRestore();
+  });
+
   it("setConfig updates ledIndexes on next toggle", async () => {
     startCalibrationTestPatternMock.mockClear();
     stopCalibrationTestPatternMock.mockClear();
