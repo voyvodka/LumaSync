@@ -41,6 +41,68 @@ describe("device status card mapping", () => {
     expect(card.code).toBe("HEALTH_CHECK_FAIL");
     expect(card.titleKey).toBe("device.healthCheck.failTitle");
     expect(card.details).toBe("choose another port");
+    expect(card.healthSteps).toEqual([
+      {
+        step: "PORT_VISIBLE",
+        pass: true,
+        message: "visible",
+        details: null,
+      },
+      {
+        step: "PORT_SUPPORTED",
+        pass: false,
+        message: "choose another port",
+        details: null,
+      },
+      {
+        step: "CONNECT_AND_VERIFY",
+        pass: false,
+        message: "failed",
+        details: "check cable",
+      },
+    ]);
+  });
+
+  it("maps health check pass and preserves full step outcomes", () => {
+    const card = buildDeviceStatusCard({
+      status: "connected",
+      statusCard: null,
+      connectedPort: "COM3",
+      isReconnecting: false,
+      isHealthChecking: false,
+      latestHealthCheck: {
+        pass: true,
+        checkedAtUnixMs: Date.now(),
+        steps: [
+          { step: "CONNECT_AND_VERIFY", pass: true, code: "CONNECTED", message: "connected", details: null },
+          { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
+          { step: "PORT_SUPPORTED", pass: true, code: "PORT_SUPPORTED", message: "supported", details: null },
+        ],
+      },
+    });
+
+    expect(card.variant).toBe("success");
+    expect(card.code).toBe("HEALTH_CHECK_PASS");
+    expect(card.healthSteps).toEqual([
+      {
+        step: "PORT_VISIBLE",
+        pass: true,
+        message: "visible",
+        details: null,
+      },
+      {
+        step: "PORT_SUPPORTED",
+        pass: true,
+        message: "supported",
+        details: null,
+      },
+      {
+        step: "CONNECT_AND_VERIFY",
+        pass: true,
+        message: "connected",
+        details: null,
+      },
+    ]);
   });
 
   it("keeps active operation precedence over stale cards", () => {
