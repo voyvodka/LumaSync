@@ -1,6 +1,6 @@
 # Project Research Summary
 
-**Project:** Ambilight Desktop
+**Project:** LumaSync
 **Domain:** Windows-first desktop Ambilight app (USB serial WS2812B)
 **Researched:** 2026-03-19
 **Confidence:** MEDIUM

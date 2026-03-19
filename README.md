@@ -1,7 +1,16 @@
-# Tauri + React + Typescript
+# LumaSync
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Tray-first desktop app for screen-synced WS2812B lighting control via USB-connected microcontrollers.
 
-## Recommended IDE Setup
+## Dev
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- `yarn`
+- `yarn tauri dev`
+
+## Build
+
+- `yarn tauri build`
+
+## Debugging
+
+- See `docs/debugging.md`

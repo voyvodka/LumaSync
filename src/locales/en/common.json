@@ -24,7 +24,7 @@
   "startupTray": {
     "title": "Startup & Tray",
     "launchAtLogin": "Launch at login",
-    "launchAtLoginDescription": "Start Ambilight automatically when you log in.",
+    "launchAtLoginDescription": "Start LumaSync automatically when you log in.",
     "trayInfo": "The app runs in the system tray when closed."
   },
   "aboutLogs": {

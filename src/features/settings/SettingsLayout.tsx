@@ -1,43 +1,17 @@
-/**
- * Settings Layout
- *
- * Phase 1 settings shell scaffold: sidebar + content area.
- *
- * - Sidebar navigation with Phase 1 baseline sections
- * - No-reload SPA routing (section state in React)
- * - Section state is owned by App shell which persists lastSection to shellStore
- * - "Language" slot is present in navigation but content is implemented in Plan 02
- */
-
+import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
 import { GeneralSection } from "./sections/GeneralSection";
 import { StartupTraySection } from "./sections/StartupTraySection";
 import { LanguageSection } from "./sections/LanguageSection";
 import { AboutLogsSection } from "./sections/AboutLogsSection";
 import { DeviceSection } from "./sections/DeviceSection";
-import "./SettingsLayout.css";
-
-// ---------------------------------------------------------------------------
-// Sidebar metadata
-// ---------------------------------------------------------------------------
 
 interface SectionMeta {
   id: SectionId;
   label: string;
-  icon: string;
+  marker: string;
 }
-
-const SECTION_META: Record<SectionId, SectionMeta> = {
-  [SECTION_IDS.GENERAL]: { id: SECTION_IDS.GENERAL, label: "General", icon: "⚙️" },
-  [SECTION_IDS.STARTUP_TRAY]: { id: SECTION_IDS.STARTUP_TRAY, label: "Startup & Tray", icon: "🚀" },
-  [SECTION_IDS.LANGUAGE]: { id: SECTION_IDS.LANGUAGE, label: "Language", icon: "🌐" },
-  [SECTION_IDS.ABOUT_LOGS]: { id: SECTION_IDS.ABOUT_LOGS, label: "About & Logs", icon: "ℹ️" },
-  [SECTION_IDS.DEVICE]: { id: SECTION_IDS.DEVICE, label: "Device", icon: "🔌" },
-};
-
-// ---------------------------------------------------------------------------
-// Section content renderer
-// ---------------------------------------------------------------------------
 
 function SectionContent({ sectionId }: { sectionId: SectionId }) {
   switch (sectionId) {
@@ -56,40 +30,83 @@ function SectionContent({ sectionId }: { sectionId: SectionId }) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// SettingsLayout
-// ---------------------------------------------------------------------------
-
 interface SettingsLayoutProps {
-  /** Currently active section (controlled by App shell for persistence) */
   activeSection: SectionId;
-  /** Called when user clicks a sidebar item */
   onSectionChange: (sectionId: SectionId) => void;
 }
 
 export function SettingsLayout({ activeSection, onSectionChange }: SettingsLayoutProps) {
+  const { t } = useTranslation("common");
+
+  const sectionMeta = useMemo<Record<SectionId, SectionMeta>>(
+    () => ({
+      [SECTION_IDS.GENERAL]: {
+        id: SECTION_IDS.GENERAL,
+        label: t("settings.sections.general"),
+        marker: "GE",
+      },
+      [SECTION_IDS.STARTUP_TRAY]: {
+        id: SECTION_IDS.STARTUP_TRAY,
+        label: t("settings.sections.startupTray"),
+        marker: "ST",
+      },
+      [SECTION_IDS.LANGUAGE]: {
+        id: SECTION_IDS.LANGUAGE,
+        label: t("settings.sections.language"),
+        marker: "LG",
+      },
+      [SECTION_IDS.ABOUT_LOGS]: {
+        id: SECTION_IDS.ABOUT_LOGS,
+        label: t("settings.sections.aboutLogs"),
+        marker: "AB",
+      },
+      [SECTION_IDS.DEVICE]: {
+        id: SECTION_IDS.DEVICE,
+        label: t("settings.sections.device"),
+        marker: "DV",
+      },
+    }),
+    [t],
+  );
+
   return (
-    <div className="settings-shell">
-      {/* Sidebar */}
-      <nav className="settings-sidebar" aria-label="Settings navigation">
-        <div className="settings-sidebar__header">
-          <span className="settings-sidebar__app-name">Ambilight</span>
+    <div className="flex h-screen w-full overflow-hidden bg-slate-100/60 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <nav
+        className="flex w-56 min-w-44 flex-col border-r border-slate-300/60 bg-white/80 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+        aria-label="Settings navigation"
+      >
+        <div className="border-b border-slate-300/70 px-4 py-4 dark:border-zinc-800">
+          <span className="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase dark:text-zinc-400">
+            LumaSync
+          </span>
         </div>
-        <ul className="settings-sidebar__nav" role="list">
+
+        <ul className="flex flex-1 flex-col gap-1 p-2" role="list">
           {SECTION_ORDER.map((sectionId) => {
-            const meta = SECTION_META[sectionId];
+            const meta = sectionMeta[sectionId];
             const isActive = sectionId === activeSection;
             return (
               <li key={sectionId}>
                 <button
-                  className={`settings-sidebar__item ${isActive ? "settings-sidebar__item--active" : ""}`}
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                    isActive
+                      ? "bg-slate-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
+                      : "text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  }`}
                   onClick={() => onSectionChange(sectionId)}
                   aria-current={isActive ? "page" : undefined}
                 >
-                  <span className="settings-sidebar__item-icon" aria-hidden="true">
-                    {meta.icon}
+                  <span
+                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold tracking-wide ${
+                      isActive
+                        ? "bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900"
+                        : "bg-slate-300/60 text-slate-700 dark:bg-zinc-700 dark:text-zinc-100"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {meta.marker}
                   </span>
-                  <span className="settings-sidebar__item-label">{meta.label}</span>
+                  <span>{meta.label}</span>
                 </button>
               </li>
             );
@@ -97,8 +114,7 @@ export function SettingsLayout({ activeSection, onSectionChange }: SettingsLayou
         </ul>
       </nav>
 
-      {/* Content area */}
-      <main className="settings-content" role="main">
+      <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:py-8" role="main">
         <SectionContent sectionId={activeSection} />
       </main>
     </div>

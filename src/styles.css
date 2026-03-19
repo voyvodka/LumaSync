@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at 12% 20%, rgba(14, 116, 144, 0.14), transparent 45%),
+    radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.2), transparent 52%),
+    linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background:
+      radial-gradient(circle at 12% 20%, rgba(6, 182, 212, 0.2), transparent 45%),
+      radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.25), transparent 52%),
+      linear-gradient(180deg, #111827 0%, #09090b 100%);
+  }
+}

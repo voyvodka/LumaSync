@@ -1,4 +1,4 @@
-// Ambilight — Phase 1: Tray-first runtime shell
+// LumaSync — Phase 1: Tray-first runtime shell
 //
 // Lifecycle order:
 //   1. single-instance plugin (must be first — captures second-launch focus)
@@ -50,7 +50,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         None::<&str>,
     )?;
     let separator3 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Ambilight", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
     Menu::with_items(
         app,
@@ -104,7 +104,7 @@ pub fn run() {
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .tooltip("Ambilight")
+                .tooltip("LumaSync")
                 // Left-click on tray icon → open/focus settings
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {

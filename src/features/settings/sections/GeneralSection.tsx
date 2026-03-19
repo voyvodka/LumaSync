@@ -1,17 +1,14 @@
-/**
- * General Section
- *
- * Phase 1 baseline – General settings panel.
- * Reserved for general application preferences.
- */
+import { useTranslation } from "react-i18next";
 
 export function GeneralSection() {
+  const { t } = useTranslation("common");
+
   return (
-    <div className="settings-section">
-      <h2 className="settings-section__title">General</h2>
-      <p className="settings-section__description">
-        General application preferences will be available here.
+    <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
+      <h2 className="text-xl font-semibold tracking-tight">{t("general.title")}</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-300">
+        {t("general.description")}
       </p>
-    </div>
+    </section>
   );
 }

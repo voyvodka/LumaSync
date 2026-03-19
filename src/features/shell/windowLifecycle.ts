@@ -152,8 +152,8 @@ export async function persistWindowState(): Promise<void> {
  * Call once during app bootstrap after i18n is ready so hints can be translated.
  */
 export async function initWindowLifecycle(opts?: {
-  onFirstClosToTray?: TrayHintCallback;
+  onFirstCloseToTray?: TrayHintCallback;
 }): Promise<void> {
   await restoreWindowState();
-  await initCloseToTrayHint(opts?.onFirstClosToTray);
+  await initCloseToTrayHint(opts?.onFirstCloseToTray);
 }

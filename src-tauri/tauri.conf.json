@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Ambilight",
+  "productName": "LumaSync",
   "version": "0.1.0",
-  "identifier": "com.ambilight.app",
+  "identifier": "com.lumasync.app",
   "build": {
     "beforeDevCommand": "yarn dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Ambilight Settings",
+        "title": "LumaSync Settings",
         "width": 900,
         "height": 620,
         "minWidth": 720,

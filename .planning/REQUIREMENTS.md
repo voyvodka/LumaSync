@@ -1,4 +1,4 @@
-# Requirements: Ambilight Desktop
+# Requirements: LumaSync
 
 **Defined:** 2026-03-19
 **Core Value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.

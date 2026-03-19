@@ -52,7 +52,7 @@
 - [ ] "Minimize to tray on close" row shows "Always on" badge
 
 ### 2.3 About & Logs section
-- [ ] "Ambilight" version row is visible
+- [ ] "LumaSync" version row is visible
 - [ ] "Application logs" row is visible
 - [ ] No missing content or empty panels
 

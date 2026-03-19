@@ -1,4 +1,4 @@
-# Roadmap: Ambilight Desktop
+# Roadmap: LumaSync
 
 ## Overview
 

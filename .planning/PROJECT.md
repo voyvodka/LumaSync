@@ -1,8 +1,8 @@
-# Ambilight Desktop
+# LumaSync
 
 ## What This Is
 
-Ambilight Desktop is a lightweight cross-platform desktop app that drives monitor backlight LEDs (WS2812B) based on live screen colors through USB-connected microcontrollers like Arduino. It targets a clean setup experience for makers and open-source users, while keeping runtime overhead low and behavior stable for long sessions. The app starts with Windows-first support and is designed to expand to additional platforms and advanced lighting modes over time.
+LumaSync is a lightweight cross-platform desktop app that drives monitor backlight LEDs (WS2812B) based on live screen colors through USB-connected microcontrollers like Arduino. It targets a clean setup experience for makers and open-source users, while keeping runtime overhead low and behavior stable for long sessions. The app starts with Windows-first support and is designed to expand to additional platforms and advanced lighting modes over time.
 
 ## Core Value
 

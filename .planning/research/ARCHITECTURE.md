@@ -254,5 +254,5 @@ Data plane:    Capture frames -> Color pipeline -> Serial packets -> LEDs
 - SerialPort docs via Context7 (`open/error/close/drain`, write/backpressure behavior): `/serialport/website` (MEDIUM-HIGH)
 
 ---
-*Architecture research for: Ambilight Desktop*
+*Architecture research for: LumaSync*
 *Researched: 2026-03-19*

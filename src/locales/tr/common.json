@@ -24,7 +24,7 @@
   "startupTray": {
     "title": "Başlangıç & Tepsi",
     "launchAtLogin": "Girişte başlat",
-    "launchAtLoginDescription": "Ambilight'ı oturum açtığınızda otomatik başlatın.",
+    "launchAtLoginDescription": "LumaSync'i oturum açtığınızda otomatik başlatın.",
     "trayInfo": "Uygulama kapatıldığında sistem tepsisinde çalışmaya devam eder."
   },
   "aboutLogs": {

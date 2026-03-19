@@ -113,5 +113,5 @@ cargo add xcap
 - https://www.electronjs.org/docs/latest/ - confirms Electron embeds Chromium + Node.js (HIGH)
 
 ---
-*Stack research for: Ambilight Desktop (Windows-first, USB serial WS2812B)*
+*Stack research for: LumaSync (Windows-first, USB serial WS2812B)*
 *Researched: 2026-03-19*

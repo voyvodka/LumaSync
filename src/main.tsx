@@ -13,6 +13,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import "./styles.css";
 import { Providers } from "./app/providers";
 import { resolveInitialLanguage } from "./features/i18n/languagePolicy";
 import { initI18n } from "./features/i18n/i18n";
@@ -36,7 +37,7 @@ async function bootstrap() {
 
 bootstrap().catch((err) => {
   // Bootstrap failure is non-fatal: fall back to English i18n and render anyway
-  console.error("[Ambilight] Bootstrap error:", err);
+  console.error("[LumaSync] Bootstrap error:", err);
   initI18n("en").then(() => {
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <React.StrictMode>
