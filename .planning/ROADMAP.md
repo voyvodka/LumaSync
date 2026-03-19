@@ -13,7 +13,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
 - [x] **Phase 1: App Shell and Baseline Defaults** - Tray tabanli uygulama acilir, ayarlar penceresi erisilebilir ve ilk acilis varsayimlari oturur. (completed 2026-03-19)
 - [x] **Phase 2: USB Connection Setup** - Cihaz auto-detect ve manuel port fallback ile baglanti kurulabilir. (completed 2026-03-19)
 - [x] **Phase 3: Connection Resilience and Health** - Kopma-sonrasi toparlanma ve setup sirasinda saglik kontrolu guvenilir calisir. (completed 2026-03-19)
-- [ ] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar.
+- [x] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar. (completed 2026-03-19)
 - [ ] **Phase 5: Core Lighting Modes** - Realtime Ambilight ve solid-color modlari kullanilabilir olur.
 - [ ] **Phase 6: Runtime Quality Controls** - Smoothing ve adaptif gonderim davranisi ile deneyim daha yumusak ve hafif olur.
 - [ ] **Phase 7: Telemetry and Full Localization** - Temel telemetri gorunurlugu ve TR/EN dil destegi tamamlanir.
@@ -130,7 +130,7 @@ Plans:
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
-| 4. Calibration Workflow | 4/5 | In Progress|  |
+| 4. Calibration Workflow | 5/5 | Complete   | 2026-03-19 |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
 | 7. Telemetry and Full Localization | 0/TBD | Not started | - |
