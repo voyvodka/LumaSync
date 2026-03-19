@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-03-19T11:27:46.550Z"
-last_activity: 2026-03-19 - Completed 01-05 fullscreen runtime gap closure
+status: executing
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-19T15:05:18.883Z"
+last_activity: 2026-03-19 - Completed 02-01 device contracts and selection rules
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 1 - App Shell and Baseline Defaults
+**Current focus:** Phase 2 - USB Connection Setup
 
 ## Current Position
 
-Phase: 1 of 8 (App Shell and Baseline Defaults)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-03-19 - Completed 01-05 fullscreen runtime gap closure
+Phase: 2 of 8 (USB Connection Setup)
+Plan: 2 of 3 in current phase
+Status: In progress
+Last activity: 2026-03-19 - Completed 02-01 device contracts and selection rules
 
-Progress: [██████████] 100%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -53,6 +53,8 @@ Progress: [██████████] 100%
 | Phase 01-app-shell-and-baseline-defaults P02 | 4min | 3 tasks | 11 files |
 | Phase 01 P04 | 4 min | 3 tasks | 5 files |
 | Phase 01 P05 | 1 min | 2 tasks | 3 files |
+| Phase 02 P02 | 4 min | 2 tasks | 5 files |
+| Phase 02 P01 | 4 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -75,6 +77,11 @@ Recent decisions affecting current work:
 - [Phase 01]: macOS close interception exits fullscreen before hide-to-tray to avoid compositor artifacts.
 - [Phase 01]: macOS fullscreen close handling now uses a staged fullscreen-exit then delayed hide-to-tray flow to reduce compositor artifacts.
 - [Phase 01]: resolveInitialLanguage production policy stays unchanged; failure-path fallback is protected with explicit load-rejection regression coverage.
+- [Phase 02]: Supported USB karari backend tarafinda VID/PID allowlist ile uretilir
+- [Phase 02]: Connect aksiyonu auto-retry olmadan tek explicit deneme olarak tutulur
+- [Phase 02]: Supported and unsupported ports are split into deterministic groups with supported listed first.
+- [Phase 02]: Initial selection prefers lastSuccessfulPort when present; otherwise first supported port.
+- [Phase 02]: Remembered port persistence remains success-only and explicit connect is never auto-triggered on selection.
 
 ### Pending Todos
 
@@ -86,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T11:19:20.801Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-03-19T15:05:18.881Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
