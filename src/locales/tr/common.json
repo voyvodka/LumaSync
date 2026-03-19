@@ -35,6 +35,50 @@
   },
   "device": {
     "title": "Cihaz",
-    "description": "Cihaz bağlantı ayarları Phase 2'de kullanılabilir olacak."
+    "description": "Serial portları tara, birini seç ve uygulamayı yeniden başlatmadan bağlan.",
+    "actions": {
+      "refresh": "Yenile",
+      "ready": "Cihaz taraması hazır.",
+      "scanning": "Portlar taranıyor...",
+      "connect": "Bağlan",
+      "reconnect": "Yeniden bağlan",
+      "connected": "Bağlı",
+      "connecting": "Bağlanıyor..."
+    },
+    "groups": {
+      "supportedTitle": "Desteklenen kontrolcüler",
+      "supportedDescription": "Mevcut allowlist ile eşleşen USB adaptörleri.",
+      "otherTitle": "Diğer serial portlar",
+      "otherDescription": "Manuel fallback portları. Bunları seçip Bağlan deneyebilirsin.",
+      "empty": "Bu grupta henüz port yok. Tekrar taramak için Yenile'yi kullan."
+    },
+    "selection": {
+      "title": "Manuel seçim",
+      "description": "Auto-detect kaçırsa bile manuel port seçimi her zaman açık kalır.",
+      "placeholder": "Bir serial port seç",
+      "selectedHint": "Seçili port: {{port}}",
+      "emptyHint": "Bağlan düğmesini etkinleştirmek için bir port seç."
+    },
+    "fields": {
+      "port": "Port"
+    },
+    "badges": {
+      "supported": "Destekli",
+      "other": "Diğer",
+      "connected": "Bağlı"
+    },
+    "status": {
+      "idleTitle": "Seçim bekleniyor",
+      "idleBody": "Bir port seçip hazır olduğunda Bağlan'ı kullan.",
+      "scanningTitle": "Serial portlar yenileniyor",
+      "scanningBody": "Tarama arkada çalışırken mevcut liste ekranda kalır.",
+      "connectedTitle": "Bağlantı kuruldu",
+      "connectedBody": "{{port}} üzerinden bağlandı. Sonraki açılışta aynı portu kullanabilirsin.",
+      "missingTitle": "Önceki seçili port kayıp",
+      "missingBody": "Önceki seçimin artık görünmüyor. Yeni bir port seçip tekrar dene.",
+      "errorTitle": "Bağlantı denemesi başarısız",
+      "errorBody": "Bağlantı tamamlanamadı. Yenile, farklı bir port seç ve tekrar dene.",
+      "nextSteps": "İpucu: Hatırlanan port yeniden görünürse otomatik olarak tekrar seçilir."
+    }
   }
 }

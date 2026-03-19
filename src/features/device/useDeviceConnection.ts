@@ -259,18 +259,20 @@ export function createDeviceConnectionController(
     const connection = await deps.connectSerialPort(targetPort);
 
     if (connection.connected && connection.portName) {
+      const connectedPortName = connection.portName;
+
       setState((prev) => ({
         ...prev,
         status: DEVICE_STATUS.CONNECTED,
-        connectedPort: connection.portName,
-        selectedPort: connection.portName,
+        connectedPort: connectedPortName,
+        selectedPort: connectedPortName,
         isConnecting: false,
-        lastSuccessfulPort: connection.portName,
+        lastSuccessfulPort: connectedPortName,
         statusCard: toConnectionCard(connection),
       }));
 
       try {
-        await deps.persistLastSuccessfulPort(connection.portName);
+        await deps.persistLastSuccessfulPort(connectedPortName);
       } catch {
         // Persistence failures should not break the active connection flow.
       }

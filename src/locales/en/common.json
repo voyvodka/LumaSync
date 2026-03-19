@@ -35,6 +35,50 @@
   },
   "device": {
     "title": "Device",
-    "description": "Device connection settings will be available in Phase 2."
+    "description": "Scan serial ports, choose one, and connect without restarting the app.",
+    "actions": {
+      "refresh": "Refresh",
+      "ready": "Device scan is ready.",
+      "scanning": "Scanning ports...",
+      "connect": "Connect",
+      "reconnect": "Reconnect",
+      "connected": "Connected",
+      "connecting": "Connecting..."
+    },
+    "groups": {
+      "supportedTitle": "Supported controllers",
+      "supportedDescription": "Detected USB adapters that match current allowlist.",
+      "otherTitle": "Other serial ports",
+      "otherDescription": "Manual fallback ports. You can still select and try Connect.",
+      "empty": "No ports in this group yet. Use Refresh to scan again."
+    },
+    "selection": {
+      "title": "Manual selection",
+      "description": "Manual port selection stays available even when auto-detect misses.",
+      "placeholder": "Select a serial port",
+      "selectedHint": "Selected port: {{port}}",
+      "emptyHint": "Choose a port to enable Connect."
+    },
+    "fields": {
+      "port": "Port"
+    },
+    "badges": {
+      "supported": "Supported",
+      "other": "Other",
+      "connected": "Connected"
+    },
+    "status": {
+      "idleTitle": "Waiting for a selection",
+      "idleBody": "Select a port and use Connect when ready.",
+      "scanningTitle": "Refreshing serial ports",
+      "scanningBody": "We keep your list visible while scan runs in the background.",
+      "connectedTitle": "Connection established",
+      "connectedBody": "Connected on {{port}}. You can keep using this port for the next start.",
+      "missingTitle": "Previously selected port is missing",
+      "missingBody": "Your previous selection is no longer available. Pick another port and retry.",
+      "errorTitle": "Connection attempt failed",
+      "errorBody": "Connection was not completed. Refresh, pick another port, and try again.",
+      "nextSteps": "Tip: if your remembered port appears again, it will be selected automatically."
+    }
   }
 }
