@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "general": "General",
+      "startupTray": "Startup & Tray",
+      "language": "Language",
+      "aboutLogs": "About & Logs",
+      "device": "Device"
+    }
+  },
+  "language": {
+    "title": "Language",
+    "description": "Choose the display language for the application.",
+    "options": {
+      "en": "English",
+      "tr": "Türkçe"
+    }
+  },
+  "general": {
+    "title": "General",
+    "description": "General application settings."
+  },
+  "startupTray": {
+    "title": "Startup & Tray",
+    "launchAtLogin": "Launch at login",
+    "launchAtLoginDescription": "Start Ambilight automatically when you log in.",
+    "trayInfo": "The app runs in the system tray when closed."
+  },
+  "aboutLogs": {
+    "title": "About & Logs",
+    "version": "Version",
+    "logs": "Logs",
+    "logsDescription": "Application logs are stored locally for debugging."
+  },
+  "device": {
+    "title": "Device",
+    "description": "Device connection settings will be available in Phase 2."
+  }
+}

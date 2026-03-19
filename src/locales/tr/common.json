@@ -1,0 +1,40 @@
+{
+  "settings": {
+    "title": "Ayarlar",
+    "sections": {
+      "general": "Genel",
+      "startupTray": "Başlangıç & Tepsi",
+      "language": "Dil",
+      "aboutLogs": "Hakkında & Günlükler",
+      "device": "Cihaz"
+    }
+  },
+  "language": {
+    "title": "Dil",
+    "description": "Uygulamanın görüntüleme dilini seçin.",
+    "options": {
+      "en": "English",
+      "tr": "Türkçe"
+    }
+  },
+  "general": {
+    "title": "Genel",
+    "description": "Genel uygulama ayarları."
+  },
+  "startupTray": {
+    "title": "Başlangıç & Tepsi",
+    "launchAtLogin": "Girişte başlat",
+    "launchAtLoginDescription": "Ambilight'ı oturum açtığınızda otomatik başlatın.",
+    "trayInfo": "Uygulama kapatıldığında sistem tepsisinde çalışmaya devam eder."
+  },
+  "aboutLogs": {
+    "title": "Hakkında & Günlükler",
+    "version": "Sürüm",
+    "logs": "Günlükler",
+    "logsDescription": "Uygulama günlükleri hata ayıklama için yerel olarak saklanır."
+  },
+  "device": {
+    "title": "Cihaz",
+    "description": "Cihaz bağlantı ayarları Phase 2'de kullanılabilir olacak."
+  }
+}
