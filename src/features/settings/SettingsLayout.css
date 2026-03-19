@@ -1,0 +1,235 @@
+/* SettingsLayout.css
+ *
+ * Sidebar + content area layout for Phase 1 settings shell.
+ * Clean technical aesthetic — no framework dependencies.
+ */
+
+/* ---------------------------------------------------------------------------
+   Shell
+--------------------------------------------------------------------------- */
+
+.settings-shell {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-ui);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------------
+   Sidebar
+--------------------------------------------------------------------------- */
+
+.settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  min-width: 160px;
+  max-width: 220px;
+  flex-shrink: 0;
+  background-color: var(--color-sidebar-bg);
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+}
+
+.settings-sidebar__header {
+  padding: 20px 16px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-sidebar__app-name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.settings-sidebar__nav {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+}
+
+.settings-sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 450;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 1px 6px;
+  width: calc(100% - 12px);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.settings-sidebar__item:hover {
+  background-color: var(--color-sidebar-item-hover);
+  color: var(--color-text-primary);
+}
+
+.settings-sidebar__item--active {
+  background-color: var(--color-sidebar-item-active);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.settings-sidebar__item-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.settings-sidebar__item-label {
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------------------
+   Content area
+--------------------------------------------------------------------------- */
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+  background-color: var(--color-bg-base);
+}
+
+/* ---------------------------------------------------------------------------
+   Section common styles
+--------------------------------------------------------------------------- */
+
+.settings-section {
+  padding: 32px 40px;
+  max-width: 640px;
+}
+
+.settings-section__title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--color-text-primary);
+}
+
+.settings-section__description {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: 0 0 24px;
+  line-height: 1.6;
+}
+
+.settings-section__divider {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 16px 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Row (label + control pattern)
+--------------------------------------------------------------------------- */
+
+.settings-section__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.settings-section__row:last-child {
+  border-bottom: none;
+}
+
+.settings-section__row-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-section__row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.settings-section__row-desc {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.settings-section__row-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  background-color: var(--color-badge-bg);
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Toggle switch
+--------------------------------------------------------------------------- */
+
+.settings-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+  padding: 0;
+}
+
+.settings-toggle--on {
+  background-color: var(--color-accent);
+}
+
+.settings-toggle--off {
+  background-color: var(--color-toggle-off);
+}
+
+.settings-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-toggle__thumb {
+  position: absolute;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: left 0.2s ease;
+}
+
+.settings-toggle--on .settings-toggle__thumb {
+  left: 21px;
+}
+
+.settings-toggle--off .settings-toggle__thumb {
+  left: 3px;
+}
