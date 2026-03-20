@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: Completed 04-06-PLAN.md
-last_updated: "2026-03-19T22:23:22.423Z"
-last_activity: 2026-03-19
+stopped_at: Completed 04-07-PLAN.md
+last_updated: "2026-03-20T09:42:02.403Z"
+last_activity: 2026-03-20
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 19
-  completed_plans: 18
+  total_plans: 22
+  completed_plans: 19
   percent: 94
 ---
 
@@ -30,7 +30,7 @@ Phase: 4 of 8 (Calibration Workflow)
 Current Plan: 5
 Total Plans in Phase: 5
 Status: Ready to execute
-Last activity: 2026-03-19
+Last activity: 2026-03-20
 
 Progress: [█████████░] 94%
 
@@ -66,6 +66,7 @@ Progress: [█████████░] 94%
 | Phase 04 P04 | 0 min | 2 tasks | 4 files |
 | Phase 04 P05 | 3 min | 1 tasks | 3 files |
 | Phase 04 P06 | 1 min | 1 tasks | 4 files |
+| Phase 04 P07 | 1 min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,8 @@ Recent decisions affecting current work:
 - [Phase 04]: CalibrationOverlay now pushes editorState.current into flow.setConfig so each next toggle uses latest calibration mapping.
 - [Phase 04]: Introduced resolveLedSequenceItem as shared marker-index normalization contract for calibration mapping consumers.
 - [Phase 04]: Overlay marker segment and segment-order pills now derive from one memoized buildLedSequence output for deterministic parity.
+- [Phase 04]: Hardening scope remained test-only for 04-07; production calibration code was intentionally unchanged.
+- [Phase 04]: CAL-04 parity behavior is now guarded by focused markerIndex/setConfig and physical-index orientation regression tests.
 
 ### Pending Todos
 
@@ -125,6 +128,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-19T22:23:22.421Z
-Stopped at: Completed 04-06-PLAN.md
+Last session: 2026-03-20T09:42:02.401Z
+Stopped at: Completed 04-07-PLAN.md
 Resume file: None
