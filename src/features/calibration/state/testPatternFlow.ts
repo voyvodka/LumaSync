@@ -173,12 +173,14 @@ export function createDefaultTestPatternFlow(
   let currentConfig: LedCalibrationConfig | null = initialConfig ?? null;
 
   const resolvePhysicalIndex = (markerIndex: number) => {
+    const fallbackIndex = Math.max(0, Math.floor(markerIndex));
+
     if (!currentConfig) {
-      return Math.max(0, Math.floor(markerIndex));
+      return fallbackIndex;
     }
 
     const sequence = buildLedSequence(currentConfig);
-    return resolveLedSequenceItem(sequence, markerIndex)?.index ?? 0;
+    return resolveLedSequenceItem(sequence, markerIndex)?.index ?? fallbackIndex;
   };
 
   return createTestPatternFlow({
