@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LedCalibrationConfig } from "./contracts";
-import { buildLedSequence } from "./indexMapping";
+import { buildLedSequence, resolveLedSequenceItem } from "./indexMapping";
 
 const BASE_CONFIG: LedCalibrationConfig = {
   counts: {
@@ -84,11 +84,11 @@ describe("buildLedSequence", () => {
       expectedFirstIndex: number;
     }> = [
       { startAnchor: "top-start", direction: "cw", expectedFirstIndex: 0 },
-      { startAnchor: "top-start", direction: "ccw", expectedFirstIndex: 10 },
+      { startAnchor: "top-start", direction: "ccw", expectedFirstIndex: 0 },
       { startAnchor: "left-end", direction: "cw", expectedFirstIndex: 10 },
-      { startAnchor: "left-end", direction: "ccw", expectedFirstIndex: 9 },
+      { startAnchor: "left-end", direction: "ccw", expectedFirstIndex: 10 },
       { startAnchor: "bottom-right-end", direction: "cw", expectedFirstIndex: 6 },
-      { startAnchor: "bottom-right-end", direction: "ccw", expectedFirstIndex: 5 },
+      { startAnchor: "bottom-right-end", direction: "ccw", expectedFirstIndex: 6 },
     ];
 
     for (const testCase of cases) {
@@ -100,5 +100,46 @@ describe("buildLedSequence", () => {
 
       expect(sequence[0]?.index).toBe(testCase.expectedFirstIndex);
     }
+  });
+
+  it("keeps the same anchor-led physical index as first item for both directions", () => {
+    const anchors: LedCalibrationConfig["startAnchor"][] = [
+      "top-start",
+      "top-end",
+      "right-start",
+      "right-end",
+      "bottom-right-start",
+      "bottom-right-end",
+      "bottom-left-start",
+      "bottom-left-end",
+      "left-start",
+      "left-end",
+    ];
+
+    for (const startAnchor of anchors) {
+      const clockwise = buildLedSequence({ ...BASE_CONFIG, startAnchor, direction: "cw" });
+      const counterClockwise = buildLedSequence({ ...BASE_CONFIG, startAnchor, direction: "ccw" });
+
+      expect(counterClockwise[0]?.index).toBe(clockwise[0]?.index);
+    }
+  });
+});
+
+describe("resolveLedSequenceItem", () => {
+  it("normalizes negative and overflowing marker indexes", () => {
+    const sequence = buildLedSequence(BASE_CONFIG);
+    const sequenceLength = sequence.length;
+
+    expect(resolveLedSequenceItem(sequence, 0)).toEqual(sequence[0]);
+    expect(resolveLedSequenceItem(sequence, sequenceLength)).toEqual(sequence[0]);
+    expect(resolveLedSequenceItem(sequence, sequenceLength + 3)).toEqual(sequence[3]);
+    expect(resolveLedSequenceItem(sequence, -1)).toEqual(sequence[sequenceLength - 1]);
+    expect(resolveLedSequenceItem(sequence, -(sequenceLength + 2))).toEqual(sequence[sequenceLength - 2]);
+  });
+
+  it("returns null for empty sequence", () => {
+    expect(resolveLedSequenceItem([], 0)).toBeNull();
+    expect(resolveLedSequenceItem([], 12)).toBeNull();
+    expect(resolveLedSequenceItem([], -2)).toBeNull();
   });
 });
