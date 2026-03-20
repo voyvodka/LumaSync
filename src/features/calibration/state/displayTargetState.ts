@@ -69,10 +69,12 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
     getSnapshot: () => snapshot,
     setDisplays: (displays) => {
       const normalized = displays.filter((display) => Boolean(display.id));
+      const defaultDisplayId =
+        normalized.find((display) => display.isPrimary)?.id ?? normalized[0]?.id ?? null;
       const selectedDisplayId =
         snapshot.selectedDisplayId && normalized.some((display) => display.id === snapshot.selectedDisplayId)
           ? snapshot.selectedDisplayId
-          : normalized[0]?.id ?? null;
+          : defaultDisplayId;
       const activeDisplayId =
         snapshot.activeDisplayId && normalized.some((display) => display.id === snapshot.activeDisplayId)
           ? snapshot.activeDisplayId

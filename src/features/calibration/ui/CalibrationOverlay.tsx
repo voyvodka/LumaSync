@@ -20,7 +20,9 @@ import {
   discardEditorChanges,
   type CalibrationEditorState,
 } from "../state/calibrationEditorState";
+import { closeDisplayOverlay, listDisplays, openDisplayOverlay } from "../calibrationApi";
 import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
+import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
 import type { CalibrationOverlayStep } from "../state/entryFlow";
 import { CalibrationEditorCanvas } from "./CalibrationEditorCanvas";
 import { CalibrationTemplateStep } from "./CalibrationTemplateStep";
@@ -88,6 +90,15 @@ export function CalibrationOverlay({
     }, initialConfig),
   );
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
+  const displayTargetRef = useRef(
+    createDisplayTargetState({
+      openDisplayOverlay,
+      closeDisplayOverlay,
+    }),
+  );
+  const [displayTarget, setDisplayTarget] = useState<DisplayTargetSnapshot>(
+    displayTargetRef.current.getSnapshot(),
+  );
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
 
   useEffect(() => {
@@ -100,7 +111,36 @@ export function CalibrationOverlay({
     setValidationErrors(null);
     flowRef.current.setTotalLeds((initialConfig ?? resetToManual()).totalLeds);
     setTestPattern(flowRef.current.getSnapshot());
+    displayTargetRef.current.clearBlockedState();
+    setDisplayTarget(displayTargetRef.current.getSnapshot());
   }, [open, initialStep, initialConfig]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let cancelled = false;
+    void listDisplays()
+      .then((displays) => {
+        if (cancelled) {
+          return;
+        }
+
+        setDisplayTarget(displayTargetRef.current.setDisplays(displays));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setDisplayTarget(displayTargetRef.current.setDisplays([]));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   useEffect(() => {
     flowRef.current.setConfig(editorState.current);
@@ -138,6 +178,9 @@ export function CalibrationOverlay({
     }
 
     void flowRef.current.dispose().then(() => {
+      void displayTargetRef.current.closeActiveDisplay().then((nextDisplayTarget) => {
+        setDisplayTarget(nextDisplayTarget);
+      });
       setTestPattern(flowRef.current.getSnapshot());
     });
   }, [open]);
@@ -234,13 +277,72 @@ export function CalibrationOverlay({
               <input
                 type="checkbox"
                 checked={testPattern.isEnabled}
+                disabled={displayTarget.blocked}
                 onChange={async (event) => {
+                  if (event.target.checked) {
+                    const switched = await displayTargetRef.current.switchActiveDisplay();
+                    setDisplayTarget(switched);
+                    if (switched.blocked) {
+                      return;
+                    }
+                  }
+
                   const next = await flowRef.current.toggle(event.target.checked);
                   setTestPattern(next);
+
+                  if (!event.target.checked) {
+                    const closed = await displayTargetRef.current.closeActiveDisplay();
+                    setDisplayTarget(closed);
+                  }
                 }}
               />
               <span>{t("calibration.overlay.testPatternToggle")}</span>
             </label>
+            {displayTarget.displays.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-white/70">{t("calibration.overlay.targetDisplay")}</span>
+                {displayTarget.displays.map((display, index) => {
+                  const isSelected = displayTarget.selectedDisplayId === display.id;
+                  const isActive = displayTarget.activeDisplayId === display.id;
+
+                  return (
+                    <button
+                      key={display.id}
+                      type="button"
+                      className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                        isSelected
+                          ? "border-cyan-300/80 bg-cyan-500/20 text-cyan-100"
+                          : "border-white/30 bg-white/5 text-white/85"
+                      }`}
+                      onClick={async () => {
+                        const selected = displayTargetRef.current.selectDisplay(display.id);
+                        setDisplayTarget(selected);
+
+                        if (!testPattern.isEnabled) {
+                          return;
+                        }
+
+                        const switched = await displayTargetRef.current.switchActiveDisplay(display.id);
+                        setDisplayTarget(switched);
+                        if (switched.blocked) {
+                          const disabledPattern = await flowRef.current.toggle(false);
+                          setTestPattern(disabledPattern);
+                        }
+                      }}
+                    >
+                      <div className="font-semibold">
+                        {t("calibration.overlay.displayCard", { number: index + 1 })}
+                        {display.isPrimary ? ` • ${t("calibration.overlay.primary")}` : ""}
+                        {isActive ? ` • ${t("calibration.overlay.active")}` : ""}
+                      </div>
+                      <div className="text-white/70">
+                        {display.width}x{display.height} @ ({display.x}, {display.y})
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             {testPattern.isEnabled ? (
               <>
                 <span className="rounded-md bg-white/15 px-2 py-1">
@@ -273,6 +375,14 @@ export function CalibrationOverlay({
             {testPattern.isEnabled && testPattern.mode === "preview-only" ? (
               <span className="rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-amber-100">
                 {t("calibration.overlay.previewOnly")}
+              </span>
+            ) : null}
+            {displayTarget.blocked ? (
+              <span className="rounded-md border border-rose-300/60 bg-rose-500/20 px-2 py-1 text-rose-100">
+                {t("calibration.overlay.blockedReason", {
+                  code: displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED",
+                  reason: displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown"),
+                })}
               </span>
             ) : null}
           </div>
@@ -373,6 +483,7 @@ export function CalibrationOverlay({
     initialConfig,
     initialStep,
     isSaving,
+    displayTarget,
     markerSegment,
     onClose,
     onSaved,
