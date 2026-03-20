@@ -20,7 +20,14 @@
   },
   "general": {
     "title": "Genel",
-    "description": "Genel uygulama ayarları."
+    "description": "Genel uygulama ayarları.",
+    "mode": {
+      "title": "LED modu",
+      "description": "Gerçek zamanlı LED çıkışını yalnızca kalibrasyon tamamlandığında etkinleştirin.",
+      "toggleLabel": "LED modunu değiştir",
+      "lockedReasonCalibration": "LED modunu etkinleştirmeden önce kalibrasyonu tamamlayın.",
+      "openCalibration": "Kalibrasyonu aç"
+    }
   },
   "startupTray": {
     "title": "Başlangıç & Tepsi",

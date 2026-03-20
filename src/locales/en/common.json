@@ -20,7 +20,14 @@
   },
   "general": {
     "title": "General",
-    "description": "General application settings."
+    "description": "General application settings.",
+    "mode": {
+      "title": "LED mode",
+      "description": "Enable realtime LED output after calibration is complete.",
+      "toggleLabel": "Toggle LED mode",
+      "lockedReasonCalibration": "Complete calibration before enabling LED mode.",
+      "openCalibration": "Open calibration"
+    }
   },
   "startupTray": {
     "title": "Startup & Tray",

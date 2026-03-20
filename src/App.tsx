@@ -20,6 +20,10 @@ import {
   startCalibrationFromSettings,
   type CalibrationOverlayStep,
 } from "./features/calibration/state/entryFlow";
+import {
+  canEnableLedMode,
+  resolveLedModeEnableAttempt,
+} from "./features/mode/state/modeGuard";
 import type { LedCalibrationConfig } from "./features/calibration/model/contracts";
 import {
   initWindowLifecycle,
@@ -34,6 +38,7 @@ import {
 function App() {
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.GENERAL);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
+  const [ledModeEnabled, setLedModeEnabled] = useState(false);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayStep, setOverlayStep] = useState<CalibrationOverlayStep>("editor");
   const [lifecycleReady, setLifecycleReady] = useState(false);
@@ -79,11 +84,40 @@ function App() {
     } catch {}
   }, []);
 
+  const openCalibrationOverlay = useCallback((step: CalibrationOverlayStep = "editor") => {
+    setOverlayStep(step);
+    setOverlayOpen(true);
+  }, []);
+
   const handleOpenCalibration = useCallback(() => {
     const entry = startCalibrationFromSettings(savedCalibration);
-    setOverlayStep(entry.step);
-    setOverlayOpen(entry.open);
-  }, [savedCalibration]);
+    if (entry.open) {
+      openCalibrationOverlay(entry.step);
+    }
+  }, [openCalibrationOverlay, savedCalibration]);
+
+  const handleLedModeChange = useCallback(
+    (nextEnabled: boolean) => {
+      if (!nextEnabled) {
+        setLedModeEnabled(false);
+        return;
+      }
+
+      const attempt = resolveLedModeEnableAttempt({
+        currentEnabled: ledModeEnabled,
+        calibration: savedCalibration,
+      });
+
+      if (attempt.shouldOpenCalibration) {
+        openCalibrationOverlay("template");
+      }
+
+      setLedModeEnabled(attempt.nextEnabled);
+    },
+    [ledModeEnabled, openCalibrationOverlay, savedCalibration],
+  );
+
+  const modeGuard = canEnableLedMode(savedCalibration);
 
   void lifecycleReady;
 
@@ -93,6 +127,9 @@ function App() {
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
         calibration={savedCalibration}
+        ledModeEnabled={ledModeEnabled}
+        modeLockReason={modeGuard.reason}
+        onLedModeChange={handleLedModeChange}
         onOpenCalibration={handleOpenCalibration}
       />
       <CalibrationOverlay

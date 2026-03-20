@@ -8,6 +8,7 @@ import { AboutLogsSection } from "./sections/AboutLogsSection";
 import { DeviceSection } from "./sections/DeviceSection";
 import { CalibrationSection } from "./sections/CalibrationSection";
 import type { LedCalibrationConfig } from "../calibration/model/contracts";
+import type { ModeGuardReason } from "../mode/state/modeGuard";
 
 interface SectionMeta {
   id: SectionId;
@@ -18,15 +19,28 @@ interface SectionMeta {
 function SectionContent({
   sectionId,
   calibration,
+  ledModeEnabled,
+  modeLockReason,
+  onLedModeChange,
   onOpenCalibration,
 }: {
   sectionId: SectionId;
   calibration?: LedCalibrationConfig;
+  ledModeEnabled: boolean;
+  modeLockReason: ModeGuardReason | null;
+  onLedModeChange: (nextEnabled: boolean) => void;
   onOpenCalibration: () => void;
 }) {
   switch (sectionId) {
     case SECTION_IDS.GENERAL:
-      return <GeneralSection />;
+      return (
+        <GeneralSection
+          ledModeEnabled={ledModeEnabled}
+          modeLockReason={modeLockReason}
+          onLedModeChange={onLedModeChange}
+          onOpenCalibrationOverlay={onOpenCalibration}
+        />
+      );
     case SECTION_IDS.STARTUP_TRAY:
       return <StartupTraySection />;
     case SECTION_IDS.LANGUAGE:
@@ -38,7 +52,14 @@ function SectionContent({
     case SECTION_IDS.CALIBRATION:
       return <CalibrationSection calibration={calibration} onEdit={onOpenCalibration} />;
     default:
-      return <GeneralSection />;
+      return (
+        <GeneralSection
+          ledModeEnabled={ledModeEnabled}
+          modeLockReason={modeLockReason}
+          onLedModeChange={onLedModeChange}
+          onOpenCalibrationOverlay={onOpenCalibration}
+        />
+      );
   }
 }
 
@@ -46,6 +67,9 @@ interface SettingsLayoutProps {
   activeSection: SectionId;
   onSectionChange: (sectionId: SectionId) => void;
   calibration?: LedCalibrationConfig;
+  ledModeEnabled: boolean;
+  modeLockReason: ModeGuardReason | null;
+  onLedModeChange: (nextEnabled: boolean) => void;
   onOpenCalibration: () => void;
 }
 
@@ -53,6 +77,9 @@ export function SettingsLayout({
   activeSection,
   onSectionChange,
   calibration,
+  ledModeEnabled,
+  modeLockReason,
+  onLedModeChange,
   onOpenCalibration,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
@@ -142,6 +169,9 @@ export function SettingsLayout({
         <SectionContent
           sectionId={activeSection}
           calibration={calibration}
+          ledModeEnabled={ledModeEnabled}
+          modeLockReason={modeLockReason}
+          onLedModeChange={onLedModeChange}
           onOpenCalibration={onOpenCalibration}
         />
       </main>
