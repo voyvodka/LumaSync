@@ -25,7 +25,7 @@ describe("buildLedSequence", () => {
     expect(second).toEqual(first);
   });
 
-  it("returns reversed traversal between cw and ccw", () => {
+  it("reverses traversal after the shared anchor-led between cw and ccw", () => {
     const clockwise = buildLedSequence({
       ...BASE_CONFIG,
       direction: "cw",
@@ -38,7 +38,8 @@ describe("buildLedSequence", () => {
     const cwKeys = clockwise.map((item) => `${item.segment}:${item.localIndex}`);
     const ccwKeys = counterClockwise.map((item) => `${item.segment}:${item.localIndex}`);
 
-    expect(cwKeys).toEqual([...ccwKeys].reverse());
+    expect(ccwKeys[0]).toBe(cwKeys[0]);
+    expect(ccwKeys.slice(1)).toEqual([...cwKeys.slice(1)].reverse());
   });
 
   it("does not change led count when only bottom gap changes", () => {

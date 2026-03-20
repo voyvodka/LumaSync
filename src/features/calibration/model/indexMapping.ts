@@ -71,5 +71,14 @@ export function buildLedSequence(config: LedCalibrationConfig): LedSequenceItem[
   const canonical = buildCanonicalSequence(config);
   const anchorIndex = resolveAnchorIndex(canonical, config.startAnchor);
   const rotated = rotateSequence(canonical, anchorIndex);
-  return config.direction === "cw" ? rotated : [...rotated].reverse();
+
+  if (config.direction === "cw") {
+    return rotated;
+  }
+
+  if (rotated.length <= 1) {
+    return rotated;
+  }
+
+  return [rotated[0], ...rotated.slice(1).reverse()];
 }
