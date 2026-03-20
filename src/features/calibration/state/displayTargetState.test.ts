@@ -104,6 +104,35 @@ describe("displayTargetState", () => {
     expect(blocked.activeDisplayId).toBeNull();
   });
 
+  it("switchActiveDisplay OVERLAY_OPEN_FAILED: blocks re-open attempts until blocked state clears", async () => {
+    const { state, openDisplayOverlay } = createState();
+    openDisplayOverlay.mockImplementation(async (displayId) => {
+      if (displayId === "display-2") {
+        return {
+          ok: false,
+          code: "OVERLAY_OPEN_FAILED",
+          message: "Overlay cannot open",
+          reason: "Display permission denied",
+        } satisfies DisplayOverlayCommandResult;
+      }
+
+      return okResult();
+    });
+
+    const blocked = await state.switchActiveDisplay("display-2");
+    expect(blocked.blocked).toBe(true);
+
+    const retry = await state.switchActiveDisplay("display-1");
+    expect(retry.blocked).toBe(true);
+    expect(openDisplayOverlay).toHaveBeenCalledTimes(1);
+
+    state.clearBlockedState();
+    const reopened = await state.switchActiveDisplay("display-1");
+    expect(reopened.blocked).toBe(false);
+    expect(reopened.activeDisplayId).toBe("display-1");
+    expect(openDisplayOverlay).toHaveBeenCalledTimes(2);
+  });
+
   it("single-active: rejects parallel open attempts while switch in progress", async () => {
     let resolveOpen!: () => void;
     const openDisplayOverlay = vi.fn(
