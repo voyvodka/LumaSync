@@ -20,6 +20,11 @@ vi.mock("react-i18next", () => ({
         "calibration.section.description": "Summary and edit entry",
         "calibration.section.template": "Template",
         "calibration.section.totalLeds": "Total LEDs",
+        "calibration.section.edges": "Edge LEDs",
+        "calibration.section.gap": "Bottom gap",
+        "calibration.section.startAnchor": "Start anchor",
+        "calibration.section.direction": "Direction",
+        "calibration.section.emptyState": "No calibration saved yet. Open the editor to map your strip before enabling live mode.",
         "calibration.section.notConfigured": "Not calibrated",
         "calibration.section.manual": "Manual",
         "calibration.section.edit": "Edit",
@@ -46,10 +51,10 @@ describe("CalibrationSection", () => {
     expect(screen.getByRole("heading", { name: "Calibration" })).toBeInTheDocument();
   });
 
-  it("shows template label and not calibrated fallback summary", () => {
+  it("shows template and geometry overview values when calibration is configured", () => {
     const onEditCalibration = vi.fn();
 
-    const { rerender } = render(
+    render(
       <CalibrationSection
         calibration={{
           templateId: "monitor-27-16-9",
@@ -65,11 +70,22 @@ describe("CalibrationSection", () => {
 
     expect(screen.getByText('27" 16:9')).toBeInTheDocument();
     expect(screen.getByText("114")).toBeInTheDocument();
+    expect(screen.getByText("Top 36 • Right 22 • Bottom right 17 • Bottom left 17 • Left 22")).toBeInTheDocument();
+    expect(screen.getByText("140 px")).toBeInTheDocument();
+    expect(screen.getByText("top-start")).toBeInTheDocument();
+    expect(screen.getByText("CW")).toBeInTheDocument();
+  });
 
-    rerender(<CalibrationSection calibration={undefined} onEditCalibration={onEditCalibration} />);
+  it("shows a clear empty-state helper and edit action when calibration is missing", () => {
+    const onEditCalibration = vi.fn();
+
+    render(<CalibrationSection calibration={undefined} onEditCalibration={onEditCalibration} />);
 
     expect(screen.getByText("Not calibrated")).toBeInTheDocument();
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(
+      screen.getByText("No calibration saved yet. Open the editor to map your strip before enabling live mode."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
   it("calls edit callback when edit button is clicked", async () => {
