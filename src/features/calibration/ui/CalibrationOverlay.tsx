@@ -280,9 +280,11 @@ export function CalibrationOverlay({
                  type="checkbox"
                  checked={testPattern.isEnabled}
                  disabled={displayTarget.isSwitching}
-                  onChange={async (event) => {
+                   onChange={async (event) => {
+                    const shouldEnable = event.currentTarget.checked;
+
                      try {
-                       if (event.target.checked) {
+                       if (shouldEnable) {
                          if (displayTarget.blocked) {
                            const reason = displayTarget.blockedReason ?? "Overlay open failed.";
                            const code = displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED";
@@ -304,14 +306,14 @@ export function CalibrationOverlay({
                         }
                       }
 
-                     const next = await flowRef.current.toggle(event.target.checked);
-                     setTestPattern(next);
-                     setTestPatternError(null);
+                      const next = await flowRef.current.toggle(shouldEnable);
+                      setTestPattern(next);
+                      setTestPatternError(null);
 
-                     if (!event.target.checked) {
-                       const closed = await displayTargetRef.current.closeActiveDisplay();
-                       setDisplayTarget(closed);
-                     } else {
+                      if (!shouldEnable) {
+                        const closed = await displayTargetRef.current.closeActiveDisplay();
+                        setDisplayTarget(closed);
+                      } else {
                        setDisplayTarget(displayTargetRef.current.clearBlockedState());
                      }
                     } catch (error) {

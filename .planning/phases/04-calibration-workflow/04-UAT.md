@@ -15,7 +15,7 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T13:14:44Z
+updated: 2026-03-20T13:18:56Z
 ---
 
 ## Current Test
@@ -98,12 +98,14 @@ skipped: 0
   reason: "User reported: hata metni olmadan kisa sureli siyah overlay flash'i oluyor, overlay kalici gorunmuyor."
   severity: major
   test: 2
-  root_cause: "Overlay penceresi app `index.html` webview'i ile aciliyor; bu tam uygulama yuklemesi overlay yuzeyini yan-etkilere acik birakiyor ve sahada gecici flash + hemen kapanma semptomu uretebiliyor."
+  root_cause: "Toggle handler async akisinda `event.target.checked` degeri await sonrasinda tekrar okunuyordu. DOM checked state'i bu sirada degistiginde `toggle(false)` ve `closeActiveDisplay()` istemeden tetikleniyor; overlay acilip hemen kapanmis gibi gorunuyordu."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "open_overlay_window App(index.html) ile ana uygulamayi yukleyerek kararsiz overlay davranisina yol aciyor"
+      issue: "test pattern toggle handler'inda checked niyeti stabilize edilmedigi icin stop/close zinciri yanlislikla calisabiliyor"
+    - path: "src/features/calibration/state/testPatternFlow.ts"
+      issue: "toggle(false) cagrisi geldiğinde stop komutu backend'e hemen iletiliyor; yanlis tetiklenirse overlay aninda kapaniyor"
   missing:
-    - "Overlay icin dedicated ve stabil bir webview yuzeyi (about:blank)"
+    - "toggle handler'da kullanici niyetinin (`shouldEnable`) await oncesi sabitlenmesi"
     - "Fix sonrasi Duzenle/Test Pattern ON adiminda kalici overlay gorunurlugu UAT kaniti"
   debug_session: ".planning/debug/calibration-edit-overlay-not-opening.md"
 
@@ -112,14 +114,14 @@ skipped: 0
   reason: "User reported: kalici overlay gorunmedigi icin tek aktif overlay gozlemi guvenilir yapilamadi"
   severity: major
   test: 7
-  root_cause: "Display switch akisinin UAT gozlemi, overlayin kalici gorunurluk vermemesi nedeniyle bloke oluyor."
+  root_cause: "Stop/close zinciri yanlis tetiklenirse display-switch adimi baslamadan overlay kapanabildigi icin tek aktif davranis sahada net gozlenemiyor."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "overlay surface stabil degil; switch davranisi fiziksel ekran ustunde surekli izlenemiyor"
+      issue: "yanlis stop/close tetiklenmesi oldugunda switch davranisi sahada yarida kesiliyor"
     - path: "src/features/calibration/state/displayTargetState.ts"
       issue: "state akisi dogru ama runtime overlay gorunurlugu olmadiginda UAT pass/fail kesinlesmiyor"
   missing:
-    - "stabil overlay rendering fixi"
+    - "toggle niyet sabitleme fixi"
     - "fix sonrasi display switch close-old/open-new UAT rerun kaydi"
   debug_session: ".planning/debug/test-pattern-overlay-missing-on-display-switch.md"
 
@@ -128,14 +130,14 @@ skipped: 0
   reason: "User reported: hata metni gormediginden fail ile gecici siyah flash ayrisamiyor"
   severity: major
   test: 8
-  root_cause: "Overlay gorunurluk semptomu fail durumunu maskeledigi icin kullanici acik blocked reason gozlemleyemiyor."
+  root_cause: "Ayni zincirde yanlis stop/close tetiklenmesi oldugunda kullanici blocked reason yerine kisa overlay kapanisi goruyor ve fail sinyali ayrismiyor."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "overlay surface kalici gorunurluk vermediginde fail mesajinin kullaniciya etkisi kayboluyor"
+      issue: "yanlis stop/close zinciri gorunurlugu bozdugunda blocked reason sinyali zayifliyor"
     - path: "src/features/calibration/ui/CalibrationOverlay.tsx"
       issue: "blockedReason metni mevcut, ancak runtime overlay semptomu ayirici sinyal uretemiyor"
   missing:
-    - "runtime overlay stabilizasyonu"
+    - "toggle niyet sabitleme fixi"
     - "fix sonrasi blocked reason davranisinin tekrar UAT kaydi"
   debug_session: ".planning/debug/overlay-open-fail-blocked-reason-not-visible.md"
 

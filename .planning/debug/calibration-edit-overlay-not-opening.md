@@ -2,7 +2,7 @@
 status: diagnosed
 trigger: "Issue truth: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir."
 created: 2026-03-20T12:40:05Z
-updated: 2026-03-20T13:14:44Z
+updated: 2026-03-20T13:18:56Z
 ---
 
 ## Current Focus
@@ -51,11 +51,12 @@ started: UAT sirasinda kesfedildi.
 
 ## Resolution
 
-root_cause: `close()->destroy()` duzeltmesi label collision'i temizledi, fakat overlay hala `index.html` (tam app webview) ile acildigi icin sahada gecici siyah flash ve hemen kapanma davranisi devam ediyor. Dedicated overlay surface olmadigi icin runtime gorunurluk kararsiz kaliyor.
-fix: `open_overlay_window` artik `WebviewUrl::External(about:blank)` ile dedicated overlay surface aciyor; init script ile sabit siyah tam ekran gorunumu veriyor.
+root_cause: Overlay acma basarili olsa da `CalibrationOverlay` toggle handler'i async akis icinde `event.target.checked` degerini tekrar okuyordu. Await sonrasi bu deger degistiginde istemsiz `toggle(false)` + `closeActiveDisplay()` zinciri calisip overlayi hemen kapatiyordu.
+fix: Toggle niyeti handler basinda `const shouldEnable = event.currentTarget.checked;` ile sabitlendi ve tum toggle/close dallari bu sabit degerle surduruldu.
 verification:
 files_changed:
   - src-tauri/src/commands/calibration.rs
+  - src/features/calibration/ui/CalibrationOverlay.tsx
 
 - timestamp: 2026-03-20T13:03:10Z
   checked: UAT rerun sonucu + src-tauri/src/commands/calibration.rs + src-tauri/src/lib.rs
@@ -66,3 +67,8 @@ files_changed:
   checked: Yeni UAT rerun semptomu + open_overlay_window URL secimi
   found: Hata metni kaybolsa da overlay kalici degil; acilan pencere `index.html` yukleyerek uygulama lifecycle'ina bagimli davraniyor.
   implication: Overlay icin app webview yerine minimal/dedicated surface kullanmak gerekiyor.
+
+- timestamp: 2026-03-20T13:18:56Z
+  checked: Kullanici gozlemi (overlay acildiktan sonra stop/close komutlari) + CalibrationOverlay toggle handler
+  found: Handler icinde `event.target.checked` await sonrasi tekrar kullanildigi icin stop/close branch'i yanlis tetiklenebiliyor.
+  implication: Kisa siyahlik + hemen kapanma semptomu, overlay open fail degil, istemsiz disable zinciri.
