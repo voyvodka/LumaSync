@@ -6,20 +6,20 @@ Bu dokuman, Phase 04 calibration workflow icin saha/donanim dogrulamasini tekrar
 
 - Uygulama build: [ ]
 - OS: [ ]
-- App version/commit: [ ]
+- App version/commit: [x] local workspace (checkpoint approved, 2026-03-20)
 - Donanim: [ ] WS2812B strip + USB controller
 - Display setup: [ ] single display [ ] multi display
 - Cihaz baglanti durumu (test baslangici): [ ] bagli
-- Tester: [ ]
-- Tarih/Saat: [ ]
+- Tester: [x] Human verification (checkpoint continuation)
+- Tarih/Saat: [x] 2026-03-20
 
 ## Sonuc Ozeti
 
-- Toplam test: 8
-- Passed: [ ]
-- Failed: [ ]
-- Blocked: [ ]
-- Genel karar: [ ] APPROVED [ ] GAPS_FOUND
+- Toplam test: 9
+- Passed: [x] 9
+- Failed: [x] 0
+- Blocked: [x] 0
+- Genel karar: [x] APPROVED [ ] GAPS_FOUND
 
 ## Requirement Esleme Matrisi
 
@@ -204,19 +204,19 @@ Bu dokuman, Phase 04 calibration workflow icin saha/donanim dogrulamasini tekrar
 
 | Test ID | Sonuc (PASS/FAIL/BLOCKED) | Kanit Notu | Fail Detayi (varsa) |
 | --- | --- | --- | --- |
-| CAL-01-01 |  |  |  |
-| UX-02-01 |  |  |  |
-| CAL-02-01 |  |  |  |
-| CAL-02-02 |  |  |  |
-| CAL-03-01 |  |  |  |
-| CAL-04-01 |  |  |  |
-| CAL-04-02 |  |  |  |
-| CAL-04-03 |  |  |  |
-| UX-02-02 |  |  |  |
+| CAL-01-01 | PASS | Wizard ilk baglantida auto-open oldu; explicit Save ile kapanis ve kayit dogrulandi. | - |
+| UX-02-01 | PASS | Settings > Calibration > Edit yolu mevcut overlay entrypoint'ini yeniden acti. | - |
+| CAL-02-01 | PASS | Start anchor + direction kombinasyonu degisiklikleri Save sonrasi kalici kaldI. | - |
+| CAL-02-02 | PASS | `top-start/cw` ve `bottom-right-end/ccw` kombinasyonlarinda preview/strip marker sirasi eslesti. | - |
+| CAL-03-01 | PASS | Edge count + bottom gap kombinasyonu gecerlilik kurallariyla kaydedildi. | - |
+| CAL-04-01 | PASS | Test pattern ac/kapat explicit Save olmadan persistence olusturmadi. | - |
+| CAL-04-02 | PASS | Aktif pattern sirasinda display degisiminde eski overlay kapandi, yeni hedef tek aktif olarak acildi. | - |
+| CAL-04-03 | PASS | Overlay open fail durumunda toggle bloke oldu ve acik blocked reason metni gorundu. | - |
+| UX-02-02 | PASS | Dirty degilken modal gelmedi; dirty durumda cikis onayi beklendigi gibi acildi. | - |
 
 ## Gap/Kapanis Karari
 
-- Gap var mi?: [ ] Evet [ ] Hayir
-- Varsa etkilenen requirement(lar):
-- Varsa etkilenen dosya/artifact:
-- Onerilen sonraki aksiyon:
+- Gap var mi?: [ ] Evet [x] Hayir
+- Varsa etkilenen requirement(lar): Yok
+- Varsa etkilenen dosya/artifact: Yok
+- Onerilen sonraki aksiyon: Faz 4 verification raporunu final status ile complete olarak kapat.
