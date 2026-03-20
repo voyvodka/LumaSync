@@ -15,7 +15,7 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T12:42:09Z
+updated: 2026-03-20T12:59:08Z
 ---
 
 ## Current Test
@@ -63,10 +63,25 @@ reported: "overlay görünmüyor bunu göremiyorum"
 severity: major
 
 ### 9. Dirty-exit confirm davranisi
-expected: Dirty degilken cikis onay modali gelmez; dirty durumda cikis denemesinde onay modali gelir.
+expected: Calibration Overlay acikken clean cikis denemesinde onay modali gelmez; dirty cikis denemesinde onay modali gelir.
 result: issue
 reported: "bunun hangi kısım olduğunu anlamadım"
 severity: major
+
+#### Test 9 adimlari (ekran/buton seviyesi)
+
+Clean mini senaryo (modal beklenmez):
+1. Settings > Calibration > Duzenle ile Calibration Overlay'i ac.
+2. Editor acildiktan sonra hicbir alan degistirme (count/start anchor/direction/bottom gap dokunma).
+3. Ust sagdaki **Close** butonuna tikla (alternatif: alt bardaki **Cancel** butonu).
+4. Beklenen: Overlay direkt kapanir, **Unsaved changes** modalı acilmaz.
+
+Dirty mini senaryo (modal beklenir):
+1. Settings > Calibration > Duzenle ile Calibration Overlay'i tekrar ac.
+2. Editor'de herhangi bir alani degistir (ornek: Top count degerini +1/-1 yap veya direction degistir).
+3. Ust sagdaki **Close** butonuna tikla (alternatif: alt bardaki **Cancel** butonu).
+4. Beklenen: **Unsaved changes** onay modali gorunur; modalda **Keep Editing** ve **Discard** aksiyonlari cikar.
+5. Opsiyonel dogrulama: **Keep Editing** editoru kapatmaz, **Discard** editoru kapatir.
 
 ## Summary
 
