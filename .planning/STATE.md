@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: Completed 04-07-PLAN.md
-last_updated: "2026-03-20T09:42:02.403Z"
+stopped_at: Completed 04-09-PLAN.md
+last_updated: "2026-03-20T10:01:57.827Z"
 last_activity: 2026-03-20
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 22
-  completed_plans: 19
+  completed_plans: 20
   percent: 94
 ---
 
@@ -67,6 +67,7 @@ Progress: [█████████░] 94%
 | Phase 04 P05 | 3 min | 1 tasks | 3 files |
 | Phase 04 P06 | 1 min | 1 tasks | 4 files |
 | Phase 04 P07 | 1 min | 1 tasks | 2 files |
+| Phase 04 P09 | 4 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Overlay marker segment and segment-order pills now derive from one memoized buildLedSequence output for deterministic parity.
 - [Phase 04]: Hardening scope remained test-only for 04-07; production calibration code was intentionally unchanged.
 - [Phase 04]: CAL-04 parity behavior is now guarded by focused markerIndex/setConfig and physical-index orientation regression tests.
+- [Phase 04]: Mode lock reason code standardized as CALIBRATION_REQUIRED via modeGuard for App/UI parity.
+- [Phase 04]: General section keeps LED mode toggle visible but disabled with calibration CTA instead of hiding control.
 
 ### Pending Todos
 
@@ -128,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T09:42:02.401Z
-Stopped at: Completed 04-07-PLAN.md
+Last session: 2026-03-20T10:01:57.826Z
+Stopped at: Completed 04-09-PLAN.md
 Resume file: None
