@@ -76,7 +76,7 @@ Plans:
   3. User can configure edge LED counts and physical gap regions to match real hardware.
   4. User can validate LED mapping with live preview/test pattern before saving.
   5. User can revisit and adjust calibration later from an advanced settings panel.
-**Plans**: 8 plans
+**Plans**: 12 plans
 Plans:
 - [ ] 04-01-PLAN.md - Build test-backed calibration contracts, template catalog, and deterministic LED mapping engine
 - [ ] 04-02-PLAN.md - Deliver shared wizard/advanced calibration overlay flow with explicit save and dirty-exit guard
@@ -86,6 +86,10 @@ Plans:
 - [ ] 04-06-PLAN.md - [gap] Restore mapping-order parity across buildLedSequence, physical payload marker index, and overlay preview segment label (CAL-04)
 - [ ] 04-07-PLAN.md - [gap] Add mapping-order parity regression hardening and physical parity re-verification gate (CAL-04)
 - [ ] 04-08-PLAN.md - [gap] Close remaining CAL-04 parity gap by hardening model-flow-overlay mapping contract
+- [ ] 04-09-PLAN.md - [gap] Add calibration-required LED mode guard and disabled-toggle CTA UX in General settings (UX-02)
+- [ ] 04-10-PLAN.md - [gap] Add display-target lifecycle slice with single-active overlay switching and blocked-reason UX (CAL-04)
+- [ ] 04-11-PLAN.md - [gap] Run final hardware UAT closure and update verification status for CAL/UX requirements
+- [ ] 04-12-PLAN.md - Add first-connection auto-open guard plus Settings > Calibration summary/edit entry wiring (UX-02)
 
 ### Phase 5: Core Lighting Modes
 **Goal**: Kullanici ana kullanim modlarini secip LED cikisini amacina gore degistirebilir.
@@ -133,7 +137,7 @@ Plans:
 | 1. App Shell and Baseline Defaults | 5/5 | Complete   | 2026-03-19 |
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
-| 4. Calibration Workflow | 10/10 | Complete   | 2026-03-20 |
+| 4. Calibration Workflow | 12/12 | Complete   | 2026-03-20 |
 | 5. Core Lighting Modes | 0/TBD | Not started | - |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
 | 7. Telemetry and Full Localization | 0/TBD | Not started | - |

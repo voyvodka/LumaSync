@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: Completed 04-10-PLAN.md
-last_updated: "2026-03-20T10:21:37.639Z"
+stopped_at: Completed 04-12-PLAN.md
+last_updated: "2026-03-20T11:01:09.587Z"
 last_activity: 2026-03-20
 progress:
   total_phases: 8
-  completed_phases: 4
-  total_plans: 22
-  completed_plans: 22
+  completed_phases: 3
+  total_plans: 24
+  completed_plans: 23
   percent: 94
 ---
 
@@ -70,6 +70,7 @@ Progress: [█████████░] 94%
 | Phase 04 P09 | 4 min | 2 tasks | 8 files |
 | Phase 04 P08 | 1 min | 4 tasks | 5 files |
 | Phase 04 P10 | 5 min | 2 tasks | 9 files |
+| Phase 04 P12 | 6 min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Marker normalization uses deterministic sequence fallback for invalid marker values to keep CAL-04 parity stable.
 - [Phase 04]: Display hedefi varsayilan olarak birincil monitore ayarlaniyor.
 - [Phase 04]: Overlay acma hatalari code+reason ile UI'da bloke mesajina donusturuluyor.
+- [Phase 04]: Auto-open trigger now evaluates live connection false-to-true transition with no calibration and one-shot session guard.
+- [Phase 04]: Settings Calibration Edit action reuses the existing calibration overlay entrypoint rather than a separate modal flow.
 
 ### Pending Todos
 
@@ -137,6 +140,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T10:21:37.636Z
-Stopped at: Completed 04-10-PLAN.md
+Last session: 2026-03-20T11:01:09.585Z
+Stopped at: Completed 04-12-PLAN.md
 Resume file: None
