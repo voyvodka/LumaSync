@@ -1,5 +1,5 @@
 ---
-status: testing
+status: complete
 phase: 04-calibration-workflow
 source:
   - 04-01-SUMMARY.md
@@ -15,16 +15,12 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T12:30:47Z
+updated: 2026-03-20T12:39:02Z
 ---
 
 ## Current Test
 
-number: 3
-name: Start anchor ve direction kaliciligi
-expected: |
-  Start anchor ve direction degistirilip Save yapildiginda secimler kalici olmali.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -40,38 +36,44 @@ severity: major
 
 ### 3. Start anchor ve direction kaliciligi
 expected: Start anchor ve direction degistirilip Save yapildiginda secimler kalici olur.
-result: [pending]
+result: pass
 
 ### 4. Orientation parity (preview vs fiziksel strip)
 expected: top-start/cw ve bottom-right-end/ccw kombinasyonlarinda overlay marker sirasi ile fiziksel strip marker sirasi birebir ayni ilerler.
-result: [pending]
+result: pass
 
 ### 5. Edge count + bottom gap kaydetme
 expected: Edge LED count ve bottom gap gecerli kombinasyonu Save ile kalici kaydedilir.
-result: [pending]
+result: pass
 
 ### 6. Explicit save disinda persist olmamasi
 expected: Save yapmadan test pattern ac/kapatmak degisiklikleri kalici hale getirmez; editor yeniden acildiginda eski kayit gorulur.
-result: [pending]
+result: pass
 
 ### 7. Display switch sirasinda tek aktif overlay
 expected: Test pattern acikken display hedefi degisince eski overlay kapanir, yeni hedefte tek aktif overlay acilir.
-result: [pending]
+result: issue
+reported: "test patern açılmıyor overview yok"
+severity: major
 
 ### 8. Overlay open fail blokaji ve reason
 expected: Overlay open fail durumunda test pattern toggle bloke olur ve kullaniciya acik reason metni gosterilir.
-result: [pending]
+result: issue
+reported: "overlay görünmüyor bunu göremiyorum"
+severity: major
 
 ### 9. Dirty-exit confirm davranisi
 expected: Dirty degilken cikis onay modali gelmez; dirty durumda cikis denemesinde onay modali gelir.
-result: [pending]
+result: issue
+reported: "bunun hangi kısım olduğunu anlamadım"
+severity: major
 
 ## Summary
 
 total: 9
-passed: 1
-issues: 1
-pending: 7
+passed: 5
+issues: 4
+pending: 0
 skipped: 0
 
 ## Gaps
@@ -81,5 +83,29 @@ skipped: 0
   reason: "User reported: overlay açılmıyor görünüm tasarlanmamış. Test pattern toggle ON oluyor ama OS-level overlay görünmüyor; checkbox geri false oluyor / görünüm yok."
   severity: major
   test: 2
+  artifacts: []
+  missing: []
+
+- truth: "Test pattern acikken display hedefi degisince eski overlay kapanir, yeni hedefte tek aktif overlay acilir."
+  status: failed
+  reason: "User reported: test patern açılmıyor overview yok"
+  severity: major
+  test: 7
+  artifacts: []
+  missing: []
+
+- truth: "Overlay open fail durumunda test pattern toggle bloke olur ve kullaniciya acik reason metni gosterilir."
+  status: failed
+  reason: "User reported: overlay görünmüyor bunu göremiyorum"
+  severity: major
+  test: 8
+  artifacts: []
+  missing: []
+
+- truth: "Dirty degilken cikis onay modali gelmez; dirty durumda cikis denemesinde onay modali gelir."
+  status: failed
+  reason: "User reported: bunun hangi kısım olduğunu anlamadım"
+  severity: major
+  test: 9
   artifacts: []
   missing: []
