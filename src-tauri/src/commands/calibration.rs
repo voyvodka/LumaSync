@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{window::Color, AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder};
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
 
@@ -95,7 +95,7 @@ fn open_overlay_window<R: Runtime>(
     target_display: &DisplayInfoPayload,
 ) -> Result<(), String> {
     let overlay_url = build_overlay_webview_url()?;
-    let (x, y, width, height) = to_overlay_geometry(target_display);
+    let (x, y) = to_overlay_position(target_display);
 
     let builder = WebviewWindowBuilder::new(app, window_label, overlay_url)
         .title("Calibration Overlay")
@@ -103,10 +103,11 @@ fn open_overlay_window<R: Runtime>(
         .resizable(false)
         .closable(false)
         .always_on_top(true)
+        .fullscreen(true)
         .skip_taskbar(true)
+        .background_color(Color(0, 0, 0, 255))
         .visible(true)
         .position(x, y)
-        .inner_size(width, height)
         .initialization_script(
             "(() => { const apply = () => { const root = document.documentElement; if (root) { root.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;'; } const body = document.body; if (body) { body.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;position:fixed;inset:0;'; } }; apply(); window.addEventListener('DOMContentLoaded', apply); })();",
         );
@@ -126,7 +127,7 @@ fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
     Ok(WebviewUrl::External(about_blank))
 }
 
-fn to_overlay_geometry(target_display: &DisplayInfoPayload) -> (f64, f64, f64, f64) {
+fn to_overlay_position(target_display: &DisplayInfoPayload) -> (f64, f64) {
     let normalized_scale =
         if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
             target_display.scale_factor
@@ -137,8 +138,6 @@ fn to_overlay_geometry(target_display: &DisplayInfoPayload) -> (f64, f64, f64, f
     (
         target_display.x as f64 / normalized_scale,
         target_display.y as f64 / normalized_scale,
-        target_display.width as f64 / normalized_scale,
-        target_display.height as f64 / normalized_scale,
     )
 }
 
@@ -325,7 +324,7 @@ mod tests {
     use tauri::WebviewUrl;
 
     use super::{
-        apply_overlay_open_transition, build_overlay_webview_url, to_overlay_geometry,
+        apply_overlay_open_transition, build_overlay_webview_url, to_overlay_position,
         DisplayInfoPayload, OverlayRuntimeState,
     };
 
@@ -340,7 +339,7 @@ mod tests {
     }
 
     #[test]
-    fn overlay_geometry_converts_physical_pixels_to_logical_units() {
+    fn overlay_position_converts_physical_pixels_to_logical_units() {
         let display = DisplayInfoPayload {
             id: "display-1".to_string(),
             label: "Display 1".to_string(),
@@ -352,12 +351,10 @@ mod tests {
             is_primary: false,
         };
 
-        let (x, y, width, height) = to_overlay_geometry(&display);
+        let (x, y) = to_overlay_position(&display);
 
         assert_eq!(x, 756.0);
         assert_eq!(y, 0.0);
-        assert_eq!(width, 1512.0);
-        assert_eq!(height, 982.0);
     }
 
     #[test]

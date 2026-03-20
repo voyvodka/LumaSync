@@ -2,7 +2,7 @@
 status: diagnosed
 trigger: "Issue truth: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir."
 created: 2026-03-20T12:40:05Z
-updated: 2026-03-20T13:25:22Z
+updated: 2026-03-20T13:31:58Z
 ---
 
 ## Current Focus
@@ -51,8 +51,8 @@ started: UAT sirasinda kesfedildi.
 
 ## Resolution
 
-root_cause: UAT semptomu tek bir hatadan degildi: (1) toggle niyeti async akis sonunda kayabiliyor ve istemsiz stop/close tetikleniyordu, (2) overlay geometri hesaplamasi fiziksel px degerleri logical window API'ye dogrudan verildigi icin pencere tam ekran/boşluksuz oturmuyordu, (3) close path'i yalnizca displayId eslesmesine bagli oldugundan fallback kapanis guvencesi zayifti.
-fix: (1) `shouldEnable` niyet sabitlemesi eklendi, (2) display `scale_factor` payload'a eklendi ve overlay geometri physical->logical donusturuldu, (3) close komutu aktif overlay label varsa displayId fark etmeksizin destroy fallback'i ile guclendirildi.
+root_cause: Son kalan sizing sapmasi, manuel width/height atamasiyla monitor fit'ini hesapla-yaz yaklasimindan geldi. Coklu DPI/arrangement ortamlarda hedef monitorde piksel-duzeyi tam oturma garantisi vermiyor.
+fix: Overlay pencereyi hedef monitor pozisyonunda `fullscreen(true)` ile actik; manuel inner_size yerine runtime fullscreen sizing kullanarak bosluk ve olcek sapmasini ortadan kaldirmayi hedefledik. Siyah background ve close destroy fallback korunuyor.
 verification:
 files_changed:
   - src-tauri/src/commands/calibration.rs
@@ -78,3 +78,8 @@ files_changed:
   checked: Son saha raporu (beyaz ekran, bosluk, kapanmama) + overlay geometry/close code path
   found: Overlay window geometri degerleri logical birimlere normalize edilmedigi icin fit sorunu var; close tarafinda id-esleme disi fallback gerekli.
   implication: Siyah/tam ekran/boşluksuz overlay ve OFF-close guvencesi icin geometri + close fallback hardening zorunlu.
+
+- timestamp: 2026-03-20T13:31:58Z
+  checked: Yeni saha raporu (acma/kapama OK, sizing hatali) + open_overlay_window sizing strategy
+  found: Manuel inner_size tabanli sizing halen sapma uretebiliyor; monitor-fit icin fullscreen runtime path daha guvenli.
+  implication: Tam ekran/boşluksuz davranis icin fullscreen monitor-target acilisina gecis gerekli.

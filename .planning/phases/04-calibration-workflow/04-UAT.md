@@ -15,7 +15,7 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T13:25:22Z
+updated: 2026-03-20T13:31:58Z
 ---
 
 ## Current Test
@@ -33,6 +33,7 @@ expected: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibratio
 result: issue
 reported: "Hata metni yok; test pattern acilinca ekranda kisa sure siyahlik gorunuyor ve hemen kapaniyor. Overlay kalici gorunmuyor."
 reported_followup: "Overview aciliyor ama beyaz ekran geliyor, kapatilamiyor (quit ile kapaniyor), ekrana tam oturmuyor ve ustte bosluk kaliyor."
+reported_followup_2: "Acma/kapama calisiyor ancak overlay yukseklik ve genislik hala yanlis ayarlaniyor."
 severity: major
 
 ### 3. Start anchor ve direction kaliciligi
@@ -99,16 +100,16 @@ skipped: 0
   reason: "User reported: hata metni olmadan kisa sureli siyah overlay flash'i oluyor, overlay kalici gorunmuyor."
   severity: major
   test: 2
-  root_cause: "Birlesik zincirde 3 sorun vardI: (1) toggle niyeti await sonrasi kayabiliyordu ve istemsiz stop/close tetikleniyordu, (2) overlay geometri fiziksel px degerleriyle logical API'ye verildigi icin pencere tam oturmuyor/bosluk kaliyordu, (3) close komutu sadece displayId eslesince calistigindan bazi akislarda overlay kapanis fallback'i zayif kalabiliyordu."
+  root_cause: "Boyut sorununun kalan parcasi, pencerenin manuel logical width/height ile acilmasindan kaynaklaniyordu. Monitor DPI/arrangement farkinda bu hesap dogru olsa bile pixel-perfect fit vermeyebiliyor."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "toggle niyet stabilizasyonu + logical geometri donusumu + close fallback guclendirmesi gerekliydi"
+      issue: "tam-fit icin manuel width/height yerine monitor hedefli fullscreen davranisina gecis gerekliydi"
     - path: "src/features/calibration/state/testPatternFlow.ts"
       issue: "toggle(false) cagrisi geldiğinde stop komutu backend'e hemen iletiliyor; yanlis tetiklenirse overlay aninda kapaniyor"
     - path: "src/shared/contracts/display.ts"
       issue: "display payload'ina scaleFactor sinyali eklenmeden geometri donusumu dogrulanamiyor"
   missing:
-    - "toggle handler niyet sabitleme + logical geometri + close fallback fixlerinin saha kaniti"
+    - "fullscreen overlay sizing fixinin saha kaniti"
     - "Fix sonrasi Duzenle/Test Pattern ON adiminda kalici overlay gorunurlugu UAT kaniti"
   debug_session: ".planning/debug/calibration-edit-overlay-not-opening.md"
 
