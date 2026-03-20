@@ -14,6 +14,13 @@ interface DeriveCalibrationOverlayEntryInput {
   savedCalibration?: LedCalibrationConfig;
 }
 
+interface AutoOpenOnConnectionInput {
+  connected: boolean;
+  wasConnected: boolean;
+  hasCalibration: boolean;
+  alreadyAutoOpened: boolean;
+}
+
 export function deriveCalibrationOverlayEntry(
   input: DeriveCalibrationOverlayEntryInput,
 ): CalibrationOverlayEntry {
@@ -42,4 +49,14 @@ export function startCalibrationFromSettings(
     reason: "settings-edit",
     initialConfig: savedCalibration,
   };
+}
+
+export function shouldAutoOpenCalibrationOnConnection(
+  input: AutoOpenOnConnectionInput,
+): boolean {
+  if (input.alreadyAutoOpened || input.hasCalibration) {
+    return false;
+  }
+
+  return input.connected && !input.wasConnected;
 }

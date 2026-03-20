@@ -12,14 +12,15 @@
  *  - Renders under i18n providers initialized in main.tsx
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { CalibrationOverlay } from "./features/calibration/ui/CalibrationOverlay";
 import {
-  deriveCalibrationOverlayEntry,
+  shouldAutoOpenCalibrationOnConnection,
   startCalibrationFromSettings,
   type CalibrationOverlayStep,
 } from "./features/calibration/state/entryFlow";
+import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import {
   canEnableLedMode,
   resolveLedModeEnableAttempt,
@@ -42,6 +43,9 @@ function App() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayStep, setOverlayStep] = useState<CalibrationOverlayStep>("editor");
   const [lifecycleReady, setLifecycleReady] = useState(false);
+  const { isConnected } = useDeviceConnection();
+  const wasConnectedRef = useRef(false);
+  const autoOpenTriggeredRef = useRef(false);
 
   useEffect(() => {
     async function bootstrap() {
@@ -49,15 +53,6 @@ function App() {
         const state = await loadShellState();
         setActiveSection(state.lastSection);
         setSavedCalibration(state.ledCalibration);
-
-        const entry = deriveCalibrationOverlayEntry({
-          hasConnectedDevice: Boolean(state.lastSuccessfulPort),
-          savedCalibration: state.ledCalibration,
-        });
-        if (entry.open) {
-          setOverlayStep(entry.step);
-          setOverlayOpen(true);
-        }
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
@@ -88,6 +83,22 @@ function App() {
     setOverlayStep(step);
     setOverlayOpen(true);
   }, []);
+
+  useEffect(() => {
+    const shouldOpen = shouldAutoOpenCalibrationOnConnection({
+      connected: isConnected,
+      wasConnected: wasConnectedRef.current,
+      hasCalibration: Boolean(savedCalibration),
+      alreadyAutoOpened: autoOpenTriggeredRef.current,
+    });
+
+    if (shouldOpen) {
+      autoOpenTriggeredRef.current = true;
+      openCalibrationOverlay("template");
+    }
+
+    wasConnectedRef.current = isConnected;
+  }, [isConnected, openCalibrationOverlay, savedCalibration]);
 
   const handleOpenCalibration = useCallback(() => {
     const entry = startCalibrationFromSettings(savedCalibration);
