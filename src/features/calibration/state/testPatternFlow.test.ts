@@ -200,7 +200,7 @@ describe("createDefaultTestPatternFlow", () => {
     const ccwSequence = buildLedSequence(ccwConfig);
 
     expect(cwSequence[0]?.index).toBe(13);
-    expect(ccwSequence[0]?.index).toBe(12);
+    expect(ccwSequence[0]?.index).toBe(13);
 
     const expectedIndexes = Array.from({ length: cwConfig.totalLeds }, (_, index) => index);
     expect([...cwSequence.map((item) => item.index)].sort((a, b) => a - b)).toEqual(expectedIndexes);

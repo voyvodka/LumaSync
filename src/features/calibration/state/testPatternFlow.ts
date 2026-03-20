@@ -174,7 +174,7 @@ export function createDefaultTestPatternFlow(
 
   const resolvePhysicalIndex = (markerIndex: number) => {
     if (!currentConfig) {
-      return 0;
+      return Math.max(0, Math.floor(markerIndex));
     }
 
     const sequence = buildLedSequence(currentConfig);
