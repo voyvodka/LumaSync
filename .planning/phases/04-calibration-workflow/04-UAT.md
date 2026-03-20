@@ -15,7 +15,7 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T12:59:08Z
+updated: 2026-03-20T13:03:10Z
 ---
 
 ## Current Test
@@ -31,7 +31,7 @@ result: pass
 ### 2. Settings > Calibration > Duzenle yeniden giris
 expected: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir.
 result: issue
-reported: "overlay açılmıyor görünüm tasarlanmamış. Test pattern toggle ON oluyor ama OS-level overlay görünmüyor; checkbox geri false oluyor / görünüm yok."
+reported: "OVERLAY_OPEN_FAILED: OVERLAY_WINDOW_OPEN_FAILED: a webview with label `calibration-overlay-7df1ecb19df184ee` already exists. Overview ekranı açılmadı."
 severity: major
 
 ### 3. Start anchor ve direction kaliciligi
@@ -53,13 +53,13 @@ result: pass
 ### 7. Display switch sirasinda tek aktif overlay
 expected: Test pattern acikken display hedefi degisince eski overlay kapanir, yeni hedefte tek aktif overlay acilir.
 result: issue
-reported: "test patern açılmıyor overview yok"
+reported: "Display switch denemesinde overlay tekrar acilamadi; ayni label already exists hatasiyla toggle blocked kaldi."
 severity: major
 
 ### 8. Overlay open fail blokaji ve reason
 expected: Overlay open fail durumunda test pattern toggle bloke olur ve kullaniciya acik reason metni gosterilir.
 result: issue
-reported: "overlay görünmüyor bunu göremiyorum"
+reported: "[LumaSync] Test pattern blocked (OVERLAY_OPEN_FAILED): OVERLAY_WINDOW_OPEN_FAILED: a webview with label `calibration-overlay-7df1ecb19df184ee` already exists."
 severity: major
 
 ### 9. Dirty-exit confirm davranisi
@@ -95,50 +95,50 @@ skipped: 0
 
 - truth: "Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir."
   status: failed
-  reason: "User reported: overlay açılmıyor görünüm tasarlanmamış. Test pattern toggle ON oluyor ama OS-level overlay görünmüyor; checkbox geri false oluyor / görünüm yok."
+  reason: "User reported: OVERLAY_OPEN_FAILED: OVERLAY_WINDOW_OPEN_FAILED: a webview with label `calibration-overlay-7df1ecb19df184ee` already exists. Overview ekranı açılmadı."
   severity: major
   test: 2
-  root_cause: "Backend open_display_overlay komutu gercek OS-level overlay olusturmuyor; sadece state guncelleyip success donuyor, bu nedenle UI aciliyor gibi olsa da gorunur overlay yok."
+  root_cause: "Overlay kapanisinda backend pencereyi `close()` ile kapatiyordu; app-level close-to-tray intercept `CloseRequested` eventini yakaladigi icin overlay destroy olmadan gizli kaliyor. Sonraki open denemesinde ayni label zaten var hatasi olusuyor."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "open_display_overlay state-only, render/window olusturma yok"
-    - path: "src/features/calibration/ui/CalibrationOverlay.tsx"
-      issue: "overlay open fail durumunda toggle geri false ve blocked state'e donuyor"
+      issue: "close_overlay_window `close()` kullandigi icin overlay event interception altinda tamamen yok olmuyor"
+    - path: "src-tauri/src/lib.rs"
+      issue: "global on_window_event close intercepti overlay window close requestlerini de etkiliyor"
   missing:
-    - "open_display_overlay/close_display_overlay icin gercek overlay lifecycle implementasyonu"
-    - "OS-level overlay basarisizliginda sebep kodu ve UI mesaj zincirinin netlestirilmesi"
+    - "Overlay pencere kapanisinda `CloseRequested` interception'a takilmayan force-destroy davranisi"
+    - "Fix sonrasi Duzenle/Test Pattern ON rerun ile tek overlay acilisinin dogrulanmasi"
   debug_session: ".planning/debug/calibration-edit-overlay-not-opening.md"
 
 - truth: "Test pattern acikken display hedefi degisince eski overlay kapanir, yeni hedefte tek aktif overlay acilir."
   status: failed
-  reason: "User reported: test patern açılmıyor overview yok"
+  reason: "User reported: display switchte overlay tekrar acma denemesi already exists hatasina dustu"
   severity: major
   test: 7
-  root_cause: "Display switch state akisi var, ancak backend open_display_overlay gorunur overlay uretmedigi icin tek aktif overlay davranisi sahada gozlenemiyor."
+  root_cause: "Eski overlay window'u close intercept nedeniyle runtime'da yasadigi icin close-old/open-new zincirinde yeni hedef ayni label ile acilamiyor."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "display switchte overlay acma state guncelleme ile sinirli"
+      issue: "close step force destroy yapmadigi icin tek aktif zincir stale window ile kiriliyor"
     - path: "src/features/calibration/state/displayTargetState.ts"
-      issue: "akisin dogrulugu backend'in gercek overlay acmasina bagli"
+      issue: "state dogru sekilde blocked snapshot'a geciyor ancak backend stale window sebebiyle open basarisiz"
   missing:
-    - "hedef monitor icin gercek overlay acma/kapama implementasyonu"
-    - "display switchte eski overlay kapat-yeni overlay ac davranisinin runtime dogrulamasi"
+    - "stale overlay window temizleme fixi"
+    - "fix sonrasi display switch close-old/open-new UAT rerun kaydi"
   debug_session: ".planning/debug/test-pattern-overlay-missing-on-display-switch.md"
 
 - truth: "Overlay open fail durumunda test pattern toggle bloke olur ve kullaniciya acik reason metni gosterilir."
   status: failed
-  reason: "User reported: overlay görünmüyor bunu göremiyorum"
+  reason: "User reported: blocked reason metni goruldu fakat sebep stale label collision oldu"
   severity: major
   test: 8
-  root_cause: "Blocked reason metni UI'da mevcut olsa da open_display_overlay gercek overlay acmadigi icin fail senaryosu sahada dogrulanabilir sekilde olusmuyor."
+  root_cause: "Fail akisinin kendisi dogru gorunuyor; fail sebebi overlay close pathinde stale webview birakilmasi (label already exists)."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "open_display_overlay state-only davranis"
+      issue: "window close pathi stale label collision uretiyor"
     - path: "src/features/calibration/ui/CalibrationOverlay.tsx"
-      issue: "blockedReason yalnizca overlay akisinda gorunur, gorunur overlay olmayinca kullanici gormuyor"
+      issue: "blockedReason metni hata kodunu dogru yansitiyor; backend fixi sonrasi tekrar UAT gerekiyor"
   missing:
-    - "gercek overlay open-fail senaryosunun backend'de olusturulmasi ve reason'in tasinmasi"
-    - "blocked reason mesajinin fail akisinda kullaniciya guvenilir sekilde sunulmasi"
+    - "backend stale label root-cause fixi"
+    - "fix sonrasi blocked reason yalnizca gercek fail durumlarinda gorundugunun UAT kaydi"
   debug_session: ".planning/debug/overlay-open-fail-blocked-reason-not-visible.md"
 
 - truth: "Dirty degilken cikis onay modali gelmez; dirty durumda cikis denemesinde onay modali gelir."

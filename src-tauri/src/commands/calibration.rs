@@ -81,7 +81,7 @@ fn build_overlay_window_label(display_id: &str) -> String {
 fn close_overlay_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> Result<(), String> {
     if let Some(window) = app.get_webview_window(window_label) {
         window
-            .close()
+            .destroy()
             .map_err(|error| format!("OVERLAY_WINDOW_CLOSE_FAILED: {error}"))?;
     }
 
