@@ -120,8 +120,20 @@
       "template": "Sablon",
       "manual": "Manuel",
       "totalLeds": "Toplam LED",
+      "edges": "Kenar LED dagilimi",
+      "gap": "Alt bosluk",
+      "startAnchor": "Baslangic noktasi",
+      "direction": "Yon",
+      "emptyState": "Kayitli kalibrasyon yok. Canli moda gecmeden once seridini eslemek icin editoru ac.",
       "notConfigured": "Yapilandirilmadi",
-      "edit": "Kalibrasyonu duzenle"
+      "edit": "Kalibrasyonu duzenle",
+      "counts": {
+        "top": "Ust",
+        "right": "Sag",
+        "bottomRight": "Alt sag",
+        "bottomLeft": "Alt sol",
+        "left": "Sol"
+      }
     },
     "overlay": {
       "title": "Kalibrasyon Editoru",

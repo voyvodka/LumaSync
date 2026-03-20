@@ -120,8 +120,20 @@
       "template": "Template",
       "manual": "Manual",
       "totalLeds": "Total LEDs",
+      "edges": "Edge LEDs",
+      "gap": "Bottom gap",
+      "startAnchor": "Start anchor",
+      "direction": "Direction",
+      "emptyState": "No calibration saved yet. Open the editor to map your strip before enabling live mode.",
       "notConfigured": "Not configured",
-      "edit": "Edit calibration"
+      "edit": "Edit calibration",
+      "counts": {
+        "top": "Top",
+        "right": "Right",
+        "bottomRight": "Bottom right",
+        "bottomLeft": "Bottom left",
+        "left": "Left"
+      }
     },
     "overlay": {
       "title": "Calibration Editor",

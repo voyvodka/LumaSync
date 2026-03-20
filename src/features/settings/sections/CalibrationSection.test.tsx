@@ -28,6 +28,11 @@ vi.mock("react-i18next", () => ({
         "calibration.section.notConfigured": "Not calibrated",
         "calibration.section.manual": "Manual",
         "calibration.section.edit": "Edit",
+        "calibration.section.counts.top": "Top",
+        "calibration.section.counts.right": "Right",
+        "calibration.section.counts.bottomRight": "Bottom right",
+        "calibration.section.counts.bottomLeft": "Bottom left",
+        "calibration.section.counts.left": "Left",
       };
 
       return dict[key] ?? key;
@@ -81,7 +86,7 @@ describe("CalibrationSection", () => {
 
     render(<CalibrationSection calibration={undefined} onEditCalibration={onEditCalibration} />);
 
-    expect(screen.getByText("Not calibrated")).toBeInTheDocument();
+    expect(screen.getAllByText("Not calibrated").length).toBeGreaterThan(0);
     expect(
       screen.getByText("No calibration saved yet. Open the editor to map your strip before enabling live mode."),
     ).toBeInTheDocument();
