@@ -48,6 +48,26 @@ function createState() {
 }
 
 describe("displayTargetState", () => {
+  it("switchActiveDisplay: picks primary display as default target", () => {
+    const openDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
+      okResult(),
+    );
+    const closeDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
+      okResult("OVERLAY_CLOSED"),
+    );
+    const state = createDisplayTargetState({
+      openDisplayOverlay,
+      closeDisplayOverlay,
+    });
+
+    state.setDisplays([
+      { id: "display-2", label: "Display 2", width: 2560, height: 1440, x: 1920, y: 0, isPrimary: false },
+      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, isPrimary: true },
+    ]);
+
+    expect(state.getSnapshot().selectedDisplayId).toBe("display-1");
+  });
+
   it("single-active: closes old overlay before opening next display", async () => {
     const { state, openDisplayOverlay, closeDisplayOverlay } = createState();
 
