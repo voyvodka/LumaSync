@@ -231,9 +231,9 @@ describe("createDefaultTestPatternFlow", () => {
     startCalibrationTestPatternMock.mockClear();
     stopCalibrationTestPatternMock.mockClear();
 
-    let rafCallback: FrameRequestCallback | null = null;
+    let rafCallback: ((timestamp: number) => void) | null = null;
     (globalThis as { window?: Window & typeof globalThis }).window = {
-      requestAnimationFrame: ((callback: FrameRequestCallback) => {
+      requestAnimationFrame: ((callback: (timestamp: number) => void) => {
         rafCallback = callback;
         return 1;
       }) as typeof window.requestAnimationFrame,
@@ -255,8 +255,14 @@ describe("createDefaultTestPatternFlow", () => {
     const togglePromise = flow.toggle(true);
     expect(startCalibrationTestPatternMock).not.toHaveBeenCalled();
 
-    rafCallback?.(1_130);
-    resolveConnection?.({ connected: true });
+    const pendingRafCallback = rafCallback;
+    if (typeof pendingRafCallback === "function") {
+      pendingRafCallback(1_130);
+    }
+    const pendingResolveConnection = resolveConnection;
+    if (typeof pendingResolveConnection === "function") {
+      pendingResolveConnection({ connected: true });
+    }
     const snapshot = await togglePromise;
 
     const expectedPhysicalIndex = buildLedSequence(config)[snapshot.markerIndex].index;
@@ -297,5 +303,48 @@ describe("createDefaultTestPatternFlow", () => {
       brightness: 64,
     });
     expect(buildLedSequence(initialConfig)[0].index).not.toBe(buildLedSequence(nextConfig)[0].index);
+  });
+
+  it("uses active markerIndex as physical fallback when config is absent", async () => {
+    startCalibrationTestPatternMock.mockClear();
+    stopCalibrationTestPatternMock.mockClear();
+
+    let rafCallback: ((timestamp: number) => void) | null = null;
+    (globalThis as { window?: Window & typeof globalThis }).window = {
+      requestAnimationFrame: ((callback: (timestamp: number) => void) => {
+        rafCallback = callback;
+        return 1;
+      }) as typeof window.requestAnimationFrame,
+      cancelAnimationFrame: (() => undefined) as typeof window.cancelAnimationFrame,
+    } as Window & typeof globalThis;
+
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    let resolveConnection: ((value: { connected: boolean }) => void) | null = null;
+    const pendingConnection = new Promise<{ connected: boolean }>((resolve) => {
+      resolveConnection = resolve;
+    });
+
+    const flow = createDefaultTestPatternFlow(async () => pendingConnection);
+    const togglePromise = flow.toggle(true);
+
+    const pendingRafCallback = rafCallback;
+    if (typeof pendingRafCallback === "function") {
+      pendingRafCallback(1_130);
+    }
+    const pendingResolveConnection = resolveConnection;
+    if (typeof pendingResolveConnection === "function") {
+      pendingResolveConnection({ connected: true });
+    }
+    const snapshot = await togglePromise;
+
+    expect(snapshot.markerIndex).toBe(1);
+    expect(startCalibrationTestPatternMock).toHaveBeenCalledTimes(1);
+    expect(startCalibrationTestPatternMock).toHaveBeenLastCalledWith({
+      ledIndexes: [snapshot.markerIndex],
+      frameMs: 120,
+      brightness: 64,
+    });
+
+    nowSpy.mockRestore();
   });
 });
