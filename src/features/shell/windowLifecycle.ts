@@ -52,6 +52,7 @@ export async function saveShellState(state: Partial<ShellState>): Promise<void> 
 export type TrayHintCallback = () => void;
 
 let unlistenCloseToTray: UnlistenFn | null = null;
+let lifecycleInitPromise: Promise<void> | null = null;
 
 /**
  * Register the shell:close-to-tray event listener that shows a one-time
@@ -100,6 +101,14 @@ async function isPositionOnScreen(x: number, y: number): Promise<boolean> {
   return false;
 }
 
+async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWindow>): Promise<void> {
+  const { x, y } = await win.outerPosition();
+  const onScreen = await isPositionOnScreen(x, y);
+  if (!onScreen) {
+    await win.center();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Window position restoration
 // ---------------------------------------------------------------------------
@@ -111,9 +120,18 @@ async function isPositionOnScreen(x: number, y: number): Promise<boolean> {
 export async function restoreWindowState(): Promise<void> {
   const win = getCurrentWindow();
   const state = await loadShellState();
+  const isLegacyDefaultSizeOnly =
+    state.windowWidth === 900 &&
+    state.windowHeight === 620 &&
+    state.windowX === null &&
+    state.windowY === null;
 
   // Restore size
-  if (state.windowWidth && state.windowHeight) {
+  if (
+    !isLegacyDefaultSizeOnly &&
+    state.windowWidth !== null &&
+    state.windowHeight !== null
+  ) {
     await win.setSize(new PhysicalSize(state.windowWidth, state.windowHeight));
   }
 
@@ -126,6 +144,10 @@ export async function restoreWindowState(): Promise<void> {
       // Off-screen: reset to centered
       await win.center();
     }
+  } else {
+    // First launch (or legacy state without explicit position): if any plugin
+    // restored an off-screen geometry, pull it back into view.
+    await ensureCurrentWindowOnScreen(win);
   }
 }
 
@@ -154,6 +176,12 @@ export async function persistWindowState(): Promise<void> {
 export async function initWindowLifecycle(opts?: {
   onFirstCloseToTray?: TrayHintCallback;
 }): Promise<void> {
-  await restoreWindowState();
-  await initCloseToTrayHint(opts?.onFirstCloseToTray);
+  if (!lifecycleInitPromise) {
+    lifecycleInitPromise = (async () => {
+      await restoreWindowState();
+      await initCloseToTrayHint(opts?.onFirstCloseToTray);
+    })();
+  }
+
+  await lifecycleInitPromise;
 }

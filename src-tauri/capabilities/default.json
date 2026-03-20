@@ -6,6 +6,9 @@
   "permissions": [
     "core:default",
     "core:app:default",
+    "core:window:allow-center",
+    "core:window:allow-set-position",
+    "core:window:allow-set-size",
     "opener:default",
     "store:default",
     "window-state:default",

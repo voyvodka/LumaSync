@@ -127,12 +127,23 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
         };
         startAnimation();
 
-        const status = await deps.getConnectionStatus();
-        if (status.connected) {
-          await deps.startPhysicalPattern(snapshot.markerIndex);
+        try {
+          const status = await deps.getConnectionStatus();
+          if (status.connected) {
+            await deps.startPhysicalPattern(snapshot.markerIndex);
+            snapshot = {
+              ...snapshot,
+              mode: "sending",
+            };
+          }
+        } catch (error) {
+          console.warn(
+            "[LumaSync] Test pattern hardware path failed, continuing preview-only:",
+            error,
+          );
           snapshot = {
             ...snapshot,
-            mode: "sending",
+            mode: "preview-only",
           };
         }
 

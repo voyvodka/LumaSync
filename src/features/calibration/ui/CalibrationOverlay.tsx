@@ -100,6 +100,7 @@ export function CalibrationOverlay({
     displayTargetRef.current.getSnapshot(),
   );
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
+  const [testPatternError, setTestPatternError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -109,6 +110,7 @@ export function CalibrationOverlay({
     setActiveStep(initialStep);
     setEditorState(buildInitialEditorState(initialConfig));
     setValidationErrors(null);
+    setTestPatternError(null);
     flowRef.current.setTotalLeds((initialConfig ?? resetToManual()).totalLeds);
     setTestPattern(flowRef.current.getSnapshot());
     displayTargetRef.current.clearBlockedState();
@@ -274,28 +276,53 @@ export function CalibrationOverlay({
         <div className="mt-4 flex items-center justify-end gap-3 rounded-xl border border-white/20 bg-black/30 px-4 py-3">
           <div className="mr-auto flex flex-wrap items-center gap-2 text-xs text-white/90">
             <label className="inline-flex items-center gap-2 rounded-md border border-white/30 px-2 py-1">
-              <input
-                type="checkbox"
-                checked={testPattern.isEnabled}
-                disabled={displayTarget.blocked}
-                onChange={async (event) => {
-                  if (event.target.checked) {
-                    const switched = await displayTargetRef.current.switchActiveDisplay();
-                    setDisplayTarget(switched);
-                    if (switched.blocked) {
-                      return;
-                    }
-                  }
+               <input
+                 type="checkbox"
+                 checked={testPattern.isEnabled}
+                 disabled={displayTarget.isSwitching}
+                  onChange={async (event) => {
+                    try {
+                      if (event.target.checked) {
+                        const switched = await displayTargetRef.current.switchActiveDisplay();
+                        setDisplayTarget(switched);
+                        if (switched.blocked) {
+                          const reason = switched.blockedReason ?? "Overlay open failed.";
+                          const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
+                          const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
+                          console.warn(message);
+                          setTestPatternError(message);
+                           return;
+                        }
+                      }
 
-                  const next = await flowRef.current.toggle(event.target.checked);
-                  setTestPattern(next);
+                     const next = await flowRef.current.toggle(event.target.checked);
+                     setTestPattern(next);
+                     setTestPatternError(null);
 
-                  if (!event.target.checked) {
-                    const closed = await displayTargetRef.current.closeActiveDisplay();
-                    setDisplayTarget(closed);
-                  }
-                }}
-              />
+                     if (!event.target.checked) {
+                       const closed = await displayTargetRef.current.closeActiveDisplay();
+                       setDisplayTarget(closed);
+                     } else {
+                       setDisplayTarget(displayTargetRef.current.clearBlockedState());
+                     }
+                    } catch (error) {
+                      const message =
+                        error instanceof Error
+                          ? `[LumaSync] Test pattern toggle failed: ${error.message}`
+                          : `[LumaSync] Test pattern toggle failed: ${String(error)}`;
+                      console.warn(message);
+                      setTestPatternError(message);
+                      try {
+                        const safeSnapshot = await flowRef.current.toggle(false);
+                        setTestPattern(safeSnapshot);
+                      } catch {}
+                     try {
+                       const closed = await displayTargetRef.current.closeActiveDisplay();
+                       setDisplayTarget(closed);
+                     } catch {}
+                   }
+                 }}
+               />
               <span>{t("calibration.overlay.testPatternToggle")}</span>
             </label>
             {displayTarget.displays.length > 0 ? (
@@ -314,21 +341,39 @@ export function CalibrationOverlay({
                           ? "border-cyan-300/80 bg-cyan-500/20 text-cyan-100"
                           : "border-white/30 bg-white/5 text-white/85"
                       }`}
-                      onClick={async () => {
-                        const selected = displayTargetRef.current.selectDisplay(display.id);
-                        setDisplayTarget(selected);
+                       onClick={async () => {
+                         const selected = displayTargetRef.current.selectDisplay(display.id);
+                         setDisplayTarget(selected);
 
-                        if (!testPattern.isEnabled) {
-                          return;
-                        }
+                         if (!testPattern.isEnabled) {
+                           return;
+                         }
 
-                        const switched = await displayTargetRef.current.switchActiveDisplay(display.id);
-                        setDisplayTarget(switched);
-                        if (switched.blocked) {
-                          const disabledPattern = await flowRef.current.toggle(false);
-                          setTestPattern(disabledPattern);
-                        }
-                      }}
+                          try {
+                            const switched = await displayTargetRef.current.switchActiveDisplay(display.id);
+                            setDisplayTarget(switched);
+                            if (switched.blocked) {
+                              const reason = switched.blockedReason ?? "Overlay open failed.";
+                              const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
+                              const message = `[LumaSync] Display switch blocked (${code}): ${reason}`;
+                              console.warn(message);
+                              setTestPatternError(message);
+                              const disabledPattern = await flowRef.current.toggle(false);
+                              setTestPattern(disabledPattern);
+                              return;
+                            }
+
+                           setTestPatternError(null);
+                           setDisplayTarget(displayTargetRef.current.clearBlockedState());
+                          } catch (error) {
+                            const message =
+                              error instanceof Error
+                                ? `[LumaSync] Display switch failed: ${error.message}`
+                                : `[LumaSync] Display switch failed: ${String(error)}`;
+                            console.warn(message);
+                            setTestPatternError(message);
+                          }
+                        }}
                     >
                       <div className="font-semibold">
                         {t("calibration.overlay.displayCard", { number: index + 1 })}
@@ -372,10 +417,16 @@ export function CalibrationOverlay({
                 </div>
               </>
             ) : null}
-            {testPattern.isEnabled && testPattern.mode === "preview-only" ? (
-              <span className="rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-amber-100">
-                {t("calibration.overlay.previewOnly")}
-              </span>
+            {testPattern.isEnabled ? (
+              testPattern.mode === "preview-only" ? (
+                <span className="rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-amber-100">
+                  {t("calibration.overlay.previewOnly")}
+                </span>
+              ) : (
+                <span className="rounded-md border border-emerald-300/60 bg-emerald-500/20 px-2 py-1 text-emerald-100">
+                  Output active
+                </span>
+              )
             ) : null}
             {displayTarget.blocked ? (
               <span className="rounded-md border border-rose-300/60 bg-rose-500/20 px-2 py-1 text-rose-100">
@@ -383,6 +434,11 @@ export function CalibrationOverlay({
                   code: displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED",
                   reason: displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown"),
                 })}
+              </span>
+            ) : null}
+            {testPatternError ? (
+              <span className="rounded-md border border-rose-300/60 bg-rose-500/20 px-2 py-1 text-rose-100">
+                {testPatternError}
               </span>
             ) : null}
           </div>

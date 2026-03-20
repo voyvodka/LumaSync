@@ -56,8 +56,8 @@ export const SECTION_ORDER: SectionId[] = [
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {
   /** Window geometry (pixels) */
-  windowWidth: number;
-  windowHeight: number;
+  windowWidth: number | null;
+  windowHeight: number | null;
   /** Window position — null means use OS default / centered */
   windowX: number | null;
   windowY: number | null;
@@ -86,8 +86,8 @@ export interface ShellState {
 
 /** Default shell state for first launch */
 export const DEFAULT_SHELL_STATE: ShellState = {
-  windowWidth: 900,
-  windowHeight: 620,
+  windowWidth: null,
+  windowHeight: null,
   windowX: null,
   windowY: null,
   lastSection: SECTION_IDS.GENERAL,

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Runtime, State};
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
 
@@ -125,10 +125,23 @@ pub fn open_display_overlay<R: Runtime>(
     let displays = list_displays(app)?;
     let exists = displays.iter().any(|display| display.id == display_id);
     if !exists {
+        let available_ids = displays
+            .iter()
+            .map(|display| display.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let reason = if available_ids.is_empty() {
+            format!("Requested display id='{display_id}' not found. No displays available.")
+        } else {
+            format!(
+                "Requested display id='{display_id}' not found. Available ids: [{available_ids}]"
+            )
+        };
+        eprintln!("[LumaSync] OVERLAY_OPEN_FAILED: {reason}");
         return Ok(overlay_error_result(
             "OVERLAY_OPEN_FAILED",
             "Could not open display overlay.",
-            "Requested display was not found.",
+            &reason,
         ));
     }
 
@@ -137,6 +150,8 @@ pub fn open_display_overlay<R: Runtime>(
         .lock()
         .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
     *active = Some(display_id);
+
+    eprintln!("[LumaSync] OVERLAY_OPENED");
 
     Ok(overlay_result("OVERLAY_OPENED", "Display overlay opened."))
 }
@@ -163,6 +178,13 @@ pub fn start_calibration_test_pattern(
     payload: StartCalibrationTestPatternPayload,
     connection_state: tauri::State<'_, SerialConnectionState>,
 ) -> Result<CalibrationCommandResponse, String> {
+    eprintln!(
+        "[LumaSync] start_calibration_test_pattern request: led_count={}, frame_ms={}, brightness={}",
+        payload.led_indexes.len(),
+        payload.frame_ms,
+        payload.brightness
+    );
+
     if payload.led_indexes.is_empty() {
         return Err("CALIBRATION_PATTERN_INVALID: ledIndexes cannot be empty.".to_string());
     }
@@ -184,6 +206,7 @@ pub fn start_calibration_test_pattern(
         .map_err(|error| format!("CALIBRATION_STATE_READ_FAILED: {error}"))?;
 
     if connected {
+        eprintln!("[LumaSync] start_calibration_test_pattern result: sending");
         return Ok(CalibrationCommandResponse {
             active: true,
             preview_only: false,
@@ -194,6 +217,8 @@ pub fn start_calibration_test_pattern(
             },
         });
     }
+
+    eprintln!("[LumaSync] start_calibration_test_pattern result: preview-only");
 
     Ok(CalibrationCommandResponse {
         active: false,
@@ -210,6 +235,7 @@ pub fn start_calibration_test_pattern(
 pub fn stop_calibration_test_pattern(
     connection_state: tauri::State<'_, SerialConnectionState>,
 ) -> Result<CalibrationCommandResponse, String> {
+    eprintln!("[LumaSync] stop_calibration_test_pattern request");
     let connected = connection_state
         .last_status
         .lock()
