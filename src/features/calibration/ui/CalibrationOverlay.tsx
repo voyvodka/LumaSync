@@ -51,7 +51,12 @@ function buildSegmentOrder(sequence: ReturnType<typeof buildLedSequence>) {
   const seen = new Set<string>();
   const order: string[] = [];
 
-  for (const item of sequence) {
+  for (let markerIndex = 0; markerIndex < sequence.length; markerIndex += 1) {
+    const item = resolveLedSequenceItem(sequence, markerIndex);
+    if (!item) {
+      continue;
+    }
+
     if (seen.has(item.segment)) {
       continue;
     }
