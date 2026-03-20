@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { DisplayOverlayCommandResult } from "../../../shared/contracts/display";
-import {
-  createDisplayTargetState,
-  type DisplayTargetState,
-} from "./displayTargetState";
+import { createDisplayTargetState } from "./displayTargetState";
 
 function okResult(code = "OVERLAY_OPENED"): DisplayOverlayCommandResult {
   return {
@@ -14,9 +11,13 @@ function okResult(code = "OVERLAY_OPENED"): DisplayOverlayCommandResult {
   };
 }
 
-function createState(overrides?: Partial<DisplayTargetState>) {
-  const openDisplayOverlay = vi.fn(async () => okResult());
-  const closeDisplayOverlay = vi.fn(async () => okResult("OVERLAY_CLOSED"));
+function createState() {
+  const openDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
+    okResult(),
+  );
+  const closeDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
+    okResult("OVERLAY_CLOSED"),
+  );
   const state = createDisplayTargetState({
     openDisplayOverlay,
     closeDisplayOverlay,
@@ -43,10 +44,6 @@ function createState(overrides?: Partial<DisplayTargetState>) {
     },
   ]);
 
-  if (overrides?.getSnapshot) {
-    throw new Error("Invalid test setup");
-  }
-
   return { state, openDisplayOverlay, closeDisplayOverlay };
 }
 
@@ -65,7 +62,7 @@ describe("displayTargetState", () => {
 
   it("OVERLAY_OPEN_FAILED: enters blocked state and preserves failure reason", async () => {
     const { state, openDisplayOverlay } = createState();
-    openDisplayOverlay.mockImplementation(async (displayId: string) => {
+    openDisplayOverlay.mockImplementation(async (displayId) => {
       if (displayId === "display-2") {
         return {
           ok: false,
@@ -88,14 +85,16 @@ describe("displayTargetState", () => {
   });
 
   it("single-active: rejects parallel open attempts while switch in progress", async () => {
-    let resolver: (() => void) | null = null;
+    let resolveOpen!: () => void;
     const openDisplayOverlay = vi.fn(
       () =>
         new Promise<DisplayOverlayCommandResult>((resolve) => {
-          resolver = () => resolve(okResult());
+          resolveOpen = () => resolve(okResult());
         }),
     );
-    const closeDisplayOverlay = vi.fn(async () => okResult("OVERLAY_CLOSED"));
+    const closeDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
+      okResult("OVERLAY_CLOSED"),
+    );
     const state = createDisplayTargetState({
       openDisplayOverlay,
       closeDisplayOverlay,
@@ -107,7 +106,7 @@ describe("displayTargetState", () => {
 
     const first = state.switchActiveDisplay("display-1");
     const second = state.switchActiveDisplay("display-1");
-    resolver?.();
+    resolveOpen();
     await Promise.all([first, second]);
 
     expect(openDisplayOverlay).toHaveBeenCalledTimes(1);

@@ -20,7 +20,10 @@ mod commands {
     pub mod device_connection;
 }
 
-use commands::calibration::{start_calibration_test_pattern, stop_calibration_test_pattern};
+use commands::calibration::{
+    close_display_overlay, list_displays, open_display_overlay, start_calibration_test_pattern,
+    stop_calibration_test_pattern, OverlayState,
+};
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
     SerialConnectionState,
@@ -138,6 +141,7 @@ pub fn run() {
 
             app.manage(TrayState { startup_toggle });
             app.manage(SerialConnectionState::default());
+            app.manage(OverlayState::default());
 
             // Build tray icon
             TrayIconBuilder::with_id(TRAY_ICON_ID)
@@ -202,7 +206,10 @@ pub fn run() {
             get_serial_connection_status,
             run_serial_health_check,
             start_calibration_test_pattern,
-            stop_calibration_test_pattern
+            stop_calibration_test_pattern,
+            list_displays,
+            open_display_overlay,
+            close_display_overlay
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

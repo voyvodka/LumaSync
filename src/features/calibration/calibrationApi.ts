@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { DEVICE_COMMANDS } from "../../shared/contracts/device";
+import {
+  DISPLAY_OVERLAY_COMMANDS,
+  type DisplayId,
+  type DisplayInfo,
+  type DisplayOverlayCommandResult,
+} from "../../shared/contracts/display";
 
 export interface CalibrationTestPatternStartPayload {
   ledIndexes: number[];
@@ -26,4 +32,16 @@ export async function startCalibrationTestPattern(
 
 export async function stopCalibrationTestPattern(): Promise<CalibrationTestPatternResult> {
   return invoke<CalibrationTestPatternResult>(DEVICE_COMMANDS.STOP_CALIBRATION_TEST_PATTERN);
+}
+
+export async function listDisplays(): Promise<DisplayInfo[]> {
+  return invoke<DisplayInfo[]>(DISPLAY_OVERLAY_COMMANDS.LIST_DISPLAYS);
+}
+
+export async function openDisplayOverlay(displayId: DisplayId): Promise<DisplayOverlayCommandResult> {
+  return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY, { displayId });
+}
+
+export async function closeDisplayOverlay(displayId: DisplayId): Promise<DisplayOverlayCommandResult> {
+  return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.CLOSE_DISPLAY_OVERLAY, { displayId });
 }
