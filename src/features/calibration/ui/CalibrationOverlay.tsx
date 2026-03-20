@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
 import type { LedCalibrationConfig } from "../model/contracts";
+import type { LedSegmentKey } from "../model/contracts";
 import { buildLedSequence, resolveLedSequenceItem } from "../model/indexMapping";
 import { applyTemplate, resetToManual } from "../model/templates";
 import {
@@ -48,8 +49,8 @@ function areSnapshotsEqual(left: TestPatternSnapshot, right: TestPatternSnapshot
 }
 
 function buildSegmentOrder(sequence: ReturnType<typeof buildLedSequence>) {
-  const seen = new Set<string>();
-  const order: string[] = [];
+  const seen = new Set<LedSegmentKey>();
+  const order: LedSegmentKey[] = [];
 
   for (let markerIndex = 0; markerIndex < sequence.length; markerIndex += 1) {
     const item = resolveLedSequenceItem(sequence, markerIndex);
@@ -148,7 +149,11 @@ export function CalibrationOverlay({
   }, []);
 
   const sequence = useMemo(() => buildLedSequence(editorState.current), [editorState.current]);
-  const markerSegment = resolveLedSequenceItem(sequence, testPattern.markerIndex)?.segment ?? "top";
+  const markerItem = useMemo(
+    () => resolveLedSequenceItem(sequence, testPattern.markerIndex),
+    [sequence, testPattern.markerIndex],
+  );
+  const markerSegment = markerItem?.segment ?? sequence[0]?.segment ?? "top";
   const segmentOrder = useMemo(() => buildSegmentOrder(sequence), [sequence]);
 
   const shell = useMemo(() => {
