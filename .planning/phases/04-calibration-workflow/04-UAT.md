@@ -15,7 +15,7 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T13:18:56Z
+updated: 2026-03-20T13:25:22Z
 ---
 
 ## Current Test
@@ -32,6 +32,7 @@ result: pass
 expected: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir.
 result: issue
 reported: "Hata metni yok; test pattern acilinca ekranda kisa sure siyahlik gorunuyor ve hemen kapaniyor. Overlay kalici gorunmuyor."
+reported_followup: "Overview aciliyor ama beyaz ekran geliyor, kapatilamiyor (quit ile kapaniyor), ekrana tam oturmuyor ve ustte bosluk kaliyor."
 severity: major
 
 ### 3. Start anchor ve direction kaliciligi
@@ -98,14 +99,16 @@ skipped: 0
   reason: "User reported: hata metni olmadan kisa sureli siyah overlay flash'i oluyor, overlay kalici gorunmuyor."
   severity: major
   test: 2
-  root_cause: "Toggle handler async akisinda `event.target.checked` degeri await sonrasinda tekrar okunuyordu. DOM checked state'i bu sirada degistiginde `toggle(false)` ve `closeActiveDisplay()` istemeden tetikleniyor; overlay acilip hemen kapanmis gibi gorunuyordu."
+  root_cause: "Birlesik zincirde 3 sorun vardI: (1) toggle niyeti await sonrasi kayabiliyordu ve istemsiz stop/close tetikleniyordu, (2) overlay geometri fiziksel px degerleriyle logical API'ye verildigi icin pencere tam oturmuyor/bosluk kaliyordu, (3) close komutu sadece displayId eslesince calistigindan bazi akislarda overlay kapanis fallback'i zayif kalabiliyordu."
   artifacts:
     - path: "src-tauri/src/commands/calibration.rs"
-      issue: "test pattern toggle handler'inda checked niyeti stabilize edilmedigi icin stop/close zinciri yanlislikla calisabiliyor"
+      issue: "toggle niyet stabilizasyonu + logical geometri donusumu + close fallback guclendirmesi gerekliydi"
     - path: "src/features/calibration/state/testPatternFlow.ts"
       issue: "toggle(false) cagrisi geldiğinde stop komutu backend'e hemen iletiliyor; yanlis tetiklenirse overlay aninda kapaniyor"
+    - path: "src/shared/contracts/display.ts"
+      issue: "display payload'ina scaleFactor sinyali eklenmeden geometri donusumu dogrulanamiyor"
   missing:
-    - "toggle handler'da kullanici niyetinin (`shouldEnable`) await oncesi sabitlenmesi"
+    - "toggle handler niyet sabitleme + logical geometri + close fallback fixlerinin saha kaniti"
     - "Fix sonrasi Duzenle/Test Pattern ON adiminda kalici overlay gorunurlugu UAT kaniti"
   debug_session: ".planning/debug/calibration-edit-overlay-not-opening.md"
 

@@ -31,6 +31,7 @@ pub struct DisplayInfoPayload {
     pub height: u32,
     pub x: i32,
     pub y: i32,
+    pub scale_factor: f64,
     pub is_primary: bool,
 }
 
@@ -94,6 +95,7 @@ fn open_overlay_window<R: Runtime>(
     target_display: &DisplayInfoPayload,
 ) -> Result<(), String> {
     let overlay_url = build_overlay_webview_url()?;
+    let (x, y, width, height) = to_overlay_geometry(target_display);
 
     let builder = WebviewWindowBuilder::new(app, window_label, overlay_url)
         .title("Calibration Overlay")
@@ -103,10 +105,10 @@ fn open_overlay_window<R: Runtime>(
         .always_on_top(true)
         .skip_taskbar(true)
         .visible(true)
-        .position(target_display.x as f64, target_display.y as f64)
-        .inner_size(target_display.width as f64, target_display.height as f64)
+        .position(x, y)
+        .inner_size(width, height)
         .initialization_script(
-            "document.documentElement.style.background='black';document.documentElement.style.margin='0';document.body.style.background='black';document.body.style.margin='0';",
+            "(() => { const apply = () => { const root = document.documentElement; if (root) { root.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;'; } const body = document.body; if (body) { body.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;position:fixed;inset:0;'; } }; apply(); window.addEventListener('DOMContentLoaded', apply); })();",
         );
 
     builder
@@ -122,6 +124,22 @@ fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
         .map_err(|error| format!("OVERLAY_URL_INVALID: {error}"))?;
 
     Ok(WebviewUrl::External(about_blank))
+}
+
+fn to_overlay_geometry(target_display: &DisplayInfoPayload) -> (f64, f64, f64, f64) {
+    let normalized_scale =
+        if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
+            target_display.scale_factor
+        } else {
+            1.0
+        };
+
+    (
+        target_display.x as f64 / normalized_scale,
+        target_display.y as f64 / normalized_scale,
+        target_display.width as f64 / normalized_scale,
+        target_display.height as f64 / normalized_scale,
+    )
 }
 
 fn apply_overlay_open_transition(
@@ -170,6 +188,7 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
             height: 0,
             x: 0,
             y: 0,
+            scale_factor: 1.0,
             is_primary: true,
         }]);
     }
@@ -201,6 +220,7 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
                 height: size.height,
                 x: position.x,
                 y: position.y,
+                scale_factor: monitor.scale_factor(),
                 is_primary,
             }
         })
@@ -284,7 +304,9 @@ pub fn close_display_overlay<R: Runtime>(
         .lock()
         .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
 
-    if runtime.active_display_id.as_deref() == Some(display_id.as_str()) {
+    if runtime.active_display_id.as_deref() == Some(display_id.as_str())
+        || runtime.active_overlay_label.is_some()
+    {
         if let Some(active_overlay_label) = runtime.active_overlay_label.as_ref() {
             close_overlay_window(&app, active_overlay_label.as_str())?;
         }
@@ -302,7 +324,10 @@ mod tests {
 
     use tauri::WebviewUrl;
 
-    use super::{apply_overlay_open_transition, build_overlay_webview_url, OverlayRuntimeState};
+    use super::{
+        apply_overlay_open_transition, build_overlay_webview_url, to_overlay_geometry,
+        DisplayInfoPayload, OverlayRuntimeState,
+    };
 
     #[test]
     fn overlay_webview_url_uses_about_blank_external_surface() {
@@ -312,6 +337,27 @@ mod tests {
             WebviewUrl::External(parsed) => assert_eq!(parsed.as_str(), "about:blank"),
             _ => panic!("expected external webview URL for overlay surface"),
         }
+    }
+
+    #[test]
+    fn overlay_geometry_converts_physical_pixels_to_logical_units() {
+        let display = DisplayInfoPayload {
+            id: "display-1".to_string(),
+            label: "Display 1".to_string(),
+            width: 3024,
+            height: 1964,
+            x: 1512,
+            y: 0,
+            scale_factor: 2.0,
+            is_primary: false,
+        };
+
+        let (x, y, width, height) = to_overlay_geometry(&display);
+
+        assert_eq!(x, 756.0);
+        assert_eq!(y, 0.0);
+        assert_eq!(width, 1512.0);
+        assert_eq!(height, 982.0);
     }
 
     #[test]

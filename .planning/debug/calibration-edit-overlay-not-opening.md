@@ -2,7 +2,7 @@
 status: diagnosed
 trigger: "Issue truth: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir."
 created: 2026-03-20T12:40:05Z
-updated: 2026-03-20T13:18:56Z
+updated: 2026-03-20T13:25:22Z
 ---
 
 ## Current Focus
@@ -51,12 +51,13 @@ started: UAT sirasinda kesfedildi.
 
 ## Resolution
 
-root_cause: Overlay acma basarili olsa da `CalibrationOverlay` toggle handler'i async akis icinde `event.target.checked` degerini tekrar okuyordu. Await sonrasi bu deger degistiginde istemsiz `toggle(false)` + `closeActiveDisplay()` zinciri calisip overlayi hemen kapatiyordu.
-fix: Toggle niyeti handler basinda `const shouldEnable = event.currentTarget.checked;` ile sabitlendi ve tum toggle/close dallari bu sabit degerle surduruldu.
+root_cause: UAT semptomu tek bir hatadan degildi: (1) toggle niyeti async akis sonunda kayabiliyor ve istemsiz stop/close tetikleniyordu, (2) overlay geometri hesaplamasi fiziksel px degerleri logical window API'ye dogrudan verildigi icin pencere tam ekran/boşluksuz oturmuyordu, (3) close path'i yalnizca displayId eslesmesine bagli oldugundan fallback kapanis guvencesi zayifti.
+fix: (1) `shouldEnable` niyet sabitlemesi eklendi, (2) display `scale_factor` payload'a eklendi ve overlay geometri physical->logical donusturuldu, (3) close komutu aktif overlay label varsa displayId fark etmeksizin destroy fallback'i ile guclendirildi.
 verification:
 files_changed:
   - src-tauri/src/commands/calibration.rs
   - src/features/calibration/ui/CalibrationOverlay.tsx
+  - src/shared/contracts/display.ts
 
 - timestamp: 2026-03-20T13:03:10Z
   checked: UAT rerun sonucu + src-tauri/src/commands/calibration.rs + src-tauri/src/lib.rs
@@ -72,3 +73,8 @@ files_changed:
   checked: Kullanici gozlemi (overlay acildiktan sonra stop/close komutlari) + CalibrationOverlay toggle handler
   found: Handler icinde `event.target.checked` await sonrasi tekrar kullanildigi icin stop/close branch'i yanlis tetiklenebiliyor.
   implication: Kisa siyahlik + hemen kapanma semptomu, overlay open fail degil, istemsiz disable zinciri.
+
+- timestamp: 2026-03-20T13:25:22Z
+  checked: Son saha raporu (beyaz ekran, bosluk, kapanmama) + overlay geometry/close code path
+  found: Overlay window geometri degerleri logical birimlere normalize edilmedigi icin fit sorunu var; close tarafinda id-esleme disi fallback gerekli.
+  implication: Siyah/tam ekran/boşluksuz overlay ve OFF-close guvencesi icin geometri + close fallback hardening zorunlu.
