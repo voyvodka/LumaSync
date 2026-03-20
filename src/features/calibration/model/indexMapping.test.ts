@@ -127,6 +127,14 @@ describe("buildLedSequence", () => {
 });
 
 describe("resolveLedSequenceItem", () => {
+  it("treats non-finite marker indexes as first marker", () => {
+    const sequence = buildLedSequence(BASE_CONFIG);
+
+    expect(resolveLedSequenceItem(sequence, Number.NaN)).toEqual(sequence[0]);
+    expect(resolveLedSequenceItem(sequence, Number.POSITIVE_INFINITY)).toEqual(sequence[0]);
+    expect(resolveLedSequenceItem(sequence, Number.NEGATIVE_INFINITY)).toEqual(sequence[0]);
+  });
+
   it("normalizes negative and overflowing marker indexes", () => {
     const sequence = buildLedSequence(BASE_CONFIG);
     const sequenceLength = sequence.length;
