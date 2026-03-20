@@ -2,7 +2,7 @@
 status: diagnosed
 trigger: "Issue truth: Settings > Calibration bolumunden Duzenle tetiklenince ayni calibration editor overlay'i yeniden acilir."
 created: 2026-03-20T12:40:05Z
-updated: 2026-03-20T13:03:10Z
+updated: 2026-03-20T13:14:44Z
 ---
 
 ## Current Focus
@@ -51,8 +51,8 @@ started: UAT sirasinda kesfedildi.
 
 ## Resolution
 
-root_cause: Overlay render implementasyonu mevcut olmasina ragmen kapanis path'inde `close()` kullanimi global close intercept nedeniyle pencereyi yok etmiyor; stale webview ayni label ile tekrar acilisa engel oluyor.
-fix: `close_overlay_window` fonksiyonunda `close()` yerine `destroy()` kullanilarak stale label cakisimi engellendi.
+root_cause: `close()->destroy()` duzeltmesi label collision'i temizledi, fakat overlay hala `index.html` (tam app webview) ile acildigi icin sahada gecici siyah flash ve hemen kapanma davranisi devam ediyor. Dedicated overlay surface olmadigi icin runtime gorunurluk kararsiz kaliyor.
+fix: `open_overlay_window` artik `WebviewUrl::External(about:blank)` ile dedicated overlay surface aciyor; init script ile sabit siyah tam ekran gorunumu veriyor.
 verification:
 files_changed:
   - src-tauri/src/commands/calibration.rs
@@ -61,3 +61,8 @@ files_changed:
   checked: UAT rerun sonucu + src-tauri/src/commands/calibration.rs + src-tauri/src/lib.rs
   found: Hata `OVERLAY_WINDOW_OPEN_FAILED: ... label already exists`; overlay kapanis adiminda `close()` kullanimi app-level `on_window_event` close intercept'ine takiliyor, pencere destroy olmadan gizli kaliyor.
   implication: Sonraki open denemesi ayni label ile cakisiyor; gorunum acilamiyor ve UI blocked state'e geciyor.
+
+- timestamp: 2026-03-20T13:14:44Z
+  checked: Yeni UAT rerun semptomu + open_overlay_window URL secimi
+  found: Hata metni kaybolsa da overlay kalici degil; acilan pencere `index.html` yukleyerek uygulama lifecycle'ina bagimli davraniyor.
+  implication: Overlay icin app webview yerine minimal/dedicated surface kullanmak gerekiyor.

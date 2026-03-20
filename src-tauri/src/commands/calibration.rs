@@ -93,21 +93,35 @@ fn open_overlay_window<R: Runtime>(
     window_label: &str,
     target_display: &DisplayInfoPayload,
 ) -> Result<(), String> {
-    let builder =
-        WebviewWindowBuilder::new(app, window_label, WebviewUrl::App("index.html".into()))
-            .decorations(false)
-            .resizable(false)
-            .always_on_top(true)
-            .skip_taskbar(true)
-            .visible(true)
-            .position(target_display.x as f64, target_display.y as f64)
-            .inner_size(target_display.width as f64, target_display.height as f64);
+    let overlay_url = build_overlay_webview_url()?;
+
+    let builder = WebviewWindowBuilder::new(app, window_label, overlay_url)
+        .title("Calibration Overlay")
+        .decorations(false)
+        .resizable(false)
+        .closable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(true)
+        .position(target_display.x as f64, target_display.y as f64)
+        .inner_size(target_display.width as f64, target_display.height as f64)
+        .initialization_script(
+            "document.documentElement.style.background='black';document.documentElement.style.margin='0';document.body.style.background='black';document.body.style.margin='0';",
+        );
 
     builder
         .build()
         .map_err(|error| format!("OVERLAY_WINDOW_OPEN_FAILED: {error}"))?;
 
     Ok(())
+}
+
+fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
+    let about_blank = "about:blank"
+        .parse()
+        .map_err(|error| format!("OVERLAY_URL_INVALID: {error}"))?;
+
+    Ok(WebviewUrl::External(about_blank))
 }
 
 fn apply_overlay_open_transition(
@@ -286,7 +300,19 @@ pub fn close_display_overlay<R: Runtime>(
 mod tests {
     use std::cell::RefCell;
 
-    use super::{apply_overlay_open_transition, OverlayRuntimeState};
+    use tauri::WebviewUrl;
+
+    use super::{apply_overlay_open_transition, build_overlay_webview_url, OverlayRuntimeState};
+
+    #[test]
+    fn overlay_webview_url_uses_about_blank_external_surface() {
+        let url = build_overlay_webview_url().expect("about:blank URL should parse");
+
+        match url {
+            WebviewUrl::External(parsed) => assert_eq!(parsed.as_str(), "about:blank"),
+            _ => panic!("expected external webview URL for overlay surface"),
+        }
+    }
 
     #[test]
     fn overlay_opened_sets_runtime_state() {
