@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { LedCalibrationConfig } from "../model/contracts";
 import {
   deriveCalibrationOverlayEntry,
+  shouldAutoOpenCalibrationOnConnection,
   startCalibrationFromSettings,
 } from "./entryFlow";
 import {
@@ -35,6 +36,46 @@ const EXISTING_CALIBRATION: LedCalibrationConfig = {
 };
 
 describe("calibration entry flow", () => {
+  it("auto-open triggers once on first connection when calibration is missing", () => {
+    const firstConnect = shouldAutoOpenCalibrationOnConnection({
+      connected: true,
+      wasConnected: false,
+      hasCalibration: false,
+      alreadyAutoOpened: false,
+    });
+
+    expect(firstConnect).toBe(true);
+  });
+
+  it("hasCalibration bypass prevents auto-open on connection", () => {
+    const hasCalibration = shouldAutoOpenCalibrationOnConnection({
+      connected: true,
+      wasConnected: false,
+      hasCalibration: true,
+      alreadyAutoOpened: false,
+    });
+
+    expect(hasCalibration).toBe(false);
+  });
+
+  it("first connection transition only auto-opens once and ignores rerender", () => {
+    const firstTransition = shouldAutoOpenCalibrationOnConnection({
+      connected: true,
+      wasConnected: false,
+      hasCalibration: false,
+      alreadyAutoOpened: false,
+    });
+    const rerenderWhileConnected = shouldAutoOpenCalibrationOnConnection({
+      connected: true,
+      wasConnected: true,
+      hasCalibration: false,
+      alreadyAutoOpened: true,
+    });
+
+    expect(firstTransition).toBe(true);
+    expect(rerenderWhileConnected).toBe(false);
+  });
+
   it("auto-opens wizard overlay on first connected run when calibration is missing", () => {
     const entry = deriveCalibrationOverlayEntry({
       hasConnectedDevice: true,
