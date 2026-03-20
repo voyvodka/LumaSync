@@ -1,12 +1,12 @@
 ---
 phase: 04-calibration-workflow
-verified: 2026-03-20T11:25:40Z
-status: passed
+verified: 2026-03-20T13:35:49Z
+status: complete
 score: 5/5 must-haves verified
 re_verification:
-  previous_status: complete
-  previous_score: 10/10
-  gaps_closed: []
+  previous_status: passed
+  previous_score: 5/5
+  gaps_closed: [2, 7, 8, 9]
   gaps_remaining: []
   regressions: []
 ---
@@ -14,8 +14,8 @@ re_verification:
 # Phase 4: Calibration Workflow Verification Report
 
 **Phase Goal:** Kullanici ilk kurulumda wizard ile, sonrasinda ileri panel ile LED geometri ve yonlendirmeyi dogru kalibre edebilir.
-**Verified:** 2026-03-20T11:25:40Z
-**Status:** passed
+**Verified:** 2026-03-20T13:35:49Z
+**Status:** complete
 **Re-verification:** Yes - regression verification after previous complete report
 
 ## Goal Achievement
@@ -75,13 +75,13 @@ Phase 4 icin plansiz/orphaned requirement bulunmadi.
 
 ### Human Verification Required
 
-Bu dogrulama turunde zorunlu ek human test kalemi yok. Fiziksel parity ve multi-display davranisi icin onceki UAT kaydi PASS durumunda mevcut (`.planning/phases/04-calibration-workflow/04-HARDWARE-UAT.md:207`).
+Gap closure rerun'u tamamlandi ve kullanici sonucu `approved` olarak iletti. Test 2/7/8/9 saha adimlari guncel implementasyonla PASS kaydina alindi (`.planning/phases/04-calibration-workflow/04-UAT.md:31`, `.planning/phases/04-calibration-workflow/04-UAT.md:55`, `.planning/phases/04-calibration-workflow/04-UAT.md:61`, `.planning/phases/04-calibration-workflow/04-UAT.md:67`).
 
 ### Gaps Summary
 
-Gap tespit edilmedi. Roadmap success criteria'dan turetilen 5/5 observable truth kod tabaninda mevcut, substantive ve wired durumda; requirement kapsami tam ve orphaned ID yok.
+Diagnosed gap closure turu tamamlandi. Test 2/7/8/9 kaynakli overlay lifecycle, sizing, ve close-flow belirsizlikleri kod fixleri ve human rerun ile kapatildi; acik gap kalmadi.
 
 ---
 
-_Verified: 2026-03-20T11:25:40Z_
+_Verified: 2026-03-20T13:35:49Z_
 _Verifier: Claude (gsd-verifier)_
