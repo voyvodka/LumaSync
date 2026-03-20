@@ -12,9 +12,8 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    // Use node environment for unit tests (no DOM required for policy/logic tests)
-    // Switch to "jsdom" when React component rendering tests are added (requires: yarn add -D jsdom)
-    environment: "node",
+    environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
 
     // Global test APIs (describe, it, expect, vi) — no imports needed in test files
     globals: true,
