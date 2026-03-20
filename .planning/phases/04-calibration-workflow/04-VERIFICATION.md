@@ -1,30 +1,22 @@
 ---
 phase: 04-calibration-workflow
-verified: 2026-03-20T11:18:27Z
-status: complete
-score: 10/10 must-haves verified
+verified: 2026-03-20T11:25:40Z
+status: passed
+score: 5/5 must-haves verified
 re_verification:
-  previous_status: gaps_found
-  previous_score: 9/10
-  gaps_closed:
-    - "Kullanici test pattern ile LED mapping sirasini (start anchor + direction etkisiyle) dogrulayabilir."
+  previous_status: complete
+  previous_score: 10/10
+  gaps_closed: []
   gaps_remaining: []
   regressions: []
-human_verification:
-  status: approved
-  source: .planning/phases/04-calibration-workflow/04-HARDWARE-UAT.md
-  completed: 2026-03-20
-  notes:
-    - "CAL-02-02 orientation parity: top-start/cw ve bottom-right-end/ccw kombinasyonlari PASS"
-    - "CAL-04-02 ve CAL-04-03: display switch tek aktif overlay ve blocked reason davranisi PASS"
 ---
 
 # Phase 4: Calibration Workflow Verification Report
 
 **Phase Goal:** Kullanici ilk kurulumda wizard ile, sonrasinda ileri panel ile LED geometri ve yonlendirmeyi dogru kalibre edebilir.
-**Verified:** 2026-03-20T11:18:27Z
-**Status:** complete
-**Re-verification:** Yes - after gap closure
+**Verified:** 2026-03-20T11:25:40Z
+**Status:** passed
+**Re-verification:** Yes - regression verification after previous complete report
 
 ## Goal Achievement
 
@@ -32,77 +24,64 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | Kullanici bir monitor sablonu secince editor alanlari onerilen LED degerleriyle dolar. | ✓ VERIFIED | Template secimi `applyTemplate` ile editor state'e yaziliyor (`src/features/calibration/ui/CalibrationOverlay.tsx:233`, `src/features/calibration/ui/CalibrationOverlay.tsx:234`), template seti mevcut (`src/features/calibration/model/templates.ts:12`). |
-| 2 | Kullanici baslangic noktasi ve yon sectiginde LED sira hesabi deterministik olur. | ✓ VERIFIED | Deterministik mapping fonksiyonu mevcut (`src/features/calibration/model/indexMapping.ts:74`) ve normalize item resolver var (`src/features/calibration/model/indexMapping.ts:10`). |
-| 3 | Kullanici kenar LED sayilari ve alt bosluk ayarini gecersiz kombinasyonlarla kaydedemez. | ✓ VERIFIED | Save oncesi `validateCalibrationConfig` calisiyor ve hata varsa erken donuyor (`src/features/calibration/ui/CalibrationOverlay.tsx:418`, `src/features/calibration/ui/CalibrationOverlay.tsx:419`). |
-| 4 | Kullanici ilk cihaz baglantisinda kalibrasyon overlay wizard'ini otomatik gorur. | ✓ VERIFIED | Bootstrapte entry flow karari var (`src/App.tsx:53`) ve ilk baglanti kosulu korunuyor (`src/features/calibration/state/entryFlow.ts:20`). |
-| 5 | Kullanici Settings > Calibration bolumunden ayni editoru tekrar acabilir. | ✓ VERIFIED | `SECTION_IDS.CALIBRATION` route'u section render ediyor (`src/features/settings/SettingsLayout.tsx:52`), `onEdit` ile overlay aciliyor (`src/features/settings/sections/CalibrationSection.tsx:41`, `src/App.tsx:92`). |
-| 6 | Kullanici template secip edge count + start anchor + direction alanlarini ayarlayabilir. | ✓ VERIFIED | Count, bottomGap, start anchor, direction alanlari editorde bagli (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:74`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:111`). |
-| 7 | Kaydedilmemis degisiklikle cikista onay akisi devreye girer. | ✓ VERIFIED | Dirty close guard state'i mevcut (`src/features/calibration/state/calibrationEditorState.ts:117`) ve modal render'i bagli (`src/features/calibration/ui/CalibrationOverlay.tsx:443`). |
-| 8 | Kullanici test pattern ile LED mapping sirasini (start anchor + direction etkisiyle) dogrulayabilir. | ✓ VERIFIED | Kalan gap kapanmis: payload artik marker-index bazli sequence item'dan turetiliyor (`src/features/calibration/state/testPatternFlow.ts:192`, `src/features/calibration/state/testPatternFlow.ts:183`); mapping `index` fiziksel semantigi koruyor (`src/features/calibration/model/indexMapping.ts:47`, `src/features/calibration/model/indexMapping.ts:79`); preview segment de ayni sequence'ten turetiliyor (`src/features/calibration/ui/CalibrationOverlay.tsx:194`, `src/features/calibration/ui/CalibrationOverlay.tsx:199`). |
-| 9 | Cihaz bagli degilken de overlay preview calisir ve kaydetme bloklanmaz. | ✓ VERIFIED | Disconnected durumda preview-only korunuyor (`src/features/calibration/state/testPatternFlow.ts:130`) ve save akisi test-patternden bagimsiz (`src/features/calibration/ui/CalibrationOverlay.tsx:427`). |
-| 10 | Editor kapatilinca test pattern temiz sekilde durdurulur. | ✓ VERIFIED | Close/cancel/save/unmount yollarinda `dispose` bagli (`src/features/calibration/ui/CalibrationOverlay.tsx:217`, `src/features/calibration/ui/CalibrationOverlay.tsx:404`, `src/features/calibration/ui/CalibrationOverlay.tsx:430`, `src/features/calibration/ui/CalibrationOverlay.tsx:190`). |
+| 1 | User can complete first-time setup through a guided wizard flow. | ✓ VERIFIED | Baglanti gecisiyle tek seferlik auto-open guard var (`src/App.tsx:88`, `src/features/calibration/state/entryFlow.ts:54`), overlay wizard adimi `template` olarak aciliyor (`src/App.tsx:97`). |
+| 2 | User can apply a predefined monitor template and then fine-tune start index and direction. | ✓ VERIFIED | Template adiminda secim `applyTemplate` ile editor config'ine yaziliyor (`src/features/calibration/ui/CalibrationOverlay.tsx:233`), editorde start-anchor ve direction kontrolleri mevcut (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:116`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:135`). |
+| 3 | User can configure edge LED counts and physical gap regions to match real hardware. | ✓ VERIFIED | Edge count ve bottom gap inputlari editorde bagli (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:74`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:93`), save oncesi config validasyonu zorunlu (`src/features/calibration/ui/CalibrationOverlay.tsx:418`). |
+| 4 | User can validate LED mapping with live preview/test pattern before saving. | ✓ VERIFIED | Test pattern toggle ve marker ilerleme preview'i aktif (`src/features/calibration/ui/CalibrationOverlay.tsx:279`, `src/features/calibration/ui/CalibrationOverlay.tsx:349`), marker -> fiziksel index mapping sequence bazli (`src/features/calibration/state/testPatternFlow.ts:182`, `src/features/calibration/state/testPatternFlow.ts:194`), save explicit aksiyonla ayrik (`src/features/calibration/ui/CalibrationOverlay.tsx:426`). |
+| 5 | User can revisit and adjust calibration later from an advanced settings panel. | ✓ VERIFIED | Settings nav calibration bolumunu render ediyor (`src/features/settings/SettingsLayout.tsx:52`), Edit aksiyonu ayni overlay'i tekrar aciyor (`src/features/settings/sections/CalibrationSection.tsx:45`, `src/App.tsx:103`). |
 
-**Score:** 10/10 truths verified
+**Score:** 5/5 truths verified
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `src/features/calibration/model/indexMapping.ts` | Start-anchor + direction sequence ve physical index semantigi | ✓ VERIFIED | `buildLedSequence` fiziksel `index` alanini yeniden numaralandirmadan koruyor; `resolveLedSequenceItem` normalize ediyor (`src/features/calibration/model/indexMapping.ts:10`, `src/features/calibration/model/indexMapping.ts:74`). |
-| `src/features/calibration/state/testPatternFlow.ts` | Marker-index tabanli physical payload orkestrasyonu | ✓ VERIFIED | `resolvePhysicalIndex(markerIndex)` sequence uzerinden hesaplayip `ledIndexes` payload'ina yaziyor (`src/features/calibration/state/testPatternFlow.ts:175`, `src/features/calibration/state/testPatternFlow.ts:194`). |
-| `src/features/calibration/ui/CalibrationOverlay.tsx` | Sequence tabanli preview + save-time validation + wizard/editor akisi | ✓ VERIFIED | Marker segment sequence'ten geliyor (`src/features/calibration/ui/CalibrationOverlay.tsx:194`), validation save gate var (`src/features/calibration/ui/CalibrationOverlay.tsx:418`), wizard/editor gecisleri aktif (`src/features/calibration/ui/CalibrationOverlay.tsx:229`). |
-| `src/features/calibration/ui/CalibrationEditorCanvas.tsx` | Count/start/direction/bottom-gap editor kontrolleri | ✓ VERIFIED | `onBottomGapChange` dahil tum temel alanlar render ve callback bagli (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:13`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:93`). |
-| `src/App.tsx` | First-run wizard + settings re-entry + mode guard entegrasyonu | ✓ VERIFIED | Entry karar, settings acilisi ve mode guard birlikte bagli (`src/App.tsx:53`, `src/App.tsx:92`, `src/App.tsx:106`). |
-| `src/features/settings/SettingsLayout.tsx` | Calibration section routing | ✓ VERIFIED | `SECTION_IDS.CALIBRATION` case'i aktif (`src/features/settings/SettingsLayout.tsx:52`). |
+| `src/App.tsx` | First-connection wizard auto-open + settings re-entry wiring | ✓ VERIFIED | Overlay acilis karari baglanti ve kalibrasyon state'ine bagli (`src/App.tsx:88`), settings uzerinden re-entry callback bagli (`src/App.tsx:103`). |
+| `src/features/calibration/state/entryFlow.ts` | Auto-open guard semantics | ✓ VERIFIED | `shouldAutoOpenCalibrationOnConnection` ile one-shot + calibration-var kontrolu var (`src/features/calibration/state/entryFlow.ts:54`). |
+| `src/features/calibration/ui/CalibrationOverlay.tsx` | Wizard/editor akisi, test pattern preview, save-time validation | ✓ VERIFIED | Template/editor adim gecisi, toggle tabanli preview, ve save gate birlestirilmis (`src/features/calibration/ui/CalibrationOverlay.tsx:229`, `src/features/calibration/ui/CalibrationOverlay.tsx:279`, `src/features/calibration/ui/CalibrationOverlay.tsx:418`). |
+| `src/features/calibration/ui/CalibrationEditorCanvas.tsx` | Edge count + gap + start anchor + direction controls | ✓ VERIFIED | Tum alanlar render edilip callbacklere bagli (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:80`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:98`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:116`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:135`). |
+| `src/features/calibration/model/indexMapping.ts` | Deterministic sequence from anchor+direction | ✓ VERIFIED | `buildLedSequence` anchor rotasyonu ve direction davranisini deterministik kuruyor (`src/features/calibration/model/indexMapping.ts:74`). |
+| `src/features/settings/SettingsLayout.tsx` + `src/features/settings/sections/CalibrationSection.tsx` | Advanced panel entrypoint | ✓ VERIFIED | Calibration section route + edit callback wired (`src/features/settings/SettingsLayout.tsx:53`, `src/features/settings/sections/CalibrationSection.tsx:45`). |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
-| `src/features/calibration/model/indexMapping.ts` | `src/features/calibration/state/testPatternFlow.ts` | `buildLedSequence` + `resolveLedSequenceItem` ile `markerIndex -> ledIndexes` | WIRED | Import ve runtime kullanim var (`src/features/calibration/state/testPatternFlow.ts:6`, `src/features/calibration/state/testPatternFlow.ts:183`). |
-| `src/features/calibration/state/testPatternFlow.ts` | `src/features/calibration/ui/CalibrationOverlay.tsx` | `flowRef` + `setConfig` + snapshot marker | WIRED | Editor degisince flow config update ediliyor (`src/features/calibration/ui/CalibrationOverlay.tsx:146`) ve marker UI'ya yansiyor (`src/features/calibration/ui/CalibrationOverlay.tsx:349`). |
-| `src/features/calibration/ui/CalibrationOverlay.tsx` | `src/features/calibration/model/validation.ts` | save handler -> `validateCalibrationConfig` | WIRED | Save oncesi validasyon ve early return mevcut (`src/features/calibration/ui/CalibrationOverlay.tsx:418`, `src/features/calibration/ui/CalibrationOverlay.tsx:422`). |
-| `src/features/settings/SettingsLayout.tsx` | `src/features/settings/sections/CalibrationSection.tsx` | `SECTION_IDS.CALIBRATION` switch case | WIRED | Section render baglantisi aktif (`src/features/settings/SettingsLayout.tsx:53`). |
-| `src/App.tsx` | `src/features/calibration/ui/CalibrationOverlay.tsx` | first-run entry + settings edit overlay acilisi | WIRED | `deriveCalibrationOverlayEntry` ve `startCalibrationFromSettings` ile iki giris yolu aktif (`src/App.tsx:53`, `src/App.tsx:93`, `src/App.tsx:135`). |
-| `src/features/calibration/ui/CalibrationOverlay.tsx` | `src/features/calibration/state/displayTargetState.ts` | display switch + blocked state akisi | WIRED | Toggle/display seciminde `switchActiveDisplay` ve blokaj fallback'i calisiyor (`src/features/calibration/ui/CalibrationOverlay.tsx:283`, `src/features/calibration/ui/CalibrationOverlay.tsx:325`). |
+| `src/App.tsx` | `src/features/calibration/state/entryFlow.ts` | `shouldAutoOpenCalibrationOnConnection` | WIRED | Import + useEffect karar akisi mevcut (`src/App.tsx:19`, `src/App.tsx:88`). |
+| `src/features/calibration/ui/CalibrationTemplateStep.tsx` | `src/features/calibration/model/templates.ts` | `CALIBRATION_TEMPLATES` + `applyTemplate` | WIRED | Template listesi stepte render, secim overlayde config'e yaziliyor (`src/features/calibration/ui/CalibrationTemplateStep.tsx:3`, `src/features/calibration/ui/CalibrationOverlay.tsx:233`). |
+| `src/features/calibration/model/indexMapping.ts` | `src/features/calibration/state/testPatternFlow.ts` | `buildLedSequence` + `resolveLedSequenceItem` | WIRED | Marker index fiziksel payloada sequence resolver ile cevriliyor (`src/features/calibration/state/testPatternFlow.ts:6`, `src/features/calibration/state/testPatternFlow.ts:194`). |
+| `src/features/calibration/ui/CalibrationOverlay.tsx` | `src/features/calibration/model/validation.ts` | save handler -> `validateCalibrationConfig` | WIRED | Geçersiz config save'i erken donus ile blokluyor (`src/features/calibration/ui/CalibrationOverlay.tsx:418`, `src/features/calibration/ui/CalibrationOverlay.tsx:422`). |
+| `src/features/settings/SettingsLayout.tsx` | `src/features/settings/sections/CalibrationSection.tsx` | `SECTION_IDS.CALIBRATION` route branch | WIRED | Calibration section mount ve edit callback aktarimi var (`src/features/settings/SettingsLayout.tsx:52`, `src/features/settings/SettingsLayout.tsx:53`). |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| CAL-01 | 04-01, 04-02, 04-06 | User can complete setup using predefined monitor LED templates | ✓ SATISFIED | En az 5 template mevcut (`src/features/calibration/model/templates.ts:12`), template step secimi editoru dolduruyor (`src/features/calibration/ui/CalibrationOverlay.tsx:233`). |
-| CAL-02 | 04-01, 04-02, 04-06 | User can set LED start index and direction for correct strip orientation | ✓ SATISFIED | Start anchor/direction alanlari editorde bagli (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:117`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:136`), mappingte orientation uygulanıyor (`src/features/calibration/model/indexMapping.ts:79`). |
-| CAL-03 | 04-01, 04-02, 04-04, 04-06 | User can configure edge LED counts and gap areas | ✓ SATISFIED | Edge count + bottom gap inputlari mevcut (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:74`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:93`), save-time validation gate aktif (`src/features/calibration/ui/CalibrationOverlay.tsx:418`). |
-| CAL-04 | 04-03, 04-05, 04-06, 04-07, 04-08, 04-10 | User can validate mapping using live preview/test pattern before saving | ✓ SATISFIED (code-level) | Test pattern toggle + preview marker aktif (`src/features/calibration/ui/CalibrationOverlay.tsx:279`, `src/features/calibration/ui/CalibrationOverlay.tsx:349`), marker->payload mapping sequence tabanli (`src/features/calibration/state/testPatternFlow.ts:183`, `src/features/calibration/state/testPatternFlow.ts:194`), display overlay lifecycle bagli (`src/features/calibration/ui/CalibrationOverlay.tsx:283`). |
-| UX-02 | 04-02, 04-06, 04-09 | User can complete first-time setup via guided wizard and later use advanced settings panel | ✓ SATISFIED | First-run auto-open (`src/App.tsx:57`), settings uzerinden yeniden acilis (`src/App.tsx:92`), Calibration section route aktif (`src/features/settings/SettingsLayout.tsx:52`). |
+| CAL-01 | 04-01, 04-02, 04-06, 04-11 | User can complete setup using predefined monitor LED templates | ✓ SATISFIED | Hazir monitor template katalogu var (`src/features/calibration/model/templates.ts:12`) ve wizard secimi editor config'ini dolduruyor (`src/features/calibration/ui/CalibrationOverlay.tsx:233`). |
+| CAL-02 | 04-01, 04-02, 04-06, 04-11 | User can set LED start index and direction for correct strip orientation | ✓ SATISFIED | Start anchor/direction kontrolleri editorde mevcut (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:116`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:135`) ve mapping motoru bunlari uyguluyor (`src/features/calibration/model/indexMapping.ts:76`). |
+| CAL-03 | 04-01, 04-02, 04-04, 04-06, 04-11 | User can configure edge LED counts and gap areas | ✓ SATISFIED | Edge count + bottom gap alanlari var (`src/features/calibration/ui/CalibrationEditorCanvas.tsx:74`, `src/features/calibration/ui/CalibrationEditorCanvas.tsx:93`) ve save validasyonu var (`src/features/calibration/model/validation.ts:31`). |
+| CAL-04 | 04-03, 04-05, 04-06, 04-07, 04-08, 04-10, 04-11 | User can validate mapping using live preview/test pattern before saving | ✓ SATISFIED | Toggle ile preview/test pattern akisi var (`src/features/calibration/ui/CalibrationOverlay.tsx:279`), fiziksel payload sequence tabanli (`src/features/calibration/state/testPatternFlow.ts:194`), save explicit aksiyona bagli (`src/features/calibration/ui/CalibrationOverlay.tsx:426`). |
+| UX-02 | 04-02, 04-06, 04-09, 04-11, 04-12 | User can complete first-time setup via guided wizard and later use advanced settings panel | ✓ SATISFIED | Ilk baglantida wizard auto-open (`src/App.tsx:95`), sonradan settings calibration edit ile ayni overlay aciliyor (`src/features/settings/sections/CalibrationSection.tsx:45`, `src/App.tsx:103`). |
 
-Plan frontmatter'larindan toplanan tum requirement ID'leri: `CAL-01`, `CAL-02`, `CAL-03`, `CAL-04`, `UX-02`.
-REQUIREMENTS.md Traceability tablosunda Phase 4 icin bu ID'ler disinda ek/orphaned requirement bulunmadi (`.planning/REQUIREMENTS.md:86`, `.planning/REQUIREMENTS.md:97`).
+Plan frontmatter'larindan toplanan requirement ID seti: `CAL-01`, `CAL-02`, `CAL-03`, `CAL-04`, `UX-02`.
+REQUIREMENTS.md icinde bu ID'lerin tamami tanimli ve Phase 4'e mapli (`.planning/REQUIREMENTS.md:19`, `.planning/REQUIREMENTS.md:97`).
+Phase 4 icin plansiz/orphaned requirement bulunmadi.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | --- | --- | --- | --- | --- |
-| N/A | - | Blocker seviyesinde TODO/FIXME/placeholder veya stub implementation tespit edilmedi | - | Faz hedefini bloklayan anti-pattern bulunmadi |
+| N/A | - | Blocker seviyesinde TODO/FIXME/stub implementation bulunmadi | - | Faz hedefine engel anti-pattern yok |
 
-### Human Verification Results
+### Human Verification Required
 
-### 1. Physical Orientation Parity
-
-**Result:** PASS
-**Evidence:** Hardware UAT kaydinda `CAL-02-02` satiri iki kombinasyon icin (`top-start/cw`, `bottom-right-end/ccw`) preview/strip marker sirasinin birebir eslestigini kaydediyor (`.planning/phases/04-calibration-workflow/04-HARDWARE-UAT.md`).
-
-### 2. Display Switch Blocking UX
-
-**Result:** PASS
-**Evidence:** Hardware UAT kaydinda `CAL-04-02` ve `CAL-04-03` satirlari display switchte tek aktif overlay davranisinin korundugunu ve overlay open fail durumunda blocked reason metninin gorundugunu dogruluyor (`.planning/phases/04-calibration-workflow/04-HARDWARE-UAT.md`).
+Bu dogrulama turunde zorunlu ek human test kalemi yok. Fiziksel parity ve multi-display davranisi icin onceki UAT kaydi PASS durumunda mevcut (`.planning/phases/04-calibration-workflow/04-HARDWARE-UAT.md:207`).
 
 ### Gaps Summary
 
-Re-verification ve hardware UAT sonucunda gap kalmadi. Kod-seviyesi kapanan CAL-04 parity davranisi saha kosullarinda da onaylandi; phase hedefi shipment-oncesi dogrulama ile complete duruma getirildi.
+Gap tespit edilmedi. Roadmap success criteria'dan turetilen 5/5 observable truth kod tabaninda mevcut, substantive ve wired durumda; requirement kapsami tam ve orphaned ID yok.
 
 ---
 
-_Verified: 2026-03-20T11:18:27Z_
+_Verified: 2026-03-20T11:25:40Z_
 _Verifier: Claude (gsd-verifier)_
