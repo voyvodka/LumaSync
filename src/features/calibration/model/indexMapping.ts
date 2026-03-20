@@ -15,6 +15,10 @@ export function resolveLedSequenceItem(
     return null;
   }
 
+  if (!Number.isFinite(markerIndex)) {
+    return sequence[0] ?? null;
+  }
+
   const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
   return sequence[normalizedMarkerIndex] ?? null;
 }
