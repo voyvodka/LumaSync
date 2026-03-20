@@ -93,6 +93,9 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
       snapshot = {
         ...snapshot,
         selectedDisplayId: displayId,
+        blocked: false,
+        blockedCode: null,
+        blockedReason: null,
       };
 
       return snapshot;
@@ -105,6 +108,14 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
       const targetDisplayId = getResolvedTargetId(displayId);
       if (!targetDisplayId) {
         return snapshot;
+      }
+
+      if (snapshot.blocked) {
+        return {
+          ...snapshot,
+          selectedDisplayId: targetDisplayId,
+          isSwitching: false,
+        };
       }
 
       if (snapshot.activeDisplayId === targetDisplayId) {

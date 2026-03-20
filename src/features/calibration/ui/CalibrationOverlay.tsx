@@ -281,11 +281,20 @@ export function CalibrationOverlay({
                  checked={testPattern.isEnabled}
                  disabled={displayTarget.isSwitching}
                   onChange={async (event) => {
-                    try {
-                      if (event.target.checked) {
-                        const switched = await displayTargetRef.current.switchActiveDisplay();
-                        setDisplayTarget(switched);
-                        if (switched.blocked) {
+                     try {
+                       if (event.target.checked) {
+                         if (displayTarget.blocked) {
+                           const reason = displayTarget.blockedReason ?? "Overlay open failed.";
+                           const code = displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED";
+                           const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
+                           console.warn(message);
+                           setTestPatternError(message);
+                           return;
+                         }
+
+                         const switched = await displayTargetRef.current.switchActiveDisplay();
+                         setDisplayTarget(switched);
+                         if (switched.blocked) {
                           const reason = switched.blockedReason ?? "Overlay open failed.";
                           const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
                           const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
