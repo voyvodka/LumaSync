@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-calibration-workflow
 source:
   - 04-01-SUMMARY.md
@@ -15,7 +15,7 @@ source:
   - 04-11-SUMMARY.md
   - 04-12-SUMMARY.md
 started: 2026-03-20T12:28:42Z
-updated: 2026-03-20T12:39:02Z
+updated: 2026-03-20T12:42:09Z
 ---
 
 ## Current Test
@@ -83,29 +83,61 @@ skipped: 0
   reason: "User reported: overlay açılmıyor görünüm tasarlanmamış. Test pattern toggle ON oluyor ama OS-level overlay görünmüyor; checkbox geri false oluyor / görünüm yok."
   severity: major
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: "Backend open_display_overlay komutu gercek OS-level overlay olusturmuyor; sadece state guncelleyip success donuyor, bu nedenle UI aciliyor gibi olsa da gorunur overlay yok."
+  artifacts:
+    - path: "src-tauri/src/commands/calibration.rs"
+      issue: "open_display_overlay state-only, render/window olusturma yok"
+    - path: "src/features/calibration/ui/CalibrationOverlay.tsx"
+      issue: "overlay open fail durumunda toggle geri false ve blocked state'e donuyor"
+  missing:
+    - "open_display_overlay/close_display_overlay icin gercek overlay lifecycle implementasyonu"
+    - "OS-level overlay basarisizliginda sebep kodu ve UI mesaj zincirinin netlestirilmesi"
+  debug_session: ".planning/debug/calibration-edit-overlay-not-opening.md"
 
 - truth: "Test pattern acikken display hedefi degisince eski overlay kapanir, yeni hedefte tek aktif overlay acilir."
   status: failed
   reason: "User reported: test patern açılmıyor overview yok"
   severity: major
   test: 7
-  artifacts: []
-  missing: []
+  root_cause: "Display switch state akisi var, ancak backend open_display_overlay gorunur overlay uretmedigi icin tek aktif overlay davranisi sahada gozlenemiyor."
+  artifacts:
+    - path: "src-tauri/src/commands/calibration.rs"
+      issue: "display switchte overlay acma state guncelleme ile sinirli"
+    - path: "src/features/calibration/state/displayTargetState.ts"
+      issue: "akisin dogrulugu backend'in gercek overlay acmasina bagli"
+  missing:
+    - "hedef monitor icin gercek overlay acma/kapama implementasyonu"
+    - "display switchte eski overlay kapat-yeni overlay ac davranisinin runtime dogrulamasi"
+  debug_session: ".planning/debug/test-pattern-overlay-missing-on-display-switch.md"
 
 - truth: "Overlay open fail durumunda test pattern toggle bloke olur ve kullaniciya acik reason metni gosterilir."
   status: failed
   reason: "User reported: overlay görünmüyor bunu göremiyorum"
   severity: major
   test: 8
-  artifacts: []
-  missing: []
+  root_cause: "Blocked reason metni UI'da mevcut olsa da open_display_overlay gercek overlay acmadigi icin fail senaryosu sahada dogrulanabilir sekilde olusmuyor."
+  artifacts:
+    - path: "src-tauri/src/commands/calibration.rs"
+      issue: "open_display_overlay state-only davranis"
+    - path: "src/features/calibration/ui/CalibrationOverlay.tsx"
+      issue: "blockedReason yalnizca overlay akisinda gorunur, gorunur overlay olmayinca kullanici gormuyor"
+  missing:
+    - "gercek overlay open-fail senaryosunun backend'de olusturulmasi ve reason'in tasinmasi"
+    - "blocked reason mesajinin fail akisinda kullaniciya guvenilir sekilde sunulmasi"
+  debug_session: ".planning/debug/overlay-open-fail-blocked-reason-not-visible.md"
 
 - truth: "Dirty degilken cikis onay modali gelmez; dirty durumda cikis denemesinde onay modali gelir."
   status: failed
   reason: "User reported: bunun hangi kısım olduğunu anlamadım"
   severity: major
   test: 9
-  artifacts: []
-  missing: []
+  root_cause: "Kod davranisi dogru; sorun UAT adiminin kullanici acisindan belirsiz yazilmasi nedeniyle testin nerede yapilacaginin anlasilmamasi."
+  artifacts:
+    - path: "src/features/calibration/state/calibrationEditorState.ts"
+      issue: "dirty/clean cikis karari deterministik ve testlerle korunuyor"
+    - path: ".planning/phases/04-calibration-workflow/04-UAT.md"
+      issue: "Test 9 aciklama adimlari ekran-buton seviyesinde yeterince net degil"
+  missing:
+    - "UAT Test 9 metninde close/cancel adimlarinin ekran bazli netlestirilmesi"
+    - "dirty ornegi icin adim adim mini senaryo eklenmesi"
+  debug_session: ".planning/debug/dirty-exit-confirm-path-unclear.md"
