@@ -118,6 +118,7 @@
       "title": "Calibration",
       "description": "Reuse the same editor for first-time setup and advanced adjustments.",
       "template": "Template",
+      "manual": "Manual",
       "totalLeds": "Total LEDs",
       "notConfigured": "Not configured",
       "edit": "Edit calibration"

@@ -39,7 +39,7 @@ describe("CalibrationSection", () => {
         ledModeEnabled={false}
         modeLockReason={null}
         onLedModeChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
+        onEditCalibration={vi.fn()}
       />,
     );
 
@@ -47,7 +47,7 @@ describe("CalibrationSection", () => {
   });
 
   it("shows template label and not calibrated fallback summary", () => {
-    const onEdit = vi.fn();
+    const onEditCalibration = vi.fn();
 
     const { rerender } = render(
       <CalibrationSection
@@ -59,27 +59,27 @@ describe("CalibrationSection", () => {
           direction: "cw",
           totalLeds: 114,
         }}
-        onEdit={onEdit}
-      />, 
+        onEditCalibration={onEditCalibration}
+      />,
     );
 
     expect(screen.getByText('27" 16:9')).toBeInTheDocument();
     expect(screen.getByText("114")).toBeInTheDocument();
 
-    rerender(<CalibrationSection calibration={undefined} onEdit={onEdit} />);
+    rerender(<CalibrationSection calibration={undefined} onEditCalibration={onEditCalibration} />);
 
     expect(screen.getByText("Not calibrated")).toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument();
   });
 
   it("calls edit callback when edit button is clicked", async () => {
-    const onEdit = vi.fn();
+    const onEditCalibration = vi.fn();
     const user = userEvent.setup();
 
-    render(<CalibrationSection onEdit={onEdit} />);
+    render(<CalibrationSection onEditCalibration={onEditCalibration} />);
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
 
-    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onEditCalibration).toHaveBeenCalledOnce();
   });
 });

@@ -118,6 +118,7 @@
       "title": "Kalibrasyon",
       "description": "Ilk kurulum ve ileri duzenleme icin ayni editoru kullan.",
       "template": "Sablon",
+      "manual": "Manuel",
       "totalLeds": "Toplam LED",
       "notConfigured": "Yapilandirilmadi",
       "edit": "Kalibrasyonu duzenle"

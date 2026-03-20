@@ -141,7 +141,7 @@ function App() {
         ledModeEnabled={ledModeEnabled}
         modeLockReason={modeGuard.reason}
         onLedModeChange={handleLedModeChange}
-        onOpenCalibration={handleOpenCalibration}
+        onEditCalibration={handleOpenCalibration}
       />
       <CalibrationOverlay
         open={overlayOpen}

@@ -1,14 +1,20 @@
 import { useTranslation } from "react-i18next";
 
 import type { LedCalibrationConfig } from "../../calibration/model/contracts";
+import { CALIBRATION_TEMPLATES } from "../../calibration/model/templates";
 
 interface CalibrationSectionProps {
   calibration?: LedCalibrationConfig;
-  onEdit: () => void;
+  onEditCalibration: () => void;
 }
 
-export function CalibrationSection({ calibration, onEdit }: CalibrationSectionProps) {
+export function CalibrationSection({ calibration, onEditCalibration }: CalibrationSectionProps) {
   const { t } = useTranslation("common");
+  const templateLabel = calibration?.templateId
+    ? CALIBRATION_TEMPLATES.find((template) => template.id === calibration.templateId)?.label ?? calibration.templateId
+    : calibration
+      ? t("calibration.section.manual")
+      : t("calibration.section.notConfigured");
 
   return (
     <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
@@ -22,9 +28,7 @@ export function CalibrationSection({ calibration, onEdit }: CalibrationSectionPr
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("calibration.section.template")}
           </dt>
-          <dd className="mt-1 text-slate-900 dark:text-zinc-100">
-            {calibration?.templateId ?? t("calibration.section.notConfigured")}
-          </dd>
+          <dd className="mt-1 text-slate-900 dark:text-zinc-100">{templateLabel}</dd>
         </div>
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
@@ -38,7 +42,7 @@ export function CalibrationSection({ calibration, onEdit }: CalibrationSectionPr
 
       <button
         type="button"
-        onClick={onEdit}
+        onClick={onEditCalibration}
         className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
       >
         {t("calibration.section.edit")}

@@ -22,14 +22,14 @@ function SectionContent({
   ledModeEnabled,
   modeLockReason,
   onLedModeChange,
-  onOpenCalibration,
+  onEditCalibration,
 }: {
   sectionId: SectionId;
   calibration?: LedCalibrationConfig;
   ledModeEnabled: boolean;
   modeLockReason: ModeGuardReason | null;
   onLedModeChange: (nextEnabled: boolean) => void;
-  onOpenCalibration: () => void;
+  onEditCalibration: () => void;
 }) {
   switch (sectionId) {
     case SECTION_IDS.GENERAL:
@@ -38,7 +38,7 @@ function SectionContent({
           ledModeEnabled={ledModeEnabled}
           modeLockReason={modeLockReason}
           onLedModeChange={onLedModeChange}
-          onOpenCalibrationOverlay={onOpenCalibration}
+          onOpenCalibrationOverlay={onEditCalibration}
         />
       );
     case SECTION_IDS.STARTUP_TRAY:
@@ -50,14 +50,14 @@ function SectionContent({
     case SECTION_IDS.DEVICE:
       return <DeviceSection />;
     case SECTION_IDS.CALIBRATION:
-      return <CalibrationSection calibration={calibration} onEdit={onOpenCalibration} />;
+      return <CalibrationSection calibration={calibration} onEditCalibration={onEditCalibration} />;
     default:
       return (
         <GeneralSection
           ledModeEnabled={ledModeEnabled}
           modeLockReason={modeLockReason}
           onLedModeChange={onLedModeChange}
-          onOpenCalibrationOverlay={onOpenCalibration}
+          onOpenCalibrationOverlay={onEditCalibration}
         />
       );
   }
@@ -70,7 +70,7 @@ interface SettingsLayoutProps {
   ledModeEnabled: boolean;
   modeLockReason: ModeGuardReason | null;
   onLedModeChange: (nextEnabled: boolean) => void;
-  onOpenCalibration: () => void;
+  onEditCalibration: () => void;
 }
 
 export function SettingsLayout({
@@ -80,7 +80,7 @@ export function SettingsLayout({
   ledModeEnabled,
   modeLockReason,
   onLedModeChange,
-  onOpenCalibration,
+  onEditCalibration,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
 
@@ -172,7 +172,7 @@ export function SettingsLayout({
           ledModeEnabled={ledModeEnabled}
           modeLockReason={modeLockReason}
           onLedModeChange={onLedModeChange}
-          onOpenCalibration={onOpenCalibration}
+          onEditCalibration={onEditCalibration}
         />
       </main>
     </div>
