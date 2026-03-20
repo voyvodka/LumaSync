@@ -76,7 +76,7 @@ Plans:
   3. User can configure edge LED counts and physical gap regions to match real hardware.
   4. User can validate LED mapping with live preview/test pattern before saving.
   5. User can revisit and adjust calibration later from an advanced settings panel.
-**Plans**: 14 plans
+**Plans**: 15 plans
 Plans:
 - [ ] 04-01-PLAN.md - Build test-backed calibration contracts, template catalog, and deterministic LED mapping engine
 - [ ] 04-02-PLAN.md - Deliver shared wizard/advanced calibration overlay flow with explicit save and dirty-exit guard
@@ -92,6 +92,7 @@ Plans:
 - [ ] 04-12-PLAN.md - Add first-connection auto-open guard plus Settings > Calibration summary/edit entry wiring (UX-02)
 - [ ] 04-13-PLAN.md - [gap] Replace state-only display overlay command with real OS-level overlay lifecycle and blocked-reason runtime hardening (CAL-04, UX-02)
 - [ ] 04-14-PLAN.md - [gap] Re-run diagnosed UAT tests (2/7/8/9), clarify dirty-exit test path, and sync verification closure (CAL-04, UX-02)
+- [ ] 04-15-PLAN.md - [gap] Complete Settings > Calibration overview visual missing pieces with richer summary cards and empty-state guidance (UX-02, CAL-03)
 
 ### Phase 5: Core Lighting Modes
 **Goal**: Kullanici ana kullanim modlarini secip LED cikisini amacina gore degistirebilir.
