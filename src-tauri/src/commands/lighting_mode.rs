@@ -9,6 +9,8 @@ use tauri::State;
 use super::device_connection::{CommandStatus, SerialConnectionState};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
+static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+static AMBILIGHT_FRAME_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -326,7 +328,7 @@ mod tests {
     use super::{
         apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
         LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
-        ACTIVE_AMBILIGHT_WORKERS,
+        ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
 
     fn ambilight_mode() -> LightingModeConfig {
@@ -380,6 +382,7 @@ mod tests {
 
     #[test]
     fn set_solid_applies_payload_and_marks_mode_active() {
+        SOLID_OUTPUT_ATTEMPTS.store(0, Ordering::SeqCst);
         let mut owner = LightingRuntimeOwner::default();
         let result = apply_mode_change(&mut owner, solid_mode(), true, None);
 
@@ -387,6 +390,28 @@ mod tests {
         assert_eq!(result.mode.kind, LightingModeKind::Solid);
         assert!(result.active);
         assert_eq!(result.mode.solid.expect("solid payload").brightness, 0.6);
+        assert!(
+            SOLID_OUTPUT_ATTEMPTS.load(Ordering::SeqCst) > 0,
+            "solid mode should attempt physical output"
+        );
+    }
+
+    #[test]
+    fn ambilight_mode_attempts_to_send_at_least_one_frame() {
+        AMBILIGHT_FRAME_ATTEMPTS.store(0, Ordering::SeqCst);
+
+        let mut owner = LightingRuntimeOwner::default();
+        let result = apply_mode_change(&mut owner, ambilight_mode(), true, None);
+
+        assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
+        thread::sleep(Duration::from_millis(20));
+        assert!(
+            AMBILIGHT_FRAME_ATTEMPTS.load(Ordering::SeqCst) > 0,
+            "ambilight mode should attempt at least one frame send"
+        );
+
+        let mut cleanup_trace = None;
+        stop_previous(&mut owner, &mut cleanup_trace);
     }
 
     #[test]
