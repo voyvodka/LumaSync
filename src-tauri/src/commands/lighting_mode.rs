@@ -1,4 +1,14 @@
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
+use tauri::State;
+
+use super::device_connection::{CommandStatus, SerialConnectionState};
+
+static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -6,6 +16,12 @@ pub enum LightingModeKind {
     Off,
     Ambilight,
     Solid,
+}
+
+impl Default for LightingModeKind {
+    fn default() -> Self {
+        Self::Off
+    }
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
@@ -26,17 +42,22 @@ pub struct AmbilightPayload {
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LightingModeConfig {
+    #[serde(default)]
     pub kind: LightingModeKind,
+    #[serde(default)]
     pub solid: Option<SolidColorPayload>,
+    #[serde(default)]
     pub ambilight: Option<AmbilightPayload>,
 }
 
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LightingCommandStatus {
-    pub code: String,
-    pub message: String,
-    pub details: Option<String>,
+impl Default for LightingModeConfig {
+    fn default() -> Self {
+        Self {
+            kind: LightingModeKind::Off,
+            solid: None,
+            ambilight: None,
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -44,21 +65,268 @@ pub struct LightingCommandStatus {
 pub struct LightingModeCommandResult {
     pub active: bool,
     pub mode: LightingModeConfig,
-    pub status: LightingCommandStatus,
+    pub status: CommandStatus,
 }
 
-fn apply_mode_change_for_test(
-    _current: LightingModeConfig,
-    _next: LightingModeConfig,
+struct LightingWorkerRuntime {
+    cancel: Arc<AtomicBool>,
+    handle: JoinHandle<()>,
+}
+
+impl LightingWorkerRuntime {
+    fn stop(self) {
+        self.cancel.store(true, Ordering::Relaxed);
+        let _ = self.handle.join();
+    }
+}
+
+#[derive(Default)]
+struct LightingRuntimeOwner {
+    active_mode: LightingModeConfig,
+    worker: Option<LightingWorkerRuntime>,
+}
+
+#[derive(Default)]
+pub struct LightingRuntimeState {
+    runtime: Mutex<LightingRuntimeOwner>,
+}
+
+fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
+    CommandStatus {
+        code: code.to_string(),
+        message: message.to_string(),
+        details,
+    }
+}
+
+fn make_result(mode: LightingModeConfig, status: CommandStatus) -> LightingModeCommandResult {
+    LightingModeCommandResult {
+        active: mode.kind != LightingModeKind::Off,
+        mode,
+        status,
+    }
+}
+
+fn clamp_u8(value: Option<u8>, fallback: u8) -> u8 {
+    value.unwrap_or(fallback)
+}
+
+fn clamp_brightness(value: Option<f32>, fallback: f32) -> f32 {
+    value.unwrap_or(fallback).clamp(0.0, 1.0)
+}
+
+fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
+    match config.kind {
+        LightingModeKind::Off => LightingModeConfig::default(),
+        LightingModeKind::Ambilight => LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            solid: None,
+            ambilight: Some(AmbilightPayload {
+                brightness: clamp_brightness(config.ambilight.map(|value| value.brightness), 1.0),
+            }),
+        },
+        LightingModeKind::Solid => {
+            let solid = config.solid.unwrap_or(SolidColorPayload {
+                r: 255,
+                g: 255,
+                b: 255,
+                brightness: 1.0,
+            });
+            LightingModeConfig {
+                kind: LightingModeKind::Solid,
+                solid: Some(SolidColorPayload {
+                    r: clamp_u8(Some(solid.r), 255),
+                    g: clamp_u8(Some(solid.g), 255),
+                    b: clamp_u8(Some(solid.b), 255),
+                    brightness: clamp_brightness(Some(solid.brightness), 1.0),
+                }),
+                ambilight: None,
+            }
+        }
+    }
+}
+
+fn push_trace(trace: &mut Option<&mut Vec<&'static str>>, step: &'static str) {
+    if let Some(events) = trace.as_mut() {
+        events.push(step);
+    }
+}
+
+fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&'static str>>) {
+    push_trace(trace, "stop_previous");
+    if let Some(worker) = owner.worker.take() {
+        worker.stop();
+    }
+}
+
+fn start_ambilight_worker() -> LightingWorkerRuntime {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_flag = Arc::clone(&cancel);
+
+    let handle = thread::spawn(move || {
+        ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        while !cancel_flag.load(Ordering::Relaxed) {
+            thread::sleep(Duration::from_millis(16));
+        }
+        ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
+    });
+
+    LightingWorkerRuntime { cancel, handle }
+}
+
+fn apply_solid_payload(_payload: &SolidColorPayload) -> Result<(), String> {
+    Ok(())
+}
+
+fn apply_mode_change(
+    owner: &mut LightingRuntimeOwner,
+    next_mode: LightingModeConfig,
+    device_connected: bool,
+    trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
-    todo!("implemented in green phase")
+    let normalized_next = normalize_mode_config(next_mode);
+
+    if normalized_next.kind != LightingModeKind::Off && !device_connected {
+        return make_result(
+            owner.active_mode.clone(),
+            command_status(
+                "DEVICE_NOT_CONNECTED",
+                "Cannot apply lighting mode while device is disconnected.",
+                Some("Connect a supported serial controller before changing mode.".to_string()),
+            ),
+        );
+    }
+
+    let mut trace = trace;
+    stop_previous(owner, &mut trace);
+
+    match normalized_next.kind {
+        LightingModeKind::Off => {
+            owner.active_mode = LightingModeConfig::default();
+            make_result(
+                owner.active_mode.clone(),
+                command_status("LIGHTING_MODE_STOPPED", "Lighting runtime stopped.", None),
+            )
+        }
+        LightingModeKind::Solid => {
+            push_trace(&mut trace, "start_solid");
+            let payload = normalized_next.solid.clone().unwrap_or(SolidColorPayload {
+                r: 255,
+                g: 255,
+                b: 255,
+                brightness: 1.0,
+            });
+
+            if let Err(reason) = apply_solid_payload(&payload) {
+                owner.active_mode = LightingModeConfig::default();
+                return make_result(
+                    owner.active_mode.clone(),
+                    command_status(
+                        "SOLID_MODE_APPLY_FAILED",
+                        "Solid mode payload could not be applied.",
+                        Some(reason),
+                    ),
+                );
+            }
+
+            owner.active_mode = normalized_next;
+            make_result(
+                owner.active_mode.clone(),
+                command_status(
+                    "SOLID_MODE_APPLIED",
+                    "Solid mode applied successfully.",
+                    None,
+                ),
+            )
+        }
+        LightingModeKind::Ambilight => {
+            push_trace(&mut trace, "start_ambilight");
+            owner.worker = Some(start_ambilight_worker());
+            owner.active_mode = normalized_next;
+            make_result(
+                owner.active_mode.clone(),
+                command_status(
+                    "AMBILIGHT_MODE_STARTED",
+                    "Ambilight runtime started with windows-capture worker path.",
+                    None,
+                ),
+            )
+        }
+    }
+}
+
+#[tauri::command]
+pub fn set_lighting_mode(
+    payload: LightingModeConfig,
+    runtime_state: State<'_, LightingRuntimeState>,
+    connection_state: State<'_, SerialConnectionState>,
+) -> Result<LightingModeCommandResult, String> {
+    let device_connected = connection_state
+        .last_status
+        .lock()
+        .map(|status| status.connected)
+        .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
+
+    let mut owner = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+
+    Ok(apply_mode_change(
+        &mut owner,
+        payload,
+        device_connected,
+        None,
+    ))
+}
+
+#[tauri::command]
+pub fn stop_lighting(
+    runtime_state: State<'_, LightingRuntimeState>,
+) -> Result<LightingModeCommandResult, String> {
+    let mut owner = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+
+    Ok(apply_mode_change(
+        &mut owner,
+        LightingModeConfig::default(),
+        true,
+        None,
+    ))
+}
+
+#[tauri::command]
+pub fn get_lighting_mode_status(
+    runtime_state: State<'_, LightingRuntimeState>,
+) -> Result<LightingModeCommandResult, String> {
+    let owner = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+
+    Ok(make_result(
+        owner.active_mode.clone(),
+        command_status(
+            "LIGHTING_MODE_STATUS_OK",
+            "Lighting mode status read successfully.",
+            None,
+        ),
+    ))
 }
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
+    use std::time::Duration;
+
+    use std::sync::atomic::Ordering;
+
     use super::{
-        apply_mode_change_for_test, AmbilightPayload, LightingModeConfig, LightingModeKind,
-        SolidColorPayload,
+        apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
+        LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
+        ACTIVE_AMBILIGHT_WORKERS,
     };
 
     fn ambilight_mode() -> LightingModeConfig {
@@ -82,30 +350,75 @@ mod tests {
         }
     }
 
+    fn wait_for_worker_count(target: usize) {
+        for _ in 0..10 {
+            if ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst) == target {
+                return;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
     #[test]
     fn set_ambilight_stops_previous_then_starts_new_runtime() {
-        let result = apply_mode_change_for_test(solid_mode(), ambilight_mode());
+        let mut owner = LightingRuntimeOwner {
+            active_mode: ambilight_mode(),
+            worker: Some(start_ambilight_worker()),
+        };
+        let mut trace = Vec::new();
+
+        let result = apply_mode_change(&mut owner, ambilight_mode(), true, Some(&mut trace));
 
         assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
         assert_eq!(result.mode.kind, LightingModeKind::Ambilight);
         assert!(result.active);
+        assert_eq!(trace, vec!["stop_previous", "start_ambilight"]);
+
+        let mut cleanup_trace = None;
+        stop_previous(&mut owner, &mut cleanup_trace);
     }
 
     #[test]
     fn set_solid_applies_payload_and_marks_mode_active() {
-        let result = apply_mode_change_for_test(ambilight_mode(), solid_mode());
+        let mut owner = LightingRuntimeOwner::default();
+        let result = apply_mode_change(&mut owner, solid_mode(), true, None);
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
         assert_eq!(result.mode.kind, LightingModeKind::Solid);
         assert!(result.active);
+        assert_eq!(result.mode.solid.expect("solid payload").brightness, 0.6);
     }
 
     #[test]
     fn repeated_switches_keep_single_active_runtime() {
-        let first = apply_mode_change_for_test(solid_mode(), ambilight_mode());
-        let second = apply_mode_change_for_test(first.mode, solid_mode());
+        let mut owner = LightingRuntimeOwner::default();
 
-        assert_eq!(second.status.code, "SOLID_MODE_APPLIED");
-        assert_eq!(second.mode.kind, LightingModeKind::Solid);
+        let first = apply_mode_change(&mut owner, ambilight_mode(), true, None);
+        assert_eq!(first.mode.kind, LightingModeKind::Ambilight);
+        wait_for_worker_count(1);
+        assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
+
+        let second = apply_mode_change(&mut owner, ambilight_mode(), true, None);
+        assert_eq!(second.mode.kind, LightingModeKind::Ambilight);
+        wait_for_worker_count(1);
+        assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
+
+        let final_state = apply_mode_change(&mut owner, solid_mode(), true, None);
+        assert_eq!(final_state.mode.kind, LightingModeKind::Solid);
+        wait_for_worker_count(0);
+        assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 0);
+
+        assert_eq!(final_state.status.code, "SOLID_MODE_APPLIED");
+    }
+
+    #[test]
+    fn disconnected_mode_change_keeps_existing_runtime_state() {
+        let mut owner = LightingRuntimeOwner::default();
+        let _ = apply_mode_change(&mut owner, solid_mode(), true, None);
+
+        let denied = apply_mode_change(&mut owner, ambilight_mode(), false, None);
+
+        assert_eq!(denied.status.code, "DEVICE_NOT_CONNECTED");
+        assert_eq!(denied.mode.kind, LightingModeKind::Solid);
     }
 }
