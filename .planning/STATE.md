@@ -3,16 +3,16 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_plan: 5
-status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-21T09:46:50.231Z"
+status: ready_for_verification
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-03-21T10:07:17.200Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 30
-  completed_plans: 29
-  percent: 94
+  completed_plans: 30
+  percent: 100
 ---
 
 # Project State
@@ -22,17 +22,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 4 - Calibration Workflow
+**Current focus:** Phase 5 - Core Lighting Modes (completed, ready for verification)
 
 ## Current Position
 
-Phase: 4 of 8 (Calibration Workflow)
+Phase: 5 of 8 (Core Lighting Modes)
 Current Plan: 5
 Total Plans in Phase: 5
-Status: Ready to execute
+Status: Ready for verification
 Last activity: 2026-03-21
 
-Progress: [█████████░] 94%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -77,6 +77,7 @@ Progress: [█████████░] 94%
 | Phase 04 P15 | 3 min | 2 tasks | 4 files |
 | Phase 05 P01 | 4 min | 2 tasks | 9 files |
 | Phase 05 P02 | 6 min | 2 tasks | 5 files |
+| Phase 05 P03 | 17 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -148,6 +149,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Lighting mode runtime source of truth backend Mutex state olarak kilitlendi.
 - [Phase 05]: Mode gecislerinde stop_previous adimi start once zorunlu hale getirildi.
 - [Phase 05]: Disconnected durumda DEVICE_NOT_CONNECTED donup aktif runtime state degismiyor.
+- [Phase 05]: General mode interaction model standardized on LightingModeConfig across App -> SettingsLayout -> GeneralSection.
+- [Phase 05]: Mode persistence writes remain partial ({ lightingMode }) so ledCalibration data is never overwritten.
 
 ### Pending Todos
 
@@ -159,6 +162,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T09:46:50.229Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-21T10:07:17.197Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None

@@ -145,7 +145,7 @@ Plans:
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
 | 4. Calibration Workflow | 12/12 | Complete   | 2026-03-20 |
-| 5. Core Lighting Modes | 0/TBD | Not started | - |
+| 5. Core Lighting Modes | 3/3 | Complete | 2026-03-21 |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
 | 7. Telemetry and Full Localization | 0/TBD | Not started | - |
 | 8. Stability Gate | 0/TBD | Not started | - |
