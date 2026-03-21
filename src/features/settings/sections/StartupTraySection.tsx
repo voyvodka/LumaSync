@@ -48,7 +48,7 @@ export function StartupTraySection() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
+    <section className="w-full rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
       <h2 className="text-xl font-semibold tracking-tight">{t("startupTray.title")}</h2>
 
       <div className="mt-6 space-y-4">

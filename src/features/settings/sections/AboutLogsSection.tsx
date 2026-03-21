@@ -4,7 +4,7 @@ export function AboutLogsSection() {
   const { t } = useTranslation("common");
 
   return (
-    <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
+    <section className="w-full rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
       <h2 className="text-xl font-semibold tracking-tight">{t("aboutLogs.title")}</h2>
 
       <div className="mt-6 divide-y divide-slate-200/80 dark:divide-zinc-800">

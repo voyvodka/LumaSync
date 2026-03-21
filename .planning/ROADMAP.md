@@ -38,7 +38,12 @@ Plans:
   1. User can start Hue Entertainment streaming for the selected area directly from mode controls.
   2. User can keep Hue streaming active during runtime without visible dropouts under normal conditions.
   3. User can stop Hue streaming and see bridge/device state return to expected non-stream state.
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 10-01-PLAN.md - Build backend Hue runtime owner/state machine, strict start gate, bounded reconnect, and deterministic stop commands.
+- [ ] 10-02-PLAN.md - Move Hue start authority to mode controls with dual-target arbitration and persisted target set.
+- [ ] 10-03-PLAN.md - Add Device-surface runtime observability, shared stop pipeline UX, and EN/TR lifecycle copy parity.
 
 ### Phase 11: Device Surface Integration
 **Goal**: Users can control Hue and USB output paths through one consistent Device settings experience.
