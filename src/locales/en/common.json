@@ -120,6 +120,76 @@
           "fail": "Fail"
         }
       }
+    },
+    "hue": {
+      "title": "Hue bridge onboarding",
+      "description": "Complete bridge discovery, pairing, area selection, and readiness in one panel.",
+      "steps": {
+        "discover": "Discover",
+        "pair": "Pair",
+        "area": "Area",
+        "ready": "Ready"
+      },
+      "actions": {
+        "discover": "Discover bridges",
+        "discovering": "Discovering...",
+        "pair": "Pair bridge",
+        "pairing": "Pairing...",
+        "refreshAreas": "Refresh areas",
+        "loadingAreas": "Loading areas...",
+        "checkReadiness": "Check readiness",
+        "checkingReadiness": "Checking readiness...",
+        "start": "Start Hue"
+      },
+      "bridge": {
+        "placeholder": "Select a Hue bridge"
+      },
+      "manualIp": {
+        "title": "Manual IP fallback",
+        "description": "Manual bridge IP remains available at all times.",
+        "placeholder": "e.g. 192.168.1.50",
+        "submit": "Verify IP",
+        "invalid": "Enter a valid IPv4 address before submitting."
+      },
+      "credential": {
+        "valid": "Valid",
+        "needsRepair": "Needs Re-pair",
+        "line": "Credential state: {{state}}",
+        "repairHint": "Credentials need re-pairing. Use Pair bridge as the next step."
+      },
+      "areas": {
+        "title": "Entertainment areas",
+        "empty": "No area loaded yet. Pair and refresh to list areas.",
+        "channels": "Channels: {{count}}"
+      },
+      "readiness": {
+        "ready": "Ready",
+        "notReady": "Not ready",
+        "unknown": "Pending",
+        "pending": "Readiness has not been validated yet.",
+        "recoveryHint": "Area is not ready. Revalidate or choose another area."
+      },
+      "successSummary": "Ready to start on {{bridge}} with {{area}} ({{readiness}}).",
+      "status": {
+        "validatingTitle": "Validating saved credentials",
+        "validatingBody": "Stored Hue credentials are being checked silently.",
+        "pairingTitle": "Pairing in progress",
+        "pairingBody": "Press bridge link button if needed, then retry pairing.",
+        "readinessCheckingTitle": "Checking stream readiness",
+        "readinessCheckingBody": "We are evaluating the selected area readiness.",
+        "idleTitle": "Hue onboarding is waiting",
+        "idleBody": "Start with bridge discovery or manual IP verification.",
+        "streamReadyTitle": "Selected area is stream-ready",
+        "streamReadyBody": "Pairing, area selection, and readiness are all valid.",
+        "successTitle": "Hue onboarding updated",
+        "successBody": "Latest Hue action completed successfully.",
+        "streamNotReadyTitle": "Selected area is not ready",
+        "streamNotReadyBody": "Keep Start disabled until readiness check passes.",
+        "errorTitle": "Hue onboarding needs attention",
+        "errorBody": "Re-pair or retry the failed step before starting.",
+        "infoTitle": "Hue onboarding info",
+        "infoBody": "Follow the current step to continue onboarding."
+      }
     }
   },
   "telemetry": {

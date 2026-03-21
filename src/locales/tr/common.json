@@ -120,6 +120,76 @@
           "fail": "Kaldı"
         }
       }
+    },
+    "hue": {
+      "title": "Hue bridge kurulumu",
+      "description": "Bridge kesfi, eslestirme, alan secimi ve hazirlik kontrolunu tek panelde tamamla.",
+      "steps": {
+        "discover": "Kesfet",
+        "pair": "Eslestir",
+        "area": "Alan",
+        "ready": "Hazir"
+      },
+      "actions": {
+        "discover": "Bridge kesfet",
+        "discovering": "Kesfediliyor...",
+        "pair": "Bridge eslestir",
+        "pairing": "Eslestiriliyor...",
+        "refreshAreas": "Alanlari yenile",
+        "loadingAreas": "Alanlar yukleniyor...",
+        "checkReadiness": "Hazirligi kontrol et",
+        "checkingReadiness": "Hazirlik kontrol ediliyor...",
+        "start": "Hue'yu baslat"
+      },
+      "bridge": {
+        "placeholder": "Bir Hue bridge sec"
+      },
+      "manualIp": {
+        "title": "Manuel IP fallback",
+        "description": "Manuel bridge IP yolu her adimda gorunur kalir.",
+        "placeholder": "orn. 192.168.1.50",
+        "submit": "IP dogrula",
+        "invalid": "Gondermeden once gecerli bir IPv4 adresi gir."
+      },
+      "credential": {
+        "valid": "Gecerli",
+        "needsRepair": "Yeniden eslestirme gerekli",
+        "line": "Kimlik durumu: {{state}}",
+        "repairHint": "Kimlik bilgileri yeniden eslestirme istiyor. Sonraki adim olarak Bridge eslestir'i kullan."
+      },
+      "areas": {
+        "title": "Entertainment alanlari",
+        "empty": "Henuz alan yuklenmedi. Alanlari listelemek icin eslestirip yenile.",
+        "channels": "Kanal: {{count}}"
+      },
+      "readiness": {
+        "ready": "Hazir",
+        "notReady": "Hazir degil",
+        "unknown": "Bekliyor",
+        "pending": "Hazirlik henuz dogrulanmadi.",
+        "recoveryHint": "Alan hazir degil. Yeniden dogrula veya baska bir alan sec."
+      },
+      "successSummary": "{{bridge}} uzerinde {{area}} ile baslamaya hazir ({{readiness}}).",
+      "status": {
+        "validatingTitle": "Kayitli kimlik bilgileri dogrulaniyor",
+        "validatingBody": "Kayitli Hue kimlikleri sessizce kontrol ediliyor.",
+        "pairingTitle": "Eslestirme suruyor",
+        "pairingBody": "Gerekirse bridge link tusuna basip eslestirmeyi tekrar dene.",
+        "readinessCheckingTitle": "Yayin hazirligi kontrol ediliyor",
+        "readinessCheckingBody": "Secili alanin hazirlik durumu degerlendiriliyor.",
+        "idleTitle": "Hue kurulumu beklemede",
+        "idleBody": "Bridge kesfi veya manuel IP dogrulama ile basla.",
+        "streamReadyTitle": "Secili alan yayina hazir",
+        "streamReadyBody": "Eslestirme, alan secimi ve hazirlik kontrolu gecerli.",
+        "successTitle": "Hue kurulum durumu guncellendi",
+        "successBody": "Son Hue adimi basariyla tamamlandi.",
+        "streamNotReadyTitle": "Secili alan henuz hazir degil",
+        "streamNotReadyBody": "Hazirlik gecene kadar Baslat devre disi kalir.",
+        "errorTitle": "Hue kurulumu dikkat istiyor",
+        "errorBody": "Baslatmadan once basarisiz adimi yeniden dene veya tekrar eslestir.",
+        "infoTitle": "Hue kurulumu bilgisi",
+        "infoBody": "Kuruluma devam etmek icin gecerli adimi takip et."
+      }
     }
   },
   "telemetry": {
