@@ -23,8 +23,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Lighting Modes
 
-- [ ] **MODE-01**: User can enable real-time Ambilight screen mirroring mode
-- [ ] **MODE-02**: User can enable a static solid-color mode
+- [x] **MODE-01**: User can enable real-time Ambilight screen mirroring mode
+- [x] **MODE-02**: User can enable a static solid-color mode
 
 ### Quality & Reliability
 
@@ -87,8 +87,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAL-02 | Phase 4 | Complete |
 | CAL-03 | Phase 4 | Complete |
 | CAL-04 | Phase 4 | Complete |
-| MODE-01 | Phase 5 | Pending |
-| MODE-02 | Phase 5 | Pending |
+| MODE-01 | Phase 5 | Complete |
+| MODE-02 | Phase 5 | Complete |
 | QUAL-01 | Phase 6 | Pending |
 | QUAL-02 | Phase 6 | Pending |
 | QUAL-03 | Phase 7 | Pending |

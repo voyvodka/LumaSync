@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: Completed 04-15-PLAN.md
-last_updated: "2026-03-20T13:49:22.489Z"
-last_activity: 2026-03-20
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-21T09:37:42.248Z"
+last_activity: 2026-03-21
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 27
-  completed_plans: 27
+  total_plans: 30
+  completed_plans: 28
   percent: 94
 ---
 
@@ -30,7 +30,7 @@ Phase: 4 of 8 (Calibration Workflow)
 Current Plan: 5
 Total Plans in Phase: 5
 Status: Ready to execute
-Last activity: 2026-03-20
+Last activity: 2026-03-21
 
 Progress: [█████████░] 94%
 
@@ -75,6 +75,7 @@ Progress: [█████████░] 94%
 | Phase 04 P13 | 330 | 2 tasks | 4 files |
 | Phase 04 P14 | 2273 | 3 tasks | 5 files |
 | Phase 04 P15 | 3 min | 2 tasks | 4 files |
+| Phase 05 P01 | 4 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -141,6 +142,8 @@ Recent decisions affecting current work:
 - [Phase 04]: Overlay sizing icin monitor-target fullscreen stratejisi manual inner-size yerine kalici cozum olarak secildi.
 - [Phase 04]: Overview details keep canonical edge order top-right-bottomRight-bottomLeft-left for quick visual validation.
 - [Phase 04]: Not-configured section keeps edit entrypoint unchanged while replacing zero-focused fallback with helper guidance.
+- [Phase 05]: Mode transition output is always transactional: stop first, then start next mode when next kind is not off.
+- [Phase 05]: Lighting mode shell persistence is merge-only and never overwrites ledCalibration data.
 
 ### Pending Todos
 
@@ -152,6 +155,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T13:49:22.487Z
-Stopped at: Completed 04-15-PLAN.md
+Last session: 2026-03-21T09:37:42.246Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
