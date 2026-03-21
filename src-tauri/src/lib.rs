@@ -18,6 +18,7 @@ use tauri::{
 mod commands {
     pub mod calibration;
     pub mod device_connection;
+    pub mod lighting_mode;
 }
 
 use commands::calibration::{
