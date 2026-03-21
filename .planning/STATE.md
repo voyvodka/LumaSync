@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: planning
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-21T19:49:25.492Z"
+status: completed
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-03-21T20:02:18.681Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 3
-  percent: 100
+  completed_plans: 5
+  percent: 96
 ---
 
 # Project State
@@ -21,13 +21,13 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-21)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Milestone v1.1 Hue integration execution (Phase 10 Plan 10-02 next)
+**Current focus:** Milestone v1.1 Hue integration execution (Phase 10 completed, Phase 11 planning next)
 
 ## Current Position
 
 Milestone: v1.1 (Hue Entertainment Integration)
 Phase: 10 - Hue Stream Lifecycle
-Status: Plan 10-01 completed, ready for Plan 10-02 execution
+Status: Plan 10-02 completed
 Last activity: 2026-03-21
 
 Progress: [██████████] 96%
@@ -36,8 +36,8 @@ Progress: [██████████] 96%
 
 - Milestone requirement coverage: 12/12 mapped to roadmap phases
 - Planned phases in milestone: 4 (Phase 9 -> Phase 12)
-- Completed phases in milestone: 1
-- Completed plans in milestone: 3
+- Completed phases in milestone: 2
+- Completed plans in milestone: 5
 
 ## Decisions
 
@@ -50,6 +50,12 @@ Progress: [██████████] 96%
 - [Phase 10]: Hue runtime lifecycle keeps explicit Idle/Starting/Running/Reconnecting/Stopping/Failed states as backend-owned source of truth.
 - [Phase 10]: Strict start gate remains backend authoritative and returns CONFIG_NOT_READY_* outcomes instead of optimistic UI-only checks.
 - [Phase 10]: Retry/backoff remains bounded and auth-invalid evidence is separated from transient recovery with explicit action hints.
+- [Phase 10]: Mode-control authority routes USB/Hue lifecycle through one target planner.
+- [Phase 10]: Partial-start policy keeps healthy targets running and surfaces coded failures per target.
+- [Phase 10]: Selected output targets persist in shell state as lastOutputTargets with USB-first fallback.
+- [Phase 10]: Runtime status mapping derives CTA hints only from explicit code-family or actionHint fields.
+- [Phase 10]: Device Start remains blocked when credential validation is unknown/in-flight or readiness is stale.
+- [Phase 10]: Device-surface Stop routes to shared mode stop pipeline instead of local ad-hoc flow.
 
 ## Accumulated Context
 
@@ -60,8 +66,8 @@ Progress: [██████████] 96%
 
 ## Session Continuity
 
-Last session: 2026-03-21T19:49:25.490Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-03-21T20:02:18.678Z
+Stopped at: Completed 10-03-PLAN.md
 Resume from: `/gsd-execute-phase 10-hue-stream-lifecycle`
 Key files:
 - `.planning/ROADMAP.md`
