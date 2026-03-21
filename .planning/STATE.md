@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 6
 status: verifying
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-21T12:23:06.506Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-21T12:32:32.808Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
   percent: 100
 ---
 
@@ -82,6 +82,7 @@ Progress: [██████████] 100%
 | Phase 05 P05 | 7 min | 3 tasks | 4 files |
 | Phase 05 P06 | 7 min | 3 tasks | 3 files |
 | Phase 06 P01 | 0 min | 3 tasks | 2 files |
+| Phase 06 P02 | 6 min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -166,6 +167,9 @@ Recent decisions affecting current work:
 - [Phase 06]: Runtime quality behavior is isolated in a pure Rust controller API to keep worker-loop logic deterministic and testable.
 - [Phase 06]: Adaptive pacing interval scales from EWMA observed cost and is clamped by config bounds to avoid runaway timing.
 - [Phase 06]: Capture bursts are handled with latest-frame slot semantics so backlog does not grow.
+- [Phase 06]: Ambilight worker uses RuntimeQualityController + RuntimeFrameSlot in hot loop instead of fixed 16ms sleep pacing.
+- [Phase 06]: Serial output now caches per-port write sessions and drops the cached session only on write/flush failure.
+- [Phase 06]: Wave 0 validation map is marked complete with runtime_quality and lighting_mode test coverage; TS contract wave item treated as N/A because no quality payload extension was introduced.
 
 ### Pending Todos
 
@@ -177,6 +181,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T12:23:06.504Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-03-21T12:32:32.806Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None
