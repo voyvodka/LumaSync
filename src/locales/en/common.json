@@ -225,6 +225,7 @@
         "retry": {
           "progress": "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms"
         },
+        "retryStatus": "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
         "triggerSource": {
           "mode_control": "Triggered from mode controls",
           "device_surface": "Triggered from device surface",

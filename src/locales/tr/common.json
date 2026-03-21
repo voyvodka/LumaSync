@@ -225,6 +225,7 @@
         "retry": {
           "progress": "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms"
         },
+        "retryStatus": "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
         "triggerSource": {
           "mode_control": "Mode controls uzerinden tetiklendi",
           "device_surface": "Device yuzeyinden tetiklendi",

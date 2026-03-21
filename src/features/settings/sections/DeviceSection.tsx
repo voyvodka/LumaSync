@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
 
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
 import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
 import { buildHueRuntimeStatusCard } from "../../device/hueRuntimeStatusCard";
 import { buildHueStatusCard } from "../../device/hueStatusCard";
 import { useDeviceConnection } from "../../device/useDeviceConnection";
 import { useHueOnboarding } from "../../device/useHueOnboarding";
-import { stopLighting } from "../../mode/modeApi";
+import { stopHue } from "../../mode/modeApi";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -575,7 +576,7 @@ export function DeviceSection() {
               <button
                 type="button"
                 onClick={() => {
-                  void stopLighting();
+                  void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
                 }}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
               >
@@ -619,6 +620,14 @@ export function DeviceSection() {
                           {t(`device.hue.runtime.targets.${targetRow.target}.retry`)}
                         </button>
                       </div>
+                      {targetRow.remainingAttempts !== undefined || targetRow.nextAttemptMs !== undefined ? (
+                        <p className="mt-1 text-[11px] text-slate-500 dark:text-zinc-400">
+                          {t("device.hue.runtime.retryStatus", {
+                            remaining: targetRow.remainingAttempts ?? "-",
+                            nextMs: targetRow.nextAttemptMs ?? "-",
+                          })}
+                        </p>
+                      ) : null}
                     </div>
                   );
                 })}
