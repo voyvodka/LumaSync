@@ -28,8 +28,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Quality & Reliability
 
-- [ ] **QUAL-01**: User gets soft color transitions (smoothing) that avoid harsh flicker
-- [ ] **QUAL-02**: User gets adaptive frame/send behavior (FPS/coalescing) to reduce system load
+- [x] **QUAL-01**: User gets soft color transitions (smoothing) that avoid harsh flicker
+- [x] **QUAL-02**: User gets adaptive frame/send behavior (FPS/coalescing) to reduce system load
 - [ ] **QUAL-03**: User can view a basic telemetry panel (capture FPS, send FPS, queue health)
 - [ ] **QUAL-04**: System passes a 60-minute continuous stability run without crash
 
@@ -89,8 +89,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAL-04 | Phase 4 | Complete |
 | MODE-01 | Phase 5 | Complete |
 | MODE-02 | Phase 5 | Complete |
-| QUAL-01 | Phase 6 | Pending |
-| QUAL-02 | Phase 6 | Pending |
+| QUAL-01 | Phase 6 | Complete |
+| QUAL-02 | Phase 6 | Complete |
 | QUAL-03 | Phase 7 | Pending |
 | QUAL-04 | Phase 8 | Pending |
 | UX-01 | Phase 1 | Complete |

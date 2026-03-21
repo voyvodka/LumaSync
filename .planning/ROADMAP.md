@@ -119,7 +119,10 @@ Plans:
   1. User experiences smooth color transitions without harsh flicker in normal use.
   2. User sees stable Ambilight behavior while system load is kept controlled by adaptive frame/send logic.
   3. User can keep Ambilight active during typical desktop use without noticeable stutter spikes.
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 06-01-PLAN.md - Build runtime quality controller contracts with Wave 0 smoothing/adaptive/coalescing tests
+- [ ] 06-02-PLAN.md - Integrate quality controls into ambilight worker and close Nyquist validation status
 
 ### Phase 7: Telemetry and Full Localization
 **Goal**: Kullanici kaliteyi gozlemleyebilir ve uygulamayi hem Turkce hem Ingilizce kullanabilir.

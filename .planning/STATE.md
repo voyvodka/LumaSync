@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 6
 status: verifying
-stopped_at: Completed 05-06-PLAN.md
-last_updated: "2026-03-21T11:37:01.957Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-21T12:23:06.506Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 33
-  completed_plans: 33
+  total_plans: 35
+  completed_plans: 34
   percent: 100
 ---
 
@@ -81,6 +81,7 @@ Progress: [██████████] 100%
 | Phase 05 P04 | 12 min | 3 tasks | 5 files |
 | Phase 05 P05 | 7 min | 3 tasks | 4 files |
 | Phase 05 P06 | 7 min | 3 tasks | 3 files |
+| Phase 06 P01 | 0 min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,9 @@ Recent decisions affecting current work:
 - [Phase 05]: MODE-01 closure claim'i varsayilan source canli ekran capture etmedigi icin blocker olarak verification raporunda acik tutulur.
 - [Phase 05]: Runtime default frame source switched to create_live_frame_source; StaticFrameSource is no longer production default.
 - [Phase 05]: Non-Windows path explicitly fails with AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM instead of any silent fallback.
+- [Phase 06]: Runtime quality behavior is isolated in a pure Rust controller API to keep worker-loop logic deterministic and testable.
+- [Phase 06]: Adaptive pacing interval scales from EWMA observed cost and is clamped by config bounds to avoid runaway timing.
+- [Phase 06]: Capture bursts are handled with latest-frame slot semantics so backlog does not grow.
 
 ### Pending Todos
 
@@ -173,6 +177,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T11:31:09.393Z
-Stopped at: Completed 05-06-PLAN.md
+Last session: 2026-03-21T12:23:06.504Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
