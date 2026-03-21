@@ -21,8 +21,47 @@ pub enum AmbilightCaptureError {
     InvalidFrame(&'static str),
 }
 
+impl AmbilightCaptureError {
+    pub fn as_reason(&self) -> String {
+        match self {
+            Self::FrameUnavailable => "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE".to_string(),
+            Self::InvalidFrame(code) => code.to_string(),
+        }
+    }
+}
+
 pub trait AmbilightFrameSource: Send {
     fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError>;
+}
+
+pub struct StaticFrameSource {
+    frame: CapturedFrame,
+}
+
+impl StaticFrameSource {
+    pub fn new(frame: CapturedFrame) -> Self {
+        Self { frame }
+    }
+
+    pub fn default_frame() -> CapturedFrame {
+        CapturedFrame {
+            width: 4,
+            height: 1,
+            pixels_rgb: vec![[18, 30, 44], [42, 60, 80], [96, 108, 120], [150, 162, 174]],
+        }
+    }
+}
+
+impl Default for StaticFrameSource {
+    fn default() -> Self {
+        Self::new(Self::default_frame())
+    }
+}
+
+impl AmbilightFrameSource for StaticFrameSource {
+    fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+        Ok(self.frame.clone())
+    }
 }
 
 pub fn sample_led_frame(

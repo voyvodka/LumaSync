@@ -6,6 +6,10 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use super::ambilight_capture::{
+    sample_led_frame, AmbilightCaptureError, AmbilightFrameSource, SamplingCalibration,
+    StaticFrameSource,
+};
 use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::led_output::{
     apply_solid_payload_to_port, send_ambilight_frame_to_port, LedOutputBridge,
@@ -14,6 +18,10 @@ use super::led_output::{
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 static AMBILIGHT_FRAME_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+static AMBILIGHT_CAPTURE_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+
+type AmbilightFrameSourceFactory =
+    dyn Fn() -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> + Send + Sync;
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -89,6 +97,7 @@ struct LightingRuntimeOwner {
     active_mode: LightingModeConfig,
     worker: Option<LightingWorkerRuntime>,
     output_bridge: LedOutputBridge,
+    frame_source_factory: Arc<AmbilightFrameSourceFactory>,
 }
 
 impl Default for LightingRuntimeOwner {
@@ -97,6 +106,7 @@ impl Default for LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
             worker: None,
             output_bridge: LedOutputBridge::default(),
+            frame_source_factory: Arc::new(|| Ok(Box::new(StaticFrameSource::default()))),
         }
     }
 }
@@ -174,37 +184,62 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     }
 }
 
-fn build_ambilight_frame(seed: u8) -> [[u8; 3]; 4] {
-    [
-        [seed, 255_u8.wrapping_sub(seed), seed / 2],
-        [seed.wrapping_add(24), seed.wrapping_add(12), 200],
-        [64, seed, 255_u8.wrapping_sub(seed / 2)],
-        [200, seed.wrapping_add(48), seed.wrapping_add(96)],
-    ]
+fn capture_sample_send_frame(
+    source: &mut dyn AmbilightFrameSource,
+    output_bridge: &LedOutputBridge,
+    port_name: &str,
+    brightness: f32,
+    calibration: &SamplingCalibration,
+) -> Result<(), String> {
+    AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+    let captured_frame = source.capture_frame().map_err(|error| error.as_reason())?;
+    let sampled =
+        sample_led_frame(&captured_frame, calibration).map_err(|error| error.as_reason())?;
+    AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+    send_ambilight_frame_to_port(
+        output_bridge,
+        port_name,
+        sampled.colors.as_slice(),
+        brightness,
+    )
+    .map_err(|error| error.as_reason())
 }
 
 fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
     port_name: String,
     brightness: f32,
+    mut frame_source: Box<dyn AmbilightFrameSource>,
 ) -> Result<LightingWorkerRuntime, String> {
-    let initial_frame = build_ambilight_frame(0);
-    AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-    send_ambilight_frame_to_port(&output_bridge, &port_name, &initial_frame, brightness)
+    let initial_frame = frame_source
+        .capture_frame()
         .map_err(|error| error.as_reason())?;
+    let calibration = SamplingCalibration {
+        led_count: initial_frame.pixels_rgb.len(),
+    };
+    let mut initial_frame_source = StaticFrameSource::new(initial_frame);
+    capture_sample_send_frame(
+        &mut initial_frame_source,
+        &output_bridge,
+        &port_name,
+        brightness,
+        &calibration,
+    )?;
 
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_flag = Arc::clone(&cancel);
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
-        let mut tick = 1_u8;
 
         while !cancel_flag.load(Ordering::Relaxed) {
-            let frame = build_ambilight_frame(tick);
-            AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-            let _ = send_ambilight_frame_to_port(&output_bridge, &port_name, &frame, brightness);
-            tick = tick.wrapping_add(1);
+            let _ = capture_sample_send_frame(
+                frame_source.as_mut(),
+                &output_bridge,
+                &port_name,
+                brightness,
+                &calibration,
+            );
             thread::sleep(Duration::from_millis(16));
         }
 
@@ -320,10 +355,26 @@ fn apply_mode_change(
                 .map(|payload| payload.brightness)
                 .unwrap_or(1.0);
 
+            let frame_source = match (owner.frame_source_factory)() {
+                Ok(source) => source,
+                Err(reason) => {
+                    owner.active_mode = LightingModeConfig::default();
+                    return make_result(
+                        owner.active_mode.clone(),
+                        command_status(
+                            "AMBILIGHT_MODE_START_FAILED",
+                            "Ambilight runtime could not start.",
+                            Some(reason.as_reason()),
+                        ),
+                    );
+                }
+            };
+
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
                 port_name.to_string(),
                 brightness,
+                frame_source,
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
@@ -424,12 +475,16 @@ mod tests {
 
     use std::sync::atomic::Ordering;
 
+    use crate::commands::ambilight_capture::{
+        AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+    };
     use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 
     use super::{
         apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
         LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
-        ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
+        ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS,
+        SOLID_OUTPUT_ATTEMPTS,
     };
 
     #[derive(Default)]
@@ -447,11 +502,53 @@ mod tests {
         }
     }
 
+    struct FakeFrameSource {
+        frame: CapturedFrame,
+        fail_with_unavailable: bool,
+    }
+
+    impl AmbilightFrameSource for FakeFrameSource {
+        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+            if self.fail_with_unavailable {
+                return Err(AmbilightCaptureError::FrameUnavailable);
+            }
+            Ok(self.frame.clone())
+        }
+    }
+
     fn owner_with_fake_sender() -> LightingRuntimeOwner {
         LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
             worker: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            frame_source_factory: Arc::new(|| {
+                Ok(Box::new(FakeFrameSource {
+                    frame: CapturedFrame {
+                        width: 2,
+                        height: 2,
+                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    },
+                    fail_with_unavailable: false,
+                }))
+            }),
+        }
+    }
+
+    fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
+        LightingRuntimeOwner {
+            active_mode: LightingModeConfig::default(),
+            worker: None,
+            output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            frame_source_factory: Arc::new(|| {
+                Ok(Box::new(FakeFrameSource {
+                    frame: CapturedFrame {
+                        width: 1,
+                        height: 1,
+                        pixels_rgb: vec![[0, 0, 0]],
+                    },
+                    fail_with_unavailable: true,
+                }))
+            }),
         }
     }
 
@@ -491,10 +588,16 @@ mod tests {
         owner = LightingRuntimeOwner {
             active_mode: ambilight_mode(),
             worker: Some(
-                start_ambilight_worker(owner.output_bridge.clone(), "COM1".to_string(), 0.8)
-                    .expect("worker start should succeed"),
+                start_ambilight_worker(
+                    owner.output_bridge.clone(),
+                    "COM1".to_string(),
+                    0.8,
+                    (owner.frame_source_factory)().expect("frame source should be available"),
+                )
+                .expect("worker start should succeed"),
             ),
             output_bridge: owner.output_bridge,
+            frame_source_factory: owner.frame_source_factory,
         };
         let mut trace = Vec::new();
 
@@ -535,12 +638,17 @@ mod tests {
     #[test]
     fn ambilight_mode_attempts_to_send_at_least_one_frame() {
         AMBILIGHT_FRAME_ATTEMPTS.store(0, Ordering::SeqCst);
+        AMBILIGHT_CAPTURE_ATTEMPTS.store(0, Ordering::SeqCst);
 
         let mut owner = owner_with_fake_sender();
         let result = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM7"), None);
 
         assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
         thread::sleep(Duration::from_millis(20));
+        assert!(
+            AMBILIGHT_CAPTURE_ATTEMPTS.load(Ordering::SeqCst) > 0,
+            "ambilight mode should attempt at least one frame capture"
+        );
         assert!(
             AMBILIGHT_FRAME_ATTEMPTS.load(Ordering::SeqCst) > 0,
             "ambilight mode should attempt at least one frame send"
@@ -581,5 +689,19 @@ mod tests {
 
         assert_eq!(denied.status.code, "DEVICE_NOT_CONNECTED");
         assert_eq!(denied.mode.kind, LightingModeKind::Solid);
+    }
+
+    #[test]
+    fn ambilight_mode_reports_start_failure_when_capture_is_unavailable() {
+        let mut owner = owner_with_unavailable_capture();
+
+        let failed = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM1"), None);
+
+        assert_eq!(failed.status.code, "AMBILIGHT_MODE_START_FAILED");
+        assert_eq!(
+            failed.status.details,
+            Some("AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE".to_string())
+        );
+        assert_eq!(failed.mode.kind, LightingModeKind::Off);
     }
 }
