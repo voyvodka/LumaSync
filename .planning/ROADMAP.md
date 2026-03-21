@@ -132,7 +132,11 @@ Plans:
   1. User can open a telemetry view showing capture FPS, send FPS, and queue health.
   2. User can switch app language between English and Turkish.
   3. User can continue setup and mode-management flows in either supported language.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 07-01-PLAN.md - Deliver Rust-owned runtime telemetry snapshot and telemetry contracts baseline for QUAL-03
+- [ ] 07-03-PLAN.md - Wire frontend telemetry polling panel and settings telemetry navigation for QUAL-03
+- [ ] 07-02-PLAN.md - Complete EN/TR localization parity guard and remove remaining hardcoded setup/mode/telemetry strings for I18N-01
 
 ### Phase 8: Stability Gate
 **Goal**: v1 cikisi icin gerekli uzun sureli calisma guvenilirligi kullanici perspektifinden dogrulanir.

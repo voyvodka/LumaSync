@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 6
 status: verifying
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-21T12:38:21.022Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-21T14:53:46.059Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 35
-  completed_plans: 35
+  total_plans: 38
+  completed_plans: 36
   percent: 100
 ---
 
@@ -83,6 +83,7 @@ Progress: [██████████] 100%
 | Phase 05 P06 | 7 min | 3 tasks | 3 files |
 | Phase 06 P01 | 0 min | 3 tasks | 2 files |
 | Phase 06 P02 | 6 min | 3 tasks | 4 files |
+| Phase 07 P01 | 5 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,9 @@ Recent decisions affecting current work:
 - [Phase 06]: Ambilight worker uses RuntimeQualityController + RuntimeFrameSlot in hot loop instead of fixed 16ms sleep pacing.
 - [Phase 06]: Serial output now caches per-port write sessions and drops the cached session only on write/flush failure.
 - [Phase 06]: Wave 0 validation map is marked complete with runtime_quality and lighting_mode test coverage; TS contract wave item treated as N/A because no quality payload extension was introduced.
+- [Phase 07]: Queue health is derived from latest-slot overwrite pressure bands (healthy/warning/critical), not raw queue length.
+- [Phase 07]: Telemetry metrics are aggregated in a 1-second Rust window and exposed via pull command snapshots.
+- [Phase 07]: Telemetry command/state contracts are appended to existing shared shell/device contracts for parity-safe frontend wiring.
 
 ### Pending Todos
 
@@ -181,6 +185,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-21T12:32:32.806Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-03-21T14:53:46.057Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
