@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::ambilight_capture::{
-    sample_led_frame, AmbilightCaptureError, AmbilightFrameSource, SamplingCalibration,
-    StaticFrameSource,
+    create_live_frame_source, sample_led_frame, AmbilightCaptureError, AmbilightFrameSource,
+    SamplingCalibration, StaticFrameSource,
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::led_output::{
@@ -106,7 +106,7 @@ impl Default for LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
             worker: None,
             output_bridge: LedOutputBridge::default(),
-            frame_source_factory: Arc::new(|| Ok(Box::new(StaticFrameSource::default()))),
+            frame_source_factory: Arc::new(create_live_frame_source),
         }
     }
 }
