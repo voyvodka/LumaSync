@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -14,6 +14,7 @@ use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::led_output::{
     apply_solid_payload_to_port, send_ambilight_frame_to_port, LedOutputBridge,
 };
+use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -186,23 +187,58 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
 
 fn capture_sample_send_frame(
     source: &mut dyn AmbilightFrameSource,
-    output_bridge: &LedOutputBridge,
-    port_name: &str,
-    brightness: f32,
     calibration: &SamplingCalibration,
-) -> Result<(), String> {
+) -> Result<Vec<[u8; 3]>, String> {
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     let captured_frame = source.capture_frame().map_err(|error| error.as_reason())?;
     let sampled =
         sample_led_frame(&captured_frame, calibration).map_err(|error| error.as_reason())?;
-    AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-    send_ambilight_frame_to_port(
-        output_bridge,
-        port_name,
-        sampled.colors.as_slice(),
-        brightness,
-    )
-    .map_err(|error| error.as_reason())
+    Ok(sampled.colors)
+}
+
+struct AmbilightWorkerQualityState {
+    controller: RuntimeQualityController,
+}
+
+impl AmbilightWorkerQualityState {
+    fn new(config: RuntimeQualityConfig) -> Self {
+        Self {
+            controller: RuntimeQualityController::new(config),
+        }
+    }
+
+    fn queue_processed_frame(&mut self, slot: &mut RuntimeFrameSlot, sampled_frame: &[[u8; 3]]) {
+        slot.push(self.controller.smooth(sampled_frame));
+    }
+
+    fn try_send_latest<F>(
+        &mut self,
+        slot: &mut RuntimeFrameSlot,
+        now: Instant,
+        mut send_frame: F,
+    ) -> Result<bool, String>
+    where
+        F: FnMut(&[[u8; 3]]) -> Result<(), String>,
+    {
+        if !self.controller.should_send_now(now) {
+            return Ok(false);
+        }
+
+        let Some(frame) = slot.take_latest() else {
+            return Ok(false);
+        };
+
+        send_frame(frame.as_slice())?;
+        Ok(true)
+    }
+
+    fn observe_capture_and_send_cost(&mut self, capture_ms: f32, send_ms: f32) {
+        self.controller.observe_timing(capture_ms, send_ms);
+    }
+
+    fn current_send_interval(&self) -> Duration {
+        self.controller.current_send_interval()
+    }
 }
 
 fn start_ambilight_worker(
@@ -217,14 +253,20 @@ fn start_ambilight_worker(
     let calibration = SamplingCalibration {
         led_count: initial_frame.pixels_rgb.len(),
     };
+
+    let mut quality_state = AmbilightWorkerQualityState::new(RuntimeQualityConfig::default());
+    let mut frame_slot = RuntimeFrameSlot::new();
+
     let mut initial_frame_source = StaticFrameSource::new(initial_frame);
-    capture_sample_send_frame(
-        &mut initial_frame_source,
-        &output_bridge,
-        &port_name,
-        brightness,
-        &calibration,
-    )?;
+    let initial_sampled = capture_sample_send_frame(&mut initial_frame_source, &calibration)?;
+    quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice());
+    let send_started = Instant::now();
+    quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
+        AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+        send_ambilight_frame_to_port(&output_bridge, &port_name, frame, brightness)
+            .map_err(|error| error.as_reason())
+    })?;
+    quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
 
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_flag = Arc::clone(&cancel);
@@ -233,14 +275,28 @@ fn start_ambilight_worker(
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
 
         while !cancel_flag.load(Ordering::Relaxed) {
-            let _ = capture_sample_send_frame(
-                frame_source.as_mut(),
-                &output_bridge,
-                &port_name,
-                brightness,
-                &calibration,
-            );
-            thread::sleep(Duration::from_millis(16));
+            let capture_started = Instant::now();
+            if let Ok(sampled) = capture_sample_send_frame(frame_source.as_mut(), &calibration) {
+                let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
+                quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice());
+
+                let send_started = Instant::now();
+                let send_ms =
+                    match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
+                        AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+                        send_ambilight_frame_to_port(&output_bridge, &port_name, frame, brightness)
+                            .map_err(|error| error.as_reason())
+                    }) {
+                        Ok(true) => send_started.elapsed().as_secs_f32() * 1000.0,
+                        _ => 0.0,
+                    };
+
+                quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
+            }
+
+            let interval_ms = quality_state.current_send_interval().as_millis() as u64;
+            let sleep_ms = (interval_ms / 4).clamp(1, 8);
+            thread::sleep(Duration::from_millis(sleep_ms));
         }
 
         ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);

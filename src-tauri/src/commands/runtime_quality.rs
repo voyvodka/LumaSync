@@ -45,7 +45,7 @@ impl RuntimeQualityController {
         }
     }
 
-    pub fn smooth_frame(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
+    pub fn smooth(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
         if self.previous_frame.len() != target_frame.len() {
             self.previous_frame = target_frame.to_vec();
             return self.previous_frame.clone();
@@ -69,7 +69,11 @@ impl RuntimeQualityController {
         smoothed
     }
 
-    pub fn observe_timing(&mut self, sample: RuntimeTimingSample) {
+    pub fn observe_timing(&mut self, capture_ms: f32, send_ms: f32) {
+        let sample = RuntimeTimingSample {
+            capture_cost_ms: capture_ms,
+            send_cost_ms: send_ms,
+        };
         let sample_cost = (sample.capture_cost_ms + sample.send_cost_ms).max(0.0);
         let ewma_alpha = self.config.pressure_ewma_alpha.clamp(0.0, 1.0);
 
@@ -79,7 +83,7 @@ impl RuntimeQualityController {
         });
     }
 
-    pub fn current_interval(&self) -> Duration {
+    pub fn current_send_interval(&self) -> Duration {
         let base_interval_ms = self.config.base_interval_ms.max(1);
         let min_interval_ms = self.config.min_interval_ms.max(1);
         let max_interval_ms = self.config.max_interval_ms.max(min_interval_ms);
@@ -95,13 +99,25 @@ impl RuntimeQualityController {
         Duration::from_millis(adaptive_ms.clamp(min_interval_ms, max_interval_ms))
     }
 
+    pub fn smooth_frame(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
+        self.smooth(target_frame)
+    }
+
+    pub fn observe_timing_sample(&mut self, sample: RuntimeTimingSample) {
+        self.observe_timing(sample.capture_cost_ms, sample.send_cost_ms);
+    }
+
+    pub fn current_interval(&self) -> Duration {
+        self.current_send_interval()
+    }
+
     pub fn should_send_now(&mut self, now: Instant) -> bool {
         let Some(last_sent_at) = self.last_sent_at else {
             self.last_sent_at = Some(now);
             return true;
         };
 
-        if now.duration_since(last_sent_at) >= self.current_interval() {
+        if now.duration_since(last_sent_at) >= self.current_send_interval() {
             self.last_sent_at = Some(now);
             return true;
         }
@@ -139,9 +155,7 @@ fn lerp_channel(previous: u8, target: u8, alpha: f32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController, RuntimeTimingSample,
-    };
+    use super::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 
     #[test]
     fn smoothes_step_changes() {
@@ -150,13 +164,13 @@ mod tests {
             ..RuntimeQualityConfig::default()
         });
 
-        let baseline = controller.smooth_frame(&[[0, 0, 0]]);
+        let baseline = controller.smooth(&[[0, 0, 0]]);
         assert_eq!(baseline, vec![[0, 0, 0]]);
 
-        let first_step = controller.smooth_frame(&[[255, 255, 255]]);
+        let first_step = controller.smooth(&[[255, 255, 255]]);
         assert_eq!(first_step, vec![[128, 128, 128]]);
 
-        let second_step = controller.smooth_frame(&[[255, 255, 255]]);
+        let second_step = controller.smooth(&[[255, 255, 255]]);
         assert!(second_step[0][0] > first_step[0][0]);
         assert!(second_step[0][0] < 255);
     }
@@ -168,8 +182,8 @@ mod tests {
             ..RuntimeQualityConfig::default()
         });
 
-        let _ = controller.smooth_frame(&[[10, 10, 10], [20, 20, 20]]);
-        let changed = controller.smooth_frame(&[[200, 100, 50]]);
+        let _ = controller.smooth(&[[10, 10, 10], [20, 20, 20]]);
+        let changed = controller.smooth(&[[200, 100, 50]]);
 
         assert_eq!(changed, vec![[200, 100, 50]]);
     }
@@ -184,15 +198,12 @@ mod tests {
             ..RuntimeQualityConfig::default()
         });
 
-        let base_interval = controller.current_interval();
+        let base_interval = controller.current_send_interval();
         assert_eq!(base_interval.as_millis(), 16);
 
-        controller.observe_timing(RuntimeTimingSample {
-            capture_cost_ms: 36.0,
-            send_cost_ms: 20.0,
-        });
+        controller.observe_timing(36.0, 20.0);
 
-        let adapted_interval = controller.current_interval();
+        let adapted_interval = controller.current_send_interval();
         assert!(adapted_interval > base_interval);
         assert!(adapted_interval.as_millis() <= 64);
     }
