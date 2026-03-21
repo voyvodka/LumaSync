@@ -19,6 +19,7 @@ mod commands {
     pub mod ambilight_capture;
     pub mod calibration;
     pub mod device_connection;
+    pub mod hue_onboarding;
     pub mod led_output;
     pub mod lighting_mode;
     pub mod runtime_quality;
@@ -32,6 +33,10 @@ use commands::calibration::{
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
     SerialConnectionState,
+};
+use commands::hue_onboarding::{
+    check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
+    pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
@@ -216,6 +221,12 @@ pub fn run() {
             connect_serial_port,
             get_serial_connection_status,
             run_serial_health_check,
+            discover_hue_bridges,
+            verify_hue_bridge_ip,
+            pair_hue_bridge,
+            validate_hue_credentials,
+            list_hue_entertainment_areas,
+            check_hue_stream_readiness,
             set_lighting_mode,
             stop_lighting,
             get_lighting_mode_status,

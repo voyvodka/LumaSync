@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main settings window (device, calibration, and lighting mode commands)",
+  "description": "Capability for the main settings window (device, Hue onboarding, calibration, and lighting mode commands)",
   "windows": ["main"],
   "permissions": [
     "core:default",
