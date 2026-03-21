@@ -34,6 +34,14 @@ export interface StartHuePayload {
   triggerSource?: HueRuntimeTriggerSource;
 }
 
+export interface HueSolidColorPayload {
+  r: number;
+  g: number;
+  b: number;
+  brightness?: number;
+  triggerSource?: HueRuntimeTriggerSource;
+}
+
 export interface HueRuntimeCommandResult {
   active: boolean;
   status: {
@@ -132,9 +140,47 @@ export async function stopHue(
   }
 }
 
+export async function restartHue(
+  payload: StartHuePayload,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<HueRuntimeCommandResult> {
+  try {
+    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.RESTART_STREAM, {
+      request: {
+        bridgeIp: payload.bridgeIp,
+        username: payload.username,
+        areaId: payload.areaId,
+        triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+    });
+  } catch (error) {
+    throw mapModeApiError(error);
+  }
+}
+
 export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): Promise<HueRuntimeStatus> {
   try {
-    return await invoker<HueRuntimeStatus>(HUE_COMMANDS.GET_STREAM_STATUS);
+    const result = await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.GET_STREAM_STATUS);
+    return result.status as HueRuntimeStatus;
+  } catch (error) {
+    throw mapModeApiError(error);
+  }
+}
+
+export async function setHueSolidColor(
+  payload: HueSolidColorPayload,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<HueRuntimeCommandResult> {
+  try {
+    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.SET_SOLID_COLOR, {
+      request: {
+        r: Math.max(0, Math.min(255, Math.floor(payload.r))),
+        g: Math.max(0, Math.min(255, Math.floor(payload.g))),
+        b: Math.max(0, Math.min(255, Math.floor(payload.b))),
+        brightness: payload.brightness,
+        triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
+      },
+    });
   } catch (error) {
     throw mapModeApiError(error);
   }

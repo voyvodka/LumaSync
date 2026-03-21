@@ -1,6 +1,7 @@
 {
   "settings": {
     "title": "Ayarlar",
+    "navigationAria": "Ayarlar gezintisi",
     "sections": {
       "general": "Genel",
       "startupTray": "Başlangıç & Tepsi",
@@ -23,8 +24,8 @@
     "title": "Genel",
     "description": "Genel uygulama ayarları.",
     "output": {
-      "title": "Cikis hedefleri",
-      "description": "Mod kontrollerinin hangi hedeflerde calisacagini sec.",
+      "title": "Çıkış hedefleri",
+      "description": "Mod kontrollerinin hangi hedeflerde çalışacağını seç.",
       "options": {
         "usb": "USB",
         "hue": "Hue",
@@ -39,6 +40,7 @@
         "ambilight": "Ambilight",
         "solid": "Sabit"
       },
+      "colorModelRgb": "RGB",
       "solidColor": "Sabit renk",
       "brightness": "Parlaklık",
       "lockedReasonCalibration": "LED modunu etkinleştirmeden önce kalibrasyonu tamamlayın.",
@@ -132,116 +134,119 @@
     },
     "hue": {
       "title": "Hue bridge kurulumu",
-      "description": "Bridge kesfi, eslestirme, alan secimi ve hazirlik kontrolunu tek panelde tamamla.",
+      "description": "Bridge keşfi, eşleştirme, alan seçimi ve hazırlık kontrolünü tek panelde tamamla.",
       "steps": {
-        "discover": "Kesfet",
-        "pair": "Eslestir",
+        "discover": "Keşfet",
+        "pair": "Eşleştir",
         "area": "Alan",
-        "ready": "Hazir"
+        "ready": "Hazır"
       },
       "actions": {
-        "discover": "Bridge kesfet",
-        "discovering": "Kesfediliyor...",
-        "pair": "Bridge eslestir",
-        "pairing": "Eslestiriliyor...",
-        "refreshAreas": "Alanlari yenile",
-        "loadingAreas": "Alanlar yukleniyor...",
-        "checkReadiness": "Hazirligi kontrol et",
-        "checkingReadiness": "Hazirlik kontrol ediliyor...",
-        "start": "Hue'yu baslat",
+        "discover": "Bridge keşfet",
+        "discovering": "Keşfediliyor...",
+        "pair": "Bridge eşleştir",
+        "pairing": "Eşleştiriliyor...",
+        "refreshAreas": "Alanları yenile",
+        "loadingAreas": "Alanlar yükleniyor...",
+        "checkReadiness": "Hazırlığı kontrol et",
+        "checkingReadiness": "Hazırlık kontrol ediliyor...",
+        "start": "Hue'yu başlat",
         "stop": "Hue'yu durdur"
       },
       "bridge": {
-        "placeholder": "Bir Hue bridge sec"
+        "placeholder": "Bir Hue bridge seç"
       },
       "manualIp": {
         "title": "Manuel IP fallback",
-        "description": "Manuel bridge IP yolu her adimda gorunur kalir.",
-        "placeholder": "orn. 192.168.1.50",
-        "submit": "IP dogrula",
-        "invalid": "Gondermeden once gecerli bir IPv4 adresi gir."
+        "description": "Manuel bridge IP yolu her adımda görünür kalır.",
+        "placeholder": "örn. 192.168.1.50",
+        "submit": "IP doğrula",
+        "invalid": "Göndermeden önce geçerli bir IPv4 adresi gir."
       },
       "credential": {
-        "valid": "Gecerli",
-        "needsRepair": "Yeniden eslestirme gerekli",
+        "valid": "Geçerli",
+        "needsRepair": "Yeniden eşleştirme gerekli",
         "line": "Kimlik durumu: {{state}}",
-        "repairHint": "Kimlik bilgileri yeniden eslestirme istiyor. Sonraki adim olarak Bridge eslestir'i kullan."
+        "repairHint": "Kimlik bilgileri yeniden eşleştirme istiyor. Sonraki adım olarak Bridge eşleştir'i kullan."
       },
       "areas": {
-        "title": "Entertainment alanlari",
-        "empty": "Henuz alan yuklenmedi. Alanlari listelemek icin eslestirip yenile.",
+        "title": "Entertainment alanları",
+        "empty": "Henüz alan yüklenmedi. Alanları listelemek için eşleştirip yenile.",
         "channels": "Kanal: {{count}}"
       },
       "readiness": {
-        "ready": "Hazir",
-        "notReady": "Hazir degil",
+        "ready": "Hazır",
+        "notReady": "Hazır değil",
         "unknown": "Bekliyor",
-        "pending": "Hazirlik henuz dogrulanmadi.",
-        "recoveryHint": "Alan hazir degil. Yeniden dogrula veya baska bir alan sec."
+        "pending": "Hazırlık henüz doğrulanmadı.",
+        "recoveryHint": "Alan hazır değil. Yeniden doğrula veya başka bir alan seç."
       },
-      "successSummary": "{{bridge}} uzerinde {{area}} ile baslamaya hazir ({{readiness}}).",
+      "successSummary": "{{bridge}} üzerinde {{area}} ile başlamaya hazır ({{readiness}}).",
       "status": {
-        "validatingTitle": "Kayitli kimlik bilgileri dogrulaniyor",
-        "validatingBody": "Kayitli Hue kimlikleri sessizce kontrol ediliyor.",
-        "pairingTitle": "Eslestirme suruyor",
-        "pairingBody": "Gerekirse bridge link tusuna basip eslestirmeyi tekrar dene.",
-        "readinessCheckingTitle": "Yayin hazirligi kontrol ediliyor",
-        "readinessCheckingBody": "Secili alanin hazirlik durumu degerlendiriliyor.",
+        "validatingTitle": "Kayıtlı kimlik bilgileri doğrulanıyor",
+        "validatingBody": "Kayıtlı Hue kimlikleri sessizce kontrol ediliyor.",
+        "pairingTitle": "Eşleştirme sürüyor",
+        "pairingBody": "Gerekirse bridge link tuşuna basıp eşleştirmeyi tekrar dene.",
+        "readinessCheckingTitle": "Yayın hazırlığı kontrol ediliyor",
+        "readinessCheckingBody": "Seçili alanın hazırlık durumu değerlendiriliyor.",
         "idleTitle": "Hue kurulumu beklemede",
-        "idleBody": "Bridge kesfi veya manuel IP dogrulama ile basla.",
-        "streamReadyTitle": "Secili alan yayina hazir",
-        "streamReadyBody": "Eslestirme, alan secimi ve hazirlik kontrolu gecerli.",
-        "successTitle": "Hue kurulum durumu guncellendi",
-        "successBody": "Son Hue adimi basariyla tamamlandi.",
-        "streamNotReadyTitle": "Secili alan henuz hazir degil",
-        "streamNotReadyBody": "Hazirlik gecene kadar Baslat devre disi kalir.",
+        "idleBody": "Bridge keşfi veya manuel IP doğrulama ile başla.",
+        "streamReadyTitle": "Seçili alan yayına hazır",
+        "streamReadyBody": "Eşleştirme, alan seçimi ve hazırlık kontrolü geçerli.",
+        "successTitle": "Hue kurulum durumu güncellendi",
+        "successBody": "Son Hue adımı başarıyla tamamlandı.",
+        "streamNotReadyTitle": "Seçili alan henüz hazır değil",
+        "streamNotReadyBody": "Hazırlık geçene kadar Başlat devre dışı kalır.",
         "errorTitle": "Hue kurulumu dikkat istiyor",
-        "errorBody": "Baslatmadan once basarisiz adimi yeniden dene veya tekrar eslestir.",
+        "errorBody": "Başlatmadan önce başarısız adımı yeniden dene veya tekrar eşleştir.",
         "infoTitle": "Hue kurulumu bilgisi",
-        "infoBody": "Kuruluma devam etmek icin gecerli adimi takip et."
+        "infoBody": "Kuruluma devam etmek için geçerli adımı takip et."
       },
       "runtime": {
         "idleTitle": "Runtime beklemede",
-        "idleBody": "Hazirlik guncelse mode controls uzerinden baslat.",
+        "idleBody": "Hazırlık güncelse mode controls üzerinden başlat.",
         "states": {
           "Idle": "Beklemede",
-          "Starting": "Baslatiliyor",
-          "Running": "Calisiyor",
-          "Reconnecting": "Yeniden baglaniyor",
+          "Starting": "Başlatılıyor",
+          "Running": "Çalışıyor",
+          "Reconnecting": "Yeniden bağlanıyor",
           "Stopping": "Durduruluyor",
-          "Failed": "Basarisiz"
+          "Failed": "Başarısız",
+          "undefined": "Durum bilinmiyor"
         },
         "codes": {
-          "HUE_STREAM_STARTING": "Hue yayin baslatma istegi alindi.",
-          "HUE_STREAM_RUNNING": "Hue yayini aktif.",
-          "HUE_STREAM_STOPPING": "Hue durdurma islemi suruyor.",
-          "HUE_STREAM_STOPPED": "Hue yayini durdu.",
-          "TRANSIENT_RETRY_SCHEDULED": "Gecici sorun algilandi. Otomatik deneme planlandi.",
-          "TRANSIENT_RETRY_EXHAUSTED": "Deneme butcesi tukendi. Manuel yeniden baglan gerekli.",
-          "AUTH_INVALID_CREDENTIALS": "Kimlik bilgileri gecersiz. Yeniden eslestirme gerekli.",
-          "CONFIG_NOT_READY_GATE_BLOCKED": "Baslatma kapi kontrolden gecmedi; hazirlik stale veya eksik.",
-          "HUE_STOP_TIMEOUT_PARTIAL": "Durdurma zaman asimina ugradi. Kismi durdurma temizligi gerekli."
+          "HUE_STREAM_STARTING": "Hue yayın başlatma isteği alındı.",
+          "HUE_STREAM_RUNNING": "Hue yayını aktif.",
+          "HUE_STREAM_STOPPING": "Hue durdurma işlemi sürüyor.",
+          "HUE_STREAM_STOPPED": "Hue yayını durdu.",
+          "TRANSIENT_RETRY_SCHEDULED": "Geçici sorun algılandı. Otomatik deneme planlandı.",
+          "TRANSIENT_RETRY_EXHAUSTED": "Deneme bütçesi tükendi. Manuel yeniden bağlan gerekli.",
+          "AUTH_INVALID_CREDENTIALS": "Kimlik bilgileri geçersiz. Yeniden eşleştirme gerekli.",
+          "CONFIG_NOT_READY_GATE_BLOCKED": "Başlatma kapı kontrolden geçmedi; hazırlık stale veya eksik.",
+          "HUE_STOP_TIMEOUT_PARTIAL": "Durdurma zaman aşımına uğradı. Kısmi durdurma temizliği gerekli.",
+          "undefined": "Durum kodu alınamadı. Son durum bilgisi bekleniyor."
         },
         "retry": {
           "progress": "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms"
         },
         "retryStatus": "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
         "triggerSource": {
-          "mode_control": "Mode controls uzerinden tetiklendi",
-          "device_surface": "Device yuzeyinden tetiklendi",
-          "system": "Sistem recovery tarafindan tetiklendi"
+          "mode_control": "Mode controls üzerinden tetiklendi",
+          "device_surface": "Device yüzeyinden tetiklendi",
+          "system": "Sistem recovery tarafından tetiklendi",
+          "undefined": "Tetik kaynağı bilinmiyor"
         },
         "checklist": {
-          "title": "Baslatma kontrol listesi",
-          "waitCredential": "Kimlik dogrulamasinin tamamlanmasini bekle.",
-          "revalidate": "Hazirlik stale. Baslatmadan once yeniden dogrula."
+          "title": "Başlatma kontrol listesi",
+          "waitCredential": "Kimlik doğrulamasının tamamlanmasını bekle.",
+          "revalidate": "Hazırlık stale. Başlatmadan önce yeniden doğrula."
         },
         "actions": {
           "retry": "Tekrar dene",
-          "reconnect": "Yeniden baglan",
-          "repair": "Yeniden eslestir",
-          "revalidate": "Yeniden dogrula",
-          "adjust_area": "Alani duzenle"
+          "reconnect": "Yeniden bağlan",
+          "repair": "Yeniden eşleştir",
+          "revalidate": "Yeniden doğrula",
+          "adjust_area": "Alanı düzenle"
         },
         "targets": {
           "hue": {
@@ -254,63 +259,63 @@
           }
         },
         "partialStop": {
-          "title": "Kismi durdurma",
-          "body": "Hue durdurma tamamen bitmedi. Temizligi tamamlamak icin yeniden durdur dene."
+          "title": "Kısmi durdurma",
+          "body": "Hue durdurma tamamen bitmedi. Temizliği tamamlamak için yeniden durdur dene."
         },
         "timeout": {
-          "title": "Durdurma zaman asimi",
-          "body": "Durdurma zaman asimina ulasti. Uygulamayi yeniden baslatmadan durdurmayi tekrar deneyebilirsin."
+          "title": "Durdurma zaman aşımı",
+          "body": "Durdurma zaman aşımına ulaştı. Uygulamayı yeniden başlatmadan durdurmayı tekrar deneyebilirsin."
         }
       }
     }
   },
   "telemetry": {
-    "title": "Calisma telemetrisi",
-    "description": "Capture/send hizini ve kuyruk baskisini neredeyse gercek zamanli izle.",
+    "title": "Çalışma telemetrisi",
+    "description": "Capture/send hızını ve kuyruk baskısını neredeyse gerçek zamanlı izle.",
     "metrics": {
       "captureFps": "Capture FPS",
       "sendFps": "Send FPS",
-      "queueHealth": "Kuyruk sagligi"
+      "queueHealth": "Kuyruk sağlığı"
     },
     "queueHealth": {
-      "healthy": "Saglikli",
-      "warning": "Uyari",
+      "healthy": "Sağlıklı",
+      "warning": "Uyarı",
       "critical": "Kritik"
     },
     "states": {
-      "loading": "Telemetri yukleniyor...",
-      "empty": "Henuz runtime aktivitesi yok.",
-      "error": "Telemetri su anda kullanilamiyor."
+      "loading": "Telemetri yükleniyor...",
+      "empty": "Henüz runtime aktivitesi yok.",
+      "error": "Telemetri şu anda kullanılamıyor."
     }
   },
   "calibration": {
     "section": {
       "title": "Kalibrasyon",
-      "description": "Ilk kurulum ve ileri duzenleme icin ayni editoru kullan.",
-      "template": "Sablon",
+      "description": "İlk kurulum ve ileri düzenleme için aynı editörü kullan.",
+      "template": "Şablon",
       "manual": "Manuel",
       "totalLeds": "Toplam LED",
-      "edges": "Kenar LED dagilimi",
+      "edges": "Kenar LED dağılımı",
       "gap": "Alt eksik LED",
-      "cornerOwnership": "Kose sahipligi",
+      "cornerOwnership": "Köşe sahipliği",
       "cornerOwnershipHorizontal": "Yatay kenarlar",
       "cornerOwnershipVertical": "Dikey kenarlar",
-      "startAnchor": "Baslangic noktasi",
-      "direction": "Yon",
-      "emptyState": "Kayitli kalibrasyon yok. Canli moda gecmeden once seridini eslemek icin editoru ac.",
-      "notConfigured": "Yapilandirilmadi",
-      "edit": "Kalibrasyonu duzenle",
+      "startAnchor": "Başlangıç noktası",
+      "direction": "Yön",
+      "emptyState": "Kayıtlı kalibrasyon yok. Canlı moda geçmeden önce şeridini eşlemek için editörü aç.",
+      "notConfigured": "Yapılandırılmadı",
+      "edit": "Kalibrasyonu düzenle",
       "counts": {
-        "top": "Ust",
-        "right": "Sag",
+        "top": "Üst",
+        "right": "Sağ",
         "bottom": "Alt",
         "left": "Sol"
       }
     },
     "overlay": {
-      "title": "Kalibrasyon Editoru",
+      "title": "Kalibrasyon Editörü",
       "close": "Kapat",
-      "cancel": "Iptal",
+      "cancel": "İptal",
       "save": "Kaydet",
       "saving": "Kaydediliyor...",
       "testPatternToggle": "Test paterni",
@@ -319,58 +324,65 @@
       "primary": "Birincil",
       "active": "Aktif",
       "blockedReason": "{{code}}: {{reason}}",
-      "blockedReasonUnknown": "Overlay acilamadi",
+      "blockedReasonUnknown": "Overlay açılamadı",
       "previewProgress": "LED {{led}}/{{total}} - {{segment}}",
-      "previewOnly": "Onizleme modu (cihaz bagli degil)",
-      "unsavedTitle": "Kaydedilmemis degisiklik",
-      "unsavedDescription": "Kaydedilmemis kalibrasyon degisiklikleri var. Kapatip vazgecmek istiyor musun?",
-      "keepEditing": "Duzenlemeye devam et",
-      "discard": "Vazgec"
+      "previewOnly": "Önizleme modu (cihaz bağlı değil)",
+      "outputActive": "Çıkış aktif",
+      "errors": {
+        "testPatternBlocked": "Test paterni engellendi ({{code}}): {{reason}}",
+        "testPatternToggleFailed": "Test paterni değiştirilemedi: {{reason}}",
+        "displaySwitchBlocked": "Ekran geçişi engellendi ({{code}}): {{reason}}",
+        "displaySwitchFailed": "Ekran geçişi başarısız oldu: {{reason}}"
+      },
+      "unsavedTitle": "Kaydedilmemiş değişiklik",
+      "unsavedDescription": "Kaydedilmemiş kalibrasyon değişiklikleri var. Kapatıp vazgeçmek istiyor musun?",
+      "keepEditing": "Düzenlemeye devam et",
+      "discard": "Vazgeç"
     },
     "template": {
-      "title": "Monitor sablonu sec",
-      "description": "Bir sablonla basla veya manuel kuruluma gec.",
+      "title": "Monitör şablonu seç",
+      "description": "Bir şablonla başla veya manuel kuruluma geç.",
       "ledCount": "{{count}} LED",
       "skip": "Atla ve manuel ayarla"
     },
     "editor": {
-      "title": "LED harita editoru",
-      "description": "Kaydetmeden once kenar sayilarini, alt eksik LED degerini ve yonu duzenle.",
+      "title": "LED harita editörü",
+      "description": "Kaydetmeden önce kenar sayılarını, alt eksik LED değerini ve yönü düzenle.",
       "dirty": "Kaydedilmedi",
       "saved": "Kaydedildi",
       "bottomMissing": "Alt eksik LED",
-      "cornerOwnership": "Kose sahipligi",
-      "cornerOwnershipHorizontal": "Koseyi yatay kenar saysin",
-      "cornerOwnershipVertical": "Koseyi dikey kenar saysin",
-      "visualPreset": "LED gorunum modu",
+      "cornerOwnership": "Köşe sahipliği",
+      "cornerOwnershipHorizontal": "Köşeyi yatay kenar saysın",
+      "cornerOwnershipVertical": "Köşeyi dikey kenar saysın",
+      "visualPreset": "LED görünüm modu",
       "visualPresets": {
         "subtle": "Sakin",
-        "vivid": "Canli"
+        "vivid": "Canlı"
       },
-      "startAnchor": "Baslangic noktasi",
+      "startAnchor": "Başlangıç noktası",
       "startAnchors": {
-        "top-start": "Ust kenar - sol kose",
-        "top-end": "Ust kenar - sag kose",
-        "right-start": "Sag kenar - ust kose",
-        "right-end": "Sag kenar - alt kose",
-        "bottom-start": "Alt kenar - sag kose",
-        "bottom-end": "Alt kenar - sol kose",
-        "bottom-gap-right": "Alt bosluk - sag taraf",
-        "bottom-gap-left": "Alt bosluk - sol taraf",
-        "left-start": "Sol kenar - alt kose",
-        "left-end": "Sol kenar - ust kose"
+        "top-start": "Üst kenar - sol köşe",
+        "top-end": "Üst kenar - sağ köşe",
+        "right-start": "Sağ kenar - üst köşe",
+        "right-end": "Sağ kenar - alt köşe",
+        "bottom-start": "Alt kenar - sağ köşe",
+        "bottom-end": "Alt kenar - sol köşe",
+        "bottom-gap-right": "Alt boşluk - sağ taraf",
+        "bottom-gap-left": "Alt boşluk - sol taraf",
+        "left-start": "Sol kenar - alt köşe",
+        "left-end": "Sol kenar - üst köşe"
       },
-      "direction": "Yon",
+      "direction": "Yön",
       "directions": {
-        "cw": "Saat yonunde",
-        "ccw": "Saat yonunun tersinde"
+        "cw": "Saat yönünde",
+        "ccw": "Saat yönünün tersinde"
       },
       "totalLeds": "Toplam LED: {{count}}",
-      "changeTemplate": "Sablon degistir",
+      "changeTemplate": "Şablon değiştir",
       "counts": {
-        "top": "Ust",
+        "top": "Üst",
         "left": "Sol",
-        "right": "Sag",
+        "right": "Sağ",
         "bottom": "Alt"
       }
     }

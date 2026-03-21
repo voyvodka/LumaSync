@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { APP_NAME, APP_VERSION } from "../../../shared/constants/app";
 
 export function AboutLogsSection() {
   const { t } = useTranslation("common");
@@ -9,8 +10,8 @@ export function AboutLogsSection() {
 
       <div className="mt-6 divide-y divide-slate-200/80 dark:divide-zinc-800">
         <div className="py-4">
-          <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">LumaSync</p>
-          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{t("aboutLogs.version")} 0.1.0</p>
+          <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{APP_NAME}</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{t("aboutLogs.version")} {APP_VERSION}</p>
         </div>
 
         <div className="py-4">

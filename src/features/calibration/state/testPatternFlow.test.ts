@@ -231,7 +231,7 @@ describe("createDefaultTestPatternFlow", () => {
     startCalibrationTestPatternMock.mockClear();
     stopCalibrationTestPatternMock.mockClear();
 
-    let rafCallback: ((timestamp: number) => void) | null = null;
+    let rafCallback: (timestamp: number) => void = () => undefined;
     (globalThis as { window?: Window & typeof globalThis }).window = {
       requestAnimationFrame: ((callback: (timestamp: number) => void) => {
         rafCallback = callback;
@@ -241,7 +241,7 @@ describe("createDefaultTestPatternFlow", () => {
     } as Window & typeof globalThis;
 
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
-    let resolveConnection: ((value: { connected: boolean }) => void) | null = null;
+    let resolveConnection: (value: { connected: boolean }) => void = () => undefined;
     const pendingConnection = new Promise<{ connected: boolean }>((resolve) => {
       resolveConnection = resolve;
     });
@@ -255,14 +255,8 @@ describe("createDefaultTestPatternFlow", () => {
     const togglePromise = flow.toggle(true);
     expect(startCalibrationTestPatternMock).not.toHaveBeenCalled();
 
-    const pendingRafCallback = rafCallback;
-    if (typeof pendingRafCallback === "function") {
-      pendingRafCallback(1_130);
-    }
-    const pendingResolveConnection = resolveConnection;
-    if (typeof pendingResolveConnection === "function") {
-      pendingResolveConnection({ connected: true });
-    }
+    rafCallback(1_130);
+    resolveConnection({ connected: true });
     const snapshot = await togglePromise;
 
     const expectedPhysicalIndex = buildLedSequence(config)[snapshot.markerIndex].index;
@@ -309,7 +303,7 @@ describe("createDefaultTestPatternFlow", () => {
     startCalibrationTestPatternMock.mockClear();
     stopCalibrationTestPatternMock.mockClear();
 
-    let rafCallback: ((timestamp: number) => void) | null = null;
+    let rafCallback: (timestamp: number) => void = () => undefined;
     (globalThis as { window?: Window & typeof globalThis }).window = {
       requestAnimationFrame: ((callback: (timestamp: number) => void) => {
         rafCallback = callback;
@@ -319,7 +313,7 @@ describe("createDefaultTestPatternFlow", () => {
     } as Window & typeof globalThis;
 
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
-    let resolveConnection: ((value: { connected: boolean }) => void) | null = null;
+    let resolveConnection: (value: { connected: boolean }) => void = () => undefined;
     const pendingConnection = new Promise<{ connected: boolean }>((resolve) => {
       resolveConnection = resolve;
     });
@@ -327,14 +321,8 @@ describe("createDefaultTestPatternFlow", () => {
     const flow = createDefaultTestPatternFlow(async () => pendingConnection);
     const togglePromise = flow.toggle(true);
 
-    const pendingRafCallback = rafCallback;
-    if (typeof pendingRafCallback === "function") {
-      pendingRafCallback(1_130);
-    }
-    const pendingResolveConnection = resolveConnection;
-    if (typeof pendingResolveConnection === "function") {
-      pendingResolveConnection({ connected: true });
-    }
+    rafCallback(1_130);
+    resolveConnection({ connected: true });
     const snapshot = await togglePromise;
 
     expect(snapshot.markerIndex).toBe(1);
@@ -352,7 +340,7 @@ describe("createDefaultTestPatternFlow", () => {
     startCalibrationTestPatternMock.mockClear();
     stopCalibrationTestPatternMock.mockClear();
 
-    let rafCallback: ((timestamp: number) => void) | null = null;
+    let rafCallback: (timestamp: number) => void = () => undefined;
     (globalThis as { window?: Window & typeof globalThis }).window = {
       requestAnimationFrame: ((callback: (timestamp: number) => void) => {
         rafCallback = callback;
@@ -362,7 +350,7 @@ describe("createDefaultTestPatternFlow", () => {
     } as Window & typeof globalThis;
 
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_000);
-    let resolveConnection: ((value: { connected: boolean }) => void) | null = null;
+    let resolveConnection: (value: { connected: boolean }) => void = () => undefined;
     const pendingConnection = new Promise<{ connected: boolean }>((resolve) => {
       resolveConnection = resolve;
     });
@@ -380,14 +368,8 @@ describe("createDefaultTestPatternFlow", () => {
     const flow = createDefaultTestPatternFlow(async () => pendingConnection, emptyConfig);
     const togglePromise = flow.toggle(true);
 
-    const pendingRafCallback = rafCallback;
-    if (typeof pendingRafCallback === "function") {
-      pendingRafCallback(1_130);
-    }
-    const pendingResolveConnection = resolveConnection;
-    if (typeof pendingResolveConnection === "function") {
-      pendingResolveConnection({ connected: true });
-    }
+    rafCallback(1_130);
+    resolveConnection({ connected: true });
     const snapshot = await togglePromise;
 
     expect(snapshot.markerIndex).toBe(1);

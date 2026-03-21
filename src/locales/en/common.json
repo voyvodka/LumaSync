@@ -1,6 +1,7 @@
 {
   "settings": {
     "title": "Settings",
+    "navigationAria": "Settings navigation",
     "sections": {
       "general": "General",
       "startupTray": "Startup & Tray",
@@ -39,6 +40,7 @@
         "ambilight": "Ambilight",
         "solid": "Solid"
       },
+      "colorModelRgb": "RGB",
       "solidColor": "Solid color",
       "brightness": "Brightness",
       "lockedReasonCalibration": "Complete calibration before enabling LED mode.",
@@ -209,7 +211,8 @@
           "Running": "Running",
           "Reconnecting": "Reconnecting",
           "Stopping": "Stopping",
-          "Failed": "Failed"
+          "Failed": "Failed",
+          "undefined": "State unavailable"
         },
         "codes": {
           "HUE_STREAM_STARTING": "Hue stream start requested.",
@@ -220,7 +223,8 @@
           "TRANSIENT_RETRY_EXHAUSTED": "Retry budget exhausted. Manual reconnect required.",
           "AUTH_INVALID_CREDENTIALS": "Credentials are invalid. Re-pair is required.",
           "CONFIG_NOT_READY_GATE_BLOCKED": "Start gate blocked because readiness is stale or missing.",
-          "HUE_STOP_TIMEOUT_PARTIAL": "Stop timed out. Partial-stop cleanup is required."
+          "HUE_STOP_TIMEOUT_PARTIAL": "Stop timed out. Partial-stop cleanup is required.",
+          "undefined": "Status code unavailable. Waiting for runtime update."
         },
         "retry": {
           "progress": "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms"
@@ -229,7 +233,8 @@
         "triggerSource": {
           "mode_control": "Triggered from mode controls",
           "device_surface": "Triggered from device surface",
-          "system": "Triggered by system recovery"
+          "system": "Triggered by system recovery",
+          "undefined": "Trigger source unavailable"
         },
         "checklist": {
           "title": "Start checklist",
@@ -322,6 +327,13 @@
       "blockedReasonUnknown": "Overlay open failed",
       "previewProgress": "LED {{led}}/{{total}} on {{segment}}",
       "previewOnly": "Preview-only mode (device disconnected)",
+      "outputActive": "Output active",
+      "errors": {
+        "testPatternBlocked": "Test pattern blocked ({{code}}): {{reason}}",
+        "testPatternToggleFailed": "Test pattern toggle failed: {{reason}}",
+        "displaySwitchBlocked": "Display switch blocked ({{code}}): {{reason}}",
+        "displaySwitchFailed": "Display switch failed: {{reason}}"
+      },
       "unsavedTitle": "Unsaved changes",
       "unsavedDescription": "You have unsaved calibration changes. Discard and close?",
       "keepEditing": "Keep editing",

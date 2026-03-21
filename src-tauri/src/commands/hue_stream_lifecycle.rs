@@ -1,6 +1,8 @@
 use std::sync::Mutex;
 
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use tauri::State;
 
 use super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
@@ -8,6 +10,7 @@ use super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
 const DEFAULT_RETRY_MAX_ATTEMPTS: u8 = 3;
 const DEFAULT_RETRY_BASE_MS: u64 = 400;
 const DEFAULT_RETRY_CAP_MS: u64 = 2_000;
+const HUE_HTTP_TIMEOUT_MS: u64 = 5_000;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub enum HueRuntimeState {
@@ -66,6 +69,16 @@ pub struct StartHueStreamRequest {
     pub trigger_source: Option<HueRuntimeTriggerSource>,
 }
 
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct SetHueSolidColorRequest {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub brightness: Option<f32>,
+    pub trigger_source: Option<HueRuntimeTriggerSource>,
+}
+
 #[derive(Clone, Debug)]
 pub struct HueRuntimeGateEvidence {
     pub bridge_configured: bool,
@@ -109,6 +122,14 @@ struct HueActiveStreamContext {
     bridge_ip: String,
     username: String,
     area_id: String,
+    light_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HueActiveOutputContext {
+    pub bridge_ip: String,
+    pub username: String,
+    pub light_ids: Vec<String>,
 }
 
 impl Default for HueRuntimeOwner {
@@ -169,6 +190,8 @@ fn start_with_evidence(
     evidence: &HueRuntimeGateEvidence,
     trigger_source: HueRuntimeTriggerSource,
 ) -> HueRuntimeCommandResult {
+    owner.user_override_pending = false;
+
     if matches!(
         owner.state,
         HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
@@ -239,7 +262,6 @@ fn start_with_evidence(
         return make_result(owner);
     }
 
-    owner.user_override_pending = false;
     owner.reconnect_attempt = 0;
     owner.state = HueRuntimeState::Starting;
     owner.last_status = status_with(
@@ -281,11 +303,31 @@ fn status_refresh_with_evidence(
         return register_auth_invalid(owner, &reason, HueRuntimeTriggerSource::System);
     }
 
-    if !evidence.readiness_current || !evidence.ready {
+    if !evidence.readiness_current {
         let reason = details.unwrap_or_else(|| {
-            "Hue readiness check reported transient fault or not-ready area state.".to_string()
+            "Hue readiness check reported a transient transport fault.".to_string()
         });
         return register_transient_fault(owner, &reason, HueRuntimeTriggerSource::System);
+    }
+
+    if !evidence.ready {
+        owner.state = HueRuntimeState::Running;
+        owner.last_status = status_with(
+            HueRuntimeState::Running,
+            "CONFIG_NOT_READY_GATE_BLOCKED",
+            "Hue stream is active but area readiness is currently not satisfied.",
+            details,
+            HueRuntimeTriggerSource::System,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+        owner.last_status.remaining_attempts = Some(
+            owner
+                .retry_policy
+                .max_attempts
+                .saturating_sub(owner.reconnect_attempt),
+        );
+        owner.last_status.next_attempt_ms = None;
+        return make_result(owner);
     }
 
     owner.reconnect_attempt = 0;
@@ -303,6 +345,7 @@ fn status_refresh_with_evidence(
 fn store_active_stream_context(
     owner: &mut HueRuntimeOwner,
     request: &StartHueStreamRequest,
+    light_ids: Vec<String>,
     start_result: &HueRuntimeCommandResult,
 ) {
     if start_result.active {
@@ -310,8 +353,299 @@ fn store_active_stream_context(
             bridge_ip: request.bridge_ip.clone(),
             username: request.username.clone(),
             area_id: request.area_id.clone(),
+            light_ids,
         });
     }
+}
+
+fn hue_http_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(std::time::Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+fn fetch_area_light_ids(
+    bridge_ip: &str,
+    username: &str,
+    area_id: &str,
+) -> Result<Vec<String>, String> {
+    let client = hue_http_client()?;
+    let endpoint =
+        format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
+    let payload = client
+        .get(endpoint)
+        .header("hue-application-key", username)
+        .send()
+        .and_then(|response| response.error_for_status())
+        .and_then(|response| response.text())
+        .map_err(|error| error.to_string())?;
+
+    let parsed: Value = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
+    let channels = parsed
+        .get("data")
+        .and_then(|value| value.as_array())
+        .and_then(|items| items.first())
+        .and_then(|item| item.get("channels"))
+        .and_then(|value| value.as_array())
+        .ok_or_else(|| "Missing channels in entertainment area payload".to_string())?;
+
+    fn push_unique(target: &mut Vec<String>, id: &str) {
+        if !target.iter().any(|existing| existing == id) {
+            target.push(id.to_string());
+        }
+    }
+
+    fn fetch_resource(
+        client: &Client,
+        bridge_ip: &str,
+        username: &str,
+        rtype: &str,
+        rid: &str,
+    ) -> Result<Value, String> {
+        let endpoint = format!("https://{bridge_ip}/clip/v2/resource/{rtype}/{rid}");
+        let payload = client
+            .get(endpoint)
+            .header("hue-application-key", username)
+            .send()
+            .and_then(|response| response.error_for_status())
+            .and_then(|response| response.text())
+            .map_err(|error| error.to_string())?;
+
+        serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
+    }
+
+    fn resolve_to_light_ids(
+        client: &Client,
+        bridge_ip: &str,
+        username: &str,
+        seed_rtype: &str,
+        seed_rid: &str,
+    ) -> Vec<String> {
+        let mut resolved = Vec::new();
+
+        if seed_rtype == "light" {
+            resolved.push(seed_rid.to_string());
+            return resolved;
+        }
+
+        let mut current_rtype = seed_rtype.to_string();
+        let mut current_rid = seed_rid.to_string();
+        for _ in 0..4 {
+            let resource =
+                match fetch_resource(client, bridge_ip, username, &current_rtype, &current_rid) {
+                    Ok(value) => value,
+                    Err(_) => return resolved,
+                };
+
+            let Some(item) = resource
+                .get("data")
+                .and_then(|value| value.as_array())
+                .and_then(|items| items.first())
+            else {
+                return resolved;
+            };
+
+            if let Some(light_services) = item
+                .get("light_services")
+                .and_then(|value| value.as_array())
+            {
+                for light in light_services {
+                    let rid = light.get("rid").and_then(|value| value.as_str());
+                    let rtype = light.get("rtype").and_then(|value| value.as_str());
+                    if matches!(rtype, Some("light")) {
+                        if let Some(light_id) = rid {
+                            push_unique(&mut resolved, light_id);
+                        }
+                    }
+                }
+                if !resolved.is_empty() {
+                    return resolved;
+                }
+            }
+
+            let Some(owner) = item.get("owner") else {
+                return resolved;
+            };
+            let Some(next_rtype) = owner.get("rtype").and_then(|value| value.as_str()) else {
+                return resolved;
+            };
+            let Some(next_rid) = owner.get("rid").and_then(|value| value.as_str()) else {
+                return resolved;
+            };
+
+            if next_rtype == "light" {
+                push_unique(&mut resolved, next_rid);
+                return resolved;
+            }
+
+            current_rtype = next_rtype.to_string();
+            current_rid = next_rid.to_string();
+        }
+
+        resolved
+    }
+
+    let mut light_ids: Vec<String> = Vec::new();
+
+    if let Some(light_services) = parsed
+        .get("data")
+        .and_then(|value| value.as_array())
+        .and_then(|items| items.first())
+        .and_then(|item| item.get("light_services"))
+        .and_then(|value| value.as_array())
+    {
+        for light in light_services {
+            let rtype = light.get("rtype").and_then(|value| value.as_str());
+            let rid = light.get("rid").and_then(|value| value.as_str());
+            if matches!(rtype, Some("light")) {
+                if let Some(light_id) = rid {
+                    push_unique(&mut light_ids, light_id);
+                }
+            }
+        }
+    }
+
+    for channel in channels {
+        let Some(members) = channel.get("members").and_then(|value| value.as_array()) else {
+            continue;
+        };
+
+        for member in members {
+            let Some(service) = member.get("service") else {
+                continue;
+            };
+
+            let Some(rtype) = service.get("rtype").and_then(|value| value.as_str()) else {
+                continue;
+            };
+            let Some(rid) = service.get("rid").and_then(|value| value.as_str()) else {
+                continue;
+            };
+
+            for light_id in resolve_to_light_ids(&client, bridge_ip, username, rtype, rid) {
+                push_unique(&mut light_ids, &light_id);
+            }
+        }
+    }
+
+    Ok(light_ids)
+}
+
+fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
+    let mut red = f64::from(r) / 255.0;
+    let mut green = f64::from(g) / 255.0;
+    let mut blue = f64::from(b) / 255.0;
+
+    red = if red > 0.04045 {
+        ((red + 0.055) / 1.055).powf(2.4)
+    } else {
+        red / 12.92
+    };
+    green = if green > 0.04045 {
+        ((green + 0.055) / 1.055).powf(2.4)
+    } else {
+        green / 12.92
+    };
+    blue = if blue > 0.04045 {
+        ((blue + 0.055) / 1.055).powf(2.4)
+    } else {
+        blue / 12.92
+    };
+
+    let x = red * 0.664_511 + green * 0.154_324 + blue * 0.162_028;
+    let y = red * 0.283_881 + green * 0.668_433 + blue * 0.047_685;
+    let z = red * 0.000_088 + green * 0.072_31 + blue * 0.986_039;
+    let sum = x + y + z;
+
+    if sum <= f64::EPSILON {
+        return (0.3127, 0.3290);
+    }
+
+    (x / sum, y / sum)
+}
+
+fn apply_solid_color_to_hue_lights(
+    bridge_ip: &str,
+    username: &str,
+    light_ids: &[String],
+    r: u8,
+    g: u8,
+    b: u8,
+    brightness: f32,
+) -> Result<(), String> {
+    let client = hue_http_client()?;
+    let (x, y) = rgb_to_xy(r, g, b);
+    let dimming = f64::from((brightness.clamp(0.0, 1.0) * 100.0) as f32);
+
+    for light_id in light_ids {
+        let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
+        let response_text = client
+            .put(endpoint)
+            .header("hue-application-key", username)
+            .json(&json!({
+                "on": { "on": true },
+                "dimming": { "brightness": dimming },
+                "color": { "xy": { "x": x, "y": y } }
+            }))
+            .send()
+            .and_then(|response| response.error_for_status())
+            .and_then(|response| response.text())
+            .map_err(|error| error.to_string())?;
+
+        let parsed =
+            serde_json::from_str::<Value>(&response_text).map_err(|error| error.to_string())?;
+        let has_errors = parsed
+            .get("errors")
+            .and_then(|value| value.as_array())
+            .is_some_and(|errors| !errors.is_empty());
+        if has_errors {
+            return Err(format!("Hue light update returned errors: {response_text}"));
+        }
+    }
+
+    Ok(())
+}
+
+pub fn snapshot_hue_output_context(
+    runtime_state: &HueRuntimeStateStore,
+) -> Result<Option<HueActiveOutputContext>, String> {
+    let owner = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+
+    Ok(owner
+        .active_stream
+        .as_ref()
+        .map(|stream| HueActiveOutputContext {
+            bridge_ip: stream.bridge_ip.clone(),
+            username: stream.username.clone(),
+            light_ids: stream.light_ids.clone(),
+        }))
+}
+
+pub fn apply_hue_color_with_context(
+    context: &HueActiveOutputContext,
+    r: u8,
+    g: u8,
+    b: u8,
+    brightness: f32,
+) -> Result<(), String> {
+    if context.light_ids.is_empty() {
+        return Err("HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS".to_string());
+    }
+
+    apply_solid_color_to_hue_lights(
+        &context.bridge_ip,
+        &context.username,
+        &context.light_ids,
+        r,
+        g,
+        b,
+        brightness,
+    )
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -474,7 +808,26 @@ pub fn start_hue_stream(
         || readiness.status.code == "HUE_CREDENTIAL_INVALID";
 
     let result = start_with_evidence(&mut owner, &gate, trigger);
-    store_active_stream_context(&mut owner, &request, &result);
+    let light_ids = if result.active {
+        fetch_area_light_ids(&request.bridge_ip, &request.username, &request.area_id)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let has_no_lights = result.active && light_ids.is_empty();
+    store_active_stream_context(&mut owner, &request, light_ids, &result);
+
+    if has_no_lights {
+        owner.last_status = status_with(
+            HueRuntimeState::Running,
+            "HUE_STREAM_RUNNING_NO_LIGHTS",
+            "Hue runtime started but no color-addressable lights were resolved for the selected area.",
+            Some("Revalidate area members and restart Hue runtime.".to_string()),
+            HueRuntimeTriggerSource::System,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+        return Ok(make_result(&owner));
+    }
 
     Ok(result)
 }
@@ -490,6 +843,129 @@ pub fn stop_hue_stream(
         .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
     let trigger = trigger_source.unwrap_or(HueRuntimeTriggerSource::System);
     Ok(stop_with_timeout(&mut owner, false, trigger))
+}
+
+#[tauri::command]
+pub fn restart_hue_stream(
+    request: StartHueStreamRequest,
+    runtime_state: State<'_, HueRuntimeStateStore>,
+) -> Result<HueRuntimeCommandResult, String> {
+    let mut owner = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+    let trigger = request
+        .trigger_source
+        .clone()
+        .unwrap_or(HueRuntimeTriggerSource::DeviceSurface);
+
+    let _ = stop_with_timeout(&mut owner, false, trigger.clone());
+
+    let readiness = check_hue_stream_readiness(
+        request.bridge_ip.clone(),
+        request.username.clone(),
+        request.area_id.clone(),
+    );
+
+    let gate = HueRuntimeGateEvidence {
+        bridge_configured: !request.bridge_ip.trim().is_empty(),
+        credentials_valid: !request.username.trim().is_empty(),
+        area_selected: !request.area_id.trim().is_empty(),
+        readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
+        ready: readiness.readiness.ready,
+        auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
+            || readiness.status.code == "HUE_CREDENTIAL_INVALID",
+    };
+
+    let result = start_with_evidence(&mut owner, &gate, trigger);
+    let light_ids = if result.active {
+        fetch_area_light_ids(&request.bridge_ip, &request.username, &request.area_id)
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let has_no_lights = result.active && light_ids.is_empty();
+    store_active_stream_context(&mut owner, &request, light_ids, &result);
+
+    if has_no_lights {
+        owner.last_status = status_with(
+            HueRuntimeState::Running,
+            "HUE_STREAM_RUNNING_NO_LIGHTS",
+            "Hue runtime restarted but no color-addressable lights were resolved for the selected area.",
+            Some("Revalidate area members and retry.".to_string()),
+            HueRuntimeTriggerSource::System,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+        return Ok(make_result(&owner));
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn set_hue_solid_color(
+    request: SetHueSolidColorRequest,
+    runtime_state: State<'_, HueRuntimeStateStore>,
+) -> Result<HueRuntimeCommandResult, String> {
+    let mut owner = runtime_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+
+    let trigger = request
+        .trigger_source
+        .clone()
+        .unwrap_or(HueRuntimeTriggerSource::ModeControl);
+
+    let Some(active_stream) = owner.active_stream.clone() else {
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "HUE_COLOR_APPLY_SKIPPED",
+            "Hue color apply skipped because stream context is not active.",
+            Some("Start Hue runtime before sending color updates.".to_string()),
+            trigger,
+        );
+        return Ok(make_result(&owner));
+    };
+
+    if active_stream.light_ids.is_empty() {
+        owner.last_status = status_with(
+            HueRuntimeState::Running,
+            "HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS",
+            "Hue color apply skipped because no addressable lights were resolved for the selected area.",
+            Some("Revalidate area and restart Hue runtime to refresh channel mapping.".to_string()),
+            trigger,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+        return Ok(make_result(&owner));
+    }
+
+    let brightness = request.brightness.unwrap_or(1.0).clamp(0.0, 1.0);
+    match apply_solid_color_to_hue_lights(
+        &active_stream.bridge_ip,
+        &active_stream.username,
+        &active_stream.light_ids,
+        request.r,
+        request.g,
+        request.b,
+        brightness,
+    ) {
+        Ok(_) => {
+            owner.state = HueRuntimeState::Running;
+            owner.last_status = status_with(
+                HueRuntimeState::Running,
+                "HUE_COLOR_APPLIED",
+                "Hue solid color update applied.",
+                None,
+                trigger,
+            );
+            Ok(make_result(&owner))
+        }
+        Err(reason) => {
+            let result = register_transient_fault(&mut owner, &reason, trigger);
+            Ok(result)
+        }
+    }
 }
 
 #[tauri::command]
@@ -656,6 +1132,36 @@ mod tests {
     }
 
     #[test]
+    fn command_status_refresh_preserves_retry_budget_for_not_ready_area_state() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut not_ready_gate = strict_gate_ready();
+        not_ready_gate.ready = false;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        owner.reconnect_attempt = 1;
+
+        let result = status_refresh_with_evidence(
+            &mut owner,
+            &not_ready_gate,
+            Some("area readiness dropped".to_string()),
+        );
+
+        assert_eq!(result.status.state, HueRuntimeState::Running);
+        assert_eq!(result.status.code, "CONFIG_NOT_READY_GATE_BLOCKED");
+        assert_eq!(
+            result.status.action_hint,
+            Some(HueRuntimeActionHint::Revalidate)
+        );
+        assert_eq!(result.status.remaining_attempts, Some(2));
+        assert_eq!(owner.reconnect_attempt, 1);
+    }
+
+    #[test]
     fn start_success_persists_active_stream_context_for_status_refresh() {
         let mut owner = HueRuntimeOwner::default();
         let request = StartHueStreamRequest {
@@ -670,12 +1176,18 @@ mod tests {
             &strict_gate_ready(),
             HueRuntimeTriggerSource::ModeControl,
         );
-        store_active_stream_context(&mut owner, &request, &start_result);
+        store_active_stream_context(
+            &mut owner,
+            &request,
+            vec!["light-1".to_string()],
+            &start_result,
+        );
 
         let active_stream = owner.active_stream.as_ref().expect("active stream context");
         assert_eq!(active_stream.bridge_ip, "192.168.1.2");
         assert_eq!(active_stream.username, "hue-user");
         assert_eq!(active_stream.area_id, "living-room");
+        assert_eq!(active_stream.light_ids, vec!["light-1".to_string()]);
     }
 
     #[test]
@@ -735,6 +1247,7 @@ mod tests {
             bridge_ip: "192.168.1.2".to_string(),
             username: "username".to_string(),
             area_id: "area".to_string(),
+            light_ids: vec!["light-1".to_string()],
         });
         let _ = stop_with_timeout(&mut owner, false, HueRuntimeTriggerSource::DeviceSurface);
 

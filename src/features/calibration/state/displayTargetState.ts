@@ -55,7 +55,7 @@ function toBlockedSnapshot(
     activeDisplayId: null,
     blocked: true,
     blockedCode: result?.code ?? "OVERLAY_OPEN_FAILED",
-    blockedReason: result?.reason ?? result?.message ?? fallbackReason ?? "Overlay open failed.",
+    blockedReason: result?.reason ?? result?.message ?? fallbackReason ?? null,
     isSwitching: false,
   };
 }

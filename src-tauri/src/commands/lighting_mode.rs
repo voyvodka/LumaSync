@@ -11,6 +11,10 @@ use super::ambilight_capture::{
     SamplingCalibration, StaticFrameSource,
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
+use super::hue_stream_lifecycle::{
+    apply_hue_color_with_context, snapshot_hue_output_context, HueActiveOutputContext,
+    HueRuntimeStateStore,
+};
 use super::led_output::{
     apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, LedOutputBridge,
 };
@@ -254,6 +258,7 @@ fn start_ambilight_worker(
     brightness: f32,
     mut frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
+    hue_output: Option<HueActiveOutputContext>,
 ) -> Result<LightingWorkerRuntime, String> {
     let initial_frame = frame_source
         .capture_frame()
@@ -289,6 +294,7 @@ fn start_ambilight_worker(
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        let mut last_hue_push_at = Instant::now();
 
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
@@ -313,6 +319,34 @@ fn start_ambilight_worker(
                     }) {
                         Ok(true) => {
                             telemetry_window.record_send();
+                            if let Some(context) = hue_output.as_ref() {
+                                let elapsed =
+                                    Instant::now().saturating_duration_since(last_hue_push_at);
+                                if elapsed >= Duration::from_millis(180) {
+                                    let led_count = sampled.len().max(1) as u32;
+                                    let (sum_r, sum_g, sum_b) = sampled.iter().fold(
+                                        (0_u32, 0_u32, 0_u32),
+                                        |(acc_r, acc_g, acc_b), color| {
+                                            (
+                                                acc_r + u32::from(color[0]),
+                                                acc_g + u32::from(color[1]),
+                                                acc_b + u32::from(color[2]),
+                                            )
+                                        },
+                                    );
+                                    let avg_r = (sum_r / led_count) as u8;
+                                    let avg_g = (sum_g / led_count) as u8;
+                                    let avg_b = (sum_b / led_count) as u8;
+
+                                    if apply_hue_color_with_context(
+                                        context, avg_r, avg_g, avg_b, brightness,
+                                    )
+                                    .is_ok()
+                                    {
+                                        last_hue_push_at = Instant::now();
+                                    }
+                                }
+                            }
                             send_started.elapsed().as_secs_f32() * 1000.0
                         }
                         _ => 0.0,
@@ -338,6 +372,7 @@ fn apply_mode_change(
     next_mode: LightingModeConfig,
     device_connected: bool,
     connected_port: Option<&str>,
+    hue_output: Option<HueActiveOutputContext>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
     trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
@@ -410,6 +445,16 @@ fn apply_mode_change(
             }
 
             owner.active_mode = normalized_next;
+            if let Some(context) = hue_output.as_ref() {
+                let _ = apply_hue_color_with_context(
+                    context,
+                    payload.r,
+                    payload.g,
+                    payload.b,
+                    payload.brightness,
+                );
+            }
+
             make_result(
                 owner.active_mode.clone(),
                 command_status(
@@ -462,6 +507,7 @@ fn apply_mode_change(
                 frame_source,
                 telemetry_snapshot
                     .unwrap_or_else(|| Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))),
+                hue_output,
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
@@ -496,6 +542,7 @@ pub fn set_lighting_mode(
     payload: LightingModeConfig,
     runtime_state: State<'_, LightingRuntimeState>,
     connection_state: State<'_, SerialConnectionState>,
+    hue_runtime_state: State<'_, HueRuntimeStateStore>,
     telemetry_state: State<'_, RuntimeTelemetryState>,
 ) -> Result<LightingModeCommandResult, String> {
     let connection_snapshot = connection_state
@@ -509,11 +556,14 @@ pub fn set_lighting_mode(
         .lock()
         .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
 
+    let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
+
     Ok(apply_mode_change(
         &mut owner,
         payload,
         connection_snapshot.connected,
         connection_snapshot.port_name.as_deref(),
+        hue_output,
         Some(telemetry_state.shared_snapshot()),
         None,
     ))
@@ -532,6 +582,7 @@ pub fn stop_lighting(
         &mut owner,
         LightingModeConfig::default(),
         true,
+        None,
         None,
         None,
         None,
@@ -690,6 +741,7 @@ mod tests {
                     0.8,
                     (owner.frame_source_factory)().expect("frame source should be available"),
                     shared_runtime_telemetry(),
+                    None,
                 )
                 .expect("worker start should succeed"),
             ),
@@ -703,6 +755,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM1"),
+            None,
             Some(shared_runtime_telemetry()),
             Some(&mut trace),
         );
@@ -721,7 +774,15 @@ mod tests {
     fn set_solid_applies_payload_and_marks_mode_active() {
         SOLID_OUTPUT_ATTEMPTS.store(0, Ordering::SeqCst);
         let mut owner = owner_with_fake_sender();
-        let result = apply_mode_change(&mut owner, solid_mode(), true, Some("COM4"), None, None);
+        let result = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM4"),
+            None,
+            None,
+            None,
+        );
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
         assert_eq!(result.mode.kind, LightingModeKind::Solid);
@@ -744,6 +805,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM7"),
+            None,
             Some(shared_runtime_telemetry()),
             None,
         );
@@ -772,6 +834,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM2"),
+            None,
             Some(shared_runtime_telemetry()),
             None,
         );
@@ -784,6 +847,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM2"),
+            None,
             Some(shared_runtime_telemetry()),
             None,
         );
@@ -791,8 +855,15 @@ mod tests {
         wait_for_worker_count(1);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
 
-        let final_state =
-            apply_mode_change(&mut owner, solid_mode(), true, Some("COM2"), None, None);
+        let final_state = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM2"),
+            None,
+            None,
+            None,
+        );
         assert_eq!(final_state.mode.kind, LightingModeKind::Solid);
         wait_for_worker_count(0);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 0);
@@ -803,12 +874,21 @@ mod tests {
     #[test]
     fn disconnected_mode_change_keeps_existing_runtime_state() {
         let mut owner = owner_with_fake_sender();
-        let _ = apply_mode_change(&mut owner, solid_mode(), true, Some("COM3"), None, None);
+        let _ = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM3"),
+            None,
+            None,
+            None,
+        );
 
         let denied = apply_mode_change(
             &mut owner,
             ambilight_mode(),
             false,
+            None,
             None,
             Some(shared_runtime_telemetry()),
             None,
@@ -827,6 +907,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM1"),
+            None,
             Some(shared_runtime_telemetry()),
             None,
         );

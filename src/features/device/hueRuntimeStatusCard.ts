@@ -36,7 +36,11 @@ function resolveVariant(status: HueRuntimeStatus): HueRuntimeStatusCardModel["va
   return "info";
 }
 
-function deriveFamilyActionHints(code: string): HueRuntimeActionHint[] {
+function deriveFamilyActionHints(code: string | null | undefined): HueRuntimeActionHint[] {
+  if (typeof code !== "string" || code.length === 0) {
+    return [];
+  }
+
   if (code.startsWith("AUTH_INVALID_")) {
     return [HUE_RUNTIME_ACTION_HINT.REPAIR];
   }

@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Tauri / Rust build artifacts
+src-tauri/target/
+
+# Local GitHub Actions runner artifacts
+.act/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

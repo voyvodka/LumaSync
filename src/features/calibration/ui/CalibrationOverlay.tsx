@@ -361,12 +361,12 @@ export function CalibrationOverlay({
                      try {
                        if (shouldEnable) {
                          if (displayTarget.blocked) {
-                           const reason = displayTarget.blockedReason ?? "Overlay open failed.";
+                            const reason = displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
                            const code = displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                           const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
-                           console.warn(message);
-                           setTestPatternError(message);
-                           return;
+                            const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
+                            console.warn(message);
+                            setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
+                            return;
                          }
 
                           const switched = await displayTargetRef.current.switchActiveDisplay(
@@ -375,12 +375,12 @@ export function CalibrationOverlay({
                           );
                          setDisplayTarget(switched);
                          if (switched.blocked) {
-                          const reason = switched.blockedReason ?? "Overlay open failed.";
+                           const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
                           const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                          const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
-                          console.warn(message);
-                          setTestPatternError(message);
-                           return;
+                           const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
+                           console.warn(message);
+                           setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
+                            return;
                         }
                       }
 
@@ -395,12 +395,10 @@ export function CalibrationOverlay({
                        setDisplayTarget(displayTargetRef.current.clearBlockedState());
                      }
                     } catch (error) {
-                      const message =
-                        error instanceof Error
-                          ? `[LumaSync] Test pattern toggle failed: ${error.message}`
-                          : `[LumaSync] Test pattern toggle failed: ${String(error)}`;
+                      const reason = error instanceof Error ? error.message : String(error);
+                      const message = `[LumaSync] Test pattern toggle failed: ${reason}`;
                       console.warn(message);
-                      setTestPatternError(message);
+                      setTestPatternError(t("calibration.overlay.errors.testPatternToggleFailed", { reason }));
                       try {
                         const safeSnapshot = await flowRef.current.toggle(false);
                         setTestPattern(safeSnapshot);
@@ -445,25 +443,23 @@ export function CalibrationOverlay({
                              );
                             setDisplayTarget(switched);
                             if (switched.blocked) {
-                              const reason = switched.blockedReason ?? "Overlay open failed.";
+                               const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
                               const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                              const message = `[LumaSync] Display switch blocked (${code}): ${reason}`;
-                              console.warn(message);
-                              setTestPatternError(message);
-                              const disabledPattern = await flowRef.current.toggle(false);
-                              setTestPattern(disabledPattern);
-                              return;
+                               const message = `[LumaSync] Display switch blocked (${code}): ${reason}`;
+                               console.warn(message);
+                               setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
+                               const disabledPattern = await flowRef.current.toggle(false);
+                               setTestPattern(disabledPattern);
+                               return;
                             }
 
                            setTestPatternError(null);
                            setDisplayTarget(displayTargetRef.current.clearBlockedState());
                           } catch (error) {
-                            const message =
-                              error instanceof Error
-                                ? `[LumaSync] Display switch failed: ${error.message}`
-                                : `[LumaSync] Display switch failed: ${String(error)}`;
+                            const reason = error instanceof Error ? error.message : String(error);
+                            const message = `[LumaSync] Display switch failed: ${reason}`;
                             console.warn(message);
-                            setTestPatternError(message);
+                            setTestPatternError(t("calibration.overlay.errors.displaySwitchFailed", { reason }));
                           }
                         }}
                     >
@@ -516,7 +512,7 @@ export function CalibrationOverlay({
                 </span>
               ) : (
                 <span className="rounded-md border border-emerald-300/60 bg-emerald-500/20 px-2 py-1 text-emerald-100">
-                  Output active
+                  {t("calibration.overlay.outputActive")}
                 </span>
               )
             ) : null}

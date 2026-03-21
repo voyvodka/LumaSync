@@ -4,8 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HUE_CREDENTIAL_STATUS, HUE_RUNTIME_TRIGGER_SOURCE } from "../../shared/contracts/hue";
 
 const getHueStreamStatusMock = vi.fn();
-const startHueMock = vi.fn();
-const stopHueMock = vi.fn();
+const restartHueMock = vi.fn();
 const shellLoadMock = vi.fn();
 const shellSaveMock = vi.fn();
 const listAreasMock = vi.fn();
@@ -13,8 +12,8 @@ const validateCredentialsMock = vi.fn();
 
 vi.mock("../mode/modeApi", () => ({
   getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
-  startHue: (...args: unknown[]) => startHueMock(...args),
-  stopHue: (...args: unknown[]) => stopHueMock(...args),
+  restartHue: (...args: unknown[]) => restartHueMock(...args),
+  startHue: vi.fn(),
 }));
 
 vi.mock("../persistence/shellStore", () => ({
@@ -66,8 +65,7 @@ describe("useHueOnboarding runtime wiring", () => {
 
   beforeEach(async () => {
     getHueStreamStatusMock.mockReset();
-    startHueMock.mockReset();
-    stopHueMock.mockReset();
+    restartHueMock.mockReset();
     shellLoadMock.mockReset();
     shellSaveMock.mockReset();
     listAreasMock.mockReset();
@@ -132,7 +130,7 @@ describe("useHueOnboarding runtime wiring", () => {
     });
   });
 
-  it("routes retryRuntimeTarget('hue') through stop+start pipeline", async () => {
+  it("routes retryRuntimeTarget('hue') through restart pipeline", async () => {
     shellLoadMock.mockResolvedValue({
       lastHueBridge: { id: "bridge-1", ip: "192.168.1.20", name: "Bridge" },
       hueAppKey: "app-user",
@@ -147,7 +145,11 @@ describe("useHueOnboarding runtime wiring", () => {
       await (result.current.retryRuntimeTarget as ((target: string) => Promise<void>) | undefined)?.("hue");
     });
 
-    expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
-    expect(startHueMock.mock.calls.length).toBeGreaterThanOrEqual(0);
+    expect(restartHueMock).toHaveBeenCalledWith({
+      bridgeIp: "192.168.1.20",
+      username: "app-user",
+      areaId: "area-1",
+      triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+    });
   });
 });

@@ -31,6 +31,7 @@ import {
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import {
+  setHueSolidColor,
   setLightingMode,
   startHue,
   stopLighting,
@@ -57,6 +58,8 @@ import {
 import type { HueRuntimeTarget } from "./shared/contracts/hue";
 
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
+const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
+const HUE_SOLID_SYNC_INTERVAL_MS = 2_000;
 
 interface HueStartConfig {
   bridgeIp: string;
@@ -103,6 +106,15 @@ function isHueStopCodeOk(code: string): boolean {
   return code === "HUE_STREAM_STOPPED";
 }
 
+function isSameTargetSet(currentTargets: HueRuntimeTarget[], expectedTargets: HueRuntimeTarget[]): boolean {
+  if (currentTargets.length !== expectedTargets.length) {
+    return false;
+  }
+
+  const currentSet = new Set(currentTargets);
+  return expectedTargets.every((target) => currentSet.has(target));
+}
+
 function App() {
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.GENERAL);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
@@ -113,9 +125,81 @@ function App() {
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayStep, setOverlayStep] = useState<CalibrationOverlayStep>("editor");
   const [lifecycleReady, setLifecycleReady] = useState(false);
+  const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
   const autoOpenTriggeredRef = useRef(false);
+  const modeTransitionLockRef = useRef(false);
+  const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
+  const persistLightingModeTimeoutRef = useRef<number | null>(null);
+  const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
+  const queuedHueSolidRef = useRef<LightingModeConfig["solid"] | null>(null);
+  const hueSolidPushInFlightRef = useRef(false);
+
+  const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
+    if (persistLightingModeTimeoutRef.current !== null) {
+      window.clearTimeout(persistLightingModeTimeoutRef.current);
+      persistLightingModeTimeoutRef.current = null;
+    }
+
+    persistLightingModeTimeoutRef.current = window.setTimeout(() => {
+      persistLightingModeTimeoutRef.current = null;
+      void saveShellState({ lightingMode: mode });
+    }, LIGHTING_MODE_PERSIST_DEBOUNCE_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (persistLightingModeTimeoutRef.current !== null) {
+        window.clearTimeout(persistLightingModeTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    activeOutputTargetsRef.current = activeOutputTargets;
+  }, [activeOutputTargets]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (hueSolidPushInFlightRef.current) {
+        return;
+      }
+
+      const nextSolid = queuedHueSolidRef.current;
+      if (!nextSolid) {
+        return;
+      }
+
+      if (!activeOutputTargetsRef.current.includes("hue")) {
+        queuedHueSolidRef.current = null;
+        return;
+      }
+
+      hueSolidPushInFlightRef.current = true;
+      void setHueSolidColor({
+        r: nextSolid.r,
+        g: nextSolid.g,
+        b: nextSolid.b,
+        brightness: nextSolid.brightness,
+      })
+        .then(() => {
+          if (queuedHueSolidRef.current === nextSolid) {
+            queuedHueSolidRef.current = null;
+          }
+        })
+        .catch((error) => {
+          console.error("[LumaSync] Failed to push queued Hue solid snapshot:", error);
+        })
+        .finally(() => {
+          hueSolidPushInFlightRef.current = false;
+        });
+    }, HUE_SOLID_SYNC_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     async function bootstrap() {
@@ -193,16 +277,60 @@ function App() {
 
   const handleLightingModeChange = useCallback(
     async (nextMode: LightingModeConfig) => {
-      const normalizedNextMode = normalizeLightingModeConfig(nextMode);
+      if (modeTransitionLockRef.current) {
+        pendingModeChangeRef.current = nextMode;
+        return;
+      }
+
+      modeTransitionLockRef.current = true;
+
+      const normalizedNextMode = normalizeLightingModeConfig({
+        kind: nextMode.kind,
+        solid: nextMode.solid ?? lightingMode.solid,
+        ambilight: nextMode.ambilight ?? lightingMode.ambilight,
+      });
+      const isQuickSolidAdjustment =
+        normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID
+        && lightingMode.kind === LIGHTING_MODE_KIND.SOLID
+        && isSameTargetSet(selectedOutputTargets, activeOutputTargets);
+
+      if (isQuickSolidAdjustment && normalizedNextMode.solid) {
+        setLightingModeState(normalizedNextMode);
+        scheduleLightingModePersist(normalizedNextMode);
+
+        if (activeOutputTargets.includes("usb")) {
+          void setLightingMode(normalizedNextMode).catch((error) => {
+            console.error("[LumaSync] Failed to push USB solid update:", error);
+          });
+        }
+
+        if (activeOutputTargets.includes("hue")) {
+          queuedHueSolidRef.current = normalizedNextMode.solid;
+        }
+
+        modeTransitionLockRef.current = false;
+        return;
+      }
+
+      if (!isQuickSolidAdjustment) {
+        setIsModeTransitioning(true);
+      }
+
       const requiresCalibration = !savedCalibration
         && normalizedNextMode.kind !== LIGHTING_MODE_KIND.OFF;
 
       if (requiresCalibration) {
         openCalibrationOverlay("template");
+        modeTransitionLockRef.current = false;
+        setIsModeTransitioning(false);
         return;
       }
 
       try {
+        const latestShellState = await loadShellState();
+        const runtimeHueStartConfig = toHueStartConfig(latestShellState) ?? hueStartConfig;
+        setHueStartConfig(runtimeHueStartConfig);
+
         if (normalizedNextMode.kind === LIGHTING_MODE_KIND.OFF) {
           const runtimePlan = resolveHueRuntimePlan({
             action: "stop",
@@ -232,7 +360,7 @@ function App() {
           const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
           setActiveOutputTargets(merged.activeTargets);
           setLightingModeState(normalizedNextMode);
-          await saveShellState({ lightingMode: normalizedNextMode });
+          scheduleLightingModePersist(normalizedNextMode);
           return;
         }
 
@@ -245,12 +373,21 @@ function App() {
         const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
         for (const target of runtimePlan.startTargets) {
           if (target === "usb") {
-            await setLightingMode(normalizedNextMode);
-            targetResults.usb = { ok: true };
+            try {
+              await setLightingMode(normalizedNextMode);
+              targetResults.usb = { ok: true };
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : String(error);
+              targetResults.usb = {
+                ok: false,
+                code: "USB_MODE_APPLY_FAILED",
+                message: reason,
+              };
+            }
           }
 
           if (target === "hue") {
-            if (!hueStartConfig) {
+            if (!runtimeHueStartConfig) {
               targetResults.hue = {
                 ok: false,
                 code: "CONFIG_NOT_READY_GATE_BLOCKED",
@@ -259,12 +396,34 @@ function App() {
               continue;
             }
 
-            const hueResult = await startHue(hueStartConfig);
-            targetResults.hue = {
-              ok: isHueStartCodeOk(hueResult.status.code),
-              code: hueResult.status.code,
-              message: hueResult.status.message,
-            };
+            try {
+              const hueResult = await startHue(runtimeHueStartConfig);
+              targetResults.hue = {
+                ok: isHueStartCodeOk(hueResult.status.code),
+                code: hueResult.status.code,
+                message: hueResult.status.message,
+              };
+
+              if (
+                targetResults.hue.ok
+                && normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID
+                && normalizedNextMode.solid
+              ) {
+                await setHueSolidColor({
+                  r: normalizedNextMode.solid.r,
+                  g: normalizedNextMode.solid.g,
+                  b: normalizedNextMode.solid.b,
+                  brightness: normalizedNextMode.solid.brightness,
+                });
+              }
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : String(error);
+              targetResults.hue = {
+                ok: false,
+                code: "HUE_MODE_APPLY_FAILED",
+                message: reason,
+              };
+            }
           }
         }
 
@@ -272,14 +431,23 @@ function App() {
         setActiveOutputTargets(merged.activeTargets);
         if (merged.activeTargets.length > 0) {
           setLightingModeState(normalizedNextMode);
-          await saveShellState({ lightingMode: normalizedNextMode });
+          scheduleLightingModePersist(normalizedNextMode);
         }
       } catch (error) {
         const modeLabel = normalizedNextMode.kind;
         console.error(`[LumaSync] Failed to switch lighting mode to ${modeLabel}:`, error);
+      } finally {
+        modeTransitionLockRef.current = false;
+        setIsModeTransitioning(false);
+
+        const pendingModeChange = pendingModeChangeRef.current;
+        pendingModeChangeRef.current = null;
+        if (pendingModeChange) {
+          void handleLightingModeChange(pendingModeChange);
+        }
       }
     },
-    [activeOutputTargets, hueStartConfig, openCalibrationOverlay, savedCalibration, selectedOutputTargets],
+    [activeOutputTargets, hueStartConfig, lightingMode.ambilight, lightingMode.kind, lightingMode.solid, openCalibrationOverlay, savedCalibration, scheduleLightingModePersist, selectedOutputTargets],
   );
 
   const modeGuard = canEnableLedMode(savedCalibration);
@@ -295,6 +463,7 @@ function App() {
         lightingMode={lightingMode}
         outputTargets={selectedOutputTargets}
         modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
+        isModeTransitioning={isModeTransitioning}
         onLightingModeChange={handleLightingModeChange}
         onOutputTargetsChange={handleOutputTargetsChange}
         onEditCalibration={handleOpenCalibration}

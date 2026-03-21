@@ -5,6 +5,8 @@ import type { LightingModeConfig } from "./model/contracts";
 import {
   getHueStreamStatus,
   getLightingModeStatus,
+  restartHue,
+  setHueSolidColor,
   startHue,
   setLightingMode,
   stopHue,
@@ -66,7 +68,10 @@ describe("modeApi wrappers", () => {
       details: null,
       triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
     };
-    const invokeMock = vi.fn().mockResolvedValue(runtimeStatus);
+    const invokeMock = vi.fn().mockResolvedValue({
+      active: true,
+      status: runtimeStatus,
+    });
 
     await expect(getHueStreamStatus(invokeMock)).resolves.toEqual(runtimeStatus);
     expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.GET_STREAM_STATUS);
@@ -117,6 +122,70 @@ describe("modeApi wrappers", () => {
         bridgeIp: "192.168.1.4",
         username: "demo-user",
         areaId: "area-1",
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
+      },
+    });
+  });
+
+  it("invokes restart_hue_stream with device-surface trigger by default", async () => {
+    const invokeMock = vi.fn().mockResolvedValue({
+      active: true,
+      status: {
+        state: "Running",
+        code: "HUE_STREAM_RUNNING",
+        message: "Hue runtime restarted and running.",
+        details: null,
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+    });
+
+    await restartHue(
+      {
+        bridgeIp: "192.168.1.4",
+        username: "demo-user",
+        areaId: "area-1",
+      },
+      invokeMock,
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.RESTART_STREAM, {
+      request: {
+        bridgeIp: "192.168.1.4",
+        username: "demo-user",
+        areaId: "area-1",
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+    });
+  });
+
+  it("invokes set_hue_solid_color with normalized payload", async () => {
+    const invokeMock = vi.fn().mockResolvedValue({
+      active: true,
+      status: {
+        state: "Running",
+        code: "HUE_COLOR_APPLIED",
+        message: "Hue solid color update applied.",
+        details: null,
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
+      },
+    });
+
+    await setHueSolidColor(
+      {
+        r: 123.9,
+        g: 200.1,
+        b: 40,
+        brightness: 0.8,
+      },
+      invokeMock,
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.SET_SOLID_COLOR, {
+      request: {
+        r: 123,
+        g: 200,
+        b: 40,
+        brightness: 0.8,
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
       },
     });

@@ -9,7 +9,7 @@ import {
   type HueRuntimeTargetTelemetryRow,
   type HueCredentialStatus,
 } from "../../shared/contracts/hue";
-import { getHueStreamStatus, startHue, stopHue } from "../mode/modeApi";
+import { getHueStreamStatus, restartHue, startHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
 import {
   checkHueStreamReadiness,
@@ -29,6 +29,7 @@ const IPV4_PATTERN =
 
 type HueStep = "discover" | "pair" | "area" | "ready";
 const READINESS_STALE_MS = 30_000;
+const READINESS_BACKGROUND_REFRESH_MS = 15_000;
 const RUNTIME_POLL_INTERVAL_MS = 3_000;
 
 export interface HueAreaReadiness {
@@ -73,6 +74,7 @@ export interface UseHueOnboardingResult {
   status: CommandStatus | null;
   runtimeStatus: HueRuntimeStatus | null;
   runtimeTargets: HueRuntimeTargetTelemetryRow[];
+  isRuntimeMutating: boolean;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
@@ -81,6 +83,7 @@ export interface UseHueOnboardingResult {
   refreshAreas: () => Promise<void>;
   selectArea: (areaId: string | null) => void;
   revalidateArea: () => Promise<void>;
+  startRuntime: () => Promise<void>;
   retryRuntimeTarget: (target: HueRuntimeTarget) => Promise<void>;
 }
 
@@ -233,6 +236,24 @@ function flattenAreaGroups(areaGroups: HueAreaGroup[]): HueAreaRow[] {
   return areaGroups.flatMap((group) => group.areas);
 }
 
+function applyAreaReadinessSnapshot(
+  areaGroups: HueAreaGroup[],
+  areaId: string,
+  readiness: HueAreaReadiness,
+): HueAreaGroup[] {
+  return areaGroups.map((group) => ({
+    ...group,
+    areas: group.areas.map((area) =>
+      area.id === areaId
+        ? {
+            ...area,
+            readiness,
+          }
+        : area,
+    ),
+  }));
+}
+
 function deriveStep(state: Pick<HueOnboardingState, "selectedBridgeId" | "credentialState" | "selectedAreaId" | "areaGroups">): HueStep {
   if (!state.selectedBridgeId) {
     return "discover";
@@ -248,7 +269,7 @@ function deriveStep(state: Pick<HueOnboardingState, "selectedBridgeId" | "creden
 
   const selectedArea = flattenAreaGroups(state.areaGroups).find((area) => area.id === state.selectedAreaId);
   if (!selectedArea?.readiness?.ready) {
-    return "ready";
+    return "area";
   }
 
   return "ready";
@@ -273,6 +294,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const [readinessCheckedAtById, setReadinessCheckedAtById] = useState<Map<string, number>>(new Map());
   const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatus | null>(null);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
+  const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
 
   const selectedBridge = useMemo(
     () => state.bridges.find((bridge) => bridge.id === state.selectedBridgeId) ?? null,
@@ -321,6 +343,54 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       };
     });
   }, []);
+
+  const applyReadinessResult = useCallback(
+    (
+      areaId: string,
+      response: Awaited<ReturnType<typeof checkHueStreamReadiness>>,
+      options?: {
+        publishStatus?: boolean;
+        persistReadyStep?: boolean;
+      },
+    ) => {
+      const readiness: HueAreaReadiness = {
+        ready: response.readiness.ready,
+        reasons: response.readiness.reasons,
+        code: response.status.code,
+        message: response.status.message,
+        details: response.status.details,
+      };
+
+      setReadinessById((prev) => {
+        const next = new Map(prev);
+        next.set(areaId, readiness);
+        return next;
+      });
+
+      setReadinessCheckedAtById((prev) => {
+        const next = new Map(prev);
+        next.set(areaId, Date.now());
+        return next;
+      });
+
+      patchState((prev) => {
+        const areaGroups = applyAreaReadinessSnapshot(prev.areaGroups, areaId, readiness);
+
+        return {
+          ...prev,
+          areaGroups,
+          status: options?.publishStatus === false ? prev.status : response.status,
+        };
+      });
+
+      if (response.readiness.ready && options?.persistReadyStep !== false) {
+        void shellStore.save({
+          hueOnboardingStep: HUE_ONBOARDING_STEP.READY,
+        });
+      }
+    },
+    [patchState],
+  );
 
   const refreshAreas = useCallback(async () => {
     if (!selectedBridge || !state.credentials) {
@@ -551,46 +621,15 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         state.selectedAreaId,
       );
 
-      setReadinessById((prev) => {
-        const next = new Map(prev);
-        next.set(state.selectedAreaId as string, {
-          ready: response.readiness.ready,
-          reasons: response.readiness.reasons,
-          code: response.status.code,
-          message: response.status.message,
-          details: response.status.details,
-        });
-        return next;
+      applyReadinessResult(state.selectedAreaId, response, {
+        publishStatus: true,
+        persistReadyStep: true,
       });
 
-      setReadinessCheckedAtById((prev) => {
-        const next = new Map(prev);
-        next.set(state.selectedAreaId as string, Date.now());
-        return next;
-      });
-
-      patchState((prev) => {
-        const refreshedGroups = normalizeAreas(flattenAreaGroups(prev.areaGroups), new Map(readinessById).set(state.selectedAreaId as string, {
-          ready: response.readiness.ready,
-          reasons: response.readiness.reasons,
-          code: response.status.code,
-          message: response.status.message,
-          details: response.status.details,
-        }));
-
-        if (response.readiness.ready) {
-          void shellStore.save({
-            hueOnboardingStep: HUE_ONBOARDING_STEP.READY,
-          });
-        }
-
-        return {
-          ...prev,
-          areaGroups: refreshedGroups,
-          isCheckingReadiness: false,
-          status: response.status,
-        };
-      });
+      patchState((prev) => ({
+        ...prev,
+        isCheckingReadiness: false,
+      }));
     } catch (error) {
       patchState((prev) => ({
         ...prev,
@@ -602,7 +641,48 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         },
       }));
     }
-  }, [patchState, readinessById, selectedBridge, state.credentials, state.selectedAreaId]);
+  }, [applyReadinessResult, patchState, selectedBridge, state.credentials, state.selectedAreaId]);
+
+  useEffect(() => {
+    if (!selectedBridge || !state.credentials || !state.selectedAreaId || state.isValidatingCredential) {
+      return;
+    }
+
+    let active = true;
+    const bridgeIp = selectedBridge.ip;
+    const username = state.credentials.username;
+    const areaId = state.selectedAreaId;
+
+    const run = async () => {
+      if (!active) {
+        return;
+      }
+
+      try {
+        const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
+        if (!active) {
+          return;
+        }
+
+        applyReadinessResult(areaId, response, {
+          publishStatus: false,
+          persistReadyStep: false,
+        });
+      } catch {
+        // Background readiness refresh is best-effort.
+      }
+    };
+
+    void run();
+    const intervalId = window.setInterval(() => {
+      void run();
+    }, READINESS_BACKGROUND_REFRESH_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -716,8 +796,17 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       const nextStatus = await getHueStreamStatus();
       setRuntimeStatus(nextStatus);
       setRuntimeTargets(deriveRuntimeTargets(nextStatus));
-    } catch {
-      // Runtime polling is best-effort for observability.
+    } catch (error) {
+      const details = error instanceof Error ? error.message : String(error);
+      const fallbackStatus: HueRuntimeStatus = {
+        state: "Failed",
+        code: "HUE_STREAM_STATUS_UNAVAILABLE",
+        message: "Could not fetch Hue runtime status.",
+        details,
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM,
+      };
+      setRuntimeStatus(fallbackStatus);
+      setRuntimeTargets(deriveRuntimeTargets(fallbackStatus));
     }
   }, []);
 
@@ -743,26 +832,65 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     };
   }, [pollRuntimeStatus]);
 
+  const startRuntime = useCallback(async () => {
+    if (isRuntimeMutating || !selectedBridge || !state.credentials || !state.selectedAreaId) {
+      return;
+    }
+
+    setIsRuntimeMutating(true);
+    try {
+      await startHue({
+        bridgeIp: selectedBridge.ip,
+        username: state.credentials.username,
+        areaId: state.selectedAreaId,
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      });
+    } catch (error) {
+      patchState((prev) => ({
+        ...prev,
+        status: {
+          code: "HUE_STREAM_START_FAILED",
+          message: "Could not start Hue stream.",
+          details: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    } finally {
+      await pollRuntimeStatus();
+      setIsRuntimeMutating(false);
+    }
+  }, [isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId]);
+
   const retryRuntimeTarget = useCallback(
     async (target: HueRuntimeTarget) => {
-      if (target !== "hue") {
+      if (isRuntimeMutating || target !== "hue") {
         return;
       }
 
-      await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
-
-      if (selectedBridge && state.credentials && state.selectedAreaId) {
-        await startHue({
-          bridgeIp: selectedBridge.ip,
-          username: state.credentials.username,
-          areaId: state.selectedAreaId,
-          triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-        });
+      setIsRuntimeMutating(true);
+      try {
+        if (selectedBridge && state.credentials && state.selectedAreaId) {
+          await restartHue({
+            bridgeIp: selectedBridge.ip,
+            username: state.credentials.username,
+            areaId: state.selectedAreaId,
+            triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+          });
+        }
+      } catch (error) {
+        patchState((prev) => ({
+          ...prev,
+          status: {
+            code: "HUE_STREAM_RECOVERY_FAILED",
+            message: "Could not recover Hue stream.",
+            details: error instanceof Error ? error.message : String(error),
+          },
+        }));
+      } finally {
+        await pollRuntimeStatus();
+        setIsRuntimeMutating(false);
       }
-
-      await pollRuntimeStatus();
     },
-    [pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId],
+    [isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId],
   );
 
   return {
@@ -787,6 +915,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     status: state.status,
     runtimeStatus,
     runtimeTargets,
+    isRuntimeMutating,
     discover,
     selectBridge,
     setManualIp,
@@ -795,6 +924,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     refreshAreas,
     selectArea,
     revalidateArea,
+    startRuntime,
     retryRuntimeTarget,
   };
 }

@@ -11,6 +11,8 @@ export const HUE_COMMANDS = {
   CHECK_STREAM_READINESS: "check_hue_stream_readiness",
   START_STREAM: "start_hue_stream",
   STOP_STREAM: "stop_hue_stream",
+  RESTART_STREAM: "restart_hue_stream",
+  SET_SOLID_COLOR: "set_hue_solid_color",
   GET_STREAM_STATUS: "get_hue_stream_status",
 } as const;
 

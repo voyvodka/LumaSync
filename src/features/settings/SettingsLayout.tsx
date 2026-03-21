@@ -12,6 +12,7 @@ import type { LedCalibrationConfig } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueRuntimeTarget } from "../../shared/contracts/hue";
+import { APP_NAME } from "../../shared/constants/app";
 
 interface SectionMeta {
   id: SectionId;
@@ -25,6 +26,7 @@ function SectionContent({
   lightingMode,
   outputTargets,
   modeLockReason,
+  isModeTransitioning,
   onLightingModeChange,
   onOutputTargetsChange,
   onEditCalibration,
@@ -34,6 +36,7 @@ function SectionContent({
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
+  isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onEditCalibration: () => void;
@@ -45,6 +48,7 @@ function SectionContent({
           mode={lightingMode}
           outputTargets={outputTargets}
           modeLockReason={modeLockReason}
+          isModeTransitioning={isModeTransitioning}
           onModeChange={onLightingModeChange}
           onOutputTargetsChange={onOutputTargetsChange}
           onOpenCalibrationOverlay={onEditCalibration}
@@ -68,6 +72,7 @@ function SectionContent({
           mode={lightingMode}
           outputTargets={outputTargets}
           modeLockReason={modeLockReason}
+          isModeTransitioning={isModeTransitioning}
           onModeChange={onLightingModeChange}
           onOutputTargetsChange={onOutputTargetsChange}
           onOpenCalibrationOverlay={onEditCalibration}
@@ -83,6 +88,7 @@ interface SettingsLayoutProps {
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
+  isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onEditCalibration: () => void;
@@ -95,6 +101,7 @@ export function SettingsLayout({
   lightingMode,
   outputTargets,
   modeLockReason,
+  isModeTransitioning = false,
   onLightingModeChange,
   onOutputTargetsChange,
   onEditCalibration,
@@ -146,11 +153,11 @@ export function SettingsLayout({
     <div className="flex h-screen w-full overflow-hidden bg-slate-100/60 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
       <nav
         className="flex w-56 min-w-44 flex-col border-r border-slate-300/60 bg-white/80 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/80"
-        aria-label="Settings navigation"
+        aria-label={t("settings.navigationAria")}
       >
         <div className="border-b border-slate-300/70 px-4 py-4 dark:border-zinc-800">
           <span className="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase dark:text-zinc-400">
-            LumaSync
+            {APP_NAME}
           </span>
         </div>
 
@@ -194,6 +201,7 @@ export function SettingsLayout({
           lightingMode={lightingMode}
           outputTargets={outputTargets}
           modeLockReason={modeLockReason}
+          isModeTransitioning={isModeTransitioning}
           onLightingModeChange={onLightingModeChange}
           onOutputTargetsChange={onOutputTargetsChange}
           onEditCalibration={onEditCalibration}

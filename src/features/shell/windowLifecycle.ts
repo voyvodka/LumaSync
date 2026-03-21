@@ -52,7 +52,45 @@ export async function saveShellState(state: Partial<ShellState>): Promise<void> 
 export type TrayHintCallback = () => void;
 
 let unlistenCloseToTray: UnlistenFn | null = null;
+let unlistenMove: UnlistenFn | null = null;
+let unlistenResize: UnlistenFn | null = null;
 let lifecycleInitPromise: Promise<void> | null = null;
+
+const GEOMETRY_PERSIST_DEBOUNCE_MS = 180;
+let geometryPersistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersistWindowState(): void {
+  if (geometryPersistTimer) {
+    clearTimeout(geometryPersistTimer);
+  }
+
+  geometryPersistTimer = setTimeout(() => {
+    geometryPersistTimer = null;
+    void persistWindowState();
+  }, GEOMETRY_PERSIST_DEBOUNCE_MS);
+}
+
+async function initWindowGeometryPersistence(): Promise<void> {
+  const win = getCurrentWindow();
+
+  if (unlistenMove) {
+    unlistenMove();
+    unlistenMove = null;
+  }
+
+  if (unlistenResize) {
+    unlistenResize();
+    unlistenResize = null;
+  }
+
+  unlistenMove = await win.onMoved(() => {
+    schedulePersistWindowState();
+  });
+
+  unlistenResize = await win.onResized(() => {
+    schedulePersistWindowState();
+  });
+}
 
 /**
  * Register the shell:close-to-tray event listener that shows a one-time
@@ -71,6 +109,8 @@ export async function initCloseToTrayHint(
   }
 
   unlistenCloseToTray = await listen("shell:close-to-tray", async () => {
+    await persistWindowState();
+
     const state = await loadShellState();
     if (!state.trayHintShown) {
       await saveShellState({ trayHintShown: true });
@@ -83,29 +123,142 @@ export async function initCloseToTrayHint(
 // Monitor bounds guard
 // ---------------------------------------------------------------------------
 
-/**
- * Validate window position against available monitors.
- * Returns `true` if the position is within any monitor's visible area;
- * `false` if it is off-screen and should be reset.
- */
-async function isPositionOnScreen(x: number, y: number): Promise<boolean> {
-  const monitors = await availableMonitors();
-  for (const monitor of monitors) {
-    const { x: mx, y: my } = monitor.position;
-    const { width: mw, height: mh } = monitor.size;
-    // A 20px margin to account for panels/taskbars near edges
-    if (x >= mx - 20 && y >= my - 20 && x < mx + mw && y < my + mh) {
-      return true;
-    }
+interface WindowRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface MonitorRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const WINDOW_EDGE_MARGIN = 8;
+
+function buildMonitorRect(monitor: { position: { x: number; y: number }; size: { width: number; height: number } }): MonitorRect {
+  return {
+    x: monitor.position.x,
+    y: monitor.position.y,
+    width: monitor.size.width,
+    height: monitor.size.height,
+  };
+}
+
+function isRectFullyInsideMonitor(rect: WindowRect, monitor: MonitorRect): boolean {
+  const minX = monitor.x + WINDOW_EDGE_MARGIN;
+  const minY = monitor.y + WINDOW_EDGE_MARGIN;
+  const maxX = monitor.x + monitor.width - WINDOW_EDGE_MARGIN;
+  const maxY = monitor.y + monitor.height - WINDOW_EDGE_MARGIN;
+
+  return rect.x >= minX
+    && rect.y >= minY
+    && rect.x + rect.width <= maxX
+    && rect.y + rect.height <= maxY;
+}
+
+function clampRectIntoMonitor(rect: WindowRect, monitor: MonitorRect): WindowRect {
+  const maxX = monitor.x + monitor.width - WINDOW_EDGE_MARGIN;
+  const maxY = monitor.y + monitor.height - WINDOW_EDGE_MARGIN;
+  const minX = monitor.x + WINDOW_EDGE_MARGIN;
+  const minY = monitor.y + WINDOW_EDGE_MARGIN;
+
+  const maxAllowedX = Math.max(minX, maxX - rect.width);
+  const maxAllowedY = Math.max(minY, maxY - rect.height);
+
+  return {
+    ...rect,
+    x: Math.min(Math.max(rect.x, minX), maxAllowedX),
+    y: Math.min(Math.max(rect.y, minY), maxAllowedY),
+  };
+}
+
+function squaredDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return (dx * dx) + (dy * dy);
+}
+
+function pickNearestMonitor(rect: WindowRect, monitors: MonitorRect[]): MonitorRect | null {
+  if (monitors.length === 0) {
+    return null;
   }
-  return false;
+
+  const rectCenter = {
+    x: rect.x + (rect.width / 2),
+    y: rect.y + (rect.height / 2),
+  };
+
+  return monitors.reduce((best, monitor) => {
+    const monitorCenter = {
+      x: monitor.x + (monitor.width / 2),
+      y: monitor.y + (monitor.height / 2),
+    };
+
+    if (!best) {
+      return monitor;
+    }
+
+    const bestCenter = {
+      x: best.x + (best.width / 2),
+      y: best.y + (best.height / 2),
+    };
+
+    return squaredDistance(rectCenter, monitorCenter) < squaredDistance(rectCenter, bestCenter)
+      ? monitor
+      : best;
+  }, null as MonitorRect | null);
+}
+
+async function ensureWindowRectOnScreen(rect: WindowRect): Promise<WindowRect | null> {
+  const monitors = (await availableMonitors()).map(buildMonitorRect);
+  if (monitors.length === 0) {
+    return null;
+  }
+
+  const alreadyVisible = monitors.some((monitor) => isRectFullyInsideMonitor(rect, monitor));
+  if (alreadyVisible) {
+    return rect;
+  }
+
+  const nearest = pickNearestMonitor(rect, monitors);
+  if (!nearest) {
+    return null;
+  }
+
+  return clampRectIntoMonitor(rect, nearest);
 }
 
 async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWindow>): Promise<void> {
   const { x, y } = await win.outerPosition();
-  const onScreen = await isPositionOnScreen(x, y);
-  if (!onScreen) {
+  const { width, height } = await win.outerSize();
+  const nextRect = await ensureWindowRectOnScreen({ x, y, width, height });
+
+  if (!nextRect) {
     await win.center();
+    const centeredPosition = await win.outerPosition();
+    const centeredSize = await win.innerSize();
+    await saveShellState({
+      windowX: centeredPosition.x,
+      windowY: centeredPosition.y,
+      windowWidth: centeredSize.width,
+      windowHeight: centeredSize.height,
+    });
+    return;
+  }
+
+  const moved = nextRect.x !== x || nextRect.y !== y;
+  if (moved) {
+    await win.setPosition(new PhysicalPosition(nextRect.x, nextRect.y));
+    await saveShellState({
+      windowX: nextRect.x,
+      windowY: nextRect.y,
+      windowWidth: nextRect.width,
+      windowHeight: nextRect.height,
+    });
   }
 }
 
@@ -137,12 +290,25 @@ export async function restoreWindowState(): Promise<void> {
 
   // Restore position (with monitor-bounds guard)
   if (state.windowX !== null && state.windowY !== null) {
-    const onScreen = await isPositionOnScreen(state.windowX, state.windowY);
-    if (onScreen) {
-      await win.setPosition(new PhysicalPosition(state.windowX, state.windowY));
+    const currentSize = await win.outerSize();
+    const candidateRect: WindowRect = {
+      x: state.windowX,
+      y: state.windowY,
+      width: state.windowWidth ?? currentSize.width,
+      height: state.windowHeight ?? currentSize.height,
+    };
+
+    const adjustedRect = await ensureWindowRectOnScreen(candidateRect);
+    if (adjustedRect) {
+      await win.setPosition(new PhysicalPosition(adjustedRect.x, adjustedRect.y));
+
+      if (adjustedRect.x !== state.windowX || adjustedRect.y !== state.windowY) {
+        await saveShellState({ windowX: adjustedRect.x, windowY: adjustedRect.y });
+      }
     } else {
-      // Off-screen: reset to centered
       await win.center();
+      const centeredPosition = await win.outerPosition();
+      await saveShellState({ windowX: centeredPosition.x, windowY: centeredPosition.y });
     }
   } else {
     // First launch (or legacy state without explicit position): if any plugin
@@ -179,6 +345,7 @@ export async function initWindowLifecycle(opts?: {
   if (!lifecycleInitPromise) {
     lifecycleInitPromise = (async () => {
       await restoreWindowState();
+      await initWindowGeometryPersistence();
       await initCloseToTrayHint(opts?.onFirstCloseToTray);
     })();
   }

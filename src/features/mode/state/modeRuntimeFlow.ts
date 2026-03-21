@@ -37,8 +37,15 @@ export function mergeLightingModeIntoShellState(
   state: ShellState,
   nextMode: LightingModeConfig,
 ): ShellState {
+  const previousMode = state.lightingMode;
+  const mergedMode: LightingModeConfig = {
+    kind: nextMode.kind,
+    solid: nextMode.solid ?? previousMode?.solid,
+    ambilight: nextMode.ambilight ?? previousMode?.ambilight,
+  };
+
   return {
     ...state,
-    lightingMode: normalizeLightingModeConfig(nextMode),
+    lightingMode: normalizeLightingModeConfig(mergedMode),
   };
 }

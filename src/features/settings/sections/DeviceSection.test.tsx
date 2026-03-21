@@ -66,6 +66,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     status: null,
     runtimeStatus: null,
     runtimeTargets: [],
+    isRuntimeMutating: false,
     discover: vi.fn(),
     selectBridge: vi.fn(),
     setManualIp: vi.fn(),
@@ -74,6 +75,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     refreshAreas: vi.fn(),
     selectArea: vi.fn(),
     revalidateArea: vi.fn(),
+    startRuntime: vi.fn(),
     retryRuntimeTarget: vi.fn(),
     ...overrides,
   };
@@ -108,6 +110,18 @@ describe("DeviceSection hue runtime controls", () => {
     await user.click(screen.getByRole("button", { name: "device.hue.actions.stop" }));
 
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+  });
+
+  it("routes Device start action to onboarding runtime start pipeline", async () => {
+    const user = userEvent.setup();
+    const startRuntime = vi.fn();
+    useHueOnboardingMock.mockReturnValue(createHueHookState({ startRuntime }));
+
+    render(<DeviceSection />);
+
+    await user.click(screen.getByRole("button", { name: "device.hue.actions.start" }));
+
+    expect(startRuntime).toHaveBeenCalledTimes(1);
   });
 
   it("keeps healthy target controls enabled while recovering target remains constrained", async () => {

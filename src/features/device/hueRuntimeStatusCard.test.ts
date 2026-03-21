@@ -73,4 +73,14 @@ describe("buildHueRuntimeStatusCard", () => {
 
     expect(model.triggerSourceKey).toBe("device.hue.runtime.triggerSource.device_surface");
   });
+
+  it("does not crash when runtime status code is missing", () => {
+    const model = buildHueRuntimeStatusCard({
+      status: createStatus({
+        code: undefined as unknown as string,
+      }),
+    });
+
+    expect(model.actionHints).toEqual([]);
+  });
 });

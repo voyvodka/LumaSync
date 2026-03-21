@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -39,9 +40,26 @@ interface GeneralSectionProps {
   mode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
+  isModeTransitioning?: boolean;
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onOpenCalibrationOverlay: () => void;
+}
+
+interface SolidDraft {
+  r: number;
+  g: number;
+  b: number;
+  brightness: number;
+}
+
+const SOLID_COMMIT_MIN_INTERVAL_MS = 180;
+
+function isSameSolidDraft(left: SolidDraft, right: SolidDraft): boolean {
+  return left.r === right.r
+    && left.g === right.g
+    && left.b === right.b
+    && Math.abs(left.brightness - right.brightness) < 0.001;
 }
 
 function isSameTargetSet(currentTargets: HueRuntimeTarget[], expectedTargets: HueRuntimeTarget[]): boolean {
@@ -83,20 +101,77 @@ export function GeneralSection({
   mode,
   outputTargets,
   modeLockReason,
+  isModeTransitioning = false,
   onModeChange,
   onOutputTargetsChange,
   onOpenCalibrationOverlay,
 }: GeneralSectionProps) {
   const { t } = useTranslation("common");
   const lockState = getGeneralModeLockState(modeLockReason);
-  const modeSelectorDisabled = lockState.showReason;
+  const modeSelectorDisabled = lockState.showReason || isModeTransitioning;
+  const solidControlsDisabled = lockState.showReason;
   const normalizedMode = normalizeLightingModeConfig(mode);
-  const solidPayload = normalizedMode.solid ?? {
+  const incomingSolidPayload: SolidDraft = normalizedMode.solid ?? {
     r: 255,
     g: 255,
     b: 255,
     brightness: 1,
   };
+  const [solidDraft, setSolidDraft] = useState<SolidDraft>(incomingSolidPayload);
+  const solidCommitTimerRef = useRef<number | null>(null);
+  const pendingSolidCommitRef = useRef<SolidDraft | null>(null);
+  const lastSolidCommitAtRef = useRef(0);
+
+  useEffect(() => {
+    if (pendingSolidCommitRef.current) {
+      return;
+    }
+
+    setSolidDraft((prev) => (isSameSolidDraft(prev, incomingSolidPayload) ? prev : incomingSolidPayload));
+  }, [incomingSolidPayload.brightness, incomingSolidPayload.b, incomingSolidPayload.g, incomingSolidPayload.r]);
+
+  useEffect(() => {
+    return () => {
+      if (solidCommitTimerRef.current !== null) {
+        window.clearTimeout(solidCommitTimerRef.current);
+      }
+    };
+  }, []);
+
+  const flushSolidCommit = (payload: SolidDraft) => {
+    lastSolidCommitAtRef.current = Date.now();
+    pendingSolidCommitRef.current = null;
+    onModeChange({
+      kind: LIGHTING_MODE_KIND.SOLID,
+      solid: payload,
+    });
+  };
+
+  const queueSolidCommit = (payload: SolidDraft) => {
+    pendingSolidCommitRef.current = payload;
+    const elapsed = Date.now() - lastSolidCommitAtRef.current;
+    const waitMs = Math.max(0, SOLID_COMMIT_MIN_INTERVAL_MS - elapsed);
+
+    if (solidCommitTimerRef.current !== null) {
+      window.clearTimeout(solidCommitTimerRef.current);
+      solidCommitTimerRef.current = null;
+    }
+
+    if (waitMs === 0) {
+      flushSolidCommit(payload);
+      return;
+    }
+
+    solidCommitTimerRef.current = window.setTimeout(() => {
+      solidCommitTimerRef.current = null;
+      const latest = pendingSolidCommitRef.current;
+      if (latest) {
+        flushSolidCommit(latest);
+      }
+    }, waitMs);
+  };
+
+  const solidPayload = solidDraft;
 
   const activeKind = normalizedMode.kind;
   const isOff = activeKind === LIGHTING_MODE_KIND.OFF;
@@ -129,6 +204,7 @@ export function GeneralSection({
                 ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
             }`}
+            disabled={modeSelectorDisabled}
             onClick={() => onOutputTargetsChange(["usb"])}
           >
             {t("general.output.options.usb")}
@@ -140,6 +216,7 @@ export function GeneralSection({
                 ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
             }`}
+            disabled={modeSelectorDisabled}
             onClick={() => onOutputTargetsChange(["hue"])}
           >
             {t("general.output.options.hue")}
@@ -151,6 +228,7 @@ export function GeneralSection({
                 ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
             }`}
+            disabled={modeSelectorDisabled}
             onClick={() => onOutputTargetsChange(["usb", "hue"])}
           >
             {t("general.output.options.usbHue")}
@@ -170,6 +248,7 @@ export function GeneralSection({
                 ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                 : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
             }`}
+            disabled={modeSelectorDisabled}
             aria-pressed={isOff}
             onClick={() => onModeChange({ kind: LIGHTING_MODE_KIND.OFF })}
           >
@@ -239,22 +318,21 @@ export function GeneralSection({
                   <input
                     type="color"
                     aria-label={t("general.mode.solidColor")}
-                    disabled={modeSelectorDisabled}
+                    disabled={solidControlsDisabled}
                     value={solidHexColor}
                     className="h-10 w-16 cursor-pointer rounded-md border border-slate-300 bg-transparent p-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600"
                     onChange={(event) => {
                       const nextColor = parseHexColor(event.currentTarget.value);
-                      onModeChange({
-                        kind: LIGHTING_MODE_KIND.SOLID,
-                        solid: {
-                          ...solidPayload,
-                          ...nextColor,
-                        },
-                      });
+                      const nextSolid = {
+                        ...solidPayload,
+                        ...nextColor,
+                      };
+                      setSolidDraft(nextSolid);
+                      queueSolidCommit(nextSolid);
                     }}
                   />
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-slate-800 dark:text-zinc-100">RGB</p>
+                    <p className="text-xs font-medium text-slate-800 dark:text-zinc-100">{t("general.mode.colorModelRgb")}</p>
                     <p className="text-xs text-slate-600 dark:text-zinc-300">
                       {solidPayload.r}, {solidPayload.g}, {solidPayload.b}
                     </p>
@@ -276,7 +354,7 @@ export function GeneralSection({
                     min={0}
                     max={100}
                     step={1}
-                    disabled={modeSelectorDisabled}
+                    disabled={solidControlsDisabled}
                     aria-label={t("general.mode.brightness")}
                     value={solidBrightnessPercent}
                     className="h-2 w-full cursor-pointer appearance-none rounded-full disabled:cursor-not-allowed disabled:opacity-60"
@@ -286,13 +364,12 @@ export function GeneralSection({
                     }}
                     onChange={(event) => {
                       const nextBrightness = Number.parseInt(event.currentTarget.value, 10) / 100;
-                      onModeChange({
-                        kind: LIGHTING_MODE_KIND.SOLID,
-                        solid: {
-                          ...solidPayload,
-                          brightness: Number.isFinite(nextBrightness) ? nextBrightness : solidPayload.brightness,
-                        },
-                      });
+                      const nextSolid = {
+                        ...solidPayload,
+                        brightness: Number.isFinite(nextBrightness) ? nextBrightness : solidPayload.brightness,
+                      };
+                      setSolidDraft(nextSolid);
+                      queueSolidCommit(nextSolid);
                     }}
                   />
                   <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-zinc-400">

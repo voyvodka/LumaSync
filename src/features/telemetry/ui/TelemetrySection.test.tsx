@@ -137,8 +137,10 @@ describe("Settings telemetry wiring", () => {
         activeSection={SECTION_IDS.TELEMETRY}
         onSectionChange={vi.fn()}
         lightingMode={{ kind: "off" }}
+        outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
         onEditCalibration={vi.fn()}
       />,
     );
@@ -157,8 +159,10 @@ describe("Settings telemetry wiring", () => {
         activeSection={SECTION_IDS.GENERAL}
         onSectionChange={onSectionChange}
         lightingMode={{ kind: "off" }}
+        outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
         onEditCalibration={vi.fn()}
       />,
     );

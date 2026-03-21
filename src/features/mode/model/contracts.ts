@@ -58,22 +58,28 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): Am
 
 export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>): LightingModeConfig {
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
+  const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
+  const normalizedAmbilight = input?.ambilight ? normalizeAmbilightPayload(input.ambilight) : undefined;
 
   if (kind === LIGHTING_MODE_KIND.SOLID) {
     return {
       kind,
-      solid: normalizeSolidColorPayload(input?.solid),
+      solid: normalizedSolid ?? normalizeSolidColorPayload(),
+      ambilight: normalizedAmbilight,
     };
   }
 
   if (kind === LIGHTING_MODE_KIND.AMBILIGHT) {
     return {
       kind,
-      ambilight: normalizeAmbilightPayload(input?.ambilight),
+      ambilight: normalizedAmbilight ?? normalizeAmbilightPayload(),
+      solid: normalizedSolid,
     };
   }
 
   return {
     kind: LIGHTING_MODE_KIND.OFF,
+    solid: normalizedSolid,
+    ambilight: normalizedAmbilight,
   };
 }

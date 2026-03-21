@@ -47,6 +47,7 @@ export function DeviceSection() {
     status: hueStatus,
     runtimeStatus,
     runtimeTargets,
+    isRuntimeMutating,
     discover,
     selectBridge,
     setManualIp,
@@ -55,6 +56,7 @@ export function DeviceSection() {
     refreshAreas,
     selectArea,
     revalidateArea,
+    startRuntime,
     retryRuntimeTarget,
   } = useHueOnboarding();
 
@@ -120,7 +122,8 @@ export function DeviceSection() {
     !canStartHue
     || isValidatingCredential
     || credentialState !== "valid"
-    || isReadinessStale;
+    || isReadinessStale
+    || isRuntimeMutating;
 
   const hueStatusModel = buildHueStatusCard({
     status: hueStatus,
@@ -567,6 +570,9 @@ export function DeviceSection() {
 
               <button
                 type="button"
+                onClick={() => {
+                  void startRuntime();
+                }}
                 disabled={hueStartDisabled}
                 className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
               >
@@ -599,7 +605,7 @@ export function DeviceSection() {
             {runtimeTargets.length > 0 ? (
               <div className="mt-3 space-y-2">
                 {runtimeTargets.map((targetRow) => {
-                  const targetLocked = targetRow.state === "Reconnecting";
+                  const targetLocked = isRuntimeMutating || targetRow.state === "Reconnecting";
                   return (
                     <div
                       key={targetRow.target}

@@ -51,8 +51,10 @@ describe("CalibrationSection", () => {
         activeSection={SECTION_IDS.CALIBRATION}
         onSectionChange={vi.fn()}
         lightingMode={{ kind: "off" }}
+        outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
         onEditCalibration={vi.fn()}
       />,
     );
