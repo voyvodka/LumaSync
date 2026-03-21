@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: verifying
-stopped_at: Completed 05-05-PLAN.md
-last_updated: "2026-03-21T11:03:25.257Z"
+stopped_at: Completed 05-06-PLAN.md
+last_updated: "2026-03-21T11:31:09.395Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 32
-  completed_plans: 32
+  total_plans: 33
+  completed_plans: 33
   percent: 100
 ---
 
@@ -80,6 +80,7 @@ Progress: [██████████] 100%
 | Phase 05 P03 | 17 min | 3 tasks | 8 files |
 | Phase 05 P04 | 12 min | 3 tasks | 5 files |
 | Phase 05 P05 | 7 min | 3 tasks | 4 files |
+| Phase 05 P06 | 7 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -159,6 +160,8 @@ Recent decisions affecting current work:
 - [Phase 05]: Ambilight runtime frame uretimi lighting_mode icindeki sentetik builder'dan ayrilip ambilight_capture kontratina alindi.
 - [Phase 05]: Capture kaynakli start hatalari worker baslangicinda erken-fail edilerek AMBILIGHT_MODE_START_FAILED altinda detail reason ile raporlanir.
 - [Phase 05]: MODE-01 closure claim'i varsayilan source canli ekran capture etmedigi icin blocker olarak verification raporunda acik tutulur.
+- [Phase 05]: Runtime default frame source switched to create_live_frame_source; StaticFrameSource is no longer production default.
+- [Phase 05]: Non-Windows path explicitly fails with AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM instead of any silent fallback.
 
 ### Pending Todos
 
@@ -171,6 +174,6 @@ yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T11:03:20.691Z
-Stopped at: Completed 05-05-PLAN.md
+Last session: 2026-03-21T11:31:09.393Z
+Stopped at: Completed 05-06-PLAN.md
 Resume file: None

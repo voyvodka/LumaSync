@@ -29,7 +29,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
   1. User can launch the app and see it running in the system tray.
   2. User can open the full settings window from the tray at any time.
   3. User sees English as the default language on first launch.
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
 - [ ] 01-01-PLAN.md - Build tray-first runtime lifecycle and shell contracts for UX-01
 - [ ] 01-03-PLAN.md - Implement settings scaffold and shell persistence baseline for UX-01
@@ -109,6 +109,7 @@ Plans:
 - [ ] 05-03-PLAN.md - Wire General settings mode UI to runtime+persistence and close phase with physical hardware UAT checkpoint
 - [ ] 05-04-PLAN.md - [gap] Replace no-op/stub lighting output paths with real device output bridge, rerun hardware UAT, and sync verification closure
 - [ ] 05-05-PLAN.md - [gap] Replace synthetic ambilight frame generation with real capture->sample->send runtime pipeline and resync MODE-01 verification closure
+- [ ] 05-06-PLAN.md - [gap] Replace static Ambilight frame source default with live monitor capture source and close remaining MODE-01 blocker
 
 ### Phase 6: Runtime Quality Controls
 **Goal**: Realtime modda goruntu gecisleri yumusar ve runtime davranisi sistem yukunu dengeleyerek calisir.
