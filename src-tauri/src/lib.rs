@@ -16,6 +16,7 @@ use tauri::{
 };
 
 mod commands {
+    pub mod ambilight_capture;
     pub mod calibration;
     pub mod device_connection;
     pub mod led_output;
