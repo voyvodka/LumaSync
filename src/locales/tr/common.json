@@ -6,6 +6,7 @@
       "startupTray": "Başlangıç & Tepsi",
       "language": "Dil",
       "aboutLogs": "Hakkında & Günlükler",
+      "telemetry": "Telemetri",
       "device": "Cihaz",
       "calibration": "Kalibrasyon"
     }
@@ -117,6 +118,25 @@
           "fail": "Kaldı"
         }
       }
+    }
+  },
+  "telemetry": {
+    "title": "Calisma telemetrisi",
+    "description": "Capture/send hizini ve kuyruk baskisini neredeyse gercek zamanli izle.",
+    "metrics": {
+      "captureFps": "Capture FPS",
+      "sendFps": "Send FPS",
+      "queueHealth": "Kuyruk sagligi"
+    },
+    "queueHealth": {
+      "healthy": "Saglikli",
+      "warning": "Uyari",
+      "critical": "Kritik"
+    },
+    "states": {
+      "loading": "Telemetri yukleniyor...",
+      "empty": "Henuz runtime aktivitesi yok.",
+      "error": "Telemetri su anda kullanilamiyor."
     }
   },
   "calibration": {

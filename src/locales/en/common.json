@@ -6,6 +6,7 @@
       "startupTray": "Startup & Tray",
       "language": "Language",
       "aboutLogs": "About & Logs",
+      "telemetry": "Telemetry",
       "device": "Device",
       "calibration": "Calibration"
     }
@@ -117,6 +118,25 @@
           "fail": "Fail"
         }
       }
+    }
+  },
+  "telemetry": {
+    "title": "Runtime telemetry",
+    "description": "Watch capture/send throughput and queue pressure in near real-time.",
+    "metrics": {
+      "captureFps": "Capture FPS",
+      "sendFps": "Send FPS",
+      "queueHealth": "Queue health"
+    },
+    "queueHealth": {
+      "healthy": "Healthy",
+      "warning": "Warning",
+      "critical": "Critical"
+    },
+    "states": {
+      "loading": "Loading telemetry...",
+      "empty": "No runtime activity yet.",
+      "error": "Telemetry unavailable."
     }
   },
   "calibration": {

@@ -7,6 +7,7 @@ import { LanguageSection } from "./sections/LanguageSection";
 import { AboutLogsSection } from "./sections/AboutLogsSection";
 import { DeviceSection } from "./sections/DeviceSection";
 import { CalibrationSection } from "./sections/CalibrationSection";
+import { TelemetrySection } from "../telemetry/ui/TelemetrySection";
 import type { LedCalibrationConfig } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
@@ -48,6 +49,8 @@ function SectionContent({
       return <LanguageSection />;
     case SECTION_IDS.ABOUT_LOGS:
       return <AboutLogsSection />;
+    case SECTION_IDS.TELEMETRY:
+      return <TelemetrySection />;
     case SECTION_IDS.DEVICE:
       return <DeviceSection />;
     case SECTION_IDS.CALIBRATION:
@@ -106,6 +109,11 @@ export function SettingsLayout({
         id: SECTION_IDS.ABOUT_LOGS,
         label: t("settings.sections.aboutLogs"),
         marker: "AB",
+      },
+      [SECTION_IDS.TELEMETRY]: {
+        id: SECTION_IDS.TELEMETRY,
+        label: t("settings.sections.telemetry"),
+        marker: "TM",
       },
       [SECTION_IDS.DEVICE]: {
         id: SECTION_IDS.DEVICE,
