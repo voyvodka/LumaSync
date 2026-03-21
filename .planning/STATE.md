@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 5
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-21T09:37:42.248Z"
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-21T09:46:50.231Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 30
-  completed_plans: 28
+  completed_plans: 29
   percent: 94
 ---
 
@@ -76,6 +76,7 @@ Progress: [█████████░] 94%
 | Phase 04 P14 | 2273 | 3 tasks | 5 files |
 | Phase 04 P15 | 3 min | 2 tasks | 4 files |
 | Phase 05 P01 | 4 min | 2 tasks | 9 files |
+| Phase 05 P02 | 6 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -144,6 +145,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Not-configured section keeps edit entrypoint unchanged while replacing zero-focused fallback with helper guidance.
 - [Phase 05]: Mode transition output is always transactional: stop first, then start next mode when next kind is not off.
 - [Phase 05]: Lighting mode shell persistence is merge-only and never overwrites ledCalibration data.
+- [Phase 05]: Lighting mode runtime source of truth backend Mutex state olarak kilitlendi.
+- [Phase 05]: Mode gecislerinde stop_previous adimi start once zorunlu hale getirildi.
+- [Phase 05]: Disconnected durumda DEVICE_NOT_CONNECTED donup aktif runtime state degismiyor.
 
 ### Pending Todos
 
@@ -155,6 +159,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T09:37:42.246Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-03-21T09:46:50.229Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
