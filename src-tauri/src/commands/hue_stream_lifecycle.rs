@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use super::hue_onboarding::CommandStatus;
+use super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
 
 const DEFAULT_RETRY_MAX_ATTEMPTS: u8 = 3;
 const DEFAULT_RETRY_BASE_MS: u64 = 400;
@@ -155,17 +155,104 @@ fn make_result(owner: &HueRuntimeOwner) -> HueRuntimeCommandResult {
 
 fn start_with_evidence(
     owner: &mut HueRuntimeOwner,
-    _evidence: &HueRuntimeGateEvidence,
+    evidence: &HueRuntimeGateEvidence,
     trigger_source: HueRuntimeTriggerSource,
 ) -> HueRuntimeCommandResult {
+    if matches!(
+        owner.state,
+        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+    ) {
+        owner.state = HueRuntimeState::Running;
+        owner.last_status = status_with(
+            HueRuntimeState::Running,
+            "HUE_START_NOOP_ALREADY_ACTIVE",
+            "Hue runtime already active. Start request is a no-op.",
+            None,
+            trigger_source,
+        );
+        return make_result(owner);
+    }
+
+    if evidence.auth_invalid_evidence {
+        owner.state = HueRuntimeState::Failed;
+        owner.last_status = status_with(
+            HueRuntimeState::Failed,
+            "AUTH_INVALID_CREDENTIALS",
+            "Hue credentials are invalid. Re-pair is required before starting stream.",
+            Some("Bridge returned explicit auth-invalid evidence.".to_string()),
+            trigger_source,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Repair);
+        return make_result(owner);
+    }
+
+    let strict_gate_ok = evidence.bridge_configured
+        && evidence.credentials_valid
+        && evidence.area_selected
+        && evidence.readiness_current
+        && evidence.ready;
+
+    if !strict_gate_ok {
+        let mut missing = Vec::new();
+        if !evidence.bridge_configured {
+            missing.push("bridge");
+        }
+        if !evidence.credentials_valid {
+            missing.push("credentials");
+        }
+        if !evidence.area_selected {
+            missing.push("area");
+        }
+        if !evidence.readiness_current {
+            missing.push("readiness");
+        }
+        if evidence.readiness_current && !evidence.ready {
+            missing.push("ready");
+        }
+
+        owner.state = HueRuntimeState::Idle;
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "CONFIG_NOT_READY_GATE_BLOCKED",
+            "Hue stream start blocked by strict backend readiness gate.",
+            Some(format!("Missing prerequisites: {}", missing.join(", "))),
+            trigger_source,
+        );
+        owner.last_status.action_hint = Some(if !evidence.area_selected {
+            HueRuntimeActionHint::AdjustArea
+        } else {
+            HueRuntimeActionHint::Revalidate
+        });
+        return make_result(owner);
+    }
+
+    owner.user_override_pending = false;
+    owner.reconnect_attempt = 0;
+    owner.state = HueRuntimeState::Starting;
     owner.last_status = status_with(
-        owner.state.clone(),
-        "HUE_STREAM_START_NOT_IMPLEMENTED",
-        "Hue start runtime policy is not implemented yet.",
+        HueRuntimeState::Starting,
+        "HUE_STREAM_STARTING",
+        "Hue runtime is starting.",
+        None,
+        trigger_source.clone(),
+    );
+
+    owner.state = HueRuntimeState::Running;
+    owner.last_status = status_with(
+        HueRuntimeState::Running,
+        "HUE_STREAM_RUNNING",
+        "Hue runtime is running.",
         None,
         trigger_source,
     );
     make_result(owner)
+}
+
+fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
+    let exponent = u32::from(attempt_index.saturating_sub(1));
+    let factor = 2_u64.saturating_pow(exponent);
+    let raw = policy.base_backoff_ms.saturating_mul(factor);
+    raw.min(policy.cap_backoff_ms)
 }
 
 fn register_transient_fault(
@@ -173,14 +260,55 @@ fn register_transient_fault(
     details: &str,
     trigger_source: HueRuntimeTriggerSource,
 ) -> HueRuntimeCommandResult {
+    if owner.user_override_pending {
+        owner.state = HueRuntimeState::Idle;
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "HUE_STOPPED_BY_USER",
+            "User action canceled reconnect workflow.",
+            None,
+            trigger_source,
+        );
+        return make_result(owner);
+    }
+
     owner.state = HueRuntimeState::Reconnecting;
+    let next_attempt_index = owner.reconnect_attempt.saturating_add(1);
+    if next_attempt_index >= owner.retry_policy.max_attempts {
+        owner.reconnect_attempt = owner.retry_policy.max_attempts;
+        owner.state = HueRuntimeState::Failed;
+        owner.last_status = status_with(
+            HueRuntimeState::Failed,
+            "TRANSIENT_RETRY_EXHAUSTED",
+            "Transient retry budget exhausted. Hue runtime moved to failed state.",
+            Some(details.to_string()),
+            trigger_source,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
+        owner.last_status.remaining_attempts = Some(0);
+        owner.last_status.next_attempt_ms = None;
+        return make_result(owner);
+    }
+
+    owner.reconnect_attempt = next_attempt_index;
     owner.last_status = status_with(
         HueRuntimeState::Reconnecting,
-        "TRANSIENT_RETRY_NOT_IMPLEMENTED",
-        "Transient reconnect policy is not implemented yet.",
+        "TRANSIENT_RETRY_SCHEDULED",
+        "Hue runtime scheduled bounded reconnect attempt.",
         Some(details.to_string()),
         trigger_source,
     );
+    owner.last_status.action_hint = Some(HueRuntimeActionHint::Reconnect);
+    owner.last_status.remaining_attempts = Some(
+        owner
+            .retry_policy
+            .max_attempts
+            .saturating_sub(owner.reconnect_attempt),
+    );
+    owner.last_status.next_attempt_ms = Some(next_backoff_ms(
+        &owner.retry_policy,
+        owner.reconnect_attempt,
+    ));
     make_result(owner)
 }
 
@@ -192,11 +320,14 @@ fn register_auth_invalid(
     owner.state = HueRuntimeState::Failed;
     owner.last_status = status_with(
         HueRuntimeState::Failed,
-        "AUTH_INVALID_NOT_IMPLEMENTED",
-        "Auth-invalid escalation policy is not implemented yet.",
+        "AUTH_INVALID_CREDENTIALS",
+        "Hue credentials are invalid and require repair.",
         Some(details.to_string()),
         trigger_source,
     );
+    owner.last_status.action_hint = Some(HueRuntimeActionHint::Repair);
+    owner.last_status.remaining_attempts = Some(0);
+    owner.last_status.next_attempt_ms = None;
     make_result(owner)
 }
 
@@ -206,19 +337,35 @@ fn stop_with_timeout(
     trigger_source: HueRuntimeTriggerSource,
 ) -> HueRuntimeCommandResult {
     owner.user_override_pending = true;
-    let code = if timed_out {
-        "HUE_STREAM_STOP_NOT_IMPLEMENTED_TIMEOUT"
-    } else {
-        "HUE_STREAM_STOP_NOT_IMPLEMENTED"
-    };
-    owner.state = HueRuntimeState::Idle;
+    owner.state = HueRuntimeState::Stopping;
     owner.last_status = status_with(
-        HueRuntimeState::Idle,
-        code,
-        "Hue stop cleanup policy is not implemented yet.",
-        None,
-        trigger_source,
+        HueRuntimeState::Stopping,
+        "HUE_STREAM_STOPPING",
+        "Hue runtime stop requested. Running deterministic cleanup.",
+        Some("cleanup-order=stream-stop->state-restore".to_string()),
+        trigger_source.clone(),
     );
+
+    owner.reconnect_attempt = 0;
+    owner.state = HueRuntimeState::Idle;
+    if timed_out {
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "HUE_STOP_TIMEOUT_PARTIAL",
+            "Hue runtime reached stop timeout; partial-stop cleanup reported.",
+            Some("retry stop to ensure bridge state restore".to_string()),
+            trigger_source,
+        );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
+    } else {
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "HUE_STREAM_STOPPED",
+            "Hue runtime stopped and state restored to non-stream mode.",
+            None,
+            trigger_source,
+        );
+    }
     make_result(owner)
 }
 
@@ -238,11 +385,24 @@ pub fn start_hue_stream(
         bridge_configured: !request.bridge_ip.trim().is_empty(),
         credentials_valid: !request.username.trim().is_empty(),
         area_selected: !request.area_id.trim().is_empty(),
-        readiness_current: false,
+        readiness_current: true,
         ready: false,
         auth_invalid_evidence: false,
     };
-    Ok(start_with_evidence(&mut owner, &evidence, trigger))
+
+    let readiness = check_hue_stream_readiness(
+        request.bridge_ip.clone(),
+        request.username.clone(),
+        request.area_id.clone(),
+    );
+
+    let mut gate = evidence;
+    gate.readiness_current = readiness.status.code != "HUE_STREAM_READINESS_FAILED";
+    gate.ready = readiness.readiness.ready;
+    gate.auth_invalid_evidence = readiness.status.code.starts_with("AUTH_INVALID_")
+        || readiness.status.code == "HUE_CREDENTIAL_INVALID";
+
+    Ok(start_with_evidence(&mut owner, &gate, trigger))
 }
 
 #[tauri::command]
