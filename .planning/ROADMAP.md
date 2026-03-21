@@ -102,12 +102,13 @@ Plans:
   1. User can switch to real-time Ambilight screen mirroring mode.
   2. User can switch to a static solid-color mode.
   3. User can change modes without losing saved calibration setup.
-**Plans**: 4 plans
+**Plans**: 5 plans
 Plans:
 - [ ] 05-01-PLAN.md - Define MODE-01/MODE-02 domain contracts, command bridge surface, and test-backed transition/persistence rules
 - [ ] 05-02-PLAN.md - Implement Rust lighting-mode runtime owner with transactional set/stop lifecycle and Tauri command registration
 - [ ] 05-03-PLAN.md - Wire General settings mode UI to runtime+persistence and close phase with physical hardware UAT checkpoint
 - [ ] 05-04-PLAN.md - [gap] Replace no-op/stub lighting output paths with real device output bridge, rerun hardware UAT, and sync verification closure
+- [ ] 05-05-PLAN.md - [gap] Replace synthetic ambilight frame generation with real capture->sample->send runtime pipeline and resync MODE-01 verification closure
 
 ### Phase 6: Runtime Quality Controls
 **Goal**: Realtime modda goruntu gecisleri yumusar ve runtime davranisi sistem yukunu dengeleyerek calisir.
