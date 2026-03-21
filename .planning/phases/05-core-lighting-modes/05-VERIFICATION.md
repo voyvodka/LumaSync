@@ -1,25 +1,36 @@
 ---
 phase: 05-core-lighting-modes
-verified: 2026-03-21T10:41:22Z
-status: complete
-score: 3/3 must-haves verified
+verified: 2026-03-21T11:04:18Z
+status: gaps_found
+score: 2/3 must-haves verified
 re_verification:
   previous_status: gaps_found
-  previous_score: 1/3 must-haves verified
+  previous_score: 2/3 must-haves verified
   gaps_closed:
-    - "MODE-01 gercek zamanli ambilight cikis yolu output bridge + frame worker ile dogrulandi"
-    - "MODE-02 solid renk cikisi no-op yerine fiziksel payload apply yoluna baglandi"
-  gaps_remaining: []
-  regressions: []
-gaps: []
+    - "Ambilight runtime worker artik capture->sample->send zincirine baglandi"
+  gaps_remaining:
+    - "MODE-01 icin canli ekran yakalama kaynagi henuz platform capture implementasyonu yerine static frame source kullaniyor"
+  regressions:
+    - "Regresyon yok - Solid mode ve persistence davranislari korunuyor"
+gaps:
+  - truth: "Kullanici Ambilight modunu actiginda LED cikisi gercek zamanli ekran renklerini yansitir (MODE-01)"
+    status: failed
+    reason: "Worker artik capture->sample->send yapiyor ancak default frame source `StaticFrameSource` oldugu icin canli ekran pikseli yerine sabit frame kullaniliyor."
+    artifacts:
+      - path: "src-tauri/src/commands/ambilight_capture.rs"
+        issue: "`AmbilightFrameSource` ve `sample_led_frame` kontrati mevcut; default source `StaticFrameSource` (sabit frame) oldugu icin canli ekran mirroring saglanmiyor."
+      - path: "src-tauri/src/commands/lighting_mode.rs"
+        issue: "`capture_sample_send_frame` zinciri ve `frame_source_factory` baglantisi var; fakat factory varsayilani static source donduruyor."
+    missing:
+      - "Platform canli ekran yakalama kaynaginin (`AmbilightFrameSource`) gercek monitor frame'i dondurecek sekilde implement edilmesi"
 ---
 
 # Phase 5: Core Lighting Modes Verification Report
 
 **Phase Goal:** Kullanici ana kullanim modlarini secip LED cikisini amacina gore degistirebilir.
-**Verified:** 2026-03-21T10:41:22Z
-**Status:** complete
-**Re-verification:** Yes - hardware UAT evidence update sonrasi tekrar dogrulama
+**Verified:** 2026-03-21T11:04:18Z
+**Status:** gaps_found
+**Re-verification:** Yes - onceki VERIFICATION raporu uzerinden yeniden dogrulama
 
 ## Goal Achievement
 
@@ -27,65 +38,70 @@ gaps: []
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | User can switch to real-time Ambilight screen mirroring mode. | ✓ VERIFIED | Ambilight branch'i frame olusturup `led_output` bridge uzerinden cihaza gonderiyor (`src-tauri/src/commands/lighting_mode.rs:196`, `src-tauri/src/commands/lighting_mode.rs:215`, `src-tauri/src/commands/led_output.rs:176`); unit test worker frame-send girisimini dogruluyor (`src-tauri/src/commands/lighting_mode.rs:486`). |
-| 2 | User can switch to a static solid-color mode. | ✓ VERIFIED | Solid branch'i payload'i `apply_solid_payload_to_port` ile fiziksel output pipeline'ina yaziyor (`src-tauri/src/commands/lighting_mode.rs:273`, `src-tauri/src/commands/led_output.rs:154`); hata durumunda `SOLID_MODE_APPLY_FAILED` korunuyor (`src-tauri/src/commands/lighting_mode.rs:286`). |
-| 3 | User can change modes without losing saved calibration setup. | ✓ VERIFIED | `saveShellState({ lightingMode })` partial persist kullaniliyor (`src/App.tsx:143`), merge-write davranisi korunuyor (`src/features/shell/windowLifecycle.ts:44`), regression testi mevcut (`src/features/mode/state/modePersistence.test.ts:30`). |
+| 1 | Kullanici Ambilight modunu actiginda LED cikisi gercek zamanli ekran renklerini yansitir (MODE-01). | ✗ FAILED | Worker artik `capture_sample_send_frame` ile capture->sample->send akisini kullaniyor (`src-tauri/src/commands/lighting_mode.rs:187`, `src-tauri/src/commands/lighting_mode.rs:236`, `src-tauri/src/commands/lighting_mode.rs:358`) ve sampling kontrati `sample_led_frame` ile dogrulaniyor (`src-tauri/src/commands/ambilight_capture.rs:67`, `src-tauri/src/commands/ambilight_capture.rs:127`). Ancak varsayilan source `StaticFrameSource` oldugu icin canli ekran capture henuz yok (`src-tauri/src/commands/lighting_mode.rs:109`, `src-tauri/src/commands/ambilight_capture.rs:37`). |
+| 2 | Kullanici Solid modunu sectiginde secilen renk/parlaklik fiziksel cikisa uygulanir (MODE-02). | ✓ VERIFIED | Solid branch payload'i `apply_solid_payload_to_port` ile porta yolluyor ve hata kodunu koruyor (`src-tauri/src/commands/lighting_mode.rs:306`, `src-tauri/src/commands/lighting_mode.rs:320`); packet encoding+yazim `led_output` bridge'de mevcut (`src-tauri/src/commands/led_output.rs:150`, `src-tauri/src/commands/led_output.rs:158`). |
+| 3 | Mode degisimi kalibrasyon kaydini bozmaz. | ✓ VERIFIED | App sadece `lightingMode` partial save yapiyor (`src/App.tsx:143`); shell save merge yapiyor (`src/features/shell/windowLifecycle.ts:41`, `src/features/shell/windowLifecycle.ts:43`). |
 
-**Score:** 3/3 truths verified
+**Score:** 2/3 truths verified
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `src/features/settings/sections/GeneralSection.tsx` | Mode secici UI + solid kontrol + lock-state | ✓ VERIFIED | Off/Ambilight/Solid secimi ve Solid color/brightness kontrolu mevcut. |
-| `src/App.tsx` | Mode orchestration + persisted restore/save | ✓ VERIFIED | `setLightingMode`/`stopLighting` bridge ve partial persistence baglantisi var. |
-| `src/features/mode/modeApi.ts` | set/stop/status invoke wrapper | ✓ VERIFIED | `DEVICE_COMMANDS` ile typed invoke cagrilari mevcut. |
-| `src-tauri/src/lib.rs` | Command registration + managed state wiring | ✓ VERIFIED | `LightingRuntimeState` manage edilmis, 3 command `generate_handler` icinde kayitli. |
-| `src-tauri/src/commands/led_output.rs` | Fiziksel output bridge + ortak packet encoder | ✓ VERIFIED | Solid/Ambilight ayni encoder kuraliyla porta yaziliyor, coded error semantigi mevcut. |
-| `src-tauri/src/commands/lighting_mode.rs` | Ambilight/Solid icin gercek runtime cikis davranisi | ✓ VERIFIED | Ambilight worker frame gonderim pipeline'ina baglandi, Solid apply no-op'dan cikti. |
-| `.planning/phases/05-core-lighting-modes/05-HARDWARE-UAT.md` | Human UAT pass kaniti | ✓ VERIFIED | 05-04 gap-closure sonrasi yeniden kosulan testler PASS ve kod davranisiyla tutarli. |
+| `src/features/settings/sections/GeneralSection.tsx` | Off/Ambilight/Solid secimi + solid kontrolleri | ✓ VERIFIED | Mode secici ve solid color/brightness inputlari mevcut, callback'e bagli (`src/features/settings/sections/GeneralSection.tsx:105`, `src/features/settings/sections/GeneralSection.tsx:166`). |
+| `src/App.tsx` | UI mode degisimi -> backend command orchestration + persistence | ✓ VERIFIED | Off icin `stopLighting`, diger modlar icin `setLightingMode`; basarili degisimde partial save var (`src/App.tsx:135`, `src/App.tsx:138`, `src/App.tsx:143`). |
+| `src/features/mode/modeApi.ts` | DEVICE_COMMANDS uzerinden set/stop/status invoke wrapper | ✓ VERIFIED | Uc command da kontrat ID ile invoke ediliyor (`src/features/mode/modeApi.ts:51`, `src/features/mode/modeApi.ts:61`, `src/features/mode/modeApi.ts:69`). |
+| `src-tauri/src/commands/led_output.rs` | Fiziksel output bridge + ortak packet encoder | ✓ VERIFIED | Solid ve ambilight ayni encoder ile porta yaziliyor (`src-tauri/src/commands/led_output.rs:119`, `src-tauri/src/commands/led_output.rs:150`, `src-tauri/src/commands/led_output.rs:172`). |
+| `src-tauri/src/commands/ambilight_capture.rs` | Capture kaynagi + frame sampling kontrati | ✓ VERIFIED | `AmbilightFrameSource`, `sample_led_frame`, coded error semantigi ve testler eklendi (`src-tauri/src/commands/ambilight_capture.rs:24`, `src-tauri/src/commands/ambilight_capture.rs:67`, `src-tauri/src/commands/ambilight_capture.rs:98`). |
+| `src-tauri/src/commands/lighting_mode.rs` | Ambilight ve Solid runtime davranisi | △ PARTIAL | Ambilight path sentetik builder yerine capture->sample->send kullaniyor (`src-tauri/src/commands/lighting_mode.rs:187`, `src-tauri/src/commands/lighting_mode.rs:236`, `src-tauri/src/commands/lighting_mode.rs:358`) fakat varsayilan source static frame donduruyor (`src-tauri/src/commands/lighting_mode.rs:109`). |
+| `src/features/shell/windowLifecycle.ts` | Shell state merge-write ile kalibrasyon korunumu | ✓ VERIFIED | `saveShellState` mevcut state ile merge ediyor (`src/features/shell/windowLifecycle.ts:41`, `src/features/shell/windowLifecycle.ts:43`). |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
 | `src/App.tsx` | `src/features/mode/modeApi.ts` | mode degisiminde set/stop command cagrisi | ✓ WIRED | `stopLighting` ve `setLightingMode` cagrilari mevcut (`src/App.tsx:136`, `src/App.tsx:138`). |
-| `src/App.tsx` | `src/features/shell/windowLifecycle.ts` | saveShellState ile mode partial persist | ✓ WIRED | `saveShellState({ lightingMode: normalizedNextMode })` mevcut (`src/App.tsx:143`). |
-| `src/features/mode/modeApi.ts` | `src/shared/contracts/device.ts` | DEVICE_COMMANDS uzerinden invoke | ✓ WIRED | 3 command ID dogrudan kullaniliyor (`src/features/mode/modeApi.ts:51`). |
-| `src-tauri/src/lib.rs` | `src-tauri/src/commands/lighting_mode.rs` | generate_handler command registration | ✓ WIRED | `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status` kayitli (`src-tauri/src/lib.rs:213`). |
-| `src-tauri/src/commands/lighting_mode.rs` | `src-tauri/src/commands/led_output.rs` | solid apply + ambilight frame send | ✓ WIRED | `apply_solid_payload_to_port` ve `send_ambilight_frame_to_port` baglantisi aktif. |
+| `src/App.tsx` | `src/features/shell/windowLifecycle.ts` | `saveShellState({ lightingMode })` partial persistence | ✓ WIRED | Partial save dogrudan cagriliyor (`src/App.tsx:143`). |
+| `src/features/mode/modeApi.ts` | `src/shared/contracts/device.ts` | DEVICE_COMMANDS uzerinden invoke | ✓ WIRED | `SET_LIGHTING_MODE`, `STOP_LIGHTING`, `GET_LIGHTING_MODE_STATUS` kullaniliyor (`src/features/mode/modeApi.ts:51`, `src/features/mode/modeApi.ts:61`, `src/features/mode/modeApi.ts:69`). |
+| `src-tauri/src/commands/lighting_mode.rs` | `src-tauri/src/commands/led_output.rs` | solid apply + frame send | ✓ WIRED | `apply_solid_payload_to_port` ve `send_ambilight_frame_to_port` bagli (`src-tauri/src/commands/lighting_mode.rs:15`, `src-tauri/src/commands/lighting_mode.rs:306`, `src-tauri/src/commands/lighting_mode.rs:199`). |
+| `src-tauri/src/commands/lighting_mode.rs` | `src-tauri/src/commands/ambilight_capture.rs` | capture -> sample -> send akisi | ✓ WIRED | Worker `capture_sample_send_frame` uzerinden frame kaynagi ve sampler ile fiziksel gonderim yapiyor (`src-tauri/src/commands/lighting_mode.rs:187`, `src-tauri/src/commands/lighting_mode.rs:236`). |
+| `src-tauri/src/commands/ambilight_capture.rs` | Platform live capture implementation | varsayilan source gercek monitor frame'i | ✗ NOT_WIRED | Varsayilan source `StaticFrameSource` oldugu icin canli ekran capture henuz yok (`src-tauri/src/commands/ambilight_capture.rs:37`, `src-tauri/src/commands/lighting_mode.rs:109`). |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | --- | --- | --- | --- | --- |
-| MODE-01 | 05-01, 05-02, 05-03, 05-04 | User can enable real-time Ambilight screen mirroring mode | ✓ COMPLETE | Ambilight runtime frame send pipeline test+kod+UAT ile dogrulandi (`cargo test ... lighting_mode`, `05-HARDWARE-UAT.md`). |
-| MODE-02 | 05-01, 05-02, 05-03, 05-04 | User can enable a static solid-color mode | ✓ COMPLETE | Solid payload apply fiziksel output bridge'e baglandi, gecis ve Off davranisi UAT ile dogrulandi. |
+| MODE-01 | 05-01, 05-02, 05-03, 05-04, 05-05 | User can enable real-time Ambilight screen mirroring mode | ✗ BLOCKED | Capture/sampling pipeline wiring tamamlandi ancak varsayilan source static frame oldugu icin canli ekran mirroring teknik olarak tamamlanmadi (`src-tauri/src/commands/lighting_mode.rs:109`, `src-tauri/src/commands/lighting_mode.rs:187`, `src-tauri/src/commands/ambilight_capture.rs:37`). |
+| MODE-02 | 05-01, 05-02, 05-03, 05-04, 05-05 | User can enable a static solid-color mode | ✓ SATISFIED | UI secimi App orchestration ile backend'e gidiyor, backend solid payload'i fiziksel porta uyguluyor (`src/features/settings/sections/GeneralSection.tsx:149`, `src/App.tsx:138`, `src-tauri/src/commands/lighting_mode.rs:306`). |
 
-Plan requirement beyan kontrolu:
-- 05-01: `MODE-01`, `MODE-02`
-- 05-02: `MODE-01`, `MODE-02`
-- 05-03: `MODE-01`, `MODE-02`
+Plan frontmatter requirement ID kontrolu:
+- `05-01-PLAN.md`: MODE-01, MODE-02
+- `05-02-PLAN.md`: MODE-01, MODE-02
+- `05-03-PLAN.md`: MODE-01, MODE-02
+- `05-04-PLAN.md`: MODE-01, MODE-02
+- `05-05-PLAN.md`: MODE-01, MODE-02
 
-REQUIREMENTS traceability kontrolu:
-- `MODE-01` -> Phase 5 (`.planning/REQUIREMENTS.md:90`)
-- `MODE-02` -> Phase 5 (`.planning/REQUIREMENTS.md:91`)
+REQUIREMENTS.md traceability kontrolu:
+- `MODE-01` tanimli ve Phase 5'e mapli (`.planning/REQUIREMENTS.md:26`, `.planning/REQUIREMENTS.md:90`)
+- `MODE-02` tanimli ve Phase 5'e mapli (`.planning/REQUIREMENTS.md:27`, `.planning/REQUIREMENTS.md:91`)
 
 Orphaned requirement bulunmadi.
 
 ### Anti-Patterns Found
 
-None.
+| File | Line | Pattern | Severity | Impact |
+| --- | --- | --- | --- | --- |
+| `src-tauri/src/commands/ambilight_capture.rs` | 37 | Varsayilan source static frame (`StaticFrameSource`) | 🛑 Blocker | MODE-01'in "real-time screen mirroring" kismini teknik olarak tamamlamiyor. |
 
 ### Human Verification Required
 
-Tamamlandi. 05-04 checkpoint "approved" ile fiziksel UAT sonucu kayda alindi.
+Bu asamada kalan gap kod seviyesinde oldugu icin ek human test teknik blocker'i kapatmaz.
 
 ### Gaps Summary
 
-05-04 ile runtime no-op/stub davranislari kapatildi. Solid ve Ambilight artik ortak `led_output` encoder/bridge yolu uzerinden fiziksel cikisa bagli; unit testler ve hardware UAT sonuclari birbirini dogruluyor. Phase 5 goal seviyesi teknik olarak kapandi.
+05-05 ile Ambilight worker sentetik frame builder'dan cikarilip capture->sample->send kontratina baglandi ve MODE-02 tarafinda regresyon gozlenmedi. Buna ragmen varsayilan frame source hala static oldugu icin MODE-01'in "gercek ekran mirroring" dogrulugu tamamlanmis degil. Kalan gap: platform capture implementation'i `AmbilightFrameSource` uzerinden canli monitor frame'i uretecek sekilde tamamlamak.
 
 ---
 
-_Verified: 2026-03-21T10:41:22Z_
+_Verified: 2026-03-21T11:04:18Z_
 _Verifier: Claude (gsd-verifier)_
