@@ -13,6 +13,7 @@ export const DEVICE_COMMANDS = {
   SET_LIGHTING_MODE: "set_lighting_mode",
   STOP_LIGHTING: "stop_lighting",
   GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
+  GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
 } as const;
 
 export const DEVICE_STATUS = {

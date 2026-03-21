@@ -34,6 +34,7 @@ export const SECTION_IDS = {
   STARTUP_TRAY: "startup-tray",
   LANGUAGE: "language",
   ABOUT_LOGS: "about-logs",
+  TELEMETRY: "telemetry",
   DEVICE: "device",
   CALIBRATION: "calibration",
 } as const;
@@ -46,6 +47,7 @@ export const SECTION_ORDER: SectionId[] = [
   SECTION_IDS.STARTUP_TRAY,
   SECTION_IDS.LANGUAGE,
   SECTION_IDS.ABOUT_LOGS,
+  SECTION_IDS.TELEMETRY,
   SECTION_IDS.DEVICE,
   SECTION_IDS.CALIBRATION,
 ];
