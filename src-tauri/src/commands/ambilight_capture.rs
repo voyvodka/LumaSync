@@ -34,6 +34,10 @@ pub trait AmbilightFrameSource: Send {
     fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError>;
 }
 
+pub fn create_live_frame_source() -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+    platform::create_live_frame_source()
+}
+
 pub struct StaticFrameSource {
     frame: CapturedFrame,
 }
@@ -61,6 +65,171 @@ impl Default for StaticFrameSource {
 impl AmbilightFrameSource for StaticFrameSource {
     fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
         Ok(self.frame.clone())
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod platform {
+    use std::sync::{Arc, Mutex};
+
+    use windows_capture::capture::{
+        CaptureControl, GraphicsCaptureApiError, GraphicsCaptureApiHandler,
+    };
+    use windows_capture::frame::Frame;
+    use windows_capture::graphics_capture_api::InternalCaptureControl;
+    use windows_capture::monitor::Monitor;
+    use windows_capture::settings::{
+        ColorFormat, CursorCaptureSettings, DirtyRegionSettings, DrawBorderSettings,
+        MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
+    };
+
+    use super::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
+
+    type SharedFrame = Arc<Mutex<Option<CapturedFrame>>>;
+
+    pub(super) fn create_live_frame_source(
+    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+        let latest_frame = Arc::new(Mutex::new(None));
+        let monitor = Monitor::primary().map_err(|_| {
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
+        })?;
+        let settings = Settings::new(
+            monitor,
+            CursorCaptureSettings::Default,
+            DrawBorderSettings::Default,
+            SecondaryWindowSettings::Default,
+            MinimumUpdateIntervalSettings::Default,
+            DirtyRegionSettings::Default,
+            ColorFormat::Rgba8,
+            Arc::clone(&latest_frame),
+        );
+
+        let capture_control =
+            WindowsLiveCaptureHandler::start_free_threaded(settings).map_err(map_start_error)?;
+
+        Ok(Box::new(WindowsLiveFrameSource {
+            latest_frame,
+            capture_control: Some(capture_control),
+        }))
+    }
+
+    fn map_start_error(error: GraphicsCaptureApiError<&'static str>) -> AmbilightCaptureError {
+        let code = match error {
+            GraphicsCaptureApiError::FailedToJoinThread => "AMBILIGHT_CAPTURE_THREAD_JOIN_FAILED",
+            GraphicsCaptureApiError::FailedToInitWinRT => "AMBILIGHT_CAPTURE_WINRT_INIT_FAILED",
+            GraphicsCaptureApiError::FailedToCreateDispatcherQueueController => {
+                "AMBILIGHT_CAPTURE_DISPATCHER_INIT_FAILED"
+            }
+            GraphicsCaptureApiError::FailedToShutdownDispatcherQueue => {
+                "AMBILIGHT_CAPTURE_DISPATCHER_SHUTDOWN_FAILED"
+            }
+            GraphicsCaptureApiError::FailedToSetDispatcherQueueCompletedHandler => {
+                "AMBILIGHT_CAPTURE_DISPATCHER_CALLBACK_FAILED"
+            }
+            GraphicsCaptureApiError::ItemConvertFailed => {
+                "AMBILIGHT_CAPTURE_ITEM_CONVERSION_FAILED"
+            }
+            GraphicsCaptureApiError::DirectXError(_) => "AMBILIGHT_CAPTURE_D3D_INIT_FAILED",
+            GraphicsCaptureApiError::GraphicsCaptureApiError(_) => {
+                "AMBILIGHT_CAPTURE_SESSION_START_FAILED"
+            }
+            GraphicsCaptureApiError::NewHandlerError(code)
+            | GraphicsCaptureApiError::FrameHandlerError(code) => code,
+        };
+
+        AmbilightCaptureError::InvalidFrame(code)
+    }
+
+    struct WindowsLiveFrameSource {
+        latest_frame: SharedFrame,
+        capture_control: Option<CaptureControl<WindowsLiveCaptureHandler, &'static str>>,
+    }
+
+    impl Drop for WindowsLiveFrameSource {
+        fn drop(&mut self) {
+            if let Some(capture_control) = self.capture_control.take() {
+                let _ = capture_control.stop();
+            }
+        }
+    }
+
+    impl AmbilightFrameSource for WindowsLiveFrameSource {
+        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+            let frame_guard = self.latest_frame.lock().map_err(|_| {
+                AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
+            })?;
+
+            frame_guard
+                .clone()
+                .ok_or(AmbilightCaptureError::FrameUnavailable)
+        }
+    }
+
+    struct WindowsLiveCaptureHandler {
+        latest_frame: SharedFrame,
+    }
+
+    impl GraphicsCaptureApiHandler for WindowsLiveCaptureHandler {
+        type Flags = SharedFrame;
+        type Error = &'static str;
+
+        fn new(ctx: windows_capture::capture::Context<Self::Flags>) -> Result<Self, Self::Error> {
+            Ok(Self {
+                latest_frame: ctx.flags,
+            })
+        }
+
+        fn on_frame_arrived(
+            &mut self,
+            frame: &mut Frame,
+            _capture_control: InternalCaptureControl,
+        ) -> Result<(), Self::Error> {
+            let width = frame.width();
+            let height = frame.height();
+            let mut frame_buffer = frame
+                .buffer()
+                .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")?;
+            let raw_pixels = frame_buffer
+                .as_nopadding_buffer()
+                .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")?;
+            let expected_len = (width as usize)
+                .saturating_mul(height as usize)
+                .saturating_mul(4);
+
+            if raw_pixels.len() < expected_len {
+                return Err("AMBILIGHT_CAPTURE_PIXEL_BUFFER_INVALID");
+            }
+
+            let mut pixels_rgb =
+                Vec::with_capacity((width as usize).saturating_mul(height as usize));
+            for pixel in raw_pixels[..expected_len].chunks_exact(4) {
+                pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+            }
+
+            let mut frame_guard = self
+                .latest_frame
+                .lock()
+                .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")?;
+            *frame_guard = Some(CapturedFrame {
+                width,
+                height,
+                pixels_rgb,
+            });
+
+            Ok(())
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+mod platform {
+    use super::{AmbilightCaptureError, AmbilightFrameSource};
+
+    pub(super) fn create_live_frame_source(
+    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+        Err(AmbilightCaptureError::InvalidFrame(
+            "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM",
+        ))
     }
 }
 
@@ -170,7 +339,10 @@ mod tests {
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn live_source_factory_returns_coded_unsupported_error_on_non_windows() {
-        let error = create_live_frame_source().expect_err("non-windows live source should fail");
+        let error = match create_live_frame_source() {
+            Ok(_) => panic!("non-windows live source should fail"),
+            Err(error) => error,
+        };
 
         assert_eq!(
             error,
