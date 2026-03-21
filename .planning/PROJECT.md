@@ -41,11 +41,20 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 - Advanced visual effect editor (timeline/node-based) - high complexity, defer to later milestone
 - Preset marketplace/plugin ecosystem - defer until reliability and UX stay stable across next milestone
 
+## Current Milestone: v1.1 Hue Entertainment Integration
+
+**Goal:** Philips Hue Entertainment Bridge/Area entegrasyonunu mevcut USB-first runtime ile uyumlu sekilde ekleyip, kullanicinin Hue cihazlarini guvenilir sekilde Ambilight akisina dahil etmesini saglamak.
+
+**Target features:**
+- Hue bridge pairing + owner/credential yonetimi + area secimi
+- Hue Entertainment DTLS stream baslat/durdur + keep-alive + state restore davranisi
+- Device UI ve runtime orchestration katmanlarinda Hue path'in USB path ile birlikte guvenilir yonetimi
+
 ## Next Milestone Goals
 
-1. Profiles: kalibrasyon + mod konfigurasyonlarini isimli profil olarak kaydet/yukle.
-2. Presets: v1.0 solid disinda temel efekt setini genislet.
-3. Stabiliteyi koruyarak UX iyilestirmeleri: mevcut gate disiplini ve telemetry kanit akisini yeni kapsamda surdur.
+1. Hue bridge entegrasyonu: pairing, entertainment area secimi, owner kontrolu.
+2. Streaming guvenilirligi: DTLS send loop, keep-alive/retry, run stop/start state restore.
+3. Entegrasyon disiplini: `src-tauri/src/commands`, device contracts/client/controller ve DeviceSection uzerinden tek akisli UX.
 
 ## Constraints
 
@@ -66,9 +75,10 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 | Use USB serial transport for device communication | Simplest reliable path for Arduino-like hardware | Implemented in v1.0 |
 | Include setup wizard plus advanced control panel | Supports both quick start and power users | Implemented in v1.0 |
 | Include basic non-Ambilight modes and profile save in v1 | Expands day-to-day utility beyond screen mirroring | Partially implemented (modes yes, profiles deferred) |
+| Hue Entertainment integration should follow production-grade references (Hyperion/HyperHDR) while keeping original implementation | Reduce protocol/streaming risk with proven patterns, preserve license-safe code ownership | Active for v1.1 |
 | Runtime telemetry is pull-based and exposed as Rust-owned snapshots | Deterministic read path for UI observability with low coupling to worker lifecycle | Implemented in v1.0 |
 | EN/TR parity is enforced with deterministic key-set tests and base-language normalization | Prevent i18n drift and avoid redundant writes on regional locale tags | Implemented in v1.0 |
 | Use open-source projects as reference, implement original code | Preserve learning benefits while staying license-safe | Implemented in v1.0 |
 
 ---
-*Last updated: 2026-03-21 after v1.0 milestone*
+*Last updated: 2026-03-21 after v1.1 milestone kickoff*
