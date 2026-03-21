@@ -8,7 +8,7 @@ Derived only from v1.1 requirements in `.planning/REQUIREMENTS.md`.
 
 ## Phases
 
-- [ ] **Phase 9: Hue Bridge Onboarding** - User can discover, pair, select area, and confirm stream readiness.
+- [x] **Phase 9: Hue Bridge Onboarding** - User can discover, pair, select area, and confirm stream readiness.
 - [ ] **Phase 10: Hue Stream Lifecycle** - User can start, maintain, and stop Hue streaming from mode controls.
 - [ ] **Phase 11: Device Surface Integration** - User can manage Hue and switch output targets in existing device settings UX.
 - [ ] **Phase 12: Diagnostics and Recovery** - User can recover from transient faults and troubleshoot stream health in-app.
@@ -28,7 +28,7 @@ Derived only from v1.1 requirements in `.planning/REQUIREMENTS.md`.
 
 Plans:
 - [x] 09-01-PLAN.md - Build Hue onboarding backend contracts, command surface, and persistence model.
-- [ ] 09-02-PLAN.md - Implement Device-surface Hue onboarding step flow, area readiness UX, and i18n parity.
+- [x] 09-02-PLAN.md - Implement Device-surface Hue onboarding step flow, area readiness UX, and i18n parity.
 
 ### Phase 10: Hue Stream Lifecycle
 **Goal**: Users can run Hue entertainment output as a stable runtime mode from the app controls.
@@ -64,7 +64,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. Hue Bridge Onboarding | 1/2 | In Progress | 2026-03-21 |
+| 9. Hue Bridge Onboarding | 2/2 | Complete | 2026-03-21 |
 | 10. Hue Stream Lifecycle | 0/TBD | Not started | - |
 | 11. Device Surface Integration | 0/TBD | Not started | - |
 | 12. Diagnostics and Recovery | 0/TBD | Not started | - |
