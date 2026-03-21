@@ -1,0 +1,246 @@
+use std::io::Write;
+use std::sync::Arc;
+use std::time::Duration;
+
+use super::device_connection::SerialConnectionState;
+
+const OUTPUT_BAUD_RATE: u32 = 115_200;
+const OUTPUT_TIMEOUT_MS: u64 = 500;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LedOutputError {
+    pub code: &'static str,
+    pub details: Option<String>,
+}
+
+impl LedOutputError {
+    fn new(code: &'static str, details: Option<String>) -> Self {
+        Self { code, details }
+    }
+
+    pub fn as_reason(&self) -> String {
+        match &self.details {
+            Some(details) => format!("{}: {}", self.code, details),
+            None => self.code.to_string(),
+        }
+    }
+}
+
+pub trait LedPacketSender: Send + Sync {
+    fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
+}
+
+#[derive(Default)]
+struct SerialLedPacketSender;
+
+impl LedPacketSender for SerialLedPacketSender {
+    fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+        let mut port = serialport::new(port_name, OUTPUT_BAUD_RATE)
+            .timeout(Duration::from_millis(OUTPUT_TIMEOUT_MS))
+            .open()
+            .map_err(|error| {
+                LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", Some(error.to_string()))
+            })?;
+
+        port.write_all(packet).map_err(|error| {
+            LedOutputError::new("LED_OUTPUT_WRITE_FAILED", Some(error.to_string()))
+        })?;
+        port.flush().map_err(|error| {
+            LedOutputError::new("LED_OUTPUT_FLUSH_FAILED", Some(error.to_string()))
+        })?;
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct LedOutputBridge {
+    sender: Arc<dyn LedPacketSender>,
+}
+
+impl LedOutputBridge {
+    pub fn new() -> Self {
+        Self {
+            sender: Arc::new(SerialLedPacketSender),
+        }
+    }
+
+    pub fn from_sender(sender: Arc<dyn LedPacketSender>) -> Self {
+        Self { sender }
+    }
+
+    pub fn send_packet(
+        &self,
+        connection_state: &SerialConnectionState,
+        packet: &[u8],
+    ) -> Result<(), LedOutputError> {
+        let status = connection_state
+            .last_status
+            .lock()
+            .map_err(|error| {
+                LedOutputError::new(
+                    "LED_OUTPUT_CONNECTION_STATE_LOCK_FAILED",
+                    Some(error.to_string()),
+                )
+            })?
+            .clone();
+
+        if !status.connected {
+            return Err(LedOutputError::new(
+                "LED_OUTPUT_DEVICE_NOT_CONNECTED",
+                Some("Last known device state is disconnected.".to_string()),
+            ));
+        }
+
+        let port_name = status.port_name.ok_or_else(|| {
+            LedOutputError::new(
+                "LED_OUTPUT_PORT_UNAVAILABLE",
+                Some("No connected serial port is recorded in connection state.".to_string()),
+            )
+        })?;
+
+        self.sender.send(&port_name, packet)
+    }
+}
+
+impl Default for LedOutputBridge {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
+    let _ = (brightness, rgb_triplets);
+    Vec::new()
+}
+
+pub fn apply_solid_payload(
+    bridge: &LedOutputBridge,
+    connection_state: &SerialConnectionState,
+    r: u8,
+    g: u8,
+    b: u8,
+    brightness: f32,
+) -> Result<(), LedOutputError> {
+    let packet = encode_led_packet(brightness, &[[r, g, b]]);
+    bridge.send_packet(connection_state, &packet)
+}
+
+pub fn send_ambilight_frame(
+    bridge: &LedOutputBridge,
+    connection_state: &SerialConnectionState,
+    frame: &[[u8; 3]],
+    brightness: f32,
+) -> Result<(), LedOutputError> {
+    let packet = encode_led_packet(brightness, frame);
+    bridge.send_packet(connection_state, &packet)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::{
+        apply_solid_payload, encode_led_packet, send_ambilight_frame, LedOutputBridge,
+        LedOutputError, LedPacketSender,
+    };
+    use crate::commands::device_connection::{
+        CommandStatus, SerialConnectionState, SerialConnectionStatus,
+    };
+
+    #[derive(Default)]
+    struct FakeSender {
+        writes: Mutex<Vec<(String, Vec<u8>)>>,
+        fail_with: Option<&'static str>,
+    }
+
+    impl FakeSender {
+        fn successful() -> Self {
+            Self::default()
+        }
+
+        fn failing(code: &'static str) -> Self {
+            Self {
+                writes: Mutex::new(Vec::new()),
+                fail_with: Some(code),
+            }
+        }
+
+        fn writes(&self) -> Vec<(String, Vec<u8>)> {
+            self.writes.lock().expect("writes lock poisoned").clone()
+        }
+    }
+
+    impl LedPacketSender for FakeSender {
+        fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+            if let Some(code) = self.fail_with {
+                return Err(LedOutputError::new(
+                    code,
+                    Some("forced failure".to_string()),
+                ));
+            }
+
+            self.writes
+                .lock()
+                .expect("writes lock poisoned")
+                .push((port_name.to_string(), packet.to_vec()));
+            Ok(())
+        }
+    }
+
+    fn connected_state(port_name: &str) -> SerialConnectionState {
+        SerialConnectionState {
+            last_status: Mutex::new(SerialConnectionStatus {
+                port_name: Some(port_name.to_string()),
+                connected: true,
+                status: CommandStatus {
+                    code: "CONNECT_OK".to_string(),
+                    message: "Connected".to_string(),
+                    details: None,
+                },
+                updated_at_unix_ms: 0,
+            }),
+        }
+    }
+
+    #[test]
+    fn solid_payload_encodes_to_deterministic_packet() {
+        let packet = encode_led_packet(0.5, &[[255, 0, 128]]);
+
+        assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 128, 56]);
+    }
+
+    #[test]
+    fn bridge_uses_connected_port_and_returns_coded_write_error() {
+        let success_sender = Arc::new(FakeSender::successful());
+        let success_bridge = LedOutputBridge::from_sender(success_sender.clone());
+        let state = connected_state("COM9");
+
+        let success = apply_solid_payload(&success_bridge, &state, 1, 2, 3, 1.0);
+        assert!(success.is_ok());
+        let writes = success_sender.writes();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].0, "COM9");
+
+        let failing_sender = Arc::new(FakeSender::failing("LED_OUTPUT_WRITE_FAILED"));
+        let failing_bridge = LedOutputBridge::from_sender(failing_sender);
+        let error = apply_solid_payload(&failing_bridge, &state, 1, 2, 3, 1.0)
+            .expect_err("write failure should bubble up");
+        assert_eq!(error.code, "LED_OUTPUT_WRITE_FAILED");
+    }
+
+    #[test]
+    fn ambilight_frame_uses_same_packet_rules_as_solid() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let state = connected_state("COM7");
+
+        let frame = [[10, 20, 30], [5, 15, 25]];
+        send_ambilight_frame(&bridge, &state, &frame, 0.25).expect("frame send should succeed");
+
+        let writes = sender.writes();
+        assert_eq!(writes.len(), 1);
+
+        let expected = encode_led_packet(0.25, &frame);
+        assert_eq!(writes[0].1, expected);
+    }
+}
