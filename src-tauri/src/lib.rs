@@ -20,6 +20,7 @@ mod commands {
     pub mod calibration;
     pub mod device_connection;
     pub mod hue_onboarding;
+    pub mod hue_stream_lifecycle;
     pub mod led_output;
     pub mod lighting_mode;
     pub mod runtime_quality;
