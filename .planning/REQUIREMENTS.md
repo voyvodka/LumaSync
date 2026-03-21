@@ -63,24 +63,24 @@ Which requirements map to which phases. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HUE-01 | Phase TBD | Pending |
-| HUE-02 | Phase TBD | Pending |
-| HUE-03 | Phase TBD | Pending |
-| HUE-04 | Phase TBD | Pending |
-| HUE-05 | Phase TBD | Pending |
-| HUE-06 | Phase TBD | Pending |
-| HUE-07 | Phase TBD | Pending |
-| HUE-08 | Phase TBD | Pending |
-| HUX-01 | Phase TBD | Pending |
-| HUX-02 | Phase TBD | Pending |
-| HDR-01 | Phase TBD | Pending |
-| HDR-02 | Phase TBD | Pending |
+| HUE-01 | Phase 9 | Pending |
+| HUE-02 | Phase 9 | Pending |
+| HUE-03 | Phase 9 | Pending |
+| HUE-04 | Phase 9 | Pending |
+| HUE-05 | Phase 10 | Pending |
+| HUE-06 | Phase 10 | Pending |
+| HUE-07 | Phase 10 | Pending |
+| HUE-08 | Phase 12 | Pending |
+| HUX-01 | Phase 11 | Pending |
+| HUX-02 | Phase 11 | Pending |
+| HDR-01 | Phase 12 | Pending |
+| HDR-02 | Phase 12 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 12 total
-- Mapped to phases: 0
-- Unmapped: 12 ⚠️
+- Mapped to phases: 12
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after v1.1 milestone requirement definition*
+*Last updated: 2026-03-21 after v1.1 roadmap mapping*
