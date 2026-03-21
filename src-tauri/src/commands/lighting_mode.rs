@@ -12,7 +12,7 @@ use super::ambilight_capture::{
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::led_output::{
-    apply_solid_payload_to_port, send_ambilight_frame_to_port, LedOutputBridge,
+    apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, LedOutputBridge,
 };
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 
@@ -263,7 +263,7 @@ fn start_ambilight_worker(
     let send_started = Instant::now();
     quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-        send_ambilight_frame_to_port(&output_bridge, &port_name, frame, brightness)
+        send_ambilight_frame_hot_path_to_port(&output_bridge, &port_name, frame, brightness)
             .map_err(|error| error.as_reason())
     })?;
     quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
@@ -284,8 +284,13 @@ fn start_ambilight_worker(
                 let send_ms =
                     match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                        send_ambilight_frame_to_port(&output_bridge, &port_name, frame, brightness)
-                            .map_err(|error| error.as_reason())
+                        send_ambilight_frame_hot_path_to_port(
+                            &output_bridge,
+                            &port_name,
+                            frame,
+                            brightness,
+                        )
+                        .map_err(|error| error.as_reason())
                     }) {
                         Ok(true) => send_started.elapsed().as_secs_f32() * 1000.0,
                         _ => 0.0,

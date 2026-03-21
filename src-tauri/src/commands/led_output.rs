@@ -1,5 +1,6 @@
+use std::collections::HashMap;
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use super::device_connection::SerialConnectionState;
@@ -30,25 +31,79 @@ pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
 }
 
-#[derive(Default)]
-struct SerialLedPacketSender;
+type PortFactory = dyn Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync;
+
+struct SerialLedPacketSender {
+    sessions: Mutex<HashMap<String, Box<dyn Write + Send>>>,
+    port_factory: Arc<PortFactory>,
+}
+
+impl SerialLedPacketSender {
+    fn new(port_factory: Arc<PortFactory>) -> Self {
+        Self {
+            sessions: Mutex::new(HashMap::new()),
+            port_factory,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_port_factory_for_tests<F>(factory: F) -> Self
+    where
+        F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
+    {
+        Self::new(Arc::new(factory))
+    }
+}
+
+impl Default for SerialLedPacketSender {
+    fn default() -> Self {
+        Self::new(Arc::new(|port_name: &str| {
+            serialport::new(port_name, OUTPUT_BAUD_RATE)
+                .timeout(Duration::from_millis(OUTPUT_TIMEOUT_MS))
+                .open()
+                .map(|port| port as Box<dyn Write + Send>)
+                .map_err(|error| {
+                    LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", Some(error.to_string()))
+                })
+        }))
+    }
+}
 
 impl LedPacketSender for SerialLedPacketSender {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
-        let mut port = serialport::new(port_name, OUTPUT_BAUD_RATE)
-            .timeout(Duration::from_millis(OUTPUT_TIMEOUT_MS))
-            .open()
-            .map_err(|error| {
-                LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", Some(error.to_string()))
-            })?;
+        let mut sessions = self.sessions.lock().map_err(|error| {
+            LedOutputError::new("LED_OUTPUT_SESSION_LOCK_FAILED", Some(error.to_string()))
+        })?;
 
-        port.write_all(packet).map_err(|error| {
+        if !sessions.contains_key(port_name) {
+            let opened = (self.port_factory)(port_name)?;
+            sessions.insert(port_name.to_string(), opened);
+        }
+
+        let Some(port) = sessions.get_mut(port_name) else {
+            return Err(LedOutputError::new(
+                "LED_OUTPUT_PORT_UNAVAILABLE",
+                Some("Port session could not be created for output write.".to_string()),
+            ));
+        };
+
+        let write_result = port.write_all(packet).map_err(|error| {
             LedOutputError::new("LED_OUTPUT_WRITE_FAILED", Some(error.to_string()))
-        })?;
-        port.flush().map_err(|error| {
-            LedOutputError::new("LED_OUTPUT_FLUSH_FAILED", Some(error.to_string()))
-        })?;
-        Ok(())
+        });
+        let flush_result = if write_result.is_ok() {
+            port.flush().map_err(|error| {
+                LedOutputError::new("LED_OUTPUT_FLUSH_FAILED", Some(error.to_string()))
+            })
+        } else {
+            Ok(())
+        };
+        let result = write_result.and(flush_result);
+
+        if result.is_err() {
+            sessions.remove(port_name);
+        }
+
+        result
     }
 }
 
@@ -60,7 +115,7 @@ pub struct LedOutputBridge {
 impl LedOutputBridge {
     pub fn new() -> Self {
         Self {
-            sender: Arc::new(SerialLedPacketSender),
+            sender: Arc::new(SerialLedPacketSender::default()),
         }
     }
 
@@ -177,6 +232,15 @@ pub fn send_ambilight_frame_to_port(
 ) -> Result<(), LedOutputError> {
     let packet = encode_led_packet(brightness, frame);
     bridge.send_packet_to_port(port_name, &packet)
+}
+
+pub fn send_ambilight_frame_hot_path_to_port(
+    bridge: &LedOutputBridge,
+    port_name: &str,
+    frame: &[[u8; 3]],
+    brightness: f32,
+) -> Result<(), LedOutputError> {
+    send_ambilight_frame_to_port(bridge, port_name, frame, brightness)
 }
 
 #[cfg(test)]
