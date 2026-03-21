@@ -39,6 +39,9 @@ use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
     pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
+use commands::hue_stream_lifecycle::{
+    get_hue_stream_status, start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
+};
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
@@ -158,6 +161,7 @@ pub fn run() {
             app.manage(SerialConnectionState::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
+            app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
 
             // Build tray icon
@@ -228,6 +232,9 @@ pub fn run() {
             validate_hue_credentials,
             list_hue_entertainment_areas,
             check_hue_stream_readiness,
+            start_hue_stream,
+            stop_hue_stream,
+            get_hue_stream_status,
             set_lighting_mode,
             stop_lighting,
             get_lighting_mode_status,
