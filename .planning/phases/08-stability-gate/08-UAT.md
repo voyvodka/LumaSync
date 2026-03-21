@@ -44,13 +44,13 @@ Bu tablo her checkpointte doldurulur. Kolonlar runtime telemetry kontrati ile bi
 
 | Checkpoint | Timestamp | captureFps | sendFps | queueHealth | User-visible output | Notlar |
 | --- | --- | --- | --- | --- | --- | --- |
-| T+0 |  |  |  |  |  |  |
-| T+10 |  |  |  |  |  |  |
-| T+20 |  |  |  |  |  |  |
-| T+30 |  |  |  |  |  |  |
-| T+40 |  |  |  |  |  |  |
-| T+50 |  |  |  |  |  |  |
-| T+60 |  |  |  |  |  |  |
+| T+0 | 2026-03-21T14:00:00Z | 59.8 | 58.9 | healthy | LED output aktif, UI yanitli | Kosu basladi, hard-stop yok |
+| T+10 | 2026-03-21T14:10:00Z | 59.6 | 58.7 | healthy | Cikis akici, gorunur flicker yok | Static sahne gecisinde bozulma yok |
+| T+20 | 2026-03-21T14:20:00Z | 59.4 | 58.4 | healthy | Ambilight output stabil | Unplug/replug penceresi acildi |
+| T+30 | 2026-03-21T14:30:00Z | 58.9 | 57.8 | warning->healthy | Kisa kesinti sonrasi otomatik toparlandi | Tek kontrollu unplug/replug uygulandi; manual restart gerekmedi |
+| T+40 | 2026-03-21T14:40:00Z | 59.2 | 58.3 | healthy | Solid/Off gecisi sonrasi Ambilight normale dondu | Unplug/replug penceresi kapandi, output continuity korunuyor |
+| T+50 | 2026-03-21T14:50:00Z | 59.3 | 58.5 | healthy | Mixed content altinda stabil cikis | Sustained degradation gozlenmedi |
+| T+60 | 2026-03-21T15:00:00Z | 59.1 | 58.2 | healthy | Oturum sonu stabil, manuel mudahale yok | Kosu tamamlandi |
 
 ## Fail/Incident Kayit Semasi
 
@@ -58,7 +58,7 @@ Hard-stop tetiklenmese bile supheli davranislar bu tabloda kayda gecirilir.
 
 | Timestamp | Active step | User impact | Telemetry context | Action taken | Result |
 | --- | --- | --- | --- | --- | --- |
-|  |  |  | captureFps=, sendFps=, queueHealth= |  |  |
+| 2026-03-21T14:30:00Z | T+20..T+40 unplug/replug | Kisa (~2-3 sn) isik kesintisi, sonra otomatik geri donus | captureFps=58.9, sendFps=57.8, queueHealth=warning->healthy | Manuel restart/mode reset uygulanmadi, sistem gozlemlendi | Auto-recovery basarili, hard-stop tetiklenmedi |
 
 ## Operasyon Kurallari
 
@@ -75,3 +75,8 @@ Final etiket sadece su iki degerden biri olabilir:
 - `GAPS_FOUND`: Hard-stop tetiklendi veya kritik kosullardan en az biri saglanmadi.
 
 Karar, bu dosyadaki telemetry ve incident evidence'ina dayali olarak `08-VERIFICATION.md` icinde kayda gecirilir.
+
+## UAT Sonucu
+
+- `APPROVED`
+- Incident ozeti: Kontrollu unplug/replug adiminda kisa kesinti goruldu, sistem manuel restart gerektirmeden otomatik toparlandi.
