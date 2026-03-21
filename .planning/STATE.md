@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: completed
-stopped_at: Completed 10-03-PLAN.md
-last_updated: "2026-03-21T20:02:18.681Z"
+status: in_progress
+stopped_at: Completed 10-04-PLAN.md
+last_updated: "2026-03-21T20:24:44.253Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 4
-  completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
-  percent: 96
+  completed_phases: 1
+  total_plans: 7
+  completed_plans: 6
+  percent: 98
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-21)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Milestone v1.1 Hue integration execution (Phase 10 complete, Phase 11 planning next)
+**Current focus:** Milestone v1.1 Hue integration execution (Phase 10 Plan 10-05 remaining)
 
 ## Current Position
 
 Milestone: v1.1 (Hue Entertainment Integration)
 Phase: 10 - Hue Stream Lifecycle
-Status: Plan 10-03 completed, Phase 10 complete and ready for Phase 11 planning
+Status: Plan 10-04 completed, Phase 10 in progress (next: 10-05)
 Last activity: 2026-03-21
 
-Progress: [██████████] 96%
+Progress: [██████████] 98%
 
 ## Performance Metrics
 
 - Milestone requirement coverage: 12/12 mapped to roadmap phases
 - Planned phases in milestone: 4 (Phase 9 -> Phase 12)
 - Completed phases in milestone: 2
-- Completed plans in milestone: 5
+- Completed plans in milestone: 6
 
 ## Decisions
 
@@ -56,6 +56,9 @@ Progress: [██████████] 96%
 - [Phase 10]: Runtime status mapping derives CTA hints only from explicit code-family or actionHint fields.
 - [Phase 10]: Device Start remains blocked when credential validation is unknown/in-flight or readiness is stale.
 - [Phase 10]: Device-surface Stop routes to shared mode stop pipeline instead of local ad-hoc flow.
+- [Phase 10]: `get_hue_stream_status` performs readiness re-evaluation for active states and triggers lifecycle transitions instead of returning passive snapshots.
+- [Phase 10]: Auth-invalid evidence (`AUTH_INVALID_*` / `HUE_CREDENTIAL_INVALID`) is escalated directly to failed+repair, separate from transient reconnect handling.
+- [Phase 10]: Active stream context (bridgeIp/username/areaId) is persisted in runtime owner and cleared on stop/fail-gate paths to keep refresh logic deterministic.
 
 ## Accumulated Context
 
@@ -66,8 +69,8 @@ Progress: [██████████] 96%
 
 ## Session Continuity
 
-Last session: 2026-03-21T20:02:18.678Z
-Stopped at: Completed 10-03-PLAN.md
+Last session: 2026-03-21T20:24:44.251Z
+Stopped at: Completed 10-04-PLAN.md
 Resume from: `/gsd-execute-phase 10-hue-stream-lifecycle`
 Key files:
 - `.planning/ROADMAP.md`
