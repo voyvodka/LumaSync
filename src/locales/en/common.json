@@ -40,7 +40,9 @@
     "title": "Startup & Tray",
     "launchAtLogin": "Launch at login",
     "launchAtLoginDescription": "Start LumaSync automatically when you log in.",
-    "trayInfo": "The app runs in the system tray when closed."
+    "trayInfo": "The app runs in the system tray when closed.",
+    "minimizeOnClose": "Minimize to tray on close",
+    "alwaysOn": "Always on"
   },
   "aboutLogs": {
     "title": "About & Logs",

@@ -40,7 +40,9 @@
     "title": "Başlangıç & Tepsi",
     "launchAtLogin": "Girişte başlat",
     "launchAtLoginDescription": "LumaSync'i oturum açtığınızda otomatik başlatın.",
-    "trayInfo": "Uygulama kapatıldığında sistem tepsisinde çalışmaya devam eder."
+    "trayInfo": "Uygulama kapatıldığında sistem tepsisinde çalışmaya devam eder.",
+    "minimizeOnClose": "Kapatınca tepsiye küçült",
+    "alwaysOn": "Her zaman açık"
   },
   "aboutLogs": {
     "title": "Hakkında & Günlükler",

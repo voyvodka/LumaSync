@@ -2,11 +2,6 @@ import { useTranslation } from "react-i18next";
 import { changeLanguage, I18N_SUPPORTED_LANGUAGES, type I18nLanguage } from "../../i18n/i18n";
 import { shellStore } from "../../persistence/shellStore";
 
-const LANGUAGE_LABELS: Record<I18nLanguage, string> = {
-  en: "English",
-  tr: "Turkce",
-};
-
 export function LanguageSection() {
   const { t, i18n } = useTranslation("common");
   const currentLanguage = i18n.language as I18nLanguage;
@@ -49,7 +44,7 @@ export function LanguageSection() {
                 }}
                 className="sr-only"
               />
-              <span className="text-sm font-medium">{LANGUAGE_LABELS[lang]}</span>
+              <span className="text-sm font-medium">{t(`language.options.${lang}`)}</span>
               <span className={`text-xs ${active ? "text-white/85 dark:text-zinc-700" : "text-slate-500 dark:text-zinc-400"}`}>
                 {lang.toUpperCase()}
               </span>
