@@ -16,7 +16,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
 - [x] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar. (completed 2026-03-19)
 - [x] **Phase 5: Core Lighting Modes** - Realtime Ambilight ve solid-color modlari kullanilabilir olur. (completed 2026-03-21)
 - [ ] **Phase 6: Runtime Quality Controls** - Smoothing ve adaptif gonderim davranisi ile deneyim daha yumusak ve hafif olur.
-- [ ] **Phase 7: Telemetry and Full Localization** - Temel telemetri gorunurlugu ve TR/EN dil destegi tamamlanir.
+- [x] **Phase 7: Telemetry and Full Localization** - Temel telemetri gorunurlugu ve TR/EN dil destegi tamamlanir. (completed 2026-03-21)
 - [ ] **Phase 8: Stability Gate** - Sistem 60 dakikalik kesintisiz calismayi crash olmadan gecer.
 
 ## Phase Details
@@ -157,5 +157,5 @@ Plans:
 | 4. Calibration Workflow | 12/12 | Complete   | 2026-03-20 |
 | 5. Core Lighting Modes | 6/6 | Complete | 2026-03-21 |
 | 6. Runtime Quality Controls | 1/2 | In Progress|  |
-| 7. Telemetry and Full Localization | 0/TBD | Not started | - |
+| 7. Telemetry and Full Localization | 3/3 | Complete | 2026-03-21 |
 | 8. Stability Gate | 0/TBD | Not started | - |
