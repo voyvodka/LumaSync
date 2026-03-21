@@ -22,6 +22,15 @@
   "general": {
     "title": "Genel",
     "description": "Genel uygulama ayarları.",
+    "output": {
+      "title": "Cikis hedefleri",
+      "description": "Mod kontrollerinin hangi hedeflerde calisacagini sec.",
+      "options": {
+        "usb": "USB",
+        "hue": "Hue",
+        "usbHue": "USB + Hue"
+      }
+    },
     "mode": {
       "title": "LED modu",
       "description": "Çıkış modunu seç ve gerektiğinde sabit rengi ayarla.",
@@ -139,7 +148,8 @@
         "loadingAreas": "Alanlar yukleniyor...",
         "checkReadiness": "Hazirligi kontrol et",
         "checkingReadiness": "Hazirlik kontrol ediliyor...",
-        "start": "Hue'yu baslat"
+        "start": "Hue'yu baslat",
+        "stop": "Hue'yu durdur"
       },
       "bridge": {
         "placeholder": "Bir Hue bridge sec"
@@ -189,6 +199,67 @@
         "errorBody": "Baslatmadan once basarisiz adimi yeniden dene veya tekrar eslestir.",
         "infoTitle": "Hue kurulumu bilgisi",
         "infoBody": "Kuruluma devam etmek icin gecerli adimi takip et."
+      },
+      "runtime": {
+        "idleTitle": "Runtime beklemede",
+        "idleBody": "Hazirlik guncelse mode controls uzerinden baslat.",
+        "states": {
+          "Idle": "Beklemede",
+          "Starting": "Baslatiliyor",
+          "Running": "Calisiyor",
+          "Reconnecting": "Yeniden baglaniyor",
+          "Stopping": "Durduruluyor",
+          "Failed": "Basarisiz"
+        },
+        "codes": {
+          "HUE_STREAM_STARTING": "Hue yayin baslatma istegi alindi.",
+          "HUE_STREAM_RUNNING": "Hue yayini aktif.",
+          "HUE_STREAM_STOPPING": "Hue durdurma islemi suruyor.",
+          "HUE_STREAM_STOPPED": "Hue yayini durdu.",
+          "TRANSIENT_RETRY_SCHEDULED": "Gecici sorun algilandi. Otomatik deneme planlandi.",
+          "TRANSIENT_RETRY_EXHAUSTED": "Deneme butcesi tukendi. Manuel yeniden baglan gerekli.",
+          "AUTH_INVALID_CREDENTIALS": "Kimlik bilgileri gecersiz. Yeniden eslestirme gerekli.",
+          "CONFIG_NOT_READY_GATE_BLOCKED": "Baslatma kapi kontrolden gecmedi; hazirlik stale veya eksik.",
+          "HUE_STOP_TIMEOUT_PARTIAL": "Durdurma zaman asimina ugradi. Kismi durdurma temizligi gerekli."
+        },
+        "retry": {
+          "progress": "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms"
+        },
+        "triggerSource": {
+          "mode_control": "Mode controls uzerinden tetiklendi",
+          "device_surface": "Device yuzeyinden tetiklendi",
+          "system": "Sistem recovery tarafindan tetiklendi"
+        },
+        "checklist": {
+          "title": "Baslatmadan once",
+          "waitCredential": "Kimlik dogrulamasinin tamamlanmasini bekle.",
+          "revalidate": "Hazirlik stale. Baslatmadan once yeniden dogrula."
+        },
+        "actions": {
+          "retry": "Tekrar dene",
+          "reconnect": "Yeniden baglan",
+          "repair": "Yeniden eslestir",
+          "revalidate": "Yeniden dogrula",
+          "adjust_area": "Alani duzenle"
+        },
+        "targets": {
+          "hue": {
+            "title": "Hue hedefi",
+            "retry": "Hue hedefini tekrar dene"
+          },
+          "usb": {
+            "title": "USB hedefi",
+            "retry": "USB hedefini tekrar dene"
+          }
+        },
+        "partialStop": {
+          "title": "Kismi durdurma",
+          "body": "Hue durdurma tamamen bitmedi. Temizligi tamamlamak icin yeniden durdur dene."
+        },
+        "timeout": {
+          "title": "Durdurma zaman asimi",
+          "body": "Durdurma zaman asimina ulasti. Uygulamayi yeniden baslatmadan durdurmayi tekrar deneyebilirsin."
+        }
       }
     }
   },

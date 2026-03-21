@@ -78,7 +78,7 @@ function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
 }
 
 function toHueStartConfig(state: {
-  lastHueBridge?: { ip?: string };
+  lastHueBridge?: { ip: string };
   hueAppKey?: string;
   lastHueAreaId?: string;
 }): HueStartConfig | null {
@@ -124,11 +124,11 @@ function App() {
         setActiveSection(state.lastSection);
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
-        const restoredTargets = normalizeOutputTargets((state as { lastOutputTargets?: unknown }).lastOutputTargets);
+        const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);
         setSelectedOutputTargets(restoredTargets);
         setActiveOutputTargets(restoredMode.kind === LIGHTING_MODE_KIND.OFF ? [] : restoredTargets);
-        setHueStartConfig(toHueStartConfig(state as { lastHueBridge?: { ip?: string }; hueAppKey?: string; lastHueAreaId?: string }));
+        setHueStartConfig(toHueStartConfig(state));
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
@@ -182,6 +182,14 @@ function App() {
       openCalibrationOverlay(entry.step);
     }
   }, [openCalibrationOverlay, savedCalibration]);
+
+  const handleOutputTargetsChange = useCallback(async (targets: HueRuntimeTarget[]) => {
+    const normalizedTargets = normalizeOutputTargets(targets);
+    setSelectedOutputTargets(normalizedTargets);
+    try {
+      await saveShellState({ lastOutputTargets: normalizedTargets });
+    } catch {}
+  }, []);
 
   const handleLightingModeChange = useCallback(
     async (nextMode: LightingModeConfig) => {
@@ -285,8 +293,10 @@ function App() {
         onSectionChange={handleSectionChange}
         calibration={savedCalibration}
         lightingMode={lightingMode}
+        outputTargets={selectedOutputTargets}
         modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
         onLightingModeChange={handleLightingModeChange}
+        onOutputTargetsChange={handleOutputTargetsChange}
         onEditCalibration={handleOpenCalibration}
       />
       <CalibrationOverlay

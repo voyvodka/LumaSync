@@ -22,6 +22,15 @@
   "general": {
     "title": "General",
     "description": "General application settings.",
+    "output": {
+      "title": "Output targets",
+      "description": "Choose where mode controls should run.",
+      "options": {
+        "usb": "USB",
+        "hue": "Hue",
+        "usbHue": "USB + Hue"
+      }
+    },
     "mode": {
       "title": "LED mode",
       "description": "Choose output mode and tune static color when needed.",
@@ -139,7 +148,8 @@
         "loadingAreas": "Loading areas...",
         "checkReadiness": "Check readiness",
         "checkingReadiness": "Checking readiness...",
-        "start": "Start Hue"
+        "start": "Start Hue",
+        "stop": "Stop Hue"
       },
       "bridge": {
         "placeholder": "Select a Hue bridge"
@@ -189,6 +199,67 @@
         "errorBody": "Re-pair or retry the failed step before starting.",
         "infoTitle": "Hue onboarding info",
         "infoBody": "Follow the current step to continue onboarding."
+      },
+      "runtime": {
+        "idleTitle": "Runtime is idle",
+        "idleBody": "Start from mode controls after readiness is current.",
+        "states": {
+          "Idle": "Idle",
+          "Starting": "Starting",
+          "Running": "Running",
+          "Reconnecting": "Reconnecting",
+          "Stopping": "Stopping",
+          "Failed": "Failed"
+        },
+        "codes": {
+          "HUE_STREAM_STARTING": "Hue stream start requested.",
+          "HUE_STREAM_RUNNING": "Hue stream is running.",
+          "HUE_STREAM_STOPPING": "Hue stream stop is in progress.",
+          "HUE_STREAM_STOPPED": "Hue stream is stopped.",
+          "TRANSIENT_RETRY_SCHEDULED": "Transient issue detected. Auto-retry scheduled.",
+          "TRANSIENT_RETRY_EXHAUSTED": "Retry budget exhausted. Manual reconnect required.",
+          "AUTH_INVALID_CREDENTIALS": "Credentials are invalid. Re-pair is required.",
+          "CONFIG_NOT_READY_GATE_BLOCKED": "Start gate blocked because readiness is stale or missing.",
+          "HUE_STOP_TIMEOUT_PARTIAL": "Stop timed out. Partial-stop cleanup is required."
+        },
+        "retry": {
+          "progress": "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms"
+        },
+        "triggerSource": {
+          "mode_control": "Triggered from mode controls",
+          "device_surface": "Triggered from device surface",
+          "system": "Triggered by system recovery"
+        },
+        "checklist": {
+          "title": "Before Start",
+          "waitCredential": "Wait for credential validation to complete.",
+          "revalidate": "Readiness is stale. Revalidate before Start."
+        },
+        "actions": {
+          "retry": "Retry",
+          "reconnect": "Reconnect",
+          "repair": "Re-pair",
+          "revalidate": "Revalidate",
+          "adjust_area": "Adjust area"
+        },
+        "targets": {
+          "hue": {
+            "title": "Hue target",
+            "retry": "Retry Hue target"
+          },
+          "usb": {
+            "title": "USB target",
+            "retry": "Retry USB target"
+          }
+        },
+        "partialStop": {
+          "title": "Partial stop",
+          "body": "Hue stop did not fully finish. Retry stop to complete cleanup."
+        },
+        "timeout": {
+          "title": "Stop timeout",
+          "body": "Stop reached timeout. You can retry stop without restarting the app."
+        }
       }
     }
   },

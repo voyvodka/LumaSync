@@ -15,6 +15,11 @@ vi.mock("react-i18next", () => ({
         "general.description": "General application settings.",
         "general.mode.title": "Lighting mode",
         "general.mode.description": "Select output mode.",
+        "general.output.title": "Output targets",
+        "general.output.description": "Pick where mode controls should run.",
+        "general.output.options.usb": "USB",
+        "general.output.options.hue": "Hue",
+        "general.output.options.usbHue": "USB + Hue",
         "general.mode.options.off": "Off",
         "general.mode.options.ambilight": "Ambilight",
         "general.mode.options.solid": "Solid",
@@ -35,12 +40,14 @@ describe("GeneralSection", () => {
     const onModeChange = vi.fn();
 
     render(
-      <GeneralSection
-        mode={{ kind: "off" }}
-        modeLockReason={null}
-        onModeChange={onModeChange}
-        onOpenCalibrationOverlay={vi.fn()}
-      />,
+        <GeneralSection
+          mode={{ kind: "off" }}
+          outputTargets={["usb"]}
+          modeLockReason={null}
+          onModeChange={onModeChange}
+          onOutputTargetsChange={vi.fn()}
+          onOpenCalibrationOverlay={vi.fn()}
+        />,
     );
 
     await user.click(screen.getByRole("button", { name: "Ambilight" }));
@@ -63,11 +70,13 @@ describe("GeneralSection", () => {
       return (
         <GeneralSection
           mode={mode}
+          outputTargets={["usb"]}
           modeLockReason={null}
           onModeChange={(nextMode) => {
             setMode(nextMode);
             onModeChange(nextMode);
           }}
+          onOutputTargetsChange={vi.fn()}
           onOpenCalibrationOverlay={vi.fn()}
         />
       );
@@ -76,7 +85,7 @@ describe("GeneralSection", () => {
     render(<Harness />);
 
     fireEvent.change(screen.getByLabelText("Brightness"), {
-      target: { value: "0.35" },
+      target: { value: "35" },
     });
     fireEvent.change(screen.getByLabelText("Solid color"), {
       target: { value: "#00ff00" },
@@ -94,12 +103,14 @@ describe("GeneralSection", () => {
     const onModeChange = vi.fn();
 
     render(
-      <GeneralSection
-        mode={{ kind: "off" }}
-        modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
-        onModeChange={onModeChange}
-        onOpenCalibrationOverlay={onOpenCalibrationOverlay}
-      />,
+        <GeneralSection
+          mode={{ kind: "off" }}
+          outputTargets={["usb"]}
+          modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
+          onModeChange={onModeChange}
+          onOutputTargetsChange={vi.fn()}
+          onOpenCalibrationOverlay={onOpenCalibrationOverlay}
+        />,
     );
 
     expect(screen.getByRole("button", { name: "Ambilight" })).toBeDisabled();
@@ -109,5 +120,27 @@ describe("GeneralSection", () => {
 
     expect(onOpenCalibrationOverlay).toHaveBeenCalledOnce();
     expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("emits selected output target set and supports dual target mode", async () => {
+    const user = userEvent.setup();
+    const onOutputTargetsChange = vi.fn();
+
+    render(
+      <GeneralSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={onOutputTargetsChange}
+        onOpenCalibrationOverlay={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Hue" }));
+    await user.click(screen.getByRole("button", { name: "USB + Hue" }));
+
+    expect(onOutputTargetsChange).toHaveBeenNthCalledWith(1, ["hue"]);
+    expect(onOutputTargetsChange).toHaveBeenNthCalledWith(2, ["usb", "hue"]);
   });
 });

@@ -48,9 +48,16 @@ vi.mock("./features/settings/SettingsLayout", () => ({
   SettingsLayout: (props: {
     lightingMode: LightingModeConfig;
     onLightingModeChange: (mode: LightingModeConfig) => void;
+    onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
   }) => (
     <div>
       <p data-testid="active-mode">{props.lightingMode.kind}</p>
+      <button
+        type="button"
+        onClick={() => props.onOutputTargetsChange(["hue"])}
+      >
+        set-hue-target
+      </button>
       <button
         type="button"
         onClick={() =>

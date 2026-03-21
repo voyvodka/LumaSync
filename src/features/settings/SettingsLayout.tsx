@@ -11,6 +11,7 @@ import { TelemetrySection } from "../telemetry/ui/TelemetrySection";
 import type { LedCalibrationConfig } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
+import type { HueRuntimeTarget } from "../../shared/contracts/hue";
 
 interface SectionMeta {
   id: SectionId;
@@ -22,15 +23,19 @@ function SectionContent({
   sectionId,
   calibration,
   lightingMode,
+  outputTargets,
   modeLockReason,
   onLightingModeChange,
+  onOutputTargetsChange,
   onEditCalibration,
 }: {
   sectionId: SectionId;
   calibration?: LedCalibrationConfig;
   lightingMode: LightingModeConfig;
+  outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
+  onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onEditCalibration: () => void;
 }) {
   switch (sectionId) {
@@ -38,8 +43,10 @@ function SectionContent({
       return (
         <GeneralSection
           mode={lightingMode}
+          outputTargets={outputTargets}
           modeLockReason={modeLockReason}
           onModeChange={onLightingModeChange}
+          onOutputTargetsChange={onOutputTargetsChange}
           onOpenCalibrationOverlay={onEditCalibration}
         />
       );
@@ -59,8 +66,10 @@ function SectionContent({
       return (
         <GeneralSection
           mode={lightingMode}
+          outputTargets={outputTargets}
           modeLockReason={modeLockReason}
           onModeChange={onLightingModeChange}
+          onOutputTargetsChange={onOutputTargetsChange}
           onOpenCalibrationOverlay={onEditCalibration}
         />
       );
@@ -72,8 +81,10 @@ interface SettingsLayoutProps {
   onSectionChange: (sectionId: SectionId) => void;
   calibration?: LedCalibrationConfig;
   lightingMode: LightingModeConfig;
+  outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
+  onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onEditCalibration: () => void;
 }
 
@@ -82,8 +93,10 @@ export function SettingsLayout({
   onSectionChange,
   calibration,
   lightingMode,
+  outputTargets,
   modeLockReason,
   onLightingModeChange,
+  onOutputTargetsChange,
   onEditCalibration,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
@@ -179,8 +192,10 @@ export function SettingsLayout({
           sectionId={activeSection}
           calibration={calibration}
           lightingMode={lightingMode}
+          outputTargets={outputTargets}
           modeLockReason={modeLockReason}
           onLightingModeChange={onLightingModeChange}
+          onOutputTargetsChange={onOutputTargetsChange}
           onEditCalibration={onEditCalibration}
         />
       </main>

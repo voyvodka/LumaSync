@@ -4,6 +4,7 @@ import type {
   HueBridgeSummary,
   HueCredentialStatus,
   HueOnboardingStep,
+  HueRuntimeTarget,
 } from "./hue";
 
 /**
@@ -95,6 +96,11 @@ export interface ShellState {
    * Absent until user explicitly changes mode settings.
    */
   lightingMode?: LightingModeConfig;
+  /**
+   * Last selected runtime output target set.
+   * Defaults to USB-first when absent.
+   */
+  lastOutputTargets?: HueRuntimeTarget[];
   /**
    * Last bridge that successfully completed Hue onboarding checks.
    */

@@ -9,6 +9,7 @@ import {
   normalizeLightingModeConfig,
   type LightingModeConfig,
 } from "../../mode/model/contracts";
+import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
 
 export interface GeneralModeLockState {
   reason: ModeGuardReason | null;
@@ -36,9 +37,20 @@ export function triggerCalibrationFromLock(
 
 interface GeneralSectionProps {
   mode: LightingModeConfig;
+  outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
   onModeChange: (nextMode: LightingModeConfig) => void;
+  onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onOpenCalibrationOverlay: () => void;
+}
+
+function isSameTargetSet(currentTargets: HueRuntimeTarget[], expectedTargets: HueRuntimeTarget[]): boolean {
+  if (currentTargets.length !== expectedTargets.length) {
+    return false;
+  }
+
+  const currentSet = new Set(currentTargets);
+  return expectedTargets.every((target) => currentSet.has(target));
 }
 
 function toHexPair(value: number): string {
@@ -69,8 +81,10 @@ function parseHexColor(value: string): { r: number; g: number; b: number } {
 
 export function GeneralSection({
   mode,
+  outputTargets,
   modeLockReason,
   onModeChange,
+  onOutputTargetsChange,
   onOpenCalibrationOverlay,
 }: GeneralSectionProps) {
   const { t } = useTranslation("common");
@@ -102,6 +116,47 @@ export function GeneralSection({
       </p>
 
       <div className="mt-6 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
+        <div>
+          <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("general.output.title")}</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{t("general.output.description")}</p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isSameTargetSet(outputTargets, ["usb"])
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
+            }`}
+            onClick={() => onOutputTargetsChange(["usb"])}
+          >
+            {t("general.output.options.usb")}
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isSameTargetSet(outputTargets, ["hue"])
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
+            }`}
+            onClick={() => onOutputTargetsChange(["hue"])}
+          >
+            {t("general.output.options.hue")}
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isSameTargetSet(outputTargets, ["usb", "hue"])
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
+            }`}
+            onClick={() => onOutputTargetsChange(["usb", "hue"])}
+          >
+            {t("general.output.options.usbHue")}
+          </button>
+        </div>
+
         <div>
           <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("general.mode.title")}</p>
           <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{t("general.mode.description")}</p>
