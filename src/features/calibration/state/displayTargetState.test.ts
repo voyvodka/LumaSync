@@ -12,9 +12,9 @@ function okResult(code = "OVERLAY_OPENED"): DisplayOverlayCommandResult {
 }
 
 function createState() {
-  const openDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
-    okResult(),
-  );
+  const openDisplayOverlay = vi.fn<
+    (displayId: string, preview?: unknown) => Promise<DisplayOverlayCommandResult>
+  >(async () => okResult());
   const closeDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
     okResult("OVERLAY_CLOSED"),
   );
@@ -49,9 +49,9 @@ function createState() {
 
 describe("displayTargetState", () => {
   it("switchActiveDisplay: picks primary display as default target", () => {
-    const openDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
-      okResult(),
-    );
+    const openDisplayOverlay = vi.fn<
+      (displayId: string, preview?: unknown) => Promise<DisplayOverlayCommandResult>
+    >(async () => okResult());
     const closeDisplayOverlay = vi.fn<(displayId: string) => Promise<DisplayOverlayCommandResult>>(async () =>
       okResult("OVERLAY_CLOSED"),
     );
@@ -75,8 +75,8 @@ describe("displayTargetState", () => {
     await state.switchActiveDisplay("display-2");
 
     expect(closeDisplayOverlay).toHaveBeenNthCalledWith(1, "display-1");
-    expect(openDisplayOverlay).toHaveBeenNthCalledWith(1, "display-1");
-    expect(openDisplayOverlay).toHaveBeenNthCalledWith(2, "display-2");
+    expect(openDisplayOverlay).toHaveBeenNthCalledWith(1, "display-1", undefined);
+    expect(openDisplayOverlay).toHaveBeenNthCalledWith(2, "display-2", undefined);
     expect(state.getSnapshot().activeDisplayId).toBe("display-2");
   });
 

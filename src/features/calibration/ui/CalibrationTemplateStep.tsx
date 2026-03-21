@@ -44,10 +44,9 @@ export function CalibrationTemplateStep({
               <p className={`mt-1 text-xs ${selected ? "text-white/80 dark:text-zinc-700" : "text-slate-500 dark:text-zinc-400"}`}>
                 {t("calibration.template.ledCount", {
                   count: template.counts.top +
-                    template.counts.left +
                     template.counts.right +
-                    template.counts.bottomLeft +
-                    template.counts.bottomRight,
+                    template.counts.bottom +
+                    template.counts.left,
                 })}
               </p>
             </button>

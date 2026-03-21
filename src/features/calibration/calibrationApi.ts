@@ -6,6 +6,7 @@ import {
   type DisplayId,
   type DisplayInfo,
   type DisplayOverlayCommandResult,
+  type OverlayPreviewPayload,
 } from "../../shared/contracts/display";
 
 export interface CalibrationTestPatternStartPayload {
@@ -38,10 +39,24 @@ export async function listDisplays(): Promise<DisplayInfo[]> {
   return invoke<DisplayInfo[]>(DISPLAY_OVERLAY_COMMANDS.LIST_DISPLAYS);
 }
 
-export async function openDisplayOverlay(displayId: DisplayId): Promise<DisplayOverlayCommandResult> {
-  return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY, { displayId });
+export async function openDisplayOverlay(
+  displayId: DisplayId,
+  preview?: OverlayPreviewPayload,
+): Promise<DisplayOverlayCommandResult> {
+  return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY, {
+    displayId,
+    preview,
+  });
 }
 
 export async function closeDisplayOverlay(displayId: DisplayId): Promise<DisplayOverlayCommandResult> {
   return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.CLOSE_DISPLAY_OVERLAY, { displayId });
+}
+
+export async function updateDisplayOverlayPreview(
+  preview: OverlayPreviewPayload,
+): Promise<DisplayOverlayCommandResult> {
+  return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.UPDATE_DISPLAY_OVERLAY_PREVIEW, {
+    preview,
+  });
 }

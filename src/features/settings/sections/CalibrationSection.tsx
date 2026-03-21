@@ -20,14 +20,22 @@ export function CalibrationSection({ calibration, onEditCalibration }: Calibrati
     ? [
         `${t("calibration.section.counts.top")} ${calibration.counts.top}`,
         `${t("calibration.section.counts.right")} ${calibration.counts.right}`,
-        `${t("calibration.section.counts.bottomRight")} ${calibration.counts.bottomRight}`,
-        `${t("calibration.section.counts.bottomLeft")} ${calibration.counts.bottomLeft}`,
+        `${t("calibration.section.counts.bottom")} ${calibration.counts.bottom}`,
         `${t("calibration.section.counts.left")} ${calibration.counts.left}`,
       ].join(" • ")
     : t("calibration.section.notConfigured");
-  const directionValue = calibration ? calibration.direction.toUpperCase() : t("calibration.section.notConfigured");
-  const gapValue = calibration ? `${calibration.bottomGapPx} px` : t("calibration.section.notConfigured");
-  const startAnchorValue = calibration?.startAnchor ?? t("calibration.section.notConfigured");
+  const directionValue = calibration
+    ? t(`calibration.editor.directions.${calibration.direction}`)
+    : t("calibration.section.notConfigured");
+  const missingValue = calibration ? String(calibration.bottomMissing) : t("calibration.section.notConfigured");
+  const cornerOwnershipValue = calibration
+    ? calibration.cornerOwnership === "vertical"
+      ? t("calibration.section.cornerOwnershipVertical")
+      : t("calibration.section.cornerOwnershipHorizontal")
+    : t("calibration.section.notConfigured");
+  const startAnchorValue = calibration
+    ? t(`calibration.editor.startAnchors.${calibration.startAnchor}`)
+    : t("calibration.section.notConfigured");
 
   return (
     <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
@@ -67,13 +75,19 @@ export function CalibrationSection({ calibration, onEditCalibration }: Calibrati
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("calibration.section.gap")}
           </dt>
-          <dd className="mt-1 text-slate-900 dark:text-zinc-100">{gapValue}</dd>
+          <dd className="mt-1 text-slate-900 dark:text-zinc-100">{missingValue}</dd>
         </div>
         <div>
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("calibration.section.startAnchor")}
           </dt>
           <dd className="mt-1 text-slate-900 dark:text-zinc-100">{startAnchorValue}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+            {t("calibration.section.cornerOwnership")}
+          </dt>
+          <dd className="mt-1 text-slate-900 dark:text-zinc-100">{cornerOwnershipValue}</dd>
         </div>
         <div className="sm:col-span-2">
           <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">

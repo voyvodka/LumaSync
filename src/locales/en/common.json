@@ -121,7 +121,10 @@
       "manual": "Manual",
       "totalLeds": "Total LEDs",
       "edges": "Edge LEDs",
-      "gap": "Bottom gap",
+      "gap": "Bottom missing LEDs",
+      "cornerOwnership": "Corner ownership",
+      "cornerOwnershipHorizontal": "Horizontal edges",
+      "cornerOwnershipVertical": "Vertical edges",
       "startAnchor": "Start anchor",
       "direction": "Direction",
       "emptyState": "No calibration saved yet. Open the editor to map your strip before enabling live mode.",
@@ -130,8 +133,7 @@
       "counts": {
         "top": "Top",
         "right": "Right",
-        "bottomRight": "Bottom right",
-        "bottomLeft": "Bottom left",
+        "bottom": "Bottom",
         "left": "Left"
       }
     },
@@ -163,20 +165,43 @@
     },
     "editor": {
       "title": "LED map editor",
-      "description": "Adjust edge counts, start anchor, and direction before saving.",
+      "description": "Adjust side counts, bottom missing LEDs, and traversal before saving.",
       "dirty": "Unsaved",
       "saved": "Saved",
-      "bottomGap": "Bottom gap (px)",
+      "bottomMissing": "Bottom missing LEDs",
+      "cornerOwnership": "Corner ownership",
+      "cornerOwnershipHorizontal": "Horizontal owns corners",
+      "cornerOwnershipVertical": "Vertical owns corners",
+      "visualPreset": "LED visual preset",
+      "visualPresets": {
+        "subtle": "Subtle",
+        "vivid": "Vivid"
+      },
       "startAnchor": "Start anchor",
+      "startAnchors": {
+        "top-start": "Top edge - left corner",
+        "top-end": "Top edge - right corner",
+        "right-start": "Right edge - top corner",
+        "right-end": "Right edge - bottom corner",
+        "bottom-start": "Bottom edge - right corner",
+        "bottom-end": "Bottom edge - left corner",
+        "bottom-gap-right": "Bottom gap - right side",
+        "bottom-gap-left": "Bottom gap - left side",
+        "left-start": "Left edge - bottom corner",
+        "left-end": "Left edge - top corner"
+      },
       "direction": "Direction",
+      "directions": {
+        "cw": "Clockwise",
+        "ccw": "Counter-clockwise"
+      },
       "totalLeds": "Total LEDs: {{count}}",
       "changeTemplate": "Change template",
       "counts": {
         "top": "Top",
         "left": "Left",
         "right": "Right",
-        "bottomLeft": "Bottom left",
-        "bottomRight": "Bottom right"
+        "bottom": "Bottom"
       }
     }
   }

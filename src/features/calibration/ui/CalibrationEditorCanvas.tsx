@@ -1,51 +1,58 @@
 import { useTranslation } from "react-i18next";
 
 import type {
+  CornerOwnership,
   LedCalibrationConfig,
   LedDirection,
   LedStartAnchor,
+  LedVisualPreset,
 } from "../model/contracts";
 
 interface CalibrationEditorCanvasProps {
   config: LedCalibrationConfig;
   isDirty: boolean;
-  onCountChange: (segment: "top" | "left" | "right" | "bottomLeft" | "bottomRight", value: number) => void;
-  onBottomGapChange: (px: number) => void;
+  onCountChange: (segment: "top" | "right" | "bottom" | "left", value: number) => void;
+  onBottomMissingChange: (count: number) => void;
+  onCornerOwnershipChange: (ownership: CornerOwnership) => void;
+  onVisualPresetChange: (preset: LedVisualPreset) => void;
   onStartAnchorChange: (anchor: LedStartAnchor) => void;
   onDirectionChange: (direction: LedDirection) => void;
   onResetTemplate: () => void;
 }
 
-const START_ANCHORS: LedStartAnchor[] = [
+const BASE_START_ANCHORS: LedStartAnchor[] = [
   "top-start",
   "top-end",
-  "left-start",
-  "left-end",
   "right-start",
   "right-end",
-  "bottom-left-start",
-  "bottom-left-end",
-  "bottom-right-start",
-  "bottom-right-end",
+  "bottom-start",
+  "bottom-end",
+  "left-start",
+  "left-end",
 ];
+
+const GAP_START_ANCHORS: LedStartAnchor[] = ["bottom-gap-right", "bottom-gap-left"];
 
 export function CalibrationEditorCanvas({
   config,
   isDirty,
   onCountChange,
-  onBottomGapChange,
+  onBottomMissingChange,
+  onCornerOwnershipChange,
+  onVisualPresetChange,
   onStartAnchorChange,
   onDirectionChange,
   onResetTemplate,
 }: CalibrationEditorCanvasProps) {
   const { t } = useTranslation("common");
+  const startAnchorOptions =
+    config.bottomMissing > 0 ? [...BASE_START_ANCHORS, ...GAP_START_ANCHORS] : BASE_START_ANCHORS;
 
-  const countFields: Array<{ key: "top" | "left" | "right" | "bottomLeft" | "bottomRight"; labelKey: string }> = [
+  const countFields: Array<{ key: "top" | "right" | "bottom" | "left"; labelKey: string }> = [
     { key: "top", labelKey: "calibration.editor.counts.top" },
-    { key: "left", labelKey: "calibration.editor.counts.left" },
     { key: "right", labelKey: "calibration.editor.counts.right" },
-    { key: "bottomLeft", labelKey: "calibration.editor.counts.bottomLeft" },
-    { key: "bottomRight", labelKey: "calibration.editor.counts.bottomRight" },
+    { key: "bottom", labelKey: "calibration.editor.counts.bottom" },
+    { key: "left", labelKey: "calibration.editor.counts.left" },
   ];
 
   return (
@@ -90,21 +97,53 @@ export function CalibrationEditorCanvas({
         ))}
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div className="mt-5 grid gap-4 sm:grid-cols-3">
         <label className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">
-            {t("calibration.editor.bottomGap")}
+            {t("calibration.editor.bottomMissing")}
           </span>
           <input
             type="number"
             min={0}
-            value={config.bottomGapPx}
+            value={config.bottomMissing}
             onChange={(event) => {
               const value = Number(event.target.value);
-              onBottomGapChange(Number.isFinite(value) ? Math.max(0, value) : 0);
+              onBottomMissingChange(Number.isFinite(value) ? Math.max(0, value) : 0);
             }}
             className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+            {t("calibration.editor.cornerOwnership")}
+          </span>
+          <select
+            value={config.cornerOwnership}
+            onChange={(event) => {
+              onCornerOwnershipChange(event.target.value as CornerOwnership);
+            }}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          >
+            <option value="horizontal">{t("calibration.editor.cornerOwnershipHorizontal")}</option>
+            <option value="vertical">{t("calibration.editor.cornerOwnershipVertical")}</option>
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+            {t("calibration.editor.visualPreset")}
+          </span>
+          <select
+            value={config.visualPreset}
+            onChange={(event) => {
+              onVisualPresetChange(event.target.value as LedVisualPreset);
+            }}
+            className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          >
+            <option value="subtle">{t("calibration.editor.visualPresets.subtle")}</option>
+            <option value="vivid">{t("calibration.editor.visualPresets.vivid")}</option>
+          </select>
         </label>
       </div>
 
@@ -120,9 +159,9 @@ export function CalibrationEditorCanvas({
             }}
             className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           >
-            {START_ANCHORS.map((anchor) => (
+            {startAnchorOptions.map((anchor) => (
               <option key={anchor} value={anchor}>
-                {anchor}
+                {t(`calibration.editor.startAnchors.${anchor}`)}
               </option>
             ))}
           </select>
@@ -139,8 +178,8 @@ export function CalibrationEditorCanvas({
             }}
             className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
           >
-            <option value="cw">CW</option>
-            <option value="ccw">CCW</option>
+            <option value="cw">{t("calibration.editor.directions.cw")}</option>
+            <option value="ccw">{t("calibration.editor.directions.ccw")}</option>
           </select>
         </label>
       </div>

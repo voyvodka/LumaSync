@@ -21,17 +21,21 @@ vi.mock("react-i18next", () => ({
         "calibration.section.template": "Template",
         "calibration.section.totalLeds": "Total LEDs",
         "calibration.section.edges": "Edge LEDs",
-        "calibration.section.gap": "Bottom gap",
+        "calibration.section.gap": "Bottom missing LEDs",
+        "calibration.section.cornerOwnership": "Corner ownership",
+        "calibration.section.cornerOwnershipHorizontal": "Horizontal edges",
+        "calibration.section.cornerOwnershipVertical": "Vertical edges",
         "calibration.section.startAnchor": "Start anchor",
         "calibration.section.direction": "Direction",
+        "calibration.editor.startAnchors.top-start": "Top edge - left corner",
+        "calibration.editor.directions.cw": "Clockwise",
         "calibration.section.emptyState": "No calibration saved yet. Open the editor to map your strip before enabling live mode.",
         "calibration.section.notConfigured": "Not calibrated",
         "calibration.section.manual": "Manual",
         "calibration.section.edit": "Edit",
         "calibration.section.counts.top": "Top",
         "calibration.section.counts.right": "Right",
-        "calibration.section.counts.bottomRight": "Bottom right",
-        "calibration.section.counts.bottomLeft": "Bottom left",
+        "calibration.section.counts.bottom": "Bottom",
         "calibration.section.counts.left": "Left",
       };
 
@@ -63,8 +67,10 @@ describe("CalibrationSection", () => {
       <CalibrationSection
         calibration={{
           templateId: "monitor-27-16-9",
-          counts: { top: 36, left: 22, right: 22, bottomLeft: 17, bottomRight: 17 },
-          bottomGapPx: 140,
+          counts: { top: 36, right: 22, bottom: 34, left: 22 },
+          bottomMissing: 2,
+          cornerOwnership: "horizontal",
+          visualPreset: "vivid",
           startAnchor: "top-start",
           direction: "cw",
           totalLeds: 114,
@@ -75,10 +81,11 @@ describe("CalibrationSection", () => {
 
     expect(screen.getByText('27" 16:9')).toBeInTheDocument();
     expect(screen.getByText("114")).toBeInTheDocument();
-    expect(screen.getByText("Top 36 • Right 22 • Bottom right 17 • Bottom left 17 • Left 22")).toBeInTheDocument();
-    expect(screen.getByText("140 px")).toBeInTheDocument();
-    expect(screen.getByText("top-start")).toBeInTheDocument();
-    expect(screen.getByText("CW")).toBeInTheDocument();
+    expect(screen.getByText("Top 36 • Right 22 • Bottom 34 • Left 22")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("Horizontal edges")).toBeInTheDocument();
+    expect(screen.getByText("Top edge - left corner")).toBeInTheDocument();
+    expect(screen.getByText("Clockwise")).toBeInTheDocument();
   });
 
   it("shows a clear empty-state helper and edit action when calibration is missing", () => {

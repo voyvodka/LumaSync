@@ -1,8 +1,12 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use tauri::{window::Color, AppHandle, Manager, Runtime, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{
+    window::Color, AppHandle, Manager, PhysicalPosition, PhysicalSize, Position, Runtime, Size,
+    State, WebviewUrl, WebviewWindowBuilder,
+};
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
 
@@ -33,6 +37,33 @@ pub struct DisplayInfoPayload {
     pub y: i32,
     pub scale_factor: f64,
     pub is_primary: bool,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayPreviewCountsPayload {
+    pub top: u16,
+    pub right: u16,
+    pub bottom: u16,
+    pub left: u16,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayPreviewSequenceItemPayload {
+    pub segment: String,
+    pub local_index: u16,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayPreviewPayload {
+    pub counts: OverlayPreviewCountsPayload,
+    pub bottom_missing: u16,
+    pub corner_ownership: String,
+    pub visual_preset: String,
+    pub sequence: Vec<OverlayPreviewSequenceItemPayload>,
+    pub frame_ms: Option<u16>,
 }
 
 #[derive(Default)]
@@ -93,52 +124,96 @@ fn open_overlay_window<R: Runtime>(
     app: &AppHandle<R>,
     window_label: &str,
     target_display: &DisplayInfoPayload,
+    preview: Option<&OverlayPreviewPayload>,
 ) -> Result<(), String> {
     let overlay_url = build_overlay_webview_url()?;
-    let (x, y) = to_overlay_position(target_display);
+    let preview_json = serialize_overlay_preview_payload(preview)?;
+    let preload_script = format!("window.__LUMASYNC_OVERLAY_PREVIEW__ = {preview_json};");
 
     let builder = WebviewWindowBuilder::new(app, window_label, overlay_url)
         .title("Calibration Overlay")
         .decorations(false)
         .resizable(false)
         .closable(false)
+        .fullscreen(false)
+        .focused(false)
         .always_on_top(true)
-        .fullscreen(true)
         .skip_taskbar(true)
-        .background_color(Color(0, 0, 0, 255))
+        .shadow(false)
+        .transparent(true)
+        .background_color(Color(0, 0, 0, 0))
         .visible(true)
-        .position(x, y)
-        .initialization_script(
-            "(() => { const apply = () => { const root = document.documentElement; if (root) { root.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;'; } const body = document.body; if (body) { body.style.cssText = 'margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;position:fixed;inset:0;'; } }; apply(); window.addEventListener('DOMContentLoaded', apply); })();",
-        );
+        .initialization_script(preload_script.as_str());
 
-    builder
+    let window = builder
         .build()
         .map_err(|error| format!("OVERLAY_WINDOW_OPEN_FAILED: {error}"))?;
+
+    window
+        .set_position(Position::Physical(PhysicalPosition::new(
+            target_display.x,
+            target_display.y,
+        )))
+        .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
+
+    window
+        .set_size(Size::Physical(PhysicalSize::new(
+            target_display.width,
+            target_display.height,
+        )))
+        .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
+
+    window
+        .set_ignore_cursor_events(true)
+        .map_err(|error| format!("OVERLAY_WINDOW_CLICKTHROUGH_FAILED: {error}"))?;
+
+    eprintln!(
+        "[LumaSync] OVERLAY_GEOMETRY display={} pos=({}, {}) size=({}x{}) scale={}",
+        target_display.id,
+        target_display.x,
+        target_display.y,
+        target_display.width,
+        target_display.height,
+        target_display.scale_factor,
+    );
+
+    if let Err(error) = window.eval(
+        "window.dispatchEvent(new CustomEvent('lumasync-overlay-preview', { detail: window.__LUMASYNC_OVERLAY_PREVIEW__ ?? null }));",
+    ) {
+        eprintln!("[LumaSync] OVERLAY_PREVIEW_SYNC_WARN: {error}");
+    }
 
     Ok(())
 }
 
-fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
-    let about_blank = "about:blank"
-        .parse()
-        .map_err(|error| format!("OVERLAY_URL_INVALID: {error}"))?;
-
-    Ok(WebviewUrl::External(about_blank))
+fn default_overlay_preview_payload() -> OverlayPreviewPayload {
+    OverlayPreviewPayload {
+        counts: OverlayPreviewCountsPayload {
+            top: 16,
+            right: 12,
+            bottom: 16,
+            left: 12,
+        },
+        bottom_missing: 0,
+        corner_ownership: "horizontal".to_string(),
+        visual_preset: "vivid".to_string(),
+        sequence: vec![],
+        frame_ms: Some(120),
+    }
 }
 
-fn to_overlay_position(target_display: &DisplayInfoPayload) -> (f64, f64) {
-    let normalized_scale =
-        if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
-            target_display.scale_factor
-        } else {
-            1.0
-        };
+fn serialize_overlay_preview_payload(
+    preview: Option<&OverlayPreviewPayload>,
+) -> Result<String, String> {
+    let resolved_preview = preview
+        .cloned()
+        .unwrap_or_else(default_overlay_preview_payload);
+    serde_json::to_string(&resolved_preview)
+        .map_err(|error| format!("OVERLAY_PREVIEW_SERIALIZE_FAILED: {error}"))
+}
 
-    (
-        target_display.x as f64 / normalized_scale,
-        target_display.y as f64 / normalized_scale,
-    )
+fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
+    Ok(WebviewUrl::App(PathBuf::from("calibration-overlay.html")))
 }
 
 fn apply_overlay_open_transition(
@@ -233,6 +308,7 @@ pub fn open_display_overlay<R: Runtime>(
     app: AppHandle<R>,
     overlay_state: State<'_, OverlayState>,
     display_id: String,
+    preview: Option<OverlayPreviewPayload>,
 ) -> Result<DisplayOverlayCommandResult, String> {
     let displays = list_displays(app.clone())?;
     let Some(target_display) = displays.iter().find(|display| display.id == display_id) else {
@@ -276,7 +352,12 @@ pub fn open_display_overlay<R: Runtime>(
         },
         || {
             close_overlay_window(&app, next_window_label.as_str())?;
-            open_overlay_window(&app, next_window_label.as_str(), target_display)
+            open_overlay_window(
+                &app,
+                next_window_label.as_str(),
+                target_display,
+                preview.as_ref(),
+            )
         },
     );
 
@@ -317,44 +398,74 @@ pub fn close_display_overlay<R: Runtime>(
     Ok(overlay_result("OVERLAY_CLOSED", "Display overlay closed."))
 }
 
+#[tauri::command]
+pub fn update_display_overlay_preview<R: Runtime>(
+    app: AppHandle<R>,
+    overlay_state: State<'_, OverlayState>,
+    preview: OverlayPreviewPayload,
+) -> Result<DisplayOverlayCommandResult, String> {
+    let runtime = overlay_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
+
+    let Some(active_overlay_label) = runtime.active_overlay_label.clone() else {
+        return Ok(overlay_result(
+            "OVERLAY_PREVIEW_SKIPPED",
+            "No active display overlay.",
+        ));
+    };
+
+    drop(runtime);
+
+    let Some(window) = app.get_webview_window(active_overlay_label.as_str()) else {
+        let reason = format!(
+            "Active overlay window not found for label='{}'.",
+            active_overlay_label
+        );
+        return Ok(overlay_error_result(
+            "OVERLAY_PREVIEW_SYNC_FAILED",
+            "Could not sync display overlay preview.",
+            reason.as_str(),
+        ));
+    };
+
+    let payload_json = serialize_overlay_preview_payload(Some(&preview))?;
+    let sync_script = format!(
+        "window.__LUMASYNC_OVERLAY_PREVIEW__ = {payload_json}; window.dispatchEvent(new CustomEvent('lumasync-overlay-preview', {{ detail: window.__LUMASYNC_OVERLAY_PREVIEW__ }}));"
+    );
+
+    if let Err(error) = window.eval(sync_script.as_str()) {
+        let reason = format!("OVERLAY_PREVIEW_EVAL_FAILED: {error}");
+        return Ok(overlay_error_result(
+            "OVERLAY_PREVIEW_SYNC_FAILED",
+            "Could not sync display overlay preview.",
+            reason.as_str(),
+        ));
+    }
+
+    Ok(overlay_result(
+        "OVERLAY_PREVIEW_SYNCED",
+        "Display overlay preview synced.",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
 
     use tauri::WebviewUrl;
 
-    use super::{
-        apply_overlay_open_transition, build_overlay_webview_url, to_overlay_position,
-        DisplayInfoPayload, OverlayRuntimeState,
-    };
+    use super::{apply_overlay_open_transition, build_overlay_webview_url, OverlayRuntimeState};
 
     #[test]
-    fn overlay_webview_url_uses_about_blank_external_surface() {
-        let url = build_overlay_webview_url().expect("about:blank URL should parse");
+    fn overlay_webview_url_uses_app_surface() {
+        let url = build_overlay_webview_url().expect("app URL should parse");
 
         match url {
-            WebviewUrl::External(parsed) => assert_eq!(parsed.as_str(), "about:blank"),
-            _ => panic!("expected external webview URL for overlay surface"),
+            WebviewUrl::App(path) => assert_eq!(path.to_string_lossy(), "calibration-overlay.html"),
+            _ => panic!("expected app webview URL for overlay surface"),
         }
-    }
-
-    #[test]
-    fn overlay_position_converts_physical_pixels_to_logical_units() {
-        let display = DisplayInfoPayload {
-            id: "display-1".to_string(),
-            label: "Display 1".to_string(),
-            width: 3024,
-            height: 1964,
-            x: 1512,
-            y: 0,
-            scale_factor: 2.0,
-            is_primary: false,
-        };
-
-        let (x, y) = to_overlay_position(&display);
-
-        assert_eq!(x, 756.0);
-        assert_eq!(y, 0.0);
     }
 
     #[test]

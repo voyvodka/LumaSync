@@ -5,7 +5,7 @@ export type CalibrationValidationCode =
   | "COUNTS_REQUIRED"
   | "SEGMENT_NON_POSITIVE"
   | "TOTAL_MISMATCH"
-  | "BOTTOM_GAP_NEGATIVE";
+  | "BOTTOM_MISSING_NEGATIVE";
 
 export interface CalibrationValidationError {
   code: CalibrationValidationCode;
@@ -33,8 +33,8 @@ export function validateCalibrationConfig(_config: LedCalibrationConfig): Calibr
     }
   }
 
-  if (!Number.isInteger(_config.bottomGapPx) || _config.bottomGapPx < 0) {
-    errors.push({ code: "BOTTOM_GAP_NEGATIVE", field: "bottomGapPx" });
+  if (!Number.isInteger(_config.bottomMissing) || _config.bottomMissing < 0) {
+    errors.push({ code: "BOTTOM_MISSING_NEGATIVE", field: "bottomMissing" });
   }
 
   const expectedTotal = sumSegmentCounts(counts);

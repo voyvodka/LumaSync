@@ -121,7 +121,10 @@
       "manual": "Manuel",
       "totalLeds": "Toplam LED",
       "edges": "Kenar LED dagilimi",
-      "gap": "Alt bosluk",
+      "gap": "Alt eksik LED",
+      "cornerOwnership": "Kose sahipligi",
+      "cornerOwnershipHorizontal": "Yatay kenarlar",
+      "cornerOwnershipVertical": "Dikey kenarlar",
       "startAnchor": "Baslangic noktasi",
       "direction": "Yon",
       "emptyState": "Kayitli kalibrasyon yok. Canli moda gecmeden once seridini eslemek icin editoru ac.",
@@ -130,8 +133,7 @@
       "counts": {
         "top": "Ust",
         "right": "Sag",
-        "bottomRight": "Alt sag",
-        "bottomLeft": "Alt sol",
+        "bottom": "Alt",
         "left": "Sol"
       }
     },
@@ -163,20 +165,43 @@
     },
     "editor": {
       "title": "LED harita editoru",
-      "description": "Kaydetmeden once kenar sayilarini, baslangic noktasini ve yonu duzenle.",
+      "description": "Kaydetmeden once kenar sayilarini, alt eksik LED degerini ve yonu duzenle.",
       "dirty": "Kaydedilmedi",
       "saved": "Kaydedildi",
-      "bottomGap": "Alt bosluk (px)",
+      "bottomMissing": "Alt eksik LED",
+      "cornerOwnership": "Kose sahipligi",
+      "cornerOwnershipHorizontal": "Koseyi yatay kenar saysin",
+      "cornerOwnershipVertical": "Koseyi dikey kenar saysin",
+      "visualPreset": "LED gorunum modu",
+      "visualPresets": {
+        "subtle": "Sakin",
+        "vivid": "Canli"
+      },
       "startAnchor": "Baslangic noktasi",
+      "startAnchors": {
+        "top-start": "Ust kenar - sol kose",
+        "top-end": "Ust kenar - sag kose",
+        "right-start": "Sag kenar - ust kose",
+        "right-end": "Sag kenar - alt kose",
+        "bottom-start": "Alt kenar - sag kose",
+        "bottom-end": "Alt kenar - sol kose",
+        "bottom-gap-right": "Alt bosluk - sag taraf",
+        "bottom-gap-left": "Alt bosluk - sol taraf",
+        "left-start": "Sol kenar - alt kose",
+        "left-end": "Sol kenar - ust kose"
+      },
       "direction": "Yon",
+      "directions": {
+        "cw": "Saat yonunde",
+        "ccw": "Saat yonunun tersinde"
+      },
       "totalLeds": "Toplam LED: {{count}}",
       "changeTemplate": "Sablon degistir",
       "counts": {
         "top": "Ust",
         "left": "Sol",
         "right": "Sag",
-        "bottomLeft": "Alt sol",
-        "bottomRight": "Alt sag"
+        "bottom": "Alt"
       }
     }
   }

@@ -25,7 +25,10 @@ import {
   canEnableLedMode,
   resolveLedModeEnableAttempt,
 } from "./features/mode/state/modeGuard";
-import type { LedCalibrationConfig } from "./features/calibration/model/contracts";
+import {
+  normalizeLedCalibrationConfig,
+  type LedCalibrationConfig,
+} from "./features/calibration/model/contracts";
 import {
   initWindowLifecycle,
   loadShellState,
@@ -52,7 +55,7 @@ function App() {
       try {
         const state = await loadShellState();
         setActiveSection(state.lastSection);
-        setSavedCalibration(state.ledCalibration);
+        setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {

@@ -6,12 +6,13 @@ import { validateCalibrationConfig } from "./validation";
 const VALID_CONFIG: LedCalibrationConfig = {
   counts: {
     top: 36,
-    left: 22,
     right: 22,
-    bottomLeft: 17,
-    bottomRight: 17,
+    bottom: 34,
+    left: 22,
   },
-  bottomGapPx: 140,
+  bottomMissing: 2,
+  cornerOwnership: "horizontal",
+  visualPreset: "vivid",
   startAnchor: "top-start",
   direction: "cw",
   totalLeds: 114,
@@ -37,14 +38,14 @@ describe("validateCalibrationConfig", () => {
     expect(result.errors.some((error) => error.code === "SEGMENT_NON_POSITIVE")).toBe(true);
   });
 
-  it("rejects negative bottom gap", () => {
+  it("rejects negative bottom missing led count", () => {
     const result = validateCalibrationConfig({
       ...VALID_CONFIG,
-      bottomGapPx: -1,
+      bottomMissing: -1,
     });
 
     expect(result.ok).toBe(false);
-    expect(result.errors.some((error) => error.code === "BOTTOM_GAP_NEGATIVE")).toBe(true);
+    expect(result.errors.some((error) => error.code === "BOTTOM_MISSING_NEGATIVE")).toBe(true);
   });
 
   it("rejects total mismatch", () => {

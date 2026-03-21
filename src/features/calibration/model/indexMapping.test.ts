@@ -6,12 +6,13 @@ import { buildLedSequence, resolveLedSequenceItem } from "./indexMapping";
 const BASE_CONFIG: LedCalibrationConfig = {
   counts: {
     top: 3,
-    left: 2,
     right: 2,
-    bottomLeft: 2,
-    bottomRight: 2,
+    bottom: 4,
+    left: 2,
   },
-  bottomGapPx: 120,
+  bottomMissing: 0,
+  cornerOwnership: "horizontal",
+  visualPreset: "vivid",
   startAnchor: "top-start",
   direction: "cw",
   totalLeds: 11,
@@ -42,14 +43,14 @@ describe("buildLedSequence", () => {
     expect(ccwKeys.slice(1)).toEqual([...cwKeys.slice(1)].reverse());
   });
 
-  it("does not change led count when only bottom gap changes", () => {
+  it("does not change led count when only bottom missing count changes", () => {
     const withSmallGap = buildLedSequence({
       ...BASE_CONFIG,
-      bottomGapPx: 60,
+      bottomMissing: 0,
     });
     const withLargeGap = buildLedSequence({
       ...BASE_CONFIG,
-      bottomGapPx: 300,
+      bottomMissing: 6,
     });
 
     expect(withSmallGap.length).toBe(BASE_CONFIG.totalLeds);
@@ -61,8 +62,8 @@ describe("buildLedSequence", () => {
     const combinations: Array<Pick<LedCalibrationConfig, "startAnchor" | "direction">> = [
       { startAnchor: "top-start", direction: "cw" },
       { startAnchor: "top-start", direction: "ccw" },
-      { startAnchor: "bottom-right-end", direction: "cw" },
-      { startAnchor: "bottom-right-end", direction: "ccw" },
+      { startAnchor: "bottom-end", direction: "cw" },
+      { startAnchor: "bottom-end", direction: "ccw" },
     ];
 
     const expectedIndexes = Array.from({ length: BASE_CONFIG.totalLeds }, (_, index) => index);
@@ -88,8 +89,10 @@ describe("buildLedSequence", () => {
       { startAnchor: "top-start", direction: "ccw", expectedFirstIndex: 0 },
       { startAnchor: "left-end", direction: "cw", expectedFirstIndex: 10 },
       { startAnchor: "left-end", direction: "ccw", expectedFirstIndex: 10 },
-      { startAnchor: "bottom-right-end", direction: "cw", expectedFirstIndex: 6 },
-      { startAnchor: "bottom-right-end", direction: "ccw", expectedFirstIndex: 6 },
+      { startAnchor: "bottom-end", direction: "cw", expectedFirstIndex: 8 },
+      { startAnchor: "bottom-end", direction: "ccw", expectedFirstIndex: 8 },
+      { startAnchor: "bottom-gap-right", direction: "cw", expectedFirstIndex: 6 },
+      { startAnchor: "bottom-gap-left", direction: "cw", expectedFirstIndex: 7 },
     ];
 
     for (const testCase of cases) {
@@ -109,10 +112,10 @@ describe("buildLedSequence", () => {
       "top-end",
       "right-start",
       "right-end",
-      "bottom-right-start",
-      "bottom-right-end",
-      "bottom-left-start",
-      "bottom-left-end",
+      "bottom-start",
+      "bottom-end",
+      "bottom-gap-right",
+      "bottom-gap-left",
       "left-start",
       "left-end",
     ];

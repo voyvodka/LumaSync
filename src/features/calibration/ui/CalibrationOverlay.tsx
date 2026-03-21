@@ -20,13 +20,19 @@ import {
   discardEditorChanges,
   type CalibrationEditorState,
 } from "../state/calibrationEditorState";
-import { closeDisplayOverlay, listDisplays, openDisplayOverlay } from "../calibrationApi";
+import {
+  closeDisplayOverlay,
+  listDisplays,
+  openDisplayOverlay,
+  updateDisplayOverlayPreview,
+} from "../calibrationApi";
 import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
 import type { CalibrationOverlayStep } from "../state/entryFlow";
 import { CalibrationEditorCanvas } from "./CalibrationEditorCanvas";
 import { CalibrationTemplateStep } from "./CalibrationTemplateStep";
 import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
+import type { OverlayPreviewPayload } from "../../../shared/contracts/display";
 
 interface CalibrationOverlayProps {
   open: boolean;
@@ -68,6 +74,44 @@ function buildSegmentOrder(sequence: ReturnType<typeof buildLedSequence>) {
   }
 
   return order;
+}
+
+function buildOverlayPreviewPayload(
+  config: LedCalibrationConfig,
+  sequence: ReturnType<typeof buildLedSequence>,
+): OverlayPreviewPayload {
+  return {
+    counts: {
+      top: config.counts.top,
+      right: config.counts.right,
+      bottom: config.counts.bottom,
+      left: config.counts.left,
+    },
+    bottomMissing: config.bottomMissing,
+    cornerOwnership: config.cornerOwnership,
+    visualPreset: config.visualPreset,
+    frameMs: 120,
+    sequence: sequence.map((item) => ({
+      segment: item.segment,
+      localIndex: item.localIndex,
+    })),
+  };
+}
+
+function resolveAnchorForBottomMissing(currentAnchor: LedCalibrationConfig["startAnchor"], nextBottomMissing: number) {
+  if (nextBottomMissing > 0) {
+    return currentAnchor;
+  }
+
+  if (currentAnchor === "bottom-gap-right") {
+    return "bottom-start";
+  }
+
+  if (currentAnchor === "bottom-gap-left") {
+    return "bottom-end";
+  }
+
+  return currentAnchor;
 }
 
 export function CalibrationOverlay({
@@ -200,6 +244,23 @@ export function CalibrationOverlay({
   );
   const markerSegment = markerItem?.segment ?? sequence[0]?.segment ?? "top";
   const segmentOrder = useMemo(() => buildSegmentOrder(sequence), [sequence]);
+  const overlayPreviewPayload = useMemo(
+    () => buildOverlayPreviewPayload(editorState.current, sequence),
+    [editorState.current, sequence],
+  );
+
+  useEffect(() => {
+    if (!open || !testPattern.isEnabled || !displayTarget.activeDisplayId || displayTarget.blocked) {
+      return;
+    }
+
+    void updateDisplayOverlayPreview(overlayPreviewPayload).then((result) => {
+      if (!result.ok) {
+        const reason = result.reason ?? result.message;
+        console.warn(`[LumaSync] Overlay preview sync skipped (${result.code}): ${reason}`);
+      }
+    });
+  }, [open, testPattern.isEnabled, displayTarget.activeDisplayId, displayTarget.blocked, overlayPreviewPayload]);
 
   const shell = useMemo(() => {
     if (!open) {
@@ -262,8 +323,22 @@ export function CalibrationOverlay({
                 setEditorState((prev) => updateEditorConfig(prev, { direction }));
                 setValidationErrors(null);
               }}
-              onBottomGapChange={(px) => {
-                setEditorState((prev) => updateEditorConfig(prev, { bottomGapPx: px }));
+              onBottomMissingChange={(count) => {
+                setEditorState((prev) => {
+                  const startAnchor = resolveAnchorForBottomMissing(prev.current.startAnchor, count);
+                  return updateEditorConfig(prev, {
+                    bottomMissing: count,
+                    startAnchor,
+                  });
+                });
+                setValidationErrors(null);
+              }}
+              onCornerOwnershipChange={(cornerOwnership) => {
+                setEditorState((prev) => updateEditorConfig(prev, { cornerOwnership }));
+                setValidationErrors(null);
+              }}
+              onVisualPresetChange={(visualPreset) => {
+                setEditorState((prev) => updateEditorConfig(prev, { visualPreset }));
                 setValidationErrors(null);
               }}
               onResetTemplate={() => {
@@ -294,7 +369,10 @@ export function CalibrationOverlay({
                            return;
                          }
 
-                         const switched = await displayTargetRef.current.switchActiveDisplay();
+                          const switched = await displayTargetRef.current.switchActiveDisplay(
+                            undefined,
+                            overlayPreviewPayload,
+                          );
                          setDisplayTarget(switched);
                          if (switched.blocked) {
                           const reason = switched.blockedReason ?? "Overlay open failed.";
@@ -361,7 +439,10 @@ export function CalibrationOverlay({
                          }
 
                           try {
-                            const switched = await displayTargetRef.current.switchActiveDisplay(display.id);
+                             const switched = await displayTargetRef.current.switchActiveDisplay(
+                               display.id,
+                               overlayPreviewPayload,
+                             );
                             setDisplayTarget(switched);
                             if (switched.blocked) {
                               const reason = switched.blockedReason ?? "Overlay open failed.";
@@ -556,6 +637,7 @@ export function CalibrationOverlay({
     onSaved,
     open,
     segmentOrder,
+    overlayPreviewPayload,
     t,
     testPattern,
     validationErrors,

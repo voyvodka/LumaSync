@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calibration Overlay</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      #stage {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background: transparent;
+        isolation: isolate;
+      }
+
+      .edge-glow {
+        position: absolute;
+        pointer-events: none;
+        filter: blur(14px) saturate(1.08);
+        opacity: 0.48;
+      }
+
+      .edge-glow.top,
+      .edge-glow.bottom {
+        height: 12px;
+      }
+
+      .edge-glow.left,
+      .edge-glow.right {
+        width: 12px;
+      }
+
+      .edge-glow.top {
+        background: linear-gradient(90deg, rgba(132, 206, 255, 0.06), rgba(132, 206, 255, 0.44), rgba(132, 206, 255, 0.06));
+      }
+
+      .edge-glow.right {
+        background: linear-gradient(180deg, rgba(132, 255, 224, 0.06), rgba(132, 255, 224, 0.38), rgba(132, 255, 224, 0.06));
+      }
+
+      .edge-glow.bottom {
+        background: linear-gradient(90deg, rgba(255, 199, 125, 0.06), rgba(255, 199, 125, 0.38), rgba(255, 199, 125, 0.06));
+      }
+
+      .edge-glow.left {
+        background: linear-gradient(180deg, rgba(255, 171, 126, 0.06), rgba(255, 171, 126, 0.36), rgba(255, 171, 126, 0.06));
+      }
+
+      .flow-link {
+        position: absolute;
+        height: 2px;
+        transform-origin: left center;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.3));
+        opacity: 0.26;
+        filter: blur(0.25px);
+      }
+
+      .flow-arrow {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        border-top: 2px solid rgba(255, 255, 255, 0.44);
+        border-right: 2px solid rgba(255, 255, 255, 0.44);
+        transform-origin: center;
+        opacity: 0.4;
+      }
+
+      .legend {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        color: rgba(255, 255, 255, 0.72);
+        font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .index-badge {
+        position: absolute;
+        min-width: 20px;
+        height: 18px;
+        padding: 0 6px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.92);
+        font: 700 10px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0.04em;
+        background: rgba(7, 10, 16, 0.56);
+        border: 1px solid rgba(255, 255, 255, 0.26);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+        transform: translate(-50%, -50%);
+      }
+
+      .led {
+        position: absolute;
+        transform: translate(-50%, -50%) rotate(var(--led-angle, 0deg));
+        width: 16px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(
+          --led-body-bg,
+          linear-gradient(90deg, rgba(206, 232, 255, 0.3), rgba(255, 255, 255, 0.78), rgba(206, 232, 255, 0.3))
+        );
+        border: 1px solid var(--led-ring-color, rgba(255, 255, 255, 0.24));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 0 0 1px rgba(255, 255, 255, 0.14),
+          0 0 7px rgba(255, 255, 255, 0.16);
+        filter: saturate(1.03) brightness(0.98);
+        transition: width 0.1s linear, height 0.1s linear, box-shadow 0.1s linear, opacity 0.1s linear,
+          filter 0.1s linear, border-color 0.1s linear;
+        will-change: width, height, box-shadow, opacity, filter;
+      }
+
+      .led::before {
+        content: "";
+        position: absolute;
+        inset: 1px 2px;
+        border-radius: 999px;
+        background: var(
+          --led-core-bg,
+          linear-gradient(90deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.14))
+        );
+      }
+
+      .led::after {
+        content: "";
+        position: absolute;
+        left: 24%;
+        top: 18%;
+        width: 50%;
+        height: 46%;
+        border-radius: 999px;
+        background: var(--led-spark-bg, radial-gradient(circle at 30% 50%, rgba(255, 255, 255, 0.54), transparent 70%));
+        opacity: 0.84;
+        mix-blend-mode: screen;
+      }
+
+      .led.is-end {
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0 10px rgba(255, 255, 255, 0.22);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script>
+      (() => {
+        const DEFAULT_PREVIEW = {
+          counts: { top: 16, right: 12, bottom: 16, left: 12 },
+          bottomMissing: 0,
+          cornerOwnership: "horizontal",
+          visualPreset: "vivid",
+          sequence: [],
+          frameMs: 120,
+        };
+
+        const stage = document.getElementById("stage");
+        if (!stage) {
+          return;
+        }
+
+        let timerId = null;
+        let resizeTimerId = null;
+        let activeVisualPreset = DEFAULT_PREVIEW.visualPreset;
+
+        const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+        const SEGMENT_ORDER = ["top", "right", "bottom", "left"];
+
+        const BASE_LED = {
+          width: 16,
+          height: 7,
+          alpha: 0.22,
+          bloom: 10,
+          aura: 18,
+        };
+
+        const ledAngleBySegment = (segment) => {
+          if (segment === "left" || segment === "right") {
+            return 90;
+          }
+          return 0;
+        };
+
+        const toRgba = (rgb, alpha) => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha.toFixed(3)})`;
+
+        const ledPalette = (segment) => {
+          if (segment === "top") {
+            return {
+              edge: [132, 206, 255],
+              core: [235, 248, 255],
+              glow: [112, 192, 255],
+            };
+          }
+
+          if (segment === "right") {
+            return {
+              edge: [132, 255, 224],
+              core: [236, 255, 248],
+              glow: [103, 246, 214],
+            };
+          }
+
+          if (segment === "left") {
+            return {
+              edge: [255, 171, 126],
+              core: [255, 244, 235],
+              glow: [255, 156, 109],
+            };
+          }
+
+          return {
+            edge: [255, 199, 125],
+            core: [255, 248, 232],
+            glow: [255, 190, 102],
+          };
+        };
+
+        const presetProfile = (preset) => {
+          if (preset === "subtle") {
+            return {
+              glowBoost: 0.72,
+              auraBoost: 0.66,
+              satBoost: 0.64,
+              brightBoost: 0.72,
+              widthBoost: 0.72,
+              heightBoost: 0.68,
+            };
+          }
+
+          return {
+            glowBoost: 1,
+            auraBoost: 1,
+            satBoost: 1,
+            brightBoost: 1,
+            widthBoost: 1,
+            heightBoost: 1,
+          };
+        };
+
+        const ledVisual = (segment, strength, preset) => {
+          const s = clamp(strength, 0, 1);
+          const p = ledPalette(segment);
+          const profile = presetProfile(preset);
+
+          const glowAlpha = (0.16 + s * 0.44) * profile.glowBoost;
+          const auraAlpha = (0.08 + s * 0.26) * profile.auraBoost;
+
+          return {
+            body: `linear-gradient(90deg, ${toRgba(p.edge, 0.2 + s * 0.44)}, ${toRgba(p.core, 0.76 + s * 0.2)}, ${toRgba(p.edge, 0.2 + s * 0.44)})`,
+            core: `linear-gradient(90deg, ${toRgba(p.core, 0.14 + s * 0.18)}, ${toRgba(p.core, 0.42 + s * 0.46)}, ${toRgba(p.core, 0.14 + s * 0.18)})`,
+            spark: `radial-gradient(circle at 32% 50%, ${toRgba(p.core, 0.46 + s * 0.3)}, transparent 70%)`,
+            ring: toRgba(p.core, 0.18 + s * 0.36),
+            ringSoft: toRgba(p.core, 0.12 + s * 0.2),
+            innerRim: toRgba(p.core, 0.2 + s * 0.28),
+            glow: toRgba(p.glow, glowAlpha),
+            aura: toRgba(p.glow, auraAlpha),
+            saturation: 1.02 + s * 0.38 * profile.satBoost,
+            brightness: 0.96 + s * 0.26 * profile.brightBoost,
+            widthBoost: profile.widthBoost,
+            heightBoost: profile.heightBoost,
+          };
+        };
+
+        const highlightLed = (slot, power) => {
+          const p = clamp(power, 0, 1);
+          const visual = ledVisual(slot.segment, p, activeVisualPreset);
+          const width = BASE_LED.width + p * 8 * visual.widthBoost;
+          const height = BASE_LED.height + p * 3 * visual.heightBoost;
+          const alpha = BASE_LED.alpha + p * 0.72;
+          const node = slot.node;
+          node.style.width = `${width}px`;
+          node.style.height = `${height}px`;
+          node.style.setProperty("--led-body-bg", visual.body);
+          node.style.setProperty("--led-core-bg", visual.core);
+          node.style.setProperty("--led-spark-bg", visual.spark);
+          node.style.setProperty("--led-ring-color", visual.ring);
+          node.style.boxShadow = `inset 0 1px 0 ${visual.innerRim}, 0 0 0 1px ${visual.ringSoft}, 0 0 ${
+            BASE_LED.bloom + Math.round(22 * p)
+          }px ${visual.glow}, 0 0 ${BASE_LED.aura + Math.round(28 * p)}px ${visual.aura}`;
+          node.style.filter = `saturate(${visual.saturation.toFixed(3)}) brightness(${visual.brightness.toFixed(3)})`;
+          node.style.opacity = (0.55 + alpha * 0.55).toFixed(3);
+        };
+
+        const resetLed = (slot) => {
+          const node = slot.node;
+          const visual = ledVisual(slot.segment, 0.06, activeVisualPreset);
+          node.style.width = `${BASE_LED.width}px`;
+          node.style.height = `${BASE_LED.height}px`;
+          node.style.setProperty("--led-body-bg", visual.body);
+          node.style.setProperty("--led-core-bg", visual.core);
+          node.style.setProperty("--led-spark-bg", visual.spark);
+          node.style.setProperty("--led-ring-color", visual.ring);
+          node.style.boxShadow = `inset 0 1px 0 ${visual.innerRim}, 0 0 0 1px ${visual.ringSoft}, 0 0 9px ${visual.glow}`;
+          node.style.filter = `saturate(${visual.saturation.toFixed(3)}) brightness(${visual.brightness.toFixed(3)})`;
+          node.style.opacity = "0.72";
+        };
+
+        const normalizePreview = (incoming) => {
+          const value = incoming && typeof incoming === "object" ? incoming : {};
+          const counts = value.counts && typeof value.counts === "object" ? value.counts : {};
+
+          return {
+            counts: {
+              top: Math.max(0, Number(counts.top) || 0),
+              right: Math.max(0, Number(counts.right) || 0),
+              bottom: Math.max(
+                0,
+                Number(counts.bottom) ||
+                  Math.max(0, Number(counts.bottomLeft) || 0) + Math.max(0, Number(counts.bottomRight) || 0),
+              ),
+              left: Math.max(0, Number(counts.left) || 0),
+            },
+            bottomMissing: Math.max(0, Number(value.bottomMissing) || 0),
+            cornerOwnership: value.cornerOwnership === "vertical" ? "vertical" : "horizontal",
+            visualPreset: value.visualPreset === "subtle" ? "subtle" : "vivid",
+            sequence: Array.isArray(value.sequence) ? value.sequence : [],
+            frameMs: clamp(Number(value.frameMs) || DEFAULT_PREVIEW.frameMs, 50, 2000),
+          };
+        };
+
+        const distribute = (count, x1, y1, x2, y2, includeStart = true, includeEnd = true) => {
+          if (count <= 0) return [];
+          const startOffset = includeStart ? 0 : 1;
+          const endOffset = includeEnd ? 0 : 1;
+          const denominator = Math.max(1, count - 1 + startOffset + endOffset);
+          const out = [];
+          for (let i = 0; i < count; i += 1) {
+            const t = (i + startOffset) / denominator;
+            out.push({ x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t });
+          }
+          return out;
+        };
+
+        const distributeBottomWithMissing = (
+          count,
+          missing,
+          x1,
+          y1,
+          x2,
+          y2,
+          includeStart,
+          includeEnd,
+        ) => {
+          if (count <= 0) {
+            return [];
+          }
+
+          const missingCount = Math.max(0, Math.floor(missing));
+          if (missingCount === 0) {
+            return distribute(count, x1, y1, x2, y2, includeStart, includeEnd);
+          }
+
+          const totalSlots = count + missingCount;
+          const allSlots = distribute(totalSlots, x1, y1, x2, y2, includeStart, includeEnd);
+          const missingStart = Math.floor((totalSlots - missingCount) / 2);
+          const missingEnd = missingStart + missingCount;
+          const output = [];
+
+          for (let slotIndex = 0; slotIndex < allSlots.length; slotIndex += 1) {
+            if (slotIndex >= missingStart && slotIndex < missingEnd) {
+              continue;
+            }
+            output.push(allSlots[slotIndex]);
+          }
+
+          return output;
+        };
+
+        const resolveCornerRules = (ownership) => {
+          if (ownership === "vertical") {
+            return {
+              top: { includeStart: false, includeEnd: false },
+              right: { includeStart: true, includeEnd: true },
+              bottom: { includeStart: false, includeEnd: false },
+              left: { includeStart: true, includeEnd: true },
+            };
+          }
+
+          return {
+            top: { includeStart: true, includeEnd: true },
+            right: { includeStart: false, includeEnd: false },
+            bottom: { includeStart: true, includeEnd: true },
+            left: { includeStart: false, includeEnd: false },
+          };
+        };
+
+        const segmentKey = (segment) => {
+          if (segment === "bottom" || segment === "bottomRight" || segment === "bottomLeft") return "bottom";
+          if (segment === "right") return "right";
+          if (segment === "left") return "left";
+          return "top";
+        };
+
+        const placeBadge = (x, y, width, height, text) => {
+          const badge = document.createElement("div");
+          badge.className = "index-badge";
+          const shiftX = x < width * 0.5 ? 18 : -18;
+          const shiftY = y < height * 0.5 ? 16 : -16;
+          badge.style.left = `${clamp(x + shiftX, 14, width - 14)}px`;
+          badge.style.top = `${clamp(y + shiftY, 14, height - 14)}px`;
+          badge.textContent = text;
+          return badge;
+        };
+
+        const createFlowGuides = (activeOrder) => {
+          const links = [];
+          if (activeOrder.length <= 1) {
+            return links;
+          }
+
+          const arrowStride = Math.max(2, Math.floor(activeOrder.length / 18));
+
+          for (let i = 0; i < activeOrder.length; i += 1) {
+            const from = activeOrder[i];
+            const to = activeOrder[(i + 1) % activeOrder.length];
+            const dx = to.x - from.x;
+            const dy = to.y - from.y;
+            const length = Math.hypot(dx, dy);
+            if (length < 3) {
+              continue;
+            }
+
+            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+            const link = document.createElement("div");
+            link.className = "flow-link";
+            link.style.left = `${from.x}px`;
+            link.style.top = `${from.y}px`;
+            link.style.width = `${length}px`;
+            link.style.transform = `rotate(${angle}deg)`;
+            stage.appendChild(link);
+
+            let arrow = null;
+            if (i % arrowStride === 0) {
+              arrow = document.createElement("div");
+              arrow.className = "flow-arrow";
+              arrow.style.left = `${from.x + dx * 0.56}px`;
+              arrow.style.top = `${from.y + dy * 0.56}px`;
+              arrow.style.transform = `translate(-50%, -50%) rotate(${angle + 45}deg)`;
+              stage.appendChild(arrow);
+            }
+
+            links.push({ link, arrow, index: i });
+          }
+
+          return links;
+        };
+
+        const paint = (activeOrder, activeIndex, flowGuides) => {
+          for (let i = 0; i < activeOrder.length; i += 1) {
+            resetLed(activeOrder[i]);
+          }
+
+          const tailDepth = Math.min(8, Math.max(1, activeOrder.length - 1));
+          for (let offset = 0; offset <= tailDepth; offset += 1) {
+            const idx = (activeIndex - offset + activeOrder.length) % activeOrder.length;
+            const power = 1 - offset / (tailDepth + 1);
+            highlightLed(activeOrder[idx], power);
+          }
+
+          for (let i = 0; i < flowGuides.length; i += 1) {
+            const guide = flowGuides[i];
+            const distance = (activeIndex - guide.index + activeOrder.length) % activeOrder.length;
+            const isFlowTail = distance <= tailDepth;
+            const intensity = isFlowTail ? 1 - distance / (tailDepth + 1) : 0;
+            guide.link.style.opacity = (0.12 + intensity * 0.58).toFixed(3);
+            if (guide.arrow) {
+              guide.arrow.style.opacity = (0.2 + intensity * 0.7).toFixed(3);
+            }
+          }
+        };
+
+        const render = (rawPreview) => {
+          const preview = normalizePreview(rawPreview ?? DEFAULT_PREVIEW);
+          activeVisualPreset = preview.visualPreset;
+
+          if (timerId !== null) {
+            window.cancelAnimationFrame(timerId);
+            timerId = null;
+          }
+
+          stage.innerHTML = "";
+
+          const width = Math.max(1, stage.clientWidth);
+          const height = Math.max(1, stage.clientHeight);
+
+          const padding = Math.round(Math.min(width, height) * 0.065);
+          const leftX = padding;
+          const rightX = width - padding;
+          const topY = padding;
+          const bottomY = height - padding;
+
+          const cornerRules = resolveCornerRules(preview.cornerOwnership);
+
+          const topGlow = document.createElement("div");
+          topGlow.className = "edge-glow top";
+          topGlow.style.left = `${leftX}px`;
+          topGlow.style.top = `${topY - 5}px`;
+          topGlow.style.width = `${Math.max(0, rightX - leftX)}px`;
+          stage.appendChild(topGlow);
+
+          const rightGlow = document.createElement("div");
+          rightGlow.className = "edge-glow right";
+          rightGlow.style.left = `${rightX - 6}px`;
+          rightGlow.style.top = `${topY}px`;
+          rightGlow.style.height = `${Math.max(0, bottomY - topY)}px`;
+          stage.appendChild(rightGlow);
+
+          const bottomGlow = document.createElement("div");
+          bottomGlow.className = "edge-glow bottom";
+          bottomGlow.style.left = `${leftX}px`;
+          bottomGlow.style.top = `${bottomY - 5}px`;
+          bottomGlow.style.width = `${Math.max(0, rightX - leftX)}px`;
+          stage.appendChild(bottomGlow);
+
+          const leftGlow = document.createElement("div");
+          leftGlow.className = "edge-glow left";
+          leftGlow.style.left = `${leftX - 6}px`;
+          leftGlow.style.top = `${topY}px`;
+          leftGlow.style.height = `${Math.max(0, bottomY - topY)}px`;
+          stage.appendChild(leftGlow);
+
+          const legend = document.createElement("div");
+          legend.className = "legend";
+          legend.textContent = "Calibration Flow";
+          stage.appendChild(legend);
+
+          const slotsBySegment = {
+            top: distribute(
+              preview.counts.top,
+              leftX,
+              topY,
+              rightX,
+              topY,
+              cornerRules.top.includeStart,
+              cornerRules.top.includeEnd,
+            ),
+            right: distribute(
+              preview.counts.right,
+              rightX,
+              topY,
+              rightX,
+              bottomY,
+              cornerRules.right.includeStart,
+              cornerRules.right.includeEnd,
+            ),
+            bottom: distributeBottomWithMissing(
+              preview.counts.bottom,
+              preview.bottomMissing,
+              rightX,
+              bottomY,
+              leftX,
+              bottomY,
+              cornerRules.bottom.includeStart,
+              cornerRules.bottom.includeEnd,
+            ),
+            left: distribute(
+              preview.counts.left,
+              leftX,
+              bottomY,
+              leftX,
+              topY,
+              cornerRules.left.includeStart,
+              cornerRules.left.includeEnd,
+            ),
+          };
+
+          const slotRef = { top: [], right: [], bottom: [], left: [] };
+          const allCapsules = [];
+
+          for (const segment of SEGMENT_ORDER) {
+            const segmentSlots = slotsBySegment[segment];
+            for (let i = 0; i < segmentSlots.length; i += 1) {
+              const point = segmentSlots[i];
+              const capsule = document.createElement("div");
+              capsule.className = "led";
+              capsule.style.left = `${point.x}px`;
+              capsule.style.top = `${point.y}px`;
+              capsule.style.setProperty("--led-angle", `${ledAngleBySegment(segment)}deg`);
+              stage.appendChild(capsule);
+              const slot = { node: capsule, x: point.x, y: point.y, segment, localIndex: i };
+              allCapsules.push(slot);
+              slotRef[segment].push(slot);
+            }
+          }
+
+          const ordered = [];
+          for (let i = 0; i < preview.sequence.length; i += 1) {
+            const item = preview.sequence[i] || {};
+            const segment = segmentKey(item.segment);
+            const local = Math.max(0, Number(item.localIndex) || 0);
+            const slot = slotRef[segment][local];
+            if (slot) ordered.push(slot);
+          }
+
+          const activeOrder = ordered.length > 0 ? ordered : allCapsules;
+          if (activeOrder.length === 0) {
+            return;
+          }
+
+          activeOrder[activeOrder.length - 1].node.classList.add("is-end");
+
+          const startBadge = placeBadge(
+            activeOrder[0].x,
+            activeOrder[0].y,
+            width,
+            height,
+            "0",
+          );
+          stage.appendChild(startBadge);
+
+          if (activeOrder.length > 1) {
+            const endBadge = placeBadge(
+              activeOrder[activeOrder.length - 1].x,
+              activeOrder[activeOrder.length - 1].y,
+              width,
+              height,
+              String(activeOrder.length - 1),
+            );
+            stage.appendChild(endBadge);
+          }
+
+          const flowGuides = createFlowGuides(activeOrder);
+
+          let active = 0;
+          paint(activeOrder, active, flowGuides);
+
+          let previousFrame = performance.now();
+          let elapsed = 0;
+          const frameMs = preview.frameMs;
+
+          const tick = (now) => {
+            const dt = Math.min(80, Math.max(0, now - previousFrame));
+            previousFrame = now;
+            elapsed += dt;
+
+            while (elapsed >= frameMs) {
+              elapsed -= frameMs;
+              active = (active + 1) % activeOrder.length;
+            }
+
+            paint(activeOrder, active, flowGuides);
+            timerId = window.requestAnimationFrame(tick);
+          };
+
+          timerId = window.requestAnimationFrame(tick);
+        };
+
+        const applyPreview = (preview) => render(preview);
+        window.__LUMASYNC_APPLY_OVERLAY_PREVIEW__ = applyPreview;
+
+        window.addEventListener("lumasync-overlay-preview", (event) => {
+          applyPreview(event && event.detail ? event.detail : window.__LUMASYNC_OVERLAY_PREVIEW__);
+        });
+
+        window.addEventListener("resize", () => {
+          if (resizeTimerId !== null) {
+            window.clearTimeout(resizeTimerId);
+          }
+          resizeTimerId = window.setTimeout(() => {
+            applyPreview(window.__LUMASYNC_OVERLAY_PREVIEW__);
+          }, 60);
+        });
+
+        applyPreview(window.__LUMASYNC_OVERLAY_PREVIEW__);
+      })();
+    </script>
+  </body>
+</html>

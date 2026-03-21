@@ -13,12 +13,13 @@ describe("calibration templates", () => {
     expect(config.templateId).toBe("monitor-27-16-9");
     expect(config.counts).toEqual({
       top: 36,
-      left: 22,
       right: 22,
-      bottomLeft: 17,
-      bottomRight: 17,
+      bottom: 34,
+      left: 22,
     });
-    expect(config.bottomGapPx).toBe(140);
+    expect(config.bottomMissing).toBe(0);
+    expect(config.cornerOwnership).toBe("horizontal");
+    expect(config.visualPreset).toBe("vivid");
     expect(config.startAnchor).toBe("top-start");
     expect(config.direction).toBe("cw");
     expect(config.totalLeds).toBe(114);
@@ -30,12 +31,13 @@ describe("calibration templates", () => {
     expect(config.templateId).toBeUndefined();
     expect(config.counts).toEqual({
       top: 0,
-      left: 0,
       right: 0,
-      bottomLeft: 0,
-      bottomRight: 0,
+      bottom: 0,
+      left: 0,
     });
-    expect(config.bottomGapPx).toBe(0);
+    expect(config.bottomMissing).toBe(0);
+    expect(config.cornerOwnership).toBe("horizontal");
+    expect(config.visualPreset).toBe("vivid");
     expect(config.totalLeds).toBe(0);
   });
 });

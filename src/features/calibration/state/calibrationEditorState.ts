@@ -1,10 +1,16 @@
 import type {
+  CornerOwnership,
   LedCalibrationConfig,
   LedDirection,
   LedSegmentCounts,
   LedStartAnchor,
+  LedVisualPreset,
 } from "../model/contracts";
-import { sumSegmentCounts } from "../model/contracts";
+import {
+  normalizeLedCalibrationConfig,
+  normalizeStartAnchor,
+  sumSegmentCounts,
+} from "../model/contracts";
 
 export interface CalibrationEditorState {
   baseline: LedCalibrationConfig;
@@ -17,7 +23,9 @@ export interface CalibrationEditorState {
 interface EditorConfigPatch {
   templateId?: string;
   counts?: Partial<LedSegmentCounts>;
-  bottomGapPx?: number;
+  bottomMissing?: number;
+  cornerOwnership?: CornerOwnership;
+  visualPreset?: LedVisualPreset;
   startAnchor?: LedStartAnchor;
   direction?: LedDirection;
 }
@@ -25,29 +33,32 @@ interface EditorConfigPatch {
 type CalibrationDraftModel = Omit<LedCalibrationConfig, "totalLeds">;
 
 function normalizeConfig(config: LedCalibrationConfig): LedCalibrationConfig {
+  const normalized = normalizeLedCalibrationConfig(config);
+  if (normalized) {
+    return normalized;
+  }
+
   const counts = {
-    top: config.counts.top,
-    left: config.counts.left,
-    right: config.counts.right,
-    bottomLeft: config.counts.bottomLeft,
-    bottomRight: config.counts.bottomRight,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
   };
 
   return {
-    templateId: config.templateId,
+    templateId: undefined,
     counts,
-    bottomGapPx: config.bottomGapPx,
-    startAnchor: config.startAnchor,
-    direction: config.direction,
+    bottomMissing: 0,
+    cornerOwnership: "horizontal",
+    visualPreset: "vivid",
+    startAnchor: normalizeStartAnchor(config.startAnchor),
+    direction: config.direction === "ccw" ? "ccw" : "cw",
     totalLeds: sumSegmentCounts(counts),
   };
 }
 
 function normalizeDraft(config: CalibrationDraftModel): LedCalibrationConfig {
-  return normalizeConfig({
-    ...config,
-    totalLeds: sumSegmentCounts(config.counts),
-  });
+  return normalizeConfig(config as LedCalibrationConfig);
 }
 
 function modelFingerprint(config: LedCalibrationConfig): string {
@@ -55,7 +66,9 @@ function modelFingerprint(config: LedCalibrationConfig): string {
   return JSON.stringify({
     templateId: normalized.templateId ?? null,
     counts: normalized.counts,
-    bottomGapPx: normalized.bottomGapPx,
+    bottomMissing: normalized.bottomMissing,
+    cornerOwnership: normalized.cornerOwnership,
+    visualPreset: normalized.visualPreset,
     startAnchor: normalized.startAnchor,
     direction: normalized.direction,
     totalLeds: normalized.totalLeds,
@@ -94,7 +107,9 @@ export function updateEditorConfig(
       ...state.current.counts,
       ...patch.counts,
     },
-    bottomGapPx: patch.bottomGapPx ?? state.current.bottomGapPx,
+    bottomMissing: patch.bottomMissing ?? state.current.bottomMissing,
+    cornerOwnership: patch.cornerOwnership ?? state.current.cornerOwnership,
+    visualPreset: patch.visualPreset ?? state.current.visualPreset,
     startAnchor: patch.startAnchor ?? state.current.startAnchor,
     direction: patch.direction ?? state.current.direction,
     totalLeds: state.current.totalLeds,

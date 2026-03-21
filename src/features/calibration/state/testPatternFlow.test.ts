@@ -24,8 +24,7 @@ beforeEach(() => {
 const BASE_COUNTS = {
   top: 4,
   right: 3,
-  bottomRight: 2,
-  bottomLeft: 2,
+  bottom: 4,
   left: 3,
 } as const;
 
@@ -33,13 +32,14 @@ function createConfig(overrides?: Partial<LedCalibrationConfig>): LedCalibration
   const totalLeds =
     BASE_COUNTS.top +
     BASE_COUNTS.right +
-    BASE_COUNTS.bottomRight +
-    BASE_COUNTS.bottomLeft +
+    BASE_COUNTS.bottom +
     BASE_COUNTS.left;
 
   return {
     counts: { ...BASE_COUNTS },
-    bottomGapPx: 24,
+    bottomMissing: 0,
+    cornerOwnership: "horizontal",
+    visualPreset: "vivid",
     startAnchor: "left-end",
     direction: "cw",
     totalLeds,
@@ -166,7 +166,7 @@ describe("createTestPatternFlow", () => {
 describe("createDefaultTestPatternFlow", () => {
   it("normalizes marker index lookup through shared sequence helper", () => {
     const config = createConfig({
-      startAnchor: "bottom-left-end",
+      startAnchor: "bottom-end",
       direction: "ccw",
     });
     const sequence = buildLedSequence(config);
@@ -282,7 +282,7 @@ describe("createDefaultTestPatternFlow", () => {
     stopCalibrationTestPatternMock.mockClear();
     const initialConfig = createConfig();
     const nextConfig = createConfig({
-      startAnchor: "bottom-right-end",
+      startAnchor: "bottom-end",
       direction: "ccw",
     });
     const flow = createDefaultTestPatternFlow(async () => ({ connected: true }), initialConfig);
@@ -371,8 +371,7 @@ describe("createDefaultTestPatternFlow", () => {
       counts: {
         top: 0,
         right: 0,
-        bottomRight: 0,
-        bottomLeft: 0,
+        bottom: 0,
         left: 0,
       },
       totalLeds: 4,

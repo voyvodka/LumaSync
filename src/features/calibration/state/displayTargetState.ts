@@ -2,10 +2,14 @@ import type {
   DisplayId,
   DisplayInfo,
   DisplayOverlayCommandResult,
+  OverlayPreviewPayload,
 } from "../../../shared/contracts/display";
 
 interface CreateDisplayTargetStateDeps {
-  openDisplayOverlay: (displayId: DisplayId) => Promise<DisplayOverlayCommandResult>;
+  openDisplayOverlay: (
+    displayId: DisplayId,
+    preview?: OverlayPreviewPayload,
+  ) => Promise<DisplayOverlayCommandResult>;
   closeDisplayOverlay: (displayId: DisplayId) => Promise<DisplayOverlayCommandResult>;
 }
 
@@ -23,7 +27,10 @@ export interface DisplayTargetState {
   getSnapshot: () => DisplayTargetSnapshot;
   setDisplays: (displays: DisplayInfo[]) => DisplayTargetSnapshot;
   selectDisplay: (displayId: DisplayId) => DisplayTargetSnapshot;
-  switchActiveDisplay: (displayId?: DisplayId | null) => Promise<DisplayTargetSnapshot>;
+  switchActiveDisplay: (
+    displayId?: DisplayId | null,
+    preview?: OverlayPreviewPayload,
+  ) => Promise<DisplayTargetSnapshot>;
   closeActiveDisplay: () => Promise<DisplayTargetSnapshot>;
   clearBlockedState: () => DisplayTargetSnapshot;
 }
@@ -100,7 +107,7 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
 
       return snapshot;
     },
-    switchActiveDisplay: async (displayId) => {
+    switchActiveDisplay: async (displayId, preview) => {
       if (inFlightSwitch) {
         return inFlightSwitch;
       }
@@ -141,7 +148,7 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
             await deps.closeDisplayOverlay(previousDisplayId);
           }
 
-          const openResult = await deps.openDisplayOverlay(targetDisplayId);
+          const openResult = await deps.openDisplayOverlay(targetDisplayId, preview);
           if (!openResult.ok) {
             snapshot = toBlockedSnapshot(snapshot, openResult);
             return snapshot;

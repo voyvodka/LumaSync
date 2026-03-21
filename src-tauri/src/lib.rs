@@ -22,7 +22,7 @@ mod commands {
 
 use commands::calibration::{
     close_display_overlay, list_displays, open_display_overlay, start_calibration_test_pattern,
-    stop_calibration_test_pattern, OverlayState,
+    stop_calibration_test_pattern, update_display_overlay_preview, OverlayState,
 };
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
@@ -209,7 +209,8 @@ pub fn run() {
             stop_calibration_test_pattern,
             list_displays,
             open_display_overlay,
-            close_display_overlay
+            close_display_overlay,
+            update_display_overlay_preview
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
