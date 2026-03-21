@@ -3,11 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
+  HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
   type HueRuntimeTarget,
   type HueRuntimeTargetTelemetryRow,
   type HueCredentialStatus,
 } from "../../shared/contracts/hue";
+import { getHueStreamStatus, startHue, stopHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
 import {
   checkHueStreamReadiness,
@@ -27,6 +29,7 @@ const IPV4_PATTERN =
 
 type HueStep = "discover" | "pair" | "area" | "ready";
 const READINESS_STALE_MS = 30_000;
+const RUNTIME_POLL_INTERVAL_MS = 3_000;
 
 export interface HueAreaReadiness {
   ready: boolean;
@@ -79,6 +82,37 @@ export interface UseHueOnboardingResult {
   selectArea: (areaId: string | null) => void;
   revalidateArea: () => Promise<void>;
   retryRuntimeTarget: (target: HueRuntimeTarget) => Promise<void>;
+}
+
+export function deriveRuntimeTargets(status: HueRuntimeStatus | null): HueRuntimeTargetTelemetryRow[] {
+  if (!status) {
+    return [];
+  }
+
+  const hueTelemetry = status.telemetry?.hue;
+  if (hueTelemetry) {
+    return [
+      {
+        ...hueTelemetry,
+        remainingAttempts: hueTelemetry.remainingAttempts ?? status.remainingAttempts,
+        nextAttemptMs: hueTelemetry.nextAttemptMs ?? status.nextAttemptMs,
+        actionHint: hueTelemetry.actionHint ?? status.actionHint,
+      },
+    ];
+  }
+
+  return [
+    {
+      target: "hue",
+      state: status.state,
+      code: status.code,
+      message: status.message,
+      details: status.details ?? undefined,
+      remainingAttempts: status.remainingAttempts,
+      nextAttemptMs: status.nextAttemptMs,
+      actionHint: status.actionHint,
+    },
+  ];
 }
 
 interface HueOnboardingState {
@@ -237,6 +271,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const [state, setState] = useState<HueOnboardingState>(DEFAULT_STATE);
   const [readinessById, setReadinessById] = useState<Map<string, HueAreaReadiness>>(new Map());
   const [readinessCheckedAtById, setReadinessCheckedAtById] = useState<Map<string, number>>(new Map());
+  const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatus | null>(null);
+  const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
 
   const selectedBridge = useMemo(
     () => state.bridges.find((bridge) => bridge.id === state.selectedBridgeId) ?? null,
@@ -675,12 +711,59 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     };
   }, [patchState]);
 
-  const retryRuntimeTarget = useCallback(async (_target: HueRuntimeTarget) => {
-    await Promise.resolve();
+  const pollRuntimeStatus = useCallback(async () => {
+    try {
+      const nextStatus = await getHueStreamStatus();
+      setRuntimeStatus(nextStatus);
+      setRuntimeTargets(deriveRuntimeTargets(nextStatus));
+    } catch {
+      // Runtime polling is best-effort for observability.
+    }
   }, []);
 
-  const runtimeStatus: HueRuntimeStatus | null = null;
-  const runtimeTargets: HueRuntimeTargetTelemetryRow[] = [];
+  useEffect(() => {
+    let active = true;
+
+    const run = async () => {
+      if (!active) {
+        return;
+      }
+      await pollRuntimeStatus();
+    };
+
+    void run();
+
+    const intervalId = window.setInterval(() => {
+      void run();
+    }, RUNTIME_POLL_INTERVAL_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [pollRuntimeStatus]);
+
+  const retryRuntimeTarget = useCallback(
+    async (target: HueRuntimeTarget) => {
+      if (target !== "hue") {
+        return;
+      }
+
+      await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+
+      if (selectedBridge && state.credentials && state.selectedAreaId) {
+        await startHue({
+          bridgeIp: selectedBridge.ip,
+          username: state.credentials.username,
+          areaId: state.selectedAreaId,
+          triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+        });
+      }
+
+      await pollRuntimeStatus();
+    },
+    [pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId],
+  );
 
   return {
     step: state.step,
