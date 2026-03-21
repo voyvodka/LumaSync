@@ -1,75 +1,78 @@
 ---
 phase: 08-stability-gate
-verified: true
+verified: 2026-03-21T16:21:00Z
 status: passed
-requirement: QUAL-04
-decision: APPROVED
+score: 6/6 must-haves verified
+re_verification:
+  previous_status: passed
+  previous_score: 3/3
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
-# Phase 8: Stability Gate Verification
+# Phase 8: Stability Gate Verification Report
 
-Bu dokuman, `QUAL-04` icin gate kararini yalnizca evidence uzerinden verir.
+**Phase Goal:** v1 cikisi icin gerekli uzun sureli calisma guvenilirligi kullanici perspektifinden dogrulanir.
+**Verified:** 2026-03-21T16:21:00Z
+**Status:** passed
+**Re-verification:** No - initial verification mode (onceki raporda `gaps` alani yok)
 
-## Observable Truths
+## Goal Achievement
 
-| # | Truth | Pass condition | Evidence source |
+### Observable Truths
+
+| # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | 60 dakikalik tek seans boyunca app crash/freeze olmadi | Hard-stop hic tetiklenmedi | `08-UAT.md` checkpoint ledger + incident kayitlari |
-| 2 | Planli unplug/replug sonrasi auto-recovery oldu | `T+20..T+40` penceresindeki tek unplug/replug sonrasi manual restart gereksiz | `08-UAT.md` adim-zaman matrisi + telemetry satirlari |
-| 3 | Manual restart veya mode reset ihtiyaci olmadi | Oturum boyunca output continuity korundu | `08-UAT.md` user-visible output + incident kayitlari |
+| 1 | User can execute one uninterrupted 60-minute stability session with explicit checkpoints at 0/10/20/30/40/50/60. | ✓ VERIFIED | `08-UAT.md` tek oturum ve checkpoint tanimi: `.planning/phases/08-stability-gate/08-UAT.md:16`, `.planning/phases/08-stability-gate/08-UAT.md:17`; doldurulmus ledger satirlari: `.planning/phases/08-stability-gate/08-UAT.md:47` |
+| 2 | User can apply one controlled unplug/replug in the 20-40 minute window and record recovery without manual restart. | ✓ VERIFIED | Pencere ve tek uygulama kurali: `.planning/phases/08-stability-gate/08-UAT.md:35`; olay kaydi ve sonuc: `.planning/phases/08-stability-gate/08-UAT.md:61` |
+| 3 | User can produce a binary phase-gate decision (APPROVED or GAPS_FOUND) based on locked fail rules. | ✓ VERIFIED | Binary sonuc sozlesmesi: `.planning/phases/08-stability-gate/08-UAT.md:7`; hard-stop kurallari: `.planning/phases/08-stability-gate/08-UAT.md:21`; final UAT etiketi: `.planning/phases/08-stability-gate/08-UAT.md:81` |
+| 4 | User can complete the 60-minute run without crash/freeze and without manual restart requirements, or run is marked failed with evidence. | ✓ VERIFIED | Hard-stop fail kosullari tanimli: `.planning/phases/08-stability-gate/08-UAT.md:21`; kosu sonucu APPROVED ve incident kaniti mevcut: `.planning/phases/08-stability-gate/08-UAT.md:81` |
+| 5 | User can verify in-session unplug/replug recovery and see automatic normal operation resume. | ✓ VERIFIED | T+30 ve incident satirinda auto-recovery + manual restart yok: `.planning/phases/08-stability-gate/08-UAT.md:50`, `.planning/phases/08-stability-gate/08-UAT.md:61` |
+| 6 | Phase closeout updates QUAL-04 evidence and requirement status from APPROVED/GAPS_FOUND result. | ✓ VERIFIED | Verification karari passed/APPROVED: `.planning/phases/08-stability-gate/08-VERIFICATION.md:4`; REQUIREMENTS QUAL-04 complete: `.planning/REQUIREMENTS.md:34`, `.planning/REQUIREMENTS.md:95`; validation approval: `.planning/phases/08-stability-gate/08-VALIDATION.md:75` |
 
-## Required Artifacts
+**Score:** 6/6 truths verified
 
-| Artifact | Expected | Status | Notes |
+### Required Artifacts
+
+| Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `.planning/phases/08-stability-gate/08-UAT.md` | T+0/T+10/T+20/T+30/T+40/T+50/T+60 checkpoint satirlari doldurulmus | passed | Tum checkpoint satirlari timestamp ve telemetry ile dolduruldu |
-| `.planning/phases/08-stability-gate/08-UAT.md` incident table | Timestamp + active step + user impact alanlari doldurulmus | passed | Kontrollu unplug/replug adimi incident tablosunda kayitli |
-| Evidence package | Checkpoint telemetry (`captureFps`, `sendFps`, `queueHealth`) + user-visible output notlari | passed | Karar yalnizca UAT ledger + incident kaydina dayandirildi |
+| `.planning/phases/08-stability-gate/08-UAT.md` | Runbook + checkpoint ledger + incident kaydi + final etiket | ✓ VERIFIED | Dosya var, 82 satir, checkpoint ve incident satirlari doldurulmus (`T+0..T+60`, unplug/replug) |
+| `.planning/phases/08-stability-gate/08-VERIFICATION.md` | QUAL-04 truth checks + requirement mapping + final decision | ✓ VERIFIED | Bu rapor ile must-have dogrulama, karar ve REQUIREMENTS kapsami net olarak yazili |
+| `.planning/phases/08-stability-gate/08-VALIDATION.md` | Final kararla uyumlu validation kaydi | ✓ VERIFIED | `nyquist_compliant: true` ve approval kaydi mevcut (`.planning/phases/08-stability-gate/08-VALIDATION.md:6`, `.planning/phases/08-stability-gate/08-VALIDATION.md:75`) |
+| `.planning/REQUIREMENTS.md` | QUAL-04 final state senkronu | ✓ VERIFIED | QUAL-04 checkbox ve traceability satiri Complete (`.planning/REQUIREMENTS.md:34`, `.planning/REQUIREMENTS.md:95`) |
 
-## Key Link Verification
+### Key Link Verification
 
-| From | To | Rule | Status |
-| --- | --- | --- | --- |
-| `08-UAT.md` checkpoint telemetry ledger | Phase 8 gate decision | Karar, ledger + incident kayitlarindan uretilir; serbest ozetten uretilmez | locked |
-| `08-UAT.md` unplug/replug evidence | `QUAL-04` recovery truth | `T+20..T+40` penceresinde tek kontrollu testin sonucu zorunludur | locked |
-| Phase 8 gate decision | `REQUIREMENTS.md` `QUAL-04` closure | Yalnizca binary karar ile kapanis verilir | locked |
+| From | To | Via | Status | Details |
+| --- | --- | --- | --- | --- |
+| `08-UAT.md` checkpoint telemetry rows | Runtime telemetry contract fields | `captureFps/sendFps/queueHealth` kolonlari | ✓ WIRED | Ledger kolonlari kontratla birebir (`.planning/phases/08-stability-gate/08-UAT.md:45`) |
+| `08-UAT.md` evidence | `08-VERIFICATION.md` decision | APPROVED/GAPS_FOUND binary kurali + hard-stop | ✓ WIRED | UAT sonucu APPROVED ve verification status passed/decision APPROVED uyumlu (`.planning/phases/08-stability-gate/08-UAT.md:81`) |
+| `08-VERIFICATION.md` decision | `REQUIREMENTS.md` QUAL-04 closure | Decision -> requirement state sync | ✓ WIRED | QUAL-04 Complete olarak kapatilmis (`.planning/REQUIREMENTS.md:95`) |
 
-## Sustained Degradation Fail Rule
+### Requirements Coverage
 
-`Sustained degradation` yoruma acik degildir: ayni bozulma ardIsIk en az `2 checkpoint` boyunca toparlanmiyorsa FAIL sayilir.
+| Requirement | Source Plan | Description | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| QUAL-04 | 08-01-PLAN, 08-02-PLAN | System passes a 60-minute continuous stability run without crash | ✓ SATISFIED | UAT tek-seans checkpoint kaydi + approved sonucu (`.planning/phases/08-stability-gate/08-UAT.md:47`, `.planning/phases/08-stability-gate/08-UAT.md:81`) ve REQUIREMENTS Complete (`.planning/REQUIREMENTS.md:95`) |
 
-## Requirements Coverage
+Orphaned requirement kontrolu (Phase 8 satirlari): ek/mapping-disi requirement bulunmadi.
 
-| Requirement | Description | Evidence required | Status |
-| --- | --- | --- | --- |
-| QUAL-04 | System passes a 60-minute continuous stability run without crash | `08-UAT.md` checkpoint telemetry + unplug/replug recovery + incident records | passed |
+### Anti-Patterns Found
 
-## Final Decision
+| File | Line | Pattern | Severity | Impact |
+| --- | --- | --- | --- | --- |
+| `.planning/phases/08-stability-gate/08-VALIDATION.md` | 4-5 | Duplicate YAML key (`status`) | ⚠️ Warning | YAML parser'a gore ilk/son deger farkli yorumlanabilir; karar verisini bozmaz ama bakim riskidir |
 
-Bu bolumde yalnizca iki deger gecerlidir:
+### Human Verification Required
 
-- `APPROVED`
-- `GAPS_FOUND`
+Bu iterasyonda ek insan testi talep edilmedi; phase artifact'larinda zaten doldurulmus 60 dakikalik donanim kosusu kaniti mevcut.
 
-### Decision Status
+### Gaps Summary
 
-- Status: `passed`
-- Decision: `APPROVED`
-- critical trigger: `none`
+Must-have truth/artifact/link zincirinde engelleyici gap bulunmadi. `QUAL-04` hem evidence dosyalarinda hem `REQUIREMENTS.md` traceability tablosunda hesap verebilir sekilde kapatilmis durumda.
 
-### Decision Record (fill after run)
+---
 
-| Field | Value |
-| --- | --- |
-| Final Decision (`APPROVED` \| `GAPS_FOUND`) | APPROVED |
-| Decided at (UTC) | 2026-03-21T16:16:59Z |
-| Based on evidence rows | UAT Checkpoint Ledger `T+0,T+10,T+20,T+30,T+40,T+50,T+60` + Incident row (`2026-03-21T14:30:00Z`) |
-| QUAL-04 closure recommendation | REQUIREMENTS.md icinde QUAL-04 `Complete` olarak kapatilabilir |
-
-## Fail Conditions Checklist
-
-- [x] Crash veya freeze gorulmedi
-- [x] Manual app restart gerekmedi
-- [x] Manual mode reset/toggle gerekmedi
-- [x] Unplug/replug sonrasi auto-recovery oldu
-- [x] Ayni bozulma `2 checkpoint` boyunca toparlanmadi (bu madde isaretlenirse karar `GAPS_FOUND` olmalidir)
+_Verified: 2026-03-21T16:21:00Z_
+_Verifier: Claude (gsd-verifier)_
