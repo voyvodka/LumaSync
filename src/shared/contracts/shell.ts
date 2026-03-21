@@ -1,5 +1,10 @@
 import type { LedCalibrationConfig } from "../../features/calibration/model/contracts";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
+import type {
+  HueBridgeSummary,
+  HueCredentialStatus,
+  HueOnboardingStep,
+} from "./hue";
 
 /**
  * Shell Contracts
@@ -90,6 +95,30 @@ export interface ShellState {
    * Absent until user explicitly changes mode settings.
    */
   lightingMode?: LightingModeConfig;
+  /**
+   * Last bridge that successfully completed Hue onboarding checks.
+   */
+  lastHueBridge?: HueBridgeSummary;
+  /**
+   * Persisted Hue pairing username (application key) for reconnect-safe reuse.
+   */
+  hueAppKey?: string;
+  /**
+   * Persisted Hue client key required for entertainment streaming.
+   */
+  hueClientKey?: string;
+  /**
+   * Last selected Hue entertainment area.
+   */
+  lastHueAreaId?: string;
+  /**
+   * Last completed onboarding step for resume flow continuity.
+   */
+  hueOnboardingStep?: HueOnboardingStep;
+  /**
+   * Cached credential health line shown in Hue settings.
+   */
+  hueCredentialStatus?: HueCredentialStatus;
 }
 
 /** Default shell state for first launch */
