@@ -9,6 +9,9 @@ export const HUE_COMMANDS = {
   VALIDATE_CREDENTIALS: "validate_hue_credentials",
   LIST_ENTERTAINMENT_AREAS: "list_hue_entertainment_areas",
   CHECK_STREAM_READINESS: "check_hue_stream_readiness",
+  START_STREAM: "start_hue_stream",
+  STOP_STREAM: "stop_hue_stream",
+  GET_STREAM_STATUS: "get_hue_stream_status",
 } as const;
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
@@ -58,6 +61,93 @@ export interface HueCommandStatus {
   code: HueStatusCode | string;
   message: string;
   details?: string;
+}
+
+export const HUE_RUNTIME_STATES = {
+  IDLE: "Idle",
+  STARTING: "Starting",
+  RUNNING: "Running",
+  RECONNECTING: "Reconnecting",
+  STOPPING: "Stopping",
+  FAILED: "Failed",
+} as const;
+
+export type HueRuntimeState =
+  (typeof HUE_RUNTIME_STATES)[keyof typeof HUE_RUNTIME_STATES];
+
+export const HUE_RUNTIME_ACTION_HINT = {
+  RETRY: "retry",
+  RECONNECT: "reconnect",
+  REPAIR: "repair",
+  REVALIDATE: "revalidate",
+  ADJUST_AREA: "adjust_area",
+} as const;
+
+export type HueRuntimeActionHint =
+  (typeof HUE_RUNTIME_ACTION_HINT)[keyof typeof HUE_RUNTIME_ACTION_HINT];
+
+export const HUE_RUNTIME_TRIGGER_SOURCE = {
+  MODE_CONTROL: "mode_control",
+  DEVICE_SURFACE: "device_surface",
+  SYSTEM: "system",
+} as const;
+
+export type HueRuntimeTriggerSource =
+  (typeof HUE_RUNTIME_TRIGGER_SOURCE)[keyof typeof HUE_RUNTIME_TRIGGER_SOURCE];
+
+export const HUE_RUNTIME_STATUS = {
+  STREAM_STARTING: "HUE_STREAM_STARTING",
+  STREAM_RUNNING: "HUE_STREAM_RUNNING",
+  STREAM_STOPPING: "HUE_STREAM_STOPPING",
+  STREAM_STOPPED: "HUE_STREAM_STOPPED",
+  TRANSIENT_RETRY_SCHEDULED: "TRANSIENT_RETRY_SCHEDULED",
+  TRANSIENT_RETRY_EXHAUSTED: "TRANSIENT_RETRY_EXHAUSTED",
+  AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
+  CONFIG_NOT_READY_GATE_BLOCKED: "CONFIG_NOT_READY_GATE_BLOCKED",
+  STOP_TIMEOUT_PARTIAL: "HUE_STOP_TIMEOUT_PARTIAL",
+} as const;
+
+export type HueRuntimeStatusCode =
+  (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
+
+export const HUE_RUNTIME_STATUS_FAMILY = {
+  TRANSIENT: "TRANSIENT_*",
+  AUTH_INVALID: "AUTH_INVALID_*",
+  CONFIG_NOT_READY: "CONFIG_NOT_READY_*",
+} as const;
+
+export type HueRuntimeTarget = "hue" | "usb";
+
+export interface HueRuntimeTargetTelemetryRow {
+  target: HueRuntimeTarget;
+  state: HueRuntimeState;
+  code: HueRuntimeStatusCode | string;
+  message: string;
+  details?: string;
+  remainingAttempts?: number;
+  nextAttemptMs?: number;
+  actionHint?: HueRuntimeActionHint;
+}
+
+export interface HueRuntimeAggregateTelemetry {
+  activeTargets: HueRuntimeTarget[];
+  runningCount: number;
+  reconnectingCount: number;
+  failedCount: number;
+}
+
+export interface HueRuntimeTelemetry {
+  hue: HueRuntimeTargetTelemetryRow;
+  aggregate: HueRuntimeAggregateTelemetry;
+}
+
+export interface HueRuntimeStatus extends HueCommandStatus {
+  state: HueRuntimeState;
+  triggerSource: HueRuntimeTriggerSource;
+  remainingAttempts?: number;
+  nextAttemptMs?: number;
+  actionHint?: HueRuntimeActionHint;
+  telemetry?: HueRuntimeTelemetry;
 }
 
 export interface HueBridgeSummary {
