@@ -29,6 +29,9 @@ use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
     SerialConnectionState,
 };
+use commands::lighting_mode::{
+    get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
+};
 
 const TRAY_ICON_ID: &str = "main-tray";
 
@@ -143,6 +146,7 @@ pub fn run() {
             app.manage(TrayState { startup_toggle });
             app.manage(SerialConnectionState::default());
             app.manage(OverlayState::default());
+            app.manage(LightingRuntimeState::default());
 
             // Build tray icon
             TrayIconBuilder::with_id(TRAY_ICON_ID)
@@ -206,6 +210,9 @@ pub fn run() {
             connect_serial_port,
             get_serial_connection_status,
             run_serial_health_check,
+            set_lighting_mode,
+            stop_lighting,
+            get_lighting_mode_status,
             start_calibration_test_pattern,
             stop_calibration_test_pattern,
             list_displays,
