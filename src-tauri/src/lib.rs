@@ -21,7 +21,6 @@ mod commands {
     pub mod device_connection;
     pub mod led_output;
     pub mod lighting_mode;
-    #[cfg(test)]
     pub mod runtime_quality;
 }
 
