@@ -145,7 +145,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. User can run the system continuously for 60 minutes without app crash.
   2. User can complete a long run without needing manual restart to restore normal operation.
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 08-01-PLAN.md - Stabilite gate runbook, telemetry checkpoint ledger, incident schema, ve binary verification iskeletini olustur
+- [ ] 08-02-PLAN.md - 60 dakikalik tek-seans UAT gate kosusunu tamamla, karari finalize et, QUAL-04 traceability kaydini senkronize et
 
 ## Progress
 
@@ -158,4 +161,4 @@ Plans:
 | 5. Core Lighting Modes | 6/6 | Complete | 2026-03-21 |
 | 6. Runtime Quality Controls | 1/2 | In Progress|  |
 | 7. Telemetry and Full Localization | 3/3 | Complete | 2026-03-21 |
-| 8. Stability Gate | 0/TBD | Not started | - |
+| 8. Stability Gate | 1/2 | In Progress|  |
