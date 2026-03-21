@@ -96,6 +96,7 @@ impl Default for HueRetryPolicy {
 
 struct HueRuntimeOwner {
     state: HueRuntimeState,
+    active_stream: Option<HueActiveStreamContext>,
     reconnect_attempt: u8,
     user_override_pending: bool,
     last_status: HueRuntimeStatus,
@@ -103,10 +104,18 @@ struct HueRuntimeOwner {
     retry_policy: HueRetryPolicy,
 }
 
+#[derive(Clone, Debug)]
+struct HueActiveStreamContext {
+    bridge_ip: String,
+    username: String,
+    area_id: String,
+}
+
 impl Default for HueRuntimeOwner {
     fn default() -> Self {
         Self {
             state: HueRuntimeState::Idle,
+            active_stream: None,
             reconnect_attempt: 0,
             user_override_pending: false,
             last_status: status_with(
@@ -177,6 +186,7 @@ fn start_with_evidence(
 
     if evidence.auth_invalid_evidence {
         owner.state = HueRuntimeState::Failed;
+        owner.active_stream = None;
         owner.last_status = status_with(
             HueRuntimeState::Failed,
             "AUTH_INVALID_CREDENTIALS",
@@ -213,6 +223,7 @@ fn start_with_evidence(
         }
 
         owner.state = HueRuntimeState::Idle;
+        owner.active_stream = None;
         owner.last_status = status_with(
             HueRuntimeState::Idle,
             "CONFIG_NOT_READY_GATE_BLOCKED",
@@ -248,6 +259,59 @@ fn start_with_evidence(
         trigger_source,
     );
     make_result(owner)
+}
+
+fn status_refresh_with_evidence(
+    owner: &mut HueRuntimeOwner,
+    evidence: &HueRuntimeGateEvidence,
+    details: Option<String>,
+) -> HueRuntimeCommandResult {
+    if owner.user_override_pending
+        || !matches!(
+            owner.state,
+            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+        )
+    {
+        return make_result(owner);
+    }
+
+    if evidence.auth_invalid_evidence {
+        let reason =
+            details.unwrap_or_else(|| "Hue readiness reported auth-invalid evidence.".to_string());
+        return register_auth_invalid(owner, &reason, HueRuntimeTriggerSource::System);
+    }
+
+    if !evidence.readiness_current || !evidence.ready {
+        let reason = details.unwrap_or_else(|| {
+            "Hue readiness check reported transient fault or not-ready area state.".to_string()
+        });
+        return register_transient_fault(owner, &reason, HueRuntimeTriggerSource::System);
+    }
+
+    owner.reconnect_attempt = 0;
+    owner.state = HueRuntimeState::Running;
+    owner.last_status = status_with(
+        HueRuntimeState::Running,
+        "HUE_STREAM_RUNNING",
+        "Hue runtime is running.",
+        details,
+        HueRuntimeTriggerSource::System,
+    );
+    make_result(owner)
+}
+
+fn store_active_stream_context(
+    owner: &mut HueRuntimeOwner,
+    request: &StartHueStreamRequest,
+    start_result: &HueRuntimeCommandResult,
+) {
+    if start_result.active {
+        owner.active_stream = Some(HueActiveStreamContext {
+            bridge_ip: request.bridge_ip.clone(),
+            username: request.username.clone(),
+            area_id: request.area_id.clone(),
+        });
+    }
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -352,6 +416,7 @@ fn stop_with_timeout(
     );
 
     owner.reconnect_attempt = 0;
+    owner.active_stream = None;
     owner.state = HueRuntimeState::Idle;
     if timed_out {
         owner.last_status = status_with(
@@ -385,6 +450,7 @@ pub fn start_hue_stream(
         .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
     let trigger = request
         .trigger_source
+        .clone()
         .unwrap_or(HueRuntimeTriggerSource::ModeControl);
     let evidence = HueRuntimeGateEvidence {
         bridge_configured: !request.bridge_ip.trim().is_empty(),
@@ -407,7 +473,10 @@ pub fn start_hue_stream(
     gate.auth_invalid_evidence = readiness.status.code.starts_with("AUTH_INVALID_")
         || readiness.status.code == "HUE_CREDENTIAL_INVALID";
 
-    Ok(start_with_evidence(&mut owner, &gate, trigger))
+    let result = start_with_evidence(&mut owner, &gate, trigger);
+    store_active_stream_context(&mut owner, &request, &result);
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -427,10 +496,39 @@ pub fn stop_hue_stream(
 pub fn get_hue_stream_status(
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    let owner = runtime_state
+    let mut owner = runtime_state
         .runtime
         .lock()
         .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+
+    if matches!(
+        owner.state,
+        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+    ) {
+        if let Some(active_stream) = owner.active_stream.clone() {
+            let readiness = check_hue_stream_readiness(
+                active_stream.bridge_ip,
+                active_stream.username,
+                active_stream.area_id,
+            );
+            let gate = HueRuntimeGateEvidence {
+                bridge_configured: true,
+                credentials_valid: true,
+                area_selected: true,
+                readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
+                ready: readiness.readiness.ready,
+                auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
+                    || readiness.status.code == "HUE_CREDENTIAL_INVALID",
+            };
+            let details = readiness
+                .status
+                .details
+                .clone()
+                .or_else(|| Some(readiness.status.message.clone()));
+            return Ok(status_refresh_with_evidence(&mut owner, &gate, details));
+        }
+    }
+
     Ok(make_result(&owner))
 }
 
@@ -446,13 +544,6 @@ fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn command_status_refresh_with_evidence(
-        owner: &mut HueRuntimeOwner,
-        _evidence: &HueRuntimeGateEvidence,
-    ) -> HueRuntimeCommandResult {
-        make_result(owner)
-    }
 
     fn strict_gate_ready() -> HueRuntimeGateEvidence {
         HueRuntimeGateEvidence {
@@ -556,10 +647,35 @@ mod tests {
             &ready_gate,
             HueRuntimeTriggerSource::ModeControl,
         );
-        let result = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
+        let result = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
 
         assert_eq!(result.status.state, HueRuntimeState::Reconnecting);
         assert_eq!(result.status.code, "TRANSIENT_RETRY_SCHEDULED");
+        assert!(result.status.next_attempt_ms.is_some());
+        assert_eq!(result.status.remaining_attempts, Some(2));
+    }
+
+    #[test]
+    fn start_success_persists_active_stream_context_for_status_refresh() {
+        let mut owner = HueRuntimeOwner::default();
+        let request = StartHueStreamRequest {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "hue-user".to_string(),
+            area_id: "living-room".to_string(),
+            trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
+        };
+
+        let start_result = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        store_active_stream_context(&mut owner, &request, &start_result);
+
+        let active_stream = owner.active_stream.as_ref().expect("active stream context");
+        assert_eq!(active_stream.bridge_ip, "192.168.1.2");
+        assert_eq!(active_stream.username, "hue-user");
+        assert_eq!(active_stream.area_id, "living-room");
     }
 
     #[test]
@@ -575,9 +691,9 @@ mod tests {
             &ready_gate,
             HueRuntimeTriggerSource::ModeControl,
         );
-        let _ = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
-        let _ = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
-        let exhausted = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
+        let _ = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+        let _ = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+        let exhausted = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
 
         assert_eq!(exhausted.status.state, HueRuntimeState::Failed);
         assert_eq!(exhausted.status.code, "TRANSIENT_RETRY_EXHAUSTED");
@@ -596,7 +712,7 @@ mod tests {
             &ready_gate,
             HueRuntimeTriggerSource::ModeControl,
         );
-        let result = command_status_refresh_with_evidence(&mut owner, &auth_invalid_gate);
+        let result = status_refresh_with_evidence(&mut owner, &auth_invalid_gate, None);
 
         assert_eq!(result.status.state, HueRuntimeState::Failed);
         assert_eq!(result.status.code, "AUTH_INVALID_CREDENTIALS");
@@ -604,6 +720,33 @@ mod tests {
             result.status.action_hint,
             Some(HueRuntimeActionHint::Repair)
         );
+    }
+
+    #[test]
+    fn user_stop_prevents_new_reconnect_attempts_during_status_refresh() {
+        let mut owner = HueRuntimeOwner::default();
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        owner.active_stream = Some(HueActiveStreamContext {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "username".to_string(),
+            area_id: "area".to_string(),
+        });
+        let _ = stop_with_timeout(&mut owner, false, HueRuntimeTriggerSource::DeviceSurface);
+
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let result = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+
+        assert_eq!(result.status.state, HueRuntimeState::Idle);
+        assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
+        assert_eq!(owner.reconnect_attempt, 0);
     }
 
     #[test]
