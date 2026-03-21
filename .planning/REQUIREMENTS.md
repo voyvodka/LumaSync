@@ -16,9 +16,9 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Hue Stream Runtime
 
-- [ ] **HUE-05**: User can start Hue Entertainment streaming for the selected area from app mode controls.
-- [ ] **HUE-06**: User can keep Hue stream alive during runtime with stable packet flow and keep-alive behavior.
-- [ ] **HUE-07**: User can stop Hue stream cleanly and restore bridge/device state without manual cleanup.
+- [x] **HUE-05**: User can start Hue Entertainment streaming for the selected area from app mode controls.
+- [x] **HUE-06**: User can keep Hue stream alive during runtime with stable packet flow and keep-alive behavior.
+- [x] **HUE-07**: User can stop Hue stream cleanly and restore bridge/device state without manual cleanup.
 - [ ] **HUE-08**: User can continue session after transient Hue stream faults without restarting the app.
 
 ### Device UX Integration
@@ -67,9 +67,9 @@ Which requirements map to which phases. Updated during roadmap creation.
 | HUE-02 | Phase 9 | Complete |
 | HUE-03 | Phase 9 | Complete |
 | HUE-04 | Phase 9 | Complete |
-| HUE-05 | Phase 10 | Pending |
-| HUE-06 | Phase 10 | Pending |
-| HUE-07 | Phase 10 | Pending |
+| HUE-05 | Phase 10 | Complete |
+| HUE-06 | Phase 10 | Complete |
+| HUE-07 | Phase 10 | Complete |
 | HUE-08 | Phase 12 | Pending |
 | HUX-01 | Phase 11 | Pending |
 | HUX-02 | Phase 11 | Pending |

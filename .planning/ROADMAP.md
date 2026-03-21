@@ -41,7 +41,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 10-01-PLAN.md - Build backend Hue runtime owner/state machine, strict start gate, bounded reconnect, and deterministic stop commands.
+- [x] 10-01-PLAN.md - Build backend Hue runtime owner/state machine, strict start gate, bounded reconnect, and deterministic stop commands.
 - [ ] 10-02-PLAN.md - Move Hue start authority to mode controls with dual-target arbitration and persisted target set.
 - [ ] 10-03-PLAN.md - Add Device-surface runtime observability, shared stop pipeline UX, and EN/TR lifecycle copy parity.
 
@@ -70,6 +70,6 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 9. Hue Bridge Onboarding | 2/2 | Complete | 2026-03-21 |
-| 10. Hue Stream Lifecycle | 0/TBD | Not started | - |
+| 10. Hue Stream Lifecycle | 1/3 | In Progress|  |
 | 11. Device Surface Integration | 0/TBD | Not started | - |
 | 12. Diagnostics and Recovery | 0/TBD | Not started | - |
