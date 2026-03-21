@@ -1,4 +1,5 @@
 import type { LedCalibrationConfig } from "../../features/calibration/model/contracts";
+import type { LightingModeConfig } from "../../features/mode/model/contracts";
 
 /**
  * Shell Contracts
@@ -82,6 +83,11 @@ export interface ShellState {
    * Absent until user completes calibration flow.
    */
   ledCalibration?: LedCalibrationConfig;
+  /**
+   * Last selected LED lighting mode state.
+   * Absent until user explicitly changes mode settings.
+   */
+  lightingMode?: LightingModeConfig;
 }
 
 /** Default shell state for first launch */

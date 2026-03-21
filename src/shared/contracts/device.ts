@@ -10,6 +10,9 @@ export const DEVICE_COMMANDS = {
   RUN_HEALTH_CHECK: "run_serial_health_check",
   START_CALIBRATION_TEST_PATTERN: "start_calibration_test_pattern",
   STOP_CALIBRATION_TEST_PATTERN: "stop_calibration_test_pattern",
+  SET_LIGHTING_MODE: "set_lighting_mode",
+  STOP_LIGHTING: "stop_lighting",
+  GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
 } as const;
 
 export const DEVICE_STATUS = {
