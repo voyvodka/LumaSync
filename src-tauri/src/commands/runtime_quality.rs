@@ -46,16 +46,53 @@ impl RuntimeQualityController {
     }
 
     pub fn smooth_frame(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
-        self.previous_frame = target_frame.to_vec();
-        self.previous_frame.clone()
+        if self.previous_frame.len() != target_frame.len() {
+            self.previous_frame = target_frame.to_vec();
+            return self.previous_frame.clone();
+        }
+
+        let alpha = self.config.smoothing_alpha.clamp(0.0, 1.0);
+        let smoothed = self
+            .previous_frame
+            .iter()
+            .zip(target_frame.iter())
+            .map(|(previous, target)| {
+                [
+                    lerp_channel(previous[0], target[0], alpha),
+                    lerp_channel(previous[1], target[1], alpha),
+                    lerp_channel(previous[2], target[2], alpha),
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        self.previous_frame = smoothed.clone();
+        smoothed
     }
 
     pub fn observe_timing(&mut self, sample: RuntimeTimingSample) {
-        let _ = sample;
+        let sample_cost = (sample.capture_cost_ms + sample.send_cost_ms).max(0.0);
+        let ewma_alpha = self.config.pressure_ewma_alpha.clamp(0.0, 1.0);
+
+        self.observed_cost_ewma_ms = Some(match self.observed_cost_ewma_ms {
+            Some(previous) => (ewma_alpha * sample_cost) + ((1.0 - ewma_alpha) * previous),
+            None => sample_cost,
+        });
     }
 
     pub fn current_interval(&self) -> Duration {
-        Duration::from_millis(self.config.base_interval_ms.max(1))
+        let base_interval_ms = self.config.base_interval_ms.max(1);
+        let min_interval_ms = self.config.min_interval_ms.max(1);
+        let max_interval_ms = self.config.max_interval_ms.max(min_interval_ms);
+
+        let adaptive_ms = match self.observed_cost_ewma_ms {
+            Some(observed) if observed > 0.0 => {
+                let pressure_ratio = (observed / base_interval_ms as f32).max(1.0);
+                (base_interval_ms as f32 * pressure_ratio).round() as u64
+            }
+            _ => base_interval_ms,
+        };
+
+        Duration::from_millis(adaptive_ms.clamp(min_interval_ms, max_interval_ms))
     }
 
     pub fn should_send_now(&mut self, now: Instant) -> bool {
