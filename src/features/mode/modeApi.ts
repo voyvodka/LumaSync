@@ -5,6 +5,7 @@ import {
   HUE_COMMANDS,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeActionHint,
+  type HueRuntimeStatus,
   type HueRuntimeState,
   type HueRuntimeTriggerSource,
 } from "../../shared/contracts/hue";
@@ -126,6 +127,14 @@ export async function stopHue(
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.STOP_STREAM, {
       triggerSource,
     });
+  } catch (error) {
+    throw mapModeApiError(error);
+  }
+}
+
+export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): Promise<HueRuntimeStatus> {
+  try {
+    return await invoker<HueRuntimeStatus>(HUE_COMMANDS.GET_STREAM_STATUS);
   } catch (error) {
     throw mapModeApiError(error);
   }
