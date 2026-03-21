@@ -181,6 +181,8 @@ pub fn send_ambilight_frame_to_port(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
     use super::{
@@ -195,6 +197,22 @@ mod tests {
     struct FakeSender {
         writes: Mutex<Vec<(String, Vec<u8>)>>,
         fail_with: Option<&'static str>,
+    }
+
+    #[derive(Default)]
+    struct FakePort {
+        writes: Vec<u8>,
+    }
+
+    impl Write for FakePort {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.writes.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
 
     impl FakeSender {
@@ -286,5 +304,24 @@ mod tests {
 
         let expected = encode_led_packet(0.25, &frame);
         assert_eq!(writes[0].1, expected);
+    }
+
+    #[test]
+    fn serial_sender_reuses_open_port_for_repeated_hot_path_writes() {
+        let open_count = Arc::new(AtomicUsize::new(0));
+        let open_count_for_factory = Arc::clone(&open_count);
+        let sender = super::SerialLedPacketSender::with_port_factory_for_tests(move |_port_name| {
+            open_count_for_factory.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(FakePort::default()))
+        });
+
+        sender
+            .send("COM42", &[1, 2, 3])
+            .expect("first write should succeed");
+        sender
+            .send("COM42", &[4, 5, 6])
+            .expect("second write should reuse open session");
+
+        assert_eq!(open_count.load(Ordering::SeqCst), 1);
     }
 }
