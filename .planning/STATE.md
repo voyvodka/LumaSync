@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 5 of 8 (Core Lighting Modes)
-Current Plan: 5
-Total Plans in Phase: 5
+Current Plan: 6
+Total Plans in Phase: 6
 Status: Ready for verification
 Last activity: 2026-03-21
 
@@ -169,8 +169,7 @@ None yet.
 
 ### Blockers/Concerns
 
-yet.
-- MODE-01 icin AmbilightFrameSource tarafinda canli monitor capture implementasyonu eksik.
+None.
 
 ## Session Continuity
 

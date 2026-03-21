@@ -102,7 +102,7 @@ Plans:
   1. User can switch to real-time Ambilight screen mirroring mode.
   2. User can switch to a static solid-color mode.
   3. User can change modes without losing saved calibration setup.
-**Plans**: 5 plans
+**Plans**: 6 plans
 Plans:
 - [ ] 05-01-PLAN.md - Define MODE-01/MODE-02 domain contracts, command bridge surface, and test-backed transition/persistence rules
 - [ ] 05-02-PLAN.md - Implement Rust lighting-mode runtime owner with transactional set/stop lifecycle and Tauri command registration
@@ -148,7 +148,7 @@ Plans:
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
 | 4. Calibration Workflow | 12/12 | Complete   | 2026-03-20 |
-| 5. Core Lighting Modes | 4/4 | Complete | 2026-03-21 |
+| 5. Core Lighting Modes | 6/6 | Complete | 2026-03-21 |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
 | 7. Telemetry and Full Localization | 0/TBD | Not started | - |
 | 8. Stability Gate | 0/TBD | Not started | - |
