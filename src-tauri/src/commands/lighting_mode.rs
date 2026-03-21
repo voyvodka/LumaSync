@@ -704,4 +704,20 @@ mod tests {
         );
         assert_eq!(failed.mode.kind, LightingModeKind::Off);
     }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn default_runtime_owner_uses_live_source_factory_contract() {
+        let owner = LightingRuntimeOwner::default();
+
+        let error = match (owner.frame_source_factory)() {
+            Ok(_) => panic!("default frame source must not fall back to static source"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.as_reason(),
+            "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM".to_string()
+        );
+    }
 }
