@@ -97,8 +97,8 @@ pub fn sample_led_frame(
 #[cfg(test)]
 mod tests {
     use super::{
-        sample_led_frame, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
-        SamplingCalibration,
+        create_live_frame_source, sample_led_frame, AmbilightCaptureError, AmbilightFrameSource,
+        CapturedFrame, SamplingCalibration,
     };
 
     struct SingleFrameSource {
@@ -165,5 +165,20 @@ mod tests {
             .expect("sampling should succeed");
 
         assert_eq!(sampled.colors.len(), 6);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn live_source_factory_returns_coded_unsupported_error_on_non_windows() {
+        let error = create_live_frame_source().expect_err("non-windows live source should fail");
+
+        assert_eq!(
+            error,
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM")
+        );
+        assert_eq!(
+            error.as_reason(),
+            "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM".to_string()
+        );
     }
 }
