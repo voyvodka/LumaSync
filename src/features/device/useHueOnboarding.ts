@@ -3,6 +3,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
+  type HueRuntimeStatus,
+  type HueRuntimeTarget,
+  type HueRuntimeTargetTelemetryRow,
   type HueCredentialStatus,
 } from "../../shared/contracts/hue";
 import { shellStore } from "../persistence/shellStore";
@@ -23,6 +26,7 @@ const IPV4_PATTERN =
   /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 
 type HueStep = "discover" | "pair" | "area" | "ready";
+const READINESS_STALE_MS = 30_000;
 
 export interface HueAreaReadiness {
   ready: boolean;
@@ -57,12 +61,15 @@ export interface UseHueOnboardingResult {
   selectedAreaId: string | null;
   selectedArea: HueAreaRow | null;
   canStartHue: boolean;
+  isReadinessStale: boolean;
   isDiscovering: boolean;
   isPairing: boolean;
   isLoadingAreas: boolean;
   isCheckingReadiness: boolean;
   isValidatingCredential: boolean;
   status: CommandStatus | null;
+  runtimeStatus: HueRuntimeStatus | null;
+  runtimeTargets: HueRuntimeTargetTelemetryRow[];
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
@@ -71,6 +78,7 @@ export interface UseHueOnboardingResult {
   refreshAreas: () => Promise<void>;
   selectArea: (areaId: string | null) => void;
   revalidateArea: () => Promise<void>;
+  retryRuntimeTarget: (target: HueRuntimeTarget) => Promise<void>;
 }
 
 interface HueOnboardingState {
@@ -97,7 +105,7 @@ const DEFAULT_STATE: HueOnboardingState = {
   selectedBridgeId: null,
   manualIp: "",
   manualIpError: null,
-  credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+  credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
   credentials: null,
   areaGroups: [],
   selectedAreaId: null,
@@ -228,6 +236,7 @@ async function persistResumeState(step: HueStep): Promise<void> {
 export function useHueOnboarding(): UseHueOnboardingResult {
   const [state, setState] = useState<HueOnboardingState>(DEFAULT_STATE);
   const [readinessById, setReadinessById] = useState<Map<string, HueAreaReadiness>>(new Map());
+  const [readinessCheckedAtById, setReadinessCheckedAtById] = useState<Map<string, number>>(new Map());
 
   const selectedBridge = useMemo(
     () => state.bridges.find((bridge) => bridge.id === state.selectedBridgeId) ?? null,
@@ -238,15 +247,30 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     return flattenAreaGroups(state.areaGroups).find((area) => area.id === state.selectedAreaId) ?? null;
   }, [state.areaGroups, state.selectedAreaId]);
 
+  const isReadinessStale = useMemo(() => {
+    if (!selectedArea?.readiness?.ready || !state.selectedAreaId) {
+      return false;
+    }
+
+    const checkedAt = readinessCheckedAtById.get(state.selectedAreaId);
+    if (!checkedAt) {
+      return true;
+    }
+
+    return Date.now() - checkedAt > READINESS_STALE_MS;
+  }, [readinessCheckedAtById, selectedArea?.readiness?.ready, state.selectedAreaId]);
+
   const canStartHue = useMemo(() => {
     return Boolean(
       selectedBridge &&
         state.credentials &&
         state.credentialState === HUE_CREDENTIAL_STATUS.VALID &&
         selectedArea &&
-        selectedArea.readiness?.ready,
+        selectedArea.readiness?.ready &&
+        !isReadinessStale &&
+        !state.isValidatingCredential,
     );
-  }, [selectedBridge, selectedArea, state.credentials, state.credentialState]);
+  }, [selectedBridge, selectedArea, state.credentials, state.credentialState, isReadinessStale, state.isValidatingCredential]);
 
   const patchState = useCallback((updater: (prev: HueOnboardingState) => HueOnboardingState) => {
     setState((prev) => {
@@ -503,6 +527,12 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         return next;
       });
 
+      setReadinessCheckedAtById((prev) => {
+        const next = new Map(prev);
+        next.set(state.selectedAreaId as string, Date.now());
+        return next;
+      });
+
       patchState((prev) => {
         const refreshedGroups = normalizeAreas(flattenAreaGroups(prev.areaGroups), new Map(readinessById).set(state.selectedAreaId as string, {
           ready: response.readiness.ready,
@@ -580,6 +610,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
 
       patchState((prev) => ({
         ...prev,
+        credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
         isValidatingCredential: true,
       }));
 
@@ -644,6 +675,13 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     };
   }, [patchState]);
 
+  const retryRuntimeTarget = useCallback(async (_target: HueRuntimeTarget) => {
+    await Promise.resolve();
+  }, []);
+
+  const runtimeStatus: HueRuntimeStatus | null = null;
+  const runtimeTargets: HueRuntimeTargetTelemetryRow[] = [];
+
   return {
     step: state.step,
     bridges: state.bridges,
@@ -657,12 +695,15 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     selectedAreaId: state.selectedAreaId,
     selectedArea,
     canStartHue,
+    isReadinessStale,
     isDiscovering: state.isDiscovering,
     isPairing: state.isPairing,
     isLoadingAreas: state.isLoadingAreas,
     isCheckingReadiness: state.isCheckingReadiness,
     isValidatingCredential: state.isValidatingCredential,
     status: state.status,
+    runtimeStatus,
+    runtimeTargets,
     discover,
     selectBridge,
     setManualIp,
@@ -671,5 +712,6 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     refreshAreas,
     selectArea,
     revalidateArea,
+    retryRuntimeTarget,
   };
 }

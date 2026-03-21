@@ -1,9 +1,11 @@
 import { useTranslation } from "react-i18next";
 
 import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
+import { buildHueRuntimeStatusCard } from "../../device/hueRuntimeStatusCard";
 import { buildHueStatusCard } from "../../device/hueStatusCard";
 import { useDeviceConnection } from "../../device/useDeviceConnection";
 import { useHueOnboarding } from "../../device/useHueOnboarding";
+import { stopLighting } from "../../mode/modeApi";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -35,12 +37,15 @@ export function DeviceSection() {
     selectedAreaId,
     selectedArea,
     canStartHue,
+    isReadinessStale,
     isDiscovering: isHueDiscovering,
     isPairing: isHuePairing,
     isLoadingAreas,
     isCheckingReadiness,
     isValidatingCredential,
     status: hueStatus,
+    runtimeStatus,
+    runtimeTargets,
     discover,
     selectBridge,
     setManualIp,
@@ -49,6 +54,7 @@ export function DeviceSection() {
     refreshAreas,
     selectArea,
     revalidateArea,
+    retryRuntimeTarget,
   } = useHueOnboarding();
 
   const {
@@ -109,7 +115,11 @@ export function DeviceSection() {
   const huePairDisabled = isHuePairing || !selectedBridge;
   const hueAreasDisabled = !selectedBridge || credentialState !== "valid" || isLoadingAreas;
   const hueReadinessDisabled = !selectedBridge || !selectedAreaId || credentialState !== "valid" || isCheckingReadiness;
-  const hueStartDisabled = !canStartHue;
+  const hueStartDisabled =
+    !canStartHue
+    || isValidatingCredential
+    || credentialState !== "valid"
+    || isReadinessStale;
 
   const hueStatusModel = buildHueStatusCard({
     status: hueStatus,
@@ -118,6 +128,12 @@ export function DeviceSection() {
     isPairing: isHuePairing,
     isCheckingReadiness,
   });
+
+  const hueRuntimeModel = buildHueRuntimeStatusCard({
+    status: runtimeStatus,
+  });
+
+  const showRuntimeChecklist = isValidatingCredential || credentialState === "unknown" || isReadinessStale;
 
   const hueStepStates = {
     discover: selectedBridgeId !== null,
@@ -555,7 +571,59 @@ export function DeviceSection() {
               >
                 {t("device.hue.actions.start")}
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void stopLighting();
+                }}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+              >
+                {t("device.hue.actions.stop")}
+              </button>
             </div>
+
+            {showRuntimeChecklist ? (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2 dark:border-amber-500/40 dark:bg-amber-900/20">
+                <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-200">{t("device.hue.runtime.checklist.title")}</p>
+                <ul className="mt-1 space-y-1 text-[11px] text-amber-700 dark:text-amber-300">
+                  {isValidatingCredential || credentialState === "unknown" ? (
+                    <li>{t("device.hue.runtime.checklist.waitCredential")}</li>
+                  ) : null}
+                  {isReadinessStale ? <li>{t("device.hue.runtime.checklist.revalidate")}</li> : null}
+                </ul>
+              </div>
+            ) : null}
+
+            {runtimeTargets.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {runtimeTargets.map((targetRow) => {
+                  const targetLocked = targetRow.state === "Reconnecting";
+                  return (
+                    <div
+                      key={targetRow.target}
+                      className="rounded-lg border border-slate-200 bg-white/80 p-2 dark:border-zinc-700 dark:bg-zinc-900/40"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-zinc-100">
+                          {t(`device.hue.runtime.targets.${targetRow.target}.title`)}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void retryRuntimeTarget(targetRow.target);
+                          }}
+                          disabled={targetLocked}
+                          className="rounded border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-100"
+                        >
+                          {t(`device.hue.runtime.targets.${targetRow.target}.retry`)}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
 
             {canStartHue && selectedBridge && selectedArea ? (
               <p className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
@@ -581,6 +649,30 @@ export function DeviceSection() {
           <h4 className="text-xs font-semibold text-slate-900 dark:text-zinc-100">{t(hueStatusModel.titleKey)}</h4>
           <p className="mt-1 text-xs text-slate-700 dark:text-zinc-200">{t(hueStatusModel.bodyKey)}</p>
           {hueStatusModel.details ? <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">{hueStatusModel.details}</p> : null}
+        </div>
+
+        <div
+          className={`mt-3 rounded-lg border p-3 ${
+            hueRuntimeModel.variant === "success"
+              ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
+              : hueRuntimeModel.variant === "error"
+                ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
+                : "border-slate-200 bg-white/70 dark:border-zinc-700 dark:bg-zinc-900/30"
+          }`}
+        >
+          <h4 className="text-xs font-semibold text-slate-900 dark:text-zinc-100">{t(hueRuntimeModel.titleKey)}</h4>
+          <p className="mt-1 text-xs text-slate-700 dark:text-zinc-200">{t(hueRuntimeModel.bodyKey)}</p>
+          {hueRuntimeModel.triggerSourceKey ? (
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-zinc-400">{t(hueRuntimeModel.triggerSourceKey)}</p>
+          ) : null}
+          {hueRuntimeModel.retry ? (
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-zinc-400">
+              {t(hueRuntimeModel.retry.labelKey, {
+                remaining: hueRuntimeModel.retry.remainingAttempts ?? "-",
+                nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "-",
+              })}
+            </p>
+          ) : null}
         </div>
       </div>
     </section>

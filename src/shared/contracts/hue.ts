@@ -42,6 +42,7 @@ export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
 export const HUE_CREDENTIAL_STATUS = {
   VALID: "valid",
   NEEDS_REPAIR: "needs_repair",
+  UNKNOWN: "unknown",
 } as const;
 
 export type HueCredentialStatus =
