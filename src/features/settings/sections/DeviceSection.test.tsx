@@ -2,9 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
 import { DeviceSection } from "./DeviceSection";
 
-const stopLightingMock = vi.fn();
+const stopHueMock = vi.fn();
 const useHueOnboardingMock = vi.fn();
 
 vi.mock("react-i18next", () => ({
@@ -14,7 +15,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../mode/modeApi", () => ({
-  stopLighting: () => stopLightingMock(),
+  stopHue: (...args: unknown[]) => stopHueMock(...args),
 }));
 
 vi.mock("../../device/useDeviceConnection", () => ({
@@ -80,7 +81,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
 
 describe("DeviceSection hue runtime controls", () => {
   beforeEach(() => {
-    stopLightingMock.mockReset();
+    stopHueMock.mockReset();
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
@@ -106,7 +107,7 @@ describe("DeviceSection hue runtime controls", () => {
 
     await user.click(screen.getByRole("button", { name: "device.hue.actions.stop" }));
 
-    expect(stopLightingMock).toHaveBeenCalledOnce();
+    expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
   });
 
   it("keeps healthy target controls enabled while recovering target remains constrained", async () => {
@@ -116,7 +117,14 @@ describe("DeviceSection hue runtime controls", () => {
     useHueOnboardingMock.mockReturnValue(
       createHueHookState({
         runtimeTargets: [
-          { target: "hue", state: "Reconnecting", code: "TRANSIENT_RETRY_SCHEDULED", message: "reconnecting" },
+          {
+            target: "hue",
+            state: "Reconnecting",
+            code: "TRANSIENT_RETRY_SCHEDULED",
+            message: "reconnecting",
+            remainingAttempts: 2,
+            nextAttemptMs: 1200,
+          },
           { target: "usb", state: "Running", code: "USB_STREAM_RUNNING", message: "running" },
         ],
         retryRuntimeTarget,
@@ -126,6 +134,7 @@ describe("DeviceSection hue runtime controls", () => {
     render(<DeviceSection />);
 
     expect(screen.getByRole("button", { name: "device.hue.runtime.targets.hue.retry" })).toBeDisabled();
+    expect(screen.getByText("device.hue.runtime.retryStatus")).toBeInTheDocument();
 
     const usbRetry = screen.getByRole("button", { name: "device.hue.runtime.targets.usb.retry" });
     expect(usbRetry).toBeEnabled();
