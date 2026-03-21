@@ -26,12 +26,33 @@ pub trait AmbilightFrameSource: Send {
 }
 
 pub fn sample_led_frame(
-    _frame: &CapturedFrame,
-    _calibration: &SamplingCalibration,
+    frame: &CapturedFrame,
+    calibration: &SamplingCalibration,
 ) -> Result<SampledLedFrame, AmbilightCaptureError> {
-    Ok(SampledLedFrame {
-        colors: vec![[0, 0, 0]; 4],
-    })
+    if frame.width == 0 || frame.height == 0 {
+        return Err(AmbilightCaptureError::InvalidFrame(
+            "FRAME_DIMENSIONS_INVALID",
+        ));
+    }
+
+    let expected_pixels = (frame.width as usize).saturating_mul(frame.height as usize);
+    if frame.pixels_rgb.len() != expected_pixels {
+        return Err(AmbilightCaptureError::InvalidFrame(
+            "FRAME_PIXEL_COUNT_MISMATCH",
+        ));
+    }
+
+    if calibration.led_count == 0 {
+        return Err(AmbilightCaptureError::InvalidFrame("LED_COUNT_INVALID"));
+    }
+
+    let mut colors = Vec::with_capacity(calibration.led_count);
+    for led_index in 0..calibration.led_count {
+        let source_index = led_index % frame.pixels_rgb.len();
+        colors.push(frame.pixels_rgb[source_index]);
+    }
+
+    Ok(SampledLedFrame { colors })
 }
 
 #[cfg(test)]
