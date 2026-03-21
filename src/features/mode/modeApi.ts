@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { DEVICE_COMMANDS } from "../../shared/contracts/device";
+import {
+  HUE_COMMANDS,
+  HUE_RUNTIME_TRIGGER_SOURCE,
+  type HueRuntimeActionHint,
+  type HueRuntimeState,
+  type HueRuntimeTriggerSource,
+} from "../../shared/contracts/hue";
 import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
 
 export interface ModeApiError {
@@ -16,6 +23,27 @@ export interface ModeCommandResult {
     code: string;
     message: string;
     details: string | null;
+  };
+}
+
+export interface StartHuePayload {
+  bridgeIp: string;
+  username: string;
+  areaId: string;
+  triggerSource?: HueRuntimeTriggerSource;
+}
+
+export interface HueRuntimeCommandResult {
+  active: boolean;
+  status: {
+    state: HueRuntimeState;
+    code: string;
+    message: string;
+    details: string | null;
+    triggerSource: HueRuntimeTriggerSource;
+    remainingAttempts?: number;
+    nextAttemptMs?: number;
+    actionHint?: HueRuntimeActionHint;
   };
 }
 
@@ -67,6 +95,37 @@ export async function stopLighting(invoker: ModeInvoker = defaultInvoke): Promis
 export async function getLightingModeStatus(invoker: ModeInvoker = defaultInvoke): Promise<ModeCommandResult> {
   try {
     return await invoker<ModeCommandResult>(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS);
+  } catch (error) {
+    throw mapModeApiError(error);
+  }
+}
+
+export async function startHue(
+  payload: StartHuePayload,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<HueRuntimeCommandResult> {
+  try {
+    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.START_STREAM, {
+      request: {
+        bridgeIp: payload.bridgeIp,
+        username: payload.username,
+        areaId: payload.areaId,
+        triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
+      },
+    });
+  } catch (error) {
+    throw mapModeApiError(error);
+  }
+}
+
+export async function stopHue(
+  triggerSource: HueRuntimeTriggerSource = HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
+  invoker: ModeInvoker = defaultInvoke,
+): Promise<HueRuntimeCommandResult> {
+  try {
+    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.STOP_STREAM, {
+      triggerSource,
+    });
   } catch (error) {
     throw mapModeApiError(error);
   }

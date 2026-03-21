@@ -32,8 +32,15 @@ import {
 } from "./features/mode/model/contracts";
 import {
   setLightingMode,
+  startHue,
   stopLighting,
+  stopHue,
 } from "./features/mode/modeApi";
+import {
+  applyRuntimeResultToTargets,
+  resolveHueRuntimePlan,
+  type HueTargetCommandResult,
+} from "./features/mode/state/hueModeRuntimeFlow";
 import {
   normalizeLedCalibrationConfig,
   type LedCalibrationConfig,
@@ -47,11 +54,62 @@ import {
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
+import type { HueRuntimeTarget } from "./shared/contracts/hue";
+
+const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
+
+interface HueStartConfig {
+  bridgeIp: string;
+  username: string;
+  areaId: string;
+}
+
+function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
+  if (!Array.isArray(value)) {
+    return [...DEFAULT_OUTPUT_TARGETS];
+  }
+
+  const targetSet = new Set(value.filter((target): target is HueRuntimeTarget => target === "usb" || target === "hue"));
+  if (targetSet.size === 0) {
+    return [...DEFAULT_OUTPUT_TARGETS];
+  }
+
+  return ["usb", "hue"].filter((target): target is HueRuntimeTarget => targetSet.has(target as HueRuntimeTarget));
+}
+
+function toHueStartConfig(state: {
+  lastHueBridge?: { ip?: string };
+  hueAppKey?: string;
+  lastHueAreaId?: string;
+}): HueStartConfig | null {
+  const bridgeIp = state.lastHueBridge?.ip?.trim();
+  const username = state.hueAppKey?.trim();
+  const areaId = state.lastHueAreaId?.trim();
+
+  if (!bridgeIp || !username || !areaId) {
+    return null;
+  }
+
+  return { bridgeIp, username, areaId };
+}
+
+function isHueStartCodeOk(code: string): boolean {
+  return code === "HUE_STREAM_RUNNING"
+    || code === "HUE_STREAM_STARTING"
+    || code === "HUE_START_NOOP_ALREADY_ACTIVE";
+}
+
+function isHueStopCodeOk(code: string): boolean {
+  return code === "HUE_STREAM_STOPPED";
+}
 
 function App() {
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.GENERAL);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [lightingMode, setLightingModeState] = useState<LightingModeConfig>({ kind: LIGHTING_MODE_KIND.OFF });
+  const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
+  const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
+  const [hueStartConfig, setHueStartConfig] = useState<HueStartConfig | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayStep, setOverlayStep] = useState<CalibrationOverlayStep>("editor");
   const [lifecycleReady, setLifecycleReady] = useState(false);
@@ -65,7 +123,12 @@ function App() {
         const state = await loadShellState();
         setActiveSection(state.lastSection);
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
-        setLightingModeState(normalizeLightingModeConfig(state.lightingMode));
+        const restoredMode = normalizeLightingModeConfig(state.lightingMode);
+        const restoredTargets = normalizeOutputTargets((state as { lastOutputTargets?: unknown }).lastOutputTargets);
+        setLightingModeState(restoredMode);
+        setSelectedOutputTargets(restoredTargets);
+        setActiveOutputTargets(restoredMode.kind === LIGHTING_MODE_KIND.OFF ? [] : restoredTargets);
+        setHueStartConfig(toHueStartConfig(state as { lastHueBridge?: { ip?: string }; hueAppKey?: string; lastHueAreaId?: string }));
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
@@ -133,20 +196,82 @@ function App() {
 
       try {
         if (normalizedNextMode.kind === LIGHTING_MODE_KIND.OFF) {
-          await stopLighting();
-        } else {
-          await setLightingMode(normalizedNextMode);
+          const runtimePlan = resolveHueRuntimePlan({
+            action: "stop",
+            selectedTargets: selectedOutputTargets,
+            activeTargets: activeOutputTargets,
+            userInitiated: true,
+            reconnectingTargets: activeOutputTargets,
+          });
+
+          const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
+          for (const target of runtimePlan.stopTargets) {
+            if (target === "usb") {
+              await stopLighting();
+              targetResults.usb = { ok: true };
+            }
+
+            if (target === "hue") {
+              const hueResult = await stopHue();
+              targetResults.hue = {
+                ok: isHueStopCodeOk(hueResult.status.code),
+                code: hueResult.status.code,
+                message: hueResult.status.message,
+              };
+            }
+          }
+
+          const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
+          setActiveOutputTargets(merged.activeTargets);
+          setLightingModeState(normalizedNextMode);
+          await saveShellState({ lightingMode: normalizedNextMode });
+          return;
         }
 
-        setLightingModeState(normalizedNextMode);
+        const runtimePlan = resolveHueRuntimePlan({
+          action: "start",
+          selectedTargets: selectedOutputTargets,
+          activeTargets: activeOutputTargets,
+        });
 
-        await saveShellState({ lightingMode: normalizedNextMode });
+        const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
+        for (const target of runtimePlan.startTargets) {
+          if (target === "usb") {
+            await setLightingMode(normalizedNextMode);
+            targetResults.usb = { ok: true };
+          }
+
+          if (target === "hue") {
+            if (!hueStartConfig) {
+              targetResults.hue = {
+                ok: false,
+                code: "CONFIG_NOT_READY_GATE_BLOCKED",
+                message: "Hue start requires bridge, credential, and area configuration.",
+              };
+              continue;
+            }
+
+            const hueResult = await startHue(hueStartConfig);
+            targetResults.hue = {
+              ok: isHueStartCodeOk(hueResult.status.code),
+              code: hueResult.status.code,
+              message: hueResult.status.message,
+            };
+          }
+        }
+
+        const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
+        setActiveOutputTargets(merged.activeTargets);
+        if (merged.activeTargets.length > 0) {
+          setLightingModeState(normalizedNextMode);
+          await saveShellState({ lightingMode: normalizedNextMode });
+        }
       } catch (error) {
         const modeLabel = normalizedNextMode.kind;
         console.error(`[LumaSync] Failed to switch lighting mode to ${modeLabel}:`, error);
       }
     },
-    [openCalibrationOverlay, savedCalibration],
+    [activeOutputTargets, hueStartConfig, openCalibrationOverlay, savedCalibration, selectedOutputTargets],
   );
 
   const modeGuard = canEnableLedMode(savedCalibration);

@@ -47,8 +47,7 @@ export function resolveHueRuntimePlan(input: HueRuntimePlanInput): HueRuntimePla
   const reconnectingTargets = normalizeTargets(input.reconnectingTargets ?? []);
 
   if (input.action === "start") {
-    const activeSet = new Set(activeBefore);
-    const startTargets = selectedTargets.filter((target) => !activeSet.has(target));
+    const startTargets = [...selectedTargets];
 
     return {
       action: "start",
