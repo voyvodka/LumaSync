@@ -9,6 +9,7 @@ import { DeviceSection } from "./sections/DeviceSection";
 import { CalibrationSection } from "./sections/CalibrationSection";
 import type { LedCalibrationConfig } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
+import type { LightingModeConfig } from "../mode/model/contracts";
 
 interface SectionMeta {
   id: SectionId;
@@ -19,25 +20,25 @@ interface SectionMeta {
 function SectionContent({
   sectionId,
   calibration,
-  ledModeEnabled,
+  lightingMode,
   modeLockReason,
-  onLedModeChange,
+  onLightingModeChange,
   onEditCalibration,
 }: {
   sectionId: SectionId;
   calibration?: LedCalibrationConfig;
-  ledModeEnabled: boolean;
+  lightingMode: LightingModeConfig;
   modeLockReason: ModeGuardReason | null;
-  onLedModeChange: (nextEnabled: boolean) => void;
+  onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onEditCalibration: () => void;
 }) {
   switch (sectionId) {
     case SECTION_IDS.GENERAL:
       return (
         <GeneralSection
-          ledModeEnabled={ledModeEnabled}
+          mode={lightingMode}
           modeLockReason={modeLockReason}
-          onLedModeChange={onLedModeChange}
+          onModeChange={onLightingModeChange}
           onOpenCalibrationOverlay={onEditCalibration}
         />
       );
@@ -54,9 +55,9 @@ function SectionContent({
     default:
       return (
         <GeneralSection
-          ledModeEnabled={ledModeEnabled}
+          mode={lightingMode}
           modeLockReason={modeLockReason}
-          onLedModeChange={onLedModeChange}
+          onModeChange={onLightingModeChange}
           onOpenCalibrationOverlay={onEditCalibration}
         />
       );
@@ -67,9 +68,9 @@ interface SettingsLayoutProps {
   activeSection: SectionId;
   onSectionChange: (sectionId: SectionId) => void;
   calibration?: LedCalibrationConfig;
-  ledModeEnabled: boolean;
+  lightingMode: LightingModeConfig;
   modeLockReason: ModeGuardReason | null;
-  onLedModeChange: (nextEnabled: boolean) => void;
+  onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onEditCalibration: () => void;
 }
 
@@ -77,9 +78,9 @@ export function SettingsLayout({
   activeSection,
   onSectionChange,
   calibration,
-  ledModeEnabled,
+  lightingMode,
   modeLockReason,
-  onLedModeChange,
+  onLightingModeChange,
   onEditCalibration,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
@@ -169,9 +170,9 @@ export function SettingsLayout({
         <SectionContent
           sectionId={activeSection}
           calibration={calibration}
-          ledModeEnabled={ledModeEnabled}
+          lightingMode={lightingMode}
           modeLockReason={modeLockReason}
-          onLedModeChange={onLedModeChange}
+          onLightingModeChange={onLightingModeChange}
           onEditCalibration={onEditCalibration}
         />
       </main>

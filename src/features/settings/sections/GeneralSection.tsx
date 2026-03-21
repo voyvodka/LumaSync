@@ -4,6 +4,11 @@ import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
 } from "../../mode/state/modeGuard";
+import {
+  LIGHTING_MODE_KIND,
+  normalizeLightingModeConfig,
+  type LightingModeConfig,
+} from "../../mode/model/contracts";
 
 export interface GeneralModeLockState {
   reason: ModeGuardReason | null;
@@ -30,21 +35,59 @@ export function triggerCalibrationFromLock(
 }
 
 interface GeneralSectionProps {
-  ledModeEnabled: boolean;
+  mode: LightingModeConfig;
   modeLockReason: ModeGuardReason | null;
-  onLedModeChange: (nextEnabled: boolean) => void;
+  onModeChange: (nextMode: LightingModeConfig) => void;
   onOpenCalibrationOverlay: () => void;
 }
 
+function toHexPair(value: number): string {
+  return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
+}
+
+function toHexColor(mode: LightingModeConfig): string {
+  const normalized = normalizeLightingModeConfig(mode);
+  if (normalized.kind !== LIGHTING_MODE_KIND.SOLID || !normalized.solid) {
+    return "#ffffff";
+  }
+
+  return `#${toHexPair(normalized.solid.r)}${toHexPair(normalized.solid.g)}${toHexPair(normalized.solid.b)}`;
+}
+
+function parseHexColor(value: string): { r: number; g: number; b: number } {
+  const safe = value.startsWith("#") ? value.slice(1) : value;
+  if (!/^[0-9a-fA-F]{6}$/.test(safe)) {
+    return { r: 255, g: 255, b: 255 };
+  }
+
+  return {
+    r: Number.parseInt(safe.slice(0, 2), 16),
+    g: Number.parseInt(safe.slice(2, 4), 16),
+    b: Number.parseInt(safe.slice(4, 6), 16),
+  };
+}
+
 export function GeneralSection({
-  ledModeEnabled,
+  mode,
   modeLockReason,
-  onLedModeChange,
+  onModeChange,
   onOpenCalibrationOverlay,
 }: GeneralSectionProps) {
   const { t } = useTranslation("common");
   const lockState = getGeneralModeLockState(modeLockReason);
-  const modeToggleDisabled = lockState.showReason;
+  const modeSelectorDisabled = lockState.showReason;
+  const normalizedMode = normalizeLightingModeConfig(mode);
+  const solidPayload = normalizedMode.solid ?? {
+    r: 255,
+    g: 255,
+    b: 255,
+    brightness: 1,
+  };
+
+  const activeKind = normalizedMode.kind;
+  const isOff = activeKind === LIGHTING_MODE_KIND.OFF;
+  const isAmbilight = activeKind === LIGHTING_MODE_KIND.AMBILIGHT;
+  const isSolid = activeKind === LIGHTING_MODE_KIND.SOLID;
 
   return (
     <section className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
@@ -54,33 +97,116 @@ export function GeneralSection({
       </p>
 
       <div className="mt-6 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-700 dark:bg-zinc-800/40">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("general.mode.title")}</p>
-            <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{t("general.mode.description")}</p>
-          </div>
+        <div>
+          <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("general.mode.title")}</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{t("general.mode.description")}</p>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <button
             type="button"
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600 ${
-              ledModeEnabled
-                ? "bg-slate-900 dark:bg-zinc-100"
-                : "bg-slate-300 dark:bg-zinc-700"
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isOff
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
             }`}
-            disabled={modeToggleDisabled}
-            aria-disabled={modeToggleDisabled}
-            aria-pressed={ledModeEnabled}
-            aria-label={t("general.mode.toggleLabel")}
-            onClick={() => {
-              onLedModeChange(!ledModeEnabled);
-            }}
+            aria-pressed={isOff}
+            onClick={() => onModeChange({ kind: LIGHTING_MODE_KIND.OFF })}
           >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform dark:bg-zinc-900 ${
-                ledModeEnabled ? "translate-x-5" : "translate-x-1"
-              }`}
-            />
+            {t("general.mode.options.off")}
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isAmbilight
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
+            }`}
+            disabled={modeSelectorDisabled}
+            aria-disabled={modeSelectorDisabled}
+            aria-pressed={isAmbilight}
+            onClick={() =>
+              onModeChange({
+                kind: LIGHTING_MODE_KIND.AMBILIGHT,
+                ambilight: {
+                  brightness: normalizedMode.ambilight?.brightness ?? 1,
+                },
+              })
+            }
+          >
+            {t("general.mode.options.ambilight")}
+          </button>
+          <button
+            type="button"
+            className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              isSolid
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700 dark:hover:bg-zinc-800"
+            }`}
+            disabled={modeSelectorDisabled}
+            aria-disabled={modeSelectorDisabled}
+            aria-pressed={isSolid}
+            onClick={() =>
+              onModeChange({
+                kind: LIGHTING_MODE_KIND.SOLID,
+                solid: {
+                  r: solidPayload.r,
+                  g: solidPayload.g,
+                  b: solidPayload.b,
+                  brightness: solidPayload.brightness,
+                },
+              })
+            }
+          >
+            {t("general.mode.options.solid")}
           </button>
         </div>
+
+        {isSolid ? (
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm text-slate-700 dark:text-zinc-200">
+              {t("general.mode.solidColor")}
+              <input
+                type="color"
+                aria-label={t("general.mode.solidColor")}
+                disabled={modeSelectorDisabled}
+                value={toHexColor(normalizedMode)}
+                onChange={(event) => {
+                  const nextColor = parseHexColor(event.currentTarget.value);
+                  onModeChange({
+                    kind: LIGHTING_MODE_KIND.SOLID,
+                    solid: {
+                      ...solidPayload,
+                      ...nextColor,
+                    },
+                  });
+                }}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700 dark:text-zinc-200">
+              {t("general.mode.brightness")}
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                disabled={modeSelectorDisabled}
+                aria-label={t("general.mode.brightness")}
+                value={solidPayload.brightness}
+                onChange={(event) => {
+                  const nextBrightness = Number.parseFloat(event.currentTarget.value);
+                  onModeChange({
+                    kind: LIGHTING_MODE_KIND.SOLID,
+                    solid: {
+                      ...solidPayload,
+                      brightness: Number.isFinite(nextBrightness) ? nextBrightness : solidPayload.brightness,
+                    },
+                  });
+                }}
+              />
+            </label>
+          </div>
+        ) : null}
 
         {lockState.showReason ? (
           <div className="mt-3 rounded-lg border border-amber-300/60 bg-amber-50/80 p-3 text-sm text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-200">

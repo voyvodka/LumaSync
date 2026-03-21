@@ -23,8 +23,14 @@
     "description": "General application settings.",
     "mode": {
       "title": "LED mode",
-      "description": "Enable realtime LED output after calibration is complete.",
-      "toggleLabel": "Toggle LED mode",
+      "description": "Choose output mode and tune static color when needed.",
+      "options": {
+        "off": "Off",
+        "ambilight": "Ambilight",
+        "solid": "Solid"
+      },
+      "solidColor": "Solid color",
+      "brightness": "Brightness",
       "lockedReasonCalibration": "Complete calibration before enabling LED mode.",
       "openCalibration": "Open calibration"
     }

@@ -50,9 +50,9 @@ describe("CalibrationSection", () => {
       <SettingsLayout
         activeSection={SECTION_IDS.CALIBRATION}
         onSectionChange={vi.fn()}
-        ledModeEnabled={false}
+        lightingMode={{ kind: "off" }}
         modeLockReason={null}
-        onLedModeChange={vi.fn()}
+        onLightingModeChange={vi.fn()}
         onEditCalibration={vi.fn()}
       />,
     );

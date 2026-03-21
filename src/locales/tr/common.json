@@ -23,8 +23,14 @@
     "description": "Genel uygulama ayarları.",
     "mode": {
       "title": "LED modu",
-      "description": "Gerçek zamanlı LED çıkışını yalnızca kalibrasyon tamamlandığında etkinleştirin.",
-      "toggleLabel": "LED modunu değiştir",
+      "description": "Çıkış modunu seç ve gerektiğinde sabit rengi ayarla.",
+      "options": {
+        "off": "Kapalı",
+        "ambilight": "Ambilight",
+        "solid": "Sabit"
+      },
+      "solidColor": "Sabit renk",
+      "brightness": "Parlaklık",
       "lockedReasonCalibration": "LED modunu etkinleştirmeden önce kalibrasyonu tamamlayın.",
       "openCalibration": "Kalibrasyonu aç"
     }

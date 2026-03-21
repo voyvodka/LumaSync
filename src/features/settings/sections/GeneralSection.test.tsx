@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MODE_GUARD_REASONS } from "../../mode/state/modeGuard";
@@ -51,24 +52,37 @@ describe("GeneralSection", () => {
   });
 
   it("updates solid payload when color is changed in solid mode", async () => {
-    const user = userEvent.setup();
     const onModeChange = vi.fn();
 
-    render(
-      <GeneralSection
-        mode={{ kind: "solid", solid: { r: 255, g: 255, b: 255, brightness: 1 } }}
-        modeLockReason={null}
-        onModeChange={onModeChange}
-        onOpenCalibrationOverlay={vi.fn()}
-      />,
-    );
+    function Harness() {
+      const [mode, setMode] = useState<LightingModeConfig>({
+        kind: "solid",
+        solid: { r: 255, g: 255, b: 255, brightness: 1 },
+      });
 
-    await user.clear(screen.getByLabelText("Brightness"));
-    await user.type(screen.getByLabelText("Brightness"), "0.35");
-    await user.clear(screen.getByLabelText("Solid color"));
-    await user.type(screen.getByLabelText("Solid color"), "#00ff00");
+      return (
+        <GeneralSection
+          mode={mode}
+          modeLockReason={null}
+          onModeChange={(nextMode) => {
+            setMode(nextMode);
+            onModeChange(nextMode);
+          }}
+          onOpenCalibrationOverlay={vi.fn()}
+        />
+      );
+    }
 
-    expect(onModeChange).toHaveBeenCalledWith({
+    render(<Harness />);
+
+    fireEvent.change(screen.getByLabelText("Brightness"), {
+      target: { value: "0.35" },
+    });
+    fireEvent.change(screen.getByLabelText("Solid color"), {
+      target: { value: "#00ff00" },
+    });
+
+    expect(onModeChange).toHaveBeenLastCalledWith({
       kind: "solid",
       solid: { r: 0, g: 255, b: 0, brightness: 0.35 },
     } satisfies LightingModeConfig);
