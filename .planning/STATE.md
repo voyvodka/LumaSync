@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-current_plan: 2
-status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-03-21T16:22:10.967Z"
+milestone_name: MVP
+current_plan: 0
+status: milestone_complete
+stopped_at: v1.0 archived and tagged
+last_updated: "2026-03-21T20:00:00.000Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 8
@@ -19,185 +19,21 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-21)
+See: `.planning/PROJECT.md` (updated 2026-03-21)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 8 - Stability Gate
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 8 of 8 (Stability Gate)
-Current Plan: 2
-Total Plans in Phase: 2
-Status: Ready to execute
+Milestone: v1.0 (MVP)
+Status: Complete and archived
 Last activity: 2026-03-21
 
 Progress: [██████████] 100%
 
-## Performance Metrics
-
-**Velocity:**
-- Total plans completed: 5
-- Average duration: ~4 min
-- Total execution time: 0.35 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01-app-shell-and-baseline-defaults | 5 | 21 min | 4 min |
-
-**Recent Trend:**
-- Last 5 plans: -
-- Trend: Stable
-| Phase 01-app-shell-and-baseline-defaults P01 | 8min | 2 tasks | 10 files |
-| Phase 01-app-shell-and-baseline-defaults P03 | 4min | 2 tasks | 11 files |
-| Phase 01-app-shell-and-baseline-defaults P02 | 4min | 3 tasks | 11 files |
-| Phase 01 P04 | 4 min | 3 tasks | 5 files |
-| Phase 01 P05 | 1 min | 2 tasks | 3 files |
-| Phase 02 P02 | 4 min | 2 tasks | 5 files |
-| Phase 02 P01 | 4 min | 2 tasks | 7 files |
-| Phase 02 P03 | 6 min | 2 tasks | 7 files |
-| Phase 02 P04 | 3 min | 2 tasks | 5 files |
-| Phase 03 P03 | 2 min | 2 tasks | 5 files |
-| Phase 04 P01 | 4 min | 2 tasks | 8 files |
-| Phase 04 P02 | 5 min | 2 tasks | 12 files |
-| Phase 04 P03 | 5 min | 2 tasks | 11 files |
-| Phase 04 P04 | 0 min | 2 tasks | 4 files |
-| Phase 04 P05 | 3 min | 1 tasks | 3 files |
-| Phase 04 P06 | 1 min | 1 tasks | 4 files |
-| Phase 04 P07 | 1 min | 1 tasks | 2 files |
-| Phase 04 P09 | 4 min | 2 tasks | 8 files |
-| Phase 04 P08 | 1 min | 4 tasks | 5 files |
-| Phase 04 P10 | 5 min | 2 tasks | 9 files |
-| Phase 04 P12 | 6 min | 2 tasks | 12 files |
-| Phase 04 P11 | 1 min | 3 tasks | 2 files |
-| Phase 04 P13 | 330 | 2 tasks | 4 files |
-| Phase 04 P14 | 2273 | 3 tasks | 5 files |
-| Phase 04 P15 | 3 min | 2 tasks | 4 files |
-| Phase 05 P01 | 4 min | 2 tasks | 9 files |
-| Phase 05 P02 | 6 min | 2 tasks | 5 files |
-| Phase 05 P03 | 17 min | 3 tasks | 8 files |
-| Phase 05 P04 | 12 min | 3 tasks | 5 files |
-| Phase 05 P05 | 7 min | 3 tasks | 4 files |
-| Phase 05 P06 | 7 min | 3 tasks | 3 files |
-| Phase 06 P01 | 0 min | 3 tasks | 2 files |
-| Phase 06 P02 | 6 min | 3 tasks | 4 files |
-| Phase 07 P01 | 5 min | 2 tasks | 7 files |
-| Phase 07 P03 | 7 min | 2 tasks | 6 files |
-| Phase 07 P02 | 7 min | 3 tasks | 6 files |
-| Phase 08 P01 | 2 min | 2 tasks | 2 files |
-| Phase 08 P02 | 1 min | 3 tasks | 4 files |
-
-## Accumulated Context
-
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Phase structure follows requirement-driven delivery with 8 phases (fine granularity).
-- Connection and resilience are separated to keep recovery behavior independently verifiable.
-- Stability certification is isolated as final release gate.
-- [Phase 01-app-shell-and-baseline-defaults]: Used official Tauri v2 plugins over hand-rolled alternatives — Registered single-instance plugin first in builder chain (required per plugin docs)
-- [Phase 01-app-shell-and-baseline-defaults]: Shell contracts file (shell.ts) is single source of truth for all tray/section IDs — Downstream modules must import from contracts file, never use magic strings
-- [Phase 01-app-shell-and-baseline-defaults]: SettingsLayout as controlled component — App.tsx owns section state for persistence — Section state is owned by the shell, not SettingsLayout — cleaner separation
-- [Phase 01-app-shell-and-baseline-defaults]: CSS design tokens via :root variables — no Tailwind framework to keep bundle lean — Tailwind not set up; plain CSS tokens provide light/dark support without framework overhead
-- [Phase 01-app-shell-and-baseline-defaults]: resolveInitialLanguage() enforces English on first launch — I18N-02 wins over context system-locale preference; one-line switch-point documented for future migration
-- [Phase 01-app-shell-and-baseline-defaults]: i18next initialised before React render (main.tsx bootstrap) to prevent hydration flicker — language available synchronously on first render
-- [Phase 01]: Removed app.trayIcon from tauri.conf.json and kept runtime TrayIconBuilder as the only tray creator.
-- [Phase 01]: Startup checkmark state is synchronized explicitly from frontend using set_tray_startup_checked invoke command.
-- [Phase 01]: macOS close interception exits fullscreen before hide-to-tray to avoid compositor artifacts.
-- [Phase 01]: macOS fullscreen close handling now uses a staged fullscreen-exit then delayed hide-to-tray flow to reduce compositor artifacts.
-- [Phase 01]: resolveInitialLanguage production policy stays unchanged; failure-path fallback is protected with explicit load-rejection regression coverage.
-- [Phase 02]: Supported USB karari backend tarafinda VID/PID allowlist ile uretilir
-- [Phase 02]: Connect aksiyonu auto-retry olmadan tek explicit deneme olarak tutulur
-- [Phase 02]: Supported and unsupported ports are split into deterministic groups with supported listed first.
-- [Phase 02]: Initial selection prefers lastSuccessfulPort when present; otherwise first supported port.
-- [Phase 02]: Remembered port persistence remains success-only and explicit connect is never auto-triggered on selection.
-- [Phase 02]: Device connection behavior now runs through a controller+hook state machine for testability
-- [Phase 02]: Refresh keeps existing port rows visible while status changes to scanning
-- [Phase 02]: Remembered port persistence remains success-only after explicit connect
-- [Phase 02]: Refresh cooldown defaults to 250ms and is bounded to 100-300ms for safe repeat attempts.
-- [Phase 02]: Blocked refresh attempts emit REFRESH_RATE_LIMITED info status instead of triggering scan state.
-- [Phase 03]: Health-check step data is exposed from buildDeviceStatusCard as a render-ready model.
-- [Phase 03]: Health-check step order is deterministic: PORT_VISIBLE, PORT_SUPPORTED, CONNECT_AND_VERIFY.
-- [Phase 04]: Canonical LED traversal order is top -> right -> bottomRight -> bottomLeft -> left before anchor/direction transforms.
-- [Phase 04]: Validation keeps bottomGapPx visual-only and enforces totalLeds from segment count sums.
-- [Phase 04]: Wizard auto-open now derives from persisted connected-device state plus missing calibration snapshot.
-- [Phase 04]: Calibration persistence remains explicit-save only; cancel and close never write shell state.
-- [Phase 04]: Dirty-exit confirmation is centralized in calibrationEditorState normalized comparison helpers for deterministic behavior.
-- [Phase 04]: Test pattern animation uses requestAnimationFrame timing instead of interval polling.
-- [Phase 04]: Disconnected hardware path returns preview-only mode and never blocks calibration save.
-- [Phase 04]: Calibration command IDs are appended to shared DEVICE_COMMANDS contract for TS/Rust parity.
-- [Phase 04]: Validation errors are rendered as code+field pairs from validation.ts for immediate gap closure without new i18n surface
-- [Phase 04]: bottomGapPx editor input clamps invalid and negative values at input boundary to keep state valid-by-default
-- [Phase 04]: Kept generic testPatternFlow callback signature unchanged and resolved hardware ledIndexes inside createDefaultTestPatternFlow via buildLedSequence.
-- [Phase 04]: CalibrationOverlay now pushes editorState.current into flow.setConfig so each next toggle uses latest calibration mapping.
-- [Phase 04]: Introduced resolveLedSequenceItem as shared marker-index normalization contract for calibration mapping consumers.
-- [Phase 04]: Overlay marker segment and segment-order pills now derive from one memoized buildLedSequence output for deterministic parity.
-- [Phase 04]: Hardening scope remained test-only for 04-07; production calibration code was intentionally unchanged.
-- [Phase 04]: CAL-04 parity behavior is now guarded by focused markerIndex/setConfig and physical-index orientation regression tests.
-- [Phase 04]: Mode lock reason code standardized as CALIBRATION_REQUIRED via modeGuard for App/UI parity.
-- [Phase 04]: General section keeps LED mode toggle visible but disabled with calibration CTA instead of hiding control.
-- [Phase 04]: Physical payload and overlay active marker derivation stay coupled to resolveLedSequenceItem to avoid preview/strip drift.
-- [Phase 04]: Marker normalization uses deterministic sequence fallback for invalid marker values to keep CAL-04 parity stable.
-- [Phase 04]: Display hedefi varsayilan olarak birincil monitore ayarlaniyor.
-- [Phase 04]: Overlay acma hatalari code+reason ile UI'da bloke mesajina donusturuluyor.
-- [Phase 04]: Auto-open trigger now evaluates live connection false-to-true transition with no calibration and one-shot session guard.
-- [Phase 04]: Settings Calibration Edit action reuses the existing calibration overlay entrypoint rather than a separate modal flow.
-- [Phase 04]: Task 2 checkpoint approved sonucu hardware UAT artifacti resmi final kanit olarak kaydedildi
-- [Phase 04]: 04-VERIFICATION status human_needed yerine complete olarak kapatildi ve UAT evidence baglandi
-- [Phase 04]: Overlay open failures keep runtime overlay state empty and return OVERLAY_OPEN_FAILED with reason.
-- [Phase 04]: Display target retries remain blocked until blocked snapshot is explicitly cleared.
-- [Phase 04]: UAT checkpoint approved sonucu Test 2/7/8/9 icin resmi gap closure kaniti olarak kabul edildi.
-- [Phase 04]: Overlay sizing icin monitor-target fullscreen stratejisi manual inner-size yerine kalici cozum olarak secildi.
-- [Phase 04]: Overview details keep canonical edge order top-right-bottomRight-bottomLeft-left for quick visual validation.
-- [Phase 04]: Not-configured section keeps edit entrypoint unchanged while replacing zero-focused fallback with helper guidance.
-- [Phase 05]: Mode transition output is always transactional: stop first, then start next mode when next kind is not off.
-- [Phase 05]: Lighting mode shell persistence is merge-only and never overwrites ledCalibration data.
-- [Phase 05]: Lighting mode runtime source of truth backend Mutex state olarak kilitlendi.
-- [Phase 05]: Mode gecislerinde stop_previous adimi start once zorunlu hale getirildi.
-- [Phase 05]: Disconnected durumda DEVICE_NOT_CONNECTED donup aktif runtime state degismiyor.
-- [Phase 05]: General mode interaction model standardized on LightingModeConfig across App -> SettingsLayout -> GeneralSection.
-- [Phase 05]: Mode persistence writes remain partial ({ lightingMode }) so ledCalibration data is never overwritten.
-- [Phase 05]: Solid ve Ambilight cikisi ayni packet encoder kuraliyla tek led_output bridge katmaninda birlestirildi.
-- [Phase 05]: Ambilight runtime sleep-loop yerine frame olusturma + cihaza gonderim akisiyla calisacak sekilde degistirildi.
-- [Phase 05]: Verification kapanisi kod seviyesinde gap'ler kapatildiktan sonra UAT kaniti ile yeniden senkronize edildi.
-- [Phase 05]: Ambilight runtime frame uretimi lighting_mode icindeki sentetik builder'dan ayrilip ambilight_capture kontratina alindi.
-- [Phase 05]: Capture kaynakli start hatalari worker baslangicinda erken-fail edilerek AMBILIGHT_MODE_START_FAILED altinda detail reason ile raporlanir.
-- [Phase 05]: MODE-01 closure claim'i varsayilan source canli ekran capture etmedigi icin blocker olarak verification raporunda acik tutulur.
-- [Phase 05]: Runtime default frame source switched to create_live_frame_source; StaticFrameSource is no longer production default.
-- [Phase 05]: Non-Windows path explicitly fails with AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM instead of any silent fallback.
-- [Phase 06]: Runtime quality behavior is isolated in a pure Rust controller API to keep worker-loop logic deterministic and testable.
-- [Phase 06]: Adaptive pacing interval scales from EWMA observed cost and is clamped by config bounds to avoid runaway timing.
-- [Phase 06]: Capture bursts are handled with latest-frame slot semantics so backlog does not grow.
-- [Phase 06]: Ambilight worker uses RuntimeQualityController + RuntimeFrameSlot in hot loop instead of fixed 16ms sleep pacing.
-- [Phase 06]: Serial output now caches per-port write sessions and drops the cached session only on write/flush failure.
-- [Phase 06]: Wave 0 validation map is marked complete with runtime_quality and lighting_mode test coverage; TS contract wave item treated as N/A because no quality payload extension was introduced.
-- [Phase 07]: Queue health is derived from latest-slot overwrite pressure bands (healthy/warning/critical), not raw queue length.
-- [Phase 07]: Telemetry metrics are aggregated in a 1-second Rust window and exposed via pull command snapshots.
-- [Phase 07]: Telemetry command/state contracts are appended to existing shared shell/device contracts for parity-safe frontend wiring.
-- [Phase 07]: Polling interval 750ms olarak sabit tutuldu; push/event modeli bu faz kapsaminda eklenmedi.
-- [Phase 07]: UI tarafinda rust snapshot verisi mapRuntimeTelemetrySnapshot ile normalize edilmeden render edilmiyor.
-- [Phase 07]: SettingsLayout section sirasi korunarak telemetry append-only sekilde sectionMeta + SectionContent'e eklendi.
-- [Phase 07]: Locale parity guard compares flattened leaf key sets and reports missing-in-en / missing-in-tr separately.
-- [Phase 07]: Language equivalence checks normalize regional tags (e.g. en-US -> en) to avoid redundant runtime writes.
-- [Phase 08]: Stability gate run is enforced as one uninterrupted 60-minute session with fixed T+ checkpoints.
-- [Phase 08]: Sustained degradation is fail-coded when same degradation persists for 2 consecutive checkpoints.
-- [Phase 08]: UAT approved sonucu sadece doldurulmus checkpoint ledger ve incident satiri uzerinden verification kararina tasindi.
-- [Phase 08]: QUAL-04 closeout durumu APPROVED kararina paralel olarak REQUIREMENTS ve VALIDATION dosyalarinda complete/true olarak senkronlandi.
-
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-None.
-
 ## Session Continuity
 
-Last session: 2026-03-21T16:18:20.801Z
-Stopped at: Completed 08-02-PLAN.md
-Resume file: None
+Last session: 2026-03-21
+Stopped at: v1.0 archived and tagged
+Resume file: `.planning/MILESTONES.md`

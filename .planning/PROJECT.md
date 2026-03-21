@@ -2,61 +2,73 @@
 
 ## What This Is
 
-LumaSync is a lightweight cross-platform desktop app that drives monitor backlight LEDs (WS2812B) based on live screen colors through USB-connected microcontrollers like Arduino. It targets a clean setup experience for makers and open-source users, while keeping runtime overhead low and behavior stable for long sessions. The app starts with Windows-first support and is designed to expand to additional platforms and advanced lighting modes over time.
+LumaSync, USB uzerinden baglanan WS2812B tabanli monitor arkasi LED sistemini canli ekran renkleriyle suren, tray-first masaustu uygulamasidir. v1.0 ile birlikte kurulum, kalibrasyon, temel modlar, runtime kalite kontrolu, telemetry gorunurlugu ve EN/TR dil destegi shipping seviyesine ulasmistir.
 
 ## Core Value
 
 Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
 
+## Current State
+
+- **Shipped version:** `v1.0` (2026-03-21)
+- **Milestone scope:** Phase 1-8 tamamlandi
+- **Release gate:** QUAL-04 (60 dakika stabilite) APPROVED
+- **Archive refs:** `.planning/milestones/v1.0-ROADMAP.md`, `.planning/milestones/v1.0-REQUIREMENTS.md`
+
 ## Requirements
 
 ### Validated
 
-(None yet - ship to validate)
+- ✓ User can connect to a USB serial LED controller through auto-detection with manual port fallback - v1.0
+- ✓ User can calibrate LED layout (start pixel, direction, edge counts, and gaps) with visual feedback - v1.0
+- ✓ User can run real-time Ambilight mode with soft color averaging that avoids harsh output - v1.0
+- ✓ User can use basic non-Ambilight lighting modes (for example solid color and basic presets) - v1.0
+- ✓ User can complete guided setup via wizard and then manage detailed options in an advanced panel - v1.0
+- ✓ User can observe runtime quality via telemetry and use setup/mode flows in both English and Turkish - v1.0
+- ✓ User can complete a 60-minute continuous run without crash or manual recovery - v1.0
 
 ### Active
 
-- [ ] User can connect to a USB serial LED controller through auto-detection with manual port fallback
-- [ ] User can calibrate LED layout (start pixel, direction, edge counts, and gaps) with visual feedback
-- [ ] User can run real-time Ambilight mode with soft color averaging that avoids harsh output
-- [ ] User can use basic non-Ambilight lighting modes (for example solid color and basic presets)
 - [ ] User can save and reuse lighting/calibration profiles
-- [ ] User can complete guided setup via wizard and then manage detailed options in an advanced panel
+- [ ] User can use richer preset effects beyond solid color
+- [ ] User can control multiple monitors/controllers with predictable orchestration
 
 ### Out of Scope
 
 - Wi-Fi or network-based device control (ESP/network transport) - defer until USB-first path is proven stable
-- Cloud sync for profiles/settings - unnecessary for v1 local-first workflow
-- Mobile app clients - desktop-first focus for initial release
+- Cloud sync for profiles/settings - unnecessary for local-first workflow
+- Mobile app clients - desktop-first focus
 - Advanced visual effect editor (timeline/node-based) - high complexity, defer to later milestone
-- Preset marketplace/plugin ecosystem - defer until core reliability and UX are validated
+- Preset marketplace/plugin ecosystem - defer until reliability and UX stay stable across next milestone
 
-## Context
+## Next Milestone Goals
 
-The initial audience is the creator and a small early tester group, but the project is intended to be public open source from day one. The user wants technical guidance because some stack choices are still uncertain, and expects research-backed decisions before locking architecture and implementation details. Existing open-source Ambilight projects should be used as references for design and technical patterns, but implementation should remain original and license-compliant.
-
-Hardware model for v1 is USB serial to Arduino-like controllers driving addressable WS2812B strips. Setup must support practical monitor geometry concerns (edge counts, start index, bottom/corner gaps) and provide fast-start templates plus deeper manual fallback. Reliability is a hard expectation: no crashes, graceful recovery from disconnects, and stable behavior during at least 1-hour continuous use.
+1. Profiles: kalibrasyon + mod konfigurasyonlarini isimli profil olarak kaydet/yukle.
+2. Presets: v1.0 solid disinda temel efekt setini genislet.
+3. Stabiliteyi koruyarak UX iyilestirmeleri: mevcut gate disiplini ve telemetry kanit akisini yeni kapsamda surdur.
 
 ## Constraints
 
-- **Platform**: Windows first - reduce capture/driver complexity for v1
-- **Transport**: USB serial only in v1 - broad compatibility with Arduino-like boards
-- **Hardware**: WS2812B addressable LEDs - primary supported strip family for v1
-- **Performance**: Balanced profile - smooth user experience with low system impact over absolute max throughput
-- **Stability**: No crash tolerance - app and firmware workflow must not destabilize user system
-- **Product Shape**: Tray app + full settings window - background operation with on-demand deep control
-- **Open Source**: MIT license target - low-friction adoption and contribution
+- **Platform**: Windows first
+- **Transport**: USB serial first
+- **Hardware**: WS2812B addressable LEDs
+- **Performance**: Balanced profile (smoothness + low system impact)
+- **Stability**: No crash tolerance in release gates
+- **Product Shape**: Tray app + full settings window
+- **Open Source**: MIT license target
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Prioritize smooth Ambilight in v1 | Core product promise and highest user value | - Pending |
-| Launch on Windows first | Lower platform risk for capture + USB path | - Pending |
-| Use USB serial transport for device communication | Simplest reliable path for Arduino-like hardware | - Pending |
-| Include setup wizard plus advanced control panel | Supports both quick start and power users | - Pending |
-| Include basic non-Ambilight modes and profile save in v1 | Expands day-to-day utility beyond screen mirroring | - Pending |
-| Use open-source projects as reference, implement original code | Preserve learning benefits while staying license-safe | - Pending |
+| Prioritize smooth Ambilight in v1 | Core product promise and highest user value | Implemented in v1.0 |
+| Launch on Windows first | Lower platform risk for capture + USB path | Implemented in v1.0 |
+| Use USB serial transport for device communication | Simplest reliable path for Arduino-like hardware | Implemented in v1.0 |
+| Include setup wizard plus advanced control panel | Supports both quick start and power users | Implemented in v1.0 |
+| Include basic non-Ambilight modes and profile save in v1 | Expands day-to-day utility beyond screen mirroring | Partially implemented (modes yes, profiles deferred) |
+| Runtime telemetry is pull-based and exposed as Rust-owned snapshots | Deterministic read path for UI observability with low coupling to worker lifecycle | Implemented in v1.0 |
+| EN/TR parity is enforced with deterministic key-set tests and base-language normalization | Prevent i18n drift and avoid redundant writes on regional locale tags | Implemented in v1.0 |
+| Use open-source projects as reference, implement original code | Preserve learning benefits while staying license-safe | Implemented in v1.0 |
 
 ---
-*Last updated: 2026-03-19 after initialization*
+*Last updated: 2026-03-21 after v1.0 milestone*
