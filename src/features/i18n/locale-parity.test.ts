@@ -3,8 +3,47 @@ import { describe, expect, it } from "vitest";
 import enCommon from "../../locales/en/common.json";
 import trCommon from "../../locales/tr/common.json";
 
-function assertLocaleKeyParity(_enLocale: unknown, _trLocale: unknown) {
-  throw new Error("Not implemented");
+function flattenKeys(node: unknown, prefix = ""): string[] {
+  if (node === null || typeof node !== "object" || Array.isArray(node)) {
+    return prefix ? [prefix] : [];
+  }
+
+  const entries = Object.entries(node as Record<string, unknown>).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+
+  if (entries.length === 0) {
+    return prefix ? [prefix] : [];
+  }
+
+  return entries.flatMap(([key, value]) => {
+    const nextPrefix = prefix ? `${prefix}.${key}` : key;
+
+    return flattenKeys(value, nextPrefix);
+  });
+}
+
+function assertLocaleKeyParity(enLocale: unknown, trLocale: unknown) {
+  const enKeys = flattenKeys(enLocale);
+  const trKeys = flattenKeys(trLocale);
+
+  const enKeySet = new Set(enKeys);
+  const trKeySet = new Set(trKeys);
+
+  const missingInEn = trKeys.filter((key) => !enKeySet.has(key));
+  const missingInTr = enKeys.filter((key) => !trKeySet.has(key));
+
+  if (missingInEn.length === 0 && missingInTr.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    [
+      "Locale key parity drift detected.",
+      `missing-in-en: ${JSON.stringify(missingInEn)}`,
+      `missing-in-tr: ${JSON.stringify(missingInTr)}`,
+    ].join("\n"),
+  );
 }
 
 describe("locale key parity", () => {
@@ -33,7 +72,7 @@ describe("locale key parity", () => {
     };
 
     expect(() => assertLocaleKeyParity(enFixture, trFixture)).toThrowError(
-      /missing-in-en:\s*\["settings.description", "startupTray.title"\].*missing-in-tr:\s*\["telemetry.title"\]/s,
+      /missing-in-en:\s*\["settings\.description","startupTray\.title"\].*missing-in-tr:\s*\["telemetry\.title"\]/s,
     );
   });
 });
