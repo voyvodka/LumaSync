@@ -174,7 +174,7 @@ export function SettingsLayout({
         </ul>
       </nav>
 
-      <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:py-8" role="main">
+      <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-10 sm:py-8" role="main">
         <SectionContent
           sectionId={activeSection}
           calibration={calibration}

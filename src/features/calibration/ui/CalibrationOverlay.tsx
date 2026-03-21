@@ -288,7 +288,7 @@ export function CalibrationOverlay({
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto overscroll-contain">
           {activeStep === "template" ? (
             <CalibrationTemplateStep
               selectedTemplateId={editorState.current.templateId}

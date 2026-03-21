@@ -99,18 +99,6 @@ impl RuntimeQualityController {
         Duration::from_millis(adaptive_ms.clamp(min_interval_ms, max_interval_ms))
     }
 
-    pub fn smooth_frame(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
-        self.smooth(target_frame)
-    }
-
-    pub fn observe_timing_sample(&mut self, sample: RuntimeTimingSample) {
-        self.observe_timing(sample.capture_cost_ms, sample.send_cost_ms);
-    }
-
-    pub fn current_interval(&self) -> Duration {
-        self.current_send_interval()
-    }
-
     pub fn should_send_now(&mut self, now: Instant) -> bool {
         let Some(last_sent_at) = self.last_sent_at else {
             self.last_sent_at = Some(now);

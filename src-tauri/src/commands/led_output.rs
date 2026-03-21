@@ -3,6 +3,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+#[cfg(test)]
 use super::device_connection::SerialConnectionState;
 
 const OUTPUT_BAUD_RATE: u32 = 115_200;
@@ -119,10 +120,12 @@ impl LedOutputBridge {
         }
     }
 
+    #[cfg(test)]
     pub fn from_sender(sender: Arc<dyn LedPacketSender>) -> Self {
         Self { sender }
     }
 
+    #[cfg(test)]
     pub fn send_packet(
         &self,
         connection_state: &SerialConnectionState,
@@ -190,6 +193,7 @@ pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
     packet
 }
 
+#[cfg(test)]
 pub fn apply_solid_payload(
     bridge: &LedOutputBridge,
     connection_state: &SerialConnectionState,
@@ -214,6 +218,7 @@ pub fn apply_solid_payload_to_port(
     bridge.send_packet_to_port(port_name, &packet)
 }
 
+#[cfg(test)]
 pub fn send_ambilight_frame(
     bridge: &LedOutputBridge,
     connection_state: &SerialConnectionState,

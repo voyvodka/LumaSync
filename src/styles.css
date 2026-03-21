@@ -14,9 +14,13 @@ body,
   margin: 0;
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
+  position: fixed;
+  inset: 0;
   background:
     radial-gradient(circle at 12% 20%, rgba(14, 116, 144, 0.14), transparent 45%),
     radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.2), transparent 52%),

@@ -17,6 +17,7 @@ pub struct SampledLedFrame {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AmbilightCaptureError {
+    #[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
     FrameUnavailable,
     InvalidFrame(&'static str),
 }
