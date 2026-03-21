@@ -471,7 +471,7 @@ pub fn get_lighting_mode_status(
 mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use std::sync::atomic::Ordering;
 
@@ -479,12 +479,13 @@ mod tests {
         AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
     };
     use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
+    use crate::commands::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig};
 
     use super::{
         apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
-        LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
-        ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS,
-        SOLID_OUTPUT_ATTEMPTS,
+        AmbilightWorkerQualityState, LightingModeConfig, LightingModeKind, LightingRuntimeOwner,
+        SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS,
+        AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
 
     #[derive(Default)]
@@ -719,5 +720,77 @@ mod tests {
             error.as_reason(),
             "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM".to_string()
         );
+    }
+
+    #[test]
+    fn quality_runtime_smoothes_frame_before_send_when_gate_opens() {
+        let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
+            smoothing_alpha: 0.5,
+            base_interval_ms: 1,
+            min_interval_ms: 1,
+            max_interval_ms: 32,
+            pressure_ewma_alpha: 1.0,
+        });
+        let mut slot = RuntimeFrameSlot::new();
+        let base = Instant::now();
+
+        quality.queue_processed_frame(&mut slot, &[[0, 0, 0]]);
+        quality.queue_processed_frame(&mut slot, &[[255, 255, 255]]);
+
+        let mut sent = Vec::new();
+        let send_due =
+            quality.try_send_latest(&mut slot, base + Duration::from_millis(2), |frame| {
+                sent.push(frame.to_vec());
+                Ok(())
+            });
+
+        assert!(send_due.expect("send attempt should succeed"));
+        assert_eq!(sent.len(), 1);
+        assert_eq!(sent[0], vec![[128, 128, 128]]);
+    }
+
+    #[test]
+    fn quality_runtime_coalesces_to_latest_frame_when_gate_is_closed() {
+        let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
+            smoothing_alpha: 1.0,
+            base_interval_ms: 60,
+            min_interval_ms: 8,
+            max_interval_ms: 120,
+            pressure_ewma_alpha: 1.0,
+        });
+        let mut slot = RuntimeFrameSlot::new();
+        let base = Instant::now();
+
+        quality.queue_processed_frame(&mut slot, &[[10, 10, 10]]);
+        let first = quality
+            .try_send_latest(&mut slot, base, |_| Ok(()))
+            .expect("first send should succeed");
+        assert!(first);
+
+        quality.queue_processed_frame(&mut slot, &[[20, 20, 20]]);
+        quality.queue_processed_frame(&mut slot, &[[30, 30, 30]]);
+
+        let blocked = quality
+            .try_send_latest(&mut slot, base + Duration::from_millis(1), |_| Ok(()))
+            .expect("gate check should succeed");
+        assert!(!blocked);
+        assert_eq!(slot.take_latest(), Some(vec![[30, 30, 30]]));
+    }
+
+    #[test]
+    fn quality_runtime_adapts_send_interval_under_high_cost() {
+        let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig {
+            smoothing_alpha: 1.0,
+            base_interval_ms: 16,
+            min_interval_ms: 8,
+            max_interval_ms: 80,
+            pressure_ewma_alpha: 1.0,
+        });
+
+        let baseline = quality.current_send_interval();
+        quality.observe_capture_and_send_cost(28.0, 24.0);
+        let adapted = quality.current_send_interval();
+
+        assert!(adapted > baseline);
     }
 }
