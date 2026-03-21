@@ -231,7 +231,7 @@
           "system": "Sistem recovery tarafindan tetiklendi"
         },
         "checklist": {
-          "title": "Baslatmadan once",
+          "title": "Baslatma kontrol listesi",
           "waitCredential": "Kimlik dogrulamasinin tamamlanmasini bekle.",
           "revalidate": "Hazirlik stale. Baslatmadan once yeniden dogrula."
         },

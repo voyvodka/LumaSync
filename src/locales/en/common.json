@@ -231,7 +231,7 @@
           "system": "Triggered by system recovery"
         },
         "checklist": {
-          "title": "Before Start",
+          "title": "Start checklist",
           "waitCredential": "Wait for credential validation to complete.",
           "revalidate": "Readiness is stale. Revalidate before Start."
         },
