@@ -76,6 +76,7 @@ pub struct HueRuntimeGateEvidence {
     pub auth_invalid_evidence: bool,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Debug)]
 struct HueRetryPolicy {
     max_attempts: u8,
@@ -98,6 +99,7 @@ struct HueRuntimeOwner {
     reconnect_attempt: u8,
     user_override_pending: bool,
     last_status: HueRuntimeStatus,
+    #[cfg_attr(not(test), allow(dead_code))]
     retry_policy: HueRetryPolicy,
 }
 
@@ -248,6 +250,7 @@ fn start_with_evidence(
     make_result(owner)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     let exponent = u32::from(attempt_index.saturating_sub(1));
     let factor = 2_u64.saturating_pow(exponent);
@@ -255,6 +258,7 @@ fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     raw.min(policy.cap_backoff_ms)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn register_transient_fault(
     owner: &mut HueRuntimeOwner,
     details: &str,
@@ -312,6 +316,7 @@ fn register_transient_fault(
     make_result(owner)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn register_auth_invalid(
     owner: &mut HueRuntimeOwner,
     details: &str,
@@ -442,6 +447,13 @@ fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
 mod tests {
     use super::*;
 
+    fn command_status_refresh_with_evidence(
+        owner: &mut HueRuntimeOwner,
+        _evidence: &HueRuntimeGateEvidence,
+    ) -> HueRuntimeCommandResult {
+        make_result(owner)
+    }
+
     fn strict_gate_ready() -> HueRuntimeGateEvidence {
         HueRuntimeGateEvidence {
             bridge_configured: true,
@@ -529,6 +541,69 @@ mod tests {
             register_auth_invalid(&mut owner, "unauthorized", HueRuntimeTriggerSource::System);
         assert_eq!(auth.status.code, "AUTH_INVALID_CREDENTIALS");
         assert_eq!(auth.status.action_hint, Some(HueRuntimeActionHint::Repair));
+    }
+
+    #[test]
+    fn command_status_refresh_marks_running_runtime_as_reconnecting_on_transient_fault() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let result = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
+
+        assert_eq!(result.status.state, HueRuntimeState::Reconnecting);
+        assert_eq!(result.status.code, "TRANSIENT_RETRY_SCHEDULED");
+    }
+
+    #[test]
+    fn command_status_refresh_exhausts_retry_budget_and_marks_failed() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let _ = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
+        let _ = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
+        let exhausted = command_status_refresh_with_evidence(&mut owner, &transient_fault_gate);
+
+        assert_eq!(exhausted.status.state, HueRuntimeState::Failed);
+        assert_eq!(exhausted.status.code, "TRANSIENT_RETRY_EXHAUSTED");
+        assert_eq!(exhausted.status.remaining_attempts, Some(0));
+    }
+
+    #[test]
+    fn command_status_refresh_marks_auth_invalid_fault_as_repair_required() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut auth_invalid_gate = strict_gate_ready();
+        auth_invalid_gate.auth_invalid_evidence = true;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let result = command_status_refresh_with_evidence(&mut owner, &auth_invalid_gate);
+
+        assert_eq!(result.status.state, HueRuntimeState::Failed);
+        assert_eq!(result.status.code, "AUTH_INVALID_CREDENTIALS");
+        assert_eq!(
+            result.status.action_hint,
+            Some(HueRuntimeActionHint::Repair)
+        );
     }
 
     #[test]
