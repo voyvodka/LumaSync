@@ -49,3 +49,31 @@ export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): 
     brightness: clampFloat(input?.brightness, 0, 1, 1),
   };
 }
+
+export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): AmbilightPayload {
+  return {
+    brightness: clampFloat(input?.brightness, 0, 1, 1),
+  };
+}
+
+export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>): LightingModeConfig {
+  const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
+
+  if (kind === LIGHTING_MODE_KIND.SOLID) {
+    return {
+      kind,
+      solid: normalizeSolidColorPayload(input?.solid),
+    };
+  }
+
+  if (kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+    return {
+      kind,
+      ambilight: normalizeAmbilightPayload(input?.ambilight),
+    };
+  }
+
+  return {
+    kind: LIGHTING_MODE_KIND.OFF,
+  };
+}
