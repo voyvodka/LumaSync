@@ -109,8 +109,22 @@ impl Default for LedOutputBridge {
 }
 
 pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
-    let _ = (brightness, rgb_triplets);
-    Vec::new()
+    let clamped_brightness = (brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
+    let led_count = u16::try_from(rgb_triplets.len()).unwrap_or(u16::MAX);
+
+    let mut packet = Vec::with_capacity(2 + 1 + 2 + (rgb_triplets.len() * 3) + 1);
+    packet.push(0xAA);
+    packet.push(0x55);
+    packet.push(clamped_brightness);
+    packet.extend_from_slice(&led_count.to_le_bytes());
+
+    for rgb in rgb_triplets {
+        packet.extend_from_slice(rgb);
+    }
+
+    let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
+    packet.push(checksum);
+    packet
 }
 
 pub fn apply_solid_payload(
@@ -206,7 +220,7 @@ mod tests {
     fn solid_payload_encodes_to_deterministic_packet() {
         let packet = encode_led_packet(0.5, &[[255, 0, 128]]);
 
-        assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 128, 56]);
+        assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 128, 254]);
     }
 
     #[test]
