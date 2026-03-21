@@ -25,6 +25,9 @@ vi.mock("./features/calibration/state/entryFlow", () => ({
 }));
 
 vi.mock("./features/mode/state/modeGuard", () => ({
+  MODE_GUARD_REASONS: {
+    CALIBRATION_REQUIRED: "CALIBRATION_REQUIRED",
+  },
   canEnableLedMode: () => ({ canEnable: true, reason: null }),
 }));
 

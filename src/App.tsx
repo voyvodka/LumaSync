@@ -23,8 +23,17 @@ import {
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import {
   canEnableLedMode,
-  resolveLedModeEnableAttempt,
+  MODE_GUARD_REASONS,
 } from "./features/mode/state/modeGuard";
+import {
+  LIGHTING_MODE_KIND,
+  normalizeLightingModeConfig,
+  type LightingModeConfig,
+} from "./features/mode/model/contracts";
+import {
+  setLightingMode,
+  stopLighting,
+} from "./features/mode/modeApi";
 import {
   normalizeLedCalibrationConfig,
   type LedCalibrationConfig,
@@ -42,7 +51,7 @@ import {
 function App() {
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.GENERAL);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
-  const [ledModeEnabled, setLedModeEnabled] = useState(false);
+  const [lightingMode, setLightingModeState] = useState<LightingModeConfig>({ kind: LIGHTING_MODE_KIND.OFF });
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayStep, setOverlayStep] = useState<CalibrationOverlayStep>("editor");
   const [lifecycleReady, setLifecycleReady] = useState(false);
@@ -56,6 +65,7 @@ function App() {
         const state = await loadShellState();
         setActiveSection(state.lastSection);
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
+        setLightingModeState(normalizeLightingModeConfig(state.lightingMode));
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
@@ -110,25 +120,33 @@ function App() {
     }
   }, [openCalibrationOverlay, savedCalibration]);
 
-  const handleLedModeChange = useCallback(
-    (nextEnabled: boolean) => {
-      if (!nextEnabled) {
-        setLedModeEnabled(false);
+  const handleLightingModeChange = useCallback(
+    async (nextMode: LightingModeConfig) => {
+      const normalizedNextMode = normalizeLightingModeConfig(nextMode);
+      const requiresCalibration = !savedCalibration
+        && normalizedNextMode.kind !== LIGHTING_MODE_KIND.OFF;
+
+      if (requiresCalibration) {
+        openCalibrationOverlay("template");
         return;
       }
 
-      const attempt = resolveLedModeEnableAttempt({
-        currentEnabled: ledModeEnabled,
-        calibration: savedCalibration,
-      });
+      try {
+        if (normalizedNextMode.kind === LIGHTING_MODE_KIND.OFF) {
+          await stopLighting();
+        } else {
+          await setLightingMode(normalizedNextMode);
+        }
 
-      if (attempt.shouldOpenCalibration) {
-        openCalibrationOverlay("template");
+        setLightingModeState(normalizedNextMode);
+
+        await saveShellState({ lightingMode: normalizedNextMode });
+      } catch (error) {
+        const modeLabel = normalizedNextMode.kind;
+        console.error(`[LumaSync] Failed to switch lighting mode to ${modeLabel}:`, error);
       }
-
-      setLedModeEnabled(attempt.nextEnabled);
     },
-    [ledModeEnabled, openCalibrationOverlay, savedCalibration],
+    [openCalibrationOverlay, savedCalibration],
   );
 
   const modeGuard = canEnableLedMode(savedCalibration);
@@ -141,9 +159,9 @@ function App() {
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
         calibration={savedCalibration}
-        ledModeEnabled={ledModeEnabled}
-        modeLockReason={modeGuard.reason}
-        onLedModeChange={handleLedModeChange}
+        lightingMode={lightingMode}
+        modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
+        onLightingModeChange={handleLightingModeChange}
         onEditCalibration={handleOpenCalibration}
       />
       <CalibrationOverlay
