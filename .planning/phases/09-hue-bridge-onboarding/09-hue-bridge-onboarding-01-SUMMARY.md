@@ -74,6 +74,8 @@ Each task was committed atomically:
 3. **Task 2 (GREEN): Rust Hue onboarding command katmanini implement et** - `8ee890e` (feat)
 4. **Task 3: Hue commandlarini Tauri invoke yuzeyine bagla** - `02001b9` (feat)
 
+**Plan metadata:** `aedbf7a` (docs)
+
 ## Files Created/Modified
 - `src/shared/contracts/hue.ts` - Hue onboarding command IDs, statuses, and DTO contracts.
 - `src/shared/contracts/shell.ts` - ShellState Hue persistence fields for reconnect-safe reuse.
