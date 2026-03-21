@@ -42,8 +42,8 @@ Plans:
 
 Plans:
 - [x] 10-01-PLAN.md - Build backend Hue runtime owner/state machine, strict start gate, bounded reconnect, and deterministic stop commands.
-- [ ] 10-02-PLAN.md - Move Hue start authority to mode controls with dual-target arbitration and persisted target set.
-- [ ] 10-03-PLAN.md - Add Device-surface runtime observability, shared stop pipeline UX, and EN/TR lifecycle copy parity.
+- [x] 10-02-PLAN.md - Move Hue start authority to mode controls with dual-target arbitration and persisted target set.
+- [x] 10-03-PLAN.md - Add Device-surface runtime observability, shared stop pipeline UX, and EN/TR lifecycle copy parity.
 
 ### Phase 11: Device Surface Integration
 **Goal**: Users can control Hue and USB output paths through one consistent Device settings experience.
