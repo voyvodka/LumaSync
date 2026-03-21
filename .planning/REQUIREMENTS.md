@@ -9,8 +9,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Hue Pairing
 
-- [ ] **HUE-01**: User can discover a Philips Hue Bridge automatically and also add bridge by manual IP fallback.
-- [ ] **HUE-02**: User can pair the app with the bridge and persist required credentials for reconnect-safe reuse.
+- [x] **HUE-01**: User can discover a Philips Hue Bridge automatically and also add bridge by manual IP fallback.
+- [x] **HUE-02**: User can pair the app with the bridge and persist required credentials for reconnect-safe reuse.
 - [ ] **HUE-03**: User can list and select available Hue Entertainment areas from the paired bridge.
 - [ ] **HUE-04**: User can see whether selected area/session is stream-ready before starting output.
 
@@ -63,8 +63,8 @@ Which requirements map to which phases. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HUE-01 | Phase 9 | Pending |
-| HUE-02 | Phase 9 | Pending |
+| HUE-01 | Phase 9 | Complete |
+| HUE-02 | Phase 9 | Complete |
 | HUE-03 | Phase 9 | Pending |
 | HUE-04 | Phase 9 | Pending |
 | HUE-05 | Phase 10 | Pending |

@@ -24,7 +24,11 @@ Derived only from v1.1 requirements in `.planning/REQUIREMENTS.md`.
   2. User can complete pairing and later reopen the app without repeating pairing for the same bridge.
   3. User can view available entertainment areas and select one for output.
   4. User can clearly see whether the selected bridge/area is stream-ready before pressing start.
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 09-01-PLAN.md - Build Hue onboarding backend contracts, command surface, and persistence model.
+- [ ] 09-02-PLAN.md - Implement Device-surface Hue onboarding step flow, area readiness UX, and i18n parity.
 
 ### Phase 10: Hue Stream Lifecycle
 **Goal**: Users can run Hue entertainment output as a stable runtime mode from the app controls.
@@ -60,7 +64,7 @@ Derived only from v1.1 requirements in `.planning/REQUIREMENTS.md`.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 9. Hue Bridge Onboarding | 0/TBD | Not started | - |
+| 9. Hue Bridge Onboarding | 1/2 | In Progress | 2026-03-21 |
 | 10. Hue Stream Lifecycle | 0/TBD | Not started | - |
 | 11. Device Surface Integration | 0/TBD | Not started | - |
 | 12. Diagnostics and Recovery | 0/TBD | Not started | - |
