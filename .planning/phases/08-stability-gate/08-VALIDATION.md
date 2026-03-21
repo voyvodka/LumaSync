@@ -2,8 +2,9 @@
 phase: 08
 slug: stability-gate
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-21
 ---
 
@@ -40,8 +41,8 @@ created: 2026-03-21
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
 | 08-01-01 | 01 | 1 | QUAL-04 | unit | `yarn vitest run src/features/telemetry/ui/TelemetrySection.test.tsx` | ✅ | ⬜ pending |
 | 08-01-02 | 01 | 1 | QUAL-04 | integration | `cargo test --manifest-path src-tauri/Cargo.toml runtime_telemetry::tests::` | ✅ | ⬜ pending |
-| 08-02-01 | 02 | 2 | QUAL-04 | integration | `yarn vitest run src/features/settings/sections/GeneralSection.test.tsx` | ✅ | ⬜ pending |
-| 08-02-02 | 02 | 2 | QUAL-04 | manual-gated | `yarn vitest run src/features/telemetry/ui/TelemetrySection.test.tsx src/features/settings/sections/GeneralSection.test.tsx` | ✅ | ⬜ pending |
+| 08-02-01 | 02 | 2 | QUAL-04 | integration | `yarn vitest run src/features/settings/sections/GeneralSection.test.tsx` | ✅ | ✅ green |
+| 08-02-02 | 02 | 2 | QUAL-04 | manual-gated | `yarn vitest run src/features/telemetry/ui/TelemetrySection.test.tsx src/features/settings/sections/GeneralSection.test.tsx` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,7 +50,7 @@ created: 2026-03-21
 
 ## Wave 0 Requirements
 
-- [ ] Existing infrastructure covers all phase requirements.
+- [x] Existing infrastructure covers all phase requirements.
 
 ---
 
@@ -64,11 +65,16 @@ created: 2026-03-21
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved (QUAL-04 gate APPROVED, 2026-03-21)
+
+## Final Gap Review
+
+- Acik kalan QUAL-04 gap'i yok.
+- Bir sonraki rerun odagi gerekmiyor; sadece regressions gorulurse phase-8 UAT runbook'u ayni kontratla tekrar calistirilir.
