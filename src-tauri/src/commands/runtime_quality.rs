@@ -136,8 +136,10 @@ impl RuntimeFrameSlot {
         Self { latest: None }
     }
 
-    pub fn push(&mut self, frame: Vec<[u8; 3]>) {
+    pub fn push(&mut self, frame: Vec<[u8; 3]>) -> bool {
+        let replaced = self.latest.is_some();
         self.latest = Some(frame);
+        replaced
     }
 
     pub fn take_latest(&mut self) -> Option<Vec<[u8; 3]>> {

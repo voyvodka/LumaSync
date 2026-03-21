@@ -15,6 +15,9 @@ use super::led_output::{
     apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, LedOutputBridge,
 };
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
+use super::runtime_telemetry::{
+    RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
+};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -207,8 +210,12 @@ impl AmbilightWorkerQualityState {
         }
     }
 
-    fn queue_processed_frame(&mut self, slot: &mut RuntimeFrameSlot, sampled_frame: &[[u8; 3]]) {
-        slot.push(self.controller.smooth(sampled_frame));
+    fn queue_processed_frame(
+        &mut self,
+        slot: &mut RuntimeFrameSlot,
+        sampled_frame: &[[u8; 3]],
+    ) -> bool {
+        slot.push(self.controller.smooth(sampled_frame))
     }
 
     fn try_send_latest<F>(
@@ -246,6 +253,7 @@ fn start_ambilight_worker(
     port_name: String,
     brightness: f32,
     mut frame_source: Box<dyn AmbilightFrameSource>,
+    telemetry_snapshot: SharedRuntimeTelemetry,
 ) -> Result<LightingWorkerRuntime, String> {
     let initial_frame = frame_source
         .capture_frame()
@@ -256,17 +264,25 @@ fn start_ambilight_worker(
 
     let mut quality_state = AmbilightWorkerQualityState::new(RuntimeQualityConfig::default());
     let mut frame_slot = RuntimeFrameSlot::new();
+    let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
 
     let mut initial_frame_source = StaticFrameSource::new(initial_frame);
     let initial_sampled = capture_sample_send_frame(&mut initial_frame_source, &calibration)?;
-    quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice());
+    telemetry_window.record_capture();
+    if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
+        telemetry_window.record_slot_overwrite();
+    }
     let send_started = Instant::now();
-    quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
+    let initial_sent = quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
         send_ambilight_frame_hot_path_to_port(&output_bridge, &port_name, frame, brightness)
             .map_err(|error| error.as_reason())
     })?;
+    if initial_sent {
+        telemetry_window.record_send();
+    }
     quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
+    telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot)?;
 
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_flag = Arc::clone(&cancel);
@@ -278,7 +294,10 @@ fn start_ambilight_worker(
             let capture_started = Instant::now();
             if let Ok(sampled) = capture_sample_send_frame(frame_source.as_mut(), &calibration) {
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
-                quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice());
+                telemetry_window.record_capture();
+                if quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice()) {
+                    telemetry_window.record_slot_overwrite();
+                }
 
                 let send_started = Instant::now();
                 let send_ms =
@@ -292,11 +311,15 @@ fn start_ambilight_worker(
                         )
                         .map_err(|error| error.as_reason())
                     }) {
-                        Ok(true) => send_started.elapsed().as_secs_f32() * 1000.0,
+                        Ok(true) => {
+                            telemetry_window.record_send();
+                            send_started.elapsed().as_secs_f32() * 1000.0
+                        }
                         _ => 0.0,
                     };
 
                 quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
+                let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
             }
 
             let interval_ms = quality_state.current_send_interval().as_millis() as u64;
@@ -315,6 +338,7 @@ fn apply_mode_change(
     next_mode: LightingModeConfig,
     device_connected: bool,
     connected_port: Option<&str>,
+    telemetry_snapshot: Option<SharedRuntimeTelemetry>,
     trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
     let normalized_next = normalize_mode_config(next_mode);
@@ -436,6 +460,8 @@ fn apply_mode_change(
                 port_name.to_string(),
                 brightness,
                 frame_source,
+                telemetry_snapshot
+                    .unwrap_or_else(|| Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))),
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
@@ -470,6 +496,7 @@ pub fn set_lighting_mode(
     payload: LightingModeConfig,
     runtime_state: State<'_, LightingRuntimeState>,
     connection_state: State<'_, SerialConnectionState>,
+    telemetry_state: State<'_, RuntimeTelemetryState>,
 ) -> Result<LightingModeCommandResult, String> {
     let connection_snapshot = connection_state
         .last_status
@@ -487,6 +514,7 @@ pub fn set_lighting_mode(
         payload,
         connection_snapshot.connected,
         connection_snapshot.port_name.as_deref(),
+        Some(telemetry_state.shared_snapshot()),
         None,
     ))
 }
@@ -504,6 +532,7 @@ pub fn stop_lighting(
         &mut owner,
         LightingModeConfig::default(),
         true,
+        None,
         None,
         None,
     ))
@@ -541,6 +570,7 @@ mod tests {
     };
     use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
     use crate::commands::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig};
+    use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 
     use super::{
         apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
@@ -644,6 +674,10 @@ mod tests {
         }
     }
 
+    fn shared_runtime_telemetry() -> Arc<Mutex<RuntimeTelemetrySnapshot>> {
+        Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+    }
+
     #[test]
     fn set_ambilight_stops_previous_then_starts_new_runtime() {
         let mut owner = owner_with_fake_sender();
@@ -655,6 +689,7 @@ mod tests {
                     "COM1".to_string(),
                     0.8,
                     (owner.frame_source_factory)().expect("frame source should be available"),
+                    shared_runtime_telemetry(),
                 )
                 .expect("worker start should succeed"),
             ),
@@ -668,6 +703,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM1"),
+            Some(shared_runtime_telemetry()),
             Some(&mut trace),
         );
 
@@ -685,7 +721,7 @@ mod tests {
     fn set_solid_applies_payload_and_marks_mode_active() {
         SOLID_OUTPUT_ATTEMPTS.store(0, Ordering::SeqCst);
         let mut owner = owner_with_fake_sender();
-        let result = apply_mode_change(&mut owner, solid_mode(), true, Some("COM4"), None);
+        let result = apply_mode_change(&mut owner, solid_mode(), true, Some("COM4"), None, None);
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
         assert_eq!(result.mode.kind, LightingModeKind::Solid);
@@ -703,7 +739,14 @@ mod tests {
         AMBILIGHT_CAPTURE_ATTEMPTS.store(0, Ordering::SeqCst);
 
         let mut owner = owner_with_fake_sender();
-        let result = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM7"), None);
+        let result = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            true,
+            Some("COM7"),
+            Some(shared_runtime_telemetry()),
+            None,
+        );
 
         assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
         thread::sleep(Duration::from_millis(20));
@@ -724,17 +767,32 @@ mod tests {
     fn repeated_switches_keep_single_active_runtime() {
         let mut owner = owner_with_fake_sender();
 
-        let first = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM2"), None);
+        let first = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            true,
+            Some("COM2"),
+            Some(shared_runtime_telemetry()),
+            None,
+        );
         assert_eq!(first.mode.kind, LightingModeKind::Ambilight);
         wait_for_worker_count(1);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
 
-        let second = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM2"), None);
+        let second = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            true,
+            Some("COM2"),
+            Some(shared_runtime_telemetry()),
+            None,
+        );
         assert_eq!(second.mode.kind, LightingModeKind::Ambilight);
         wait_for_worker_count(1);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
 
-        let final_state = apply_mode_change(&mut owner, solid_mode(), true, Some("COM2"), None);
+        let final_state =
+            apply_mode_change(&mut owner, solid_mode(), true, Some("COM2"), None, None);
         assert_eq!(final_state.mode.kind, LightingModeKind::Solid);
         wait_for_worker_count(0);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 0);
@@ -745,9 +803,16 @@ mod tests {
     #[test]
     fn disconnected_mode_change_keeps_existing_runtime_state() {
         let mut owner = owner_with_fake_sender();
-        let _ = apply_mode_change(&mut owner, solid_mode(), true, Some("COM3"), None);
+        let _ = apply_mode_change(&mut owner, solid_mode(), true, Some("COM3"), None, None);
 
-        let denied = apply_mode_change(&mut owner, ambilight_mode(), false, None, None);
+        let denied = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            false,
+            None,
+            Some(shared_runtime_telemetry()),
+            None,
+        );
 
         assert_eq!(denied.status.code, "DEVICE_NOT_CONNECTED");
         assert_eq!(denied.mode.kind, LightingModeKind::Solid);
@@ -757,7 +822,14 @@ mod tests {
     fn ambilight_mode_reports_start_failure_when_capture_is_unavailable() {
         let mut owner = owner_with_unavailable_capture();
 
-        let failed = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM1"), None);
+        let failed = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            true,
+            Some("COM1"),
+            Some(shared_runtime_telemetry()),
+            None,
+        );
 
         assert_eq!(failed.status.code, "AMBILIGHT_MODE_START_FAILED");
         assert_eq!(

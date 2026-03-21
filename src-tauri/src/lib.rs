@@ -22,6 +22,7 @@ mod commands {
     pub mod led_output;
     pub mod lighting_mode;
     pub mod runtime_quality;
+    pub mod runtime_telemetry;
 }
 
 use commands::calibration::{
@@ -35,6 +36,7 @@ use commands::device_connection::{
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
+use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
 
@@ -150,6 +152,7 @@ pub fn run() {
             app.manage(SerialConnectionState::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
+            app.manage(RuntimeTelemetryState::default());
 
             // Build tray icon
             TrayIconBuilder::with_id(TRAY_ICON_ID)
@@ -216,6 +219,7 @@ pub fn run() {
             set_lighting_mode,
             stop_lighting,
             get_lighting_mode_status,
+            get_runtime_telemetry,
             start_calibration_test_pattern,
             stop_calibration_test_pattern,
             list_displays,
