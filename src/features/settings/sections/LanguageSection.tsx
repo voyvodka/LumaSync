@@ -4,7 +4,7 @@ import { shellStore } from "../../persistence/shellStore";
 
 export function LanguageSection() {
   const { t, i18n } = useTranslation("common");
-  const currentLanguage = i18n.language as I18nLanguage;
+  const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";
 
   async function handleLanguageChange(lang: I18nLanguage) {
     if (lang === currentLanguage) return;
