@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const getRuntimeTelemetrySnapshotMock = vi.fn();
 
@@ -33,13 +33,16 @@ import { TelemetrySection } from "./TelemetrySection";
 
 describe("TelemetrySection", () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     vi.clearAllMocks();
     getRuntimeTelemetrySnapshotMock.mockResolvedValue({
       captureFps: 60,
       sendFps: 58,
       queueHealth: "healthy",
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("fetches runtime telemetry on mount and renders capture/send/queue values", async () => {
@@ -58,28 +61,39 @@ describe("TelemetrySection", () => {
   });
 
   it("cleans polling interval on unmount and does not duplicate interval after remount", async () => {
+    vi.useFakeTimers();
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
     const firstRender = render(<TelemetrySection />);
 
-    await waitFor(() => {
-      expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(750);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+    });
     expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
 
     firstRender.unmount();
 
-    await vi.advanceTimersByTimeAsync(1500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
     expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
     expect(clearIntervalSpy).toHaveBeenCalled();
 
     render(<TelemetrySection />);
-    await waitFor(() => {
-      expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(3);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(3);
 
-    await vi.advanceTimersByTimeAsync(750);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(750);
+    });
     expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(4);
 
     clearIntervalSpy.mockRestore();
