@@ -14,7 +14,7 @@ Bu roadmap, USB-first Ambilight deneyimini kullanici acisindan calisir hale geti
 - [x] **Phase 2: USB Connection Setup** - Cihaz auto-detect ve manuel port fallback ile baglanti kurulabilir. (completed 2026-03-19)
 - [x] **Phase 3: Connection Resilience and Health** - Kopma-sonrasi toparlanma ve setup sirasinda saglik kontrolu guvenilir calisir. (completed 2026-03-19)
 - [x] **Phase 4: Calibration Workflow** - Kullanici wizard ve ileri ayarlardan dogru LED haritalamasini tamamlar. (completed 2026-03-19)
-- [ ] **Phase 5: Core Lighting Modes** - Realtime Ambilight ve solid-color modlari kullanilabilir olur.
+- [x] **Phase 5: Core Lighting Modes** - Realtime Ambilight ve solid-color modlari kullanilabilir olur. (completed 2026-03-21)
 - [ ] **Phase 6: Runtime Quality Controls** - Smoothing ve adaptif gonderim davranisi ile deneyim daha yumusak ve hafif olur.
 - [ ] **Phase 7: Telemetry and Full Localization** - Temel telemetri gorunurlugu ve TR/EN dil destegi tamamlanir.
 - [ ] **Phase 8: Stability Gate** - Sistem 60 dakikalik kesintisiz calismayi crash olmadan gecer.
@@ -102,11 +102,12 @@ Plans:
   1. User can switch to real-time Ambilight screen mirroring mode.
   2. User can switch to a static solid-color mode.
   3. User can change modes without losing saved calibration setup.
-**Plans**: 3 plans
+**Plans**: 4 plans
 Plans:
 - [ ] 05-01-PLAN.md - Define MODE-01/MODE-02 domain contracts, command bridge surface, and test-backed transition/persistence rules
 - [ ] 05-02-PLAN.md - Implement Rust lighting-mode runtime owner with transactional set/stop lifecycle and Tauri command registration
 - [ ] 05-03-PLAN.md - Wire General settings mode UI to runtime+persistence and close phase with physical hardware UAT checkpoint
+- [ ] 05-04-PLAN.md - [gap] Replace no-op/stub lighting output paths with real device output bridge, rerun hardware UAT, and sync verification closure
 
 ### Phase 6: Runtime Quality Controls
 **Goal**: Realtime modda goruntu gecisleri yumusar ve runtime davranisi sistem yukunu dengeleyerek calisir.
@@ -145,7 +146,7 @@ Plans:
 | 2. USB Connection Setup | 4/4 | Complete   | 2026-03-19 |
 | 3. Connection Resilience and Health | 3/3 | Complete    | 2026-03-19 |
 | 4. Calibration Workflow | 12/12 | Complete   | 2026-03-20 |
-| 5. Core Lighting Modes | 3/3 | Complete | 2026-03-21 |
+| 5. Core Lighting Modes | 4/4 | Complete | 2026-03-21 |
 | 6. Runtime Quality Controls | 0/TBD | Not started | - |
 | 7. Telemetry and Full Localization | 0/TBD | Not started | - |
 | 8. Stability Gate | 0/TBD | Not started | - |
