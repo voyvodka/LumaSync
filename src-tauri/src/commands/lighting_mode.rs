@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
+use super::led_output::{
+    apply_solid_payload_to_port, send_ambilight_frame_to_port, LedOutputBridge,
+};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -82,10 +85,20 @@ impl LightingWorkerRuntime {
     }
 }
 
-#[derive(Default)]
 struct LightingRuntimeOwner {
     active_mode: LightingModeConfig,
     worker: Option<LightingWorkerRuntime>,
+    output_bridge: LedOutputBridge,
+}
+
+impl Default for LightingRuntimeOwner {
+    fn default() -> Self {
+        Self {
+            active_mode: LightingModeConfig::default(),
+            worker: None,
+            output_bridge: LedOutputBridge::default(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -161,29 +174,51 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     }
 }
 
-fn start_ambilight_worker() -> LightingWorkerRuntime {
+fn build_ambilight_frame(seed: u8) -> [[u8; 3]; 4] {
+    [
+        [seed, 255_u8.wrapping_sub(seed), seed / 2],
+        [seed.wrapping_add(24), seed.wrapping_add(12), 200],
+        [64, seed, 255_u8.wrapping_sub(seed / 2)],
+        [200, seed.wrapping_add(48), seed.wrapping_add(96)],
+    ]
+}
+
+fn start_ambilight_worker(
+    output_bridge: LedOutputBridge,
+    port_name: String,
+    brightness: f32,
+) -> Result<LightingWorkerRuntime, String> {
+    let initial_frame = build_ambilight_frame(0);
+    AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+    send_ambilight_frame_to_port(&output_bridge, &port_name, &initial_frame, brightness)
+        .map_err(|error| error.as_reason())?;
+
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_flag = Arc::clone(&cancel);
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        let mut tick = 1_u8;
+
         while !cancel_flag.load(Ordering::Relaxed) {
+            let frame = build_ambilight_frame(tick);
+            AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+            let _ = send_ambilight_frame_to_port(&output_bridge, &port_name, &frame, brightness);
+            tick = tick.wrapping_add(1);
             thread::sleep(Duration::from_millis(16));
         }
+
         ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
     });
 
-    LightingWorkerRuntime { cancel, handle }
-}
-
-fn apply_solid_payload(_payload: &SolidColorPayload) -> Result<(), String> {
-    Ok(())
+    Ok(LightingWorkerRuntime { cancel, handle })
 }
 
 fn apply_mode_change(
     owner: &mut LightingRuntimeOwner,
     next_mode: LightingModeConfig,
     device_connected: bool,
+    connected_port: Option<&str>,
     trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
     let normalized_next = normalize_mode_config(next_mode);
@@ -219,7 +254,30 @@ fn apply_mode_change(
                 brightness: 1.0,
             });
 
-            if let Err(reason) = apply_solid_payload(&payload) {
+            let Some(port_name) = connected_port else {
+                owner.active_mode = LightingModeConfig::default();
+                return make_result(
+                    owner.active_mode.clone(),
+                    command_status(
+                        "SOLID_MODE_APPLY_FAILED",
+                        "Solid mode payload could not be applied.",
+                        Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
+                    ),
+                );
+            };
+
+            SOLID_OUTPUT_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+
+            if let Err(reason) = apply_solid_payload_to_port(
+                &owner.output_bridge,
+                port_name,
+                payload.r,
+                payload.g,
+                payload.b,
+                payload.brightness,
+            )
+            .map_err(|error| error.as_reason())
+            {
                 owner.active_mode = LightingModeConfig::default();
                 return make_result(
                     owner.active_mode.clone(),
@@ -243,16 +301,54 @@ fn apply_mode_change(
         }
         LightingModeKind::Ambilight => {
             push_trace(&mut trace, "start_ambilight");
-            owner.worker = Some(start_ambilight_worker());
-            owner.active_mode = normalized_next;
-            make_result(
-                owner.active_mode.clone(),
-                command_status(
-                    "AMBILIGHT_MODE_STARTED",
-                    "Ambilight runtime started with windows-capture worker path.",
-                    None,
-                ),
-            )
+
+            let Some(port_name) = connected_port else {
+                owner.active_mode = LightingModeConfig::default();
+                return make_result(
+                    owner.active_mode.clone(),
+                    command_status(
+                        "AMBILIGHT_MODE_START_FAILED",
+                        "Ambilight runtime could not start.",
+                        Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
+                    ),
+                );
+            };
+
+            let brightness = normalized_next
+                .ambilight
+                .as_ref()
+                .map(|payload| payload.brightness)
+                .unwrap_or(1.0);
+
+            match start_ambilight_worker(
+                owner.output_bridge.clone(),
+                port_name.to_string(),
+                brightness,
+            ) {
+                Ok(worker) => {
+                    owner.worker = Some(worker);
+                    owner.active_mode = normalized_next;
+                    make_result(
+                        owner.active_mode.clone(),
+                        command_status(
+                            "AMBILIGHT_MODE_STARTED",
+                            "Ambilight runtime started with frame output pipeline.",
+                            None,
+                        ),
+                    )
+                }
+                Err(reason) => {
+                    owner.active_mode = LightingModeConfig::default();
+                    make_result(
+                        owner.active_mode.clone(),
+                        command_status(
+                            "AMBILIGHT_MODE_START_FAILED",
+                            "Ambilight runtime could not start.",
+                            Some(reason),
+                        ),
+                    )
+                }
+            }
         }
     }
 }
@@ -263,10 +359,10 @@ pub fn set_lighting_mode(
     runtime_state: State<'_, LightingRuntimeState>,
     connection_state: State<'_, SerialConnectionState>,
 ) -> Result<LightingModeCommandResult, String> {
-    let device_connected = connection_state
+    let connection_snapshot = connection_state
         .last_status
         .lock()
-        .map(|status| status.connected)
+        .map(|status| status.clone())
         .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
 
     let mut owner = runtime_state
@@ -277,7 +373,8 @@ pub fn set_lighting_mode(
     Ok(apply_mode_change(
         &mut owner,
         payload,
-        device_connected,
+        connection_snapshot.connected,
+        connection_snapshot.port_name.as_deref(),
         None,
     ))
 }
@@ -295,6 +392,7 @@ pub fn stop_lighting(
         &mut owner,
         LightingModeConfig::default(),
         true,
+        None,
         None,
     ))
 }
@@ -320,16 +418,42 @@ pub fn get_lighting_mode_status(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::Duration;
 
     use std::sync::atomic::Ordering;
+
+    use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
 
     use super::{
         apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
         LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
         ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
+
+    #[derive(Default)]
+    struct FakeLedSender {
+        writes: Mutex<Vec<(String, Vec<u8>)>>,
+    }
+
+    impl LedPacketSender for FakeLedSender {
+        fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+            self.writes
+                .lock()
+                .expect("writes lock poisoned")
+                .push((port_name.to_string(), packet.to_vec()));
+            Ok(())
+        }
+    }
+
+    fn owner_with_fake_sender() -> LightingRuntimeOwner {
+        LightingRuntimeOwner {
+            active_mode: LightingModeConfig::default(),
+            worker: None,
+            output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+        }
+    }
 
     fn ambilight_mode() -> LightingModeConfig {
         LightingModeConfig {
@@ -363,13 +487,24 @@ mod tests {
 
     #[test]
     fn set_ambilight_stops_previous_then_starts_new_runtime() {
-        let mut owner = LightingRuntimeOwner {
+        let mut owner = owner_with_fake_sender();
+        owner = LightingRuntimeOwner {
             active_mode: ambilight_mode(),
-            worker: Some(start_ambilight_worker()),
+            worker: Some(
+                start_ambilight_worker(owner.output_bridge.clone(), "COM1".to_string(), 0.8)
+                    .expect("worker start should succeed"),
+            ),
+            output_bridge: owner.output_bridge,
         };
         let mut trace = Vec::new();
 
-        let result = apply_mode_change(&mut owner, ambilight_mode(), true, Some(&mut trace));
+        let result = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            true,
+            Some("COM1"),
+            Some(&mut trace),
+        );
 
         assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
         assert_eq!(result.mode.kind, LightingModeKind::Ambilight);
@@ -378,13 +513,14 @@ mod tests {
 
         let mut cleanup_trace = None;
         stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_worker_count(0);
     }
 
     #[test]
     fn set_solid_applies_payload_and_marks_mode_active() {
         SOLID_OUTPUT_ATTEMPTS.store(0, Ordering::SeqCst);
-        let mut owner = LightingRuntimeOwner::default();
-        let result = apply_mode_change(&mut owner, solid_mode(), true, None);
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(&mut owner, solid_mode(), true, Some("COM4"), None);
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
         assert_eq!(result.mode.kind, LightingModeKind::Solid);
@@ -400,8 +536,8 @@ mod tests {
     fn ambilight_mode_attempts_to_send_at_least_one_frame() {
         AMBILIGHT_FRAME_ATTEMPTS.store(0, Ordering::SeqCst);
 
-        let mut owner = LightingRuntimeOwner::default();
-        let result = apply_mode_change(&mut owner, ambilight_mode(), true, None);
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM7"), None);
 
         assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
         thread::sleep(Duration::from_millis(20));
@@ -416,19 +552,19 @@ mod tests {
 
     #[test]
     fn repeated_switches_keep_single_active_runtime() {
-        let mut owner = LightingRuntimeOwner::default();
+        let mut owner = owner_with_fake_sender();
 
-        let first = apply_mode_change(&mut owner, ambilight_mode(), true, None);
+        let first = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM2"), None);
         assert_eq!(first.mode.kind, LightingModeKind::Ambilight);
         wait_for_worker_count(1);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
 
-        let second = apply_mode_change(&mut owner, ambilight_mode(), true, None);
+        let second = apply_mode_change(&mut owner, ambilight_mode(), true, Some("COM2"), None);
         assert_eq!(second.mode.kind, LightingModeKind::Ambilight);
         wait_for_worker_count(1);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
 
-        let final_state = apply_mode_change(&mut owner, solid_mode(), true, None);
+        let final_state = apply_mode_change(&mut owner, solid_mode(), true, Some("COM2"), None);
         assert_eq!(final_state.mode.kind, LightingModeKind::Solid);
         wait_for_worker_count(0);
         assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 0);
@@ -438,10 +574,10 @@ mod tests {
 
     #[test]
     fn disconnected_mode_change_keeps_existing_runtime_state() {
-        let mut owner = LightingRuntimeOwner::default();
-        let _ = apply_mode_change(&mut owner, solid_mode(), true, None);
+        let mut owner = owner_with_fake_sender();
+        let _ = apply_mode_change(&mut owner, solid_mode(), true, Some("COM3"), None);
 
-        let denied = apply_mode_change(&mut owner, ambilight_mode(), false, None);
+        let denied = apply_mode_change(&mut owner, ambilight_mode(), false, None, None);
 
         assert_eq!(denied.status.code, "DEVICE_NOT_CONNECTED");
         assert_eq!(denied.mode.kind, LightingModeKind::Solid);

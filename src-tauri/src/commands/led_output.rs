@@ -98,7 +98,15 @@ impl LedOutputBridge {
             )
         })?;
 
-        self.sender.send(&port_name, packet)
+        self.send_packet_to_port(&port_name, packet)
+    }
+
+    pub fn send_packet_to_port(
+        &self,
+        port_name: &str,
+        packet: &[u8],
+    ) -> Result<(), LedOutputError> {
+        self.sender.send(port_name, packet)
     }
 }
 
@@ -139,6 +147,18 @@ pub fn apply_solid_payload(
     bridge.send_packet(connection_state, &packet)
 }
 
+pub fn apply_solid_payload_to_port(
+    bridge: &LedOutputBridge,
+    port_name: &str,
+    r: u8,
+    g: u8,
+    b: u8,
+    brightness: f32,
+) -> Result<(), LedOutputError> {
+    let packet = encode_led_packet(brightness, &[[r, g, b]]);
+    bridge.send_packet_to_port(port_name, &packet)
+}
+
 pub fn send_ambilight_frame(
     bridge: &LedOutputBridge,
     connection_state: &SerialConnectionState,
@@ -147,6 +167,16 @@ pub fn send_ambilight_frame(
 ) -> Result<(), LedOutputError> {
     let packet = encode_led_packet(brightness, frame);
     bridge.send_packet(connection_state, &packet)
+}
+
+pub fn send_ambilight_frame_to_port(
+    bridge: &LedOutputBridge,
+    port_name: &str,
+    frame: &[[u8; 3]],
+    brightness: f32,
+) -> Result<(), LedOutputError> {
+    let packet = encode_led_packet(brightness, frame);
+    bridge.send_packet_to_port(port_name, &packet)
 }
 
 #[cfg(test)]
