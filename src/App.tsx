@@ -357,6 +357,30 @@ function App() {
             }
           }
 
+          const shouldForceHueStop =
+            !targetResults.hue
+            && (activeOutputTargets.includes("hue")
+              || selectedOutputTargets.includes("hue")
+              || Boolean(runtimeHueStartConfig));
+
+          if (shouldForceHueStop) {
+            try {
+              const hueResult = await stopHue();
+              targetResults.hue = {
+                ok: isHueStopCodeOk(hueResult.status.code),
+                code: hueResult.status.code,
+                message: hueResult.status.message,
+              };
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : String(error);
+              targetResults.hue = {
+                ok: false,
+                code: "HUE_STOP_FAILED",
+                message: reason,
+              };
+            }
+          }
+
           const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
           setActiveOutputTargets(merged.activeTargets);
           setLightingModeState(normalizedNextMode);
