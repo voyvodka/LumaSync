@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    window::Color, AppHandle, Manager, PhysicalPosition, PhysicalSize, Position, Runtime, Size,
-    State, WebviewUrl, WebviewWindowBuilder,
+    window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition,
+    PhysicalSize, Position, Runtime, Size, State, WebviewUrl, WebviewWindowBuilder,
 };
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
@@ -149,19 +149,95 @@ fn open_overlay_window<R: Runtime>(
         .build()
         .map_err(|error| format!("OVERLAY_WINDOW_OPEN_FAILED: {error}"))?;
 
-    window
-        .set_position(Position::Physical(PhysicalPosition::new(
-            target_display.x,
-            target_display.y,
-        )))
-        .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
+    if cfg!(target_os = "windows") {
+        window
+            .set_position(Position::Physical(PhysicalPosition::new(
+                target_display.x,
+                target_display.y,
+            )))
+            .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
 
-    window
-        .set_size(Size::Physical(PhysicalSize::new(
-            target_display.width,
-            target_display.height,
-        )))
-        .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
+        window
+            .set_size(Size::Physical(PhysicalSize::new(
+                target_display.width,
+                target_display.height,
+            )))
+            .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
+
+        let applied_size = window
+            .outer_size()
+            .map_err(|error| format!("OVERLAY_WINDOW_SIZE_READ_FAILED: {error}"))?;
+        let width_mismatch = target_display.width.saturating_sub(applied_size.width) > 2
+            || applied_size.width.saturating_sub(target_display.width) > 2;
+        let height_mismatch = target_display.height.saturating_sub(applied_size.height) > 2
+            || applied_size.height.saturating_sub(target_display.height) > 2;
+
+        if width_mismatch || height_mismatch {
+            let runtime_scale = window
+                .scale_factor()
+                .map_err(|error| format!("OVERLAY_WINDOW_SCALE_READ_FAILED: {error}"))?;
+            let safe_scale = if runtime_scale.is_finite() && runtime_scale > 0.0 {
+                runtime_scale
+            } else {
+                1.0
+            };
+
+            let logical_x = f64::from(target_display.x) / safe_scale;
+            let logical_y = f64::from(target_display.y) / safe_scale;
+            let logical_width = f64::from(target_display.width) / safe_scale;
+            let logical_height = f64::from(target_display.height) / safe_scale;
+
+            window
+                .set_position(Position::Logical(LogicalPosition::new(
+                    logical_x, logical_y,
+                )))
+                .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
+            window
+                .set_size(Size::Logical(LogicalSize::new(
+                    logical_width,
+                    logical_height,
+                )))
+                .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
+
+            eprintln!(
+                "[LumaSync] OVERLAY_WINDOWS_DPI_CORRECTION target=({}x{}) applied=({}x{}) scale={}",
+                target_display.width,
+                target_display.height,
+                applied_size.width,
+                applied_size.height,
+                safe_scale,
+            );
+        }
+    } else {
+        let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
+            target_display.scale_factor
+        } else {
+            1.0
+        };
+
+        let logical_x = f64::from(target_display.x) / safe_scale;
+        let logical_y = f64::from(target_display.y) / safe_scale;
+        let logical_width = f64::from(target_display.width) / safe_scale;
+        let logical_height = f64::from(target_display.height) / safe_scale;
+
+        window
+            .set_position(Position::Logical(LogicalPosition::new(logical_x, logical_y)))
+            .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
+
+        window
+            .set_size(Size::Logical(LogicalSize::new(logical_width, logical_height)))
+            .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
+
+        eprintln!(
+            "[LumaSync] OVERLAY_LOGICAL_GEOMETRY display={} logical_pos=({:.1}, {:.1}) logical_size=({:.1}x{:.1}) scale={}",
+            target_display.id,
+            logical_x,
+            logical_y,
+            logical_width,
+            logical_height,
+            safe_scale,
+        );
+    }
 
     window
         .set_ignore_cursor_events(true)
@@ -311,26 +387,41 @@ pub fn open_display_overlay<R: Runtime>(
     preview: Option<OverlayPreviewPayload>,
 ) -> Result<DisplayOverlayCommandResult, String> {
     let displays = list_displays(app.clone())?;
-    let Some(target_display) = displays.iter().find(|display| display.id == display_id) else {
-        let available_ids = displays
-            .iter()
-            .map(|display| display.id.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let reason = if available_ids.is_empty() {
-            format!("Requested display id='{display_id}' not found. No displays available.")
+    let target_display =
+        if let Some(display) = displays.iter().find(|display| display.id == display_id) {
+            display
         } else {
-            format!(
+            let available_ids = displays
+                .iter()
+                .map(|display| display.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let reason = if available_ids.is_empty() {
+                format!("Requested display id='{display_id}' not found. No displays available.")
+            } else {
+                format!(
                 "Requested display id='{display_id}' not found. Available ids: [{available_ids}]"
             )
+            };
+            eprintln!("[LumaSync] OVERLAY_TARGET_FALLBACK: {reason}");
+
+            if let Some(fallback_display) = displays
+                .iter()
+                .find(|display| display.is_primary)
+                .or_else(|| displays.first())
+            {
+                fallback_display
+            } else {
+                eprintln!("[LumaSync] OVERLAY_OPEN_FAILED: {reason}");
+                return Ok(overlay_error_result(
+                    "OVERLAY_OPEN_FAILED",
+                    "Could not open display overlay.",
+                    &reason,
+                ));
+            }
         };
-        eprintln!("[LumaSync] OVERLAY_OPEN_FAILED: {reason}");
-        return Ok(overlay_error_result(
-            "OVERLAY_OPEN_FAILED",
-            "Could not open display overlay.",
-            &reason,
-        ));
-    };
+
+    let resolved_display_id = target_display.id.as_str();
 
     let mut runtime = overlay_state
         .runtime
@@ -338,11 +429,11 @@ pub fn open_display_overlay<R: Runtime>(
         .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
 
     let previous_window_label = runtime.active_overlay_label.clone();
-    let next_window_label = build_overlay_window_label(display_id.as_str());
+    let next_window_label = build_overlay_window_label(resolved_display_id);
 
     let result = apply_overlay_open_transition(
         &mut runtime,
-        display_id.as_str(),
+        resolved_display_id,
         next_window_label.as_str(),
         || {
             if let Some(label) = previous_window_label {

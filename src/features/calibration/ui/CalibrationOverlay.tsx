@@ -175,10 +175,13 @@ export function CalibrationOverlay({
 
         setDisplayTarget(displayTargetRef.current.setDisplays(displays));
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) {
           return;
         }
+
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`[LumaSync] Display list unavailable for overlay: ${reason}`);
 
         setDisplayTarget(displayTargetRef.current.setDisplays([]));
       });
@@ -348,240 +351,273 @@ export function CalibrationOverlay({
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-end gap-3 rounded-xl border border-white/20 bg-black/30 px-4 py-3">
-          <div className="mr-auto flex flex-wrap items-center gap-2 text-xs text-white/90">
-            <label className="inline-flex items-center gap-2 rounded-md border border-white/30 px-2 py-1">
-               <input
-                 type="checkbox"
-                 checked={testPattern.isEnabled}
-                 disabled={displayTarget.isSwitching}
-                   onChange={async (event) => {
-                    const shouldEnable = event.currentTarget.checked;
+        {/* Error / validation strip */}
+        {(testPatternError || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
+          <div className="mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-950/60 px-3.5 py-2.5">
+            {displayTarget.blocked && (
+              <p className="flex items-start gap-2 text-xs text-rose-300">
+                <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+                <span>
+                  {t("calibration.overlay.blockedReason", {
+                    code: displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED",
+                    reason: displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown"),
+                  })}
+                </span>
+              </p>
+            )}
+            {testPatternError && (
+              <p className="flex items-start gap-2 text-xs text-rose-300">
+                <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+                <span>{testPatternError}</span>
+              </p>
+            )}
+            {validationErrors && validationErrors.length > 0 &&
+              validationErrors.map((error) => (
+                <p key={`${error.code}:${error.field}`} className="flex items-start gap-2 text-xs text-rose-300">
+                  <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
+                    <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                  </svg>
+                  <span>{error.code}: {error.field}</span>
+                </p>
+              ))}
+          </div>
+        )}
 
-                     try {
-                       if (shouldEnable) {
-                         if (displayTarget.blocked) {
-                            const reason = displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
-                           const code = displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                            const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
-                            console.warn(message);
-                            setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
-                            return;
-                         }
-
-                          const switched = await displayTargetRef.current.switchActiveDisplay(
-                            undefined,
-                            overlayPreviewPayload,
-                          );
-                         setDisplayTarget(switched);
-                         if (switched.blocked) {
-                           const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
-                          const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                           const message = `[LumaSync] Test pattern blocked (${code}): ${reason}`;
-                           console.warn(message);
-                           setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
-                            return;
-                        }
+        {/* Main action bar */}
+        <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/12 bg-black/40 px-4 py-3">
+          {/* Left: preview controls */}
+          <div className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+            {/* Toggle switch */}
+            <div className="flex shrink-0 items-center gap-2.5">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={testPattern.isEnabled}
+                disabled={displayTarget.isSwitching}
+                onClick={async () => {
+                  const shouldEnable = !testPattern.isEnabled;
+                  try {
+                    if (shouldEnable) {
+                      if (displayTarget.blocked) {
+                        const reason = displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+                        const code = displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED";
+                        console.warn(`[LumaSync] Test pattern blocked (${code}): ${reason}`);
+                        setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
+                        return;
                       }
+                      const switched = await displayTargetRef.current.switchActiveDisplay(undefined, overlayPreviewPayload);
+                      setDisplayTarget(switched);
+                      if (switched.blocked) {
+                        const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+                        const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
+                        console.warn(`[LumaSync] Test pattern blocked (${code}): ${reason}`);
+                        setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
+                        return;
+                      }
+                    }
+                    const next = await flowRef.current.toggle(shouldEnable);
+                    setTestPattern(next);
+                    setTestPatternError(null);
+                    if (!shouldEnable) {
+                      const closed = await displayTargetRef.current.closeActiveDisplay();
+                      setDisplayTarget(closed);
+                    } else {
+                      setDisplayTarget(displayTargetRef.current.clearBlockedState());
+                    }
+                  } catch (error) {
+                    const reason = error instanceof Error ? error.message : String(error);
+                    console.warn(`[LumaSync] Test pattern toggle failed: ${reason}`);
+                    setTestPatternError(t("calibration.overlay.errors.testPatternToggleFailed", { reason }));
+                    try { const s = await flowRef.current.toggle(false); setTestPattern(s); } catch {}
+                    try { const c = await displayTargetRef.current.closeActiveDisplay(); setDisplayTarget(c); } catch {}
+                  }
+                }}
+                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 disabled:cursor-not-allowed disabled:opacity-40 ${
+                  testPattern.isEnabled ? "bg-cyan-500" : "bg-white/20"
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                    testPattern.isEnabled ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+              <span className="select-none text-sm font-medium text-white/70">
+                {t("calibration.overlay.testPatternToggle")}
+              </span>
+            </div>
 
-                      const next = await flowRef.current.toggle(shouldEnable);
-                      setTestPattern(next);
-                      setTestPatternError(null);
+            {/* Monitor selector */}
+            {displayTarget.displays.length > 0 && (
+              <>
+                <div className="h-4 w-px shrink-0 bg-white/12" />
+                <div className="flex items-center gap-1.5">
+                  {displayTarget.displays.map((display, index) => {
+                    const isSelected = displayTarget.selectedDisplayId === display.id;
+                    const isActive = displayTarget.activeDisplayId === display.id;
 
-                      if (!shouldEnable) {
-                        const closed = await displayTargetRef.current.closeActiveDisplay();
-                        setDisplayTarget(closed);
-                      } else {
-                       setDisplayTarget(displayTargetRef.current.clearBlockedState());
-                     }
-                    } catch (error) {
-                      const reason = error instanceof Error ? error.message : String(error);
-                      const message = `[LumaSync] Test pattern toggle failed: ${reason}`;
-                      console.warn(message);
-                      setTestPatternError(t("calibration.overlay.errors.testPatternToggleFailed", { reason }));
-                      try {
-                        const safeSnapshot = await flowRef.current.toggle(false);
-                        setTestPattern(safeSnapshot);
-                      } catch {}
-                     try {
-                       const closed = await displayTargetRef.current.closeActiveDisplay();
-                       setDisplayTarget(closed);
-                     } catch {}
-                   }
-                 }}
-               />
-              <span>{t("calibration.overlay.testPatternToggle")}</span>
-            </label>
-            {displayTarget.displays.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-white/70">{t("calibration.overlay.targetDisplay")}</span>
-                {displayTarget.displays.map((display, index) => {
-                  const isSelected = displayTarget.selectedDisplayId === display.id;
-                  const isActive = displayTarget.activeDisplayId === display.id;
-
-                  return (
-                    <button
-                      key={display.id}
-                      type="button"
-                      className={`rounded-md border px-2 py-1 text-[11px] transition-colors ${
-                        isSelected
-                          ? "border-cyan-300/80 bg-cyan-500/20 text-cyan-100"
-                          : "border-white/30 bg-white/5 text-white/85"
-                      }`}
-                       onClick={async () => {
-                         const selected = displayTargetRef.current.selectDisplay(display.id);
-                         setDisplayTarget(selected);
-
-                         if (!testPattern.isEnabled) {
-                           return;
-                         }
-
+                    return (
+                      <button
+                        key={display.id}
+                        type="button"
+                        onClick={async () => {
+                          const selected = displayTargetRef.current.selectDisplay(display.id);
+                          setDisplayTarget(selected);
+                          if (!testPattern.isEnabled) return;
                           try {
-                             const switched = await displayTargetRef.current.switchActiveDisplay(
-                               display.id,
-                               overlayPreviewPayload,
-                             );
+                            const switched = await displayTargetRef.current.switchActiveDisplay(display.id, overlayPreviewPayload);
                             setDisplayTarget(switched);
                             if (switched.blocked) {
-                               const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+                              const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
                               const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                               const message = `[LumaSync] Display switch blocked (${code}): ${reason}`;
-                               console.warn(message);
-                               setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
-                               const disabledPattern = await flowRef.current.toggle(false);
-                               setTestPattern(disabledPattern);
-                               return;
+                              console.warn(`[LumaSync] Display switch blocked (${code}): ${reason}`);
+                              setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
+                              const disabledPattern = await flowRef.current.toggle(false);
+                              setTestPattern(disabledPattern);
+                              return;
                             }
-
-                           setTestPatternError(null);
-                           setDisplayTarget(displayTargetRef.current.clearBlockedState());
+                            setTestPatternError(null);
+                            setDisplayTarget(displayTargetRef.current.clearBlockedState());
                           } catch (error) {
                             const reason = error instanceof Error ? error.message : String(error);
-                            const message = `[LumaSync] Display switch failed: ${reason}`;
-                            console.warn(message);
+                            console.warn(`[LumaSync] Display switch failed: ${reason}`);
                             setTestPatternError(t("calibration.overlay.errors.displaySwitchFailed", { reason }));
                           }
                         }}
-                    >
-                      <div className="font-semibold">
-                        {t("calibration.overlay.displayCard", { number: index + 1 })}
-                        {display.isPrimary ? ` • ${t("calibration.overlay.primary")}` : ""}
-                        {isActive ? ` • ${t("calibration.overlay.active")}` : ""}
-                      </div>
-                      <div className="text-white/70">
-                        {display.width}x{display.height} @ ({display.x}, {display.y})
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-            {testPattern.isEnabled ? (
-              <>
-                <span className="rounded-md bg-white/15 px-2 py-1">
-                  {t("calibration.overlay.previewProgress", {
-                    led: testPattern.markerIndex + 1,
-                    total: Math.max(1, testPattern.totalLeds),
-                    segment: t(`calibration.editor.counts.${markerSegment}`),
-                  })}
-                </span>
-                <div className="flex items-center gap-1 rounded-md border border-cyan-300/45 bg-cyan-500/10 px-1.5 py-1">
-                  {segmentOrder.map((segment) => {
-                    const isActive = markerSegment === segment;
-
-                    return (
-                      <span
-                        key={segment}
-                        className={`rounded px-1.5 py-0.5 text-[11px] font-semibold transition-colors ${
-                          isActive
-                            ? "bg-cyan-300 text-slate-900"
-                            : "bg-white/10 text-white/80"
+                        className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-all ${
+                          isSelected
+                            ? "border-cyan-400/50 bg-cyan-500/15 text-cyan-100"
+                            : "border-white/10 bg-white/5 text-white/50 hover:border-white/20 hover:bg-white/8 hover:text-white/80"
                         }`}
                       >
-                        {t(`calibration.editor.counts.${segment}`)}
-                      </span>
+                        <div className="relative shrink-0">
+                          <svg viewBox="0 0 16 14" className="h-3.5 w-4 fill-none stroke-current" strokeWidth="1.3">
+                            <rect x="0.75" y="0.75" width="14.5" height="9.5" rx="1.5" />
+                            <path d="M5.5 12h5M8 10.25V12" strokeLinecap="round" />
+                          </svg>
+                          {isActive && (
+                            <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 ring-1 ring-black/30" />
+                          )}
+                        </div>
+                        <div className="text-left">
+                          <div className="text-[11px] font-semibold leading-tight">
+                            {t("calibration.overlay.displayCard", { number: index + 1 })}
+                            {display.isPrimary ? (
+                              <span className="ml-1 text-[9px] font-normal opacity-55">
+                                {t("calibration.overlay.primary").toUpperCase()}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-[10px] leading-tight opacity-45">
+                            {display.width}×{display.height}
+                          </div>
+                        </div>
+                      </button>
                     );
                   })}
                 </div>
               </>
-            ) : null}
-            {testPattern.isEnabled ? (
-              testPattern.mode === "preview-only" ? (
-                <span className="rounded-md border border-amber-300/60 bg-amber-500/20 px-2 py-1 text-amber-100">
-                  {t("calibration.overlay.previewOnly")}
-                </span>
-              ) : (
-                <span className="rounded-md border border-emerald-300/60 bg-emerald-500/20 px-2 py-1 text-emerald-100">
-                  {t("calibration.overlay.outputActive")}
-                </span>
-              )
-            ) : null}
-            {displayTarget.blocked ? (
-              <span className="rounded-md border border-rose-300/60 bg-rose-500/20 px-2 py-1 text-rose-100">
-                {t("calibration.overlay.blockedReason", {
-                  code: displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED",
-                  reason: displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown"),
-                })}
-              </span>
-            ) : null}
-            {testPatternError ? (
-              <span className="rounded-md border border-rose-300/60 bg-rose-500/20 px-2 py-1 text-rose-100">
-                {testPatternError}
-              </span>
-            ) : null}
+            )}
+
+            {/* Active preview status */}
+            {testPattern.isEnabled && (
+              <>
+                <div className="h-4 w-px shrink-0 bg-white/12" />
+                <div className="flex min-w-0 items-center gap-2">
+                  {/* Segment tracker */}
+                  <div className="flex gap-0.5">
+                    {segmentOrder.map((segment) => {
+                      const isCurrentSegment = markerSegment === segment;
+                      return (
+                        <span
+                          key={segment}
+                          className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest transition-colors ${
+                            isCurrentSegment ? "bg-cyan-400 text-slate-900" : "text-white/25"
+                          }`}
+                        >
+                          {t(`calibration.editor.counts.${segment}`).charAt(0)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <span className="shrink-0 tabular-nums text-[11px] text-white/35">
+                    {testPattern.markerIndex + 1}/{Math.max(1, testPattern.totalLeds)}
+                  </span>
+                </div>
+                {/* Mode indicator */}
+                <div
+                  className={`flex shrink-0 items-center gap-1.5 text-[11px] ${
+                    testPattern.mode === "preview-only" ? "text-amber-300/65" : "text-emerald-300/75"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      testPattern.mode === "preview-only" ? "bg-amber-400" : "animate-pulse bg-emerald-400"
+                    }`}
+                  />
+                  <span>
+                    {testPattern.mode === "preview-only"
+                      ? t("calibration.overlay.previewOnly")
+                      : t("calibration.overlay.outputActive")}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
-          {validationErrors && validationErrors.length > 0 ? (
-            <ul className="mr-auto flex flex-col gap-1 text-xs text-rose-400">
-              {validationErrors.map((error) => (
-                <li key={`${error.code}:${error.field}`}>
-                  {error.code}: {error.field}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              const closeState = requestEditorClose(editorState);
-              setEditorState(closeState);
-              if (closeState.shouldClose) {
-                void flowRef.current.dispose();
-                setTestPattern(flowRef.current.getSnapshot());
-                onClose();
-              }
-            }}
-            className="rounded-lg border border-white/30 px-4 py-2 text-sm font-medium text-white hover:bg-white/10"
-          >
-            {t("calibration.overlay.cancel")}
-          </button>
-          <button
-            type="button"
-            disabled={isSaving}
-            onClick={async () => {
-              setIsSaving(true);
-              const result = validateCalibrationConfig(editorState.current);
-              if (!result.ok) {
-                setValidationErrors(result.errors);
-                setIsSaving(false);
-                return;
-              }
-              setValidationErrors(null);
-              try {
-                const savedState = saveEditorCalibration(editorState);
-                await shellStore.save({ ledCalibration: savedState.current });
-                onSaved(savedState.current);
-                setEditorState(savedState);
-                await flowRef.current.dispose();
-                setTestPattern(flowRef.current.getSnapshot());
-                onClose();
-              } finally {
-                setIsSaving(false);
-              }
-            }}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            {isSaving ? t("calibration.overlay.saving") : t("calibration.overlay.save")}
-          </button>
+
+          {/* Right: action buttons */}
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const closeState = requestEditorClose(editorState);
+                setEditorState(closeState);
+                if (closeState.shouldClose) {
+                  void flowRef.current.dispose();
+                  setTestPattern(flowRef.current.getSnapshot());
+                  onClose();
+                }
+              }}
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white/65 transition-colors hover:border-white/25 hover:bg-white/8 hover:text-white/90"
+            >
+              {t("calibration.overlay.cancel")}
+            </button>
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={async () => {
+                setIsSaving(true);
+                const result = validateCalibrationConfig(editorState.current);
+                if (!result.ok) {
+                  setValidationErrors(result.errors);
+                  setIsSaving(false);
+                  return;
+                }
+                setValidationErrors(null);
+                try {
+                  const savedState = saveEditorCalibration(editorState);
+                  await shellStore.save({ ledCalibration: savedState.current });
+                  onSaved(savedState.current);
+                  setEditorState(savedState);
+                  await flowRef.current.dispose();
+                  setTestPattern(flowRef.current.getSnapshot());
+                  onClose();
+                } finally {
+                  setIsSaving(false);
+                }
+              }}
+              className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-white/90 disabled:opacity-50"
+            >
+              {isSaving ? t("calibration.overlay.saving") : t("calibration.overlay.save")}
+            </button>
+          </div>
         </div>
 
         {editorState.confirmDiscard ? (

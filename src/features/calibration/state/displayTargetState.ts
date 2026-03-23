@@ -112,8 +112,18 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
         return inFlightSwitch;
       }
 
-      const targetDisplayId = getResolvedTargetId(displayId);
+      const fallbackDisplayId =
+        snapshot.displays.find((display) => display.isPrimary)?.id ?? snapshot.displays[0]?.id ?? null;
+      const targetDisplayId = getResolvedTargetId(displayId) ?? fallbackDisplayId;
       if (!targetDisplayId) {
+        snapshot = {
+          ...snapshot,
+          activeDisplayId: null,
+          blocked: true,
+          blockedCode: "OVERLAY_NO_DISPLAY",
+          blockedReason: "No display available for calibration overlay.",
+          isSwitching: false,
+        };
         return snapshot;
       }
 
