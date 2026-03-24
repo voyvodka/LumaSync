@@ -211,8 +211,20 @@ function App() {
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);
         setSelectedOutputTargets(restoredTargets);
-        setActiveOutputTargets(restoredMode.kind === LIGHTING_MODE_KIND.OFF ? [] : restoredTargets);
-        setHueStartConfig(toHueStartConfig(state));
+        const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
+        setActiveOutputTargets(isActive ? restoredTargets : []);
+        const hueBootstrapConfig = toHueStartConfig(state);
+        setHueStartConfig(hueBootstrapConfig);
+
+        // Warm up the persistent Hue sender so solid-color updates work
+        // immediately on app start without requiring a mode switch first.
+        if (isActive && restoredTargets.includes("hue") && hueBootstrapConfig) {
+          try {
+            await startHue(hueBootstrapConfig);
+          } catch {
+            // Non-fatal: user can switch modes to re-initialize.
+          }
+        }
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
@@ -305,7 +317,17 @@ function App() {
         }
 
         if (activeOutputTargets.includes("hue")) {
-          queuedHueSolidRef.current = normalizedNextMode.solid;
+          // Fire-and-forget: Rust background sender handles 50ms rate limiting.
+          // The 2-second sync interval acts as a safety-net retry, not the primary path.
+          void setHueSolidColor({
+            r: normalizedNextMode.solid.r,
+            g: normalizedNextMode.solid.g,
+            b: normalizedNextMode.solid.b,
+            brightness: normalizedNextMode.solid.brightness,
+          }).catch(() => {
+            // On failure, fall back to the queue so the interval retries.
+            queuedHueSolidRef.current = normalizedNextMode.solid;
+          });
         }
 
         modeTransitionLockRef.current = false;

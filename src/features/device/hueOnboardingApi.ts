@@ -109,3 +109,23 @@ export async function checkHueStreamReadiness(
     areaId,
   });
 }
+
+export interface HueAreaChannelInfo {
+  index: number;
+  positionX: number;
+  positionY: number;
+  lightCount: number;
+  autoRegion: string;
+}
+
+export async function getHueAreaChannels(
+  bridgeIp: string,
+  username: string,
+  areaId: string,
+): Promise<HueAreaChannelInfo[]> {
+  return invoke<HueAreaChannelInfo[]>(HUE_COMMANDS.GET_AREA_CHANNELS, {
+    bridgeIp,
+    username,
+    areaId,
+  });
+}

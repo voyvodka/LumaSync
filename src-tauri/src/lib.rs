@@ -40,8 +40,8 @@ use commands::hue_onboarding::{
     pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
 use commands::hue_stream_lifecycle::{
-    get_hue_stream_status, restart_hue_stream, set_hue_solid_color, start_hue_stream,
-    stop_hue_stream, HueRuntimeStateStore,
+    get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
+    start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
 };
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
@@ -238,6 +238,7 @@ pub fn run() {
             restart_hue_stream,
             set_hue_solid_color,
             get_hue_stream_status,
+            get_hue_area_channels,
             set_lighting_mode,
             stop_lighting,
             get_lighting_mode_status,

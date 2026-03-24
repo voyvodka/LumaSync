@@ -7,6 +7,7 @@ import { buildHueStatusCard } from "../../device/hueStatusCard";
 import { useDeviceConnection } from "../../device/useDeviceConnection";
 import { useHueOnboarding } from "../../device/useHueOnboarding";
 import { stopHue } from "../../mode/modeApi";
+import { HueChannelMapPanel } from "./HueChannelMapPanel";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -48,6 +49,10 @@ export function DeviceSection() {
     runtimeStatus,
     runtimeTargets,
     isRuntimeMutating,
+    areaChannels,
+    isLoadingChannels,
+    channelRegionOverrides,
+    setChannelRegion,
     discover,
     selectBridge,
     setManualIp,
@@ -554,6 +559,15 @@ export function DeviceSection() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {selectedAreaId && (
+              <HueChannelMapPanel
+                channels={areaChannels}
+                isLoading={isLoadingChannels}
+                overrides={channelRegionOverrides}
+                onSetRegion={setChannelRegion}
+              />
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -14,10 +14,12 @@ import { shellStore } from "../persistence/shellStore";
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
+  getHueAreaChannels,
   listHueEntertainmentAreas,
   pairHueBridge,
   type CommandStatus,
   type HueBridgeSummary,
+  type HueAreaChannelInfo,
   type HueEntertainmentAreaSummary,
   type HuePairingCredentials,
   validateHueCredentials,
@@ -75,6 +77,12 @@ export interface UseHueOnboardingResult {
   runtimeStatus: HueRuntimeStatus | null;
   runtimeTargets: HueRuntimeTargetTelemetryRow[];
   isRuntimeMutating: boolean;
+  /** Channels for the currently selected area (empty while loading or no area selected). */
+  areaChannels: HueAreaChannelInfo[];
+  isLoadingChannels: boolean;
+  /** User overrides: channel index → region string. */
+  channelRegionOverrides: Record<number, string>;
+  setChannelRegion: (channelIndex: number, region: string | null) => void;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
@@ -295,6 +303,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatus | null>(null);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
   const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
+  const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
+  const [channelRegionOverrides, setChannelRegionOverrides] = useState<Record<number, string>>({});
 
   const selectedBridge = useMemo(
     () => state.bridges.find((bridge) => bridge.id === state.selectedBridgeId) ?? null,
@@ -343,6 +354,84 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       };
     });
   }, []);
+
+  // Load channels whenever the selected area or credentials change.
+  useEffect(() => {
+    if (!selectedBridge || !state.credentials || !state.selectedAreaId) {
+      setAreaChannels([]);
+      return;
+    }
+
+    let cancelled = false;
+    const areaId = state.selectedAreaId;
+    const { ip } = selectedBridge;
+    const { username } = state.credentials;
+
+    setIsLoadingChannels(true);
+    void getHueAreaChannels(ip, username, areaId)
+      .then((channels) => {
+        if (!cancelled) {
+          setAreaChannels(channels);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAreaChannels([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingChannels(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBridge, state.credentials, state.selectedAreaId]);
+
+  // Load channel overrides for the selected area from the store.
+  useEffect(() => {
+    if (!state.selectedAreaId) {
+      setChannelRegionOverrides({});
+      return;
+    }
+
+    const areaId = state.selectedAreaId;
+    void shellStore.load().then((stored) => {
+      const overrides = stored.hueChannelRegionOverrides?.[areaId] ?? {};
+      setChannelRegionOverrides(overrides);
+    });
+  }, [state.selectedAreaId]);
+
+  const setChannelRegion = useCallback(
+    (channelIndex: number, region: string | null) => {
+      if (!state.selectedAreaId) return;
+
+      const areaId = state.selectedAreaId;
+      setChannelRegionOverrides((prev) => {
+        const next = { ...prev };
+        if (region === null) {
+          delete next[channelIndex];
+        } else {
+          next[channelIndex] = region;
+        }
+
+        void shellStore.load().then((stored) => {
+          const allOverrides = { ...(stored.hueChannelRegionOverrides ?? {}) };
+          if (Object.keys(next).length === 0) {
+            delete allOverrides[areaId];
+          } else {
+            allOverrides[areaId] = next;
+          }
+          void shellStore.save({ hueChannelRegionOverrides: allOverrides });
+        });
+
+        return next;
+      });
+    },
+    [state.selectedAreaId],
+  );
 
   const applyReadinessResult = useCallback(
     (
@@ -844,6 +933,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         username: state.credentials.username,
         areaId: state.selectedAreaId,
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+        channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
       });
     } catch (error) {
       patchState((prev) => ({
@@ -858,7 +948,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       await pollRuntimeStatus();
       setIsRuntimeMutating(false);
     }
-  }, [isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId]);
+  }, [channelRegionOverrides, isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId]);
 
   const retryRuntimeTarget = useCallback(
     async (target: HueRuntimeTarget) => {
@@ -874,6 +964,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
             username: state.credentials.username,
             areaId: state.selectedAreaId,
             triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+            channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
           });
         }
       } catch (error) {
@@ -890,7 +981,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         setIsRuntimeMutating(false);
       }
     },
-    [isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId],
+    [channelRegionOverrides, isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId],
   );
 
   return {
@@ -916,6 +1007,10 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     runtimeStatus,
     runtimeTargets,
     isRuntimeMutating,
+    areaChannels,
+    isLoadingChannels,
+    channelRegionOverrides,
+    setChannelRegion,
     discover,
     selectBridge,
     setManualIp,

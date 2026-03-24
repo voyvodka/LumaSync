@@ -53,7 +53,7 @@ interface SolidDraft {
   brightness: number;
 }
 
-const SOLID_COMMIT_MIN_INTERVAL_MS = 180;
+const SOLID_COMMIT_MIN_INTERVAL_MS = 50;
 
 function isSameSolidDraft(left: SolidDraft, right: SolidDraft): boolean {
   return left.r === right.r

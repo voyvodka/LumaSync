@@ -228,15 +228,6 @@ fn open_overlay_window<R: Runtime>(
             .set_size(Size::Logical(LogicalSize::new(logical_width, logical_height)))
             .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
 
-        eprintln!(
-            "[LumaSync] OVERLAY_LOGICAL_GEOMETRY display={} logical_pos=({:.1}, {:.1}) logical_size=({:.1}x{:.1}) scale={}",
-            target_display.id,
-            logical_x,
-            logical_y,
-            logical_width,
-            logical_height,
-            safe_scale,
-        );
     }
 
     window

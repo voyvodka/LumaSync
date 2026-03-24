@@ -8,12 +8,12 @@ use tauri::State;
 
 use super::ambilight_capture::{
     create_live_frame_source, sample_led_frame, AmbilightCaptureError, AmbilightFrameSource,
-    SamplingCalibration, StaticFrameSource,
+    CapturedFrame, SamplingCalibration, StaticFrameSource,
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::hue_stream_lifecycle::{
-    apply_hue_color_with_context, snapshot_hue_output_context, HueActiveOutputContext,
-    HueRuntimeStateStore,
+    apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
+    HueActiveOutputContext, HueScreenRegion, HueRuntimeStateStore,
 };
 use super::led_output::{
     apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, LedOutputBridge,
@@ -195,12 +195,61 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
 fn capture_sample_send_frame(
     source: &mut dyn AmbilightFrameSource,
     calibration: &SamplingCalibration,
-) -> Result<Vec<[u8; 3]>, String> {
+) -> Result<(CapturedFrame, Vec<[u8; 3]>), String> {
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-    let captured_frame = source.capture_frame().map_err(|error| error.as_reason())?;
-    let sampled =
-        sample_led_frame(&captured_frame, calibration).map_err(|error| error.as_reason())?;
-    Ok(sampled.colors)
+    let frame = source.capture_frame().map_err(|error| error.as_reason())?;
+    let sampled = sample_led_frame(&frame, calibration).map_err(|error| error.as_reason())?;
+    Ok((frame, sampled.colors))
+}
+
+/// Average the colour of the pixels in the screen strip corresponding to
+/// `region`. Uses a step of 8 pixels in both axes for fast sub-sampling.
+fn sample_screen_region_avg(frame: &CapturedFrame, region: &HueScreenRegion) -> (u8, u8, u8) {
+    let w = frame.width as usize;
+    let h = frame.height as usize;
+    if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
+        return (0, 0, 0);
+    }
+
+    const STRIP: f32 = 0.20; // 20% strip depth
+    const STEP: usize = 8;   // sub-sample every 8th pixel for speed
+
+    let strip_h = ((h as f32 * STRIP) as usize).max(1);
+    let strip_w = ((w as f32 * STRIP) as usize).max(1);
+
+    let (row_start, row_end, col_start, col_end) = match region {
+        HueScreenRegion::Top    => (0,           strip_h,     0,           w          ),
+        HueScreenRegion::Bottom => (h - strip_h, h,           0,           w          ),
+        HueScreenRegion::Left   => (0,           h,           0,           strip_w    ),
+        HueScreenRegion::Right  => (0,           h,           w - strip_w, w          ),
+        HueScreenRegion::Center => (h / 4,       3 * h / 4,   w / 4,       3 * w / 4 ),
+    };
+
+    let mut sum_r = 0u32;
+    let mut sum_g = 0u32;
+    let mut sum_b = 0u32;
+    let mut count = 0u32;
+
+    let mut row = row_start;
+    while row < row_end {
+        let mut col = col_start;
+        while col < col_end {
+            let idx = row * w + col;
+            if let Some(pixel) = frame.pixels_rgb.get(idx) {
+                sum_r += u32::from(pixel[0]);
+                sum_g += u32::from(pixel[1]);
+                sum_b += u32::from(pixel[2]);
+                count += 1;
+            }
+            col += STEP;
+        }
+        row += STEP;
+    }
+
+    if count == 0 {
+        return (0, 0, 0);
+    }
+    ((sum_r / count) as u8, (sum_g / count) as u8, (sum_b / count) as u8)
 }
 
 struct AmbilightWorkerQualityState {
@@ -272,7 +321,7 @@ fn start_ambilight_worker(
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
 
     let mut initial_frame_source = StaticFrameSource::new(initial_frame);
-    let initial_sampled = capture_sample_send_frame(&mut initial_frame_source, &calibration)?;
+    let (_, initial_sampled) = capture_sample_send_frame(&mut initial_frame_source, &calibration)?;
     telemetry_window.record_capture();
     if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
         telemetry_window.record_slot_overwrite();
@@ -294,11 +343,12 @@ fn start_ambilight_worker(
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
-        let mut last_hue_push_at = Instant::now();
 
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
-            if let Ok(sampled) = capture_sample_send_frame(frame_source.as_mut(), &calibration) {
+            if let Ok((raw_frame, sampled)) =
+                capture_sample_send_frame(frame_source.as_mut(), &calibration)
+            {
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
                 telemetry_window.record_capture();
                 if quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice()) {
@@ -319,32 +369,22 @@ fn start_ambilight_worker(
                     }) {
                         Ok(true) => {
                             telemetry_window.record_send();
+                            // Fire-and-forget per-channel Hue update.
+                            // Rate limiting (50ms) is handled inside the sender.
                             if let Some(context) = hue_output.as_ref() {
-                                let elapsed =
-                                    Instant::now().saturating_duration_since(last_hue_push_at);
-                                if elapsed >= Duration::from_millis(180) {
-                                    let led_count = sampled.len().max(1) as u32;
-                                    let (sum_r, sum_g, sum_b) = sampled.iter().fold(
-                                        (0_u32, 0_u32, 0_u32),
-                                        |(acc_r, acc_g, acc_b), color| {
-                                            (
-                                                acc_r + u32::from(color[0]),
-                                                acc_g + u32::from(color[1]),
-                                                acc_b + u32::from(color[2]),
-                                            )
-                                        },
+                                if !context.channels.is_empty() {
+                                    let channel_colors: Vec<(u8, u8, u8)> = context
+                                        .channels
+                                        .iter()
+                                        .map(|ch| {
+                                            sample_screen_region_avg(&raw_frame, &ch.screen_region)
+                                        })
+                                        .collect();
+                                    let _ = apply_hue_channels_with_context(
+                                        context,
+                                        channel_colors,
+                                        brightness,
                                     );
-                                    let avg_r = (sum_r / led_count) as u8;
-                                    let avg_g = (sum_g / led_count) as u8;
-                                    let avg_b = (sum_b / led_count) as u8;
-
-                                    if apply_hue_color_with_context(
-                                        context, avg_r, avg_g, avg_b, brightness,
-                                    )
-                                    .is_ok()
-                                    {
-                                        last_hue_push_at = Instant::now();
-                                    }
                                 }
                             }
                             send_started.elapsed().as_secs_f32() * 1000.0

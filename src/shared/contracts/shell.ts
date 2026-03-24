@@ -122,6 +122,11 @@ export interface ShellState {
    */
   hueOnboardingStep?: HueOnboardingStep;
   /**
+   * User-defined screen region overrides per entertainment area.
+   * Keyed by area ID → channel index → region string ("left" | "right" | "top" | "bottom" | "center").
+   */
+  hueChannelRegionOverrides?: Record<string, Record<number, string>>;
+  /**
    * Cached credential health line shown in Hue settings.
    */
   hueCredentialStatus?: HueCredentialStatus;

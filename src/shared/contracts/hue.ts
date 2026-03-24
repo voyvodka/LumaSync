@@ -14,6 +14,7 @@ export const HUE_COMMANDS = {
   RESTART_STREAM: "restart_hue_stream",
   SET_SOLID_COLOR: "set_hue_solid_color",
   GET_STREAM_STATUS: "get_hue_stream_status",
+  GET_AREA_CHANNELS: "get_hue_area_channels",
 } as const;
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];

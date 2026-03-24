@@ -32,6 +32,8 @@ export interface StartHuePayload {
   username: string;
   areaId: string;
   triggerSource?: HueRuntimeTriggerSource;
+  /** Per-channel region overrides indexed by channel index. */
+  channelRegionOverrides?: Record<number, string>;
 }
 
 export interface HueSolidColorPayload {
@@ -109,17 +111,30 @@ export async function getLightingModeStatus(invoker: ModeInvoker = defaultInvoke
   }
 }
 
+function overridesToList(overrides: Record<number, string>): (string | null)[] | undefined {
+  const keys = Object.keys(overrides).map(Number);
+  if (keys.length === 0) {
+    return undefined;
+  }
+  const channelCount = Math.max(...keys) + 1;
+  return Array.from({ length: channelCount }, (_, i) => overrides[i] ?? null);
+}
+
 export async function startHue(
   payload: StartHuePayload,
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<HueRuntimeCommandResult> {
   try {
+    const overrideList = payload.channelRegionOverrides
+      ? overridesToList(payload.channelRegionOverrides)
+      : undefined;
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.START_STREAM, {
       request: {
         bridgeIp: payload.bridgeIp,
         username: payload.username,
         areaId: payload.areaId,
         triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
+        channelRegionOverrides: overrideList,
       },
     });
   } catch (error) {
@@ -145,12 +160,16 @@ export async function restartHue(
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<HueRuntimeCommandResult> {
   try {
+    const overrideList = payload.channelRegionOverrides
+      ? overridesToList(payload.channelRegionOverrides)
+      : undefined;
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.RESTART_STREAM, {
       request: {
         bridgeIp: payload.bridgeIp,
         username: payload.username,
         areaId: payload.areaId,
         triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+        channelRegionOverrides: overrideList,
       },
     });
   } catch (error) {
