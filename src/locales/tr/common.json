@@ -1,15 +1,16 @@
 {
   "settings": {
     "title": "Ayarlar",
-    "navigationAria": "Ayarlar gezintisi",
+    "navigationAria": "Ana gezinti",
     "sections": {
-      "general": "Genel",
-      "startupTray": "Başlangıç & Tepsi",
-      "language": "Dil",
-      "aboutLogs": "Hakkında & Günlükler",
-      "telemetry": "Telemetri",
+      "control": "Kontrol",
+      "calibration": "Kalibrasyon",
+      "settings": "Ayarlar"
+    },
+    "tabs": {
       "device": "Cihaz",
-      "calibration": "Kalibrasyon"
+      "system": "Sistem",
+      "diagnostics": "Tanılama"
     }
   },
   "language": {
@@ -320,6 +321,16 @@
         "bottom": "Alt",
         "left": "Sol"
       }
+    },
+    "page": {
+      "title": "Kalibrasyon",
+      "back": "Geri",
+      "stepDisplay": "Ekran",
+      "stepTemplate": "Şablon",
+      "stepEditor": "Editör",
+      "displayTitle": "Ekranını seç",
+      "displayDescription": "LED şeridinin bağlı olduğu monitörü seç.",
+      "displayContinue": "Devam"
     },
     "overlay": {
       "title": "Kalibrasyon Editörü",

@@ -45,21 +45,22 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("CalibrationSection", () => {
-  it("renders CalibrationSection content in settings when calibration sidebar section is active", () => {
+  it("renders calibration navigation item in the layout", () => {
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.CALIBRATION}
+        activeSection={SECTION_IDS.CONTROL}
         onSectionChange={vi.fn()}
+        calibrationStep="editor"
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onEditCalibration={vi.fn()}
+        onCalibrationSaved={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Calibration" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Calibration/i })).toBeInTheDocument();
   });
 
   it("shows template and geometry overview values when calibration is configured", () => {

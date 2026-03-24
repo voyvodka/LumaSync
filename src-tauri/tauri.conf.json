@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "LumaSync Settings",
+        "title": "LumaSync",
         "width": 900,
         "height": 620,
         "minWidth": 720,

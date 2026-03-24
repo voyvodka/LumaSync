@@ -46,7 +46,7 @@ describe("GeneralSection", () => {
           modeLockReason={null}
           onModeChange={onModeChange}
           onOutputTargetsChange={vi.fn()}
-          onOpenCalibrationOverlay={vi.fn()}
+          onOpenCalibration={vi.fn()}
         />,
     );
 
@@ -77,7 +77,7 @@ describe("GeneralSection", () => {
             onModeChange(nextMode);
           }}
           onOutputTargetsChange={vi.fn()}
-          onOpenCalibrationOverlay={vi.fn()}
+          onOpenCalibration={vi.fn()}
         />
       );
     }
@@ -99,7 +99,7 @@ describe("GeneralSection", () => {
 
   it("keeps controls disabled and opens calibration CTA when lock reason is CALIBRATION_REQUIRED", async () => {
     const user = userEvent.setup();
-    const onOpenCalibrationOverlay = vi.fn();
+    const onOpenCalibration = vi.fn();
     const onModeChange = vi.fn();
 
     render(
@@ -109,7 +109,7 @@ describe("GeneralSection", () => {
           modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
           onModeChange={onModeChange}
           onOutputTargetsChange={vi.fn()}
-          onOpenCalibrationOverlay={onOpenCalibrationOverlay}
+          onOpenCalibration={onOpenCalibration}
         />,
     );
 
@@ -118,7 +118,7 @@ describe("GeneralSection", () => {
 
     await user.click(screen.getByRole("button", { name: "Open calibration" }));
 
-    expect(onOpenCalibrationOverlay).toHaveBeenCalledOnce();
+    expect(onOpenCalibration).toHaveBeenCalledOnce();
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
@@ -133,7 +133,7 @@ describe("GeneralSection", () => {
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={onOutputTargetsChange}
-        onOpenCalibrationOverlay={vi.fn()}
+        onOpenCalibration={vi.fn()}
       />,
     );
 

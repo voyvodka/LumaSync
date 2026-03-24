@@ -68,7 +68,7 @@ describe("lighting mode contracts", () => {
       windowHeight: 840,
       windowX: 0,
       windowY: 0,
-      lastSection: "general",
+      lastSection: "control",
       trayHintShown: true,
       startupEnabled: false,
       ledCalibration: CALIBRATION,

@@ -131,47 +131,47 @@ describe("TelemetrySection", () => {
 });
 
 describe("Settings telemetry wiring", () => {
-  it("renders TelemetrySection content when telemetry section is active", async () => {
+  it("renders TelemetrySection content when diagnostics section is active", async () => {
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.TELEMETRY}
+        activeSection={SECTION_IDS.SETTINGS}
         onSectionChange={vi.fn()}
+        calibrationStep="editor"
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onEditCalibration={vi.fn()}
+        onCalibrationSaved={vi.fn()}
       />,
     );
 
+    // Telemetry is inside Settings/Diagnostics tab
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Runtime telemetry" })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /Device/i })).toBeInTheDocument();
     });
   });
 
-  it("preserves existing default section flow while telemetry tab remains selectable", async () => {
+  it("preserves existing default section flow while settings tab remains selectable", async () => {
     const user = userEvent.setup();
     const onSectionChange = vi.fn();
 
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.GENERAL}
+        activeSection={SECTION_IDS.CONTROL}
         onSectionChange={onSectionChange}
+        calibrationStep="editor"
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onEditCalibration={vi.fn()}
+        onCalibrationSaved={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "General" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Settings/i }));
 
-    await user.click(screen.getByRole("button", { name: "Telemetry" }));
-
-    expect(onSectionChange).toHaveBeenCalledWith(SECTION_IDS.TELEMETRY);
-    expect(screen.queryByRole("heading", { name: "Runtime telemetry" })).not.toBeInTheDocument();
+    expect(onSectionChange).toHaveBeenCalledWith(SECTION_IDS.SETTINGS);
   });
 });

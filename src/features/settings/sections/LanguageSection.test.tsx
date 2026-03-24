@@ -115,21 +115,22 @@ describe("localized settings copy", () => {
     expect(screen.getByText("Always on")).toBeInTheDocument();
   });
 
-  it("keeps telemetry navigation label localized", () => {
+  it("keeps settings navigation label localized", () => {
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.GENERAL}
+        activeSection={SECTION_IDS.CONTROL}
         onSectionChange={vi.fn()}
+        calibrationStep="editor"
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
-        onEditCalibration={vi.fn()}
+        onCalibrationSaved={vi.fn()}
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Telemetry/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Calibration/i })).toBeInTheDocument();
   });
 });
 

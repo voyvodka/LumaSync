@@ -5,13 +5,11 @@ import { CALIBRATION_TEMPLATES } from "../model/templates";
 interface CalibrationTemplateStepProps {
   selectedTemplateId?: string;
   onSelectTemplate: (templateId: string) => void;
-  onSkipTemplate: () => void;
 }
 
 export function CalibrationTemplateStep({
   selectedTemplateId,
   onSelectTemplate,
-  onSkipTemplate,
 }: CalibrationTemplateStepProps) {
   const { t } = useTranslation("common");
 
@@ -31,9 +29,7 @@ export function CalibrationTemplateStep({
             <button
               key={template.id}
               type="button"
-              onClick={() => {
-                onSelectTemplate(template.id);
-              }}
+              onClick={() => onSelectTemplate(template.id)}
               className={`rounded-xl border px-4 py-3 text-left transition-colors ${
                 selected
                   ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
@@ -54,13 +50,6 @@ export function CalibrationTemplateStep({
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={onSkipTemplate}
-        className="mt-4 text-sm font-medium text-slate-600 underline underline-offset-2 hover:text-slate-900 dark:text-zinc-300 dark:hover:text-zinc-100"
-      >
-        {t("calibration.template.skip")}
-      </button>
     </section>
   );
 }

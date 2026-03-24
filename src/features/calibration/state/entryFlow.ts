@@ -1,6 +1,6 @@
 import type { LedCalibrationConfig } from "../model/contracts";
 
-export type CalibrationOverlayStep = "template" | "editor";
+export type CalibrationOverlayStep = "display" | "template" | "editor";
 
 export interface CalibrationOverlayEntry {
   open: boolean;

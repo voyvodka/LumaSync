@@ -34,28 +34,29 @@ export type TrayMenuId = (typeof TRAY_MENU_IDS)[keyof typeof TRAY_MENU_IDS];
 // Settings Sidebar Section IDs
 // ---------------------------------------------------------------------------
 
-/** Phase 1 baseline sidebar section identifiers */
+/** Main navigation section identifiers */
 export const SECTION_IDS = {
-  GENERAL: "general",
-  STARTUP_TRAY: "startup-tray",
-  LANGUAGE: "language",
-  ABOUT_LOGS: "about-logs",
-  TELEMETRY: "telemetry",
-  DEVICE: "device",
+  CONTROL: "control",
   CALIBRATION: "calibration",
+  SETTINGS: "settings",
 } as const;
 
 export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS];
 
-/** Ordered list of sidebar sections for rendering */
+/** Settings page tab identifiers */
+export const SETTINGS_TAB_IDS = {
+  DEVICE: "device",
+  SYSTEM: "system",
+  DIAGNOSTICS: "diagnostics",
+} as const;
+
+export type SettingsTabId = (typeof SETTINGS_TAB_IDS)[keyof typeof SETTINGS_TAB_IDS];
+
+/** Ordered list of main navigation sections */
 export const SECTION_ORDER: SectionId[] = [
-  SECTION_IDS.GENERAL,
-  SECTION_IDS.STARTUP_TRAY,
-  SECTION_IDS.LANGUAGE,
-  SECTION_IDS.ABOUT_LOGS,
-  SECTION_IDS.TELEMETRY,
-  SECTION_IDS.DEVICE,
+  SECTION_IDS.CONTROL,
   SECTION_IDS.CALIBRATION,
+  SECTION_IDS.SETTINGS,
 ];
 
 // ---------------------------------------------------------------------------
@@ -138,7 +139,7 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   windowHeight: null,
   windowX: null,
   windowY: null,
-  lastSection: SECTION_IDS.GENERAL,
+  lastSection: SECTION_IDS.CONTROL,
   trayHintShown: false,
   startupEnabled: false,
 };

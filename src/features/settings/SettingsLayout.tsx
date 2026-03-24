@@ -1,211 +1,160 @@
-import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
 import { GeneralSection } from "./sections/GeneralSection";
-import { StartupTraySection } from "./sections/StartupTraySection";
-import { LanguageSection } from "./sections/LanguageSection";
-import { AboutLogsSection } from "./sections/AboutLogsSection";
-import { DeviceSection } from "./sections/DeviceSection";
-import { CalibrationSection } from "./sections/CalibrationSection";
-import { TelemetrySection } from "../telemetry/ui/TelemetrySection";
+import { CalibrationPage } from "../calibration/ui/CalibrationPage";
+import { SettingsPage } from "./SettingsPage";
 import type { LedCalibrationConfig } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueRuntimeTarget } from "../../shared/contracts/hue";
-import { APP_NAME } from "../../shared/constants/app";
+import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
+import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
 
-interface SectionMeta {
-  id: SectionId;
-  label: string;
-  marker: string;
+// Nav icons
+function IconControl() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="3" />
+      <path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.05 5.05l1.41 1.41M13.54 13.54l1.41 1.41M5.05 14.95l1.41-1.41M13.54 6.46l1.41-1.41" />
+    </svg>
+  );
 }
 
-function SectionContent({
-  sectionId,
-  calibration,
-  lightingMode,
-  outputTargets,
-  modeLockReason,
-  isModeTransitioning,
-  onLightingModeChange,
-  onOutputTargetsChange,
-  onEditCalibration,
-}: {
-  sectionId: SectionId;
-  calibration?: LedCalibrationConfig;
-  lightingMode: LightingModeConfig;
-  outputTargets: HueRuntimeTarget[];
-  modeLockReason: ModeGuardReason | null;
-  isModeTransitioning?: boolean;
-  onLightingModeChange: (nextMode: LightingModeConfig) => void;
-  onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
-  onEditCalibration: () => void;
-}) {
-  switch (sectionId) {
-    case SECTION_IDS.GENERAL:
-      return (
-        <GeneralSection
-          mode={lightingMode}
-          outputTargets={outputTargets}
-          modeLockReason={modeLockReason}
-          isModeTransitioning={isModeTransitioning}
-          onModeChange={onLightingModeChange}
-          onOutputTargetsChange={onOutputTargetsChange}
-          onOpenCalibrationOverlay={onEditCalibration}
-        />
-      );
-    case SECTION_IDS.STARTUP_TRAY:
-      return <StartupTraySection />;
-    case SECTION_IDS.LANGUAGE:
-      return <LanguageSection />;
-    case SECTION_IDS.ABOUT_LOGS:
-      return <AboutLogsSection />;
-    case SECTION_IDS.TELEMETRY:
-      return <TelemetrySection />;
-    case SECTION_IDS.DEVICE:
-      return <DeviceSection />;
-    case SECTION_IDS.CALIBRATION:
-      return <CalibrationSection calibration={calibration} onEditCalibration={onEditCalibration} />;
-    default:
-      return (
-        <GeneralSection
-          mode={lightingMode}
-          outputTargets={outputTargets}
-          modeLockReason={modeLockReason}
-          isModeTransitioning={isModeTransitioning}
-          onModeChange={onLightingModeChange}
-          onOutputTargetsChange={onOutputTargetsChange}
-          onOpenCalibrationOverlay={onEditCalibration}
-        />
-      );
-  }
+function IconCalibration() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="16" height="11" rx="1.5" />
+      <path d="M7 17h6M10 15v2" />
+      <path d="M5 7h4M5 10h6M5 13h3" />
+    </svg>
+  );
 }
+
+function IconSettings() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="10" cy="10" r="2.5" />
+      <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.4 4.4l1.4 1.4M14.2 14.2l1.4 1.4M4.4 15.6l1.4-1.4M14.2 5.8l1.4-1.4" />
+    </svg>
+  );
+}
+
+const NAV_ICONS: Record<SectionId, React.ReactNode> = {
+  [SECTION_IDS.CONTROL]: <IconControl />,
+  [SECTION_IDS.CALIBRATION]: <IconCalibration />,
+  [SECTION_IDS.SETTINGS]: <IconSettings />,
+};
 
 interface SettingsLayoutProps {
   activeSection: SectionId;
-  onSectionChange: (sectionId: SectionId) => void;
+  onSectionChange: (sectionId: SectionId) => Promise<void>;
   calibration?: LedCalibrationConfig;
+  calibrationStep: CalibrationOverlayStep;
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
-  onEditCalibration: () => void;
+  onCalibrationSaved: (config: LedCalibrationConfig) => void;
 }
 
 export function SettingsLayout({
   activeSection,
   onSectionChange,
   calibration,
+  calibrationStep,
   lightingMode,
   outputTargets,
   modeLockReason,
   isModeTransitioning = false,
   onLightingModeChange,
   onOutputTargetsChange,
-  onEditCalibration,
+  onCalibrationSaved,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
 
-  const sectionMeta = useMemo<Record<SectionId, SectionMeta>>(
-    () => ({
-      [SECTION_IDS.GENERAL]: {
-        id: SECTION_IDS.GENERAL,
-        label: t("settings.sections.general"),
-        marker: "GE",
-      },
-      [SECTION_IDS.STARTUP_TRAY]: {
-        id: SECTION_IDS.STARTUP_TRAY,
-        label: t("settings.sections.startupTray"),
-        marker: "ST",
-      },
-      [SECTION_IDS.LANGUAGE]: {
-        id: SECTION_IDS.LANGUAGE,
-        label: t("settings.sections.language"),
-        marker: "LG",
-      },
-      [SECTION_IDS.ABOUT_LOGS]: {
-        id: SECTION_IDS.ABOUT_LOGS,
-        label: t("settings.sections.aboutLogs"),
-        marker: "AB",
-      },
-      [SECTION_IDS.TELEMETRY]: {
-        id: SECTION_IDS.TELEMETRY,
-        label: t("settings.sections.telemetry"),
-        marker: "TM",
-      },
-      [SECTION_IDS.DEVICE]: {
-        id: SECTION_IDS.DEVICE,
-        label: t("settings.sections.device"),
-        marker: "DV",
-      },
-      [SECTION_IDS.CALIBRATION]: {
-        id: SECTION_IDS.CALIBRATION,
-        label: t("settings.sections.calibration"),
-        marker: "CL",
-      },
-    }),
-    [t],
-  );
-
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-100/60 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
+      {/* Sidebar */}
       <nav
-        className="flex w-56 min-w-44 flex-col border-r border-slate-300/60 bg-white/80 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/80"
+        className="flex w-48 min-w-[160px] flex-col border-r border-slate-200/70 bg-white/80 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/80"
         aria-label={t("settings.navigationAria")}
       >
-        <div className="border-b border-slate-300/70 px-4 py-4 dark:border-zinc-800">
-          <span className="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase dark:text-zinc-400">
+        {/* App name */}
+        <div className="border-b border-slate-200/70 px-4 py-4 dark:border-zinc-800">
+          <span className="text-[11px] font-bold tracking-[0.18em] text-slate-500 uppercase dark:text-zinc-400">
             {APP_NAME}
           </span>
         </div>
 
-        <ul className="flex flex-1 flex-col gap-1 p-2" role="list">
+        {/* Nav items */}
+        <ul className="flex flex-1 flex-col gap-0.5 p-2" role="list">
           {SECTION_ORDER.map((sectionId) => {
-            const meta = sectionMeta[sectionId];
             const isActive = sectionId === activeSection;
+            const label = t(`settings.sections.${sectionId}`);
             return (
               <li key={sectionId}>
                 <button
-                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
                     isActive
                       ? "bg-slate-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
-                      : "text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                   }`}
-                  onClick={() => onSectionChange(sectionId)}
+                  onClick={() => void onSectionChange(sectionId)}
                   aria-current={isActive ? "page" : undefined}
                 >
                   <span
-                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold tracking-wide ${
-                      isActive
-                        ? "bg-white/20 text-white dark:bg-zinc-900/20 dark:text-zinc-900"
-                        : "bg-slate-300/60 text-slate-700 dark:bg-zinc-700 dark:text-zinc-100"
+                    className={`shrink-0 ${
+                      isActive ? "text-white dark:text-zinc-900" : "text-slate-500 dark:text-zinc-400"
                     }`}
-                    aria-hidden="true"
                   >
-                    {meta.marker}
+                    {NAV_ICONS[sectionId]}
                   </span>
-                  <span>{meta.label}</span>
+                  <span>{label}</span>
                 </button>
               </li>
             );
           })}
         </ul>
+
+        {/* Version */}
+        <div className="border-t border-slate-200/70 px-4 py-3 dark:border-zinc-800">
+          <span className="text-[10px] tabular-nums text-slate-400 dark:text-zinc-600">
+            v{APP_VERSION}
+          </span>
+        </div>
       </nav>
 
-      <main className="min-w-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6 sm:px-10 sm:py-8" role="main">
-        <SectionContent
-          sectionId={activeSection}
-          calibration={calibration}
-          lightingMode={lightingMode}
-          outputTargets={outputTargets}
-          modeLockReason={modeLockReason}
-          isModeTransitioning={isModeTransitioning}
-          onLightingModeChange={onLightingModeChange}
-          onOutputTargetsChange={onOutputTargetsChange}
-          onEditCalibration={onEditCalibration}
-        />
+      {/* Main content */}
+      <main className="min-w-0 flex-1 overflow-hidden" role="main">
+        {activeSection === SECTION_IDS.CONTROL && (
+          <div className="h-full overflow-y-auto overscroll-contain px-6 py-6 sm:px-8 sm:py-7">
+            <GeneralSection
+              mode={lightingMode}
+              outputTargets={outputTargets}
+              modeLockReason={modeLockReason}
+              isModeTransitioning={isModeTransitioning}
+              onModeChange={onLightingModeChange}
+              onOutputTargetsChange={onOutputTargetsChange}
+              onOpenCalibration={() => void onSectionChange(SECTION_IDS.CALIBRATION)}
+            />
+          </div>
+        )}
+
+        {activeSection === SECTION_IDS.CALIBRATION && (
+          <CalibrationPage
+            key="calibration-page"
+            initialStep={calibrationStep}
+            initialConfig={calibration}
+            onNavigateBack={() => void onSectionChange(SECTION_IDS.CONTROL)}
+            onSaved={onCalibrationSaved}
+          />
+        )}
+
+        {activeSection === SECTION_IDS.SETTINGS && (
+          <SettingsPage />
+        )}
       </main>
     </div>
   );

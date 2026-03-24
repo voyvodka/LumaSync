@@ -300,9 +300,6 @@ export function CalibrationOverlay({
                 setEditorState((prev) => loadEditorConfig(prev, config));
                 setActiveStep("editor");
               }}
-              onSkipTemplate={() => {
-                setActiveStep("editor");
-              }}
             />
           ) : (
             <CalibrationEditorCanvas

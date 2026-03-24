@@ -1,15 +1,16 @@
 {
   "settings": {
     "title": "Settings",
-    "navigationAria": "Settings navigation",
+    "navigationAria": "Main navigation",
     "sections": {
-      "general": "General",
-      "startupTray": "Startup & Tray",
-      "language": "Language",
-      "aboutLogs": "About & Logs",
-      "telemetry": "Telemetry",
+      "control": "Control",
+      "calibration": "Calibration",
+      "settings": "Settings"
+    },
+    "tabs": {
       "device": "Device",
-      "calibration": "Calibration"
+      "system": "System",
+      "diagnostics": "Diagnostics"
     }
   },
   "language": {
@@ -320,6 +321,16 @@
         "bottom": "Bottom",
         "left": "Left"
       }
+    },
+    "page": {
+      "title": "Calibration",
+      "back": "Back",
+      "stepDisplay": "Display",
+      "stepTemplate": "Template",
+      "stepEditor": "Editor",
+      "displayTitle": "Choose your display",
+      "displayDescription": "Select which monitor your LED strip is attached to.",
+      "displayContinue": "Continue"
     },
     "overlay": {
       "title": "Calibration Editor",
