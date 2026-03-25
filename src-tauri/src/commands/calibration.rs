@@ -199,14 +199,6 @@ fn open_overlay_window<R: Runtime>(
                 )))
                 .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
 
-            eprintln!(
-                "[LumaSync] OVERLAY_WINDOWS_DPI_CORRECTION target=({}x{}) applied=({}x{}) scale={}",
-                target_display.width,
-                target_display.height,
-                applied_size.width,
-                applied_size.height,
-                safe_scale,
-            );
         }
     } else {
         let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
@@ -234,21 +226,10 @@ fn open_overlay_window<R: Runtime>(
         .set_ignore_cursor_events(true)
         .map_err(|error| format!("OVERLAY_WINDOW_CLICKTHROUGH_FAILED: {error}"))?;
 
-    eprintln!(
-        "[LumaSync] OVERLAY_GEOMETRY display={} pos=({}, {}) size=({}x{}) scale={}",
-        target_display.id,
-        target_display.x,
-        target_display.y,
-        target_display.width,
-        target_display.height,
-        target_display.scale_factor,
-    );
 
-    if let Err(error) = window.eval(
+    let _ = window.eval(
         "window.dispatchEvent(new CustomEvent('lumasync-overlay-preview', { detail: window.__LUMASYNC_OVERLAY_PREVIEW__ ?? null }));",
-    ) {
-        eprintln!("[LumaSync] OVERLAY_PREVIEW_SYNC_WARN: {error}");
-    }
+    );
 
     Ok(())
 }
@@ -394,8 +375,6 @@ pub fn open_display_overlay<R: Runtime>(
                 "Requested display id='{display_id}' not found. Available ids: [{available_ids}]"
             )
             };
-            eprintln!("[LumaSync] OVERLAY_TARGET_FALLBACK: {reason}");
-
             if let Some(fallback_display) = displays
                 .iter()
                 .find(|display| display.is_primary)
@@ -403,7 +382,6 @@ pub fn open_display_overlay<R: Runtime>(
             {
                 fallback_display
             } else {
-                eprintln!("[LumaSync] OVERLAY_OPEN_FAILED: {reason}");
                 return Ok(overlay_error_result(
                     "OVERLAY_OPEN_FAILED",
                     "Could not open display overlay.",
@@ -444,13 +422,8 @@ pub fn open_display_overlay<R: Runtime>(
     );
 
     if !result.ok {
-        if let Some(reason) = result.reason.as_deref() {
-            eprintln!("[LumaSync] OVERLAY_OPEN_FAILED: {reason}");
-        }
         return Ok(result);
     }
-
-    eprintln!("[LumaSync] OVERLAY_OPENED");
 
     Ok(result)
 }
@@ -623,13 +596,6 @@ pub fn start_calibration_test_pattern(
     payload: StartCalibrationTestPatternPayload,
     connection_state: tauri::State<'_, SerialConnectionState>,
 ) -> Result<CalibrationCommandResponse, String> {
-    eprintln!(
-        "[LumaSync] start_calibration_test_pattern request: led_count={}, frame_ms={}, brightness={}",
-        payload.led_indexes.len(),
-        payload.frame_ms,
-        payload.brightness
-    );
-
     if payload.led_indexes.is_empty() {
         return Err("CALIBRATION_PATTERN_INVALID: ledIndexes cannot be empty.".to_string());
     }
@@ -651,7 +617,6 @@ pub fn start_calibration_test_pattern(
         .map_err(|error| format!("CALIBRATION_STATE_READ_FAILED: {error}"))?;
 
     if connected {
-        eprintln!("[LumaSync] start_calibration_test_pattern result: sending");
         return Ok(CalibrationCommandResponse {
             active: true,
             preview_only: false,
@@ -662,8 +627,6 @@ pub fn start_calibration_test_pattern(
             },
         });
     }
-
-    eprintln!("[LumaSync] start_calibration_test_pattern result: preview-only");
 
     Ok(CalibrationCommandResponse {
         active: false,
@@ -680,7 +643,6 @@ pub fn start_calibration_test_pattern(
 pub fn stop_calibration_test_pattern(
     connection_state: tauri::State<'_, SerialConnectionState>,
 ) -> Result<CalibrationCommandResponse, String> {
-    eprintln!("[LumaSync] stop_calibration_test_pattern request");
     let connected = connection_state
         .last_status
         .lock()

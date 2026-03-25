@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use reqwest::blocking::Client;
+use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::State;
@@ -234,7 +234,7 @@ impl HueColorSender {
 }
 
 fn spawn_hue_color_sender(
-    client: Arc<Client>,
+    client: Arc<BlockingClient>,
     bridge_ip: String,
     username: String,
     channels: Vec<HueAreaChannel>,
@@ -270,7 +270,7 @@ fn spawn_hue_color_sender(
             // Send to each channel concurrently; each channel may itself contain
             // multiple lights which `send_color_to_lights` also fans out in parallel.
             let brightness = latest.brightness;
-            let client_ref: &Client = &client;
+            let client_ref: &BlockingClient = &client;
             let bridge_ref: &str = &bridge_ip;
             let username_ref: &str = &username;
             thread::scope(|s| {
@@ -302,7 +302,7 @@ fn spawn_hue_color_sender(
 /// Send to all lights. For a single light: direct call. For multiple: parallel
 /// threads via `thread::scope` so each HTTPS round-trip happens concurrently.
 fn send_color_to_lights(
-    client: &Client,
+    client: &BlockingClient,
     bridge_ip: &str,
     username: &str,
     light_ids: &[String],
@@ -333,7 +333,7 @@ fn send_color_to_lights(
 }
 
 fn send_light_put(
-    client: &Client,
+    client: &BlockingClient,
     bridge_ip: &str,
     username: &str,
     light_id: &str,
@@ -627,16 +627,24 @@ fn store_active_stream_context(
     });
 }
 
-fn hue_http_client() -> Result<Client, String> {
-    Client::builder()
+fn hue_http_client() -> Result<BlockingClient, String> {
+    BlockingClient::builder()
         .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
         .danger_accept_invalid_certs(true)
         .build()
         .map_err(|error| error.to_string())
 }
 
-fn hue_http_client_arc() -> Result<Arc<Client>, String> {
+fn hue_http_client_arc() -> Result<Arc<BlockingClient>, String> {
     hue_http_client().map(Arc::new)
+}
+
+fn async_hue_http_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|error| error.to_string())
 }
 
 /// Map a Hue channel's 2D position (x: -1 left … +1 right, y: -1 bottom … +1 top)
@@ -661,21 +669,22 @@ fn channel_position_to_screen_region(x: f32, y: f32) -> HueScreenRegion {
     }
 }
 
-fn fetch_area_channels(
+async fn fetch_area_channels(
     bridge_ip: &str,
     username: &str,
     area_id: &str,
 ) -> Result<Vec<HueAreaChannel>, String> {
-    let client = hue_http_client()?;
+    let client = async_hue_http_client()?;
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
-    let payload = client
+    let response = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.text())
+        .await
+        .and_then(|r| r.error_for_status())
         .map_err(|error| error.to_string())?;
+    let payload = response.text().await.map_err(|error| error.to_string())?;
 
     let parsed: Value = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
     let raw_channels = parsed
@@ -692,26 +701,27 @@ fn fetch_area_channels(
         }
     }
 
-    fn fetch_resource(
-        client: &Client,
+    async fn fetch_resource(
+        client: &reqwest::Client,
         bridge_ip: &str,
         username: &str,
         rtype: &str,
         rid: &str,
     ) -> Result<Value, String> {
         let endpoint = format!("https://{bridge_ip}/clip/v2/resource/{rtype}/{rid}");
-        let payload = client
+        let response = client
             .get(endpoint)
             .header("hue-application-key", username)
             .send()
-            .and_then(|response| response.error_for_status())
-            .and_then(|response| response.text())
+            .await
+            .and_then(|r| r.error_for_status())
             .map_err(|error| error.to_string())?;
+        let payload = response.text().await.map_err(|error| error.to_string())?;
         serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
     }
 
-    fn resolve_to_light_ids(
-        client: &Client,
+    async fn resolve_to_light_ids(
+        client: &reqwest::Client,
         bridge_ip: &str,
         username: &str,
         seed_rtype: &str,
@@ -725,11 +735,18 @@ fn fetch_area_channels(
         let mut current_rtype = seed_rtype.to_string();
         let mut current_rid = seed_rid.to_string();
         for _ in 0..4 {
-            let resource =
-                match fetch_resource(client, bridge_ip, username, &current_rtype, &current_rid) {
-                    Ok(value) => value,
-                    Err(_) => return resolved,
-                };
+            let resource = match fetch_resource(
+                client,
+                bridge_ip,
+                username,
+                &current_rtype,
+                &current_rid,
+            )
+            .await
+            {
+                Ok(value) => value,
+                Err(_) => return resolved,
+            };
             let Some(item) = resource
                 .get("data")
                 .and_then(|value| value.as_array())
@@ -757,7 +774,9 @@ fn fetch_area_channels(
                     return resolved;
                 }
             }
-            let Some(owner) = item.get("owner") else { return resolved; };
+            let Some(owner) = item.get("owner") else {
+                return resolved;
+            };
             let Some(next_rtype) = owner.get("rtype").and_then(|value| value.as_str()) else {
                 return resolved;
             };
@@ -795,24 +814,38 @@ fn fetch_area_channels(
 
         let Some(members) = raw_ch.get("members").and_then(|value| value.as_array()) else {
             // Channel with no members still gets a record (empty lights).
-            result.push(HueAreaChannel { light_ids, screen_region, position_x: pos_x, position_y: pos_y });
+            result.push(HueAreaChannel {
+                light_ids,
+                screen_region,
+                position_x: pos_x,
+                position_y: pos_y,
+            });
             continue;
         };
 
         for member in members {
-            let Some(service) = member.get("service") else { continue; };
+            let Some(service) = member.get("service") else {
+                continue;
+            };
             let Some(rtype) = service.get("rtype").and_then(|value| value.as_str()) else {
                 continue;
             };
             let Some(rid) = service.get("rid").and_then(|value| value.as_str()) else {
                 continue;
             };
-            for light_id in resolve_to_light_ids(&client, bridge_ip, username, rtype, rid) {
+            for light_id in
+                resolve_to_light_ids(&client, bridge_ip, username, rtype, rid).await
+            {
                 push_unique(&mut light_ids, &light_id);
             }
         }
 
-        result.push(HueAreaChannel { light_ids, screen_region, position_x: pos_x, position_y: pos_y });
+        result.push(HueAreaChannel {
+            light_ids,
+            screen_region,
+            position_x: pos_x,
+            position_y: pos_y,
+        });
     }
 
     Ok(result)
@@ -851,13 +884,13 @@ fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChannelInfo> {
 /// a redundant bridge round-trip (and race with `start_hue_stream`). Falls back
 /// to a live bridge fetch only when the runtime has no matching data.
 #[tauri::command]
-pub fn get_hue_area_channels(
+pub async fn get_hue_area_channels(
     bridge_ip: String,
     username: String,
     area_id: String,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<Vec<HueAreaChannelInfo>, String> {
-    // Fast path: reuse channels already resolved by the running stream.
+    // Fast path: reuse channels already resolved by the running stream (brief lock, no I/O).
     {
         let owner = runtime_state
             .runtime
@@ -875,9 +908,9 @@ pub fn get_hue_area_channels(
                 return Ok(channels_to_info(&persistent.channels));
             }
         }
-    }
-    // Slow path: fetch directly from bridge.
-    let channels = fetch_area_channels(&bridge_ip, &username, &area_id)?;
+    } // lock released before any async I/O
+    // Slow path: fetch directly from bridge (no lock held).
+    let channels = fetch_area_channels(&bridge_ip, &username, &area_id).await?;
     Ok(channels_to_info(&channels))
 }
 
@@ -1086,48 +1119,53 @@ fn stop_with_timeout(
 }
 
 #[tauri::command]
-pub fn start_hue_stream(
+pub async fn start_hue_stream(
     request: StartHueStreamRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    let mut owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
     let trigger = request
         .trigger_source
         .clone()
         .unwrap_or(HueRuntimeTriggerSource::ModeControl);
-    let evidence = HueRuntimeGateEvidence {
-        bridge_configured: !request.bridge_ip.trim().is_empty(),
-        credentials_valid: !request.username.trim().is_empty(),
-        area_selected: !request.area_id.trim().is_empty(),
-        readiness_current: true,
-        ready: false,
-        auth_invalid_evidence: false,
-    };
 
+    // 1. Async readiness check — no lock held during network I/O.
     let readiness = check_hue_stream_readiness(
         request.bridge_ip.clone(),
         request.username.clone(),
         request.area_id.clone(),
-    );
+    )
+    .await;
 
-    let mut gate = evidence;
-    gate.readiness_current = readiness.status.code != "HUE_STREAM_READINESS_FAILED";
-    gate.ready = readiness.readiness.ready;
-    gate.auth_invalid_evidence = readiness.status.code.starts_with("AUTH_INVALID_")
-        || readiness.status.code == "HUE_CREDENTIAL_INVALID";
+    let gate = HueRuntimeGateEvidence {
+        bridge_configured: !request.bridge_ip.trim().is_empty(),
+        credentials_valid: !request.username.trim().is_empty(),
+        area_selected: !request.area_id.trim().is_empty(),
+        readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
+        ready: readiness.readiness.ready,
+        auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
+            || readiness.status.code == "HUE_CREDENTIAL_INVALID",
+    };
 
-    let result = start_with_evidence(&mut owner, &gate, trigger);
-    // If the stream was already active (NOOP), return early without re-fetching
-    // channels. Re-fetching while the stream is live can fail and would overwrite
-    // the working channel/sender state with empty data, breaking solid color.
-    if result.status.code == "HUE_START_NOOP_ALREADY_ACTIVE" {
-        return Ok(result);
-    }
+    // 2. Lock briefly for state decision only.
+    let result = {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        let result = start_with_evidence(&mut owner, &gate, trigger);
+        // If the stream was already active (NOOP), return early without re-fetching
+        // channels. Re-fetching while the stream is live can fail and would overwrite
+        // the working channel/sender state with empty data, breaking solid color.
+        if result.status.code == "HUE_START_NOOP_ALREADY_ACTIVE" {
+            return Ok(result);
+        }
+        result
+    }; // lock released before async I/O
+
+    // 3. Async channel fetch — no lock held.
     let mut channels = if result.active {
         fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
+            .await
             .unwrap_or_default()
     } else {
         Vec::new()
@@ -1135,19 +1173,27 @@ pub fn start_hue_stream(
     if let Some(overrides) = &request.channel_region_overrides {
         apply_channel_region_overrides(&mut channels, overrides);
     }
-    let has_no_lights = result.active && channels.is_empty();
-    store_active_stream_context(&mut owner, &request, channels, &result);
 
-    if has_no_lights {
-        owner.last_status = status_with(
-            HueRuntimeState::Running,
-            "HUE_STREAM_RUNNING_NO_LIGHTS",
-            "Hue runtime started but no color-addressable lights were resolved for the selected area.",
-            Some("Revalidate area members and restart Hue runtime.".to_string()),
-            HueRuntimeTriggerSource::System,
-        );
-        owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
-        return Ok(make_result(&owner));
+    // 4. Lock briefly to store stream context and apply no-lights guard.
+    let has_no_lights = result.active && channels.is_empty();
+    {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        store_active_stream_context(&mut owner, &request, channels, &result);
+
+        if has_no_lights {
+            owner.last_status = status_with(
+                HueRuntimeState::Running,
+                "HUE_STREAM_RUNNING_NO_LIGHTS",
+                "Hue runtime started but no color-addressable lights were resolved for the selected area.",
+                Some("Revalidate area members and restart Hue runtime.".to_string()),
+                HueRuntimeTriggerSource::System,
+            );
+            owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+            return Ok(make_result(&owner));
+        }
     }
 
     Ok(result)
@@ -1167,26 +1213,31 @@ pub fn stop_hue_stream(
 }
 
 #[tauri::command]
-pub fn restart_hue_stream(
+pub async fn restart_hue_stream(
     request: StartHueStreamRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    let mut owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
     let trigger = request
         .trigger_source
         .clone()
         .unwrap_or(HueRuntimeTriggerSource::DeviceSurface);
 
-    let _ = stop_with_timeout(&mut owner, false, trigger.clone());
+    // 1. Stop first — brief lock, no I/O.
+    {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        let _ = stop_with_timeout(&mut owner, false, trigger.clone());
+    } // lock released before async I/O
 
+    // 2. Async readiness check — no lock held.
     let readiness = check_hue_stream_readiness(
         request.bridge_ip.clone(),
         request.username.clone(),
         request.area_id.clone(),
-    );
+    )
+    .await;
 
     let gate = HueRuntimeGateEvidence {
         bridge_configured: !request.bridge_ip.trim().is_empty(),
@@ -1198,9 +1249,19 @@ pub fn restart_hue_stream(
             || readiness.status.code == "HUE_CREDENTIAL_INVALID",
     };
 
-    let result = start_with_evidence(&mut owner, &gate, trigger);
+    // 3. Lock briefly for state decision.
+    let result = {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        start_with_evidence(&mut owner, &gate, trigger)
+    }; // lock released
+
+    // 4. Async channel fetch — no lock held.
     let mut channels = if result.active {
         fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
+            .await
             .unwrap_or_default()
     } else {
         Vec::new()
@@ -1208,19 +1269,27 @@ pub fn restart_hue_stream(
     if let Some(overrides) = &request.channel_region_overrides {
         apply_channel_region_overrides(&mut channels, overrides);
     }
-    let has_no_lights = result.active && channels.is_empty();
-    store_active_stream_context(&mut owner, &request, channels, &result);
 
-    if has_no_lights {
-        owner.last_status = status_with(
-            HueRuntimeState::Running,
-            "HUE_STREAM_RUNNING_NO_LIGHTS",
-            "Hue runtime restarted but no color-addressable lights were resolved for the selected area.",
-            Some("Revalidate area members and retry.".to_string()),
-            HueRuntimeTriggerSource::System,
-        );
-        owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
-        return Ok(make_result(&owner));
+    // 5. Lock briefly to store context and apply no-lights guard.
+    let has_no_lights = result.active && channels.is_empty();
+    {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        store_active_stream_context(&mut owner, &request, channels, &result);
+
+        if has_no_lights {
+            owner.last_status = status_with(
+                HueRuntimeState::Running,
+                "HUE_STREAM_RUNNING_NO_LIGHTS",
+                "Hue runtime restarted but no color-addressable lights were resolved for the selected area.",
+                Some("Revalidate area members and retry.".to_string()),
+                HueRuntimeTriggerSource::System,
+            );
+            owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+            return Ok(make_result(&owner));
+        }
     }
 
     Ok(result)
@@ -1301,42 +1370,61 @@ pub fn set_hue_solid_color(
 }
 
 #[tauri::command]
-pub fn get_hue_stream_status(
+pub async fn get_hue_stream_status(
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    let mut owner = runtime_state
+    // 1. Check if stream is active and read params — brief lock, no I/O.
+    let active_stream_params = {
+        let owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        if matches!(
+            owner.state,
+            HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+        ) {
+            owner.active_stream.as_ref().map(|stream| {
+                (
+                    stream.bridge_ip.clone(),
+                    stream.username.clone(),
+                    stream.area_id.clone(),
+                )
+            })
+        } else {
+            None
+        }
+    }; // lock released before async I/O
+
+    // 2. If stream is active, check readiness async — no lock held.
+    if let Some((bridge_ip, username, area_id)) = active_stream_params {
+        let readiness = check_hue_stream_readiness(bridge_ip, username, area_id).await;
+        let gate = HueRuntimeGateEvidence {
+            bridge_configured: true,
+            credentials_valid: true,
+            area_selected: true,
+            readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
+            ready: readiness.readiness.ready,
+            auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
+                || readiness.status.code == "HUE_CREDENTIAL_INVALID",
+        };
+        let details = readiness
+            .status
+            .details
+            .clone()
+            .or_else(|| Some(readiness.status.message.clone()));
+
+        // 3. Lock briefly to apply the refreshed state.
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        return Ok(status_refresh_with_evidence(&mut owner, &gate, details));
+    }
+
+    let owner = runtime_state
         .runtime
         .lock()
         .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
-
-    if matches!(
-        owner.state,
-        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
-    ) {
-        if let Some(active_stream) = owner.active_stream.clone() {
-            let readiness = check_hue_stream_readiness(
-                active_stream.bridge_ip,
-                active_stream.username,
-                active_stream.area_id,
-            );
-            let gate = HueRuntimeGateEvidence {
-                bridge_configured: true,
-                credentials_valid: true,
-                area_selected: true,
-                readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
-                ready: readiness.readiness.ready,
-                auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
-                    || readiness.status.code == "HUE_CREDENTIAL_INVALID",
-            };
-            let details = readiness
-                .status
-                .details
-                .clone()
-                .or_else(|| Some(readiness.status.message.clone()));
-            return Ok(status_refresh_with_evidence(&mut owner, &gate, details));
-        }
-    }
-
     Ok(make_result(&owner))
 }
 

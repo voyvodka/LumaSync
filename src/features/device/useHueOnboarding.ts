@@ -733,7 +733,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   }, [applyReadinessResult, patchState, selectedBridge, state.credentials, state.selectedAreaId]);
 
   useEffect(() => {
-    if (!selectedBridge || !state.credentials || !state.selectedAreaId || state.isValidatingCredential) {
+    if (!selectedBridge || !state.credentials || !state.selectedAreaId || state.isValidatingCredential || state.isLoadingAreas) {
       return;
     }
 

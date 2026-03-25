@@ -1,6 +1,6 @@
 use std::{net::Ipv4Addr, str::FromStr, time::Duration};
 
-use reqwest::blocking::Client;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -96,7 +96,7 @@ struct DiscoveryBridge {
 }
 
 #[tauri::command]
-pub fn discover_hue_bridges() -> HueDiscoveryResponse {
+pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
     let client = match hue_http_client() {
         Ok(client) => client,
         Err(error) => {
@@ -111,12 +111,16 @@ pub fn discover_hue_bridges() -> HueDiscoveryResponse {
         }
     };
 
-    match client
-        .get("https://discovery.meethue.com/")
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.text())
-    {
+    let fetch = async {
+        client
+            .get("https://discovery.meethue.com/")
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await
+    };
+    match fetch.await {
         Ok(payload) => parse_discovery_payload(&payload),
         Err(error) => HueDiscoveryResponse {
             status: command_status(
@@ -130,7 +134,7 @@ pub fn discover_hue_bridges() -> HueDiscoveryResponse {
 }
 
 #[tauri::command]
-pub fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpResponse {
+pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpResponse {
     let invalid = verify_hue_bridge_ip_input(&bridge_ip);
     if invalid.status.code == "HUE_IP_INVALID" {
         return invalid;
@@ -151,12 +155,16 @@ pub fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpResponse {
     };
 
     let endpoint = format!("http://{bridge_ip}/api/config");
-    match client
-        .get(endpoint)
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.text())
-    {
+    let fetch = async {
+        client
+            .get(endpoint)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await
+    };
+    match fetch.await {
         Ok(payload) => parse_bridge_config_payload(&bridge_ip, &payload),
         Err(error) => HueVerifyBridgeIpResponse {
             status: command_status(
@@ -170,7 +178,7 @@ pub fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpResponse {
 }
 
 #[tauri::command]
-pub fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
+pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
     let ip_check = verify_hue_bridge_ip_input(&bridge_ip);
     if ip_check.status.code == "HUE_IP_INVALID" {
         return HuePairBridgeResponse {
@@ -194,18 +202,21 @@ pub fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
     };
 
     let endpoint = format!("http://{bridge_ip}/api");
-    let payload = json!({
+    let body = json!({
         "devicetype": "lumasync#desktop",
         "generateclientkey": true,
     });
-
-    match client
-        .post(endpoint)
-        .json(&payload)
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.text())
-    {
+    let fetch = async {
+        client
+            .post(endpoint)
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await
+    };
+    match fetch.await {
         Ok(payload) => parse_pairing_payload(&payload),
         Err(error) => HuePairBridgeResponse {
             status: command_status(
@@ -219,7 +230,7 @@ pub fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
 }
 
 #[tauri::command]
-pub fn validate_hue_credentials(
+pub async fn validate_hue_credentials(
     bridge_ip: String,
     username: String,
     _client_key: Option<String>,
@@ -247,12 +258,16 @@ pub fn validate_hue_credentials(
     };
 
     let endpoint = format!("http://{bridge_ip}/api/{username}/config");
-    match client
-        .get(endpoint)
-        .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.text())
-    {
+    let fetch = async {
+        client
+            .get(endpoint)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await
+    };
+    match fetch.await {
         Ok(payload) => parse_credentials_validation_payload(&payload),
         Err(error) => HueValidateCredentialsResponse {
             status: command_status(
@@ -266,7 +281,7 @@ pub fn validate_hue_credentials(
 }
 
 #[tauri::command]
-pub fn list_hue_entertainment_areas(
+pub async fn list_hue_entertainment_areas(
     bridge_ip: String,
     username: String,
 ) -> HueEntertainmentAreaListResponse {
@@ -281,7 +296,7 @@ pub fn list_hue_entertainment_areas(
         };
     }
 
-    match fetch_hue_entertainment_areas(&bridge_ip, &username) {
+    match fetch_hue_entertainment_areas(&bridge_ip, &username).await {
         Ok(areas) if areas.is_empty() => HueEntertainmentAreaListResponse {
             status: command_status(
                 "HUE_AREA_LIST_EMPTY",
@@ -312,12 +327,12 @@ pub fn list_hue_entertainment_areas(
 }
 
 #[tauri::command]
-pub fn check_hue_stream_readiness(
+pub async fn check_hue_stream_readiness(
     bridge_ip: String,
     username: String,
     area_id: String,
 ) -> HueStreamReadinessResponse {
-    match fetch_hue_entertainment_areas(&bridge_ip, &username) {
+    match fetch_hue_entertainment_areas(&bridge_ip, &username).await {
         Ok(areas) => {
             let selected = areas.iter().find(|area| area.id == area_id);
             let Some(area) = selected else {
@@ -585,7 +600,7 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
     }
 }
 
-fn fetch_hue_entertainment_areas(
+async fn fetch_hue_entertainment_areas(
     bridge_ip: &str,
     username: &str,
 ) -> Result<Vec<HueEntertainmentArea>, String> {
@@ -595,13 +610,14 @@ fn fetch_hue_entertainment_areas(
 
     let client = hue_http_client()?;
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration");
-    let payload = client
+    let response = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
-        .and_then(|response| response.error_for_status())
-        .and_then(|response| response.text())
+        .await
+        .and_then(|r| r.error_for_status())
         .map_err(|error| error.to_string())?;
+    let payload = response.text().await.map_err(|error| error.to_string())?;
 
     parse_area_list_payload(&payload)
 }
