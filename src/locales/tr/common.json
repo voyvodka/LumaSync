@@ -62,6 +62,20 @@
     "logs": "Günlükler",
     "logsDescription": "Uygulama günlükleri hata ayıklama için yerel olarak saklanır."
   },
+  "updater": {
+    "title": "Güncelleme mevcut",
+    "available": "{{version}} sürümü yüklenmeye hazır.",
+    "install": "Yükle ve Yeniden Başlat",
+    "later": "Sonra",
+    "downloading": "İndiriliyor... %{{progress}}",
+    "installing": "Güncelleme yükleniyor, uygulama yeniden başlıyor...",
+    "error": "Güncelleme başarısız: {{message}}",
+    "close": "Kapat",
+    "checkForUpdates": "Yazılım güncellemesi",
+    "checkForUpdatesDescription": "LumaSync'in en son sürümünü kontrol et.",
+    "checkAction": "Güncellemeleri kontrol et",
+    "checking": "Kontrol ediliyor..."
+  },
   "device": {
     "title": "Cihaz",
     "description": "Serial portları tara, birini seç ve uygulamayı yeniden başlatmadan bağlan.",

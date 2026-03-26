@@ -152,6 +152,9 @@ pub fn run() {
     // 5. Opener (for external links)
     builder = builder.plugin(tauri_plugin_opener::init());
 
+    // 6. Updater (auto-update from GitHub Releases)
+    builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
     builder
         .setup(|app| {
             // Build tray menu

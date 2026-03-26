@@ -127,6 +127,8 @@ describe("localized settings copy", () => {
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
         onCalibrationSaved={vi.fn()}
+        onCheckForUpdates={vi.fn()}
+        isCheckingForUpdates={false}
       />,
     );
 

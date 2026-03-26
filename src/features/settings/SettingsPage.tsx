@@ -12,7 +12,12 @@ import {
 } from "../tray/trayController";
 import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
 import { SETTINGS_TAB_IDS, type SettingsTabId } from "../../shared/contracts/shell";
-export function SettingsPage() {
+interface SettingsPageProps {
+  onCheckForUpdates: () => void;
+  isCheckingForUpdates: boolean;
+}
+
+export function SettingsPage({ onCheckForUpdates, isCheckingForUpdates }: SettingsPageProps) {
   const { t } = useTranslation("common");
   const [activeTab, setActiveTab] = useState<SettingsTabId>(SETTINGS_TAB_IDS.DEVICE);
 
@@ -60,7 +65,10 @@ export function SettingsPage() {
           </div>
         )}
         {activeTab === SETTINGS_TAB_IDS.SYSTEM && (
-          <SystemTab />
+          <SystemTab
+            onCheckForUpdates={onCheckForUpdates}
+            isCheckingForUpdates={isCheckingForUpdates}
+          />
         )}
         {activeTab === SETTINGS_TAB_IDS.DIAGNOSTICS && (
           <div className="px-6 py-6">
@@ -72,7 +80,12 @@ export function SettingsPage() {
   );
 }
 
-function SystemTab() {
+interface SystemTabProps {
+  onCheckForUpdates: () => void;
+  isCheckingForUpdates: boolean;
+}
+
+function SystemTab({ onCheckForUpdates, isCheckingForUpdates }: SystemTabProps) {
   const { t, i18n } = useTranslation("common");
   const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";
   const [startupEnabled, setStartupEnabled] = useState(false);
@@ -209,9 +222,25 @@ function SystemTab() {
               {t("aboutLogs.version")} {APP_VERSION}
             </p>
           </div>
-          <div className="px-4 py-3.5">
-            <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("aboutLogs.logs")}</p>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">{t("aboutLogs.logsDescription")}</p>
+          <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("aboutLogs.logs")}</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">{t("aboutLogs.logsDescription")}</p>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-4 px-4 py-3.5">
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">{t("updater.checkForUpdates")}</p>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">{t("updater.checkForUpdatesDescription")}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onCheckForUpdates}
+              disabled={isCheckingForUpdates}
+              className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+            >
+              {isCheckingForUpdates ? t("updater.checking") : t("updater.checkAction")}
+            </button>
           </div>
         </div>
       </div>

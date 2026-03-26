@@ -57,6 +57,8 @@ interface SettingsLayoutProps {
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onCalibrationSaved: (config: LedCalibrationConfig) => void;
+  onCheckForUpdates: () => void;
+  isCheckingForUpdates: boolean;
 }
 
 export function SettingsLayout({
@@ -71,6 +73,8 @@ export function SettingsLayout({
   onLightingModeChange,
   onOutputTargetsChange,
   onCalibrationSaved,
+  onCheckForUpdates,
+  isCheckingForUpdates,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
 
@@ -153,7 +157,10 @@ export function SettingsLayout({
         )}
 
         {activeSection === SECTION_IDS.SETTINGS && (
-          <SettingsPage />
+          <SettingsPage
+            onCheckForUpdates={onCheckForUpdates}
+            isCheckingForUpdates={isCheckingForUpdates}
+          />
         )}
       </main>
     </div>

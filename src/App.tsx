@@ -7,6 +7,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
+import { useAutoUpdater } from "./features/updater/useAutoUpdater";
+import { UpdateModal } from "./features/updater/UpdateModal";
 import {
   shouldAutoOpenCalibrationOnConnection,
   startCalibrationFromSettings,
@@ -99,6 +101,7 @@ function isSameTargetSet(a: HueRuntimeTarget[], b: HueRuntimeTarget[]): boolean 
 }
 
 function App() {
+  const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.CONTROL);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [calibrationStep, setCalibrationStep] = useState<CalibrationOverlayStep>("editor");
@@ -199,6 +202,9 @@ function App() {
             );
           },
         });
+
+        // Check for updates silently after startup
+        void checkForUpdates();
       } catch (err) {
         console.warn("[LumaSync] Shell lifecycle bootstrap error:", err);
       }
@@ -440,21 +446,30 @@ function App() {
   const modeGuard = canEnableLedMode(savedCalibration);
 
   return (
-    <SettingsLayout
-      activeSection={activeSection}
-      onSectionChange={handleSectionChange}
-      calibration={savedCalibration}
-      calibrationStep={calibrationStep}
-      lightingMode={lightingMode}
-      outputTargets={selectedOutputTargets}
-      modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
-      isModeTransitioning={isModeTransitioning}
-      onLightingModeChange={handleLightingModeChange}
-      onOutputTargetsChange={handleOutputTargetsChange}
-      onCalibrationSaved={(config) => {
-        setSavedCalibration(config);
-      }}
-    />
+    <>
+      <SettingsLayout
+        activeSection={activeSection}
+        onSectionChange={handleSectionChange}
+        calibration={savedCalibration}
+        calibrationStep={calibrationStep}
+        lightingMode={lightingMode}
+        outputTargets={selectedOutputTargets}
+        modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
+        isModeTransitioning={isModeTransitioning}
+        onLightingModeChange={handleLightingModeChange}
+        onOutputTargetsChange={handleOutputTargetsChange}
+        onCalibrationSaved={(config) => {
+          setSavedCalibration(config);
+        }}
+        onCheckForUpdates={checkForUpdates}
+        isCheckingForUpdates={updaterState.status === "checking"}
+      />
+      <UpdateModal
+        state={updaterState}
+        onInstall={downloadAndInstall}
+        onDismiss={dismiss}
+      />
+    </>
   );
 }
 

@@ -143,6 +143,8 @@ describe("Settings telemetry wiring", () => {
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
         onCalibrationSaved={vi.fn()}
+        onCheckForUpdates={vi.fn()}
+        isCheckingForUpdates={false}
       />,
     );
 
@@ -167,6 +169,8 @@ describe("Settings telemetry wiring", () => {
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
         onCalibrationSaved={vi.fn()}
+        onCheckForUpdates={vi.fn()}
+        isCheckingForUpdates={false}
       />,
     );
 

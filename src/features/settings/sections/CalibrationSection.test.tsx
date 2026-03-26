@@ -57,6 +57,8 @@ describe("CalibrationSection", () => {
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
         onCalibrationSaved={vi.fn()}
+        onCheckForUpdates={vi.fn()}
+        isCheckingForUpdates={false}
       />,
     );
 

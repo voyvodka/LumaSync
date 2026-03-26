@@ -20,6 +20,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Enable Corepack (yarn)
+        run: corepack enable
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -28,6 +31,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Install Linux deps for Tauri check
         run: |
@@ -43,8 +51,5 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Build frontend
-        run: yarn build
-
-      - name: Cargo check (Tauri)
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Check all
+        run: yarn check:all

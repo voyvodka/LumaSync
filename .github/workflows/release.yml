@@ -14,12 +14,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-22.04, windows-latest]
+        os: [macos-latest, macos-13, ubuntu-22.04, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Enable Corepack (yarn)
+        run: corepack enable
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -29,6 +32,11 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - name: Install Linux deps for Tauri bundle
         if: matrix.os == 'ubuntu-22.04'
@@ -49,6 +57,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "LumaSync ${{ github.ref_name }}"

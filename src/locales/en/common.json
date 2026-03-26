@@ -62,6 +62,20 @@
     "logs": "Logs",
     "logsDescription": "Application logs are stored locally for debugging."
   },
+  "updater": {
+    "title": "Update available",
+    "available": "Version {{version}} is ready to install.",
+    "install": "Install & Relaunch",
+    "later": "Later",
+    "downloading": "Downloading... {{progress}}%",
+    "installing": "Installing update, relaunching shortly...",
+    "error": "Update failed: {{message}}",
+    "close": "Close",
+    "checkForUpdates": "Software update",
+    "checkForUpdatesDescription": "Check for the latest version of LumaSync.",
+    "checkAction": "Check for updates",
+    "checking": "Checking..."
+  },
   "device": {
     "title": "Device",
     "description": "Scan serial ports, choose one, and connect without restarting the app.",
