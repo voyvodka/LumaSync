@@ -45,14 +45,21 @@ const REQUIRED_TRAY_IDS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Required sidebar section ID values
+// Required sidebar section ID values (main nav)
 // ---------------------------------------------------------------------------
 const REQUIRED_SECTION_IDS = [
-  "general",
-  "startup-tray",
-  "language",
-  "about-logs",
+  "control",
+  "calibration",
+  "settings",
+];
+
+// ---------------------------------------------------------------------------
+// Required settings tab ID values
+// ---------------------------------------------------------------------------
+const REQUIRED_SETTINGS_TAB_IDS = [
   "device",
+  "system",
+  "diagnostics",
 ];
 
 // ---------------------------------------------------------------------------
@@ -140,6 +147,16 @@ for (const id of REQUIRED_SECTION_IDS) {
   );
 }
 
+// Check settings tab IDs
+console.log("\n[ Settings tab IDs ]");
+for (const id of REQUIRED_SETTINGS_TAB_IDS) {
+  check(
+    source.includes(`"${id}"`),
+    `settings tab id "${id}" defined`,
+    `MISSING settings tab id "${id}"`
+  );
+}
+
 // Check ShellState fields
 console.log("\n[ ShellState fields ]");
 for (const field of REQUIRED_STATE_FIELDS) {
@@ -150,24 +167,19 @@ for (const field of REQUIRED_STATE_FIELDS) {
   );
 }
 
-// Check SECTION_ORDER completeness: all section IDs should appear in SECTION_ORDER
+// Check SECTION_ORDER completeness
 console.log("\n[ SECTION_ORDER completeness ]");
-// Extract the block from SECTION_ORDER = [ ... ] (multi-line safe)
 const orderMatch = source.match(/SECTION_ORDER[^=]*=\s*\[([^\]]+)\]/s);
 if (orderMatch) {
   const orderBlock = orderMatch[1];
   for (const id of REQUIRED_SECTION_IDS) {
-    // Section IDs are referenced via SECTION_IDS.XXX constants, not literal strings
-    // So verify the literal string value appears anywhere in the SECTION_ORDER block
-    // by checking the const names map to values already confirmed above
     check(
-      true, // already verified section IDs are defined; ordering verified by SECTION_ORDER export check
-      `"${id}" covered by SECTION_IDS constants (SECTION_ORDER references SECTION_IDS.*)`,
+      orderBlock.includes(`SECTION_IDS.${id.toUpperCase()}`),
+      `"${id}" present in SECTION_ORDER`,
       `MISSING "${id}" from SECTION_ORDER`
     );
   }
 } else {
-  // SECTION_ORDER may not use a plain array literal – check it is exported at minimum
   check(
     source.includes("SECTION_ORDER"),
     "SECTION_ORDER exported",

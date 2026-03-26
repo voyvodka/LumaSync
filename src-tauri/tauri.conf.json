@@ -31,7 +31,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": "v1Compatible",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,7 +42,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZGRjIzNENGQTQyRkVGNApSV1QwL2tMNlRDUC9CclVWRXIwNXFYUHpsd0dEeUpuc1FpU1hzNEJoUnN3S1RMZTQvVUlEM2JLdwo=",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI4OEFBNjlEOTBEODlBNDYKUldSR210aVFuYWFLdUF4R1U5VDQ3enRuV1NPdHAzaGY0cmhSR0t1YUFIZ2JSbmhxZnRrMmduV24K",
       "endpoints": [
         "https://github.com/voyvodka/LumaSync/releases/latest/download/latest.json"
       ]
