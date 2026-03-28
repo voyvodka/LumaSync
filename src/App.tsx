@@ -112,7 +112,7 @@ function App() {
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
-  const autoOpenTriggeredRef = useRef(false);
+  const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
   const modeTransitionLockRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
   const persistLightingModeTimeoutRef = useRef<number | null>(null);
@@ -178,8 +178,15 @@ function App() {
           control: SECTION_IDS.CONTROL,
           settings: SECTION_IDS.SETTINGS,
         };
-        const mappedSection = sectionMap[state.lastSection] ?? SECTION_IDS.CONTROL;
-        setActiveSection(mappedSection);
+        // On first launch keep the default CONTROL section.
+        // On a page refresh (sessionStorage survives the reload) restore the last section.
+        const isPageRefresh = sessionStorage.getItem("lumasync_session") === "1";
+        sessionStorage.setItem("lumasync_session", "1");
+
+        if (isPageRefresh) {
+          const mappedSection = sectionMap[state.lastSection] ?? SECTION_IDS.CONTROL;
+          setActiveSection(mappedSection);
+        }
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
@@ -191,7 +198,17 @@ function App() {
         setHueStartConfig(hueBootstrapConfig);
 
         if (isActive && restoredTargets.includes("hue") && hueBootstrapConfig) {
-          try { await startHue(hueBootstrapConfig); } catch {}
+          try {
+            await startHue(hueBootstrapConfig);
+            if (restoredMode.kind === LIGHTING_MODE_KIND.SOLID && restoredMode.solid) {
+              await setHueSolidColor({
+                r: restoredMode.solid.r,
+                g: restoredMode.solid.g,
+                b: restoredMode.solid.b,
+                brightness: restoredMode.solid.brightness,
+              });
+            }
+          } catch {}
         }
 
         await initWindowLifecycle({
@@ -454,6 +471,8 @@ function App() {
         calibrationStep={calibrationStep}
         lightingMode={lightingMode}
         outputTargets={selectedOutputTargets}
+        usbConnected={isConnected}
+        hueConfigured={hueStartConfig !== null}
         modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
         isModeTransitioning={isModeTransitioning}
         onLightingModeChange={handleLightingModeChange}

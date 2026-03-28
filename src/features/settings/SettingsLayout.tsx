@@ -52,6 +52,8 @@ interface SettingsLayoutProps {
   calibrationStep: CalibrationOverlayStep;
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
+  usbConnected: boolean;
+  hueConfigured: boolean;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
@@ -68,6 +70,8 @@ export function SettingsLayout({
   calibrationStep,
   lightingMode,
   outputTargets,
+  usbConnected,
+  hueConfigured,
   modeLockReason,
   isModeTransitioning = false,
   onLightingModeChange,
@@ -137,6 +141,8 @@ export function SettingsLayout({
             <GeneralSection
               mode={lightingMode}
               outputTargets={outputTargets}
+              usbConnected={usbConnected}
+              hueConfigured={hueConfigured}
               modeLockReason={modeLockReason}
               isModeTransitioning={isModeTransitioning}
               onModeChange={onLightingModeChange}

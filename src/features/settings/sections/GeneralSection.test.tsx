@@ -16,10 +16,14 @@ vi.mock("react-i18next", () => ({
         "general.mode.title": "Lighting mode",
         "general.mode.description": "Select output mode.",
         "general.output.title": "Output targets",
-        "general.output.description": "Pick where mode controls should run.",
-        "general.output.options.usb": "USB",
-        "general.output.options.hue": "Hue",
-        "general.output.options.usbHue": "USB + Hue",
+        "general.output.devices.usb": "USB LED Strip",
+        "general.output.devices.hue": "Philips Hue",
+        "general.output.status.connected": "Connected",
+        "general.output.status.notConnected": "Not connected",
+        "general.output.status.ready": "Ready",
+        "general.output.status.notConfigured": "Not configured",
+        "general.output.noDevices": "No devices available",
+        "general.output.noDevicesHint": "Connect your devices in Settings",
         "general.mode.options.off": "Off",
         "general.mode.options.ambilight": "Ambilight",
         "general.mode.options.solid": "Solid",
@@ -43,6 +47,8 @@ describe("GeneralSection", () => {
         <GeneralSection
           mode={{ kind: "off" }}
           outputTargets={["usb"]}
+          usbConnected={true}
+          hueConfigured={false}
           modeLockReason={null}
           onModeChange={onModeChange}
           onOutputTargetsChange={vi.fn()}
@@ -71,6 +77,8 @@ describe("GeneralSection", () => {
         <GeneralSection
           mode={mode}
           outputTargets={["usb"]}
+          usbConnected={true}
+          hueConfigured={false}
           modeLockReason={null}
           onModeChange={(nextMode) => {
             setMode(nextMode);
@@ -106,6 +114,8 @@ describe("GeneralSection", () => {
         <GeneralSection
           mode={{ kind: "off" }}
           outputTargets={["usb"]}
+          usbConnected={true}
+          hueConfigured={false}
           modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
           onModeChange={onModeChange}
           onOutputTargetsChange={vi.fn()}
@@ -122,7 +132,7 @@ describe("GeneralSection", () => {
     expect(onModeChange).not.toHaveBeenCalled();
   });
 
-  it("emits selected output target set and supports dual target mode", async () => {
+  it("toggles hue target when hue is configured and the row is clicked", async () => {
     const user = userEvent.setup();
     const onOutputTargetsChange = vi.fn();
 
@@ -130,6 +140,8 @@ describe("GeneralSection", () => {
       <GeneralSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
+        usbConnected={true}
+        hueConfigured={true}
         modeLockReason={null}
         onModeChange={vi.fn()}
         onOutputTargetsChange={onOutputTargetsChange}
@@ -137,10 +149,9 @@ describe("GeneralSection", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Hue" }));
-    await user.click(screen.getByRole("button", { name: "USB + Hue" }));
+    // Hue is configured but not selected — clicking adds it
+    await user.click(screen.getByRole("button", { name: /Philips Hue/i }));
 
-    expect(onOutputTargetsChange).toHaveBeenNthCalledWith(1, ["hue"]);
-    expect(onOutputTargetsChange).toHaveBeenNthCalledWith(2, ["usb", "hue"]);
+    expect(onOutputTargetsChange).toHaveBeenCalledWith(["usb", "hue"]);
   });
 });

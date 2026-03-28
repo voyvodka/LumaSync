@@ -26,12 +26,18 @@
     "description": "General application settings.",
     "output": {
       "title": "Output targets",
-      "description": "Choose where mode controls should run.",
-      "options": {
-        "usb": "USB",
-        "hue": "Hue",
-        "usbHue": "USB + Hue"
-      }
+      "devices": {
+        "usb": "USB LED Strip",
+        "hue": "Philips Hue"
+      },
+      "status": {
+        "connected": "Connected",
+        "notConnected": "Not connected",
+        "ready": "Ready",
+        "notConfigured": "Not configured"
+      },
+      "noDevices": "No devices available",
+      "noDevicesHint": "Connect your devices in Settings"
     },
     "mode": {
       "title": "LED mode",
@@ -108,7 +114,13 @@
     "badges": {
       "supported": "Supported",
       "other": "Other",
-      "connected": "Connected"
+      "connected": "Connected",
+      "reconnecting": "Reconnecting",
+      "checking": "Checking…",
+      "error": "Error"
+    },
+    "port": {
+      "missingHint": "{{port}} is no longer visible. Reconnect the device or choose another port."
     },
     "status": {
       "idleTitle": "Waiting for a selection",
@@ -169,7 +181,12 @@
         "stop": "Stop Hue"
       },
       "bridge": {
-        "placeholder": "Select a Hue bridge"
+        "placeholder": "Select a Hue bridge",
+        "noBridges": "No bridges found yet. Start discovery or enter an IP manually.",
+        "unreachable": "Unreachable",
+        "online": "Online",
+        "checking": "Checking…",
+        "networkHint": "Could not reach {{name}} at {{ip}}. Make sure you are on the same network as your Hue bridge."
       },
       "manualIp": {
         "title": "Manual IP fallback",
@@ -181,6 +198,7 @@
       "credential": {
         "valid": "Valid",
         "needsRepair": "Needs Re-pair",
+        "unreachable": "Unreachable",
         "line": "Credential state: {{state}}",
         "repairHint": "Credentials need re-pairing. Use Pair bridge as the next step."
       },

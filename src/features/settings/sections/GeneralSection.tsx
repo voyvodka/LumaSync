@@ -37,6 +37,8 @@ export function triggerCalibrationFromLock(
 interface GeneralSectionProps {
   mode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
+  usbConnected: boolean;
+  hueConfigured: boolean;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
   onModeChange: (nextMode: LightingModeConfig) => void;
@@ -62,11 +64,6 @@ function isSameSolidDraft(left: SolidDraft, right: SolidDraft): boolean {
   );
 }
 
-function isSameTargetSet(a: HueRuntimeTarget[], b: HueRuntimeTarget[]): boolean {
-  if (a.length !== b.length) return false;
-  const set = new Set(a);
-  return b.every((t) => set.has(t));
-}
 
 function toHexPair(value: number): string {
   return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
@@ -91,6 +88,8 @@ function parseHexColor(value: string): { r: number; g: number; b: number } {
 export function GeneralSection({
   mode,
   outputTargets,
+  usbConnected,
+  hueConfigured,
   modeLockReason,
   isModeTransitioning = false,
   onModeChange,
@@ -170,42 +169,58 @@ export function GeneralSection({
       )}
 
       {/* Output targets */}
-      <div className="rounded-xl border border-slate-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/80">
-        <div className="border-b border-slate-100 px-5 py-3.5 dark:border-zinc-800/70">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("general.output.title")}
-          </p>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">
-            {t("general.output.description")}
-          </p>
-        </div>
-        <div className="flex gap-2 px-5 py-4">
-          {(
-            [
-              { targets: ["usb"] as HueRuntimeTarget[], label: t("general.output.options.usb") },
-              { targets: ["hue"] as HueRuntimeTarget[], label: t("general.output.options.hue") },
-              { targets: ["usb", "hue"] as HueRuntimeTarget[], label: t("general.output.options.usbHue") },
-            ] as const
-          ).map(({ targets, label }) => {
-            const isActive = isSameTargetSet(outputTargets, targets);
-            return (
-              <button
-                key={label}
-                type="button"
-                disabled={modeSelectorDisabled}
-                onClick={() => onOutputTargetsChange([...targets])}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                  isActive
-                    ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {(() => {
+        const devices: { id: HueRuntimeTarget; label: string; available: boolean }[] = [
+          { id: "usb", label: t("general.output.devices.usb"), available: usbConnected },
+          { id: "hue", label: t("general.output.devices.hue"), available: hueConfigured },
+        ];
+
+        const toggleTarget = (id: HueRuntimeTarget, currentlySelected: boolean) => {
+          const next = currentlySelected
+            ? outputTargets.filter((t) => t !== id)
+            : [...outputTargets, id as HueRuntimeTarget];
+          if (next.length > 0) onOutputTargetsChange(next);
+        };
+
+        return (
+          <div className="rounded-xl border border-slate-200/80 bg-white/90 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900/80">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">
+              {t("general.output.title")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {devices.map(({ id, label, available }) => {
+                const selected = outputTargets.includes(id);
+                const isLastSelected = selected && outputTargets.length === 1;
+                const disabled = modeSelectorDisabled || !available || isLastSelected;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggleTarget(id, selected)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed ${
+                      selected && available
+                        ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                        : available
+                          ? "border-slate-200 bg-white text-slate-700 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-500"
+                          : "border-slate-200 bg-white text-slate-400 opacity-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-600"
+                    }`}
+                  >
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      available
+                        ? selected
+                          ? "bg-emerald-400 dark:bg-emerald-600"
+                          : "bg-emerald-500"
+                        : "bg-slate-300 dark:bg-zinc-600"
+                    }`} />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* LED mode */}
       <div className="rounded-xl border border-slate-200/80 bg-white/90 dark:border-zinc-800 dark:bg-zinc-900/80">
