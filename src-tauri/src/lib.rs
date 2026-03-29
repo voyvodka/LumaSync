@@ -14,6 +14,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, Runtime, State,
 };
+use tauri_plugin_autostart::ManagerExt;
 
 mod commands {
     pub mod ambilight_capture;
@@ -188,14 +189,35 @@ pub fn run() {
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
                     "startup-toggle" => {
-                        // Toggle is handled by the frontend via plugin-autostart commands.
-                        // Here we just forward the action so the frontend can sync state.
-                        let _ = app.emit("tray:startup-toggle-clicked", ());
+                        let manager = app.autolaunch();
+                        let new_state = match manager.is_enabled() {
+                            Ok(true) => {
+                                let _ = manager.disable();
+                                false
+                            }
+                            _ => {
+                                let _ = manager.enable();
+                                true
+                            }
+                        };
+                        // Sync the CheckMenuItem visual to the new state
+                        // (CheckMenuItem auto-toggles on click, but we override to match truth)
+                        if let Some(tray_state) = app.try_state::<TrayState<tauri::Wry>>() {
+                            let _ = tray_state.startup_toggle.set_checked(new_state);
+                        }
+                        // Notify frontend so UI can update if settings window is open
+                        let _ = app.emit("tray:startup-state-changed", new_state);
                     }
                     "quit" => safe_quit(app),
                     _ => {}
                 })
                 .build(&app_handle)?;
+
+            // Initialize tray checkmark from actual autostart state
+            if let Ok(enabled) = app.handle().autolaunch().is_enabled() {
+                let tray_state: State<TrayState<tauri::Wry>> = app.handle().state();
+                let _ = tray_state.startup_toggle.set_checked(enabled);
+            }
 
             Ok(())
         })

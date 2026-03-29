@@ -11,12 +11,10 @@
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { TRAY_MENU_IDS } from "../../shared/contracts/shell";
-
-const SET_TRAY_STARTUP_CHECKED_COMMAND = "set_tray_startup_checked";
+import { TRAY_MENU_IDS, SHELL_COMMANDS } from "../../shared/contracts/shell";
 
 export async function setStartupTrayChecked(checked: boolean): Promise<void> {
-  await invoke(SET_TRAY_STARTUP_CHECKED_COMMAND, { checked });
+  await invoke(SHELL_COMMANDS.SET_TRAY_STARTUP_CHECKED, { checked });
 }
 
 // ---------------------------------------------------------------------------
@@ -47,16 +45,15 @@ export async function getStartupEnabled(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 /**
- * Listen for the startup-toggle click event emitted from Rust when the tray
- * menu item is clicked. Toggles autostart state and invokes optional callback
- * so UI can sync state.
+ * Listen for the startup-state-changed event emitted from Rust after it has
+ * already toggled autostart state. The payload is the new boolean state.
+ * The frontend does NOT toggle autostart here — Rust is authoritative.
  */
 export async function listenStartupToggle(
   onToggle: (newState: boolean) => void
 ): Promise<UnlistenFn> {
-  return listen("tray:startup-toggle-clicked", async () => {
-    const newState = await toggleStartup();
-    onToggle(newState);
+  return listen<boolean>("tray:startup-state-changed", (event) => {
+    onToggle(event.payload);
   });
 }
 
