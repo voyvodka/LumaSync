@@ -1,5 +1,6 @@
 use std::{net::Ipv4Addr, str::FromStr, time::Duration};
 
+use log::{error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -190,6 +191,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
     let client = match hue_http_client() {
         Ok(client) => client,
         Err(error) => {
+            warn!("Hue pairing client init failed: {error}");
             return HuePairBridgeResponse {
                 status: command_status(
                     "HUE_PAIRING_FAILED",
@@ -217,15 +219,26 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
             .await
     };
     match fetch.await {
-        Ok(payload) => parse_pairing_payload(&payload),
-        Err(error) => HuePairBridgeResponse {
-            status: command_status(
-                "HUE_PAIRING_FAILED",
-                "Pairing request failed. Press bridge link button, then retry within 30 seconds.",
-                Some(error.to_string()),
-            ),
-            credentials: None,
-        },
+        Ok(payload) => {
+            let result = parse_pairing_payload(&payload);
+            if result.status.code == "HUE_PAIRING_OK" {
+                info!("Hue bridge pairing succeeded at {bridge_ip}");
+            } else if result.status.code == "HUE_PAIRING_FAILED" {
+                warn!("Hue bridge pairing failed at {bridge_ip}");
+            }
+            result
+        }
+        Err(error) => {
+            warn!("Hue bridge pairing failed at {bridge_ip}");
+            HuePairBridgeResponse {
+                status: command_status(
+                    "HUE_PAIRING_FAILED",
+                    "Pairing request failed. Press bridge link button, then retry within 30 seconds.",
+                    Some(error.to_string()),
+                ),
+                credentials: None,
+            }
+        }
     }
 }
 
@@ -268,7 +281,15 @@ pub async fn validate_hue_credentials(
             .await
     };
     match fetch.await {
-        Ok(payload) => parse_credentials_validation_payload(&payload),
+        Ok(payload) => {
+            let result = parse_credentials_validation_payload(&payload);
+            if result.valid {
+                info!("Hue credentials validated for bridge {bridge_ip}");
+            } else if result.status.code == "HUE_CREDENTIAL_INVALID" {
+                error!("Hue credentials invalid for bridge {bridge_ip}");
+            }
+            result
+        }
         Err(error) => HueValidateCredentialsResponse {
             status: command_status(
                 "HUE_CREDENTIAL_CHECK_FAILED",
@@ -307,22 +328,28 @@ pub async fn list_hue_entertainment_areas(
             ),
             areas,
         },
-        Ok(areas) => HueEntertainmentAreaListResponse {
-            status: command_status(
-                "HUE_AREA_LIST_OK",
-                "Hue entertainment areas loaded successfully.",
-                None,
-            ),
-            areas,
-        },
-        Err(error) => HueEntertainmentAreaListResponse {
-            status: command_status(
-                "HUE_AREA_LIST_FAILED",
-                "Could not list Hue entertainment areas with current credentials.",
-                Some(error),
-            ),
-            areas: Vec::new(),
-        },
+        Ok(areas) => {
+            info!("Loaded {} Hue entertainment areas", areas.len());
+            HueEntertainmentAreaListResponse {
+                status: command_status(
+                    "HUE_AREA_LIST_OK",
+                    "Hue entertainment areas loaded successfully.",
+                    None,
+                ),
+                areas,
+            }
+        }
+        Err(error) => {
+            warn!("Failed to list Hue entertainment areas: {error}");
+            HueEntertainmentAreaListResponse {
+                status: command_status(
+                    "HUE_AREA_LIST_FAILED",
+                    "Could not list Hue entertainment areas with current credentials.",
+                    Some(error),
+                ),
+                areas: Vec::new(),
+            }
+        }
     }
 }
 
@@ -355,8 +382,16 @@ pub async fn check_hue_stream_readiness(
             if area.channel_count == 0 {
                 reasons.push("Selected area has no entertainment channels configured.".to_string());
             }
+            if area.active_streamer {
+                reasons.push("HUE_STREAM_NOT_READY_ACTIVE_STREAMER".to_string());
+            }
 
             let ready = reasons.is_empty();
+            if ready {
+                info!("Hue stream readiness gate passed for area {area_id}");
+            } else {
+                info!("Hue stream readiness gate failed for area {area_id}: {reasons:?}");
+            }
             let status = if ready {
                 command_status(
                     "HUE_STREAM_READY",
@@ -376,19 +411,23 @@ pub async fn check_hue_stream_readiness(
                 readiness: HueStreamReadiness { ready, reasons },
             }
         }
-        Err(error) => HueStreamReadinessResponse {
-            status: command_status(
-                "HUE_STREAM_READINESS_FAILED",
-                "Could not evaluate Hue stream readiness.",
-                Some(error),
-            ),
-            readiness: HueStreamReadiness {
-                ready: false,
-                reasons: vec![
-                    "Bridge or credentials could not be validated for readiness check.".to_string(),
-                ],
-            },
-        },
+        Err(error) => {
+            warn!("Hue stream readiness check failed: {error}");
+            HueStreamReadinessResponse {
+                status: command_status(
+                    "HUE_STREAM_READINESS_FAILED",
+                    "Could not evaluate Hue stream readiness.",
+                    Some(error),
+                ),
+                readiness: HueStreamReadiness {
+                    ready: false,
+                    reasons: vec![
+                        "Bridge or credentials could not be validated for readiness check."
+                            .to_string(),
+                    ],
+                },
+            }
+        }
     }
 }
 
