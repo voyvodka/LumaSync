@@ -14,6 +14,7 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 - **Milestone scope:** Phase 1-8 tamamlandi
 - **Release gate:** QUAL-04 (60 dakika stabilite) APPROVED
 - **Archive refs:** `.planning/milestones/v1.0-ROADMAP.md`, `.planning/milestones/v1.0-REQUIREMENTS.md`
+- **v1.1 progress:** Phase 01 complete (2026-03-29) — tray-first shell, startup toggle Rust-authoritative, all UAT gaps closed
 
 ## Requirements
 
@@ -81,4 +82,4 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 | Use open-source projects as reference, implement original code | Preserve learning benefits while staying license-safe | Implemented in v1.0 |
 
 ---
-*Last updated: 2026-03-21 after v1.1 milestone kickoff*
+*Last updated: 2026-03-29 after Phase 01 completion*
