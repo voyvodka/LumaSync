@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -6,6 +6,8 @@ use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::State;
+
+use log::{error, info, warn};
 
 use super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
 
@@ -16,6 +18,31 @@ const HUE_HTTP_TIMEOUT_MS: u64 = 5_000;
 /// Minimum interval between Hue color pushes in the background sender thread.
 /// 50ms = 20 Hz max, well within CLIP v2 limits and imperceptibly fast.
 const HUE_SENDER_MIN_INTERVAL_MS: u64 = 50;
+/// Hue Entertainment DTLS port.
+const HUE_DTLS_PORT: u16 = 2100;
+/// Maximum time (in seconds) to wait for the sender thread to shut down
+/// before reporting a partial-stop timeout.
+const HUE_STOP_TIMEOUT_SECS: u64 = 3;
+/// Hard wall-clock deadline (in seconds) for the DTLS handshake attempt.
+/// OpenSSL's DTLS retransmit loop ignores socket-level read timeouts, so we
+/// run the handshake on a dedicated OS thread and abandon it after this limit.
+const DTLS_CONNECT_TIMEOUT_SECS: u64 = 8;
+
+// ---------------------------------------------------------------------------
+// HueStream binary protocol constants (v2.0, API version 1.0)
+// ---------------------------------------------------------------------------
+
+/// "HueStream" magic bytes.
+const HUESTREAM_MAGIC: &[u8; 9] = b"HueStream";
+/// Protocol version: major=2, minor=0.
+const HUESTREAM_VERSION_MAJOR: u8 = 0x02;
+const HUESTREAM_VERSION_MINOR: u8 = 0x00;
+/// Sequence number — 0x00 for non-sequenced mode (simplest).
+const HUESTREAM_SEQUENCE: u8 = 0x00;
+/// Reserved bytes (2 bytes, must be 0x00).
+const HUESTREAM_RESERVED: [u8; 2] = [0x00, 0x00];
+/// Color space: 0x00 = RGB, 0x01 = XY+Brightness.
+const HUESTREAM_COLOR_SPACE_RGB: u8 = 0x00;
 
 /// The screen region a Hue entertainment channel should receive colour from.
 /// Derived from the channel's 3D position as reported by the bridge.
@@ -55,13 +82,15 @@ fn parse_screen_region(s: &str) -> Option<HueScreenRegion> {
 /// the screen region those lights should mirror.
 #[derive(Clone, Debug)]
 pub struct HueAreaChannel {
+    /// Entertainment channel ID (0-based index used in HueStream frames).
+    pub channel_id: u8,
     /// CLIP v2 light resource IDs belonging to this channel.
     pub light_ids: Vec<String>,
     /// Screen region derived from the channel's x/y position (or overridden by user).
     pub screen_region: HueScreenRegion,
-    /// Raw position X reported by the bridge (-1 left … +1 right).
+    /// Raw position X reported by the bridge (-1 left ... +1 right).
     pub position_x: f32,
-    /// Raw position Y reported by the bridge (-1 bottom … +1 top).
+    /// Raw position Y reported by the bridge (-1 bottom ... +1 top).
     pub position_y: f32,
 }
 
@@ -123,6 +152,7 @@ pub struct HueRuntimeStatus {
 pub struct HueRuntimeCommandResult {
     pub active: bool,
     pub status: HueRuntimeStatus,
+    pub last_solid_color: Option<HueSolidColorSnapshot>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -130,6 +160,7 @@ pub struct HueRuntimeCommandResult {
 pub struct StartHueStreamRequest {
     pub bridge_ip: String,
     pub username: String,
+    pub client_key: String,
     pub area_id: String,
     pub trigger_source: Option<HueRuntimeTriggerSource>,
     /// Optional per-channel region overrides indexed by channel index.
@@ -146,6 +177,16 @@ pub struct SetHueSolidColorRequest {
     pub b: u8,
     pub brightness: Option<f32>,
     pub trigger_source: Option<HueRuntimeTriggerSource>,
+}
+
+/// Snapshot of the last solid color sent to the Hue bridge.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct HueSolidColorSnapshot {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub brightness: f32,
 }
 
 #[derive(Clone, Debug)]
@@ -186,6 +227,46 @@ struct HuePersistentSender {
     sender: HueColorSender,
 }
 
+/// Shared signal used to detect when a background sender thread has exited.
+/// The thread sets the bool to `true` and notifies the condvar right before
+/// returning, allowing `stop_hue_stream` to wait with a bounded timeout.
+type ShutdownSignal = Arc<(Mutex<bool>, Condvar)>;
+
+/// Create a fresh shutdown signal (initially `false` / not-yet-shut-down).
+fn new_shutdown_signal() -> ShutdownSignal {
+    Arc::new((Mutex::new(false), Condvar::new()))
+}
+
+/// Mark the shutdown signal as complete and wake any waiters.
+fn signal_shutdown_complete(signal: &ShutdownSignal) {
+    if let Ok(mut done) = signal.0.lock() {
+        *done = true;
+        signal.1.notify_all();
+    }
+}
+
+/// Non-blocking probe: has the background thread already signalled shutdown?
+/// Returns `true` if `signal_shutdown_complete` was called, `false` otherwise.
+fn is_shutdown_signaled(signal: &ShutdownSignal) -> bool {
+    signal.0.lock().map(|guard| *guard).unwrap_or(false)
+}
+
+/// Wait for the shutdown signal up to `timeout`. Returns `true` if the
+/// thread confirmed shutdown within the deadline, `false` on timeout.
+fn wait_for_shutdown(signal: &ShutdownSignal, timeout: Duration) -> bool {
+    if let Ok(guard) = signal.0.lock() {
+        let result = signal
+            .1
+            .wait_timeout_while(guard, timeout, |done| !*done);
+        match result {
+            Ok((_, timeout_result)) => !timeout_result.timed_out(),
+            Err(_) => false,
+        }
+    } else {
+        false
+    }
+}
+
 struct HueRuntimeOwner {
     state: HueRuntimeState,
     active_stream: Option<HueActiveStreamContext>,
@@ -195,12 +276,15 @@ struct HueRuntimeOwner {
     reconnect_attempt: u8,
     user_override_pending: bool,
     last_status: HueRuntimeStatus,
+    /// Most recent solid color successfully sent to the bridge.
+    /// Persists across reconnects so the UI can restore the last applied color.
+    last_solid_color: Option<HueSolidColorSnapshot>,
     #[cfg_attr(not(test), allow(dead_code))]
     retry_policy: HueRetryPolicy,
 }
 
 /// Lightweight, cloneable handle to the background Hue color sender thread.
-/// Cloning only increments an Arc refcount — cheap. When every clone drops,
+/// Cloning only increments an Arc refcount -- cheap. When every clone drops,
 /// the sender channel closes and the background thread exits on its own.
 #[derive(Clone, Debug)]
 pub struct HueColorSender {
@@ -233,15 +317,383 @@ impl HueColorSender {
     }
 }
 
-fn spawn_hue_color_sender(
+// ---------------------------------------------------------------------------
+// HueStream binary frame builder
+// ---------------------------------------------------------------------------
+
+/// Build a HueStream v2 binary frame for the entertainment API.
+///
+/// Frame layout (header = 16 bytes):
+///   Bytes  0..8:  "HueStream" (9 bytes magic)
+///   Byte   9:     API version major (0x02)
+///   Byte  10:     API version minor (0x00)
+///   Byte  11:     Sequence number (0x00 = non-sequenced)
+///   Bytes 12..13: Reserved (0x00, 0x00)
+///   Byte  14:     Color space (0x00 = RGB)
+///   Byte  15:     Reserved (0x00)
+///
+/// Per light entry (7 bytes each):
+///   Byte   0:     Channel ID (uint8)
+///   Bytes 1..2:   Red   (uint16 BE, 0..65535)
+///   Bytes 3..4:   Green (uint16 BE, 0..65535)
+///   Bytes 5..6:   Blue  (uint16 BE, 0..65535)
+///
+/// Between the header and channel entries there is a 36-byte field containing
+/// the entertainment_configuration resource UUID (ASCII string, e.g.
+/// "1a8d99cc-967b-44f2-9202-43f976c0fa6b"). This field is mandatory per the
+/// Hue Entertainment API v2.0 specification — the bridge uses it to route the
+/// frame to the correct entertainment area when multiple sessions could be
+/// active. Without it the bridge cannot parse the channel data and ignores
+/// the frame entirely.
+fn build_huestream_frame(
+    area_id: &str,
+    channels: &[HueAreaChannel],
+    channel_colors: &[(u8, u8, u8)],
+    brightness: f32,
+) -> Vec<u8> {
+    const UUID_LEN: usize = 36;
+    let header_len = 16;
+    let entry_len = 7;
+    let mut frame = Vec::with_capacity(header_len + UUID_LEN + channels.len() * entry_len);
+
+    // Header
+    frame.extend_from_slice(HUESTREAM_MAGIC);
+    frame.push(HUESTREAM_VERSION_MAJOR);
+    frame.push(HUESTREAM_VERSION_MINOR);
+    frame.push(HUESTREAM_SEQUENCE);
+    frame.extend_from_slice(&HUESTREAM_RESERVED);
+    frame.push(HUESTREAM_COLOR_SPACE_RGB);
+    frame.push(0x00); // reserved
+
+    // Entertainment configuration UUID (36 ASCII bytes), required by spec.
+    // Pad or truncate defensively to always emit exactly UUID_LEN bytes so
+    // channel offsets are deterministic even if the stored ID is malformed.
+    let id_bytes = area_id.as_bytes();
+    if id_bytes.len() >= UUID_LEN {
+        frame.extend_from_slice(&id_bytes[..UUID_LEN]);
+    } else {
+        frame.extend_from_slice(id_bytes);
+        frame.extend(std::iter::repeat(0u8).take(UUID_LEN - id_bytes.len()));
+    }
+
+    let brightness_clamped = brightness.clamp(0.0, 1.0);
+
+    for (i, channel) in channels.iter().enumerate() {
+        let (r, g, b) = channel_colors.get(i).copied().unwrap_or((0, 0, 0));
+
+        // Scale 8-bit to 16-bit and apply brightness
+        let r16 = ((f32::from(r) / 255.0) * brightness_clamped * 65535.0) as u16;
+        let g16 = ((f32::from(g) / 255.0) * brightness_clamped * 65535.0) as u16;
+        let b16 = ((f32::from(b) / 255.0) * brightness_clamped * 65535.0) as u16;
+
+        frame.push(channel.channel_id);
+        frame.extend_from_slice(&r16.to_be_bytes());
+        frame.extend_from_slice(&g16.to_be_bytes());
+        frame.extend_from_slice(&b16.to_be_bytes());
+    }
+
+    frame
+}
+
+// ---------------------------------------------------------------------------
+// DTLS 1.2 PSK connection via openssl
+// ---------------------------------------------------------------------------
+
+/// Thin wrapper around `UdpSocket` that implements `Read` + `Write` so that
+/// `openssl::ssl::SslStream` can use it as its underlying transport.
+#[derive(Debug)]
+struct UdpSocketWrapper(std::net::UdpSocket);
+
+impl std::io::Read for UdpSocketWrapper {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.recv(buf)
+    }
+}
+
+impl std::io::Write for UdpSocketWrapper {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.send(buf)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Establish a DTLS 1.2 connection to the Hue bridge using PSK.
+///
+/// - `bridge_ip`: IP address of the bridge
+/// - `username`: Hue application username (used as PSK identity, ASCII hex)
+/// - `client_key`: Hue clientkey (16-byte hex string, used as PSK)
+///
+/// Returns an `openssl::ssl::SslStream<UdpSocketWrapper>` on success.
+fn connect_dtls(
+    bridge_ip: &str,
+    username: &str,
+    client_key: &str,
+) -> Result<openssl::ssl::SslStream<UdpSocketWrapper>, String> {
+    use openssl::ssl::{SslConnector, SslMethod, SslVerifyMode};
+    use std::net::UdpSocket;
+
+    // Decode the 32-hex-char clientkey into 16 raw bytes for PSK.
+    let psk_bytes = hex_decode(client_key)
+        .map_err(|e| format!("DTLS_PSK_DECODE_FAILED: {e}"))?;
+
+    let psk_identity = username.to_string();
+
+    let mut builder = SslConnector::builder(SslMethod::dtls())
+        .map_err(|e| format!("DTLS_CONNECTOR_BUILD_FAILED: {e}"))?;
+
+    // Disable certificate verification (bridge uses self-signed cert).
+    builder.set_verify(SslVerifyMode::NONE);
+
+    // Set PSK client callback: bridge expects username as identity, clientkey as PSK.
+    builder.set_psk_client_callback(move |_ssl, _hint, identity_out, psk_out| {
+        // Write PSK identity
+        let identity_bytes = psk_identity.as_bytes();
+        let ilen = identity_bytes.len().min(identity_out.len().saturating_sub(1));
+        identity_out[..ilen].copy_from_slice(&identity_bytes[..ilen]);
+        identity_out[ilen] = 0; // null terminate
+
+        // Write PSK key
+        let klen = psk_bytes.len().min(psk_out.len());
+        psk_out[..klen].copy_from_slice(&psk_bytes[..klen]);
+
+        Ok(klen)
+    });
+
+    // Force TLS_PSK_WITH_AES_128_GCM_SHA256 which Hue bridges expect.
+    builder
+        .set_cipher_list("PSK-AES128-GCM-SHA256")
+        .map_err(|e| format!("DTLS_CIPHER_SET_FAILED: {e}"))?;
+
+    let connector = builder.build();
+
+    // Bind a UDP socket and connect to bridge:2100.
+    let socket = UdpSocket::bind("0.0.0.0:0")
+        .map_err(|e| format!("DTLS_SOCKET_BIND_FAILED: {e}"))?;
+    socket
+        .connect(format!("{bridge_ip}:{HUE_DTLS_PORT}"))
+        .map_err(|e| format!("DTLS_SOCKET_CONNECT_FAILED: {e}"))?;
+    socket
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .map_err(|e| format!("DTLS_SOCKET_TIMEOUT_FAILED: {e}"))?;
+
+    let ssl_stream = connector
+        .connect(bridge_ip, UdpSocketWrapper(socket))
+        .map_err(|e| format!("DTLS_HANDSHAKE_FAILED: {e}"))?;
+
+    Ok(ssl_stream)
+}
+
+/// Decode a hex string (e.g. "AABBCCDD") into raw bytes.
+fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
+    if hex.len() % 2 != 0 {
+        return Err("Hex string has odd length".to_string());
+    }
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| {
+            u8::from_str_radix(&hex[i..i + 2], 16)
+                .map_err(|e| format!("Invalid hex at position {i}: {e}"))
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Entertainment configuration activate/deactivate via CLIP v2
+// ---------------------------------------------------------------------------
+
+/// PUT /clip/v2/resource/entertainment_configuration/{area_id}
+/// body: { "action": "start" }
+///
+/// This tells the bridge to enter entertainment mode for the given area.
+/// Must be called BEFORE starting the DTLS stream.
+fn activate_entertainment_config(
+    client: &BlockingClient,
+    bridge_ip: &str,
+    username: &str,
+    area_id: &str,
+) -> Result<(), String> {
+    let endpoint = format!(
+        "https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}"
+    );
+    let response = client
+        .put(&endpoint)
+        .header("hue-application-key", username)
+        .json(&json!({ "action": "start" }))
+        .send()
+        .map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::FORBIDDEN {
+        return Err("AUTH_INVALID_ENTERTAINMENT_ACTIVATE: 403 Forbidden".to_string());
+    }
+    if !status.is_success() {
+        let body = response.text().unwrap_or_default();
+        return Err(format!(
+            "ENTERTAINMENT_ACTIVATE_FAILED: HTTP {status} — {body}"
+        ));
+    }
+    Ok(())
+}
+
+/// PUT /clip/v2/resource/entertainment_configuration/{area_id}
+/// body: { "action": "stop" }
+///
+/// Tells the bridge to exit entertainment mode. Called when stopping the stream.
+fn deactivate_entertainment_config(
+    client: &BlockingClient,
+    bridge_ip: &str,
+    username: &str,
+    area_id: &str,
+) -> Result<(), String> {
+    let endpoint = format!(
+        "https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}"
+    );
+    let response = client
+        .put(&endpoint)
+        .header("hue-application-key", username)
+        .json(&json!({ "action": "stop" }))
+        .send()
+        .map_err(|e| format!("ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {e}"))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().unwrap_or_default();
+        return Err(format!(
+            "ENTERTAINMENT_DEACTIVATE_FAILED: HTTP {status} — {body}"
+        ));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Background DTLS sender thread
+// ---------------------------------------------------------------------------
+
+/// Spawns a background thread that:
+/// 1. Activates the entertainment configuration via HTTPS
+/// 2. Connects via DTLS 1.2 PSK to bridge:2100
+/// 3. Continuously sends HueStream frames at 20 Hz
+/// 4. On channel close or error, deactivates entertainment config
+///
+/// Returns the color sender handle and a shutdown signal that fires when the
+/// thread exits.
+fn spawn_hue_dtls_sender(
+    client: Arc<BlockingClient>,
+    bridge_ip: String,
+    username: String,
+    client_key: String,
+    area_id: String,
+    channels: Vec<HueAreaChannel>,
+) -> Result<(HueColorSender, ShutdownSignal), String> {
+    let channel_count = channels.len();
+    let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
+    let tx = Arc::new(tx);
+
+    // Activate entertainment mode via HTTPS before starting DTLS.
+    activate_entertainment_config(&client, &bridge_ip, &username, &area_id)?;
+
+    // Establish DTLS connection.
+    let mut dtls_stream = connect_dtls(&bridge_ip, &username, &client_key)?;
+
+    // Spawn the sender thread.
+    let deactivate_client = client;
+    let deactivate_ip = bridge_ip.clone();
+    let deactivate_username = username.clone();
+    let deactivate_area_id = area_id.clone();
+
+    let shutdown = new_shutdown_signal();
+    let shutdown_inner = Arc::clone(&shutdown);
+
+    thread::spawn(move || {
+        use std::io::Write;
+
+        let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
+        let mut last_sent_at = Instant::now()
+            .checked_sub(min_interval)
+            .unwrap_or_else(Instant::now);
+
+        // Keep-alive: send a frame even when no update arrives, to prevent the
+        // bridge from closing the stream after ~10s of inactivity.
+        let keepalive_timeout = Duration::from_secs(2);
+
+        // Last known frame data for keep-alive re-sends.
+        let mut last_colors: Vec<(u8, u8, u8)> = vec![(0, 0, 0); channels.len()];
+        let mut last_brightness: f32 = 1.0;
+
+        loop {
+            // Try to receive with a timeout so we can send keep-alive frames.
+            let update = match rx.recv_timeout(keepalive_timeout) {
+                Ok(u) => Some(u),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => None,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            };
+
+            // If we got an update, drain any stale ones.
+            let latest = if let Some(mut latest) = update {
+                while let Ok(newer) = rx.try_recv() {
+                    latest = newer;
+                }
+                last_colors = latest.channel_colors.clone();
+                last_brightness = latest.brightness;
+                latest
+            } else {
+                // Keep-alive: re-send the last known frame.
+                HueColorUpdate {
+                    channel_colors: last_colors.clone(),
+                    brightness: last_brightness,
+                }
+            };
+
+            // Honour the minimum interval so we don't slam the bridge.
+            let elapsed = Instant::now().saturating_duration_since(last_sent_at);
+            if elapsed < min_interval {
+                thread::sleep(min_interval - elapsed);
+            }
+
+            // Build and send the HueStream binary frame.
+            let frame = build_huestream_frame(&area_id, &channels, &latest.channel_colors, latest.brightness);
+            if dtls_stream.write_all(&frame).is_err() {
+                error!("DTLS write failed, stopping entertainment stream.");
+                break;
+            }
+
+            last_sent_at = Instant::now();
+        }
+
+        // Cleanup: deactivate entertainment mode.
+        let _ = deactivate_entertainment_config(
+            &deactivate_client,
+            &deactivate_ip,
+            &deactivate_username,
+            &deactivate_area_id,
+        );
+
+        // Signal that this thread has completed shutdown.
+        signal_shutdown_complete(&shutdown_inner);
+    });
+
+    Ok((HueColorSender { tx, channel_count }, shutdown))
+}
+
+/// Fallback HTTP sender for when DTLS is not available (e.g. missing clientkey).
+/// This uses the legacy per-light PUT approach.
+///
+/// Returns the color sender handle and a shutdown signal that fires when the
+/// thread exits.
+fn spawn_hue_http_sender(
     client: Arc<BlockingClient>,
     bridge_ip: String,
     username: String,
     channels: Vec<HueAreaChannel>,
-) -> HueColorSender {
+) -> (HueColorSender, ShutdownSignal) {
     let channel_count = channels.len();
     let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
     let tx = Arc::new(tx);
+
+    let shutdown = new_shutdown_signal();
+    let shutdown_inner = Arc::clone(&shutdown);
 
     thread::spawn(move || {
         let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
@@ -252,7 +704,7 @@ fn spawn_hue_color_sender(
         loop {
             let update = match rx.recv() {
                 Ok(u) => u,
-                Err(_) => break, // all senders dropped → exit cleanly
+                Err(_) => break,
             };
 
             // Drain stale updates: keep only the latest.
@@ -267,8 +719,6 @@ fn spawn_hue_color_sender(
                 thread::sleep(min_interval - elapsed);
             }
 
-            // Send to each channel concurrently; each channel may itself contain
-            // multiple lights which `send_color_to_lights` also fans out in parallel.
             let brightness = latest.brightness;
             let client_ref: &BlockingClient = &client;
             let bridge_ref: &str = &bridge_ip;
@@ -294,12 +744,15 @@ fn spawn_hue_color_sender(
 
             last_sent_at = Instant::now();
         }
+
+        // Signal that this thread has completed shutdown.
+        signal_shutdown_complete(&shutdown_inner);
     });
 
-    HueColorSender { tx, channel_count }
+    (HueColorSender { tx, channel_count }, shutdown)
 }
 
-/// Send to all lights. For a single light: direct call. For multiple: parallel
+/// Send to all lights via HTTP. For a single light: direct call. For multiple: parallel
 /// threads via `thread::scope` so each HTTPS round-trip happens concurrently.
 fn send_color_to_lights(
     client: &BlockingClient,
@@ -360,9 +813,16 @@ fn send_light_put(
 struct HueActiveStreamContext {
     bridge_ip: String,
     username: String,
+    #[allow(dead_code)]
+    client_key: String,
     area_id: String,
     channels: Vec<HueAreaChannel>,
     color_sender: HueColorSender,
+    /// Whether this context uses real DTLS streaming (true) or HTTP fallback (false).
+    uses_dtls: bool,
+    /// Fires when the background sender thread exits. Used by `stop_hue_stream`
+    /// to wait for graceful shutdown before reporting success or timeout.
+    shutdown_signal: ShutdownSignal,
 }
 
 #[derive(Clone, Debug)]
@@ -386,6 +846,7 @@ impl Default for HueRuntimeOwner {
                 None,
                 HueRuntimeTriggerSource::System,
             ),
+            last_solid_color: None,
             retry_policy: HueRetryPolicy::default(),
         }
     }
@@ -394,6 +855,39 @@ impl Default for HueRuntimeOwner {
 #[derive(Default)]
 pub struct HueRuntimeStateStore {
     runtime: Mutex<HueRuntimeOwner>,
+}
+
+
+/// If a solid color was queued while the stream context was not ready, attempt
+/// to flush it now.  Called whenever we hold the lock and the context may have
+/// just become available (e.g. after status_refresh_with_evidence confirms the
+/// stream is healthy, or on a periodic get_hue_stream_status poll).
+fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) {
+    if owner.last_status.code != "HUE_COLOR_QUEUED_PENDING_STREAM" {
+        return;
+    }
+    if let (Some(color), Some(stream)) = (owner.last_solid_color.clone(), owner.active_stream.as_ref()) {
+        if !stream.channels.is_empty() {
+            stream.color_sender.try_send(color.r, color.g, color.b, color.brightness);
+            owner.last_status = status_with(
+                owner.state.clone(),
+                "HUE_COLOR_APPLIED",
+                "Queued solid color flushed after stream context became ready.",
+                None,
+                HueRuntimeTriggerSource::System,
+            );
+        }
+    }
+}
+
+/// Acquire the Hue runtime mutex, recovering from poison if a previous holder
+/// panicked.  This ensures a single panic inside the lock does not permanently
+/// brick the Hue subsystem for the rest of the application lifetime.
+fn acquire_hue_runtime(runtime: &Mutex<HueRuntimeOwner>) -> std::sync::MutexGuard<'_, HueRuntimeOwner> {
+    runtime.lock().unwrap_or_else(|poison| {
+        error!("Hue runtime mutex was poisoned — recovering from poison guard.");
+        poison.into_inner()
+    })
 }
 
 fn status_with(
@@ -422,6 +916,7 @@ fn make_result(owner: &HueRuntimeOwner) -> HueRuntimeCommandResult {
             HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
         ),
         status: owner.last_status.clone(),
+        last_solid_color: owner.last_solid_color.clone(),
     }
 }
 
@@ -582,35 +1077,101 @@ fn status_refresh_with_evidence(
     make_result(owner)
 }
 
+/// Spawn the Hue color sender (DTLS or HTTP fallback) **outside** any mutex
+/// lock.  This function performs blocking network I/O (DTLS handshake, HTTP
+/// activate) and must never be called while the `HueRuntimeOwner` lock is held.
+fn build_hue_sender(
+    request: &StartHueStreamRequest,
+    channels: Vec<HueAreaChannel>,
+) -> (HueColorSender, bool, ShutdownSignal) {
+    let has_client_key = !request.client_key.trim().is_empty();
+
+    if has_client_key {
+        match hue_http_client_arc() {
+            Ok(client) => {
+                // Spawn DTLS attempt on a dedicated OS thread with a hard deadline.
+                // DTLS handshake can block indefinitely if the bridge ignores UDP:2100 —
+                // the socket-level read timeout is not honored by OpenSSL's retransmit loop.
+                let (tx_result, rx_result) = std::sync::mpsc::channel();
+                let client_clone = client.clone();
+                let bridge_ip_t = request.bridge_ip.clone();
+                let username_t = request.username.clone();
+                let client_key_t = request.client_key.clone();
+                let area_id_t = request.area_id.clone();
+                let channels_t = channels.clone();
+
+                std::thread::spawn(move || {
+                    let result = spawn_hue_dtls_sender(
+                        client_clone, bridge_ip_t, username_t, client_key_t, area_id_t, channels_t,
+                    );
+                    let _ = tx_result.send(result);
+                });
+
+                match rx_result.recv_timeout(Duration::from_secs(DTLS_CONNECT_TIMEOUT_SECS)) {
+                    Ok(Ok((sender, shutdown))) => {
+                        info!("DTLS entertainment stream established successfully.");
+                        (sender, true, shutdown)
+                    }
+                    Ok(Err(err)) => {
+                        warn!("DTLS connection failed ({err}), falling back to HTTP.");
+                        let (sender, shutdown) = spawn_hue_http_sender(
+                            client,
+                            request.bridge_ip.clone(),
+                            request.username.clone(),
+                            channels.clone(),
+                        );
+                        (sender, false, shutdown)
+                    }
+                    Err(_timeout) => {
+                        warn!("DTLS handshake timed out after {DTLS_CONNECT_TIMEOUT_SECS}s, falling back to HTTP.");
+                        let (sender, shutdown) = spawn_hue_http_sender(
+                            client,
+                            request.bridge_ip.clone(),
+                            request.username.clone(),
+                            channels.clone(),
+                        );
+                        (sender, false, shutdown)
+                    }
+                }
+            }
+            Err(err) => {
+                error!("HUE_SENDER_INIT_FAILED: {err}");
+                let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+            }
+        }
+    } else {
+        info!("No clientKey provided, using HTTP fallback sender.");
+        match hue_http_client_arc() {
+            Ok(client) => {
+                let (sender, shutdown) = spawn_hue_http_sender(
+                    client,
+                    request.bridge_ip.clone(),
+                    request.username.clone(),
+                    channels.clone(),
+                );
+                (sender, false, shutdown)
+            }
+            Err(err) => {
+                error!("HUE_SENDER_INIT_FAILED: {err}");
+                let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+            }
+        }
+    }
+}
+
+/// Store an already-spawned sender into the runtime owner.  This function only
+/// touches in-memory fields — no I/O — so it is safe to call under the lock.
 fn store_active_stream_context(
     owner: &mut HueRuntimeOwner,
     request: &StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
-    start_result: &HueRuntimeCommandResult,
+    color_sender: HueColorSender,
+    uses_dtls: bool,
+    shutdown_signal: ShutdownSignal,
 ) {
-    if !start_result.active {
-        return;
-    }
-
-    let color_sender = hue_http_client_arc()
-        .map(|client| {
-            spawn_hue_color_sender(
-                client,
-                request.bridge_ip.clone(),
-                request.username.clone(),
-                channels.clone(),
-            )
-        })
-        .unwrap_or_else(|err| {
-            eprintln!("[LumaSync] HUE_SENDER_INIT_FAILED: {err}");
-            let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-            HueColorSender { tx: Arc::new(tx), channel_count: 0 }
-        });
-
     // Keep a persistent clone that survives stream stop/start cycles.
-    // Both `active_stream` and `persistent_sender` share the same Arc so only
-    // one background thread is running, and it stays alive even after the
-    // stream stops (as long as `persistent_sender` is alive).
     if !channels.is_empty() {
         owner.persistent_sender = Some(HuePersistentSender {
             channels: channels.clone(),
@@ -621,11 +1182,16 @@ fn store_active_stream_context(
     owner.active_stream = Some(HueActiveStreamContext {
         bridge_ip: request.bridge_ip.clone(),
         username: request.username.clone(),
+        client_key: request.client_key.clone(),
         area_id: request.area_id.clone(),
         channels,
         color_sender,
+        uses_dtls,
+        shutdown_signal,
     });
 }
+
+static HUE_BLOCKING_CLIENT: OnceLock<Arc<BlockingClient>> = OnceLock::new();
 
 fn hue_http_client() -> Result<BlockingClient, String> {
     BlockingClient::builder()
@@ -636,7 +1202,15 @@ fn hue_http_client() -> Result<BlockingClient, String> {
 }
 
 fn hue_http_client_arc() -> Result<Arc<BlockingClient>, String> {
-    hue_http_client().map(Arc::new)
+    Ok(Arc::clone(HUE_BLOCKING_CLIENT.get_or_init(|| {
+        Arc::new(
+            BlockingClient::builder()
+                .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
+                .danger_accept_invalid_certs(true)
+                .build()
+                .expect("Failed to build Hue blocking HTTP client")
+        )
+    })))
 }
 
 fn async_hue_http_client() -> Result<reqwest::Client, String> {
@@ -647,7 +1221,7 @@ fn async_hue_http_client() -> Result<reqwest::Client, String> {
         .map_err(|error| error.to_string())
 }
 
-/// Map a Hue channel's 2D position (x: -1 left … +1 right, y: -1 bottom … +1 top)
+/// Map a Hue channel's 2D position (x: -1 left ... +1 right, y: -1 bottom ... +1 top)
 /// to the screen region whose colour that channel should display.
 fn channel_position_to_screen_region(x: f32, y: f32) -> HueScreenRegion {
     let abs_x = x.abs();
@@ -754,8 +1328,6 @@ async fn fetch_area_channels(
             else {
                 return resolved;
             };
-            // `light_services` is used by grouped_light; `services` is used by device.
-            // Try both so that entertainment_service → device → light traversal works.
             let svc_array = item
                 .get("light_services")
                 .or_else(|| item.get("services"))
@@ -796,7 +1368,13 @@ async fn fetch_area_channels(
     // Build one `HueAreaChannel` per entertainment channel, preserving position.
     let mut result: Vec<HueAreaChannel> = Vec::new();
 
-    for raw_ch in raw_channels {
+    for (idx, raw_ch) in raw_channels.iter().enumerate() {
+        // Extract the channel_id from the bridge payload.
+        let channel_id = raw_ch
+            .get("channel_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(idx as u64) as u8;
+
         // Extract position.x and position.y (default 0.0 if absent).
         let pos = raw_ch.get("position");
         let pos_x = pos
@@ -813,8 +1391,8 @@ async fn fetch_area_channels(
         let mut light_ids: Vec<String> = Vec::new();
 
         let Some(members) = raw_ch.get("members").and_then(|value| value.as_array()) else {
-            // Channel with no members still gets a record (empty lights).
             result.push(HueAreaChannel {
+                channel_id,
                 light_ids,
                 screen_region,
                 position_x: pos_x,
@@ -841,6 +1419,7 @@ async fn fetch_area_channels(
         }
 
         result.push(HueAreaChannel {
+            channel_id,
             light_ids,
             screen_region,
             position_x: pos_x,
@@ -892,10 +1471,7 @@ pub async fn get_hue_area_channels(
 ) -> Result<Vec<HueAreaChannelInfo>, String> {
     // Fast path: reuse channels already resolved by the running stream (brief lock, no I/O).
     {
-        let owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|e| format!("HUE_RUNTIME_LOCK_FAILED: {e}"))?;
+        let owner = acquire_hue_runtime(&runtime_state.runtime);
         if let Some(stream) = owner.active_stream.as_ref() {
             if stream.area_id == area_id && !stream.channels.is_empty() {
                 return Ok(channels_to_info(&stream.channels));
@@ -904,7 +1480,6 @@ pub async fn get_hue_area_channels(
         // Also check persistent sender (covers app-startup solid-only mode).
         if let Some(persistent) = owner.persistent_sender.as_ref() {
             if !persistent.channels.is_empty() {
-                // Persistent sender doesn't carry area_id; best-effort match.
                 return Ok(channels_to_info(&persistent.channels));
             }
         }
@@ -951,10 +1526,7 @@ fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
 pub fn snapshot_hue_output_context(
     runtime_state: &HueRuntimeStateStore,
 ) -> Result<Option<HueActiveOutputContext>, String> {
-    let owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+    let owner = acquire_hue_runtime(&runtime_state.runtime);
 
     Ok(owner.active_stream.as_ref().map(|stream| HueActiveOutputContext {
         channels: stream.channels.clone(),
@@ -963,7 +1535,7 @@ pub fn snapshot_hue_output_context(
 }
 
 /// Broadcast one colour to every channel (solid-colour path).
-/// Always returns `Ok(())` immediately — never blocks the caller.
+/// Always returns `Ok(())` immediately -- never blocks the caller.
 pub fn apply_hue_color_with_context(
     context: &HueActiveOutputContext,
     r: u8,
@@ -980,7 +1552,7 @@ pub fn apply_hue_color_with_context(
 
 /// Send individual colours per channel (ambilight path).
 /// `channel_colors` must be ordered the same as `context.channels`.
-/// Always returns `Ok(())` immediately — never blocks the caller.
+/// Always returns `Ok(())` immediately -- never blocks the caller.
 pub fn apply_hue_channels_with_context(
     context: &HueActiveOutputContext,
     channel_colors: Vec<(u8, u8, u8)>,
@@ -992,6 +1564,7 @@ pub fn apply_hue_channels_with_context(
     context.color_sender.try_send_channels(channel_colors, brightness);
     Ok(())
 }
+
 
 #[cfg_attr(not(test), allow(dead_code))]
 fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
@@ -1094,8 +1667,16 @@ fn stop_with_timeout(
         trigger_source.clone(),
     );
 
+    // Dropping active_stream (and thus the sender Arc) closes the mpsc channel,
+    // which causes the background thread to exit. DTLS deactivation is performed
+    // by the caller AFTER releasing the lock to avoid blocking the mutex on HTTP I/O.
+
     owner.reconnect_attempt = 0;
     owner.active_stream = None;
+    // A4: Drop persistent_sender so the background thread's mpsc channel closes
+    // immediately (Arc refcount falls to zero). Without this, wait_for_shutdown
+    // always times out because the thread's recv loop never sees Disconnected.
+    owner.persistent_sender = None;
     owner.state = HueRuntimeState::Idle;
     if timed_out {
         owner.last_status = status_with(
@@ -1118,6 +1699,42 @@ fn stop_with_timeout(
     make_result(owner)
 }
 
+/// RAII guard that resets the Hue runtime to `Failed` if `start_hue_stream`
+/// exits without successfully completing step 4c.  Call `.disarm()` once
+/// `store_active_stream_context` has been called.
+struct StartAbortGuard<'a> {
+    runtime: &'a Mutex<HueRuntimeOwner>,
+    armed: bool,
+}
+
+impl<'a> StartAbortGuard<'a> {
+    fn new(runtime: &'a Mutex<HueRuntimeOwner>) -> Self {
+        Self { runtime, armed: true }
+    }
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl<'a> Drop for StartAbortGuard<'a> {
+    fn drop(&mut self) {
+        if !self.armed { return; }
+        let mut owner = acquire_hue_runtime(self.runtime);
+        if matches!(owner.state, HueRuntimeState::Starting | HueRuntimeState::Running) {
+            owner.state = HueRuntimeState::Failed;
+            owner.active_stream = None;
+            owner.last_status = status_with(
+                HueRuntimeState::Failed,
+                "HUE_STREAM_START_ABORTED",
+                "Hue stream start was aborted before the stream context could be established.",
+                Some("Retry start. If this persists, check bridge connectivity.".to_string()),
+                HueRuntimeTriggerSource::System,
+            );
+            owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn start_hue_stream(
     request: StartHueStreamRequest,
@@ -1128,7 +1745,7 @@ pub async fn start_hue_stream(
         .clone()
         .unwrap_or(HueRuntimeTriggerSource::ModeControl);
 
-    // 1. Async readiness check — no lock held during network I/O.
+    // 1. Async readiness check -- no lock held during network I/O.
     let readiness = check_hue_stream_readiness(
         request.bridge_ip.clone(),
         request.username.clone(),
@@ -1148,10 +1765,7 @@ pub async fn start_hue_stream(
 
     // 2. Lock briefly for state decision only.
     let result = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
         let result = start_with_evidence(&mut owner, &gate, trigger);
         // If the stream was already active (NOOP), return early without re-fetching
         // channels. Re-fetching while the stream is live can fail and would overwrite
@@ -1162,7 +1776,10 @@ pub async fn start_hue_stream(
         result
     }; // lock released before async I/O
 
-    // 3. Async channel fetch — no lock held.
+    // Abort guard: if we exit before step 4c stores the context, roll back to Failed.
+    let mut abort_guard = StartAbortGuard::new(&runtime_state.runtime);
+
+    // 3. Async channel fetch -- no lock held.
     let mut channels = if result.active {
         fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
             .await
@@ -1174,14 +1791,46 @@ pub async fn start_hue_stream(
         apply_channel_region_overrides(&mut channels, overrides);
     }
 
-    // 4. Lock briefly to store stream context and apply no-lights guard.
+    // 4a. Lock briefly for race-condition guard only.
     let has_no_lights = result.active && channels.is_empty();
     {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
-        store_active_stream_context(&mut owner, &request, channels, &result);
+        let owner = acquire_hue_runtime(&runtime_state.runtime);
+        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+            abort_guard.disarm();
+            return Ok(make_result(&owner));
+        }
+    } // lock released before blocking I/O
+
+    // 4b. Spawn sender on a blocking thread — DTLS handshake / HTTP activate
+    //     create/drop a reqwest::blocking::Client which panics on Tokio workers.
+    let (color_sender, uses_dtls, shutdown_signal) = if result.active {
+        let req = request.clone();
+        let ch = channels.clone();
+        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch))
+            .await
+            .unwrap_or_else(|_join_err| {
+                error!("build_hue_sender task panicked, using no-op sender.");
+                let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+            })
+    } else {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+    };
+
+    // 4c. Re-acquire lock to store the spawned sender context.
+    let final_result = {
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+
+        // Second race-condition guard: a stop may have arrived while we were
+        // spawning the sender.
+        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+            abort_guard.disarm();
+            return Ok(make_result(&owner));
+        }
+
+        store_active_stream_context(&mut owner, &request, channels, color_sender, uses_dtls, shutdown_signal);
+        abort_guard.disarm();
 
         if has_no_lights {
             owner.last_status = status_with(
@@ -1194,22 +1843,103 @@ pub async fn start_hue_stream(
             owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
             return Ok(make_result(&owner));
         }
-    }
 
-    Ok(result)
+        // If DTLS was established, update the status to indicate entertainment streaming.
+        if let Some(stream) = owner.active_stream.as_ref() {
+            if stream.uses_dtls {
+                owner.last_status = status_with(
+                    HueRuntimeState::Running,
+                    "HUE_STREAM_RUNNING_DTLS",
+                    "Hue entertainment stream active via DTLS.",
+                    None,
+                    HueRuntimeTriggerSource::System,
+                );
+            }
+        }
+
+        // Flush any solid color that was queued while the stream context was not ready.
+        flush_pending_solid_color(&mut owner);
+
+        make_result(&owner)
+    };
+
+    Ok(final_result)
 }
 
+/// Stop the Hue entertainment stream with a bounded wait for the background
+/// sender thread to exit. If the thread does not shut down within
+/// `HUE_STOP_TIMEOUT_SECS`, the command reports `HUE_STOP_TIMEOUT_PARTIAL`
+/// with an action hint to retry.
+///
+/// This is a **synchronous** Tauri command. Tauri automatically dispatches
+/// sync commands onto a blocking thread pool, so the `Condvar` wait inside
+/// will never starve the async runtime.
 #[tauri::command]
 pub fn stop_hue_stream(
     trigger_source: Option<HueRuntimeTriggerSource>,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    let mut owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
     let trigger = trigger_source.unwrap_or(HueRuntimeTriggerSource::System);
-    Ok(stop_with_timeout(&mut owner, false, trigger))
+
+    // 1. Brief lock: extract the shutdown signal and DTLS deactivation params,
+    //    then initiate cleanup.  Dropping the active_stream (and thus the sender
+    //    Arc) closes the mpsc channel, which unblocks the background thread's
+    //    recv loop.  DTLS deactivation HTTP call happens AFTER the lock is released.
+    let (maybe_shutdown, dtls_deactivate) = {
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+
+        // Grab the shutdown signal before stop_with_timeout drops active_stream.
+        let signal = owner
+            .active_stream
+            .as_ref()
+            .map(|s| Arc::clone(&s.shutdown_signal));
+
+        // Extract DTLS deactivation params before active_stream is cleared.
+        let dtls_deactivate = owner.active_stream.as_ref()
+            .filter(|s| s.uses_dtls)
+            .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
+
+        // Perform synchronous cleanup (drop sender, reset state).
+        // We pass `timed_out=false` initially; if the wait below times out
+        // we will re-lock and update the status.
+        let _ = stop_with_timeout(&mut owner, false, trigger.clone());
+
+        (signal, dtls_deactivate)
+    }; // lock released -- background thread can now observe the channel close.
+
+    // Best-effort DTLS deactivation outside the lock to avoid blocking the mutex.
+    if let Some((ip, username, area_id)) = dtls_deactivate {
+        if let Ok(client) = hue_http_client() {
+            let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
+        }
+    }
+
+    // 2. If there was an active stream, wait for the sender thread to confirm
+    //    shutdown within HUE_STOP_TIMEOUT_SECS.
+    if let Some(shutdown_signal) = maybe_shutdown {
+        let shutdown_ok = wait_for_shutdown(
+            &shutdown_signal,
+            Duration::from_secs(HUE_STOP_TIMEOUT_SECS),
+        );
+
+        if !shutdown_ok {
+            // 3. Re-lock and overwrite status to reflect the partial-stop timeout.
+            let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+            owner.last_status = status_with(
+                HueRuntimeState::Idle,
+                "HUE_STOP_TIMEOUT_PARTIAL",
+                "Hue runtime reached stop timeout; partial-stop cleanup reported.",
+                Some("retry stop to ensure bridge state restore".to_string()),
+                trigger,
+            );
+            owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
+            return Ok(make_result(&owner));
+        }
+    }
+
+    // Either no active stream existed or the thread shut down in time.
+    let owner = acquire_hue_runtime(&runtime_state.runtime);
+    Ok(make_result(&owner))
 }
 
 #[tauri::command]
@@ -1222,16 +1952,27 @@ pub async fn restart_hue_stream(
         .clone()
         .unwrap_or(HueRuntimeTriggerSource::DeviceSurface);
 
-    // 1. Stop first — brief lock, no I/O.
-    {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+    // 1. Stop first -- brief lock, no I/O.  Extract DTLS deactivation params
+    //    before the lock is released so we can deactivate outside the lock.
+    let dtls_deactivate = {
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+        let dtls_deactivate = owner.active_stream.as_ref()
+            .filter(|s| s.uses_dtls)
+            .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
         let _ = stop_with_timeout(&mut owner, false, trigger.clone());
-    } // lock released before async I/O
+        dtls_deactivate
+    }; // lock released before async I/O
 
-    // 2. Async readiness check — no lock held.
+    // Best-effort DTLS deactivation outside the lock.
+    if let Some((ip, username, area_id)) = dtls_deactivate {
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(client) = hue_http_client() {
+                let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
+            }
+        }).await;
+    }
+
+    // 2. Async readiness check -- no lock held.
     let readiness = check_hue_stream_readiness(
         request.bridge_ip.clone(),
         request.username.clone(),
@@ -1251,14 +1992,14 @@ pub async fn restart_hue_stream(
 
     // 3. Lock briefly for state decision.
     let result = {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
         start_with_evidence(&mut owner, &gate, trigger)
     }; // lock released
 
-    // 4. Async channel fetch — no lock held.
+    // Abort guard: if we exit before step 5c stores the context, roll back to Failed.
+    let mut abort_guard = StartAbortGuard::new(&runtime_state.runtime);
+
+    // 4. Async channel fetch -- no lock held.
     let mut channels = if result.active {
         fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
             .await
@@ -1270,14 +2011,43 @@ pub async fn restart_hue_stream(
         apply_channel_region_overrides(&mut channels, overrides);
     }
 
-    // 5. Lock briefly to store context and apply no-lights guard.
+    // 5a. Lock briefly for race-condition guard only.
     let has_no_lights = result.active && channels.is_empty();
     {
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
-        store_active_stream_context(&mut owner, &request, channels, &result);
+        let owner = acquire_hue_runtime(&runtime_state.runtime);
+        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+            abort_guard.disarm();
+            return Ok(make_result(&owner));
+        }
+    } // lock released before blocking I/O
+
+    // 5b. Spawn sender on a blocking thread — same rationale as start_hue_stream 4b.
+    let (color_sender, uses_dtls, shutdown_signal) = if result.active {
+        let req = request.clone();
+        let ch = channels.clone();
+        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch))
+            .await
+            .unwrap_or_else(|_join_err| {
+                error!("build_hue_sender task panicked, using no-op sender.");
+                let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+            })
+    } else {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+    };
+
+    // 5c. Re-acquire lock to store the spawned sender context.
+    let final_result = {
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+
+        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+            abort_guard.disarm();
+            return Ok(make_result(&owner));
+        }
+
+        store_active_stream_context(&mut owner, &request, channels, color_sender, uses_dtls, shutdown_signal);
+        abort_guard.disarm();
 
         if has_no_lights {
             owner.last_status = status_with(
@@ -1290,9 +2060,27 @@ pub async fn restart_hue_stream(
             owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
             return Ok(make_result(&owner));
         }
-    }
 
-    Ok(result)
+        // If DTLS was established, update the status to indicate entertainment streaming.
+        if let Some(stream) = owner.active_stream.as_ref() {
+            if stream.uses_dtls {
+                owner.last_status = status_with(
+                    HueRuntimeState::Running,
+                    "HUE_STREAM_RUNNING_DTLS",
+                    "Hue entertainment stream active via DTLS.",
+                    None,
+                    HueRuntimeTriggerSource::System,
+                );
+            }
+        }
+
+        // Flush any solid color that was queued while the stream context was not ready.
+        flush_pending_solid_color(&mut owner);
+
+        make_result(&owner)
+    };
+
+    Ok(final_result)
 }
 
 #[tauri::command]
@@ -1300,10 +2088,7 @@ pub fn set_hue_solid_color(
     request: SetHueSolidColorRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    let mut owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+    let mut owner = acquire_hue_runtime(&runtime_state.runtime);
 
     let trigger = request
         .trigger_source
@@ -1312,7 +2097,7 @@ pub fn set_hue_solid_color(
 
     let brightness = request.brightness.unwrap_or(1.0).clamp(0.0, 1.0);
 
-    // Fast path: active stream — use the pre-warmed background sender.
+    // Fast path: active stream -- use the pre-warmed background sender.
     if let Some(active_stream) = owner.active_stream.as_ref() {
         if active_stream.channels.is_empty() {
             owner.last_status = status_with(
@@ -1329,6 +2114,12 @@ pub fn set_hue_solid_color(
         active_stream
             .color_sender
             .try_send(request.r, request.g, request.b, brightness);
+        owner.last_solid_color = Some(HueSolidColorSnapshot {
+            r: request.r,
+            g: request.g,
+            b: request.b,
+            brightness,
+        });
         owner.last_status = status_with(
             HueRuntimeState::Running,
             "HUE_COLOR_APPLIED",
@@ -1347,6 +2138,12 @@ pub fn set_hue_solid_color(
             persistent
                 .sender
                 .try_send(request.r, request.g, request.b, brightness);
+            owner.last_solid_color = Some(HueSolidColorSnapshot {
+                r: request.r,
+                g: request.g,
+                b: request.b,
+                brightness,
+            });
             owner.last_status = status_with(
                 owner.state.clone(),
                 "HUE_COLOR_APPLIED",
@@ -1358,14 +2155,26 @@ pub fn set_hue_solid_color(
         }
     }
 
-    // No credentials available at all.
-    owner.last_status = status_with(
-        HueRuntimeState::Idle,
-        "HUE_COLOR_APPLY_SKIPPED",
-        "Hue color apply skipped because stream context is not active.",
-        Some("Start Hue runtime before sending color updates.".to_string()),
-        trigger,
-    );
+    // Stream context not ready — differentiate between "starting" and truly idle.
+    if matches!(owner.state, HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting) {
+        // Stream is starting but context not ready yet — record the color for later flush
+        owner.last_solid_color = Some(HueSolidColorSnapshot { r: request.r, g: request.g, b: request.b, brightness });
+        owner.last_status = status_with(
+            owner.state.clone(),
+            "HUE_COLOR_QUEUED_PENDING_STREAM",
+            "Color queued — stream context not ready yet, will be flushed when stream starts.",
+            None,
+            trigger,
+        );
+    } else {
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "HUE_COLOR_APPLY_SKIPPED",
+            "Hue color apply skipped because stream context is not active.",
+            Some("Start Hue runtime before sending color updates.".to_string()),
+            trigger,
+        );
+    }
     Ok(make_result(&owner))
 }
 
@@ -1373,12 +2182,9 @@ pub fn set_hue_solid_color(
 pub async fn get_hue_stream_status(
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
-    // 1. Check if stream is active and read params — brief lock, no I/O.
+    // 1. Check if stream is active and read params -- brief lock, no I/O.
     let active_stream_params = {
-        let owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+        let owner = acquire_hue_runtime(&runtime_state.runtime);
         if matches!(
             owner.state,
             HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
@@ -1388,6 +2194,7 @@ pub async fn get_hue_stream_status(
                     stream.bridge_ip.clone(),
                     stream.username.clone(),
                     stream.area_id.clone(),
+                    Arc::clone(&stream.shutdown_signal),
                 )
             })
         } else {
@@ -1395,36 +2202,77 @@ pub async fn get_hue_stream_status(
         }
     }; // lock released before async I/O
 
-    // 2. If stream is active, check readiness async — no lock held.
-    if let Some((bridge_ip, username, area_id)) = active_stream_params {
+    // A3: Non-blocking probe — if the background sender thread has already exited,
+    // register a transient fault immediately without doing a network round-trip.
+    if let Some((_, _, _, ref shutdown_signal)) = active_stream_params {
+        if is_shutdown_signaled(shutdown_signal) {
+            let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+            if matches!(
+                owner.state,
+                HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+            ) {
+                // Clear dead stream/sender contexts so the next start can spawn fresh.
+                owner.active_stream = None;
+                owner.persistent_sender = None;
+                return Ok(register_transient_fault(
+                    &mut owner,
+                    "DTLS sender thread exited unexpectedly.",
+                    HueRuntimeTriggerSource::System,
+                ));
+            }
+            return Ok(make_result(&owner));
+        }
+    }
+
+    // 2. If stream is active, check readiness async -- no lock held.
+    if let Some((bridge_ip, username, area_id, _)) = active_stream_params {
         let readiness = check_hue_stream_readiness(bridge_ip, username, area_id).await;
+        // During a health poll the area will have active_streamer=true (we are
+        // the active streamer).  The readiness check treats active_streamer as
+        // "not ready" to prevent hijacking a foreign stream, but for an ongoing
+        // health check that flag means everything is working.  Override ready=true
+        // when the only blocking reason is active_streamer.
+        let only_blocked_by_us = !readiness.readiness.ready
+            && readiness
+                .readiness
+                .reasons
+                .iter()
+                .all(|r| r.contains("ACTIVE_STREAMER"));
+        let ready_for_health = readiness.readiness.ready || only_blocked_by_us;
         let gate = HueRuntimeGateEvidence {
             bridge_configured: true,
             credentials_valid: true,
             area_selected: true,
             readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
-            ready: readiness.readiness.ready,
+            ready: ready_for_health,
             auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
                 || readiness.status.code == "HUE_CREDENTIAL_INVALID",
         };
-        let details = readiness
-            .status
-            .details
-            .clone()
-            .or_else(|| Some(readiness.status.message.clone()));
+        // Suppress the "not ready" details when we are the active streamer — the
+        // area is healthy from our perspective and leaking those details into the
+        // Running status creates misleading "Adjust Entertainment Area" messages.
+        let details = if only_blocked_by_us {
+            None
+        } else {
+            readiness
+                .status
+                .details
+                .clone()
+                .or_else(|| Some(readiness.status.message.clone()))
+        };
 
         // 3. Lock briefly to apply the refreshed state.
-        let mut owner = runtime_state
-            .runtime
-            .lock()
-            .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
-        return Ok(status_refresh_with_evidence(&mut owner, &gate, details));
+        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+        let _ = status_refresh_with_evidence(&mut owner, &gate, details);
+        // Flush any solid color that was queued during the stream-starting window.
+        flush_pending_solid_color(&mut owner);
+        return Ok(make_result(&owner));
     }
 
-    let owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("HUE_RUNTIME_LOCK_FAILED: {error}"))?;
+    // Fallback: active_stream was None at step 1, but step 4c of start_hue_stream
+    // may have stored the context by now. Re-acquire the lock and attempt a flush.
+    let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+    flush_pending_solid_color(&mut owner);
     Ok(make_result(&owner))
 }
 
@@ -1460,6 +2308,28 @@ mod tests {
             readiness_current: false,
             ready: false,
             auth_invalid_evidence: false,
+        }
+    }
+
+    /// Helper: build a dummy `HueActiveStreamContext` for tests that need one
+    /// without spawning a real background thread.
+    fn dummy_active_stream_context() -> HueActiveStreamContext {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        HueActiveStreamContext {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "username".to_string(),
+            client_key: String::new(),
+            area_id: "area".to_string(),
+            channels: vec![HueAreaChannel {
+                channel_id: 0,
+                light_ids: vec!["light-1".to_string()],
+                screen_region: HueScreenRegion::Center,
+                position_x: 0.0,
+                position_y: 0.0,
+            }],
+            color_sender: HueColorSender { tx: Arc::new(tx), channel_count: 1 },
+            uses_dtls: false,
+            shutdown_signal: new_shutdown_signal(),
         }
     }
 
@@ -1587,6 +2457,7 @@ mod tests {
         let request = StartHueStreamRequest {
             bridge_ip: "192.168.1.2".to_string(),
             username: "hue-user".to_string(),
+            client_key: String::new(),
             area_id: "living-room".to_string(),
             trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
             channel_region_overrides: None,
@@ -1597,16 +2468,21 @@ mod tests {
             &strict_gate_ready(),
             HueRuntimeTriggerSource::ModeControl,
         );
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let dummy_sender = HueColorSender { tx: Arc::new(tx), channel_count: 1 };
         store_active_stream_context(
             &mut owner,
             &request,
             vec![HueAreaChannel {
+                channel_id: 0,
                 light_ids: vec!["light-1".to_string()],
                 screen_region: HueScreenRegion::Center,
                 position_x: 0.0,
                 position_y: 0.0,
             }],
-            &start_result,
+            dummy_sender,
+            false,
+            new_shutdown_signal(),
         );
 
         let active_stream = owner.active_stream.as_ref().expect("active stream context");
@@ -1670,21 +2546,7 @@ mod tests {
             &strict_gate_ready(),
             HueRuntimeTriggerSource::ModeControl,
         );
-        {
-            let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-            owner.active_stream = Some(HueActiveStreamContext {
-                bridge_ip: "192.168.1.2".to_string(),
-                username: "username".to_string(),
-                area_id: "area".to_string(),
-                channels: vec![HueAreaChannel {
-                    light_ids: vec!["light-1".to_string()],
-                    screen_region: HueScreenRegion::Center,
-                    position_x: 0.0,
-                    position_y: 0.0,
-                }],
-                color_sender: HueColorSender { tx: Arc::new(tx), channel_count: 1 },
-            });
-        }
+        owner.active_stream = Some(dummy_active_stream_context());
         let _ = stop_with_timeout(&mut owner, false, HueRuntimeTriggerSource::DeviceSurface);
 
         let mut transient_fault_gate = strict_gate_ready();
@@ -1716,5 +2578,106 @@ mod tests {
             Some(HueRuntimeActionHint::Retry)
         );
         assert!(!timeout.active);
+    }
+
+    #[test]
+    fn shutdown_signal_fires_when_sender_thread_exits() {
+        let signal = new_shutdown_signal();
+        let signal_clone = Arc::clone(&signal);
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            signal_shutdown_complete(&signal_clone);
+        });
+
+        let completed = wait_for_shutdown(&signal, Duration::from_secs(2));
+        assert!(completed, "shutdown signal should have fired within 2s");
+    }
+
+    #[test]
+    fn shutdown_signal_times_out_when_thread_does_not_signal() {
+        let signal = new_shutdown_signal();
+        let completed = wait_for_shutdown(&signal, Duration::from_millis(100));
+        assert!(!completed, "should have timed out");
+    }
+
+    #[test]
+    fn build_huestream_frame_produces_correct_header_and_channels() {
+        let channels = vec![
+            HueAreaChannel {
+                channel_id: 0,
+                light_ids: vec!["l1".to_string()],
+                screen_region: HueScreenRegion::Left,
+                position_x: -0.8,
+                position_y: 0.0,
+            },
+            HueAreaChannel {
+                channel_id: 1,
+                light_ids: vec!["l2".to_string()],
+                screen_region: HueScreenRegion::Right,
+                position_x: 0.8,
+                position_y: 0.0,
+            },
+        ];
+        let colors = vec![(255, 0, 0), (0, 255, 0)];
+        let area_id = "1a8d99cc-967b-44f2-9202-43f976c0fa6b";
+        let frame = build_huestream_frame(area_id, &channels, &colors, 1.0);
+
+        // Header: 9 magic + 1 major + 1 minor + 1 seq + 2 reserved + 1 color_space + 1 reserved = 16
+        assert_eq!(&frame[0..9], b"HueStream");
+        assert_eq!(frame[9], 0x02);  // major
+        assert_eq!(frame[10], 0x00); // minor
+        assert_eq!(frame[11], 0x00); // sequence
+        assert_eq!(frame[12], 0x00); // reserved
+        assert_eq!(frame[13], 0x00); // reserved
+        assert_eq!(frame[14], 0x00); // color space RGB
+        assert_eq!(frame[15], 0x00); // reserved
+
+        // Entertainment configuration UUID (bytes 16..52, 36 bytes ASCII)
+        assert_eq!(&frame[16..52], area_id.as_bytes());
+
+        // Channel 0: id=0, R=65535, G=0, B=0  (starts at byte 52)
+        assert_eq!(frame[52], 0);       // channel_id
+        assert_eq!(frame[53..55], 0xFFFFu16.to_be_bytes()); // R
+        assert_eq!(frame[55..57], 0x0000u16.to_be_bytes()); // G
+        assert_eq!(frame[57..59], 0x0000u16.to_be_bytes()); // B
+
+        // Channel 1: id=1, R=0, G=65535, B=0  (starts at byte 59)
+        assert_eq!(frame[59], 1);       // channel_id
+        assert_eq!(frame[60..62], 0x0000u16.to_be_bytes()); // R
+        assert_eq!(frame[62..64], 0xFFFFu16.to_be_bytes()); // G
+        assert_eq!(frame[64..66], 0x0000u16.to_be_bytes()); // B
+
+        // Total: 16 header + 36 UUID + 2*7 channels = 66
+        assert_eq!(frame.len(), 66);
+    }
+
+    #[test]
+    fn build_huestream_frame_applies_brightness() {
+        let channels = vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["l1".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }];
+        let colors = vec![(255, 255, 255)];
+        let frame = build_huestream_frame("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", &channels, &colors, 0.5);
+
+        // Channel starts at byte 52 (16 header + 36 UUID). At 50% brightness, 255 -> ~32767.
+        let r = u16::from_be_bytes([frame[53], frame[54]]);
+        let g = u16::from_be_bytes([frame[55], frame[56]]);
+        let b = u16::from_be_bytes([frame[57], frame[58]]);
+        assert!(r > 32000 && r < 33000, "R={r} should be ~32767");
+        assert!(g > 32000 && g < 33000, "G={g} should be ~32767");
+        assert!(b > 32000 && b < 33000, "B={b} should be ~32767");
+    }
+
+    #[test]
+    fn hex_decode_works() {
+        assert_eq!(hex_decode("AABB").unwrap(), vec![0xAA, 0xBB]);
+        assert_eq!(hex_decode("0123456789abcdef").unwrap(), vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF]);
+        assert!(hex_decode("ABC").is_err()); // odd length
+        assert!(hex_decode("GG").is_err()); // invalid hex
     }
 }
