@@ -156,6 +156,45 @@ pub fn run() {
     // 6. Updater (auto-update from GitHub Releases)
     builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
+    // 7. Logging
+    #[cfg(debug_assertions)]
+    {
+        builder = builder.plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Debug)
+                .level_for("reqwest", log::LevelFilter::Warn)
+                .level_for("hyper", log::LevelFilter::Warn)
+                .level_for("hyper_util", log::LevelFilter::Warn)
+                .level_for("openssl", log::LevelFilter::Warn)
+                .level_for("rustls", log::LevelFilter::Warn)
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .build(),
+        );
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        builder = builder.plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .level_for("reqwest", log::LevelFilter::Warn)
+                .level_for("hyper", log::LevelFilter::Warn)
+                .level_for("hyper_util", log::LevelFilter::Warn)
+                .level_for("openssl", log::LevelFilter::Warn)
+                .level_for("rustls", log::LevelFilter::Warn)
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("lumasync".to_string()),
+                    },
+                ))
+                .build(),
+        );
+    }
+
     builder
         .setup(|app| {
             // Build tray menu
