@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.2
-milestone_name: Oda Görselleştirme ve Evrensel Işık Yönetimi
-status: ready_to_plan
-stopped_at: Roadmap created — Phase 14 ready to plan
-last_updated: "2026-03-30T00:00:00.000Z"
+milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
+status: executing
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-30T13:46:25.990Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 7
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** v1.2 — Phase 14: Contract Foundation
+**Current focus:** Phase 14 — contract-foundation
 
 ## Current Position
 
 Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
-Phase: 14 of 20 (Contract Foundation)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-30 — v1.2 roadmap created (7 phases, 24 requirements mapped)
+Phase: 14 (contract-foundation) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-03-30
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -48,6 +48,9 @@ Progress: [░░░░░░░░░░] 0%
 - CHAN-05 (write-back) is experimental; placed in Phase 20 with explicit "verify API first" gate.
 - react-konva NOT used for room map — DOM-based drag with pointer events is sufficient (900x620, max 20 elements).
 - WebView2 GPU blocklist flag (`--ignore-gpu-blocklist`) must be applied at start of Phase 17 before any canvas drag code.
+- [Phase 14-contract-foundation]: wall_side field uses String type (not enum) - enum upgrade deferred to Phase 16/17
+- [Phase 14-contract-foundation]: Command stubs return STUB_NOT_IMPLEMENTED CommandStatus to prevent runtime panics from todo!()
+- [Phase 14-contract-foundation]: f64 used for all float fields to match JavaScript number 64-bit precision at Tauri serialization boundary
 
 ## Accumulated Context
 
@@ -59,6 +62,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Session Continuity
 
-Last session: 2026-03-30
-Stopped at: Roadmap and STATE.md written for v1.2. Ready to run `/gsd:plan-phase 14`.
+Last session: 2026-03-30T13:46:25.987Z
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None

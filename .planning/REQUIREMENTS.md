@@ -18,22 +18,22 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### Oda Haritası (ROOM)
 
-- [ ] **ROOM-01**: User can create a 2D top-down room map with configurable room dimensions (width × depth in meters)
-- [ ] **ROOM-02**: User can add furniture items (desk, sofa, TV stand, shelf, etc.) to the room as named reference objects with adjustable size and position
-- [ ] **ROOM-03**: User can define named zones within the room (e.g. "TV Area", "Desk Zone") and assign lights to them
-- [ ] **ROOM-04**: User can add Hue light sources to the map with representative shape and size (bulb, lightbar, gradient strip)
-- [ ] **ROOM-05**: User can add a USB LED strip to the map with configurable length and wall placement
-- [ ] **ROOM-06**: User can designate the TV/monitor as the center reference anchor of the room map
-- [ ] **ROOM-07**: User can save and reload the room map (persisted via plugin-store)
-- [ ] **ROOM-08**: User can upload a custom background image for the room map (floor plan photo or illustration)
+- [x] **ROOM-01**: User can create a 2D top-down room map with configurable room dimensions (width × depth in meters)
+- [x] **ROOM-02**: User can add furniture items (desk, sofa, TV stand, shelf, etc.) to the room as named reference objects with adjustable size and position
+- [x] **ROOM-03**: User can define named zones within the room (e.g. "TV Area", "Desk Zone") and assign lights to them
+- [x] **ROOM-04**: User can add Hue light sources to the map with representative shape and size (bulb, lightbar, gradient strip)
+- [x] **ROOM-05**: User can add a USB LED strip to the map with configurable length and wall placement
+- [x] **ROOM-06**: User can designate the TV/monitor as the center reference anchor of the room map
+- [x] **ROOM-07**: User can save and reload the room map (persisted via plugin-store)
+- [x] **ROOM-08**: User can upload a custom background image for the room map (floor plan photo or illustration)
 
 ### Hue Kanal Pozisyon Editörü (CHAN)
 
-- [ ] **CHAN-01**: User can see all Hue Entertainment Area channels overlaid on the room map at their current x/y positions
-- [ ] **CHAN-02**: User can drag individual Hue channels on the room map to update their x/y position
-- [ ] **CHAN-03**: User can set the height (z-axis) for each Hue channel via a per-channel slider
-- [ ] **CHAN-04**: User can select multiple channels and move them together as a group
-- [ ] **CHAN-05** *(optional — experimental)*: User can write edited channel positions back to the Hue bridge (requires stream to be stopped; API behavior unconfirmed — validation phase required)
+- [x] **CHAN-01**: User can see all Hue Entertainment Area channels overlaid on the room map at their current x/y positions
+- [x] **CHAN-02**: User can drag individual Hue channels on the room map to update their x/y position
+- [x] **CHAN-03**: User can set the height (z-axis) for each Hue channel via a per-channel slider
+- [x] **CHAN-04**: User can select multiple channels and move them together as a group
+- [x] **CHAN-05** *(optional — experimental)*: User can write edited channel positions back to the Hue bridge (requires stream to be stopped; API behavior unconfirmed — validation phase required)
 
 ### LED Zone Otomatik Türetme (ZONE)
 
@@ -103,18 +103,18 @@ Which requirements map to which phases. Updated during roadmap creation.
 | HUX-02 | Phase 20 | Pending |
 | HDR-01 | Phase 15 | Pending |
 | HDR-02 | Phase 15 | Pending |
-| ROOM-01 | Phase 17 | Pending |
-| ROOM-02 | Phase 17 | Pending |
-| ROOM-03 | Phase 17 | Pending |
-| ROOM-04 | Phase 17 | Pending |
-| ROOM-05 | Phase 17 | Pending |
-| ROOM-06 | Phase 17 | Pending |
-| ROOM-07 | Phase 17 | Pending |
-| ROOM-08 | Phase 17 | Pending |
-| CHAN-01 | Phase 16 | Pending |
-| CHAN-02 | Phase 16 | Pending |
-| CHAN-03 | Phase 16 | Pending |
-| CHAN-04 | Phase 16 | Pending |
+| ROOM-01 | Phase 17 | Complete |
+| ROOM-02 | Phase 17 | Complete |
+| ROOM-03 | Phase 17 | Complete |
+| ROOM-04 | Phase 17 | Complete |
+| ROOM-05 | Phase 17 | Complete |
+| ROOM-06 | Phase 17 | Complete |
+| ROOM-07 | Phase 17 | Complete |
+| ROOM-08 | Phase 17 | Complete |
+| CHAN-01 | Phase 16 | Complete |
+| CHAN-02 | Phase 16 | Complete |
+| CHAN-03 | Phase 16 | Complete |
+| CHAN-04 | Phase 16 | Complete |
 | CHAN-05 | Phase 20 | Pending (optional — experimental) |
 | ZONE-01 | Phase 19 | Pending |
 | ZONE-02 | Phase 19 | Pending |
