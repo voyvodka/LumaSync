@@ -98,36 +98,45 @@ Which requirements map to which phases. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HUE-08 | TBD | Pending |
-| HUX-01 | TBD | Pending |
-| HUX-02 | TBD | Pending |
-| HDR-01 | TBD | Pending |
-| HDR-02 | TBD | Pending |
-| ROOM-01 | TBD | Pending |
-| ROOM-02 | TBD | Pending |
-| ROOM-03 | TBD | Pending |
-| ROOM-04 | TBD | Pending |
-| ROOM-05 | TBD | Pending |
-| ROOM-06 | TBD | Pending |
-| ROOM-07 | TBD | Pending |
-| ROOM-08 | TBD | Pending |
-| CHAN-01 | TBD | Pending |
-| CHAN-02 | TBD | Pending |
-| CHAN-03 | TBD | Pending |
-| CHAN-04 | TBD | Pending |
-| CHAN-05 | TBD | Pending (optional) |
-| ZONE-01 | TBD | Pending |
-| ZONE-02 | TBD | Pending |
-| ZONE-03 | TBD | Pending |
-| STND-01 | TBD | Pending |
-| STND-02 | TBD | Pending |
-| STND-03 | TBD | Pending |
+| HUE-08 | Phase 15 | Pending |
+| HUX-01 | Phase 20 | Pending |
+| HUX-02 | Phase 20 | Pending |
+| HDR-01 | Phase 15 | Pending |
+| HDR-02 | Phase 15 | Pending |
+| ROOM-01 | Phase 17 | Pending |
+| ROOM-02 | Phase 17 | Pending |
+| ROOM-03 | Phase 17 | Pending |
+| ROOM-04 | Phase 17 | Pending |
+| ROOM-05 | Phase 17 | Pending |
+| ROOM-06 | Phase 17 | Pending |
+| ROOM-07 | Phase 17 | Pending |
+| ROOM-08 | Phase 17 | Pending |
+| CHAN-01 | Phase 16 | Pending |
+| CHAN-02 | Phase 16 | Pending |
+| CHAN-03 | Phase 16 | Pending |
+| CHAN-04 | Phase 16 | Pending |
+| CHAN-05 | Phase 20 | Pending (optional — experimental) |
+| ZONE-01 | Phase 19 | Pending |
+| ZONE-02 | Phase 19 | Pending |
+| ZONE-03 | Phase 19 | Pending |
+| STND-01 | Phase 18 | Pending |
+| STND-02 | Phase 18 | Pending |
+| STND-03 | Phase 18 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 24 total (23 mandatory + 1 optional)
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 24 ⚠
+- Mapped to phases: 24/24 ✓
+- Unmapped: 0
+
+**Phase coverage summary:**
+- Phase 14 (Contract Foundation): All types — scaffolds Phases 15-20
+- Phase 15 (Fault Recovery + Diagnostics): HUE-08, HDR-01, HDR-02
+- Phase 16 (Hue Channel Position Editor): CHAN-01, CHAN-02, CHAN-03, CHAN-04
+- Phase 17 (Room Map UI): ROOM-01, ROOM-02, ROOM-03, ROOM-04, ROOM-05, ROOM-06, ROOM-07, ROOM-08
+- Phase 18 (Hue Standalone Mode): STND-01, STND-02, STND-03
+- Phase 19 (LED Zone Auto-Derivation): ZONE-01, ZONE-02, ZONE-03
+- Phase 20 (Device UX Polish + Channel Write-back): HUX-01, HUX-02, CHAN-05
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after v1.2 milestone definition*
+*Last updated: 2026-03-30 after v1.2 roadmap creation — all 24 requirements mapped*
