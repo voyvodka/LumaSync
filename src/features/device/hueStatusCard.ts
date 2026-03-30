@@ -14,6 +14,7 @@ export interface HueStatusCardInput {
   isValidatingCredential: boolean;
   isPairing: boolean;
   isCheckingReadiness: boolean;
+  bridgeUnreachable?: boolean;
 }
 
 export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardModel {
@@ -38,6 +39,14 @@ export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardMode
       variant: "info",
       titleKey: "device.hue.status.readinessCheckingTitle",
       bodyKey: "device.hue.status.readinessCheckingBody",
+    };
+  }
+
+  if (input.bridgeUnreachable) {
+    return {
+      variant: "info",
+      titleKey: "device.hue.status.bridgeOfflineTitle",
+      bodyKey: "device.hue.status.bridgeOfflineBody",
     };
   }
 

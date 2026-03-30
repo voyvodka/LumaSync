@@ -160,8 +160,8 @@
       }
     },
     "hue": {
-      "title": "Hue bridge onboarding",
-      "description": "Complete bridge discovery, pairing, area selection, and readiness in one panel.",
+      "title": "Philips Hue",
+      "description": "Bridge discovery, pairing, and entertainment area setup.",
       "steps": {
         "discover": "Discover",
         "pair": "Pair",
@@ -189,23 +189,26 @@
         "networkHint": "Could not reach {{name}} at {{ip}}. Make sure you are on the same network as your Hue bridge."
       },
       "manualIp": {
-        "title": "Manual IP fallback",
-        "description": "Manual bridge IP remains available at all times.",
+        "title": "Manual IP entry",
+        "description": "If auto-discovery did not find your bridge, enter its IP address.",
         "placeholder": "e.g. 192.168.1.50",
         "submit": "Verify IP",
         "invalid": "Enter a valid IPv4 address before submitting."
       },
+      "pair": {
+        "linkButtonHint": "Press the physical button on top of your Hue bridge, then wait a moment."
+      },
       "credential": {
-        "valid": "Valid",
+        "valid": "Paired",
         "needsRepair": "Needs Re-pair",
         "unreachable": "Unreachable",
         "line": "Credential state: {{state}}",
-        "repairHint": "Credentials need re-pairing. Use Pair bridge as the next step."
+        "repairHint": "Your credentials have expired. Press the bridge button and pair again."
       },
       "areas": {
         "title": "Entertainment areas",
-        "empty": "No area loaded yet. Pair and refresh to list areas.",
-        "channels": "Channels: {{count}}"
+        "empty": "No entertainment areas found. Create one in the Hue app first.",
+        "channels": "{{count}} channels"
       },
       "channelMap": {
         "title": "Channel screen regions",
@@ -214,16 +217,48 @@
         "oneLight": "1 light",
         "lights": "{{count}} lights",
         "auto": "Reset",
-        "resetToAuto": "Reset to auto-detected region"
+        "resetToAuto": "Reset to auto-detected region",
+        "saved": "✓ Saved",
+        "regions": {
+          "left": "Left",
+          "right": "Right",
+          "top": "Top",
+          "bottom": "Bottom",
+          "center": "Center"
+        }
       },
       "readiness": {
         "ready": "Ready",
         "notReady": "Not ready",
         "unknown": "Pending",
         "pending": "Readiness has not been validated yet.",
-        "recoveryHint": "Area is not ready. Revalidate or choose another area."
+        "recoveryHint": "Area is not ready. Revalidate or choose another area.",
+        "activeStreamer": "Another app is already streaming to this area."
       },
       "successSummary": "Ready to start on {{bridge}} with {{area}} ({{readiness}}).",
+      "wizard": {
+        "locked": "Complete the previous step first",
+        "badgeReady": "Ready",
+        "badgeConnected": "Connected",
+        "badgeUnreachable": "Unreachable",
+        "badgeInProgress": "In progress",
+        "badgeNotStarted": "Not started",
+        "badgeSelected": "Selected",
+        "pairInstruction": "Press the physical button on your Hue bridge, then click Pair bridge.",
+        "areaInstruction": "Choose the entertainment area you want to sync with your lights.",
+        "readySummary": "{{bridge}} / {{area}}",
+        "emptyTitle": "No Hue bridge configured",
+        "emptyBody": "Connect your Philips Hue bridge to sync your room lights with your screen. Make sure your bridge is powered on and connected to the same network.",
+        "emptyAction": "Discover bridges",
+        "offlineTitle": "Bridge is not reachable",
+        "offlineBody": "{{name}} ({{ip}}) is not responding right now. This usually means:",
+        "offlineReason1": "You are on a different Wi-Fi network",
+        "offlineReason2": "The bridge is turned off or restarting",
+        "offlineReason3": "The bridge IP address has changed",
+        "offlineRediscover": "Rediscover",
+        "offlineTryIp": "Try a different IP",
+        "offlineReset": "Remove this bridge and start over"
+      },
       "status": {
         "validatingTitle": "Validating saved credentials",
         "validatingBody": "Stored Hue credentials are being checked silently.",
@@ -239,6 +274,8 @@
         "successBody": "Latest Hue action completed successfully.",
         "streamNotReadyTitle": "Selected area is not ready",
         "streamNotReadyBody": "Keep Start disabled until readiness check passes.",
+        "bridgeOfflineTitle": "Bridge is not reachable",
+        "bridgeOfflineBody": "Your registered bridge cannot be reached. Make sure you are on the same network, then try again. If the bridge has a new IP address, enter it below.",
         "errorTitle": "Hue onboarding needs attention",
         "errorBody": "Re-pair or retry the failed step before starting.",
         "infoTitle": "Hue onboarding info",
@@ -259,6 +296,7 @@
         "codes": {
           "HUE_STREAM_STARTING": "Hue stream start requested.",
           "HUE_STREAM_RUNNING": "Hue stream is running.",
+          "HUE_STREAM_RUNNING_DTLS": "Hue stream is running.",
           "HUE_STREAM_STOPPING": "Hue stream stop is in progress.",
           "HUE_STREAM_STOPPED": "Hue stream is stopped.",
           "TRANSIENT_RETRY_SCHEDULED": "Transient issue detected. Auto-retry scheduled.",
@@ -288,7 +326,8 @@
           "reconnect": "Reconnect",
           "repair": "Re-pair",
           "revalidate": "Revalidate",
-          "adjust_area": "Adjust area"
+          "adjust_area": "Adjust area",
+          "stopRetrying": "Stop retrying"
         },
         "targets": {
           "hue": {

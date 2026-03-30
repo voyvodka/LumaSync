@@ -47,6 +47,7 @@ interface CalibrationPageProps {
   initialConfig?: LedCalibrationConfig;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
+  onStepChange?: (step: CalibrationOverlayStep) => void;
 }
 
 function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
@@ -101,9 +102,20 @@ export function CalibrationPage({
   initialConfig,
   onNavigateBack,
   onSaved,
+  onStepChange,
 }: CalibrationPageProps) {
   const { t } = useTranslation("common");
+  const STEP_ORDER: CalibrationOverlayStep[] = ["template", "display", "editor"];
+  const stepIndex = (step: CalibrationOverlayStep) => STEP_ORDER.indexOf(step);
+
   const [activeStep, setActiveStep] = useState<CalibrationOverlayStep>(initialStep);
+  const [maxStepReached, setMaxStepReached] = useState(() => stepIndex(initialStep));
+
+  const goToStep = useCallback((step: CalibrationOverlayStep) => {
+    setActiveStep(step);
+    setMaxStepReached((prev) => Math.max(prev, stepIndex(step)));
+    onStepChange?.(step);
+  }, [onStepChange]);
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
     buildInitialEditorState(initialConfig),
   );
@@ -255,23 +267,24 @@ export function CalibrationPage({
             number={1}
             label={t("calibration.page.stepTemplate")}
             active={activeStep === "template"}
-            done={activeStep === "display" || activeStep === "editor"}
-            onClick={activeStep !== "template" ? () => setActiveStep("template") : undefined}
+            done={maxStepReached >= stepIndex("template") && activeStep !== "template"}
+            onClick={activeStep !== "template" ? () => goToStep("template") : undefined}
           />
           <StepArrow />
           <StepIndicator
             number={2}
             label={t("calibration.page.stepDisplay")}
             active={activeStep === "display"}
-            done={activeStep === "editor"}
-            onClick={activeStep === "editor" ? () => setActiveStep("display") : undefined}
+            done={maxStepReached >= stepIndex("display") && activeStep !== "display"}
+            onClick={maxStepReached >= stepIndex("display") && activeStep !== "display" ? () => goToStep("display") : undefined}
           />
           <StepArrow />
           <StepIndicator
             number={3}
             label={t("calibration.page.stepEditor")}
             active={activeStep === "editor"}
-            done={false}
+            done={maxStepReached >= stepIndex("editor") && activeStep !== "editor"}
+            onClick={maxStepReached >= stepIndex("editor") && activeStep !== "editor" ? () => goToStep("editor") : undefined}
           />
         </div>
 
@@ -380,7 +393,7 @@ export function CalibrationPage({
               setEditorState((prev) => updateEditorConfig(prev, { visualPreset }));
               setValidationErrors(null);
             }}
-            onResetTemplate={() => setActiveStep("template")}
+            onResetTemplate={() => goToStep("template")}
           />
         )}
       </div>
@@ -455,8 +468,8 @@ export function CalibrationPage({
             <button
               type="button"
               disabled={!editorState.current.templateId}
-              onClick={() => setActiveStep("display")}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              onClick={() => goToStep("display")}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {t("calibration.page.displayContinue")} →
             </button>
@@ -464,7 +477,7 @@ export function CalibrationPage({
           {activeStep === "display" && (
             <button
               type="button"
-              onClick={() => setActiveStep("editor")}
+              onClick={() => goToStep("editor")}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
               {t("calibration.page.displayContinue")} →
@@ -503,7 +516,7 @@ export function CalibrationPage({
                     setIsSaving(false);
                   }
                 }}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:opacity-50"
               >
                 {isSaving ? t("calibration.overlay.saving") : t("calibration.overlay.save")}
               </button>
@@ -602,7 +615,7 @@ function StepArrow() {
 
 function ErrorLine({ text }: { text: string }) {
   return (
-    <p className="flex items-start gap-2 text-xs text-rose-300">
+    <p className="flex items-start gap-2 text-xs text-rose-700 dark:text-rose-300">
       <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
         <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
         <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />

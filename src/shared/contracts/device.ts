@@ -5,7 +5,6 @@
 export const DEVICE_COMMANDS = {
   LIST_PORTS: "list_serial_ports",
   CONNECT_PORT: "connect_serial_port",
-  DISCONNECT_PORT: "disconnect_serial_port",
   GET_CONNECTION_STATUS: "get_serial_connection_status",
   RUN_HEALTH_CHECK: "run_serial_health_check",
   START_CALIBRATION_TEST_PATTERN: "start_calibration_test_pattern",

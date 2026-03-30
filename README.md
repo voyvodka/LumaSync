@@ -81,5 +81,4 @@ If you discover a security issue, please follow the process in `SECURITY.md`.
 
 ## License
 
-No license file is currently defined in this repository.
-If you plan to publish this project as open source, add a license file (for example MIT, Apache-2.0, or GPL-3.0) before accepting external contributions.
+[MIT](LICENSE) © 2026 voyvodka

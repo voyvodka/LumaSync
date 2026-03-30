@@ -103,6 +103,10 @@ impl LightingWorkerRuntime {
 
 struct LightingRuntimeOwner {
     active_mode: LightingModeConfig,
+    /// Port name for the currently active LED session.
+    /// Cleared in stop_previous so the cached serial handle is released
+    /// via disconnect_session, preventing stale handle reuse on reconnect.
+    active_port: Option<String>,
     worker: Option<LightingWorkerRuntime>,
     output_bridge: LedOutputBridge,
     frame_source_factory: Arc<AmbilightFrameSourceFactory>,
@@ -112,6 +116,7 @@ impl Default for LightingRuntimeOwner {
     fn default() -> Self {
         Self {
             active_mode: LightingModeConfig::default(),
+            active_port: None,
             worker: None,
             output_bridge: LedOutputBridge::default(),
             frame_source_factory: Arc::new(create_live_frame_source),
@@ -189,6 +194,11 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     push_trace(trace, "stop_previous");
     if let Some(worker) = owner.worker.take() {
         worker.stop();
+    }
+    // Release the cached serial handle for the port that was active.
+    // This prevents the next connect from inheriting a stale file descriptor.
+    if let Some(port_name) = owner.active_port.take() {
+        owner.output_bridge.disconnect_session(&port_name);
     }
 }
 
@@ -485,6 +495,7 @@ fn apply_mode_change(
             }
 
             owner.active_mode = normalized_next;
+            owner.active_port = Some(port_name.to_string());
             if let Some(context) = hue_output.as_ref() {
                 let _ = apply_hue_color_with_context(
                     context,
@@ -552,6 +563,7 @@ fn apply_mode_change(
                 Ok(worker) => {
                     owner.worker = Some(worker);
                     owner.active_mode = normalized_next;
+                    owner.active_port = Some(port_name.to_string());
                     make_result(
                         owner.active_mode.clone(),
                         command_status(
@@ -683,6 +695,10 @@ mod tests {
                 .push((port_name.to_string(), packet.to_vec()));
             Ok(())
         }
+
+        fn disconnect_session(&self, _port_name: &str) {
+            // no-op in tests — session tracking is not exercised here
+        }
     }
 
     struct FakeFrameSource {
@@ -702,6 +718,7 @@ mod tests {
     fn owner_with_fake_sender() -> LightingRuntimeOwner {
         LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
+            active_port: None,
             worker: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             frame_source_factory: Arc::new(|| {
@@ -720,6 +737,7 @@ mod tests {
     fn owner_with_unavailable_capture() -> LightingRuntimeOwner {
         LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
+            active_port: None,
             worker: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             frame_source_factory: Arc::new(|| {
@@ -774,6 +792,7 @@ mod tests {
         let mut owner = owner_with_fake_sender();
         owner = LightingRuntimeOwner {
             active_mode: ambilight_mode(),
+            active_port: Some("COM1".to_string()),
             worker: Some(
                 start_ambilight_worker(
                     owner.output_bridge.clone(),

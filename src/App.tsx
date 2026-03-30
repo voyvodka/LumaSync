@@ -25,12 +25,14 @@ import {
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import {
+  getHueStreamStatus,
   setHueSolidColor,
   setLightingMode,
   startHue,
   stopLighting,
   stopHue,
 } from "./features/mode/modeApi";
+import { validateHueCredentials } from "./features/device/hueOnboardingApi";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,
@@ -49,15 +51,19 @@ import {
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
-import type { HueRuntimeTarget } from "./shared/contracts/hue";
+import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
 
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
-const HUE_SOLID_SYNC_INTERVAL_MS = 2_000;
+/** Interval for polling backend Hue stream health when "hue" is an active output target. */
+const HUE_STREAM_HEALTH_POLL_MS = 5_000;
+/** Interval for checking bridge reachability when configured but stream is not active. */
+const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 
 interface HueStartConfig {
   bridgeIp: string;
   username: string;
+  clientKey: string;
   areaId: string;
 }
 
@@ -73,18 +79,21 @@ function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
 function toHueStartConfig(state: {
   lastHueBridge?: { ip: string };
   hueAppKey?: string;
+  hueClientKey?: string;
   lastHueAreaId?: string;
 }): HueStartConfig | null {
   const bridgeIp = state.lastHueBridge?.ip?.trim();
   const username = state.hueAppKey?.trim();
+  const clientKey = state.hueClientKey?.trim() ?? "";
   const areaId = state.lastHueAreaId?.trim();
   if (!bridgeIp || !username || !areaId) return null;
-  return { bridgeIp, username, areaId };
+  return { bridgeIp, username, clientKey, areaId };
 }
 
 function isHueStartCodeOk(code: string): boolean {
   return (
     code === "HUE_STREAM_RUNNING" ||
+    code === "HUE_STREAM_RUNNING_DTLS" ||
     code === "HUE_STREAM_STARTING" ||
     code === "HUE_START_NOOP_ALREADY_ACTIVE"
   );
@@ -109,6 +118,7 @@ function App() {
   const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
   const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
   const [hueStartConfig, setHueStartConfig] = useState<HueStartConfig | null>(null);
+  const [hueReachable, setHueReachable] = useState(false);
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
@@ -117,8 +127,13 @@ function App() {
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
   const persistLightingModeTimeoutRef = useRef<number | null>(null);
   const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
-  const queuedHueSolidRef = useRef<LightingModeConfig["solid"] | null>(null);
-  const hueSolidPushInFlightRef = useRef(false);
+  /**
+   * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
+   * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
+   * ardından true yapılır. Running dışına çıkınca false sıfırlanır.
+   * Kullanıcı renk değiştirirken bu bayrak DOKUNULMAZ — loop'u önler.
+   */
+  const hueSolidSyncedRef = useRef(false);
 
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
     if (persistLightingModeTimeoutRef.current !== null) {
@@ -143,24 +158,125 @@ function App() {
     activeOutputTargetsRef.current = activeOutputTargets;
   }, [activeOutputTargets]);
 
+  // ---------------------------------------------------------------------------
+  // B2 fix: Poll backend Hue stream health while "hue" is an active target.
+  // When the backend reports Failed or Idle, remove "hue" from activeOutputTargets
+  // so the frontend chip stops pulsing and accurately reflects the dead stream.
+  // ---------------------------------------------------------------------------
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      if (hueSolidPushInFlightRef.current) return;
-      const nextSolid = queuedHueSolidRef.current;
-      if (!nextSolid) return;
-      if (!activeOutputTargetsRef.current.includes("hue")) {
-        queuedHueSolidRef.current = null;
-        return;
-      }
-      hueSolidPushInFlightRef.current = true;
-      void setHueSolidColor({ r: nextSolid.r, g: nextSolid.g, b: nextSolid.b, brightness: nextSolid.brightness })
-        .then(() => { if (queuedHueSolidRef.current === nextSolid) queuedHueSolidRef.current = null; })
-        .catch((error) => { console.error("[LumaSync] Failed to push queued Hue solid snapshot:", error); })
-        .finally(() => { hueSolidPushInFlightRef.current = false; });
-    }, HUE_SOLID_SYNC_INTERVAL_MS);
+    if (!activeOutputTargets.includes("hue")) return;
 
-    return () => { window.clearInterval(intervalId); };
-  }, []);
+    let active = true;
+
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const result = await getHueStreamStatus();
+        if (!active) return;
+        const backendDead =
+          result.status.state === HUE_RUNTIME_STATES.FAILED ||
+          result.status.state === HUE_RUNTIME_STATES.IDLE;
+        if (backendDead) {
+          setActiveOutputTargets((prev) => prev.filter((t) => t !== "hue"));
+        }
+      } catch {
+        // Network error polling status — do not remove target on transient fetch failure.
+      }
+    };
+
+    void poll();
+    const intervalId = window.setInterval(() => { void poll(); }, HUE_STREAM_HEALTH_POLL_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [activeOutputTargets]);
+
+  // ---------------------------------------------------------------------------
+  // Bridge reachability poll: validate credentials every 30 s when hue is
+  // configured but stream is NOT active. Updates hueReachable so the chip
+  // accurately reflects whether the bridge is currently on the same network.
+  // While hue is streaming we skip polling — the active stream is proof enough.
+  // ---------------------------------------------------------------------------
+  const hueStreaming = activeOutputTargets.includes("hue");
+  useEffect(() => {
+    if (!hueStartConfig || hueStreaming) return;
+
+    let active = true;
+
+    const poll = async () => {
+      if (!active) return;
+      try {
+        const validation = await validateHueCredentials(
+          hueStartConfig.bridgeIp,
+          hueStartConfig.username,
+          hueStartConfig.clientKey,
+        );
+        if (!active) return;
+        setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
+      } catch {
+        if (active) setHueReachable(false);
+      }
+    };
+
+    const intervalId = window.setInterval(() => { void poll(); }, HUE_BRIDGE_REACHABILITY_POLL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [hueStartConfig, hueStreaming]);
+
+  // ---------------------------------------------------------------------------
+  // Hue solid color bootstrap sync (Hue → UI yönünde okuma).
+  //
+  // Hue Running'e her girişte BİR KEZ backend'den lastSolidColor okunur:
+  //   - "hue" activeOutputTargets'a girince VE hueSolidSyncedRef false ise
+  //     → getHueStreamStatus() çağır → lastSolidColor varsa
+  //       → setLightingModeState({ kind: SOLID, solid: lastSolidColor }) yap.
+  //     → bayrağı true yap (loop'u önler).
+  //   - "hue" activeOutputTargets'tan çıkınca (stop/fail)
+  //     → bayrağı false sıfırla (sonraki bağlantı için hazırla).
+  //
+  // Kullanıcı renk değiştirince (isQuickSolidAdjustment yolu) bu bayrak
+  // DOKUNULMAZ — bu sayede UI'dan gelen değişiklik backend'den override edilmez.
+  // ---------------------------------------------------------------------------
+  const prevHueActiveRef = useRef(false);
+  useEffect(() => {
+    const hueNowActive = activeOutputTargets.includes("hue");
+
+    if (!hueNowActive && prevHueActiveRef.current) {
+      // Hue Running → başka state: bayrağı sıfırla
+      hueSolidSyncedRef.current = false;
+    }
+
+    if (hueNowActive && !hueSolidSyncedRef.current) {
+      // Hue Running'e yeni girdi ve henüz sync yapılmadı
+      hueSolidSyncedRef.current = true;
+      void getHueStreamStatus()
+        .then((result) => {
+          const snap = result.lastSolidColor;
+          if (snap) {
+            setLightingModeState({
+              kind: LIGHTING_MODE_KIND.SOLID,
+              solid: {
+                r: snap.r,
+                g: snap.g,
+                b: snap.b,
+                brightness: snap.brightness,
+              },
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("[LumaSync] Bootstrap solid color read failed:", error);
+          // Başarısız olursa sonraki bağlantıda tekrar denensin
+          hueSolidSyncedRef.current = false;
+        });
+    }
+
+    prevHueActiveRef.current = hueNowActive;
+  }, [activeOutputTargets]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -197,10 +313,27 @@ function App() {
         const hueBootstrapConfig = toHueStartConfig(state);
         setHueStartConfig(hueBootstrapConfig);
 
+        if (hueBootstrapConfig) {
+          try {
+            const validation = await validateHueCredentials(
+              hueBootstrapConfig.bridgeIp,
+              hueBootstrapConfig.username,
+              hueBootstrapConfig.clientKey,
+            );
+            setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
+          } catch {
+            setHueReachable(false);
+          }
+        }
+
         if (isActive && restoredTargets.includes("hue") && hueBootstrapConfig) {
           try {
-            await startHue(hueBootstrapConfig);
-            if (restoredMode.kind === LIGHTING_MODE_KIND.SOLID && restoredMode.solid) {
+            const startResult = await startHue(hueBootstrapConfig);
+            if (
+              isHueStartCodeOk(startResult.status.code) &&
+              restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
+              restoredMode.solid
+            ) {
               await setHueSolidColor({
                 r: restoredMode.solid.r,
                 g: restoredMode.solid.g,
@@ -302,7 +435,9 @@ function App() {
             g: normalizedNextMode.solid.g,
             b: normalizedNextMode.solid.b,
             brightness: normalizedNextMode.solid.brightness,
-          }).catch(() => { queuedHueSolidRef.current = normalizedNextMode.solid; });
+          }).catch((error) => {
+            console.error("[LumaSync] Failed to push Hue solid update:", error);
+          });
         }
 
         modeTransitionLockRef.current = false;
@@ -432,10 +567,8 @@ function App() {
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
         setActiveOutputTargets(merged.activeTargets);
-        if (merged.activeTargets.length > 0) {
-          setLightingModeState(normalizedNextMode);
-          scheduleLightingModePersist(normalizedNextMode);
-        }
+        setLightingModeState(normalizedNextMode);
+        scheduleLightingModePersist(normalizedNextMode);
       } catch (error) {
         console.error(`[LumaSync] Failed to switch lighting mode to ${normalizedNextMode.kind}:`, error);
       } finally {
@@ -473,6 +606,8 @@ function App() {
         outputTargets={selectedOutputTargets}
         usbConnected={isConnected}
         hueConfigured={hueStartConfig !== null}
+        hueReachable={hueReachable || hueStreaming}
+        hueStreaming={hueStreaming}
         modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
         isModeTransitioning={isModeTransitioning}
         onLightingModeChange={handleLightingModeChange}
@@ -480,6 +615,7 @@ function App() {
         onCalibrationSaved={(config) => {
           setSavedCalibration(config);
         }}
+        onCalibrationStepChange={setCalibrationStep}
         onCheckForUpdates={checkForUpdates}
         isCheckingForUpdates={updaterState.status === "checking"}
       />

@@ -60,8 +60,8 @@ export function TelemetrySection() {
     && snapshot.sendFps === 0;
 
   return (
-    <section className="w-full rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-8">
-      <h2 className="text-xl font-semibold tracking-tight">{t("telemetry.title")}</h2>
+    <section className="w-full rounded-xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80 ">
+      <h2 className="text-sm font-semibold tracking-tight">{t("telemetry.title")}</h2>
       <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-300">{t("telemetry.description")}</p>
 
       {isLoading ? (
@@ -77,7 +77,7 @@ export function TelemetrySection() {
       ) : null}
 
       {!isLoading && !hasError && snapshot ? (
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid gap-3 grid-cols-3">
           <article className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
               {t("telemetry.metrics.captureFps")}

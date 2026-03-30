@@ -73,3 +73,13 @@ Plans:
 | 10. Hue Stream Lifecycle | 5/5 | Complete    | 2026-03-21 |
 | 11. Device Surface Integration | 0/TBD | Not started | - |
 | 12. Diagnostics and Recovery | 0/TBD | Not started | - |
+
+### Phase 13: Structured Logging — tauri-plugin-log integration with Hue lifecycle events
+
+**Goal:** tauri-plugin-log entegrasyonu ile Hue lifecycle event'lerinin yapılandırılmış log çıktısına bağlanması. `hue_stream_lifecycle.rs` ve `hue_onboarding.rs` kapsamında mevcut `eprintln!` çağrıları uygun log macro'larıyla replace edilir.
+**Requirements**: TBD
+**Depends on:** Phase 12
+**Plans:** 1 plan
+
+Plans:
+- [x] 13-01-PLAN.md - tauri-plugin-log kurulumu, plugin kaydı ve Hue lifecycle log migration.

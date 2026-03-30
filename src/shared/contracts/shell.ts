@@ -17,6 +17,17 @@ import type {
  */
 
 // ---------------------------------------------------------------------------
+// Shell Commands (Tauri invoke targets)
+// ---------------------------------------------------------------------------
+
+/** Canonical Tauri command names for shell-level operations */
+export const SHELL_COMMANDS = {
+  SET_TRAY_STARTUP_CHECKED: "set_tray_startup_checked",
+} as const;
+
+export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
+
+// ---------------------------------------------------------------------------
 // Tray Menu IDs
 // ---------------------------------------------------------------------------
 

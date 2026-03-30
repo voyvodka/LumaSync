@@ -5,7 +5,6 @@ import {
   HUE_COMMANDS,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeActionHint,
-  type HueRuntimeStatus,
   type HueRuntimeState,
   type HueRuntimeTriggerSource,
 } from "../../shared/contracts/hue";
@@ -30,6 +29,7 @@ export interface ModeCommandResult {
 export interface StartHuePayload {
   bridgeIp: string;
   username: string;
+  clientKey: string;
   areaId: string;
   triggerSource?: HueRuntimeTriggerSource;
   /** Per-channel region overrides indexed by channel index. */
@@ -44,6 +44,13 @@ export interface HueSolidColorPayload {
   triggerSource?: HueRuntimeTriggerSource;
 }
 
+export interface HueSolidColorSnapshot {
+  r: number;
+  g: number;
+  b: number;
+  brightness: number;
+}
+
 export interface HueRuntimeCommandResult {
   active: boolean;
   status: {
@@ -56,6 +63,7 @@ export interface HueRuntimeCommandResult {
     nextAttemptMs?: number;
     actionHint?: HueRuntimeActionHint;
   };
+  lastSolidColor?: HueSolidColorSnapshot | null;
 }
 
 export type ModeInvoker = <T>(command: string, payload?: Record<string, unknown>) => Promise<T>;
@@ -132,6 +140,7 @@ export async function startHue(
       request: {
         bridgeIp: payload.bridgeIp,
         username: payload.username,
+        clientKey: payload.clientKey,
         areaId: payload.areaId,
         triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
         channelRegionOverrides: overrideList,
@@ -167,6 +176,7 @@ export async function restartHue(
       request: {
         bridgeIp: payload.bridgeIp,
         username: payload.username,
+        clientKey: payload.clientKey,
         areaId: payload.areaId,
         triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
         channelRegionOverrides: overrideList,
@@ -177,10 +187,9 @@ export async function restartHue(
   }
 }
 
-export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): Promise<HueRuntimeStatus> {
+export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): Promise<HueRuntimeCommandResult> {
   try {
-    const result = await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.GET_STREAM_STATUS);
-    return result.status as HueRuntimeStatus;
+    return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.GET_STREAM_STATUS);
   } catch (error) {
     throw mapModeApiError(error);
   }

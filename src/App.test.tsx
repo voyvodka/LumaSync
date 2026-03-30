@@ -36,7 +36,7 @@ vi.mock("./features/mode/state/modeGuard", () => ({
 vi.mock("./features/mode/modeApi", () => ({
   setLightingMode: (payload: LightingModeConfig) => setLightingModeMock(payload),
   stopLighting: () => stopLightingMock(),
-  startHue: (payload: { bridgeIp: string; username: string; areaId: string }) => startHueMock(payload),
+  startHue: (payload: { bridgeIp: string; username: string; clientKey: string; areaId: string }) => startHueMock(payload),
   stopHue: () => stopHueMock(),
 }));
 
@@ -178,6 +178,7 @@ describe("App mode orchestration", () => {
       lastOutputTargets: ["hue"],
       lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
       hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
       lastHueAreaId: "area-1",
     });
 
@@ -199,6 +200,7 @@ describe("App mode orchestration", () => {
     expect(startHueMock).toHaveBeenCalledWith({
       bridgeIp: "192.168.1.10",
       username: "app-user",
+      clientKey: "AABBCCDD11223344",
       areaId: "area-1",
     });
     expect(setLightingModeMock).not.toHaveBeenCalled();
@@ -222,6 +224,7 @@ describe("App mode orchestration", () => {
       lastOutputTargets: ["hue"],
       lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
       hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
       lastHueAreaId: "area-1",
     });
 
@@ -270,6 +273,7 @@ describe("App mode orchestration", () => {
       lastOutputTargets: ["usb", "hue"],
       lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
       hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
       lastHueAreaId: "area-1",
     });
 

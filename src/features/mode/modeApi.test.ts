@@ -60,7 +60,7 @@ describe("modeApi wrappers", () => {
     });
   });
 
-  it("invokes get_hue_stream_status and returns typed runtime status", async () => {
+  it("invokes get_hue_stream_status and returns full command result", async () => {
     const runtimeStatus = {
       state: "Running",
       code: "HUE_STREAM_RUNNING",
@@ -68,12 +68,14 @@ describe("modeApi wrappers", () => {
       details: null,
       triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
     };
-    const invokeMock = vi.fn().mockResolvedValue({
+    const commandResult = {
       active: true,
       status: runtimeStatus,
-    });
+      lastSolidColor: null,
+    };
+    const invokeMock = vi.fn().mockResolvedValue(commandResult);
 
-    await expect(getHueStreamStatus(invokeMock)).resolves.toEqual(runtimeStatus);
+    await expect(getHueStreamStatus(invokeMock)).resolves.toEqual(commandResult);
     expect(invokeMock).toHaveBeenCalledWith(HUE_COMMANDS.GET_STREAM_STATUS);
   });
 
@@ -112,6 +114,7 @@ describe("modeApi wrappers", () => {
       {
         bridgeIp: "192.168.1.4",
         username: "demo-user",
+        clientKey: "AABBCCDD11223344AABBCCDD11223344",
         areaId: "area-1",
       },
       invokeMock,
@@ -121,6 +124,7 @@ describe("modeApi wrappers", () => {
       request: {
         bridgeIp: "192.168.1.4",
         username: "demo-user",
+        clientKey: "AABBCCDD11223344AABBCCDD11223344",
         areaId: "area-1",
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
       },
@@ -143,6 +147,7 @@ describe("modeApi wrappers", () => {
       {
         bridgeIp: "192.168.1.4",
         username: "demo-user",
+        clientKey: "AABBCCDD11223344AABBCCDD11223344",
         areaId: "area-1",
       },
       invokeMock,
@@ -152,6 +157,7 @@ describe("modeApi wrappers", () => {
       request: {
         bridgeIp: "192.168.1.4",
         username: "demo-user",
+        clientKey: "AABBCCDD11223344AABBCCDD11223344",
         areaId: "area-1",
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
       },

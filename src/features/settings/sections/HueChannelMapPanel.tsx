@@ -1,3 +1,4 @@
+import { useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueAreaChannelInfo } from "../../device/hueOnboardingApi";
@@ -10,17 +11,6 @@ interface Props {
   isLoading: boolean;
   overrides: Record<number, string>;
   onSetRegion: (channelIndex: number, region: string | null) => void;
-}
-
-function regionLabel(region: string): string {
-  const map: Record<string, string> = {
-    left: "Left",
-    right: "Right",
-    top: "Top",
-    bottom: "Bottom",
-    center: "Center",
-  };
-  return map[region] ?? region;
 }
 
 /** Convert Hue position (x: -1..+1, y: -1..+1) to CSS % inside the grid box.
@@ -49,8 +39,34 @@ const REGION_COLORS_ACTIVE: Record<Region, string> = {
   center: "bg-slate-600 text-white",
 };
 
+const SAVED_FLASH_MS = 2000;
+
 export function HueChannelMapPanel({ channels, isLoading, overrides, onSetRegion }: Props) {
   const { t } = useTranslation();
+  const [savedChannelIndex, setSavedChannelIndex] = useState<number | null>(null);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const regionLabel = (region: string): string => {
+    const key = `device.hue.channelMap.regions.${region}`;
+    const translated = t(key);
+    // Fallback to raw region name if key is missing
+    return translated === key ? region : translated;
+  };
+
+  const handleSetRegion = useCallback(
+    (channelIndex: number, region: string | null) => {
+      onSetRegion(channelIndex, region);
+      setSavedChannelIndex(channelIndex);
+      if (savedTimerRef.current !== null) {
+        clearTimeout(savedTimerRef.current);
+      }
+      savedTimerRef.current = setTimeout(() => {
+        setSavedChannelIndex(null);
+        savedTimerRef.current = null;
+      }, SAVED_FLASH_MS);
+    },
+    [onSetRegion],
+  );
 
   if (isLoading) {
     return (
@@ -117,6 +133,8 @@ export function HueChannelMapPanel({ channels, isLoading, overrides, onSetRegion
           const effectiveRegion = (overrides[ch.index] ?? ch.autoRegion) as Region;
           const isOverridden = Boolean(overrides[ch.index]);
 
+          const isSaved = savedChannelIndex === ch.index;
+
           return (
             <div key={ch.index} className="flex items-center gap-2">
               {/* Channel label */}
@@ -141,9 +159,9 @@ export function HueChannelMapPanel({ channels, isLoading, overrides, onSetRegion
                       type="button"
                       onClick={() => {
                         if (isActive && isOverridden) {
-                          onSetRegion(ch.index, null);
+                          handleSetRegion(ch.index, null);
                         } else if (!isActive || !isOverridden) {
-                          onSetRegion(ch.index, region === ch.autoRegion ? null : region);
+                          handleSetRegion(ch.index, region === ch.autoRegion ? null : region);
                         }
                       }}
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
@@ -158,19 +176,23 @@ export function HueChannelMapPanel({ channels, isLoading, overrides, onSetRegion
                 })}
               </div>
 
-              {/* Override indicator */}
-              {isOverridden && (
+              {/* Saved flash or override reset */}
+              {isSaved ? (
+                <span className="ml-auto shrink-0 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                  {t("device.hue.channelMap.saved")}
+                </span>
+              ) : isOverridden ? (
                 <button
                   type="button"
                   onClick={() => {
-                    onSetRegion(ch.index, null);
+                    handleSetRegion(ch.index, null);
                   }}
                   className="ml-auto shrink-0 text-[10px] text-slate-400 underline hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
                   title={t("device.hue.channelMap.resetToAuto")}
                 >
                   {t("device.hue.channelMap.auto")}
                 </button>
-              )}
+              ) : null}
             </div>
           );
         })}

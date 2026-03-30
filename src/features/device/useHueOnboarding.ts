@@ -62,6 +62,8 @@ export interface UseHueOnboardingResult {
   manualIp: string;
   manualIpError: string | null;
   credentialState: HueCredentialStatus;
+  /** True when the bridge is registered but cannot be reached (network error, not auth error). */
+  bridgeUnreachable: boolean;
   credentials: HuePairingCredentials | null;
   areaGroups: HueAreaGroup[];
   selectedAreaId: string | null;
@@ -133,6 +135,8 @@ interface HueOnboardingState {
   manualIp: string;
   manualIpError: string | null;
   credentialState: HueCredentialStatus;
+  /** Sticky flag: set true only on network-level credential check failure, cleared on successful validation or bridge removal. */
+  bridgeUnreachable: boolean;
   credentials: HuePairingCredentials | null;
   areaGroups: HueAreaGroup[];
   selectedAreaId: string | null;
@@ -151,6 +155,7 @@ const DEFAULT_STATE: HueOnboardingState = {
   manualIp: "",
   manualIpError: null,
   credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
+  bridgeUnreachable: false,
   credentials: null,
   areaGroups: [],
   selectedAreaId: null,
@@ -575,6 +580,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       patchState((prev) => ({
         ...prev,
         selectedBridgeId: bridgeId,
+        // Clear unreachable flag when bridge is removed or a different bridge is selected.
+        bridgeUnreachable: bridgeId !== null && bridgeId === prev.selectedBridgeId ? prev.bridgeUnreachable : false,
       }));
     },
     [patchState],
@@ -650,6 +657,10 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         credentialState: response.credentials
           ? HUE_CREDENTIAL_STATUS.VALID
           : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+        // HUE_PAIRING_FAILED is used for both network errors and bridge rejections.
+        // If the bridge actually responded (link button, ok, etc.) we know it's reachable.
+        // For HUE_PAIRING_FAILED we can't tell, so preserve existing state.
+        bridgeUnreachable: response.status.code === "HUE_PAIRING_FAILED" ? prev.bridgeUnreachable : false,
         isPairing: false,
         status: response.status,
       }));
@@ -830,6 +841,10 @@ export function useHueOnboarding(): UseHueOnboardingResult {
           credentialState: validation.valid
             ? HUE_CREDENTIAL_STATUS.VALID
             : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+          // HUE_CREDENTIAL_CHECK_FAILED = network error (bridge offline).
+          // HUE_CREDENTIAL_INVALID = bridge responded but auth is wrong.
+          // Any other case (success or unexpected) = bridge was reachable.
+          bridgeUnreachable: !validation.valid && validation.status.code === "HUE_CREDENTIAL_CHECK_FAILED",
           isValidatingCredential: false,
           status: validation.status,
         }));
@@ -863,6 +878,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         patchState((prev) => ({
           ...prev,
           credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+          bridgeUnreachable: true,
           isValidatingCredential: false,
           status: {
             code: "HUE_CREDENTIAL_CHECK_FAILED",
@@ -882,7 +898,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
 
   const pollRuntimeStatus = useCallback(async () => {
     try {
-      const nextStatus = await getHueStreamStatus();
+      const result = await getHueStreamStatus();
+      const nextStatus = result.status as HueRuntimeStatus;
       setRuntimeStatus(nextStatus);
       setRuntimeTargets(deriveRuntimeTargets(nextStatus));
     } catch (error) {
@@ -931,6 +948,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       await startHue({
         bridgeIp: selectedBridge.ip,
         username: state.credentials.username,
+        clientKey: state.credentials.clientKey,
         areaId: state.selectedAreaId,
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
         channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
@@ -962,6 +980,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
           await restartHue({
             bridgeIp: selectedBridge.ip,
             username: state.credentials.username,
+            clientKey: state.credentials.clientKey,
             areaId: state.selectedAreaId,
             triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
             channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
@@ -992,6 +1011,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     manualIp: state.manualIp,
     manualIpError: state.manualIpError,
     credentialState: state.credentialState,
+    bridgeUnreachable: state.bridgeUnreachable,
     credentials: state.credentials,
     areaGroups: state.areaGroups,
     selectedAreaId: state.selectedAreaId,

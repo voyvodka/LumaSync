@@ -161,7 +161,8 @@ pub fn run() {
     {
         builder = builder.plugin(
             tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Debug)
+                .level(log::LevelFilter::Warn)
+                .level_for("lumasync_lib", log::LevelFilter::Debug)
                 .level_for("reqwest", log::LevelFilter::Warn)
                 .level_for("hyper", log::LevelFilter::Warn)
                 .level_for("hyper_util", log::LevelFilter::Warn)
@@ -169,6 +170,11 @@ pub fn run() {
                 .level_for("rustls", log::LevelFilter::Warn)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
+                ))
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("lumasync-dev".to_string()),
+                    },
                 ))
                 .build(),
         );

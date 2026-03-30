@@ -54,11 +54,14 @@ interface SettingsLayoutProps {
   outputTargets: HueRuntimeTarget[];
   usbConnected: boolean;
   hueConfigured: boolean;
+  hueReachable?: boolean;
+  hueStreaming: boolean;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onCalibrationSaved: (config: LedCalibrationConfig) => void;
+  onCalibrationStepChange: (step: CalibrationOverlayStep) => void;
   onCheckForUpdates: () => void;
   isCheckingForUpdates: boolean;
 }
@@ -72,11 +75,14 @@ export function SettingsLayout({
   outputTargets,
   usbConnected,
   hueConfigured,
+  hueReachable = true,
+  hueStreaming,
   modeLockReason,
   isModeTransitioning = false,
   onLightingModeChange,
   onOutputTargetsChange,
   onCalibrationSaved,
+  onCalibrationStepChange,
   onCheckForUpdates,
   isCheckingForUpdates,
 }: SettingsLayoutProps) {
@@ -104,7 +110,7 @@ export function SettingsLayout({
             return (
               <li key={sectionId}>
                 <button
-                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 ${
                     isActive
                       ? "bg-slate-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
@@ -137,12 +143,14 @@ export function SettingsLayout({
       {/* Main content */}
       <main className="min-w-0 flex-1 overflow-hidden" role="main">
         {activeSection === SECTION_IDS.CONTROL && (
-          <div className="h-full overflow-y-auto overscroll-contain px-6 py-6 sm:px-8 sm:py-7">
+          <div className="h-full overflow-y-auto overscroll-contain px-6 py-6">
             <GeneralSection
               mode={lightingMode}
               outputTargets={outputTargets}
               usbConnected={usbConnected}
               hueConfigured={hueConfigured}
+              hueReachable={hueReachable}
+              hueStreaming={hueStreaming}
               modeLockReason={modeLockReason}
               isModeTransitioning={isModeTransitioning}
               onModeChange={onLightingModeChange}
@@ -159,6 +167,7 @@ export function SettingsLayout({
             initialConfig={calibration}
             onNavigateBack={() => void onSectionChange(SECTION_IDS.CONTROL)}
             onSaved={onCalibrationSaved}
+            onStepChange={onCalibrationStepChange}
           />
         )}
 

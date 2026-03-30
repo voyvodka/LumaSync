@@ -30,6 +30,7 @@ impl LedOutputError {
 
 pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
+    fn disconnect_session(&self, port_name: &str);
 }
 
 type PortFactory = dyn Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync;
@@ -106,6 +107,12 @@ impl LedPacketSender for SerialLedPacketSender {
 
         result
     }
+
+    fn disconnect_session(&self, port_name: &str) {
+        if let Ok(mut sessions) = self.sessions.lock() {
+            sessions.remove(port_name);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -123,6 +130,15 @@ impl LedOutputBridge {
     #[cfg(test)]
     pub fn from_sender(sender: Arc<dyn LedPacketSender>) -> Self {
         Self { sender }
+    }
+
+    /// Drops the cached port handle for `port_name`.
+    ///
+    /// Must be called whenever the logical connection is terminated (disconnect
+    /// command, health-check failure, lighting stop) so that the next connect
+    /// attempt opens a fresh handle instead of reusing a stale one.
+    pub fn disconnect_session(&self, port_name: &str) {
+        self.sender.disconnect_session(port_name);
     }
 
     #[cfg(test)]
@@ -266,6 +282,7 @@ mod tests {
     struct FakeSender {
         writes: Mutex<Vec<(String, Vec<u8>)>>,
         fail_with: Option<&'static str>,
+        disconnected: Mutex<Vec<String>>,
     }
 
     #[derive(Default)]
@@ -293,11 +310,19 @@ mod tests {
             Self {
                 writes: Mutex::new(Vec::new()),
                 fail_with: Some(code),
+                disconnected: Mutex::new(Vec::new()),
             }
         }
 
         fn writes(&self) -> Vec<(String, Vec<u8>)> {
             self.writes.lock().expect("writes lock poisoned").clone()
+        }
+
+        fn disconnected_ports(&self) -> Vec<String> {
+            self.disconnected
+                .lock()
+                .expect("disconnected lock poisoned")
+                .clone()
         }
     }
 
@@ -315,6 +340,13 @@ mod tests {
                 .expect("writes lock poisoned")
                 .push((port_name.to_string(), packet.to_vec()));
             Ok(())
+        }
+
+        fn disconnect_session(&self, port_name: &str) {
+            self.disconnected
+                .lock()
+                .expect("disconnected lock poisoned")
+                .push(port_name.to_string());
         }
     }
 
@@ -392,5 +424,45 @@ mod tests {
             .expect("second write should reuse open session");
 
         assert_eq!(open_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn disconnect_session_removes_cached_handle_and_forces_reopen() {
+        let open_count = Arc::new(AtomicUsize::new(0));
+        let open_count_for_factory = Arc::clone(&open_count);
+        let sender = super::SerialLedPacketSender::with_port_factory_for_tests(move |_port_name| {
+            open_count_for_factory.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(FakePort::default()))
+        });
+
+        sender
+            .send("COM42", &[1, 2, 3])
+            .expect("first write should open and succeed");
+        assert_eq!(open_count.load(Ordering::SeqCst), 1, "one open after first send");
+
+        sender.disconnect_session("COM42");
+
+        sender
+            .send("COM42", &[4, 5, 6])
+            .expect("send after disconnect should reopen and succeed");
+        assert_eq!(
+            open_count.load(Ordering::SeqCst),
+            2,
+            "port must be reopened after disconnect_session"
+        );
+    }
+
+    #[test]
+    fn bridge_disconnect_session_delegates_to_sender() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+
+        bridge.disconnect_session("COM5");
+
+        assert_eq!(
+            sender.disconnected_ports(),
+            vec!["COM5".to_string()],
+            "bridge must forward disconnect_session to inner sender"
+        );
     }
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
@@ -28,6 +29,62 @@ function portDisplayName(portName: string, product?: string, manufacturer?: stri
 const HUE_STEPS = ["discover", "pair", "area", "ready"] as const;
 type HueStepKey = (typeof HUE_STEPS)[number];
 
+/* ── Inline SVG icons ─────────────────────────────────── */
+
+function IconCheck() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 6l3 3 5-5" />
+    </svg>
+  );
+}
+
+function IconChevronDown({ open }: { open: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  );
+}
+
+function IconInfo() {
+  return (
+    <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 5v3.5M8 11v.5" />
+    </svg>
+  );
+}
+
+function IconWifi() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 7.5a12.5 12.5 0 0116 0" />
+      <path d="M5 11a8 8 0 0110 0" />
+      <path d="M8 14.5a4 4 0 014 0" />
+      <circle cx="10" cy="17" r="0.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconBridge() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="14" height="10" rx="3" />
+      <circle cx="10" cy="10" r="2" />
+      <path d="M10 5v-2M10 17v-2" />
+    </svg>
+  );
+}
+
 export function DeviceSection() {
   const { t } = useTranslation("common");
   const {
@@ -38,6 +95,7 @@ export function DeviceSection() {
     manualIp,
     manualIpError,
     credentialState,
+    bridgeUnreachable,
     areaGroups,
     selectedAreaId,
     selectedArea,
@@ -129,12 +187,6 @@ export function DeviceSection() {
     || isReadinessStale
     || isRuntimeMutating;
 
-  // Bridge is unreachable (network issue) vs actually needing re-pair (credential issue).
-  const bridgeUnreachable =
-    credentialState !== "valid"
-    && !isValidatingCredential
-    && (hueStatus?.code === "HUE_CREDENTIAL_CHECK_FAILED" || hueStatus?.code === "HUE_IP_UNREACHABLE");
-
   // When bridge is unreachable due to network, visually keep focus on Discover step
   // so the user understands the action is "get on the right network", not "re-pair".
   const visualActiveStep = bridgeUnreachable ? "discover" : hueStep;
@@ -145,6 +197,7 @@ export function DeviceSection() {
     isValidatingCredential,
     isPairing: isHuePairing,
     isCheckingReadiness,
+    bridgeUnreachable,
   });
 
   const hueRuntimeModel = buildHueRuntimeStatusCard({
@@ -159,6 +212,49 @@ export function DeviceSection() {
     area: Boolean(selectedAreaId),
     ready: canStartHue,
   };
+
+  // Wizard accordion: user can click completed steps to revisit them
+  const [hueExpandedStep, setHueExpandedStep] = useState<HueStepKey | null>(null);
+  // Derive which step should be open: user override > active step
+  const resolvedExpandedStep = hueExpandedStep ?? visualActiveStep;
+
+  // Header badge for Hue section
+  const hueHeaderBadge = (() => {
+    if (isValidatingCredential) {
+      return {
+        label: t("device.hue.bridge.checking"),
+        className: "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300",
+      };
+    }
+    if (bridgeUnreachable) {
+      return {
+        label: t("device.hue.wizard.badgeUnreachable"),
+        className: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400",
+      };
+    }
+    if (canStartHue) {
+      return {
+        label: t("device.hue.wizard.badgeReady"),
+        className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
+      };
+    }
+    if (credentialState === "valid") {
+      return {
+        label: t("device.hue.wizard.badgeConnected"),
+        className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300",
+      };
+    }
+    if (selectedBridgeId) {
+      return {
+        label: t("device.hue.wizard.badgeInProgress"),
+        className: "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300",
+      };
+    }
+    return {
+      label: t("device.hue.wizard.badgeNotStarted"),
+      className: "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500",
+    };
+  })();
 
   const renderPortRows = (kind: "supported" | "other") => {
     const list = kind === "supported" ? groupedPorts.supported : groupedPorts.other;
@@ -195,7 +291,7 @@ export function DeviceSection() {
           connBadgeInactiveClass = "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300";
         } else {
           connBadgeLabel = t("device.badges.connected");
-          connBadgeActiveClass = "bg-white/20 text-white dark:bg-emerald-500/15 dark:text-emerald-800";
+          connBadgeActiveClass = "bg-white/20 text-white dark:bg-emerald-500/15 dark:text-emerald-400";
           connBadgeInactiveClass = "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300";
         }
       }
@@ -228,10 +324,10 @@ export function DeviceSection() {
                   className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     port.isSupported
                       ? active
-                        ? "bg-emerald-400/20 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-800"
+                        ? "bg-emerald-400/20 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400"
                         : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
                       : active
-                        ? "bg-amber-400/20 text-amber-100 dark:bg-amber-400/20 dark:text-amber-900"
+                        ? "bg-amber-400/20 text-amber-100 dark:bg-amber-400/20 dark:text-amber-300"
                         : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
                   }`}
                 >
@@ -251,10 +347,96 @@ export function DeviceSection() {
     });
   };
 
+  /* ── Wizard step header row helper ──────────────────── */
+  function renderWizardStepHeader(
+    stepKey: HueStepKey,
+    stepIndex: number,
+    isCompleted: boolean,
+    isActive: boolean,
+    isLocked: boolean,
+    summaryText?: string,
+  ) {
+    const isExpanded = resolvedExpandedStep === stepKey;
+    const canClick = isCompleted || isActive;
+
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          if (canClick) {
+            setHueExpandedStep(isExpanded ? null : stepKey);
+          }
+        }}
+        disabled={isLocked}
+        aria-expanded={isExpanded}
+        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
+          canClick && !isLocked
+            ? "hover:bg-slate-50 dark:hover:bg-zinc-800/50"
+            : ""
+        } ${isLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+      >
+        {/* Step circle */}
+        <div
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors ${
+            isCompleted
+              ? "bg-emerald-500 text-white"
+              : isActive
+                ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                : "bg-slate-100 text-slate-400 dark:bg-zinc-800 dark:text-zinc-500"
+          }`}
+        >
+          {isCompleted ? <IconCheck /> : String(stepIndex + 1)}
+        </div>
+
+        {/* Label + summary */}
+        <div className="min-w-0 flex-1">
+          <span
+            className={`text-xs font-semibold ${
+              isActive
+                ? "text-slate-900 dark:text-zinc-100"
+                : isCompleted
+                  ? "text-slate-700 dark:text-zinc-300"
+                  : "text-slate-400 dark:text-zinc-500"
+            }`}
+          >
+            {t(`device.hue.steps.${stepKey}`)}
+          </span>
+          {isCompleted && summaryText && !isExpanded ? (
+            <span className="ml-2 text-[11px] text-slate-400 dark:text-zinc-500">
+              {summaryText}
+            </span>
+          ) : null}
+          {isLocked ? (
+            <span className="ml-2 text-[11px] text-slate-400 dark:text-zinc-500">
+              {t("device.hue.wizard.locked")}
+            </span>
+          ) : null}
+        </div>
+
+        {/* Expand indicator */}
+        {canClick && !isLocked ? (
+          <IconChevronDown open={isExpanded} />
+        ) : null}
+      </button>
+    );
+  }
+
+  /* ── Step content visibility ─────────────────────────── */
+  const stepOrder: HueStepKey[] = ["discover", "pair", "area", "ready"];
+
+  function isStepLocked(stepKey: HueStepKey): boolean {
+    const idx = stepOrder.indexOf(stepKey);
+    // A step is locked if all prior steps are not completed
+    for (let i = 0; i < idx; i++) {
+      if (!hueStepStates[stepOrder[i]]) return true;
+    }
+    return false;
+  }
+
   return (
     <div className="w-full space-y-5">
       {/* ── Serial Device ─────────────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+      <section className="rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-zinc-800">
           <div className="min-w-0">
@@ -363,7 +545,7 @@ export function DeviceSection() {
                     void connectSelectedPort();
                   }}
                   disabled={connectDisabled}
-                  className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                  className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isConnecting ? t("device.actions.connecting") : t(connectLabelKey)}
                 </button>
@@ -373,10 +555,7 @@ export function DeviceSection() {
             {/* Missing port hint — analogous to bridge network hint */}
             {statusCard?.code === "SELECTED_PORT_MISSING" ? (
               <div className="flex items-start gap-2 border-t border-slate-100 px-4 py-2.5 dark:border-zinc-800">
-                <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-zinc-500" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="8" cy="8" r="6" />
-                  <path d="M8 5v3.5M8 11v.5" />
-                </svg>
+                <IconInfo />
                 <p className="text-[11px] text-slate-500 dark:text-zinc-400">
                   {t("device.port.missingHint", { port: selectedPort ?? "-" })}
                 </p>
@@ -427,462 +606,542 @@ export function DeviceSection() {
       </section>
 
       {/* ── Philips Hue ───────────────────────────────────────── */}
-      <section className="rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+      <section className="rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-zinc-800">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-zinc-100">{t("device.hue.title")}</h2>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">{t("device.hue.description")}</p>
           </div>
-          <span
-            className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold ${
-              isValidatingCredential
-                ? "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300"
-                : credentialState === "valid"
-                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-                  : bridgeUnreachable
-                    ? "bg-slate-100 text-slate-600 dark:bg-amber-500/15 dark:text-amber-400"
-                    : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
-            }`}
-          >
-            {isValidatingCredential
-              ? t("device.hue.bridge.checking")
-              : credentialState === "valid"
-                ? t("device.hue.credential.valid")
-                : bridgeUnreachable
-                  ? t("device.hue.credential.unreachable")
-                  : t("device.hue.credential.needsRepair")}
+          <span className={`shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold ${hueHeaderBadge.className}`}>
+            {hueHeaderBadge.label}
           </span>
         </div>
 
-        <div className="p-6">
-          {/* Numbered stepper */}
-          <ol className="flex items-start">
-            {HUE_STEPS.map((key, idx) => {
-              const completed = hueStepStates[key];
-              const active = visualActiveStep === key;
-              const isLast = idx === HUE_STEPS.length - 1;
-              return (
-                <li key={key} className="flex flex-1 items-start">
-                  <div className="flex flex-col items-center">
-                    <div
-                      className={`flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
-                        completed
-                          ? "bg-emerald-500 text-white"
-                          : active
-                            ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                            : "bg-slate-100 text-slate-400 dark:bg-zinc-800 dark:text-zinc-500"
-                      }`}
-                    >
-                      {completed ? (
-                        <svg viewBox="0 0 12 12" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M2 6l3 3 5-5" />
-                        </svg>
-                      ) : (
-                        String(idx + 1)
-                      )}
-                    </div>
-                    <span
-                      className={`mt-1.5 text-center text-[10px] font-medium leading-tight ${
-                        active
-                          ? "text-slate-900 dark:text-zinc-100"
-                          : completed
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-slate-400 dark:text-zinc-500"
-                      }`}
-                    >
-                      {t(`device.hue.steps.${key}`)}
-                    </span>
-                  </div>
-                  {!isLast && (
-                    <div
-                      className={`mx-1 mt-3.5 h-px flex-1 transition-colors ${
-                        completed ? "bg-emerald-400/60" : "bg-slate-200 dark:bg-zinc-700"
-                      }`}
-                    />
-                  )}
-                </li>
-              );
-            })}
-          </ol>
+        {/* Bridge offline card — shown when bridge was registered but is unreachable */}
+        {bridgeUnreachable && selectedBridge ? (
+          <div className="mx-6 mt-5 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-500/25 dark:bg-amber-900/10">
+            <div className="flex items-start gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+                <IconWifi />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">
+                  {t("device.hue.wizard.offlineTitle")}
+                </p>
+                <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                  {t("device.hue.wizard.offlineBody", { name: selectedBridge.name, ip: selectedBridge.ip })}
+                </p>
+                <ul className="mt-2 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                  <li>{t("device.hue.wizard.offlineReason1")}</li>
+                  <li>{t("device.hue.wizard.offlineReason2")}</li>
+                  <li>{t("device.hue.wizard.offlineReason3")}</li>
+                </ul>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void discover();
+                    }}
+                    disabled={isHueDiscovering}
+                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isHueDiscovering ? t("device.hue.actions.discovering") : t("device.hue.wizard.offlineRediscover")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHueExpandedStep("discover");
+                    }}
+                    className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-500/30 dark:text-amber-300 dark:hover:bg-amber-900/20"
+                  >
+                    {t("device.hue.wizard.offlineTryIp")}
+                  </button>
+                </div>
+              </div>
+            </div>
+            {/* Reset link */}
+            <div className="mt-3 border-t border-amber-200/60 pt-2.5 dark:border-amber-500/15">
+              <button
+                type="button"
+                onClick={() => {
+                  selectBridge(null);
+                }}
+                className="text-[11px] font-medium text-amber-600 underline decoration-amber-400/40 underline-offset-2 transition-colors hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200"
+              >
+                {t("device.hue.wizard.offlineReset")}
+              </button>
+            </div>
+          </div>
+        ) : null}
 
-          {/* Step sections */}
-          <div className="mt-5 divide-y divide-slate-100 dark:divide-zinc-800/70">
-            {/* Step 1: Discover */}
-            <div className="pb-5">
-              <p className="mb-3 text-xs font-semibold text-slate-700 dark:text-zinc-300">{t("device.hue.steps.discover")}</p>
-
-              {/* Discover action row */}
+        <div className="p-6 pt-0">
+          {/* Empty state guide — no bridge at all, no history */}
+          {!selectedBridgeId && bridges.length === 0 && !isHueDiscovering && !bridgeUnreachable ? (
+            <div className="mt-5 flex flex-col items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-6 py-8 text-center dark:border-zinc-700 dark:bg-zinc-800/20">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400 dark:bg-zinc-800 dark:text-zinc-500">
+                <IconBridge />
+              </div>
+              <p className="mt-3 text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                {t("device.hue.wizard.emptyTitle")}
+              </p>
+              <p className="mt-1 max-w-xs text-[11px] text-slate-500 dark:text-zinc-400">
+                {t("device.hue.wizard.emptyBody")}
+              </p>
               <button
                 type="button"
                 onClick={() => {
                   void discover();
                 }}
-                disabled={isHueDiscovering}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
-                {isHueDiscovering ? t("device.hue.actions.discovering") : t("device.hue.actions.discover")}
+                {t("device.hue.wizard.emptyAction")}
               </button>
-
-              {/* Bridge cards */}
-              {bridges.length > 0 ? (
-                <div className="mt-3 space-y-1.5">
-                  {bridges.map((bridge) => {
-                    const isSelected = selectedBridgeId === bridge.id;
-                    const showBadge = isSelected;
-                    const badgeLabel = isSelected
-                      ? isValidatingCredential
-                        ? t("device.hue.bridge.checking")
-                        : credentialState === "valid"
-                          ? t("device.hue.bridge.online")
-                          : bridgeUnreachable
-                            ? t("device.hue.bridge.unreachable")
-                            : t("device.hue.credential.needsRepair")
-                      : null;
-                    const badgeClass = isSelected
-                      ? isValidatingCredential || bridgeUnreachable
-                        ? "bg-white/15 text-white/80 dark:bg-zinc-900/20 dark:text-zinc-500"
-                        : credentialState === "valid"
-                          ? "bg-emerald-400/25 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-800"
-                          : "bg-amber-400/25 text-amber-100 dark:bg-amber-500/20 dark:text-amber-800"
-                      : null;
-                    return (
-                      <button
-                        key={bridge.id}
-                        type="button"
-                        onClick={() => {
-                          selectBridge(bridge.id);
-                        }}
-                        className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                          isSelected
-                            ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                            : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-semibold">{bridge.name}</p>
-                            <p className={`mt-0.5 font-mono text-[11px] ${isSelected ? "text-white/65 dark:text-zinc-600" : "text-slate-400 dark:text-zinc-500"}`}>
-                              {bridge.ip}
-                            </p>
-                          </div>
-                          {showBadge && badgeLabel && (
-                            <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium ${badgeClass}`}>
-                              {badgeLabel}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-2 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.hue.bridge.noBridges")}</p>
-              )}
-
-              {/* Network unreachable hint */}
-              {bridgeUnreachable && selectedBridge ? (
-                <div className="mt-3 flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800/30">
-                  <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-zinc-500" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="8" cy="8" r="6" />
-                    <path d="M8 5v3.5M8 11v.5" />
-                  </svg>
-                  <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                    {t("device.hue.bridge.networkHint", { name: selectedBridge.name, ip: selectedBridge.ip })}
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 dark:border-zinc-700 dark:bg-zinc-800/40">
-                <p className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300">{t("device.hue.manualIp.title")}</p>
-                <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.hue.manualIp.description")}</p>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={manualIp}
-                    onChange={(event) => {
-                      setManualIp(event.target.value);
-                    }}
-                    placeholder={t("device.hue.manualIp.placeholder")}
-                    className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void submitManualIp();
-                    }}
-                    disabled={hueManualIpDisabled}
-                    className="h-8 shrink-0 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                  >
-                    {t("device.hue.manualIp.submit")}
-                  </button>
-                </div>
-                {manualIpError ? <p className="mt-1.5 text-[11px] text-rose-600 dark:text-rose-400">{t(manualIpError)}</p> : null}
-              </div>
             </div>
+          ) : (
+            /* ── Wizard accordion steps ────────────────── */
+            <div className="mt-5 divide-y divide-slate-100 rounded-xl border border-slate-100 bg-white/60 dark:divide-zinc-800/70 dark:border-zinc-800 dark:bg-zinc-900/40">
 
-            {/* Step 2: Pair */}
-            <div className="py-5">
-              <p className="mb-3 text-xs font-semibold text-slate-700 dark:text-zinc-300">{t("device.hue.steps.pair")}</p>
+              {/* ── Step 1: Discover ────────────────────── */}
+              <div>
+                {renderWizardStepHeader(
+                  "discover",
+                  0,
+                  hueStepStates.discover,
+                  visualActiveStep === "discover",
+                  false,
+                  selectedBridge?.name,
+                )}
+                <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${resolvedExpandedStep === "discover" ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden">
+                  <div className="px-4 pb-4">
+                    {/* Discover button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void discover();
+                      }}
+                      disabled={isHueDiscovering}
+                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isHueDiscovering ? t("device.hue.actions.discovering") : t("device.hue.actions.discover")}
+                    </button>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void pair();
-                  }}
-                  disabled={huePairDisabled}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-                >
-                  {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.actions.pair")}
-                </button>
-                {credentialState === "needs_repair" ? (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">{t("device.hue.credential.repairHint")}</p>
-                ) : null}
-              </div>
-            </div>
-
-            {/* Step 3: Area Selection */}
-            <div className="py-5">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">{t("device.hue.steps.area")}</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void refreshAreas();
-                  }}
-                  disabled={hueAreasDisabled}
-                  className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-                >
-                  {isLoadingAreas ? t("device.hue.actions.loadingAreas") : t("device.hue.actions.refreshAreas")}
-                </button>
-              </div>
-
-              {areaGroups.length === 0 ? (
-                <p className="text-xs text-slate-400 dark:text-zinc-500">{t("device.hue.areas.empty")}</p>
-              ) : (
-                <div className="space-y-3">
-                  {areaGroups.map((group) => (
-                    <div key={group.roomName}>
-                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">{group.roomName}</p>
-                      <ul className="space-y-1.5">
-                        {group.areas.map((area) => {
-                          const active = selectedAreaId === area.id;
-                          const readinessLabel = area.readiness?.ready
-                            ? t("device.hue.readiness.ready")
-                            : area.readiness
-                              ? t("device.hue.readiness.notReady")
-                              : t("device.hue.readiness.unknown");
-
+                    {/* Bridge list */}
+                    {bridges.length > 0 ? (
+                      <div className="mt-3 space-y-1.5">
+                        {bridges.map((bridge) => {
+                          const isSelected = selectedBridgeId === bridge.id;
                           return (
-                            <li key={area.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  selectArea(area.id);
-                                }}
-                                className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                                  active
-                                    ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                                    : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="text-xs font-semibold">{area.name}</p>
-                                    <p className={`mt-0.5 text-[11px] ${active ? "text-white/70 dark:text-zinc-600" : "text-slate-400 dark:text-zinc-500"}`}>
-                                      {t("device.hue.areas.channels", { count: area.channelCount ?? 0 })}
-                                    </p>
-                                    {area.readiness?.message ? (
-                                      <p className={`mt-0.5 text-[11px] ${active ? "text-white/65 dark:text-zinc-700" : "text-slate-500 dark:text-zinc-400"}`}>
-                                        {area.readiness.message}
-                                      </p>
-                                    ) : (
-                                      <p className={`mt-0.5 text-[11px] ${active ? "text-white/65 dark:text-zinc-700" : "text-slate-500 dark:text-zinc-400"}`}>
-                                        {t("device.hue.readiness.pending")}
-                                      </p>
-                                    )}
-                                    {area.readiness && !area.readiness.ready ? (
-                                      <p className={`mt-0.5 text-[11px] ${active ? "text-amber-200 dark:text-amber-800" : "text-amber-600 dark:text-amber-400"}`}>
-                                        {t("device.hue.readiness.recoveryHint")}
-                                      </p>
-                                    ) : null}
-                                  </div>
-                                  <span
-                                    className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold ${
-                                      area.readiness?.ready
-                                        ? active
-                                          ? "bg-emerald-400/25 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-900"
-                                          : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-                                        : area.readiness
-                                          ? active
-                                            ? "bg-amber-400/25 text-amber-100 dark:bg-amber-500/20 dark:text-amber-900"
-                                            : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
-                                          : active
-                                            ? "bg-white/20 text-white dark:bg-zinc-700/25 dark:text-zinc-600"
-                                            : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
-                                    }`}
-                                  >
-                                    {readinessLabel}
-                                  </span>
+                            <button
+                              key={bridge.id}
+                              type="button"
+                              onClick={() => {
+                                selectBridge(bridge.id);
+                              }}
+                              className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                                isSelected
+                                  ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                                  : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold">{bridge.name}</p>
+                                  <p className={`mt-0.5 font-mono text-[11px] ${isSelected ? "text-white/65 dark:text-zinc-600" : "text-slate-400 dark:text-zinc-500"}`}>
+                                    {bridge.ip}
+                                  </p>
                                 </div>
-                              </button>
-                            </li>
+                                {isSelected ? (
+                                  <span className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-medium ${
+                                    isValidatingCredential
+                                      ? "bg-white/15 text-white/80 dark:bg-zinc-900/20 dark:text-zinc-500"
+                                      : credentialState === "valid"
+                                        ? "bg-emerald-400/25 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400"
+                                        : "bg-white/15 text-white/80 dark:bg-zinc-900/20 dark:text-zinc-500"
+                                  }`}>
+                                    {isValidatingCredential
+                                      ? t("device.hue.bridge.checking")
+                                      : credentialState === "valid"
+                                        ? t("device.hue.bridge.online")
+                                        : t("device.hue.wizard.badgeSelected")}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </button>
                           );
                         })}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {selectedAreaId ? (
-                <HueChannelMapPanel
-                  channels={areaChannels}
-                  isLoading={isLoadingChannels}
-                  overrides={channelRegionOverrides}
-                  onSetRegion={setChannelRegion}
-                />
-              ) : null}
-            </div>
-
-            {/* Step 4: Controls */}
-            <div className="pt-5">
-              <p className="mb-3 text-xs font-semibold text-slate-700 dark:text-zinc-300">{t("device.hue.steps.ready")}</p>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void revalidateArea();
-                  }}
-                  disabled={hueReadinessDisabled}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-                >
-                  {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("device.hue.actions.checkReadiness")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void startRuntime();
-                  }}
-                  disabled={hueStartDisabled}
-                  className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                >
-                  {t("device.hue.actions.start")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
-                  }}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-                >
-                  {t("device.hue.actions.stop")}
-                </button>
-              </div>
-
-              {showRuntimeChecklist ? (
-                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-500/30 dark:bg-amber-900/15">
-                  <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">{t("device.hue.runtime.checklist.title")}</p>
-                  <ul className="mt-1 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-400">
-                    {isValidatingCredential || credentialState === "unknown" ? (
-                      <li>{t("device.hue.runtime.checklist.waitCredential")}</li>
+                      </div>
+                    ) : !isHueDiscovering ? (
+                      <p className="mt-2 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.hue.bridge.noBridges")}</p>
                     ) : null}
-                    {isReadinessStale ? <li>{t("device.hue.runtime.checklist.revalidate")}</li> : null}
-                  </ul>
-                </div>
-              ) : null}
 
-              {runtimeTargets.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  {runtimeTargets.map((targetRow) => {
-                    const targetLocked = isRuntimeMutating || targetRow.state === "Reconnecting";
-                    return (
-                      <div
-                        key={targetRow.target}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-800/30"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">
-                            {t(`device.hue.runtime.targets.${targetRow.target}.title`)}
-                          </p>
-                          {targetRow.remainingAttempts !== undefined || targetRow.nextAttemptMs !== undefined ? (
-                            <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
-                              {t("device.hue.runtime.retryStatus", {
-                                remaining: targetRow.remainingAttempts ?? "-",
-                                nextMs: targetRow.nextAttemptMs ?? "-",
-                              })}
-                            </p>
-                          ) : null}
-                        </div>
+                    {/* Manual IP */}
+                    <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-3 dark:border-zinc-700 dark:bg-zinc-800/40">
+                      <p className="text-[11px] font-semibold text-slate-700 dark:text-zinc-300">{t("device.hue.manualIp.title")}</p>
+                      <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.hue.manualIp.description")}</p>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          value={manualIp}
+                          onChange={(event) => {
+                            setManualIp(event.target.value);
+                          }}
+                          placeholder={t("device.hue.manualIp.placeholder")}
+                          className="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                        />
                         <button
                           type="button"
                           onClick={() => {
-                            void retryRuntimeTarget(targetRow.target);
+                            void submitManualIp();
                           }}
-                          disabled={targetLocked}
-                          className="shrink-0 rounded border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                          disabled={hueManualIpDisabled}
+                          className="h-8 shrink-0 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          {t(`device.hue.runtime.targets.${targetRow.target}.retry`)}
+                          {t("device.hue.manualIp.submit")}
                         </button>
                       </div>
-                    );
-                  })}
+                      {manualIpError ? <p className="mt-1.5 text-[11px] text-rose-600 dark:text-rose-400">{t(manualIpError)}</p> : null}
+                    </div>
+                  </div>
+                  </div>
                 </div>
-              ) : null}
+              </div>
 
-              {canStartHue && selectedBridge && selectedArea ? (
-                <p className="mt-3 text-xs text-emerald-700 dark:text-emerald-400">
-                  {t("device.hue.successSummary", {
-                    bridge: selectedBridge.name,
-                    area: selectedArea.name,
-                    readiness: t("device.hue.readiness.ready"),
-                  })}
-                </p>
-              ) : null}
-
-              {/* Hue status cards */}
-              <div className="mt-4 space-y-2">
-                <div
-                  className={`rounded-lg border p-3 ${
-                    hueStatusModel.variant === "success"
-                      ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
-                      : hueStatusModel.variant === "error"
-                        ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
-                        : "border-slate-100 bg-slate-50/60 dark:border-zinc-800 dark:bg-zinc-800/30"
-                  }`}
-                >
-                  <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{t(hueStatusModel.titleKey)}</p>
-                  <p className="mt-0.5 text-[11px] text-slate-600 dark:text-zinc-300">{t(hueStatusModel.bodyKey)}</p>
-                  {hueStatusModel.details ? <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{hueStatusModel.details}</p> : null}
-                </div>
-
-                <div
-                  className={`rounded-lg border p-3 ${
-                    hueRuntimeModel.variant === "success"
-                      ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
-                      : hueRuntimeModel.variant === "error"
-                        ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
-                        : "border-slate-100 bg-slate-50/60 dark:border-zinc-800 dark:bg-zinc-800/30"
-                  }`}
-                >
-                  <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{t(hueRuntimeModel.titleKey)}</p>
-                  <p className="mt-0.5 text-[11px] text-slate-600 dark:text-zinc-300">{t(hueRuntimeModel.bodyKey)}</p>
-                  {hueRuntimeModel.triggerSourceKey ? (
-                    <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{t(hueRuntimeModel.triggerSourceKey)}</p>
-                  ) : null}
-                  {hueRuntimeModel.retry ? (
-                    <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
-                      {t(hueRuntimeModel.retry.labelKey, {
-                        remaining: hueRuntimeModel.retry.remainingAttempts ?? "-",
-                        nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "-",
-                      })}
+              {/* ── Step 2: Pair ────────────────────────── */}
+              <div>
+                {renderWizardStepHeader(
+                  "pair",
+                  1,
+                  hueStepStates.pair,
+                  visualActiveStep === "pair",
+                  isStepLocked("pair"),
+                  credentialState === "valid" ? t("device.hue.credential.valid") : undefined,
+                )}
+                <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${resolvedExpandedStep === "pair" && !isStepLocked("pair") ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden">
+                  <div className="px-4 pb-4">
+                    <p className="mb-3 text-[11px] text-slate-500 dark:text-zinc-400">
+                      {t("device.hue.wizard.pairInstruction")}
                     </p>
-                  ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void pair();
+                      }}
+                      disabled={huePairDisabled}
+                      className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.actions.pair")}
+                    </button>
+
+                    {/* Link button pending hint */}
+                    {isHuePairing && hueStatus?.code === "HUE_PAIRING_PENDING_LINK_BUTTON" ? (
+                      <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-900/15">
+                        <span className="mt-0.5 text-amber-500 dark:text-amber-400"><IconInfo /></span>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                          {t("device.hue.pair.linkButtonHint")}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {/* Credential repair hint */}
+                    {credentialState === "needs_repair" && !bridgeUnreachable && !isHuePairing ? (
+                      <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2.5 dark:border-amber-500/25 dark:bg-amber-900/10">
+                        <span className="mt-0.5 text-amber-500 dark:text-amber-400"><IconInfo /></span>
+                        <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                          {t("device.hue.credential.repairHint")}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Step 3: Area ────────────────────────── */}
+              <div>
+                {renderWizardStepHeader(
+                  "area",
+                  2,
+                  hueStepStates.area && Boolean(selectedArea?.readiness?.ready),
+                  visualActiveStep === "area",
+                  isStepLocked("area"),
+                  selectedArea?.name,
+                )}
+                <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${resolvedExpandedStep === "area" && !isStepLocked("area") ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden">
+                  <div className="px-4 pb-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+                        {t("device.hue.wizard.areaInstruction")}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void refreshAreas();
+                        }}
+                        disabled={hueAreasDisabled}
+                        className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                      >
+                        {isLoadingAreas ? t("device.hue.actions.loadingAreas") : t("device.hue.actions.refreshAreas")}
+                      </button>
+                    </div>
+
+                    {areaGroups.length === 0 ? (
+                      <p className="text-xs text-slate-400 dark:text-zinc-500">{t("device.hue.areas.empty")}</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {areaGroups.map((group) => (
+                          <div key={group.roomName}>
+                            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">{group.roomName}</p>
+                            <ul className="space-y-1.5">
+                              {group.areas.map((area) => {
+                                const active = selectedAreaId === area.id;
+                                const readinessLabel = area.readiness?.ready
+                                  ? t("device.hue.readiness.ready")
+                                  : area.readiness
+                                    ? t("device.hue.readiness.notReady")
+                                    : t("device.hue.readiness.unknown");
+
+                                return (
+                                  <li key={area.id}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        selectArea(area.id);
+                                      }}
+                                      className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                                        active
+                                          ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                                          : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500"
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <p className="text-xs font-semibold">{area.name}</p>
+                                          <p className={`mt-0.5 text-[11px] ${active ? "text-white/70 dark:text-zinc-600" : "text-slate-400 dark:text-zinc-500"}`}>
+                                            {t("device.hue.areas.channels", { count: area.channelCount ?? 0 })}
+                                          </p>
+                                        </div>
+                                        <span
+                                          className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold ${
+                                            area.readiness?.ready
+                                              ? active
+                                                ? "bg-emerald-400/25 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                              : area.readiness
+                                                ? active
+                                                  ? "bg-amber-400/25 text-amber-100 dark:bg-amber-500/20 dark:text-amber-300"
+                                                  : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                                                : active
+                                                  ? "bg-white/20 text-white dark:bg-zinc-700/25 dark:text-zinc-600"
+                                                  : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+                                          }`}
+                                        >
+                                          {readinessLabel}
+                                        </span>
+                                      </div>
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedAreaId ? (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void revalidateArea();
+                          }}
+                          disabled={hueReadinessDisabled}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                        >
+                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("device.hue.actions.checkReadiness")}
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {/* Channel map */}
+                    {selectedAreaId ? (
+                      <HueChannelMapPanel
+                        channels={areaChannels}
+                        isLoading={isLoadingChannels}
+                        overrides={channelRegionOverrides}
+                        onSetRegion={setChannelRegion}
+                      />
+                    ) : null}
+                  </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Step 4: Ready / Controls ────────────── */}
+              <div>
+                {renderWizardStepHeader(
+                  "ready",
+                  3,
+                  canStartHue,
+                  visualActiveStep === "ready",
+                  isStepLocked("ready"),
+                  canStartHue && selectedBridge && selectedArea
+                    ? t("device.hue.wizard.readySummary", { bridge: selectedBridge.name, area: selectedArea.name })
+                    : undefined,
+                )}
+                <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${resolvedExpandedStep === "ready" && !isStepLocked("ready") ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                  <div className="overflow-hidden">
+                  <div className="px-4 pb-4">
+                    {/* Runtime checklist */}
+                    {showRuntimeChecklist ? (
+                      <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-500/30 dark:bg-amber-900/15">
+                        <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">{t("device.hue.runtime.checklist.title")}</p>
+                        <ul className="mt-1 space-y-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                          {isValidatingCredential || credentialState === "unknown" ? (
+                            <li>{t("device.hue.runtime.checklist.waitCredential")}</li>
+                          ) : null}
+                          {isReadinessStale ? <li>{t("device.hue.runtime.checklist.revalidate")}</li> : null}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {/* Summary */}
+                    {canStartHue && selectedBridge && selectedArea ? (
+                      <p className="mb-3 text-xs text-emerald-700 dark:text-emerald-400">
+                        {t("device.hue.successSummary", {
+                          bridge: selectedBridge.name,
+                          area: selectedArea.name,
+                          readiness: t("device.hue.readiness.ready"),
+                        })}
+                      </p>
+                    ) : null}
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void startRuntime();
+                        }}
+                        disabled={hueStartDisabled}
+                        className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {t("device.hue.actions.start")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+                        }}
+                        disabled={!runtimeStatus || isRuntimeMutating}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                      >
+                        {t("device.hue.actions.stop")}
+                      </button>
+                    </div>
+
+                    {/* Runtime targets */}
+                    {runtimeTargets.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {runtimeTargets.map((targetRow) => {
+                          const targetLocked = isRuntimeMutating || targetRow.state === "Reconnecting";
+                          return (
+                            <div
+                              key={targetRow.target}
+                              className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5 dark:border-zinc-800 dark:bg-zinc-800/30"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">
+                                  {t(`device.hue.runtime.targets.${targetRow.target}.title`)}
+                                </p>
+                                {targetRow.remainingAttempts !== undefined || targetRow.nextAttemptMs !== undefined ? (
+                                  <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
+                                    {t("device.hue.runtime.retryStatus", {
+                                      remaining: targetRow.remainingAttempts ?? "-",
+                                      nextMs: targetRow.nextAttemptMs ?? "-",
+                                    })}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                {targetRow.state === "Reconnecting" || targetRow.remainingAttempts !== undefined ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
+                                    }}
+                                    disabled={isRuntimeMutating}
+                                    className="shrink-0 rounded border border-rose-200 px-2.5 py-1 text-[11px] font-medium text-rose-700 transition-colors hover:border-rose-600 hover:bg-rose-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-700/50 dark:text-rose-400 dark:hover:border-rose-500 dark:hover:bg-rose-500 dark:hover:text-white"
+                                  >
+                                    {t("device.hue.runtime.actions.stopRetrying")}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void retryRuntimeTarget(targetRow.target);
+                                  }}
+                                  disabled={targetLocked}
+                                  className="shrink-0 rounded border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                                >
+                                  {t(
+                                    targetRow.actionHint
+                                      ? `device.hue.runtime.actions.${targetRow.actionHint}`
+                                      : `device.hue.runtime.targets.${targetRow.target}.retry`
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {/* Status cards — compact, side by side */}
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                      <div
+                        className={`rounded-lg border p-3 ${
+                          hueStatusModel.variant === "success"
+                            ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
+                            : hueStatusModel.variant === "error"
+                              ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
+                              : "border-slate-100 bg-slate-50/60 dark:border-zinc-800 dark:bg-zinc-800/30"
+                        }`}
+                      >
+                        <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{t(hueStatusModel.titleKey)}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-600 dark:text-zinc-300">{t(hueStatusModel.bodyKey)}</p>
+                      </div>
+
+                      <div
+                        className={`rounded-lg border p-3 ${
+                          hueRuntimeModel.variant === "success"
+                            ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
+                            : hueRuntimeModel.variant === "error"
+                              ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
+                              : "border-slate-100 bg-slate-50/60 dark:border-zinc-800 dark:bg-zinc-800/30"
+                        }`}
+                      >
+                        <p className="text-[11px] font-semibold text-slate-800 dark:text-zinc-100">{t(hueRuntimeModel.titleKey)}</p>
+                        <p className="mt-0.5 text-[11px] text-slate-600 dark:text-zinc-300">{t(hueRuntimeModel.bodyKey)}</p>
+                        {hueRuntimeModel.retry ? (
+                          <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
+                            {t(hueRuntimeModel.retry.labelKey, {
+                              remaining: hueRuntimeModel.retry.remainingAttempts ?? "-",
+                              nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "-",
+                            })}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
     </div>

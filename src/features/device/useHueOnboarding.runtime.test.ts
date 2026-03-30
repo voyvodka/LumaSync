@@ -73,7 +73,11 @@ describe("useHueOnboarding runtime wiring", () => {
 
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
-    getHueStreamStatusMock.mockResolvedValue(runtimeStatusFixture());
+    getHueStreamStatusMock.mockResolvedValue({
+      active: true,
+      status: runtimeStatusFixture(),
+      lastSolidColor: null,
+    });
     listAreasMock.mockResolvedValue({
       status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
       areas: [
@@ -148,6 +152,7 @@ describe("useHueOnboarding runtime wiring", () => {
     expect(restartHueMock).toHaveBeenCalledWith({
       bridgeIp: "192.168.1.20",
       username: "app-user",
+      clientKey: "client-key",
       areaId: "area-1",
       triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
     });

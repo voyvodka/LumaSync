@@ -160,8 +160,8 @@
       }
     },
     "hue": {
-      "title": "Hue bridge kurulumu",
-      "description": "Bridge keşfi, eşleştirme, alan seçimi ve hazırlık kontrolünü tek panelde tamamla.",
+      "title": "Philips Hue",
+      "description": "Bridge keşfi, eşleştirme ve entertainment alanı kurulumu.",
       "steps": {
         "discover": "Keşfet",
         "pair": "Eşleştir",
@@ -189,23 +189,26 @@
         "networkHint": "{{name}} bridge'ine {{ip}} üzerinden ulaşılamıyor. Hue bridge'inizle aynı ağda olduğunuzdan emin olun."
       },
       "manualIp": {
-        "title": "Manuel IP fallback",
-        "description": "Manuel bridge IP yolu her adımda görünür kalır.",
+        "title": "Manuel IP girişi",
+        "description": "Otomatik keşif bridge'inizi bulamadıysa IP adresini elle girin.",
         "placeholder": "örn. 192.168.1.50",
         "submit": "IP doğrula",
         "invalid": "Göndermeden önce geçerli bir IPv4 adresi gir."
       },
+      "pair": {
+        "linkButtonHint": "Hue bridge'inizin üstündeki fiziksel butona basın ve bir an bekleyin."
+      },
       "credential": {
-        "valid": "Geçerli",
+        "valid": "Eşleştirildi",
         "needsRepair": "Yeniden eşleştirme gerekli",
         "unreachable": "Ulaşılamıyor",
         "line": "Kimlik durumu: {{state}}",
-        "repairHint": "Kimlik bilgileri yeniden eşleştirme istiyor. Sonraki adım olarak Bridge eşleştir'i kullan."
+        "repairHint": "Kimlik bilgileriniz süresi dolmuş. Bridge butonuna basıp tekrar eşleştirin."
       },
       "areas": {
         "title": "Entertainment alanları",
-        "empty": "Henüz alan yüklenmedi. Alanları listelemek için eşleştirip yenile.",
-        "channels": "Kanal: {{count}}"
+        "empty": "Entertainment alanı bulunamadı. Hue uygulamasından bir tane oluşturun.",
+        "channels": "{{count}} kanal"
       },
       "channelMap": {
         "title": "Kanal ekran bölgeleri",
@@ -214,16 +217,48 @@
         "oneLight": "1 ışık",
         "lights": "{{count}} ışık",
         "auto": "Sıfırla",
-        "resetToAuto": "Otomatik bölgeye sıfırla"
+        "resetToAuto": "Otomatik bölgeye sıfırla",
+        "saved": "✓ Kaydedildi",
+        "regions": {
+          "left": "Sol",
+          "right": "Sağ",
+          "top": "Üst",
+          "bottom": "Alt",
+          "center": "Orta"
+        }
       },
       "readiness": {
         "ready": "Hazır",
         "notReady": "Hazır değil",
         "unknown": "Bekliyor",
         "pending": "Hazırlık henüz doğrulanmadı.",
-        "recoveryHint": "Alan hazır değil. Yeniden doğrula veya başka bir alan seç."
+        "recoveryHint": "Alan hazır değil. Yeniden doğrula veya başka bir alan seç.",
+        "activeStreamer": "Başka bir uygulama bu alana zaten akış yapıyor."
       },
       "successSummary": "{{bridge}} üzerinde {{area}} ile başlamaya hazır ({{readiness}}).",
+      "wizard": {
+        "locked": "Önce bir önceki adımı tamamlayın",
+        "badgeReady": "Hazır",
+        "badgeConnected": "Bağlı",
+        "badgeUnreachable": "Ulaşılamıyor",
+        "badgeInProgress": "Devam ediyor",
+        "badgeNotStarted": "Başlamadı",
+        "badgeSelected": "Seçildi",
+        "pairInstruction": "Hue bridge'inizin üzerindeki fiziksel butona basın, ardından Bridge eşleştir'e tıklayın.",
+        "areaInstruction": "Işıklarınızla senkronize etmek istediğiniz entertainment alanını seçin.",
+        "readySummary": "{{bridge}} / {{area}}",
+        "emptyTitle": "Hue bridge yapılandırılmadı",
+        "emptyBody": "Oda ışıklarınızı ekranınızla senkronize etmek için Philips Hue bridge'inizi bağlayın. Bridge'inizin açık ve aynı ağa bağlı olduğundan emin olun.",
+        "emptyAction": "Bridge keşfet",
+        "offlineTitle": "Bridge'e ulaşılamıyor",
+        "offlineBody": "{{name}} ({{ip}}) şu an yanıt vermiyor. Bunun olası nedenleri:",
+        "offlineReason1": "Farklı bir Wi-Fi ağındasınız",
+        "offlineReason2": "Bridge kapalı veya yeniden başlatılıyor",
+        "offlineReason3": "Bridge'in IP adresi değişmiş olabilir",
+        "offlineRediscover": "Yeniden keşfet",
+        "offlineTryIp": "Farklı bir IP dene",
+        "offlineReset": "Bu bridge'i kaldır ve baştan başla"
+      },
       "status": {
         "validatingTitle": "Kayıtlı kimlik bilgileri doğrulanıyor",
         "validatingBody": "Kayıtlı Hue kimlikleri sessizce kontrol ediliyor.",
@@ -239,6 +274,8 @@
         "successBody": "Son Hue adımı başarıyla tamamlandı.",
         "streamNotReadyTitle": "Seçili alan henüz hazır değil",
         "streamNotReadyBody": "Hazırlık geçene kadar Başlat devre dışı kalır.",
+        "bridgeOfflineTitle": "Bridge'e ulaşılamıyor",
+        "bridgeOfflineBody": "Kayıtlı bridge şu an erişilemiyor. Aynı ağda olduğundan emin ol ve tekrar dene. Bridge'in IP adresi değiştiyse aşağıya yeni adresi gir.",
         "errorTitle": "Hue kurulumu dikkat istiyor",
         "errorBody": "Başlatmadan önce başarısız adımı yeniden dene veya tekrar eşleştir.",
         "infoTitle": "Hue kurulumu bilgisi",
@@ -259,6 +296,7 @@
         "codes": {
           "HUE_STREAM_STARTING": "Hue yayın başlatma isteği alındı.",
           "HUE_STREAM_RUNNING": "Hue yayını aktif.",
+          "HUE_STREAM_RUNNING_DTLS": "Hue yayını aktif.",
           "HUE_STREAM_STOPPING": "Hue durdurma işlemi sürüyor.",
           "HUE_STREAM_STOPPED": "Hue yayını durdu.",
           "TRANSIENT_RETRY_SCHEDULED": "Geçici sorun algılandı. Otomatik deneme planlandı.",
@@ -288,7 +326,8 @@
           "reconnect": "Yeniden bağlan",
           "repair": "Yeniden eşleştir",
           "revalidate": "Yeniden doğrula",
-          "adjust_area": "Alanı düzenle"
+          "adjust_area": "Alanı düzenle",
+          "stopRetrying": "Yeniden denemeyi durdur"
         },
         "targets": {
           "hue": {

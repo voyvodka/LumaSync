@@ -125,10 +125,12 @@ describe("localized settings copy", () => {
         outputTargets={["usb"]}
         usbConnected={true}
         hueConfigured={false}
+        hueStreaming={false}
         modeLockReason={null}
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
         onCalibrationSaved={vi.fn()}
+        onCalibrationStepChange={vi.fn()}
         onCheckForUpdates={vi.fn()}
         isCheckingForUpdates={false}
       />,
