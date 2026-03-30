@@ -105,7 +105,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — TypeScript contract definitions (roomMap.ts, shell.ts extension, hue.ts extension)
+- [x] 14-01-PLAN.md — TypeScript contract definitions (roomMap.ts, shell.ts extension, hue.ts extension)
 - [x] 14-02-PLAN.md — Rust mirror structs and Tauri command stubs (models/room_map.rs, commands/room_map.rs, lib.rs)
 - [ ] 14-03-PLAN.md — Repair and extend verify:shell-contracts script for full validation
 
@@ -186,7 +186,7 @@ Plans:
 | 11. Device Surface Integration | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 12. Diagnostics and Recovery | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 13. Structured Logging | v1.1 | 1/1 | Complete | 2026-03-29 |
-| 14. Contract Foundation | v1.2 | 1/3 | In Progress|  |
+| 14. Contract Foundation | v1.2 | 2/3 | In Progress|  |
 | 15. Fault Recovery and Diagnostics | v1.2 | 0/TBD | Not started | - |
 | 16. Hue Channel Position Editor | v1.2 | 0/TBD | Not started | - |
 | 17. Room Map UI | v1.2 | 0/TBD | Not started | - |

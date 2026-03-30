@@ -37,15 +37,15 @@ Requirements for this milestone. Each maps to roadmap phases.
 
 ### LED Zone Otomatik Türetme (ZONE)
 
-- [ ] **ZONE-01**: User can auto-derive Ambilight screen-edge zone assignments from the room map positions of lights relative to the TV anchor
-- [ ] **ZONE-02**: User can review and confirm the derived zone assignments in a preview step before applying
-- [ ] **ZONE-03**: User can apply confirmed zone assignments to the active LED calibration configuration
+- [x] **ZONE-01**: User can auto-derive Ambilight screen-edge zone assignments from the room map positions of lights relative to the TV anchor
+- [x] **ZONE-02**: User can review and confirm the derived zone assignments in a preview step before applying
+- [x] **ZONE-03**: User can apply confirmed zone assignments to the active LED calibration configuration
 
 ### Hue Standalone Modu (STND)
 
-- [ ] **STND-01**: User can start Hue Entertainment streaming without a USB LED strip connected
-- [ ] **STND-02**: App bypasses USB-dependent setup steps automatically when running in Hue-only mode
-- [ ] **STND-03**: User can switch active output target between USB and Hue automatically based on connected hardware
+- [x] **STND-01**: User can start Hue Entertainment streaming without a USB LED strip connected
+- [x] **STND-02**: App bypasses USB-dependent setup steps automatically when running in Hue-only mode
+- [x] **STND-03**: User can switch active output target between USB and Hue automatically based on connected hardware
 
 ### v1.1 Carry-overs
 
@@ -116,12 +116,12 @@ Which requirements map to which phases. Updated during roadmap creation.
 | CHAN-03 | Phase 16 | Complete |
 | CHAN-04 | Phase 16 | Complete |
 | CHAN-05 | Phase 20 | Pending (optional — experimental) |
-| ZONE-01 | Phase 19 | Pending |
-| ZONE-02 | Phase 19 | Pending |
-| ZONE-03 | Phase 19 | Pending |
-| STND-01 | Phase 18 | Pending |
-| STND-02 | Phase 18 | Pending |
-| STND-03 | Phase 18 | Pending |
+| ZONE-01 | Phase 19 | Complete |
+| ZONE-02 | Phase 19 | Complete |
+| ZONE-03 | Phase 19 | Complete |
+| STND-01 | Phase 18 | Complete |
+| STND-02 | Phase 18 | Complete |
+| STND-03 | Phase 18 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 24 total (23 mandatory + 1 optional)
