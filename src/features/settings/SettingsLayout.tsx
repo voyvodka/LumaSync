@@ -2,7 +2,8 @@ import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
 import { GeneralSection } from "./sections/GeneralSection";
 import { CalibrationPage } from "../calibration/ui/CalibrationPage";
-import { SettingsPage } from "./SettingsPage";
+import { DeviceSection } from "./sections/DeviceSection";
+import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
@@ -11,18 +12,18 @@ import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
 import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
 
 // Nav icons
-function IconControl() {
+function IconLights() {
   return (
-    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="10" cy="10" r="3" />
       <path d="M10 3v2M10 15v2M3 10h2M15 10h2M5.05 5.05l1.41 1.41M13.54 13.54l1.41 1.41M5.05 14.95l1.41-1.41M13.54 6.46l1.41-1.41" />
     </svg>
   );
 }
 
-function IconCalibration() {
+function IconLedSetup() {
   return (
-    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="2" y="4" width="16" height="11" rx="1.5" />
       <path d="M7 17h6M10 15v2" />
       <path d="M5 7h4M5 10h6M5 13h3" />
@@ -30,19 +31,39 @@ function IconCalibration() {
   );
 }
 
-function IconSettings() {
+function IconDevices() {
   return (
-    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 4v5M13.5 4v5M4 9h12v3.5a6 6 0 01-12 0V9z" />
+      <path d="M10 16v2" />
+    </svg>
+  );
+}
+
+function IconSystem() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="10" cy="10" r="2.5" />
       <path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.4 4.4l1.4 1.4M14.2 14.2l1.4 1.4M4.4 15.6l1.4-1.4M14.2 5.8l1.4-1.4" />
     </svg>
   );
 }
 
+function IconRoomMap() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="16" height="16" rx="1.5" />
+      <path d="M2 7h16M7 7v11" />
+    </svg>
+  );
+}
+
 const NAV_ICONS: Record<SectionId, React.ReactNode> = {
-  [SECTION_IDS.CONTROL]: <IconControl />,
-  [SECTION_IDS.CALIBRATION]: <IconCalibration />,
-  [SECTION_IDS.SETTINGS]: <IconSettings />,
+  [SECTION_IDS.LIGHTS]: <IconLights />,
+  [SECTION_IDS.LED_SETUP]: <IconLedSetup />,
+  [SECTION_IDS.DEVICES]: <IconDevices />,
+  [SECTION_IDS.SYSTEM]: <IconSystem />,
+  [SECTION_IDS.ROOM_MAP]: <IconRoomMap />,
 };
 
 interface SettingsLayoutProps {
@@ -142,7 +163,7 @@ export function SettingsLayout({
 
       {/* Main content */}
       <main className="min-w-0 flex-1 overflow-hidden" role="main">
-        {activeSection === SECTION_IDS.CONTROL && (
+        {activeSection === SECTION_IDS.LIGHTS && (
           <div className="h-full overflow-y-auto overscroll-contain px-6 py-6">
             <GeneralSection
               mode={lightingMode}
@@ -155,27 +176,35 @@ export function SettingsLayout({
               isModeTransitioning={isModeTransitioning}
               onModeChange={onLightingModeChange}
               onOutputTargetsChange={onOutputTargetsChange}
-              onOpenCalibration={() => void onSectionChange(SECTION_IDS.CALIBRATION)}
+              onOpenCalibration={() => void onSectionChange(SECTION_IDS.LED_SETUP)}
             />
           </div>
         )}
 
-        {activeSection === SECTION_IDS.CALIBRATION && (
+        {activeSection === SECTION_IDS.LED_SETUP && (
           <CalibrationPage
             key="calibration-page"
             initialStep={calibrationStep}
             initialConfig={calibration}
-            onNavigateBack={() => void onSectionChange(SECTION_IDS.CONTROL)}
+            onNavigateBack={() => void onSectionChange(SECTION_IDS.LIGHTS)}
             onSaved={onCalibrationSaved}
             onStepChange={onCalibrationStepChange}
           />
         )}
 
-        {activeSection === SECTION_IDS.SETTINGS && (
-          <SettingsPage
-            onCheckForUpdates={onCheckForUpdates}
-            isCheckingForUpdates={isCheckingForUpdates}
-          />
+        {activeSection === SECTION_IDS.DEVICES && (
+          <div className="h-full overflow-y-auto overscroll-contain px-6 py-6">
+            <DeviceSection />
+          </div>
+        )}
+
+        {activeSection === SECTION_IDS.SYSTEM && (
+          <div className="h-full overflow-y-auto overscroll-contain">
+            <SystemSection
+              onCheckForUpdates={onCheckForUpdates}
+              isCheckingForUpdates={isCheckingForUpdates}
+            />
+          </div>
         )}
       </main>
     </div>

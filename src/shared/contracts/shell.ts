@@ -6,6 +6,7 @@ import type {
   HueOnboardingStep,
   HueRuntimeTarget,
 } from "./hue";
+import type { RoomMapConfig } from "./roomMap";
 
 /**
  * Shell Contracts
@@ -47,27 +48,22 @@ export type TrayMenuId = (typeof TRAY_MENU_IDS)[keyof typeof TRAY_MENU_IDS];
 
 /** Main navigation section identifiers */
 export const SECTION_IDS = {
-  CONTROL: "control",
-  CALIBRATION: "calibration",
-  SETTINGS: "settings",
+  LIGHTS: "lights",
+  LED_SETUP: "led-setup",
+  DEVICES: "devices",
+  SYSTEM: "system",
+  ROOM_MAP: "room-map",
 } as const;
 
 export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS];
 
-/** Settings page tab identifiers */
-export const SETTINGS_TAB_IDS = {
-  DEVICE: "device",
-  SYSTEM: "system",
-  DIAGNOSTICS: "diagnostics",
-} as const;
-
-export type SettingsTabId = (typeof SETTINGS_TAB_IDS)[keyof typeof SETTINGS_TAB_IDS];
-
 /** Ordered list of main navigation sections */
 export const SECTION_ORDER: SectionId[] = [
-  SECTION_IDS.CONTROL,
-  SECTION_IDS.CALIBRATION,
-  SECTION_IDS.SETTINGS,
+  SECTION_IDS.LIGHTS,
+  SECTION_IDS.LED_SETUP,
+  SECTION_IDS.DEVICES,
+  SECTION_IDS.SYSTEM,
+  SECTION_IDS.ROOM_MAP,
 ];
 
 // ---------------------------------------------------------------------------
@@ -142,6 +138,16 @@ export interface ShellState {
    * Cached credential health line shown in Hue settings.
    */
   hueCredentialStatus?: HueCredentialStatus;
+  /**
+   * Persisted room map configuration.
+   * Absent until the user first opens the room map editor.
+   */
+  roomMap?: RoomMapConfig;
+  /**
+   * Monotonically increasing integer, incremented on each room map save.
+   * Allows downstream consumers to detect stale in-memory state.
+   */
+  roomMapVersion?: number;
 }
 
 /** Default shell state for first launch */
@@ -150,7 +156,7 @@ export const DEFAULT_SHELL_STATE: ShellState = {
   windowHeight: null,
   windowX: null,
   windowY: null,
-  lastSection: SECTION_IDS.CONTROL,
+  lastSection: SECTION_IDS.LIGHTS,
   trayHintShown: false,
   startupEnabled: false,
 };
