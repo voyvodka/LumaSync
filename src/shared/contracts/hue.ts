@@ -15,6 +15,7 @@ export const HUE_COMMANDS = {
   SET_SOLID_COLOR: "set_hue_solid_color",
   GET_STREAM_STATUS: "get_hue_stream_status",
   GET_AREA_CHANNELS: "get_hue_area_channels",
+  UPDATE_CHANNEL_POSITIONS: "update_hue_channel_positions",
 } as const;
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
@@ -110,6 +111,8 @@ export const HUE_RUNTIME_STATUS = {
   AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
   CONFIG_NOT_READY_GATE_BLOCKED: "CONFIG_NOT_READY_GATE_BLOCKED",
   STOP_TIMEOUT_PARTIAL: "HUE_STOP_TIMEOUT_PARTIAL",
+  CHANNEL_POSITIONS_UPDATED: "HUE_CHANNEL_POSITIONS_UPDATED",
+  CHANNEL_POSITIONS_FAILED: "HUE_CHANNEL_POSITIONS_FAILED",
 } as const;
 
 export type HueRuntimeStatusCode =
