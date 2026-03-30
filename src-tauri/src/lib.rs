@@ -24,8 +24,13 @@ mod commands {
     pub mod hue_stream_lifecycle;
     pub mod led_output;
     pub mod lighting_mode;
+    pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
+}
+
+mod models {
+    pub mod room_map;
 }
 
 use commands::calibration::{
@@ -47,6 +52,7 @@ use commands::hue_stream_lifecycle::{
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
+use commands::room_map::{load_room_map, save_room_map, update_hue_channel_positions};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -318,7 +324,10 @@ pub fn run() {
             list_displays,
             open_display_overlay,
             close_display_overlay,
-            update_display_overlay_preview
+            update_display_overlay_preview,
+            save_room_map,
+            load_room_map,
+            update_hue_channel_positions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
