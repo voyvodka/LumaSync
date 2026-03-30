@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 MVP** - Phases 1-8 (shipped 2026-03-21)
 - ✅ **v1.1 Hue Entertainment Integration** - Phases 9-13 (shipped 2026-03-29)
-- 🚧 **v1.2 Oda Görselleştirme ve Evrensel Işık Yönetimi** - Phases 14-20 (in progress)
+- 🚧 **v1.2 Oda Gorselleştirme ve Evrensel Isik Yonetimi** - Phases 14-20 (in progress)
 
 ## Phases
 
@@ -68,20 +68,20 @@ Plans:
 **Plans**: Deferred to v1.2
 
 ### Phase 13: Structured Logging
-**Goal**: tauri-plugin-log entegrasyonu ile Hue lifecycle event'lerinin yapılandırılmış log çıktısına bağlanması.
+**Goal**: tauri-plugin-log entegrasyonu ile Hue lifecycle event'lerinin yapilandirilmis log ciktisina baglanmasi.
 **Depends on**: Phase 12
 **Plans**: 1 plan
 
 Plans:
-- [x] 13-01-PLAN.md - tauri-plugin-log kurulumu, plugin kaydı ve Hue lifecycle log migration.
+- [x] 13-01-PLAN.md - tauri-plugin-log kurulumu, plugin kaydi ve Hue lifecycle log migration.
 
 </details>
 
 ---
 
-### 🚧 v1.2 Oda Görselleştirme ve Evrensel Işık Yönetimi (In Progress)
+### 🚧 v1.2 Oda Gorselleştirme ve Evrensel Isik Yonetimi (In Progress)
 
-**Milestone Goal:** Kullanıcının odadaki tüm ışık kaynaklarını tek bir oda haritasında konumlandırabildiği, Ambilight bölgelerinin bu haritadan otomatik türetildiği ve Hue'nun USB şeritten bağımsız da çalışabildiği evrensel bir ışık yönetim sistemi.
+**Milestone Goal:** Kullanicinin odadaki tum isik kaynaklarini tek bir oda haritasinda konumlandirabildigi, Ambilight bolgelerinin bu haritadan otomatik turetildigi ve Hue'nun USB seritten bagimsiz da calisabildigi evrensel bir isik yonetim sistemi.
 
 - [ ] **Phase 14: Contract Foundation** - All v1.2 cross-boundary types defined before implementation begins.
 - [ ] **Phase 15: Fault Recovery and Diagnostics** - Hue session auto-recovers from transient faults; error states shown with actionable hints.
@@ -102,8 +102,12 @@ Plans:
   2. `RoomMapConfig`, `LightSourcePlacement`, and `RoomDimensions` types exist in `src/shared/contracts/roomMap.ts` and compile without errors.
   3. `ShellState` is extended with `roomMap?` and `roomMapVersion?` keys that round-trip through plugin-store without data loss.
   4. `hue.ts` contains `UPDATE_CHANNEL_POSITIONS` command and `CHANNEL_POSITIONS_UPDATED`/`CHANNEL_POSITIONS_FAILED` status codes.
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 3 plans
+
+Plans:
+- [ ] 14-01-PLAN.md — TypeScript contract definitions (roomMap.ts, shell.ts extension, hue.ts extension)
+- [ ] 14-02-PLAN.md — Rust mirror structs and Tauri command stubs (models/room_map.rs, commands/room_map.rs, lib.rs)
+- [ ] 14-03-PLAN.md — Repair and extend verify:shell-contracts script for full validation
 
 ### Phase 15: Fault Recovery and Diagnostics
 **Goal**: Users can recover from Hue stream faults automatically and see clear, actionable error messages when problems occur.
@@ -182,7 +186,7 @@ Plans:
 | 11. Device Surface Integration | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 12. Diagnostics and Recovery | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 13. Structured Logging | v1.1 | 1/1 | Complete | 2026-03-29 |
-| 14. Contract Foundation | v1.2 | 0/TBD | Not started | - |
+| 14. Contract Foundation | v1.2 | 0/3 | Planned | - |
 | 15. Fault Recovery and Diagnostics | v1.2 | 0/TBD | Not started | - |
 | 16. Hue Channel Position Editor | v1.2 | 0/TBD | Not started | - |
 | 17. Room Map UI | v1.2 | 0/TBD | Not started | - |
