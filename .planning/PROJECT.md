@@ -15,6 +15,7 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 - **Release gate:** QUAL-04 (60 dakika stabilite) APPROVED
 - **Archive refs:** `.planning/milestones/v1.0-ROADMAP.md`, `.planning/milestones/v1.0-REQUIREMENTS.md`
 - **v1.1 progress:** Phase 01 complete (2026-03-29) — tray-first shell, startup toggle Rust-authoritative, all UAT gaps closed
+- **v1.2 progress:** Phase 14 complete (2026-03-30) — all cross-boundary contracts defined (TS + Rust), verification script green
 
 ## Requirements
 
@@ -106,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after v1.2 milestone start*
+*Last updated: 2026-03-30 after Phase 14 (Contract Foundation) completion*
