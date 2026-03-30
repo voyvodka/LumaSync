@@ -186,7 +186,7 @@ Plans:
 | 11. Device Surface Integration | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 12. Diagnostics and Recovery | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 13. Structured Logging | v1.1 | 1/1 | Complete | 2026-03-29 |
-| 14. Contract Foundation | v1.2 | 3/3 | Complete   | 2026-03-30 |
+| 14. Contract Foundation | v1.2 | 3/3 | Complete    | 2026-03-30 |
 | 15. Fault Recovery and Diagnostics | v1.2 | 0/TBD | Not started | - |
 | 16. Hue Channel Position Editor | v1.2 | 0/TBD | Not started | - |
 | 17. Room Map UI | v1.2 | 0/TBD | Not started | - |
