@@ -5,6 +5,10 @@
  * and bridges shell persistence (window lifecycle + section restore).
  */
 
+// DEV PREVIEW — uncomment + comment out "export default App" below to preview
+// import { HueAreaPreview } from "./dev/HueAreaPreview";
+// export { HueAreaPreview as default };
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
@@ -111,7 +115,7 @@ function isSameTargetSet(a: HueRuntimeTarget[], b: HueRuntimeTarget[]): boolean 
 
 function App() {
   const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
-  const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.CONTROL);
+  const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [calibrationStep, setCalibrationStep] = useState<CalibrationOverlayStep>("editor");
   const [lightingMode, setLightingModeState] = useState<LightingModeConfig>({ kind: LIGHTING_MODE_KIND.OFF });
@@ -284,23 +288,29 @@ function App() {
         const state = await loadShellState();
         // Map old section IDs to new ones for backward compatibility
         const sectionMap: Record<string, SectionId> = {
-          general: SECTION_IDS.CONTROL,
-          calibration: SECTION_IDS.CALIBRATION,
-          "startup-tray": SECTION_IDS.SETTINGS,
-          language: SECTION_IDS.SETTINGS,
-          "about-logs": SECTION_IDS.SETTINGS,
-          telemetry: SECTION_IDS.SETTINGS,
-          device: SECTION_IDS.SETTINGS,
-          control: SECTION_IDS.CONTROL,
-          settings: SECTION_IDS.SETTINGS,
+          // Legacy IDs from persisted state before navigation restructure
+          general: SECTION_IDS.LIGHTS,
+          control: SECTION_IDS.LIGHTS,
+          calibration: SECTION_IDS.LED_SETUP,
+          device: SECTION_IDS.DEVICES,
+          settings: SECTION_IDS.SYSTEM,
+          "startup-tray": SECTION_IDS.SYSTEM,
+          language: SECTION_IDS.SYSTEM,
+          "about-logs": SECTION_IDS.SYSTEM,
+          telemetry: SECTION_IDS.SYSTEM,
+          // Current IDs (map to themselves)
+          lights: SECTION_IDS.LIGHTS,
+          "led-setup": SECTION_IDS.LED_SETUP,
+          devices: SECTION_IDS.DEVICES,
+          system: SECTION_IDS.SYSTEM,
         };
-        // On first launch keep the default CONTROL section.
+        // On first launch keep the default LIGHTS section.
         // On a page refresh (sessionStorage survives the reload) restore the last section.
         const isPageRefresh = sessionStorage.getItem("lumasync_session") === "1";
         sessionStorage.setItem("lumasync_session", "1");
 
         if (isPageRefresh) {
-          const mappedSection = sectionMap[state.lastSection] ?? SECTION_IDS.CONTROL;
+          const mappedSection = sectionMap[state.lastSection] ?? SECTION_IDS.LIGHTS;
           setActiveSection(mappedSection);
         }
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
@@ -341,14 +351,14 @@ function App() {
                 brightness: restoredMode.solid.brightness,
               });
             }
-          } catch {}
+          } catch { }
         }
 
         await initWindowLifecycle({
           onFirstCloseToTray: () => {
             console.info(
               "[LumaSync] Hint: The app is still running in the system tray. " +
-                "Click the tray icon to reopen settings.",
+              "Click the tray icon to reopen settings.",
             );
           },
         });
@@ -365,7 +375,7 @@ function App() {
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
     setActiveSection(sectionId);
-    try { await saveShellState({ lastSection: sectionId }); } catch {}
+    try { await saveShellState({ lastSection: sectionId }); } catch { }
   }, []);
 
   // Auto-open calibration when device connects for the first time
@@ -380,7 +390,7 @@ function App() {
     if (shouldOpen) {
       autoOpenTriggeredRef.current = true;
       setCalibrationStep("template");
-      setActiveSection(SECTION_IDS.CALIBRATION);
+      setActiveSection(SECTION_IDS.LED_SETUP);
     }
 
     wasConnectedRef.current = isConnected;
@@ -390,14 +400,14 @@ function App() {
     const entry = startCalibrationFromSettings(savedCalibration);
     if (entry.open) {
       setCalibrationStep(entry.step);
-      setActiveSection(SECTION_IDS.CALIBRATION);
+      setActiveSection(SECTION_IDS.LED_SETUP);
     }
   }, [savedCalibration]);
 
   const handleOutputTargetsChange = useCallback(async (targets: HueRuntimeTarget[]) => {
     const normalizedTargets = normalizeOutputTargets(targets);
     setSelectedOutputTargets(normalizedTargets);
-    try { await saveShellState({ lastOutputTargets: normalizedTargets }); } catch {}
+    try { await saveShellState({ lastOutputTargets: normalizedTargets }); } catch { }
   }, []);
 
   const handleLightingModeChange = useCallback(
