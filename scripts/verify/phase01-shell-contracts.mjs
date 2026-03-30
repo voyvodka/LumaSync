@@ -48,18 +48,11 @@ const REQUIRED_TRAY_IDS = [
 // Required sidebar section ID values (main nav)
 // ---------------------------------------------------------------------------
 const REQUIRED_SECTION_IDS = [
-  "control",
-  "calibration",
-  "settings",
-];
-
-// ---------------------------------------------------------------------------
-// Required settings tab ID values
-// ---------------------------------------------------------------------------
-const REQUIRED_SETTINGS_TAB_IDS = [
-  "device",
+  "lights",
+  "led-setup",
+  "devices",
   "system",
-  "diagnostics",
+  "room-map",
 ];
 
 // ---------------------------------------------------------------------------
@@ -147,16 +140,6 @@ for (const id of REQUIRED_SECTION_IDS) {
   );
 }
 
-// Check settings tab IDs
-console.log("\n[ Settings tab IDs ]");
-for (const id of REQUIRED_SETTINGS_TAB_IDS) {
-  check(
-    source.includes(`"${id}"`),
-    `settings tab id "${id}" defined`,
-    `MISSING settings tab id "${id}"`
-  );
-}
-
 // Check ShellState fields
 console.log("\n[ ShellState fields ]");
 for (const field of REQUIRED_STATE_FIELDS) {
@@ -172,9 +155,17 @@ console.log("\n[ SECTION_ORDER completeness ]");
 const orderMatch = source.match(/SECTION_ORDER[^=]*=\s*\[([^\]]+)\]/s);
 if (orderMatch) {
   const orderBlock = orderMatch[1];
+  const ID_TO_CONST = {
+    "lights": "LIGHTS",
+    "led-setup": "LED_SETUP",
+    "devices": "DEVICES",
+    "system": "SYSTEM",
+    "room-map": "ROOM_MAP",
+  };
   for (const id of REQUIRED_SECTION_IDS) {
+    const constName = ID_TO_CONST[id] || id.toUpperCase();
     check(
-      orderBlock.includes(`SECTION_IDS.${id.toUpperCase()}`),
+      orderBlock.includes(`SECTION_IDS.${constName}`),
       `"${id}" present in SECTION_ORDER`,
       `MISSING "${id}" from SECTION_ORDER`
     );
