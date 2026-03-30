@@ -1,35 +1,61 @@
 # Requirements: LumaSync
 
-**Defined:** 2026-03-21
+**Defined:** 2026-03-30
 **Core Value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
 
-## v1.1 Requirements
+## v1.1 Requirements (Archived — carried incomplete items to v1.2)
+
+All v1.1 requirements: see `.planning/milestones/` for archive.
+
+Complete: HUE-01, HUE-02, HUE-03, HUE-04, HUE-05, HUE-06, HUE-07
+Carried to v1.2: HUE-08, HUX-01, HUX-02, HDR-01, HDR-02
+
+---
+
+## v1.2 Requirements
 
 Requirements for this milestone. Each maps to roadmap phases.
 
-### Hue Pairing
+### Oda Haritası (ROOM)
 
-- [x] **HUE-01**: User can discover a Philips Hue Bridge automatically and also add bridge by manual IP fallback.
-- [x] **HUE-02**: User can pair the app with the bridge and persist required credentials for reconnect-safe reuse.
-- [x] **HUE-03**: User can list and select available Hue Entertainment areas from the paired bridge.
-- [x] **HUE-04**: User can see whether selected area/session is stream-ready before starting output.
+- [ ] **ROOM-01**: User can create a 2D top-down room map with configurable room dimensions (width × depth in meters)
+- [ ] **ROOM-02**: User can add furniture items (desk, sofa, TV stand, shelf, etc.) to the room as named reference objects with adjustable size and position
+- [ ] **ROOM-03**: User can define named zones within the room (e.g. "TV Area", "Desk Zone") and assign lights to them
+- [ ] **ROOM-04**: User can add Hue light sources to the map with representative shape and size (bulb, lightbar, gradient strip)
+- [ ] **ROOM-05**: User can add a USB LED strip to the map with configurable length and wall placement
+- [ ] **ROOM-06**: User can designate the TV/monitor as the center reference anchor of the room map
+- [ ] **ROOM-07**: User can save and reload the room map (persisted via plugin-store)
+- [ ] **ROOM-08**: User can upload a custom background image for the room map (floor plan photo or illustration)
 
-### Hue Stream Runtime
+### Hue Kanal Pozisyon Editörü (CHAN)
 
-- [x] **HUE-05**: User can start Hue Entertainment streaming for the selected area from app mode controls.
-- [x] **HUE-06**: User can keep Hue stream alive during runtime with stable packet flow and keep-alive behavior.
-- [x] **HUE-07**: User can stop Hue stream cleanly and restore bridge/device state without manual cleanup.
-- [ ] **HUE-08**: User can continue session after transient Hue stream faults without restarting the app.
+- [ ] **CHAN-01**: User can see all Hue Entertainment Area channels overlaid on the room map at their current x/y positions
+- [ ] **CHAN-02**: User can drag individual Hue channels on the room map to update their x/y position
+- [ ] **CHAN-03**: User can set the height (z-axis) for each Hue channel via a per-channel slider
+- [ ] **CHAN-04**: User can select multiple channels and move them together as a group
+- [ ] **CHAN-05** *(optional — experimental)*: User can write edited channel positions back to the Hue bridge (requires stream to be stopped; API behavior unconfirmed — validation phase required)
 
-### Device UX Integration
+### LED Zone Otomatik Türetme (ZONE)
 
-- [ ] **HUX-01**: User can manage Hue connection, area selection, and stream status from existing Device settings surfaces.
-- [ ] **HUX-02**: User can switch output target (USB vs Hue) without losing existing calibration/mode configuration.
+- [ ] **ZONE-01**: User can auto-derive Ambilight screen-edge zone assignments from the room map positions of lights relative to the TV anchor
+- [ ] **ZONE-02**: User can review and confirm the derived zone assignments in a preview step before applying
+- [ ] **ZONE-03**: User can apply confirmed zone assignments to the active LED calibration configuration
 
-### Diagnostics & Recovery
+### Hue Standalone Modu (STND)
 
-- [ ] **HDR-01**: User can see coded Hue-related error states with actionable recovery hints in UI.
-- [ ] **HDR-02**: User can inspect basic Hue stream health signals for troubleshooting during runtime.
+- [ ] **STND-01**: User can start Hue Entertainment streaming without a USB LED strip connected
+- [ ] **STND-02**: App bypasses USB-dependent setup steps automatically when running in Hue-only mode
+- [ ] **STND-03**: User can switch active output target between USB and Hue automatically based on connected hardware
+
+### v1.1 Carry-overs
+
+- [ ] **HUE-08**: User can continue a Hue session after transient stream faults without restarting the app
+- [ ] **HUX-01**: User can manage Hue connection, area selection, and stream status from existing Device settings surfaces
+- [ ] **HUX-02**: User can switch output target (USB vs Hue) without losing saved calibration or active mode configuration
+- [ ] **HDR-01**: User can see coded Hue-related error states with actionable recovery hints in the UI
+- [ ] **HDR-02**: User can inspect basic Hue stream health signals for troubleshooting during runtime
+
+---
 
 ## Future Requirements
 
@@ -45,17 +71,26 @@ Deferred to future milestones.
 - **MMON-01**: User can configure multi-monitor and multi-controller orchestration.
 - **AUTO-01**: User can automate mode/profile switching via local API hooks.
 - **MOB-01**: User can control the system from a mobile companion app.
+- **ROOM-EXT-01**: User can manage multiple rooms with separate light source sets.
+
+---
 
 ## Out of Scope
 
-Explicitly excluded for v1.1.
+Explicitly excluded for v1.2.
 
 | Feature | Reason |
 |---------|--------|
-| Home Assistant bridge emulation | Advanced compatibility target; not required for initial Hue milestone value |
-| Multi-bridge synchronized streaming | Adds orchestration complexity; defer until single-bridge path is stable |
-| Cloud account sync for Hue credentials | Increases security/privacy scope beyond local-first milestone |
-| Full plugin/effect marketplace integration | Not needed to validate core Hue entertainment flow |
+| Isometric / 3D room renderer | 2–3× dev cost, WebGL WebView2 risks, 2D top-down is sufficient for zone derivation |
+| Automatic furniture recognition (photo/AI) | Out of scope for lighting utility |
+| Scale-based physics simulation | Not needed for light positioning |
+| Hue write-back to bridge (CHAN-05) if API unconfirmed | Moved to experimental/optional — skip if PUT schema blocked |
+| Multi-room support | Defer until single-room path is proven |
+| Home Assistant bridge emulation | Advanced compatibility; defer |
+| Multi-bridge synchronized streaming | Adds orchestration complexity; defer |
+| Cloud sync for room map / credentials | Local-first design |
+
+---
 
 ## Traceability
 
@@ -63,24 +98,36 @@ Which requirements map to which phases. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| HUE-01 | Phase 9 | Complete |
-| HUE-02 | Phase 9 | Complete |
-| HUE-03 | Phase 9 | Complete |
-| HUE-04 | Phase 9 | Complete |
-| HUE-05 | Phase 10 | Complete |
-| HUE-06 | Phase 10 | Complete |
-| HUE-07 | Phase 10 | Complete |
-| HUE-08 | Phase 12 | Pending |
-| HUX-01 | Phase 11 | Pending |
-| HUX-02 | Phase 11 | Pending |
-| HDR-01 | Phase 12 | Pending |
-| HDR-02 | Phase 12 | Pending |
+| HUE-08 | TBD | Pending |
+| HUX-01 | TBD | Pending |
+| HUX-02 | TBD | Pending |
+| HDR-01 | TBD | Pending |
+| HDR-02 | TBD | Pending |
+| ROOM-01 | TBD | Pending |
+| ROOM-02 | TBD | Pending |
+| ROOM-03 | TBD | Pending |
+| ROOM-04 | TBD | Pending |
+| ROOM-05 | TBD | Pending |
+| ROOM-06 | TBD | Pending |
+| ROOM-07 | TBD | Pending |
+| ROOM-08 | TBD | Pending |
+| CHAN-01 | TBD | Pending |
+| CHAN-02 | TBD | Pending |
+| CHAN-03 | TBD | Pending |
+| CHAN-04 | TBD | Pending |
+| CHAN-05 | TBD | Pending (optional) |
+| ZONE-01 | TBD | Pending |
+| ZONE-02 | TBD | Pending |
+| ZONE-03 | TBD | Pending |
+| STND-01 | TBD | Pending |
+| STND-02 | TBD | Pending |
+| STND-03 | TBD | Pending |
 
 **Coverage:**
-- v1.1 requirements: 12 total
-- Mapped to phases: 12
-- Unmapped: 0 ✓
+- v1.2 requirements: 24 total (23 mandatory + 1 optional)
+- Mapped to phases: 0 (roadmap pending)
+- Unmapped: 24 ⚠
 
 ---
-*Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after v1.1 roadmap mapping*
+*Requirements defined: 2026-03-30*
+*Last updated: 2026-03-30 after v1.2 milestone definition*
