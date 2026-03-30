@@ -66,6 +66,8 @@ const REQUIRED_STATE_FIELDS = [
   "lastSection",
   "trayHintShown",
   "startupEnabled",
+  "roomMap",
+  "roomMapVersion",
 ];
 
 // ---------------------------------------------------------------------------
@@ -175,6 +177,81 @@ if (orderMatch) {
     source.includes("SECTION_ORDER"),
     "SECTION_ORDER exported",
     "SECTION_ORDER array not found"
+  );
+}
+
+// Read hue contract file
+const HUE_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/hue.ts");
+let hueSource;
+try {
+  hueSource = readFileSync(HUE_CONTRACT_FILE, "utf-8");
+} catch (err) {
+  console.error(`\nWARN: Cannot read hue contract file: ${HUE_CONTRACT_FILE}`);
+  hueSource = "";
+}
+
+console.log("\n[ Hue channel position commands ]");
+const REQUIRED_HUE_CHANNEL_COMMANDS = [
+  "update_hue_channel_positions",
+];
+for (const cmd of REQUIRED_HUE_CHANNEL_COMMANDS) {
+  check(
+    hueSource.includes(`"${cmd}"`),
+    `hue command "${cmd}" defined`,
+    `MISSING hue command "${cmd}" in hue.ts`
+  );
+}
+
+const REQUIRED_HUE_CHANNEL_STATUS = [
+  "HUE_CHANNEL_POSITIONS_UPDATED",
+  "HUE_CHANNEL_POSITIONS_FAILED",
+];
+for (const status of REQUIRED_HUE_CHANNEL_STATUS) {
+  check(
+    hueSource.includes(`"${status}"`),
+    `hue status "${status}" defined`,
+    `MISSING hue status "${status}" in hue.ts`
+  );
+}
+
+// Read room map contract file
+const ROOM_MAP_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/roomMap.ts");
+let roomMapSource;
+try {
+  roomMapSource = readFileSync(ROOM_MAP_CONTRACT_FILE, "utf-8");
+} catch (err) {
+  console.error(`\nWARN: Cannot read room map contract file: ${ROOM_MAP_CONTRACT_FILE}`);
+  roomMapSource = "";
+}
+
+console.log("\n[ Room map contract types ]");
+const REQUIRED_ROOM_MAP_TYPES = [
+  "RoomDimensions",
+  "HueChannelPlacement",
+  "UsbStripPlacement",
+  "FurniturePlacement",
+  "TvAnchorPlacement",
+  "ZoneDefinition",
+  "RoomMapConfig",
+];
+for (const typeName of REQUIRED_ROOM_MAP_TYPES) {
+  check(
+    roomMapSource.includes(`export interface ${typeName}`),
+    `room map type "${typeName}" exported`,
+    `MISSING room map type "${typeName}" in roomMap.ts`
+  );
+}
+
+console.log("\n[ Room map commands ]");
+const REQUIRED_ROOM_MAP_COMMANDS = [
+  "save_room_map",
+  "load_room_map",
+];
+for (const cmd of REQUIRED_ROOM_MAP_COMMANDS) {
+  check(
+    roomMapSource.includes(`"${cmd}"`),
+    `room map command "${cmd}" defined`,
+    `MISSING room map command "${cmd}" in roomMap.ts`
   );
 }
 
