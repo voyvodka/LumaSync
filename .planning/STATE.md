@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
-status: executing
-stopped_at: Completed 14-01-PLAN.md
-last_updated: "2026-03-30T13:48:53.831Z"
+status: verifying
+stopped_at: Completed 14-03-PLAN.md
+last_updated: "2026-03-30T13:53:24.866Z"
 last_activity: 2026-03-30
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
 Phase: 14 (contract-foundation) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-30
 
 Progress: [░░░░░░░░░░] 0%
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 14-contract-foundation]: RoomMapConfig uses separate typed arrays (hueChannels, usbStrips, furniture) per D-02a, maps cleanly to Rust structs
 - [Phase 14-contract-foundation]: HueChannelPlacement x/y/z use Hue native range [-1.0, 1.0] for direct bridge write-back per D-01a
 - [Phase 14-contract-foundation]: All new ShellState fields (roomMap, roomMapVersion) are optional to avoid breaking existing app.json deserialization
+- [Phase 14-contract-foundation]: ID_TO_CONST mapping handles hyphenated section IDs (led-setup, room-map) that break naïve toUpperCase() matching in SECTION_ORDER completeness check
 
 ## Accumulated Context
 
@@ -65,6 +66,6 @@ Progress: [░░░░░░░░░░] 0%
 
 ### Session Continuity
 
-Last session: 2026-03-30T13:48:53.828Z
-Stopped at: Completed 14-01-PLAN.md
+Last session: 2026-03-30T13:53:24.863Z
+Stopped at: Completed 14-03-PLAN.md
 Resume file: None
