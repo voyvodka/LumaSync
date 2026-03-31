@@ -118,7 +118,12 @@ Plans:
   2. User can see a specific error code with a plain-language explanation and a suggested action (e.g. "Bridge unreachable — check network connection") when a Hue fault occurs.
   3. User can open the telemetry panel during an active Hue stream and see stream health signals (packet rate, last error, retry count).
   4. User can observe that after maximum retries are exhausted, the app enters a stopped state with a recoverable error message rather than crashing.
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 15-01-PLAN.md — Frontend contracts: fault code taxonomy, telemetry type extension, i18n keys
+- [ ] 15-02-PLAN.md — Rust backend: reconnect monitor, Hue telemetry snapshot, simulate_hue_fault
+- [ ] 15-03-PLAN.md — Frontend UI: TelemetrySection Hue subsection, HueFaultSimulator dev tool
 
 ### Phase 16: Hue Channel Position Editor
 **Goal**: Users can see their Hue Entertainment Area channels positioned on the map, drag them to update positions, and inspect height per channel.
@@ -187,7 +192,7 @@ Plans:
 | 12. Diagnostics and Recovery | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 13. Structured Logging | v1.1 | 1/1 | Complete | 2026-03-29 |
 | 14. Contract Foundation | v1.2 | 3/3 | Complete    | 2026-03-30 |
-| 15. Fault Recovery and Diagnostics | v1.2 | 0/TBD | Not started | - |
+| 15. Fault Recovery and Diagnostics | v1.2 | 0/3 | Planned | - |
 | 16. Hue Channel Position Editor | v1.2 | 0/TBD | Not started | - |
 | 17. Room Map UI | v1.2 | 0/TBD | Not started | - |
 | 18. Hue Standalone Mode | v1.2 | 0/TBD | Not started | - |
