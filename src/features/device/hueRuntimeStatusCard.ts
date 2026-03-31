@@ -36,11 +36,29 @@ function resolveVariant(status: HueRuntimeStatus): HueRuntimeStatusCardModel["va
   return "info";
 }
 
-function deriveFamilyActionHints(code: string | null | undefined): HueRuntimeActionHint[] {
+export function deriveFamilyActionHints(code: string | null | undefined): HueRuntimeActionHint[] {
   if (typeof code !== "string" || code.length === 0) {
     return [];
   }
 
+  // New HUE-* fault code families (take priority — more specific)
+  if (code.startsWith("HUE-NET-")) {
+    return [HUE_RUNTIME_ACTION_HINT.RECONNECT];
+  }
+
+  if (code.startsWith("HUE-AUTH-")) {
+    return [HUE_RUNTIME_ACTION_HINT.REPAIR];
+  }
+
+  if (code.startsWith("HUE-STR-")) {
+    return [HUE_RUNTIME_ACTION_HINT.RETRY, HUE_RUNTIME_ACTION_HINT.ADJUST_AREA];
+  }
+
+  if (code.startsWith("HUE-CFG-")) {
+    return [HUE_RUNTIME_ACTION_HINT.REVALIDATE, HUE_RUNTIME_ACTION_HINT.ADJUST_AREA];
+  }
+
+  // Existing legacy families
   if (code.startsWith("AUTH_INVALID_")) {
     return [HUE_RUNTIME_ACTION_HINT.REPAIR];
   }
