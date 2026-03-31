@@ -18,3 +18,22 @@ export interface RuntimeTelemetryDisplayModel {
   sendFpsText: string;
   queueHealthLabel: TelemetryQueueHealth;
 }
+
+export interface HueTelemetrySnapshot {
+  state: string;
+  uptimeSecs: number | null;
+  packetRate: number;
+  lastErrorCode: string | null;
+  lastErrorAtSecs: number | null;
+  totalReconnects: number;
+  successfulReconnects: number;
+  failedReconnects: number;
+  dtlsActive: boolean;
+  dtlsCipher: string | null;
+  dtlsConnectedAtSecs: number | null;
+}
+
+export interface FullTelemetrySnapshot {
+  usb: RuntimeTelemetrySnapshot;
+  hue: HueTelemetrySnapshot | null;
+}

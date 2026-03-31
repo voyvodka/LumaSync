@@ -5,7 +5,7 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
 } from "../../shared/contracts/hue";
-import { buildHueRuntimeStatusCard } from "./hueRuntimeStatusCard";
+import { buildHueRuntimeStatusCard, deriveFamilyActionHints } from "./hueRuntimeStatusCard";
 
 function createStatus(partial: Partial<HueRuntimeStatus>): HueRuntimeStatus {
   return {
@@ -82,5 +82,116 @@ describe("buildHueRuntimeStatusCard", () => {
     });
 
     expect(model.actionHints).toEqual([]);
+  });
+
+  it("produces variant: error when state is Failed with HUE-NET code", () => {
+    const model = buildHueRuntimeStatusCard({
+      status: createStatus({
+        state: "Failed",
+        code: "HUE-NET-01",
+      }),
+    });
+
+    expect(model.variant).toBe("error");
+    expect(model.actionHints).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
+  });
+});
+
+describe("deriveFamilyActionHints", () => {
+  describe("HUE-NET family (new)", () => {
+    it("returns [RECONNECT] for HUE-NET-01", () => {
+      expect(deriveFamilyActionHints("HUE-NET-01")).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
+    });
+
+    it("returns [RECONNECT] for HUE-NET-04", () => {
+      expect(deriveFamilyActionHints("HUE-NET-04")).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
+    });
+
+    it("returns [RECONNECT] for any HUE-NET- prefix codes", () => {
+      expect(deriveFamilyActionHints("HUE-NET-02")).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
+      expect(deriveFamilyActionHints("HUE-NET-03")).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
+    });
+  });
+
+  describe("HUE-AUTH family (new)", () => {
+    it("returns [REPAIR] for HUE-AUTH-01", () => {
+      expect(deriveFamilyActionHints("HUE-AUTH-01")).toEqual([HUE_RUNTIME_ACTION_HINT.REPAIR]);
+    });
+
+    it("returns [REPAIR] for HUE-AUTH-03", () => {
+      expect(deriveFamilyActionHints("HUE-AUTH-03")).toEqual([HUE_RUNTIME_ACTION_HINT.REPAIR]);
+    });
+
+    it("returns [REPAIR] for HUE-AUTH-02", () => {
+      expect(deriveFamilyActionHints("HUE-AUTH-02")).toEqual([HUE_RUNTIME_ACTION_HINT.REPAIR]);
+    });
+  });
+
+  describe("HUE-STR family (new)", () => {
+    it("returns [RETRY, ADJUST_AREA] for HUE-STR-01", () => {
+      expect(deriveFamilyActionHints("HUE-STR-01")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.RETRY,
+        HUE_RUNTIME_ACTION_HINT.ADJUST_AREA,
+      ]);
+    });
+
+    it("returns [RETRY, ADJUST_AREA] for HUE-STR-04", () => {
+      expect(deriveFamilyActionHints("HUE-STR-04")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.RETRY,
+        HUE_RUNTIME_ACTION_HINT.ADJUST_AREA,
+      ]);
+    });
+  });
+
+  describe("HUE-CFG family (new)", () => {
+    it("returns [REVALIDATE, ADJUST_AREA] for HUE-CFG-01", () => {
+      expect(deriveFamilyActionHints("HUE-CFG-01")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.REVALIDATE,
+        HUE_RUNTIME_ACTION_HINT.ADJUST_AREA,
+      ]);
+    });
+
+    it("returns [REVALIDATE, ADJUST_AREA] for HUE-CFG-02", () => {
+      expect(deriveFamilyActionHints("HUE-CFG-02")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.REVALIDATE,
+        HUE_RUNTIME_ACTION_HINT.ADJUST_AREA,
+      ]);
+    });
+  });
+
+  describe("Existing families (regression)", () => {
+    it("AUTH_INVALID_ returns [REPAIR]", () => {
+      expect(deriveFamilyActionHints("AUTH_INVALID_CREDENTIALS")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.REPAIR,
+      ]);
+    });
+
+    it("CONFIG_NOT_READY_ returns [REVALIDATE, ADJUST_AREA]", () => {
+      expect(deriveFamilyActionHints("CONFIG_NOT_READY_GATE_BLOCKED")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.REVALIDATE,
+        HUE_RUNTIME_ACTION_HINT.ADJUST_AREA,
+      ]);
+    });
+
+    it("TRANSIENT_ returns [RETRY, RECONNECT]", () => {
+      expect(deriveFamilyActionHints("TRANSIENT_RETRY_SCHEDULED")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.RETRY,
+        HUE_RUNTIME_ACTION_HINT.RECONNECT,
+      ]);
+    });
+  });
+
+  describe("Edge cases", () => {
+    it("returns [] for empty string", () => {
+      expect(deriveFamilyActionHints("")).toEqual([]);
+    });
+
+    it("returns [] for null", () => {
+      expect(deriveFamilyActionHints(null)).toEqual([]);
+    });
+
+    it("returns [] for unknown code", () => {
+      expect(deriveFamilyActionHints("UNKNOWN_CODE")).toEqual([]);
+    });
   });
 });

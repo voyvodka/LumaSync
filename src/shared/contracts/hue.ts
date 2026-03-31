@@ -124,6 +124,28 @@ export const HUE_RUNTIME_STATUS_FAMILY = {
   CONFIG_NOT_READY: "CONFIG_NOT_READY_*",
 } as const;
 
+export const HUE_FAULT_CODES = {
+  // Network/connection family (HUE-NET-xx)
+  NET_BRIDGE_UNREACHABLE: "HUE-NET-01",
+  NET_DTLS_HANDSHAKE_FAILED: "HUE-NET-02",
+  NET_DTLS_SEND_TIMEOUT: "HUE-NET-03",
+  NET_DTLS_UNEXPECTED_EXIT: "HUE-NET-04",
+  // Auth family (HUE-AUTH-xx)
+  AUTH_CREDENTIALS_INVALID: "HUE-AUTH-01",
+  AUTH_PAIRING_BROKEN: "HUE-AUTH-02",
+  AUTH_FORBIDDEN_403: "HUE-AUTH-03",
+  // Stream runtime family (HUE-STR-xx)
+  STR_AREA_NOT_FOUND: "HUE-STR-01",
+  STR_THROTTLE_DETECTED: "HUE-STR-02",
+  STR_PACKET_SEND_FAILED: "HUE-STR-03",
+  STR_SENDER_EXIT: "HUE-STR-04",
+  // Configuration family (HUE-CFG-xx)
+  CFG_NO_AREA_SELECTED: "HUE-CFG-01",
+  CFG_BRIDGE_IP_CHANGED: "HUE-CFG-02",
+} as const;
+
+export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
+
 export type HueRuntimeTarget = "hue" | "usb";
 
 export interface HueRuntimeTargetTelemetryRow {
