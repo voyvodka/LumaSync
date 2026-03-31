@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SECTION_IDS } from "../../../shared/contracts/shell";
 import { SettingsLayout } from "../../settings/SettingsLayout";
 
-const getRuntimeTelemetrySnapshotMock = vi.fn();
+const getFullTelemetrySnapshotMock = vi.fn();
 
 vi.mock("../telemetryApi", () => ({
-  getRuntimeTelemetrySnapshot: () => getRuntimeTelemetrySnapshotMock(),
+  getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -26,13 +26,17 @@ vi.mock("react-i18next", () => ({
         "telemetry.states.loading": "Loading telemetry...",
         "telemetry.states.empty": "No runtime activity yet.",
         "telemetry.states.error": "Telemetry unavailable.",
-        "settings.sections.general": "General",
-        "settings.sections.startupTray": "Startup & Tray",
-        "settings.sections.language": "Language",
-        "settings.sections.aboutLogs": "About & Logs",
-        "settings.sections.telemetry": "Telemetry",
-        "settings.sections.device": "Device",
-        "settings.sections.calibration": "Calibration",
+        "telemetry.hue.title": "Hue Stream",
+        "telemetry.hue.status": "Status",
+        "telemetry.hue.packetRate": "Packet Rate",
+        "telemetry.hue.lastError": "Last Error",
+        "telemetry.hue.reconnects": "Reconnects",
+        "telemetry.hue.dtlsCipher": "DTLS Cipher",
+        "telemetry.hue.connectionAge": "Connection Age",
+        "settings.sections.lights": "Lights",
+        "settings.sections.led-setup": "LED Setup",
+        "settings.sections.devices": "Devices",
+        "settings.sections.system": "System",
         "general.title": "General",
         "general.description": "General application settings.",
         "general.mode.title": "LED mode",
@@ -54,10 +58,9 @@ import { TelemetrySection } from "./TelemetrySection";
 describe("TelemetrySection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getRuntimeTelemetrySnapshotMock.mockResolvedValue({
-      captureFps: 60,
-      sendFps: 58,
-      queueHealth: "healthy",
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: { captureFps: 60, sendFps: 58, queueHealth: "healthy" },
+      hue: null,
     });
   });
 
@@ -69,7 +72,7 @@ describe("TelemetrySection", () => {
     render(<TelemetrySection />);
 
     await waitFor(() => {
-      expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+      expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
     });
 
     expect(screen.getByText("Capture FPS")).toBeInTheDocument();
@@ -89,19 +92,19 @@ describe("TelemetrySection", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(750);
+      await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
 
     firstRender.unmount();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await vi.advanceTimersByTimeAsync(4000);
     });
-    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
     expect(clearIntervalSpy).toHaveBeenCalled();
 
     render(<TelemetrySection />);
@@ -109,18 +112,56 @@ describe("TelemetrySection", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(3);
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(3);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(750);
+      await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(getRuntimeTelemetrySnapshotMock).toHaveBeenCalledTimes(4);
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(4);
 
     clearIntervalSpy.mockRestore();
   });
 
+  it("renders Hue Stream section when hue telemetry is present", async () => {
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: { captureFps: 60, sendFps: 58, queueHealth: "healthy" },
+      hue: {
+        state: "Running",
+        uptimeSecs: 754,
+        packetRate: 18.4,
+        lastErrorCode: null,
+        lastErrorAtSecs: null,
+        totalReconnects: 0,
+        successfulReconnects: 0,
+        failedReconnects: 0,
+        dtlsActive: true,
+        dtlsCipher: "PSK-AES128-GCM-SHA256",
+        dtlsConnectedAtSecs: 754,
+      },
+    });
+
+    render(<TelemetrySection />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Hue Stream")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("18.4 pkt/s")).toBeInTheDocument();
+    expect(screen.getByText("PSK-AES128-GCM-SHA256")).toBeInTheDocument();
+  });
+
+  it("does not render Hue section when hue is null", async () => {
+    render(<TelemetrySection />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Capture FPS")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Hue Stream")).not.toBeInTheDocument();
+  });
+
   it("renders error fallback when telemetry request fails", async () => {
-    getRuntimeTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
+    getFullTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
 
     render(<TelemetrySection />);
 
@@ -130,11 +171,27 @@ describe("TelemetrySection", () => {
   });
 });
 
+vi.mock("../../tray/trayController", () => ({
+  getStartupEnabled: vi.fn().mockResolvedValue(false),
+  listenStartupToggle: vi.fn().mockResolvedValue(() => {}),
+  setStartupTrayChecked: vi.fn().mockResolvedValue(undefined),
+  toggleStartup: vi.fn().mockResolvedValue(true),
+}));
+
+vi.mock("../../i18n/i18n", () => ({
+  I18N_SUPPORTED_LANGUAGES: ["en", "tr"],
+  changeLanguage: vi.fn(),
+}));
+
+vi.mock("../../persistence/shellStore", () => ({
+  shellStore: { save: vi.fn() },
+}));
+
 describe("Settings telemetry wiring", () => {
-  it("renders TelemetrySection content when diagnostics section is active", async () => {
+  it("renders TelemetrySection when system section is active", async () => {
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.SETTINGS}
+        activeSection={SECTION_IDS.SYSTEM}
         onSectionChange={vi.fn()}
         calibrationStep="editor"
         lightingMode={{ kind: "off" }}
@@ -152,19 +209,18 @@ describe("Settings telemetry wiring", () => {
       />,
     );
 
-    // Telemetry is inside Settings/Diagnostics tab
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: /Device/i })).toBeInTheDocument();
+      expect(screen.getByText("Runtime telemetry")).toBeInTheDocument();
     });
   });
 
-  it("preserves existing default section flow while settings tab remains selectable", async () => {
+  it("system nav button triggers section change to SYSTEM", async () => {
     const user = userEvent.setup();
     const onSectionChange = vi.fn();
 
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.CONTROL}
+        activeSection={SECTION_IDS.LIGHTS}
         onSectionChange={onSectionChange}
         calibrationStep="editor"
         lightingMode={{ kind: "off" }}
@@ -182,8 +238,8 @@ describe("Settings telemetry wiring", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Settings/i }));
+    await user.click(screen.getByRole("button", { name: /System/i }));
 
-    expect(onSectionChange).toHaveBeenCalledWith(SECTION_IDS.SETTINGS);
+    expect(onSectionChange).toHaveBeenCalledWith(SECTION_IDS.SYSTEM);
   });
 });
