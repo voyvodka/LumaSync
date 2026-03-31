@@ -346,6 +346,27 @@
         "timeout": {
           "title": "Stop timeout",
           "body": "Stop reached timeout. You can retry stop without restarting the app."
+        },
+        "reconnectingTitle": "Reconnecting to Hue bridge",
+        "reconnectingBody": "Retries left: {{remaining}} | Next attempt: {{nextMs}} ms",
+        "failedTitle": "Hue stream failed",
+        "failedBody": "[{{code}}] {{description}} — {{actionHint}}",
+        "retryStreamAction": "Retry Stream",
+        "stopStreamAction": "Stop Stream",
+        "faults": {
+          "HUE-NET-01": { "description": "Bridge unreachable", "hint": "Check your network connection" },
+          "HUE-NET-02": { "description": "DTLS handshake failed", "hint": "Try restarting the stream" },
+          "HUE-NET-03": { "description": "DTLS send timeout", "hint": "Check network latency and bridge proximity" },
+          "HUE-NET-04": { "description": "DTLS connection dropped unexpectedly", "hint": "Retry to reconnect" },
+          "HUE-AUTH-01": { "description": "Credentials are invalid", "hint": "Re-pair your Hue bridge" },
+          "HUE-AUTH-02": { "description": "Bridge pairing is broken", "hint": "Press the bridge button and pair again" },
+          "HUE-AUTH-03": { "description": "Bridge rejected the request (403)", "hint": "Re-pair to refresh credentials" },
+          "HUE-STR-01": { "description": "Entertainment area not found", "hint": "Select a valid area in Device settings" },
+          "HUE-STR-02": { "description": "Stream throttle detected", "hint": "Reduce stream frequency or check bridge load" },
+          "HUE-STR-03": { "description": "Packet send failed", "hint": "Check network stability" },
+          "HUE-STR-04": { "description": "Sender exited unexpectedly", "hint": "Retry stream" },
+          "HUE-CFG-01": { "description": "No entertainment area selected", "hint": "Choose an area in Device settings" },
+          "HUE-CFG-02": { "description": "Bridge IP has changed", "hint": "Update bridge IP in Device settings" }
         }
       }
     }
@@ -367,6 +388,20 @@
       "loading": "Loading telemetry...",
       "empty": "No runtime activity yet.",
       "error": "Telemetry unavailable."
+    },
+    "hue": {
+      "title": "Hue Stream",
+      "status": "Status",
+      "packetRate": "Packet Rate",
+      "lastError": "Last Error",
+      "reconnects": "Reconnects",
+      "dtlsCipher": "DTLS Cipher",
+      "connectionAge": "Connection Age",
+      "uptimeFormat": "{{minutes}} min {{seconds}} sec",
+      "packetRateFormat": "{{rate}} pkt/s",
+      "reconnectsFormat": "{{total}} ({{success}} successful, {{failed}} failed)",
+      "noError": "—",
+      "errorAgo": "{{code}} — {{minutes}} min ago"
     }
   },
   "calibration": {

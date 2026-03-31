@@ -346,6 +346,27 @@
         "timeout": {
           "title": "Durdurma zaman aşımı",
           "body": "Durdurma zaman aşımına ulaştı. Uygulamayı yeniden başlatmadan durdurmayı tekrar deneyebilirsin."
+        },
+        "reconnectingTitle": "Hue bridge'e yeniden bağlanılıyor",
+        "reconnectingBody": "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
+        "failedTitle": "Hue stream başarısız oldu",
+        "failedBody": "[{{code}}] {{description}} — {{actionHint}}",
+        "retryStreamAction": "Yeniden Dene",
+        "stopStreamAction": "Durdur",
+        "faults": {
+          "HUE-NET-01": { "description": "Bridge ulaşılamıyor", "hint": "Ağ bağlantınızı kontrol edin" },
+          "HUE-NET-02": { "description": "DTLS el sıkışma başarısız", "hint": "Stream'i yeniden başlatmayı deneyin" },
+          "HUE-NET-03": { "description": "DTLS gönderim zaman aşımı", "hint": "Ağ gecikmesini ve bridge yakınlığını kontrol edin" },
+          "HUE-NET-04": { "description": "DTLS bağlantısı beklenmedik şekilde kapandı", "hint": "Yeniden bağlanmayı deneyin" },
+          "HUE-AUTH-01": { "description": "Kimlik bilgileri geçersiz", "hint": "Hue bridge'inizi yeniden eşleştirin" },
+          "HUE-AUTH-02": { "description": "Bridge eşleştirmesi bozulmuş", "hint": "Bridge düğmesine basın ve tekrar eşleştirin" },
+          "HUE-AUTH-03": { "description": "Bridge isteği reddetti (403)", "hint": "Kimlik bilgilerini yenilemek için yeniden eşleştirin" },
+          "HUE-STR-01": { "description": "Entertainment alanı bulunamadı", "hint": "Cihaz ayarlarından geçerli bir alan seçin" },
+          "HUE-STR-02": { "description": "Stream kısıtlaması algılandı", "hint": "Stream frekansını azaltın veya bridge yükünü kontrol edin" },
+          "HUE-STR-03": { "description": "Paket gönderimi başarısız", "hint": "Ağ kararlılığını kontrol edin" },
+          "HUE-STR-04": { "description": "Gönderici beklenmedik şekilde sonlandı", "hint": "Stream'i yeniden deneyin" },
+          "HUE-CFG-01": { "description": "Entertainment alanı seçilmemiş", "hint": "Cihaz ayarlarından bir alan seçin" },
+          "HUE-CFG-02": { "description": "Bridge IP adresi değişmiş", "hint": "Cihaz ayarlarından bridge IP'sini güncelleyin" }
         }
       }
     }
@@ -367,6 +388,20 @@
       "loading": "Telemetri yükleniyor...",
       "empty": "Henüz runtime aktivitesi yok.",
       "error": "Telemetri şu anda kullanılamıyor."
+    },
+    "hue": {
+      "title": "Hue Stream",
+      "status": "Durum",
+      "packetRate": "Paket Hızı",
+      "lastError": "Son Hata",
+      "reconnects": "Yeniden Bağlanma",
+      "dtlsCipher": "DTLS Şifrelemesi",
+      "connectionAge": "Bağlantı Yaşı",
+      "uptimeFormat": "{{minutes}} dk {{seconds}} sn",
+      "packetRateFormat": "{{rate}} pkt/s",
+      "reconnectsFormat": "{{total}} ({{success}} başarılı, {{failed}} başarısız)",
+      "noError": "—",
+      "errorAgo": "{{code}} — {{minutes}} dk önce"
     }
   },
   "calibration": {
