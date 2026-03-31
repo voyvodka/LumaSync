@@ -267,9 +267,9 @@ fn wait_for_shutdown(signal: &ShutdownSignal, timeout: Duration) -> bool {
     }
 }
 
-struct HueRuntimeOwner {
-    state: HueRuntimeState,
-    active_stream: Option<HueActiveStreamContext>,
+pub(crate) struct HueRuntimeOwner {
+    pub(crate) state: HueRuntimeState,
+    pub(crate) active_stream: Option<HueActiveStreamContext>,
     /// Retained across stream stop/start cycles so that solid-color updates
     /// succeed even when the runtime is temporarily Idle.
     persistent_sender: Option<HuePersistentSender>,
@@ -281,6 +281,24 @@ struct HueRuntimeOwner {
     last_solid_color: Option<HueSolidColorSnapshot>,
     #[cfg_attr(not(test), allow(dead_code))]
     retry_policy: HueRetryPolicy,
+    /// Instant when the current stream session started (for uptime calculation).
+    pub(crate) stream_started_at: Option<Instant>,
+    /// Cumulative reconnect counters for the current app session.
+    pub(crate) session_reconnect_total: u32,
+    pub(crate) session_reconnect_success: u32,
+    /// DTLS cipher negotiated during handshake (stored for telemetry).
+    pub(crate) dtls_cipher: Option<String>,
+    /// Instant when the current DTLS connection was established.
+    pub(crate) dtls_connected_at: Option<Instant>,
+    /// Last error code reported (for telemetry display).
+    pub(crate) last_error_code: Option<String>,
+    /// Instant of the last error (for "X min ago" display).
+    pub(crate) last_error_at: Option<Instant>,
+    /// Approximate packet send rate (updated by sender thread via shared atomic on telemetry read).
+    pub(crate) packet_send_count: Arc<std::sync::atomic::AtomicU32>,
+    /// Last time packet_send_count was sampled for rate calculation.
+    pub(crate) packet_rate_sampled_at: Option<Instant>,
+    pub(crate) packet_rate_last_count: u32,
 }
 
 /// Lightweight, cloneable handle to the background Hue color sender thread.
@@ -577,8 +595,8 @@ fn deactivate_entertainment_config(
 /// 3. Continuously sends HueStream frames at 20 Hz
 /// 4. On channel close or error, deactivates entertainment config
 ///
-/// Returns the color sender handle and a shutdown signal that fires when the
-/// thread exits.
+/// Returns the color sender handle, a shutdown signal that fires when the
+/// thread exits, and the DTLS cipher name used during the handshake.
 fn spawn_hue_dtls_sender(
     client: Arc<BlockingClient>,
     bridge_ip: String,
@@ -586,7 +604,8 @@ fn spawn_hue_dtls_sender(
     client_key: String,
     area_id: String,
     channels: Vec<HueAreaChannel>,
-) -> Result<(HueColorSender, ShutdownSignal), String> {
+    packet_counter: Arc<std::sync::atomic::AtomicU32>,
+) -> Result<(HueColorSender, ShutdownSignal, Option<String>), String> {
     let channel_count = channels.len();
     let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
     let tx = Arc::new(tx);
@@ -596,6 +615,10 @@ fn spawn_hue_dtls_sender(
 
     // Establish DTLS connection.
     let mut dtls_stream = connect_dtls(&bridge_ip, &username, &client_key)?;
+
+    // Extract cipher name from the established handshake.
+    let cipher_name = dtls_stream.ssl().current_cipher()
+        .map(|c| c.name().to_string());
 
     // Spawn the sender thread.
     let deactivate_client = client;
@@ -659,6 +682,9 @@ fn spawn_hue_dtls_sender(
                 break;
             }
 
+            // Increment packet counter for telemetry.
+            packet_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
             last_sent_at = Instant::now();
         }
 
@@ -674,7 +700,7 @@ fn spawn_hue_dtls_sender(
         signal_shutdown_complete(&shutdown_inner);
     });
 
-    Ok((HueColorSender { tx, channel_count }, shutdown))
+    Ok((HueColorSender { tx, channel_count }, shutdown, cipher_name))
 }
 
 /// Fallback HTTP sender for when DTLS is not available (e.g. missing clientkey).
@@ -810,19 +836,19 @@ fn send_light_put(
 }
 
 #[derive(Clone, Debug)]
-struct HueActiveStreamContext {
-    bridge_ip: String,
-    username: String,
+pub(crate) struct HueActiveStreamContext {
+    pub(crate) bridge_ip: String,
+    pub(crate) username: String,
     #[allow(dead_code)]
-    client_key: String,
-    area_id: String,
-    channels: Vec<HueAreaChannel>,
-    color_sender: HueColorSender,
+    pub(crate) client_key: String,
+    pub(crate) area_id: String,
+    pub(crate) channels: Vec<HueAreaChannel>,
+    pub(crate) color_sender: HueColorSender,
     /// Whether this context uses real DTLS streaming (true) or HTTP fallback (false).
-    uses_dtls: bool,
+    pub(crate) uses_dtls: bool,
     /// Fires when the background sender thread exits. Used by `stop_hue_stream`
     /// to wait for graceful shutdown before reporting success or timeout.
-    shutdown_signal: ShutdownSignal,
+    pub(crate) shutdown_signal: ShutdownSignal,
 }
 
 #[derive(Clone, Debug)]
@@ -848,13 +874,36 @@ impl Default for HueRuntimeOwner {
             ),
             last_solid_color: None,
             retry_policy: HueRetryPolicy::default(),
+            stream_started_at: None,
+            session_reconnect_total: 0,
+            session_reconnect_success: 0,
+            dtls_cipher: None,
+            dtls_connected_at: None,
+            last_error_code: None,
+            last_error_at: None,
+            packet_send_count: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+            packet_rate_sampled_at: None,
+            packet_rate_last_count: 0,
         }
     }
 }
 
-#[derive(Default)]
 pub struct HueRuntimeStateStore {
-    runtime: Mutex<HueRuntimeOwner>,
+    runtime: Arc<Mutex<HueRuntimeOwner>>,
+}
+
+impl Default for HueRuntimeStateStore {
+    fn default() -> Self {
+        Self {
+            runtime: Arc::new(Mutex::new(HueRuntimeOwner::default())),
+        }
+    }
+}
+
+impl HueRuntimeStateStore {
+    pub fn runtime_arc(&self) -> Arc<Mutex<HueRuntimeOwner>> {
+        Arc::clone(&self.runtime)
+    }
 }
 
 
@@ -883,12 +932,13 @@ fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) {
 /// Acquire the Hue runtime mutex, recovering from poison if a previous holder
 /// panicked.  This ensures a single panic inside the lock does not permanently
 /// brick the Hue subsystem for the rest of the application lifetime.
-fn acquire_hue_runtime(runtime: &Mutex<HueRuntimeOwner>) -> std::sync::MutexGuard<'_, HueRuntimeOwner> {
+pub(crate) fn acquire_hue_runtime(runtime: &Mutex<HueRuntimeOwner>) -> std::sync::MutexGuard<'_, HueRuntimeOwner> {
     runtime.lock().unwrap_or_else(|poison| {
         error!("Hue runtime mutex was poisoned — recovering from poison guard.");
         poison.into_inner()
     })
 }
+
 
 fn status_with(
     state: HueRuntimeState,
@@ -1080,10 +1130,22 @@ fn status_refresh_with_evidence(
 /// Spawn the Hue color sender (DTLS or HTTP fallback) **outside** any mutex
 /// lock.  This function performs blocking network I/O (DTLS handshake, HTTP
 /// activate) and must never be called while the `HueRuntimeOwner` lock is held.
+/// Returns (sender, uses_dtls, shutdown_signal, cipher_name).
 fn build_hue_sender(
     request: &StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
 ) -> (HueColorSender, bool, ShutdownSignal) {
+    let packet_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let (sender, uses_dtls, shutdown, _cipher) = build_hue_sender_with_counter(request, channels, packet_counter);
+    (sender, uses_dtls, shutdown)
+}
+
+/// Variant of `build_hue_sender` that takes an external packet counter and returns cipher.
+fn build_hue_sender_with_counter(
+    request: &StartHueStreamRequest,
+    channels: Vec<HueAreaChannel>,
+    packet_counter: Arc<std::sync::atomic::AtomicU32>,
+) -> (HueColorSender, bool, ShutdownSignal, Option<String>) {
     let has_client_key = !request.client_key.trim().is_empty();
 
     if has_client_key {
@@ -1099,18 +1161,20 @@ fn build_hue_sender(
                 let client_key_t = request.client_key.clone();
                 let area_id_t = request.area_id.clone();
                 let channels_t = channels.clone();
+                let counter_t = Arc::clone(&packet_counter);
 
                 std::thread::spawn(move || {
                     let result = spawn_hue_dtls_sender(
                         client_clone, bridge_ip_t, username_t, client_key_t, area_id_t, channels_t,
+                        counter_t,
                     );
                     let _ = tx_result.send(result);
                 });
 
                 match rx_result.recv_timeout(Duration::from_secs(DTLS_CONNECT_TIMEOUT_SECS)) {
-                    Ok(Ok((sender, shutdown))) => {
+                    Ok(Ok((sender, shutdown, cipher_name))) => {
                         info!("DTLS entertainment stream established successfully.");
-                        (sender, true, shutdown)
+                        (sender, true, shutdown, cipher_name)
                     }
                     Ok(Err(err)) => {
                         warn!("DTLS connection failed ({err}), falling back to HTTP.");
@@ -1120,7 +1184,7 @@ fn build_hue_sender(
                             request.username.clone(),
                             channels.clone(),
                         );
-                        (sender, false, shutdown)
+                        (sender, false, shutdown, None)
                     }
                     Err(_timeout) => {
                         warn!("DTLS handshake timed out after {DTLS_CONNECT_TIMEOUT_SECS}s, falling back to HTTP.");
@@ -1130,14 +1194,14 @@ fn build_hue_sender(
                             request.username.clone(),
                             channels.clone(),
                         );
-                        (sender, false, shutdown)
+                        (sender, false, shutdown, None)
                     }
                 }
             }
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
                 let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal(), None)
             }
         }
     } else {
@@ -1150,12 +1214,12 @@ fn build_hue_sender(
                     request.username.clone(),
                     channels.clone(),
                 );
-                (sender, false, shutdown)
+                (sender, false, shutdown, None)
             }
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
                 let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal(), None)
             }
         }
     }
@@ -1170,6 +1234,18 @@ fn store_active_stream_context(
     color_sender: HueColorSender,
     uses_dtls: bool,
     shutdown_signal: ShutdownSignal,
+) {
+    store_active_stream_context_with_cipher(owner, request, channels, color_sender, uses_dtls, shutdown_signal, None);
+}
+
+fn store_active_stream_context_with_cipher(
+    owner: &mut HueRuntimeOwner,
+    request: &StartHueStreamRequest,
+    channels: Vec<HueAreaChannel>,
+    color_sender: HueColorSender,
+    uses_dtls: bool,
+    shutdown_signal: ShutdownSignal,
+    cipher_name: Option<String>,
 ) {
     // Keep a persistent clone that survives stream stop/start cycles.
     if !channels.is_empty() {
@@ -1189,6 +1265,17 @@ fn store_active_stream_context(
         uses_dtls,
         shutdown_signal,
     });
+
+    // Update telemetry tracking fields.
+    owner.stream_started_at = Some(Instant::now());
+    owner.reconnect_attempt = 0;
+    owner.packet_send_count.store(0, std::sync::atomic::Ordering::Relaxed);
+    owner.packet_rate_sampled_at = Some(Instant::now());
+    owner.packet_rate_last_count = 0;
+    if uses_dtls {
+        owner.dtls_cipher = cipher_name;
+        owner.dtls_connected_at = Some(Instant::now());
+    }
 }
 
 static HUE_BLOCKING_CLIENT: OnceLock<Arc<BlockingClient>> = OnceLock::new();
@@ -1566,7 +1653,6 @@ pub fn apply_hue_channels_with_context(
 }
 
 
-#[cfg_attr(not(test), allow(dead_code))]
 fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     let exponent = u32::from(attempt_index.saturating_sub(1));
     let factor = 2_u64.saturating_pow(exponent);
@@ -1574,7 +1660,6 @@ fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     raw.min(policy.cap_backoff_ms)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 fn register_transient_fault(
     owner: &mut HueRuntimeOwner,
     details: &str,
@@ -1629,10 +1714,12 @@ fn register_transient_fault(
         &owner.retry_policy,
         owner.reconnect_attempt,
     ));
+    // Record error for telemetry.
+    owner.last_error_code = Some(owner.last_status.code.clone());
+    owner.last_error_at = Some(Instant::now());
     make_result(owner)
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
 fn register_auth_invalid(
     owner: &mut HueRuntimeOwner,
     details: &str,
@@ -1649,6 +1736,9 @@ fn register_auth_invalid(
     owner.last_status.action_hint = Some(HueRuntimeActionHint::Repair);
     owner.last_status.remaining_attempts = Some(0);
     owner.last_status.next_attempt_ms = None;
+    // Record error for telemetry.
+    owner.last_error_code = Some(owner.last_status.code.clone());
+    owner.last_error_at = Some(Instant::now());
     make_result(owner)
 }
 
@@ -1702,13 +1792,13 @@ fn stop_with_timeout(
 /// RAII guard that resets the Hue runtime to `Failed` if `start_hue_stream`
 /// exits without successfully completing step 4c.  Call `.disarm()` once
 /// `store_active_stream_context` has been called.
-struct StartAbortGuard<'a> {
-    runtime: &'a Mutex<HueRuntimeOwner>,
+struct StartAbortGuard {
+    runtime: Arc<Mutex<HueRuntimeOwner>>,
     armed: bool,
 }
 
-impl<'a> StartAbortGuard<'a> {
-    fn new(runtime: &'a Mutex<HueRuntimeOwner>) -> Self {
+impl StartAbortGuard {
+    fn new(runtime: Arc<Mutex<HueRuntimeOwner>>) -> Self {
         Self { runtime, armed: true }
     }
     fn disarm(&mut self) {
@@ -1716,10 +1806,10 @@ impl<'a> StartAbortGuard<'a> {
     }
 }
 
-impl<'a> Drop for StartAbortGuard<'a> {
+impl Drop for StartAbortGuard {
     fn drop(&mut self) {
         if !self.armed { return; }
-        let mut owner = acquire_hue_runtime(self.runtime);
+        let mut owner = acquire_hue_runtime(&self.runtime);
         if matches!(owner.state, HueRuntimeState::Starting | HueRuntimeState::Running) {
             owner.state = HueRuntimeState::Failed;
             owner.active_stream = None;
@@ -1777,7 +1867,7 @@ pub async fn start_hue_stream(
     }; // lock released before async I/O
 
     // Abort guard: if we exit before step 4c stores the context, roll back to Failed.
-    let mut abort_guard = StartAbortGuard::new(&runtime_state.runtime);
+    let mut abort_guard = StartAbortGuard::new(runtime_state.runtime_arc());
 
     // 3. Async channel fetch -- no lock held.
     let mut channels = if result.active {
@@ -1862,6 +1952,18 @@ pub async fn start_hue_stream(
 
         make_result(&owner)
     };
+
+    // Spawn reconnect monitor to detect sender thread exit and trigger bounded retry.
+    {
+        let owner = acquire_hue_runtime(&runtime_state.runtime);
+        if let Some(ref stream) = owner.active_stream {
+            spawn_reconnect_monitor(
+                Arc::clone(&stream.shutdown_signal),
+                runtime_state.runtime_arc(),
+                request.clone(),
+            );
+        }
+    }
 
     Ok(final_result)
 }
@@ -1997,7 +2099,7 @@ pub async fn restart_hue_stream(
     }; // lock released
 
     // Abort guard: if we exit before step 5c stores the context, roll back to Failed.
-    let mut abort_guard = StartAbortGuard::new(&runtime_state.runtime);
+    let mut abort_guard = StartAbortGuard::new(runtime_state.runtime_arc());
 
     // 4. Async channel fetch -- no lock held.
     let mut channels = if result.active {
@@ -2079,6 +2181,18 @@ pub async fn restart_hue_stream(
 
         make_result(&owner)
     };
+
+    // Spawn reconnect monitor to detect sender thread exit and trigger bounded retry.
+    {
+        let owner = acquire_hue_runtime(&runtime_state.runtime);
+        if let Some(ref stream) = owner.active_stream {
+            spawn_reconnect_monitor(
+                Arc::clone(&stream.shutdown_signal),
+                runtime_state.runtime_arc(),
+                request.clone(),
+            );
+        }
+    }
 
     Ok(final_result)
 }
@@ -2283,6 +2397,285 @@ fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
         message: status.message.clone(),
         details: status.details.clone(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Reconnect monitor (HUE-08) — detects sender thread exit and triggers retry
+// ---------------------------------------------------------------------------
+
+/// Spawns a Tokio task that monitors the sender thread's shutdown signal.
+/// When the signal fires (sender died), it triggers register_transient_fault
+/// and attempts bounded reconnection.
+///
+/// The monitor exits when:
+/// - All retry attempts are exhausted (transitions to Failed)
+/// - A successful reconnect occurs (new monitor spawned by restart flow)
+/// - User manually stops the stream (user_override_pending = true)
+fn spawn_reconnect_monitor(
+    shutdown_signal: ShutdownSignal,
+    runtime: Arc<Mutex<HueRuntimeOwner>>,
+    request: StartHueStreamRequest,
+) {
+    tokio::spawn(async move {
+        // Poll shutdown signal with 200ms interval.
+        loop {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            if is_shutdown_signaled(&shutdown_signal) {
+                break;
+            }
+        }
+
+        // Sender thread has exited — check if this is an intentional stop.
+        {
+            let owner = acquire_hue_runtime(&runtime);
+            if owner.user_override_pending
+                || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping)
+            {
+                return;
+            }
+            // If already Failed or Reconnecting from another path, don't double-trigger.
+            if matches!(owner.state, HueRuntimeState::Failed | HueRuntimeState::Reconnecting) {
+                return;
+            }
+        }
+
+        // Register transient fault and get backoff delay.
+        let backoff_ms = {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let result = register_transient_fault(
+                &mut owner,
+                "DTLS sender thread exited unexpectedly",
+                HueRuntimeTriggerSource::System,
+            );
+            owner.session_reconnect_total += 1;
+
+            if owner.state == HueRuntimeState::Failed {
+                // Retry budget exhausted (D-02).
+                info!("Reconnect monitor: retry budget exhausted, entering Failed state.");
+                return;
+            }
+
+            result.status.next_attempt_ms.unwrap_or(400)
+        };
+
+        // Wait for backoff.
+        info!("Reconnect monitor: waiting {}ms before reconnect attempt.", backoff_ms);
+        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+
+        // Check state again before attempting reconnect.
+        {
+            let owner = acquire_hue_runtime(&runtime);
+            if owner.user_override_pending
+                || matches!(
+                    owner.state,
+                    HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+                )
+            {
+                return;
+            }
+        }
+
+        // Attempt restart using internal logic.
+        info!("Reconnect monitor: attempting stream restart.");
+        let restart_result = internal_restart_stream(&runtime, &request).await;
+
+        match restart_result {
+            Ok(true) => {
+                let mut owner = acquire_hue_runtime(&runtime);
+                owner.session_reconnect_success += 1;
+                info!("Reconnect monitor: stream restarted successfully.");
+                // New monitor is spawned by the restart flow.
+            }
+            Ok(false) | Err(_) => {
+                info!("Reconnect monitor: restart failed.");
+                // The restart flow itself handles state transitions.
+            }
+        }
+    });
+}
+
+/// Internal stream restart logic for the reconnect monitor.
+/// Replicates the core logic of restart_hue_stream but accepts
+/// Arc<Mutex<HueRuntimeOwner>> directly instead of Tauri State<>.
+async fn internal_restart_stream(
+    runtime: &Arc<Mutex<HueRuntimeOwner>>,
+    request: &StartHueStreamRequest,
+) -> Result<bool, String> {
+    // 1. Extract current stream info and clear state.
+    let dtls_deactivate = {
+        let mut owner = acquire_hue_runtime(runtime);
+        let deactivate = owner
+            .active_stream
+            .as_ref()
+            .filter(|s| s.uses_dtls)
+            .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
+        owner.active_stream = None;
+        owner.persistent_sender = None;
+        deactivate
+    };
+
+    // Best-effort DTLS deactivation outside lock.
+    if let Some((ip, username, area_id)) = dtls_deactivate {
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(client) = hue_http_client() {
+                let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
+            }
+        })
+        .await;
+    }
+
+    // 2. Readiness check (async, no lock held).
+    let readiness = check_hue_stream_readiness(
+        request.bridge_ip.clone(),
+        request.username.clone(),
+        request.area_id.clone(),
+    )
+    .await;
+
+    if !readiness.readiness.ready {
+        let mut owner = acquire_hue_runtime(runtime);
+        let _ = register_transient_fault(
+            &mut owner,
+            &format!(
+                "Readiness check failed during reconnect: {}",
+                readiness.status.message
+            ),
+            HueRuntimeTriggerSource::System,
+        );
+        return Ok(false);
+    }
+
+    // 3. Set state to Starting.
+    {
+        let mut owner = acquire_hue_runtime(runtime);
+        if owner.user_override_pending
+            || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
+        {
+            return Ok(false);
+        }
+        owner.state = HueRuntimeState::Starting;
+    }
+
+    // 4. Fetch channels.
+    let mut channels =
+        fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
+            .await
+            .unwrap_or_default();
+    if let Some(overrides) = &request.channel_region_overrides {
+        apply_channel_region_overrides(&mut channels, overrides);
+    }
+
+    // 5. Spawn sender (blocking), passing the owner's packet counter.
+    let req = request.clone();
+    let ch = channels.clone();
+    let packet_counter = {
+        let owner = acquire_hue_runtime(runtime);
+        Arc::clone(&owner.packet_send_count)
+    };
+    let (color_sender, uses_dtls, shutdown_signal, cipher_name) =
+        tokio::task::spawn_blocking(move || build_hue_sender_with_counter(&req, ch, packet_counter))
+            .await
+            .unwrap_or_else(|_| {
+                let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+                (
+                    HueColorSender {
+                        tx: Arc::new(tx),
+                        channel_count: 0,
+                    },
+                    false,
+                    new_shutdown_signal(),
+                    None,
+                )
+            });
+
+    // 6. Store context and spawn new monitor.
+    {
+        let mut owner = acquire_hue_runtime(runtime);
+        if owner.user_override_pending
+            || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
+        {
+            return Ok(false);
+        }
+
+        let stream_ctx = HueActiveStreamContext {
+            bridge_ip: request.bridge_ip.clone(),
+            username: request.username.clone(),
+            client_key: request.client_key.clone(),
+            area_id: request.area_id.clone(),
+            channels: channels.clone(),
+            color_sender: color_sender.clone(),
+            uses_dtls,
+            shutdown_signal: Arc::clone(&shutdown_signal),
+        };
+        if !channels.is_empty() {
+            owner.persistent_sender = Some(HuePersistentSender {
+                channels: channels.clone(),
+                sender: color_sender.clone(),
+            });
+        }
+        owner.active_stream = Some(stream_ctx);
+        owner.state = HueRuntimeState::Running;
+        owner.reconnect_attempt = 0;
+        owner.stream_started_at = Some(Instant::now());
+        owner.packet_send_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        owner.packet_rate_sampled_at = Some(Instant::now());
+        owner.packet_rate_last_count = 0;
+        if uses_dtls {
+            owner.dtls_cipher = cipher_name;
+            owner.dtls_connected_at = Some(Instant::now());
+            owner.last_status = status_with(
+                HueRuntimeState::Running,
+                "HUE_STREAM_RUNNING_DTLS",
+                "Hue entertainment stream active via DTLS (reconnected).",
+                None,
+                HueRuntimeTriggerSource::System,
+            );
+        } else {
+            owner.last_status = status_with(
+                HueRuntimeState::Running,
+                "HUE_STREAM_RUNNING",
+                "Hue stream running (reconnected).",
+                None,
+                HueRuntimeTriggerSource::System,
+            );
+        }
+    }
+
+    // Spawn new monitor for the new connection.
+    spawn_reconnect_monitor(
+        shutdown_signal,
+        Arc::clone(runtime),
+        request.clone(),
+    );
+
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// simulate_hue_fault — debug-only command (D-10, D-11)
+// ---------------------------------------------------------------------------
+
+#[cfg(debug_assertions)]
+#[tauri::command]
+pub fn simulate_hue_fault(
+    runtime_state: State<'_, HueRuntimeStateStore>,
+) -> Result<String, String> {
+    let owner = acquire_hue_runtime(&runtime_state.runtime);
+    if let Some(ref stream) = owner.active_stream {
+        if stream.uses_dtls {
+            // D-11: Fire shutdown signal to trigger reconnect monitor.
+            signal_shutdown_complete(&stream.shutdown_signal);
+            info!("simulate_hue_fault: shutdown signal fired for active DTLS stream.");
+            return Ok("HUE_FAULT_SIMULATED".to_string());
+        }
+    }
+    Err("NO_ACTIVE_DTLS_STREAM".to_string())
+}
+
+#[cfg(not(debug_assertions))]
+#[tauri::command]
+pub fn simulate_hue_fault() -> Result<String, String> {
+    Err("SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string())
 }
 
 #[cfg(test)]

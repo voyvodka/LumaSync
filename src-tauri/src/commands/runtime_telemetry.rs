@@ -4,6 +4,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::State;
 
+use super::hue_stream_lifecycle::{acquire_hue_runtime, HueRuntimeStateStore};
+
 const TELEMETRY_WINDOW: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -45,6 +47,99 @@ impl RuntimeTelemetryState {
 
 pub type SharedRuntimeTelemetry = Arc<Mutex<RuntimeTelemetrySnapshot>>;
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HueTelemetrySnapshot {
+    pub state: String,
+    pub uptime_secs: Option<u64>,
+    pub packet_rate: f32,
+    pub last_error_code: Option<String>,
+    pub last_error_at_secs: Option<u64>,
+    pub total_reconnects: u32,
+    pub successful_reconnects: u32,
+    pub failed_reconnects: u32,
+    pub dtls_active: bool,
+    pub dtls_cipher: Option<String>,
+    pub dtls_connected_at_secs: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FullTelemetrySnapshot {
+    pub usb: RuntimeTelemetrySnapshot,
+    pub hue: Option<HueTelemetrySnapshot>,
+}
+
+/// Collect Hue runtime health metrics from HueRuntimeStateStore.
+/// Returns None if Hue has never been active in this session.
+pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTelemetrySnapshot> {
+    let arc = hue_state.runtime_arc();
+    let mut owner = acquire_hue_runtime(&*arc);
+
+    // Only return telemetry if Hue has been active at some point.
+    let state_str = format!("{:?}", owner.state);
+    let is_active = owner.active_stream.is_some()
+        || owner.stream_started_at.is_some()
+        || owner.session_reconnect_total > 0;
+
+    if !is_active {
+        return None;
+    }
+
+    let now = Instant::now();
+
+    let uptime_secs = owner.stream_started_at.map(|started| {
+        now.saturating_duration_since(started).as_secs()
+    });
+
+    // Calculate packet rate from atomic counter.
+    let current_count = owner
+        .packet_send_count
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let packet_rate = if let Some(sampled_at) = owner.packet_rate_sampled_at {
+        let elapsed = now
+            .saturating_duration_since(sampled_at)
+            .as_secs_f32()
+            .max(0.1);
+        let delta = current_count.saturating_sub(owner.packet_rate_last_count);
+        // Update sampling window.
+        owner.packet_rate_sampled_at = Some(now);
+        owner.packet_rate_last_count = current_count;
+        round_two_decimals(delta as f32 / elapsed)
+    } else {
+        0.0
+    };
+
+    let last_error_at_secs = owner.last_error_at.map(|err_at| {
+        now.saturating_duration_since(err_at).as_secs()
+    });
+
+    let dtls_connected_at_secs = owner.dtls_connected_at.map(|connected| {
+        now.saturating_duration_since(connected).as_secs()
+    });
+
+    let uses_dtls = owner
+        .active_stream
+        .as_ref()
+        .map_or(false, |s| s.uses_dtls);
+
+    Some(HueTelemetrySnapshot {
+        state: state_str,
+        uptime_secs,
+        packet_rate,
+        last_error_code: owner.last_error_code.clone(),
+        last_error_at_secs,
+        total_reconnects: owner.session_reconnect_total,
+        successful_reconnects: owner.session_reconnect_success,
+        failed_reconnects: owner
+            .session_reconnect_total
+            .saturating_sub(owner.session_reconnect_success),
+        dtls_active: uses_dtls,
+        dtls_cipher: owner.dtls_cipher.clone(),
+        dtls_connected_at_secs,
+    })
+}
+
 pub fn read_runtime_telemetry(
     snapshot: &SharedRuntimeTelemetry,
 ) -> Result<RuntimeTelemetrySnapshot, String> {
@@ -68,8 +163,11 @@ pub fn write_runtime_telemetry(
 #[tauri::command]
 pub fn get_runtime_telemetry(
     telemetry_state: State<'_, RuntimeTelemetryState>,
-) -> Result<RuntimeTelemetrySnapshot, String> {
-    read_runtime_telemetry(&telemetry_state.shared_snapshot())
+    hue_state: State<'_, HueRuntimeStateStore>,
+) -> Result<FullTelemetrySnapshot, String> {
+    let usb = read_runtime_telemetry(&telemetry_state.shared_snapshot())?;
+    let hue = collect_hue_telemetry(&hue_state);
+    Ok(FullTelemetrySnapshot { usb, hue })
 }
 
 pub struct RuntimeTelemetryWindow {

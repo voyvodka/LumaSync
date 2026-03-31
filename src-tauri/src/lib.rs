@@ -47,7 +47,7 @@ use commands::hue_onboarding::{
 };
 use commands::hue_stream_lifecycle::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
-    start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
+    simulate_hue_fault, start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
 };
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
@@ -327,7 +327,8 @@ pub fn run() {
             update_display_overlay_preview,
             save_room_map,
             load_room_map,
-            update_hue_channel_positions
+            update_hue_channel_positions,
+            simulate_hue_fault
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
