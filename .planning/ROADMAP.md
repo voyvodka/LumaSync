@@ -121,8 +121,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 15-01-PLAN.md — Frontend contracts: fault code taxonomy, telemetry type extension, i18n keys
-- [ ] 15-02-PLAN.md — Rust backend: reconnect monitor, Hue telemetry snapshot, simulate_hue_fault
+- [x] 15-01-PLAN.md — Frontend contracts: fault code taxonomy, telemetry type extension, i18n keys
+- [x] 15-02-PLAN.md — Rust backend: reconnect monitor, Hue telemetry snapshot, simulate_hue_fault
 - [ ] 15-03-PLAN.md — Frontend UI: TelemetrySection Hue subsection, HueFaultSimulator dev tool
 
 ### Phase 16: Hue Channel Position Editor
@@ -192,7 +192,7 @@ Plans:
 | 12. Diagnostics and Recovery | v1.1 | 0/0 | Deferred to v1.2 | - |
 | 13. Structured Logging | v1.1 | 1/1 | Complete | 2026-03-29 |
 | 14. Contract Foundation | v1.2 | 3/3 | Complete    | 2026-03-30 |
-| 15. Fault Recovery and Diagnostics | v1.2 | 0/3 | Planned | - |
+| 15. Fault Recovery and Diagnostics | v1.2 | 2/3 | In Progress|  |
 | 16. Hue Channel Position Editor | v1.2 | 0/TBD | Not started | - |
 | 17. Room Map UI | v1.2 | 0/TBD | Not started | - |
 | 18. Hue Standalone Mode | v1.2 | 0/TBD | Not started | - |
