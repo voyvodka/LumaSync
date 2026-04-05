@@ -13,6 +13,7 @@ vi.mock("../telemetryApi", () => ({
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
+    i18n: { language: "en" },
     t: (key: string) => {
       const dict: Record<string, string> = {
         "telemetry.title": "Runtime telemetry",
