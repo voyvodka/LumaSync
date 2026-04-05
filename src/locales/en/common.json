@@ -3,6 +3,11 @@
     "title": "Settings",
     "navigationAria": "Main navigation",
     "sections": {
+      "lights": "Lights",
+      "led-setup": "LED Setup",
+      "devices": "Devices",
+      "system": "System",
+      "room-map": "Room Map",
       "control": "Control",
       "calibration": "Calibration",
       "settings": "Settings"
@@ -208,7 +213,9 @@
       "areas": {
         "title": "Entertainment areas",
         "empty": "No entertainment areas found. Create one in the Hue app first.",
-        "channels": "{{count}} channels"
+        "channels": "{{count}} channels",
+        "activeStreamer": "Active",
+        "activeStreamerHint": "Another app is streaming"
       },
       "channelMap": {
         "title": "Channel screen regions",
@@ -225,7 +232,19 @@
           "top": "Top",
           "bottom": "Bottom",
           "center": "Center"
-        }
+        },
+        "screenLabel": "Screen",
+        "selectedChannel": "Channel {{index}}",
+        "zonePicker": "Assign zone",
+        "regionShort": {
+          "left": "L",
+          "right": "R",
+          "top": "T",
+          "bottom": "B",
+          "center": "C"
+        },
+        "selectZoneHint": "Click a zone on the map to assign the selected channel.",
+        "chipLabel": "Ch {{index}}"
       },
       "readiness": {
         "ready": "Ready",
@@ -403,6 +422,9 @@
       "noError": "—",
       "errorAgo": "{{code}} — {{minutes}} min ago"
     }
+  },
+  "roomMap": {
+    "comingSoon": "Room map editor is coming in a future update."
   },
   "calibration": {
     "section": {

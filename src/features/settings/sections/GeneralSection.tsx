@@ -107,17 +107,21 @@ export function GeneralSection({
             onModeChange={onModeChange}
           />
         </div>
-        {isSolid && (
-          <div className="border-t border-slate-100 px-5 py-4 dark:border-zinc-800/70">
-            <SolidColorPanel
-              incoming={incomingSolid}
-              disabled={lockState.showReason}
-              onCommit={(draft) =>
-                onModeChange({ kind: LIGHTING_MODE_KIND.SOLID, solid: draft })
-              }
-            />
+        <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+          isSolid ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        }`}>
+          <div className="overflow-hidden">
+            <div className="border-t border-slate-100 px-5 py-4 dark:border-zinc-800/70">
+              <SolidColorPanel
+                incoming={incomingSolid}
+                disabled={lockState.showReason}
+                onCommit={(draft) =>
+                  onModeChange({ kind: LIGHTING_MODE_KIND.SOLID, solid: draft })
+                }
+              />
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

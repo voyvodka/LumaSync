@@ -3,6 +3,11 @@
     "title": "Ayarlar",
     "navigationAria": "Ana gezinti",
     "sections": {
+      "lights": "Işıklar",
+      "led-setup": "LED Kurulumu",
+      "devices": "Cihazlar",
+      "system": "Sistem",
+      "room-map": "Oda Haritası",
       "control": "Kontrol",
       "calibration": "Kalibrasyon",
       "settings": "Ayarlar"
@@ -208,7 +213,9 @@
       "areas": {
         "title": "Entertainment alanları",
         "empty": "Entertainment alanı bulunamadı. Hue uygulamasından bir tane oluşturun.",
-        "channels": "{{count}} kanal"
+        "channels": "{{count}} kanal",
+        "activeStreamer": "Aktif",
+        "activeStreamerHint": "Başka bir uygulama akış yapıyor"
       },
       "channelMap": {
         "title": "Kanal ekran bölgeleri",
@@ -225,7 +232,19 @@
           "top": "Üst",
           "bottom": "Alt",
           "center": "Orta"
-        }
+        },
+        "screenLabel": "Ekran",
+        "selectedChannel": "Kanal {{index}}",
+        "zonePicker": "Bölge ata",
+        "regionShort": {
+          "left": "S",
+          "right": "S",
+          "top": "U",
+          "bottom": "A",
+          "center": "O"
+        },
+        "selectZoneHint": "Seçili kanalı atamak için haritada bir bölgeye tıkla.",
+        "chipLabel": "Kn {{index}}"
       },
       "readiness": {
         "ready": "Hazır",
@@ -403,6 +422,9 @@
       "noError": "—",
       "errorAgo": "{{code}} — {{minutes}} dk önce"
     }
+  },
+  "roomMap": {
+    "comingSoon": "Oda haritası editörü ilerleyen bir güncellemede gelecek."
   },
   "calibration": {
     "section": {

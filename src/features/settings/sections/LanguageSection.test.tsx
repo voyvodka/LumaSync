@@ -38,13 +38,10 @@ vi.mock("react-i18next", () => ({
         "startupTray.trayInfo": "Keeps running in tray",
         "startupTray.minimizeOnClose": "Minimize on close",
         "startupTray.alwaysOn": "Always on",
-        "settings.sections.general": "General",
-        "settings.sections.startupTray": "Startup & Tray",
-        "settings.sections.language": "Language",
-        "settings.sections.aboutLogs": "About & Logs",
-        "settings.sections.telemetry": "Telemetry",
-        "settings.sections.device": "Device",
-        "settings.sections.calibration": "Calibration",
+        "settings.sections.lights": "Lights",
+        "settings.sections.led-setup": "LED Setup",
+        "settings.sections.devices": "Devices",
+        "settings.sections.system": "System",
       },
       tr: {
         "language.title": "Dil",
@@ -57,13 +54,10 @@ vi.mock("react-i18next", () => ({
         "startupTray.trayInfo": "Tepside calismaya devam eder",
         "startupTray.minimizeOnClose": "Kapatinca tepsiye kucult",
         "startupTray.alwaysOn": "Her zaman acik",
-        "settings.sections.general": "Genel",
-        "settings.sections.startupTray": "Baslangic ve Tepsi",
-        "settings.sections.language": "Dil",
-        "settings.sections.aboutLogs": "Hakkinda ve Gunlukler",
-        "settings.sections.telemetry": "Telemetri",
-        "settings.sections.device": "Cihaz",
-        "settings.sections.calibration": "Kalibrasyon",
+        "settings.sections.lights": "Isiklar",
+        "settings.sections.led-setup": "LED Kurulumu",
+        "settings.sections.devices": "Cihazlar",
+        "settings.sections.system": "Sistem",
       },
     };
 
@@ -118,7 +112,7 @@ describe("localized settings copy", () => {
   it("keeps settings navigation label localized", () => {
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.CONTROL}
+        activeSection={SECTION_IDS.LIGHTS}
         onSectionChange={vi.fn()}
         calibrationStep="editor"
         lightingMode={{ kind: "off" }}
@@ -136,7 +130,7 @@ describe("localized settings copy", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Calibration/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /LED Setup/i })).toBeInTheDocument();
   });
 });
 

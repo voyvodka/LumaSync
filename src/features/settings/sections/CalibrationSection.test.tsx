@@ -10,12 +10,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const dict: Record<string, string> = {
-        "settings.sections.general": "General",
-        "settings.sections.startupTray": "Startup & Tray",
-        "settings.sections.language": "Language",
-        "settings.sections.aboutLogs": "About & Logs",
-        "settings.sections.device": "Device",
-        "settings.sections.calibration": "Calibration",
+        "settings.sections.lights": "Lights",
+        "settings.sections.led-setup": "LED Setup",
+        "settings.sections.devices": "Devices",
+        "settings.sections.system": "System",
         "calibration.section.title": "Calibration",
         "calibration.section.description": "Summary and edit entry",
         "calibration.section.template": "Template",
@@ -45,10 +43,10 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("CalibrationSection", () => {
-  it("renders calibration navigation item in the layout", () => {
+  it("renders LED Setup navigation item in the layout", () => {
     render(
       <SettingsLayout
-        activeSection={SECTION_IDS.CONTROL}
+        activeSection={SECTION_IDS.LIGHTS}
         onSectionChange={vi.fn()}
         calibrationStep="editor"
         lightingMode={{ kind: "off" }}
@@ -66,7 +64,7 @@ describe("CalibrationSection", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Calibration/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /LED Setup/i })).toBeInTheDocument();
   });
 
   it("shows template and geometry overview values when calibration is configured", () => {

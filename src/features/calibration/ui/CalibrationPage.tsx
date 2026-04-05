@@ -136,13 +136,17 @@ export function CalibrationPage({
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<string | null>(null);
 
-  // Load displays on mount
+  // Load displays on mount — auto-select when exactly one display is found (P0-2)
   useEffect(() => {
     let cancelled = false;
     void listDisplays()
       .then((displays) => {
         if (cancelled) return;
-        setDisplayTarget(displayTargetRef.current.setDisplays(displays));
+        let newState = displayTargetRef.current.setDisplays(displays);
+        if (displays.length === 1) {
+          newState = displayTargetRef.current.selectDisplay(displays[0].id);
+        }
+        setDisplayTarget(newState);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -475,13 +479,23 @@ export function CalibrationPage({
             </button>
           )}
           {activeStep === "display" && (
-            <button
-              type="button"
-              onClick={() => goToStep("editor")}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              {t("calibration.page.displayContinue")} →
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => goToStep("template")}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                ← {t("calibration.page.back")}
+              </button>
+              <button
+                type="button"
+                disabled={!displayTarget.selectedDisplayId && displayTarget.displays.length > 0}
+                onClick={() => goToStep("editor")}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t("calibration.page.displayContinue")} →
+              </button>
+            </>
           )}
           {activeStep === "editor" && (
             <>
@@ -598,7 +612,11 @@ function StepIndicator({
               : "bg-slate-200 text-slate-500 dark:bg-zinc-700 dark:text-zinc-400"
         }`}
       >
-        {done ? "✓" : number}
+        {done ? (
+          <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2 6l3 3 5-5" />
+          </svg>
+        ) : number}
       </span>
       {label}
     </button>

@@ -33,7 +33,7 @@ describe("mergeLightingModeIntoShellState", () => {
       windowHeight: 720,
       windowX: 0,
       windowY: 0,
-      lastSection: "control",
+      lastSection: "lights",
       trayHintShown: true,
       startupEnabled: false,
       language: "en",

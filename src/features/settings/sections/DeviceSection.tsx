@@ -8,7 +8,7 @@ import { buildHueStatusCard } from "../../device/hueStatusCard";
 import { useDeviceConnection } from "../../device/useDeviceConnection";
 import { useHueOnboarding } from "../../device/useHueOnboarding";
 import { stopHue } from "../../mode/modeApi";
-import { HueChannelMapPanel } from "./HueChannelMapPanel";
+import { HueChannelMapPanel, MiniSpatialPreview } from "./HueChannelMapPanel";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -46,7 +46,7 @@ function IconChevronDown({ open }: { open: boolean }) {
       className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -77,7 +77,7 @@ function IconWifi() {
 
 function IconBridge() {
   return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="14" height="10" rx="3" />
       <circle cx="10" cy="10" r="2" />
       <path d="M10 5v-2M10 17v-2" />
@@ -871,7 +871,7 @@ export function DeviceSection() {
                 <div className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${resolvedExpandedStep === "area" && !isStepLocked("area") ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
                   <div className="overflow-hidden">
                   <div className="px-4 pb-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="mb-4 flex items-center justify-between gap-3">
                       <p className="text-[11px] text-slate-500 dark:text-zinc-400">
                         {t("device.hue.wizard.areaInstruction")}
                       </p>
@@ -881,20 +881,25 @@ export function DeviceSection() {
                           void refreshAreas();
                         }}
                         disabled={hueAreasDisabled}
-                        className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                        className="flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
                       >
+                        <svg viewBox="0 0 14 14" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 7A5 5 0 1 1 7 2M12 2v3H9" />
+                        </svg>
                         {isLoadingAreas ? t("device.hue.actions.loadingAreas") : t("device.hue.actions.refreshAreas")}
                       </button>
                     </div>
 
                     {areaGroups.length === 0 ? (
-                      <p className="text-xs text-slate-400 dark:text-zinc-500">{t("device.hue.areas.empty")}</p>
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-5 text-center dark:border-zinc-700/60 dark:bg-zinc-800/30">
+                        <p className="text-xs text-slate-400 dark:text-zinc-500">{t("device.hue.areas.empty")}</p>
+                      </div>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {areaGroups.map((group) => (
                           <div key={group.roomName}>
-                            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-zinc-500">{group.roomName}</p>
-                            <ul className="space-y-1.5">
+                            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-zinc-500">{group.roomName}</p>
+                            <ul className="space-y-2">
                               {group.areas.map((area) => {
                                 const active = selectedAreaId === area.id;
                                 const readinessLabel = area.readiness?.ready
@@ -910,32 +915,51 @@ export function DeviceSection() {
                                       onClick={() => {
                                         selectArea(area.id);
                                       }}
-                                      className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                                      className={`w-full rounded-xl border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 ${
                                         active
-                                          ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                                          : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500"
+                                          ? "border-slate-900/20 bg-slate-50 ring-1 ring-slate-900/30 dark:border-zinc-600 dark:bg-zinc-800/60 dark:ring-zinc-600"
+                                          : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/50 dark:border-zinc-700/60 dark:bg-zinc-900 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/40"
                                       }`}
                                     >
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                          <p className="text-xs font-semibold">{area.name}</p>
-                                          <p className={`mt-0.5 text-[11px] ${active ? "text-white/70 dark:text-zinc-600" : "text-slate-400 dark:text-zinc-500"}`}>
+                                      <div className="flex items-center gap-3">
+                                        {/* Radio indicator */}
+                                        <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                                          active
+                                            ? "border-slate-900 dark:border-zinc-100"
+                                            : "border-slate-300 dark:border-zinc-600"
+                                        }`}>
+                                          {active && (
+                                            <div className="h-1.5 w-1.5 rounded-full bg-slate-900 dark:bg-zinc-100" />
+                                          )}
+                                        </div>
+
+                                        {/* Mini spatial preview */}
+                                        <MiniSpatialPreview channelCount={area.channelCount ?? 0} />
+
+                                        {/* Name + channel count + activeStreamer badge */}
+                                        <div className="min-w-0 flex-1">
+                                          <div className="flex items-center gap-2">
+                                            <p className="text-xs font-semibold text-slate-800 dark:text-zinc-100">{area.name}</p>
+                                            {area.activeStreamer && (
+                                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-500 dark:bg-amber-500/20 dark:text-amber-400">
+                                                <span className="h-1 w-1 animate-pulse rounded-full bg-amber-400" />
+                                                {t("device.hue.areas.activeStreamer")}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
                                             {t("device.hue.areas.channels", { count: area.channelCount ?? 0 })}
                                           </p>
                                         </div>
+
+                                        {/* Readiness badge */}
                                         <span
-                                          className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold ${
+                                          className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold ${
                                             area.readiness?.ready
-                                              ? active
-                                                ? "bg-emerald-400/25 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-300"
-                                                : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
                                               : area.readiness
-                                                ? active
-                                                  ? "bg-amber-400/25 text-amber-100 dark:bg-amber-500/20 dark:text-amber-300"
-                                                  : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
-                                                : active
-                                                  ? "bg-white/20 text-white dark:bg-zinc-700/25 dark:text-zinc-600"
-                                                  : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
+                                                ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
+                                                : "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400"
                                           }`}
                                         >
                                           {readinessLabel}
@@ -952,14 +976,14 @@ export function DeviceSection() {
                     )}
 
                     {selectedAreaId ? (
-                      <div className="mt-3">
+                      <div className="mt-4">
                         <button
                           type="button"
                           onClick={() => {
                             void revalidateArea();
                           }}
                           disabled={hueReadinessDisabled}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
                         >
                           {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("device.hue.actions.checkReadiness")}
                         </button>
