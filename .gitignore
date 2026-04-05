@@ -34,3 +34,6 @@ src-tauri/target/
 .opencode/package.json
 .opencode/package-lock.json
 .opencode/settings.json
+
+.claude/*
+.planning/
