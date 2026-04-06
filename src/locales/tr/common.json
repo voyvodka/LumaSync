@@ -87,6 +87,12 @@
     "checkAction": "Güncellemeleri kontrol et",
     "checking": "Kontrol ediliyor..."
   },
+  "hotplug": {
+    "usbDetected": "USB LED şerit algılandı. Çıkış hedefi olarak eklensin mi?",
+    "addTarget": "Ekle",
+    "dismiss": "Kapat",
+    "usbDisconnected": "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor."
+  },
   "device": {
     "title": "Cihaz",
     "description": "Serial portları tara, birini seç ve uygulamayı yeniden başlatmadan bağlan.",
@@ -142,6 +148,7 @@
       "errorBody": "Bağlantı tamamlanamadı. Yenile, farklı bir port seç ve tekrar dene.",
       "nextSteps": "İpucu: Hatırlanan port yeniden görünürse otomatik olarak tekrar seçilir."
     },
+    "usbDisconnected": "Cihaz bağlantısı yok",
     "healthCheck": {
       "runAction": "Sağlık Kontrolü Çalıştır",
       "runningAction": "Sağlık Kontrolü Çalışıyor...",

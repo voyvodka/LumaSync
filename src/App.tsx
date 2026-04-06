@@ -10,6 +10,7 @@
 // export { HueAreaPreview as default };
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
@@ -116,6 +117,7 @@ function isSameTargetSet(a: HueRuntimeTarget[], b: HueRuntimeTarget[]): boolean 
 }
 
 function App() {
+  const { t } = useTranslation("common");
   const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
@@ -128,6 +130,11 @@ function App() {
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
+  // Hot-plug detection refs/state — separate from wasConnectedRef (per Pitfall 4)
+  const prevUsbConnectedRef = useRef<boolean | null>(null); // null = not yet initialized
+  const [bootstrapDone, setBootstrapDone] = useState(false);
+  const [showUsbSuggest, setShowUsbSuggest] = useState(false);
+  const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
   const modeTransitionLockRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
@@ -336,6 +343,10 @@ function App() {
           setSelectedOutputTargets(restoredTargets);
         }
 
+        // Initialize hot-plug ref AFTER USB status is known
+        // This prevents false "USB detected" events on startup
+        prevUsbConnectedRef.current = bootstrapUsbAvailable;
+
         const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
         setActiveOutputTargets(isActive ? restoredTargets : []);
         const hueBootstrapConfig = toHueStartConfig(state);
@@ -383,8 +394,13 @@ function App() {
 
         // Check for updates silently after startup
         void checkForUpdates();
+
+        // Mark bootstrap complete — hot-plug useEffect may now run
+        setBootstrapDone(true);
       } catch (err) {
         console.warn("[LumaSync] Shell lifecycle bootstrap error:", err);
+        // Still mark bootstrap complete so UI is not permanently blocked
+        setBootstrapDone(true);
       }
     }
 
@@ -426,6 +442,52 @@ function App() {
     const normalizedTargets = normalizeOutputTargets(targets);
     setSelectedOutputTargets(normalizedTargets);
     try { await saveShellState({ lastOutputTargets: normalizedTargets }); } catch { }
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Hot-plug detection: USB plug/unplug target management (D-07, D-08)
+  // Guard: only runs after bootstrap has initialized prevUsbConnectedRef
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
+
+    const wasConnected = prevUsbConnectedRef.current;
+
+    if (wasConnected === false && isConnected) {
+      // USB just plugged in (D-07) — offer to add as target
+      if (!selectedOutputTargets.includes("usb")) {
+        setShowUsbSuggest(true);
+        // Auto-dismiss after 10 seconds
+        window.setTimeout(() => setShowUsbSuggest(false), 10_000);
+      }
+    }
+
+    if (wasConnected === true && !isConnected) {
+      // USB just unplugged (D-08) — silently drop from targets
+      if (selectedOutputTargets.includes("usb")) {
+        const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
+        if (nextTargets.length > 0) {
+          void handleOutputTargetsChange(nextTargets);
+          setUsbDisconnectNotice(true);
+          window.setTimeout(() => setUsbDisconnectNotice(false), 5_000);
+        }
+        // If no targets remain, keep current targets — mode buttons will show disabled via guard
+      }
+      setShowUsbSuggest(false);
+    }
+
+    prevUsbConnectedRef.current = isConnected;
+  }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
+
+  const handleAcceptUsbTarget = useCallback(async () => {
+    setShowUsbSuggest(false);
+    if (!selectedOutputTargets.includes("usb")) {
+      await handleOutputTargetsChange([...selectedOutputTargets, "usb"]);
+    }
+  }, [selectedOutputTargets, handleOutputTargetsChange]);
+
+  const handleDismissUsbSuggest = useCallback(() => {
+    setShowUsbSuggest(false);
   }, []);
 
   const handleLightingModeChange = useCallback(
@@ -655,6 +717,30 @@ function App() {
         onInstall={downloadAndInstall}
         onDismiss={dismiss}
       />
+      {showUsbSuggest && (
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 shadow-lg">
+          <span className="text-sm text-zinc-200">{t("hotplug.usbDetected")}</span>
+          <button
+            type="button"
+            onClick={() => { void handleAcceptUsbTarget(); }}
+            className="rounded bg-zinc-600 px-3 py-1 text-xs text-white hover:bg-zinc-500"
+          >
+            {t("hotplug.addTarget")}
+          </button>
+          <button
+            type="button"
+            onClick={handleDismissUsbSuggest}
+            className="text-xs text-zinc-400 hover:text-zinc-200"
+          >
+            {t("hotplug.dismiss")}
+          </button>
+        </div>
+      )}
+      {usbDisconnectNotice && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 shadow-lg">
+          <span className="text-sm text-zinc-400">{t("hotplug.usbDisconnected")}</span>
+        </div>
+      )}
     </>
   );
 }

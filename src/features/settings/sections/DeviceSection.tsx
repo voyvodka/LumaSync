@@ -139,6 +139,7 @@ export function DeviceSection() {
     isConnecting,
     isReconnecting,
     isHealthChecking,
+    isConnected,
     canConnect,
     statusCard,
     latestHealthCheck,
@@ -518,6 +519,11 @@ export function DeviceSection() {
         </div>
 
         <div className="p-6">
+          {/* D-04: USB disconnected status message */}
+          {!isConnected && (
+            <p className="mb-4 text-sm text-zinc-500">{t("device.usbDisconnected")}</p>
+          )}
+
           {/* Port grid */}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">

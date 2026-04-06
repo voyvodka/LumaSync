@@ -87,6 +87,12 @@
     "checkAction": "Check for updates",
     "checking": "Checking..."
   },
+  "hotplug": {
+    "usbDetected": "USB LED strip detected. Add as output target?",
+    "addTarget": "Add",
+    "dismiss": "Dismiss",
+    "usbDisconnected": "USB device disconnected. Continuing with remaining targets."
+  },
   "device": {
     "title": "Device",
     "description": "Scan serial ports, choose one, and connect without restarting the app.",
@@ -142,6 +148,7 @@
       "errorBody": "Connection was not completed. Refresh, pick another port, and try again.",
       "nextSteps": "Tip: if your remembered port appears again, it will be selected automatically."
     },
+    "usbDisconnected": "No device connected",
     "healthCheck": {
       "runAction": "Run Health Check",
       "runningAction": "Running Health Check...",
