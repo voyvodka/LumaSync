@@ -1067,3 +1067,36 @@ mod tests {
         assert!(adapted > baseline);
     }
 }
+
+#[cfg(test)]
+mod lighting_mode_tests {
+    use super::*;
+
+    #[test]
+    fn hue_only_target_bypasses_usb_gate() {
+        // Setup: device_connected=false, targets=Some(vec!["hue".to_string()])
+        // Expect: apply_mode_change does NOT return DEVICE_NOT_CONNECTED
+        todo!("Implement after Task 1 adds targets field")
+    }
+
+    #[test]
+    fn usb_target_requires_device_connected() {
+        // Setup: device_connected=false, targets=Some(vec!["usb".to_string()])
+        // Expect: apply_mode_change returns DEVICE_NOT_CONNECTED
+        todo!("Implement after Task 1 adds targets field")
+    }
+
+    #[test]
+    fn none_targets_preserves_legacy_usb_gate() {
+        // Setup: device_connected=false, targets=None
+        // Expect: apply_mode_change returns DEVICE_NOT_CONNECTED (backward compat)
+        todo!("Implement after Task 1 adds targets field")
+    }
+
+    #[test]
+    fn hue_only_target_returns_hue_not_ready_when_no_hue_output() {
+        // Setup: targets=Some(vec!["hue".to_string()]), hue_output=None
+        // Expect: apply_mode_change returns HUE_NOT_READY
+        todo!("Implement after Task 1 adds targets field")
+    }
+}
