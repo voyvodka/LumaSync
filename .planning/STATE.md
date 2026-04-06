@@ -1,102 +1,75 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: milestone
+milestone: v1.2
+milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
 status: executing
-stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-04-06T06:07:58.097Z"
-last_activity: 2026-03-29
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-04-06T09:18:50.249Z"
+last_activity: 2026-04-06
 progress:
-  percent: 100
+  total_phases: 7
+  completed_phases: 3
+  total_plans: 12
+  completed_plans: 9
+  percent: 38
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-03-21)
+See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 01 — app-shell-and-baseline-defaults
+**Current focus:** Phase 17 — room-map-ui
 
 ## Current Position
 
-Milestone: v1.1 (Hue Entertainment Integration)
-Phase: 09
-Plan: Not started
-Status: Executing Phase 01
-Last activity: 2026-03-29
+Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
+Phase: 17 (room-map-ui) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-04-06
 
-Progress: [██████████] 100%
+Progress: [████░░░░░░] 38%
 
 ## Performance Metrics
 
-- Milestone requirement coverage: 12/12 mapped to roadmap phases
-- Planned phases in milestone: 4 (Phase 9 -> Phase 12)
-- Completed phases in milestone: 2
-- Completed plans in milestone: 7
+- v1.2 phases: 7 (Phases 14-20)
+- v1.2 requirements: 24 mapped (23 mandatory + 1 optional)
+- Completed plans in milestone: 0
+- Total plans: TBD (defined during plan-phase)
 
 ## Decisions
 
-- Phase 9 command layer uses deterministic `code + message + details` response shape for all Hue onboarding outcomes.
-- Manual IP onboarding path stays always available and validates IPv4 before network requests (`HUE_IP_INVALID` guard path).
-- Pairing/credential outcomes are parser-driven to support reconnect-safe shell persistence and predictable frontend gating.
-- [Phase 09]: Resume step is derived from last incomplete condition (discover -> pair -> area -> ready).
-- [Phase 09]: Manual IP fallback is always visible and submit is disabled for invalid IPv4.
-- [Phase 09]: Start gate is strict: valid credentials + selected area + ready status are all required.
-- [Phase 10]: Hue runtime lifecycle keeps explicit Idle/Starting/Running/Reconnecting/Stopping/Failed states as backend-owned source of truth.
-- [Phase 10]: Strict start gate remains backend authoritative and returns CONFIG_NOT_READY_* outcomes instead of optimistic UI-only checks.
-- [Phase 10]: Retry/backoff remains bounded and auth-invalid evidence is separated from transient recovery with explicit action hints.
-- [Phase 10]: Mode-control authority routes USB/Hue lifecycle through one target planner.
-- [Phase 10]: Partial-start policy keeps healthy targets running and surfaces coded failures per target.
-- [Phase 10]: Selected output targets persist in shell state as lastOutputTargets with USB-first fallback.
-- [Phase 10]: Runtime status mapping derives CTA hints only from explicit code-family or actionHint fields.
-- [Phase 10]: Device Start remains blocked when credential validation is unknown/in-flight or readiness is stale.
-- [Phase 10]: Device-surface Stop routes to shared mode stop pipeline instead of local ad-hoc flow.
-- [Phase 10]: `get_hue_stream_status` performs readiness re-evaluation for active states and triggers lifecycle transitions instead of returning passive snapshots.
-- [Phase 10]: Auth-invalid evidence (`AUTH_INVALID_*` / `HUE_CREDENTIAL_INVALID`) is escalated directly to failed+repair, separate from transient reconnect handling.
-- [Phase 10]: Active stream context (bridgeIp/username/areaId) is persisted in runtime owner and cleared on stop/fail-gate paths to keep refresh logic deterministic.
-- [Phase 10]: Device panel stop action now routes through stopHue with device_surface trigger source
-- [Phase 10]: useHueOnboarding runtime telemetry now comes from polling getHueStreamStatus and typed target mapping
-- [Phase 10]: Hue retry from device surface executes explicit stop+start command chain instead of no-op
+- Phase 14 defines all contracts before any feature implementation — prevents Rust/TS serialization drift.
+- Phase 16 (Channel Editor) builds before Phase 17 (Room Map) to establish centralized coordinate conversion utility first.
+- Phase 15 (Fault Recovery) placed before Phase 18 (Standalone) — standalone users have no USB fallback; DTLS must be stable first.
+- CHAN-05 (write-back) is experimental; placed in Phase 20 with explicit "verify API first" gate.
+- react-konva NOT used for room map — DOM-based drag with pointer events is sufficient (900x620, max 20 elements).
+- WebView2 GPU blocklist flag (`--ignore-gpu-blocklist`) must be applied at start of Phase 17 before any canvas drag code.
+- [Phase 14-contract-foundation]: wall_side field uses String type (not enum) - enum upgrade deferred to Phase 16/17
+- [Phase 14-contract-foundation]: Command stubs return STUB_NOT_IMPLEMENTED CommandStatus to prevent runtime panics from todo!()
+- [Phase 14-contract-foundation]: f64 used for all float fields to match JavaScript number 64-bit precision at Tauri serialization boundary
+- [Phase 14-contract-foundation]: RoomMapConfig uses separate typed arrays (hueChannels, usbStrips, furniture) per D-02a, maps cleanly to Rust structs
+- [Phase 14-contract-foundation]: HueChannelPlacement x/y/z use Hue native range [-1.0, 1.0] for direct bridge write-back per D-01a
+- [Phase 14-contract-foundation]: All new ShellState fields (roomMap, roomMapVersion) are optional to avoid breaking existing app.json deserialization
+- [Phase 14-contract-foundation]: ID_TO_CONST mapping handles hyphenated section IDs (led-setup, room-map) that break naïve toUpperCase() matching in SECTION_ORDER completeness check
+- [Phase 15-fault-recovery-and-diagnostics]: [Phase 15-03]: TelemetrySection migrated from getRuntimeTelemetrySnapshot to getFullTelemetrySnapshot; HueTelemetryGrid renders when hue !== null
+- [Phase 16-01]: placements prop uses placementsRef (useRef) instead of direct useEffect dependency — prevents infinite render loop when caller passes inline array literals
+- [Phase 16-01]: roomMap.ts contract created in this plan (was referenced by RESEARCH.md but missing from codebase)
+- [Phase 17-room-map-ui]: fs:allow-app-data-dir is not a valid Tauri 2 fs permission — replaced with fs:allow-appdata-write and fs:allow-appdata-read
 
 ## Accumulated Context
 
-### Roadmap Evolution
+### Blockers / Research Flags
 
-- Phase 13 added: Structured Logging — tauri-plugin-log integration with Hue lifecycle events
+- Phase 16: Hue CLIP v2 PUT body schema for channel positions is MEDIUM confidence (inferred from aiohue, not official docs). Must verify against physical bridge or openhue-api OpenAPI YAML before writing `update_hue_channel_positions` Rust handler.
+- Phase 18: `SetLightingModeRequest.targets` addition may break existing callers — audit all `invoke("set_lighting_mode", ...)` call sites before Phase 18 begins.
+- Phase 20 (CHAN-05): Conditional on API verification. If PUT schema blocked, criterion 3 is skipped and CHAN-05 moves to Future Requirements.
 
-- Phase numbering continues from v1.0 closeout and starts at Phase 9.
-- Roadmap scope is strictly v1.1 requirements (HUE/HUX/HDR) with no future-scope items included.
-- Each requirement is mapped to exactly one phase in `.planning/REQUIREMENTS.md` traceability.
-- Dependencies set as: 9 -> 10 -> 11, then 12 depends on 10 and 11.
+### Session Continuity
 
-## Session Continuity
-
-Last session: 2026-03-21T20:37:29.863Z
-Stopped at: Completed 10-05-PLAN.md
-Resume from: `/gsd-execute-phase 10-hue-stream-lifecycle`
-Key files:
-
-- `.planning/ROADMAP.md`
-- `.planning/REQUIREMENTS.md`
-- `.planning/PROJECT.md`
-
----
-## Bekleyen İnsan Testleri (Donanım Gerektirir)
-
-### Hue Bridge Gerektirir → `/gsd:verify-work 09` ve `/gsd:verify-work 10`
-
-- 09-VERIFICATION: Device panel onboarding akışı (Discover→Pair→Area→Ready)
-- 09-VERIFICATION: Manuel IP fallback + geçersiz IP engeli
-- 10-VERIFICATION: 5-10 dk kesintisiz runtime testi
-
-### USB Cihaz Gerektirir → `/gsd:verify-work 02`, `03`, `07`
-
-- 02-VERIFICATION: Gerçek USB auto-detect + manuel fallback
-- 03-VERIFICATION: Physical unplug/replug recovery
-- 07-VERIFICATION: Canlı telemetri metrik akışı
-
-### Şimdi Yapılabilir
-
-- 07-VERIFICATION: EN/TR dil değişimi testi → **BU SOHBETTE YAPILACAK**
+Last session: 2026-04-06T09:18:50.247Z
+Stopped at: Completed 17-01-PLAN.md
+Resume file: None
