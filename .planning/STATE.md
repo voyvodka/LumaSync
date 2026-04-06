@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
 status: executing
-stopped_at: Completed 17-04-PLAN.md
-last_updated: "2026-04-06T09:55:43.996Z"
+stopped_at: Completed 18-01-PLAN.md
+last_updated: "2026-04-06T20:12:44.631Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
+  total_plans: 14
+  completed_plans: 13
   percent: 38
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 17 — room-map-ui
+**Current focus:** Phase 18 — hue-standalone-mode
 
 ## Current Position
 
 Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
-Phase: 18
-Plan: Not started
+Phase: 18 (hue-standalone-mode) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
 Last activity: 2026-04-06
 
@@ -63,6 +63,8 @@ Progress: [████░░░░░░] 38%
 - [Phase 17]: [Phase 17-02]: SettingsLayout ROOM_MAP section uses h-full overflow-hidden wrapper (no padding) for full-bleed canvas per D-01a
 - [Phase 17]: HueChannelOverlay uses imperative DOM updates during drag instead of React state to avoid stale closure with pointer capture
 - [Phase 17]: Tauri protocol-asset feature enabled for convertFileSrc background image display in room map
+- [Phase 18-hue-standalone-mode]: targets=None preserves legacy USB-required behavior; needs_usb=true when targets empty or contains 'usb'
+- [Phase 18-hue-standalone-mode]: start_ambilight_worker accepts Option<String> port: None=Hue-only ambilight (captures frames, skips USB send, drives Hue channels)
 
 ## Accumulated Context
 
@@ -74,6 +76,6 @@ Progress: [████░░░░░░] 38%
 
 ### Session Continuity
 
-Last session: 2026-04-06T09:49:43.023Z
-Stopped at: Completed 17-04-PLAN.md
+Last session: 2026-04-06T20:12:44.628Z
+Stopped at: Completed 18-01-PLAN.md
 Resume file: None

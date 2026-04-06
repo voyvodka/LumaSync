@@ -169,7 +169,11 @@ Plans:
   1. User can launch the app with no USB serial device connected, navigate to mode controls, and start Hue streaming without seeing USB error banners or blocked controls.
   2. User can operate in Hue-only mode through a full session (stream start, maintain, stop) and the app never prompts for USB calibration.
   3. User can plug in a USB LED strip while in Hue-only mode and have the app detect it and offer USB as an additional output target without interrupting the Hue stream.
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [x] 18-01-PLAN.md — Rust backend target-aware gate logic, Hue-only workers, TS contract updates
+- [ ] 18-02-PLAN.md — Frontend target-aware mode pipeline, hot-plug UX, startup filtering, i18n
 
 ### Phase 19: LED Zone Auto-Derivation
 **Goal**: Users can derive Ambilight screen-edge zone assignments automatically from the room map, define named zones with light assignments, and apply them to calibration with explicit confirmation.
@@ -207,6 +211,6 @@ Plans:
 | 15. Fault Recovery and Diagnostics | v1.2 | 3/3 | Complete    | 2026-04-05 |
 | 16. Hue Channel Position Editor | v1.2 | 2/2 | Complete    | 2026-04-06 |
 | 17. Room Map UI | v1.2 | 4/4 | Complete    | 2026-04-06 |
-| 18. Hue Standalone Mode | v1.2 | 0/TBD | Not started | - |
+| 18. Hue Standalone Mode | v1.2 | 1/2 | In Progress|  |
 | 19. LED Zone Auto-Derivation | v1.2 | 0/TBD | Not started | - |
 | 20. Device UX Polish and Channel Write-back | v1.2 | 0/TBD | Not started | - |

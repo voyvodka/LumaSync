@@ -256,6 +256,20 @@ describe("App mode orchestration", () => {
     expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
   });
 
+  it.todo("filters persisted USB target when USB is not connected on startup");
+  // Setup: loadShellStateMock returns lastOutputTargets: ["usb", "hue"], useDeviceConnection returns isConnected: false
+  // Expect: After bootstrap, only "hue" target is active (USB filtered out)
+
+  it.todo("shows USB suggest banner when USB is plugged in during Hue-only session");
+  // Setup: Start with targets=["hue"], isConnected=false
+  // Action: Simulate isConnected changing to true
+  // Expect: USB suggest banner appears
+
+  it.todo("silently drops USB target when USB is unplugged during dual-target session");
+  // Setup: Start with targets=["usb", "hue"], isConnected=true
+  // Action: Simulate isConnected changing to false
+  // Expect: USB removed from targets, Hue continues, disconnect notice shown
+
   it("routes stop to selected targets and does not re-trigger hue start after manual stop", async () => {
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
