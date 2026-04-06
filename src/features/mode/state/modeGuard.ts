@@ -1,4 +1,5 @@
 import type { LedCalibrationConfig } from "../../calibration/model/contracts";
+import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
 
 export const MODE_GUARD_REASONS = {
   CALIBRATION_REQUIRED: "CALIBRATION_REQUIRED",
@@ -14,6 +15,7 @@ export interface LedModeGuardResult {
 export interface LedModeEnableAttemptInput {
   currentEnabled: boolean;
   calibration?: LedCalibrationConfig;
+  selectedTargets?: HueRuntimeTarget[];
 }
 
 export interface LedModeEnableAttempt {
@@ -22,8 +24,18 @@ export interface LedModeEnableAttempt {
   shouldOpenCalibration: boolean;
 }
 
-export function canEnableLedMode(calibration?: LedCalibrationConfig): LedModeGuardResult {
-  if (!calibration) {
+export function canEnableLedMode(
+  calibration?: LedCalibrationConfig,
+  selectedTargets?: HueRuntimeTarget[],
+): LedModeGuardResult {
+  // D-05: If targets are exclusively Hue (no USB), skip calibration requirement.
+  // USB target (or no targets = default to USB) requires calibration.
+  const usesUsb =
+    !selectedTargets ||
+    selectedTargets.length === 0 ||
+    selectedTargets.includes("usb");
+
+  if (usesUsb && !calibration) {
     return {
       canEnable: false,
       reason: MODE_GUARD_REASONS.CALIBRATION_REQUIRED,
@@ -39,7 +51,7 @@ export function canEnableLedMode(calibration?: LedCalibrationConfig): LedModeGua
 export function resolveLedModeEnableAttempt(
   input: LedModeEnableAttemptInput,
 ): LedModeEnableAttempt {
-  const gate = canEnableLedMode(input.calibration);
+  const gate = canEnableLedMode(input.calibration, input.selectedTargets);
 
   if (!gate.canEnable) {
     return {

@@ -10,6 +10,7 @@
 // export { HueAreaPreview as default };
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
@@ -56,6 +57,7 @@ import {
   type SectionId,
 } from "./shared/contracts/shell";
 import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
+import { DEVICE_COMMANDS } from "./shared/contracts/device";
 
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
@@ -317,7 +319,23 @@ function App() {
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);
-        setSelectedOutputTargets(restoredTargets);
+
+        // D-09: Filter persisted targets against available hardware at startup
+        let bootstrapUsbAvailable = false;
+        try {
+          const connectionStatus = await invoke<{ connected: boolean }>(
+            DEVICE_COMMANDS.GET_CONNECTION_STATUS,
+          );
+          bootstrapUsbAvailable = connectionStatus.connected;
+          const filteredTargets = restoredTargets.filter(
+            (t) => t !== "usb" || bootstrapUsbAvailable,
+          );
+          setSelectedOutputTargets(filteredTargets.length > 0 ? filteredTargets : restoredTargets);
+        } catch {
+          // If status check fails, use restored targets as-is
+          setSelectedOutputTargets(restoredTargets);
+        }
+
         const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
         setActiveOutputTargets(isActive ? restoredTargets : []);
         const hueBootstrapConfig = toHueStartConfig(state);
@@ -423,6 +441,7 @@ function App() {
         kind: nextMode.kind,
         solid: nextMode.solid ?? lightingMode.solid,
         ambilight: nextMode.ambilight ?? lightingMode.ambilight,
+        targets: selectedOutputTargets,
       });
       const isQuickSolidAdjustment =
         normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
@@ -456,8 +475,10 @@ function App() {
 
       if (!isQuickSolidAdjustment) setIsModeTransitioning(true);
 
+      // D-05: USB target requires calibration; Hue-only does not
+      const usesUsb = selectedOutputTargets.includes("usb");
       const requiresCalibration =
-        !savedCalibration && normalizedNextMode.kind !== LIGHTING_MODE_KIND.OFF;
+        usesUsb && !savedCalibration && normalizedNextMode.kind !== LIGHTING_MODE_KIND.OFF;
 
       if (requiresCalibration) {
         handleOpenCalibration();
@@ -603,7 +624,7 @@ function App() {
     ],
   );
 
-  const modeGuard = canEnableLedMode(savedCalibration);
+  const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
   return (
     <>
