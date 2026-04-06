@@ -206,7 +206,7 @@ Plans:
 | 14. Contract Foundation | v1.2 | 3/3 | Complete    | 2026-03-30 |
 | 15. Fault Recovery and Diagnostics | v1.2 | 3/3 | Complete    | 2026-04-05 |
 | 16. Hue Channel Position Editor | v1.2 | 2/2 | Complete    | 2026-04-06 |
-| 17. Room Map UI | v1.2 | 4/4 | Complete   | 2026-04-06 |
+| 17. Room Map UI | v1.2 | 4/4 | Complete    | 2026-04-06 |
 | 18. Hue Standalone Mode | v1.2 | 0/TBD | Not started | - |
 | 19. LED Zone Auto-Derivation | v1.2 | 0/TBD | Not started | - |
 | 20. Device UX Polish and Channel Write-back | v1.2 | 0/TBD | Not started | - |
