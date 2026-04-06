@@ -25,6 +25,7 @@ export function RoomMapEditor() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
+  const [gridStrokeWidth, setGridStrokeWidth] = useState(0.5);
   const [backgroundOpacity, setBackgroundOpacity] = useState(35);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -268,7 +269,9 @@ export function RoomMapEditor() {
             backgroundOpacity={backgroundOpacity}
             backgroundFileName={backgroundFileName}
             onDimensionsChange={handleDimensionsChange}
+            gridStrokeWidth={gridStrokeWidth}
             onGridToggle={setShowGrid}
+            onGridStrokeWidthChange={setGridStrokeWidth}
             onOpacityChange={setBackgroundOpacity}
             onUploadBackground={() => void handleUploadBackground()}
             onReset={() => void resetConfig()}
@@ -277,9 +280,13 @@ export function RoomMapEditor() {
         <RoomMapCanvas
           config={config}
           showGrid={showGrid}
+          gridStrokeWidth={gridStrokeWidth}
           backgroundOpacity={backgroundOpacity}
           selectedId={selectedId}
           onCanvasClick={() => setSelectedId(null)}
+          onBackgroundTransformChange={(ox, oy, s) => {
+            void updateConfig({ backgroundOffsetX: ox, backgroundOffsetY: oy, backgroundScale: s });
+          }}
         >
           {isEmpty && <RoomMapEmptyHint />}
 

@@ -7,10 +7,12 @@ interface RoomMapSettingsPopoverProps {
   onClose: () => void;
   dimensions: RoomDimensions;
   showGrid: boolean;
+  gridStrokeWidth: number;
   backgroundOpacity: number;
   backgroundFileName: string | null;
   onDimensionsChange: (d: RoomDimensions) => void;
   onGridToggle: (v: boolean) => void;
+  onGridStrokeWidthChange: (v: number) => void;
   onOpacityChange: (v: number) => void;
   onUploadBackground: () => void;
   onReset: () => void;
@@ -21,10 +23,12 @@ export function RoomMapSettingsPopover({
   onClose,
   dimensions,
   showGrid,
+  gridStrokeWidth,
   backgroundOpacity,
   backgroundFileName,
   onDimensionsChange,
   onGridToggle,
+  onGridStrokeWidthChange,
   onOpacityChange,
   onUploadBackground,
   onReset,
@@ -172,6 +176,27 @@ export function RoomMapSettingsPopover({
             />
             {t("roomMap.settings.showGrid")}
           </label>
+          {/* Grid stroke width slider */}
+          {showGrid && (
+            <div className="mt-2">
+              <label className={labelClass}>
+                {t("roomMap.settings.gridStrokeWidth")}: {gridStrokeWidth.toFixed(1)}px
+              </label>
+              <input
+                type="range"
+                min={0.5}
+                max={3}
+                step="any"
+                value={gridStrokeWidth}
+                onChange={(e) => onGridStrokeWidthChange(parseFloat(e.target.value))}
+                onPointerUp={(e) => {
+                  const raw = parseFloat((e.target as HTMLInputElement).value);
+                  onGridStrokeWidthChange(Math.round(raw * 10) / 10);
+                }}
+                className="w-full accent-slate-700 dark:accent-zinc-300"
+              />
+            </div>
+          )}
         </div>
 
         {/* Divider */}

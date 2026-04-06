@@ -80,7 +80,6 @@ export function HueChannelOverlay({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
       e.stopPropagation();
-      e.preventDefault();
       const el = e.currentTarget;
       el.setPointerCapture(e.pointerId);
 
@@ -174,11 +173,9 @@ export function HueChannelOverlay({
               aria-label={dotLabel}
               title={dotLabel}
               className={[
-                "flex items-center justify-center rounded-full border-2 text-[8px] font-bold text-zinc-900 select-none",
+                "flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none",
                 isSelected ? "w-4 h-4" : "w-3 h-3",
-                "bg-white",
-                "border-zinc-400",
-                isSelected ? "ring-2 ring-white/70" : "",
+                isSelected ? "bg-white border-white text-zinc-900" : "bg-white/80 border-zinc-400 text-zinc-900",
                 "cursor-grab active:cursor-grabbing",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
               ]

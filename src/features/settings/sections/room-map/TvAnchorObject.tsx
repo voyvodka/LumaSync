@@ -158,10 +158,10 @@ export function TvAnchorObject({
 
   return (
     <div
-      className={`absolute border-2 border-violet-500 bg-violet-500/40 ${
+      className={`absolute border-2 bg-violet-500/40 ${
         selected
-          ? "outline outline-2 outline-offset-2 outline-slate-900 dark:outline-zinc-100"
-          : ""
+          ? "border-white dark:border-white"
+          : "border-violet-500"
       } cursor-grab active:cursor-grabbing flex items-center justify-center`}
       style={{
         left: localX * pxPerMeter,
@@ -170,6 +170,7 @@ export function TvAnchorObject({
         height: localH * pxPerMeter,
         userSelect: "none",
         touchAction: "none",
+        zIndex: 10,
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

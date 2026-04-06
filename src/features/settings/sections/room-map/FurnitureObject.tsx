@@ -190,10 +190,10 @@ export function FurnitureObject({
 
   return (
     <div
-      className={`absolute border ${colors.border} ${colors.bg} ${
+      className={`absolute border-2 ${colors.bg} ${
         selected
-          ? "outline outline-2 outline-offset-2 outline-slate-900 dark:outline-zinc-100"
-          : ""
+          ? "border-white dark:border-white"
+          : colors.border
       } cursor-grab active:cursor-grabbing`}
       style={{
         left: localX * pxPerMeter,
@@ -204,6 +204,7 @@ export function FurnitureObject({
         transformOrigin: "center center",
         userSelect: "none",
         touchAction: "none",
+        zIndex: 10,
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

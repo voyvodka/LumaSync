@@ -460,6 +460,7 @@
       "uploadBackground": "Kat planı yükle",
       "opacity": "Şeffaflık",
       "showGrid": "Izgarayı göster",
+      "gridStrokeWidth": "Izgara kalınlığı",
       "roomWidth": "Genişlik (m)",
       "roomDepth": "Derinlik (m)",
       "resetMap": "Haritayı sıfırla",

@@ -132,6 +132,11 @@ export interface RoomMapConfig {
   zones: ZoneDefinition[];
   /** Path to a user-provided background floor plan image */
   backgroundImagePath?: string;
+  /** Background image offset in metres from canvas top-left */
+  backgroundOffsetX?: number;
+  backgroundOffsetY?: number;
+  /** Background image scale factor (1 = fit to canvas, >1 = zoomed in) */
+  backgroundScale?: number;
 }
 
 // ---------------------------------------------------------------------------

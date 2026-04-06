@@ -460,6 +460,7 @@
       "uploadBackground": "Upload floor plan",
       "opacity": "Opacity",
       "showGrid": "Show grid",
+      "gridStrokeWidth": "Grid thickness",
       "roomWidth": "Width (m)",
       "roomDepth": "Depth (m)",
       "resetMap": "Reset map",
