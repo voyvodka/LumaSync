@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
 status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-04-06T09:18:50.249Z"
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-04-06T09:25:23.839Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 7
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 9
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 1
   percent: 38
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
 Phase: 17 (room-map-ui) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-04-06
 
@@ -59,6 +59,8 @@ Progress: [████░░░░░░] 38%
 - [Phase 16-01]: placements prop uses placementsRef (useRef) instead of direct useEffect dependency — prevents infinite render loop when caller passes inline array literals
 - [Phase 16-01]: roomMap.ts contract created in this plan (was referenced by RESEARCH.md but missing from codebase)
 - [Phase 17-room-map-ui]: fs:allow-app-data-dir is not a valid Tauri 2 fs permission — replaced with fs:allow-appdata-write and fs:allow-appdata-read
+- [Phase 17]: RoomMapContext provides pxPerMeter and canvasSize to children via React.createContext — avoids prop drilling for future object components in Plans 03/04
+- [Phase 17]: [Phase 17-02]: SettingsLayout ROOM_MAP section uses h-full overflow-hidden wrapper (no padding) for full-bleed canvas per D-01a
 
 ## Accumulated Context
 
@@ -70,6 +72,6 @@ Progress: [████░░░░░░] 38%
 
 ### Session Continuity
 
-Last session: 2026-04-06T09:18:50.247Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-04-06T09:25:23.837Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
