@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement } from "../../../../shared/contracts/roomMap";
 
@@ -13,8 +13,7 @@ interface HueChannelOverlayProps {
 /**
  * Convert Hue coordinate [-1, 1] to CSS percentage [0%, 100%].
  *
- * Hue x: -1=left  → 0%,  +1=right → 100%
- * Hue y: -1=back  → 0% (top),  +1=front → 100% (bottom) — NOTE: Y is inverted for CSS `top`
+ * Hue x: -1=left  -> 0%,  +1=right -> 100%
  */
 function posToPercent(val: number): number {
   return ((val + 1) / 2) * 100;
@@ -24,15 +23,39 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-interface DragRef {
+interface DragState {
   active: boolean;
+  channelIndex: number;
   startClientX: number;
   startClientY: number;
   startX: number;
   startY: number;
-  channelIndex: number;
+  /** Live drag position — updated on each pointer move so pointerUp can read final value */
+  currentX: number;
+  currentY: number;
+  /** The element whose render needs updating */
+  element: HTMLDivElement | null;
 }
 
+const EMPTY_DRAG: DragState = {
+  active: false,
+  channelIndex: -1,
+  startClientX: 0,
+  startClientY: 0,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  element: null,
+};
+
+/**
+ * Renders Hue channel dots on the room map canvas.
+ *
+ * Uses imperative DOM manipulation during drag to avoid React re-render overhead
+ * and stale closure issues with pointer capture. Position is committed to React
+ * state only on pointer up via onChange callback.
+ */
 export function HueChannelOverlay({
   channels,
   canvasSize,
@@ -42,104 +65,91 @@ export function HueChannelOverlay({
 }: HueChannelOverlayProps) {
   const { t } = useTranslation("common");
 
-  const dragRef = useRef<DragRef>({
-    active: false,
-    startClientX: 0,
-    startClientY: 0,
-    startX: 0,
-    startY: 0,
-    channelIndex: -1,
-  });
+  const dragRef = useRef<DragState>({ ...EMPTY_DRAG });
 
-  // Local position state during drag (keyed by channelIndex)
-  const [localPositions, setLocalPositions] = useState<Map<number, { x: number; y: number }>>(
-    new Map(),
-  );
+  /** Lookup channel by index from current channels prop via ref to avoid stale closure */
+  const channelsRef = useRef(channels);
+  channelsRef.current = channels;
+
+  const canvasSizeRef = useRef(canvasSize);
+  canvasSizeRef.current = canvasSize;
+
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
       e.stopPropagation();
-      e.currentTarget.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+
       dragRef.current = {
         active: true,
+        channelIndex: ch.channelIndex,
         startClientX: e.clientX,
         startClientY: e.clientY,
         startX: ch.x,
         startY: ch.y,
-        channelIndex: ch.channelIndex,
+        currentX: ch.x,
+        currentY: ch.y,
+        element: el,
       };
-      setLocalPositions((prev) => {
-        const next = new Map(prev);
-        next.set(ch.channelIndex, { x: ch.x, y: ch.y });
-        return next;
-      });
+
       onSelect(ch.channelIndex);
     },
     [onSelect],
   );
 
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const dr = dragRef.current;
-      if (!dr.active || canvasSize.w === 0 || canvasSize.h === 0) return;
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const dr = dragRef.current;
+    const cs = canvasSizeRef.current;
+    if (!dr.active || cs.w === 0 || cs.h === 0) return;
 
-      const dxPx = e.clientX - dr.startClientX;
-      const dyPx = e.clientY - dr.startClientY;
+    const dxPx = e.clientX - dr.startClientX;
+    const dyPx = e.clientY - dr.startClientY;
 
-      // Convert pixel delta to Hue coordinate delta
-      // Canvas width represents 2 units of Hue space [-1, 1]
-      const dxHue = (dxPx / canvasSize.w) * 2;
-      // Y is inverted: dragging down increases CSS top but decreases Hue y
-      const dyHue = -(dyPx / canvasSize.h) * 2;
+    // Convert pixel delta to Hue coordinate delta
+    const dxHue = (dxPx / cs.w) * 2;
+    // Y inverted: CSS down = Hue y decrease
+    const dyHue = -(dyPx / cs.h) * 2;
 
-      const newX = clamp(dr.startX + dxHue, -1, 1);
-      const newY = clamp(dr.startY + dyHue, -1, 1);
+    const newX = clamp(dr.startX + dxHue, -1, 1);
+    const newY = clamp(dr.startY + dyHue, -1, 1);
 
-      setLocalPositions((prev) => {
-        const next = new Map(prev);
-        next.set(dr.channelIndex, { x: newX, y: newY });
-        return next;
-      });
-    },
-    [canvasSize],
-  );
+    dr.currentX = newX;
+    dr.currentY = newY;
 
-  const handlePointerUp = useCallback(
-    (_e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
-      const dr = dragRef.current;
-      if (!dr.active) return;
+    // Imperative DOM update for smooth drag — avoids re-render
+    const wrapper = dr.element?.parentElement;
+    if (wrapper) {
+      wrapper.style.left = `${posToPercent(newX)}%`;
+      wrapper.style.top = `${posToPercent(-newY)}%`;
+    }
+  }, []);
 
-      const pos = localPositions.get(ch.channelIndex);
-      if (pos) {
-        onChange({ ...ch, x: pos.x, y: pos.y });
-      }
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const dr = dragRef.current;
+    if (!dr.active) return;
 
-      dragRef.current = {
-        active: false,
-        startClientX: 0,
-        startClientY: 0,
-        startX: 0,
-        startY: 0,
-        channelIndex: -1,
-      };
-    },
-    [localPositions, onChange],
-  );
+    e.currentTarget.releasePointerCapture(e.pointerId);
+
+    const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
+    if (ch) {
+      onChangeRef.current({ ...ch, x: dr.currentX, y: dr.currentY });
+    }
+
+    dragRef.current = { ...EMPTY_DRAG };
+  }, []);
 
   return (
     <>
       {channels.map((ch) => {
-        const localPos = localPositions.get(ch.channelIndex);
-        const displayX = localPos?.x ?? ch.x;
-        const displayY = localPos?.y ?? ch.y;
-
-        const leftPct = posToPercent(displayX);
-        // Invert Y: Hue +y = front wall = bottom of canvas (CSS top = higher value)
-        // Hue y=-1 → top: 0% (back wall top), Hue y=+1 → top: 100% (front wall bottom)
-        const topPct = posToPercent(-displayY);
+        const leftPct = posToPercent(ch.x);
+        // Invert Y: Hue +y = front wall (bottom of canvas)
+        const topPct = posToPercent(-ch.y);
 
         const isSelected = selectedId === `hue-${ch.channelIndex}`;
-        const isDragging = dragRef.current.active && dragRef.current.channelIndex === ch.channelIndex;
 
         const dotLabel =
           ch.label ??
@@ -154,6 +164,7 @@ export function HueChannelOverlay({
               top: `${topPct}%`,
               transform: "translate(-50%, -50%)",
               zIndex: 20,
+              touchAction: "none",
             }}
           >
             <div
@@ -164,27 +175,21 @@ export function HueChannelOverlay({
               title={dotLabel}
               className={[
                 "flex items-center justify-center rounded-full border-2 text-[8px] font-bold text-zinc-900 select-none",
-                // Size: larger when selected
                 isSelected ? "w-4 h-4" : "w-3 h-3",
-                // Background: white dot
                 "bg-white",
-                // Border: zinc-400 for unassigned (room map has no region assignments)
                 "border-zinc-400",
-                // Ring when selected
                 isSelected ? "ring-2 ring-white/70" : "",
-                // Cursor
-                isDragging ? "cursor-grabbing" : "cursor-grab",
+                "cursor-grab active:cursor-grabbing",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
               ]
                 .filter(Boolean)
                 .join(" ")}
+              style={{ touchAction: "none" }}
               onPointerDown={(e) => {
                 handlePointerDown(e, ch);
               }}
               onPointerMove={handlePointerMove}
-              onPointerUp={(e) => {
-                handlePointerUp(e, ch);
-              }}
+              onPointerUp={handlePointerUp}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(ch.channelIndex);

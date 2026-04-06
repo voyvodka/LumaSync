@@ -21,6 +21,7 @@
     "dialog:allow-open",
     "fs:allow-copy-file",
     "fs:allow-appdata-write",
-    "fs:allow-appdata-read"
+    "fs:allow-appdata-read",
+    "fs:allow-appdata-read-recursive"
   ]
 }

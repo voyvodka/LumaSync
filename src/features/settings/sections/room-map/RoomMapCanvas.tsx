@@ -133,7 +133,14 @@ export function RoomMapCanvas({
         )}
 
         {/* Object layer (z-index 10+) */}
-        <div className="relative z-10 w-full h-full">
+        <div
+          className="relative z-10 w-full h-full"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              onCanvasClick();
+            }
+          }}
+        >
           {children}
         </div>
       </div>

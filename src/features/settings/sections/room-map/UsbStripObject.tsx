@@ -10,7 +10,7 @@ interface UsbStripObjectProps {
   onChange: (updated: UsbStripPlacement) => void;
 }
 
-type HandleType = "start" | "end";
+type HandleType = "start" | "end" | "line";
 
 export function UsbStripObject({
   placement,
@@ -43,8 +43,14 @@ export function UsbStripObject({
     handle: HandleType | null;
     startClientX: number;
     startClientY: number;
+    // For start/end handle: single position
     startPosX: number;
     startPosY: number;
+    // For line drag: both endpoints
+    startSX: number;
+    startSY: number;
+    startEX: number;
+    startEY: number;
   }>({
     active: false,
     handle: null,
@@ -52,10 +58,14 @@ export function UsbStripObject({
     startClientY: 0,
     startPosX: 0,
     startPosY: 0,
+    startSX: 0,
+    startSY: 0,
+    startEX: 0,
+    startEY: 0,
   });
 
   const handlePointerDown = (
-    e: React.PointerEvent<HTMLDivElement>,
+    e: React.PointerEvent<HTMLDivElement | SVGLineElement>,
     handle: HandleType,
   ) => {
     e.stopPropagation();
@@ -67,22 +77,31 @@ export function UsbStripObject({
       startClientY: e.clientY,
       startPosX: handle === "start" ? localSX : localEX,
       startPosY: handle === "start" ? localSY : localEY,
+      startSX: localSX,
+      startSY: localSY,
+      startEX: localEX,
+      startEY: localEY,
     };
     onSelect(placement.stripId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement | SVGLineElement>) => {
     if (!dragRef.current.active || !dragRef.current.handle) return;
     const dx = (e.clientX - dragRef.current.startClientX) / pxPerMeter;
     const dy = (e.clientY - dragRef.current.startClientY) / pxPerMeter;
-    const newX = dragRef.current.startPosX + dx;
-    const newY = dragRef.current.startPosY + dy;
-    if (dragRef.current.handle === "start") {
-      setLocalSX(newX);
-      setLocalSY(newY);
+
+    if (dragRef.current.handle === "line") {
+      // Move both endpoints together
+      setLocalSX(dragRef.current.startSX + dx);
+      setLocalSY(dragRef.current.startSY + dy);
+      setLocalEX(dragRef.current.startEX + dx);
+      setLocalEY(dragRef.current.startEY + dy);
+    } else if (dragRef.current.handle === "start") {
+      setLocalSX(dragRef.current.startPosX + dx);
+      setLocalSY(dragRef.current.startPosY + dy);
     } else {
-      setLocalEX(newX);
-      setLocalEY(newY);
+      setLocalEX(dragRef.current.startPosX + dx);
+      setLocalEY(dragRef.current.startPosY + dy);
     }
   };
 
@@ -120,11 +139,29 @@ export function UsbStripObject({
 
   return (
     <>
-      {/* SVG line + arrow — pointer-events: none so handles below receive events */}
+      {/* SVG line + arrow + invisible wide hit area for line drag */}
       <svg
-        className="absolute inset-0 w-full h-full pointer-events-none"
+        className="absolute inset-0 w-full h-full"
         style={{ zIndex: 1 }}
       >
+        {/* Invisible wide stroke for easier line grab (pointer-events: stroke) */}
+        <line
+          x1={sx}
+          y1={sy}
+          x2={ex}
+          y2={ey}
+          stroke="transparent"
+          strokeWidth="14"
+          style={{ cursor: selected ? "grab" : "pointer", pointerEvents: "stroke" }}
+          onPointerDown={(e) => handlePointerDown(e, "line")}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(placement.stripId);
+          }}
+        />
+        {/* Visible dashed line */}
         <line
           x1={sx}
           y1={sy}
@@ -133,11 +170,13 @@ export function UsbStripObject({
           stroke="#06b6d4"
           strokeWidth="2"
           strokeDasharray="4 4"
+          style={{ pointerEvents: "none" }}
         />
         <polygon
           points="0,-6 5,0 -5,0"
           fill="#06b6d4"
           transform={`translate(${ex}, ${ey}) rotate(${angle + 90})`}
+          style={{ pointerEvents: "none" }}
         />
       </svg>
 

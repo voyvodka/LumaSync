@@ -155,15 +155,76 @@ export function RoomMapEditor() {
     void updateConfig({ furniture: updated });
   }, [selectedId, config.furniture, updateConfig]);
 
+  const handleArrowNudge = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!selectedId) return;
+      const arrowKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
+      if (!arrowKeys.includes(e.key)) return;
+      e.preventDefault();
+
+      // Metre-based nudge step (0.1m default, smaller than grid step)
+      const nudgeM = 0.1;
+      let dx = 0;
+      let dy = 0;
+      if (e.key === "ArrowLeft") dx = -nudgeM;
+      if (e.key === "ArrowRight") dx = nudgeM;
+      if (e.key === "ArrowUp") dy = -nudgeM;
+      if (e.key === "ArrowDown") dy = nudgeM;
+
+      if (selectedId === "tv" && config.tvAnchor) {
+        void updateConfig({
+          tvAnchor: { ...config.tvAnchor, x: config.tvAnchor.x + dx, y: config.tvAnchor.y + dy },
+        });
+      } else if (selectedId.startsWith("furniture-")) {
+        const fId = selectedId.replace("furniture-", "");
+        void updateConfig({
+          furniture: config.furniture.map((f) =>
+            f.id === fId ? { ...f, x: f.x + dx, y: f.y + dy } : f,
+          ),
+        });
+      } else if (selectedId.startsWith("usb-")) {
+        const sId = selectedId.replace("usb-", "");
+        void updateConfig({
+          usbStrips: config.usbStrips.map((s) =>
+            s.stripId === sId
+              ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
+              : s,
+          ),
+        });
+      } else if (selectedId.startsWith("hue-")) {
+        const idx = parseInt(selectedId.replace("hue-", ""), 10);
+        // Hue channels: nudge in [-1,1] space; step = 0.05
+        const hueStep = 0.05;
+        let hdx = 0;
+        let hdy = 0;
+        if (e.key === "ArrowLeft") hdx = -hueStep;
+        if (e.key === "ArrowRight") hdx = hueStep;
+        // Hue Y: up = positive (towards front), CSS up = negative
+        if (e.key === "ArrowUp") hdy = hueStep;
+        if (e.key === "ArrowDown") hdy = -hueStep;
+        void updateConfig({
+          hueChannels: config.hueChannels.map((ch) =>
+            ch.channelIndex === idx
+              ? { ...ch, x: Math.max(-1, Math.min(1, ch.x + hdx)), y: Math.max(-1, Math.min(1, ch.y + hdy)) }
+              : ch,
+          ),
+        });
+      }
+    },
+    [selectedId, config, updateConfig],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key === "Delete" || e.key === "Backspace") {
         handleDelete();
       } else if (e.key === "r" || e.key === "R") {
         handleRotate();
+      } else {
+        handleArrowNudge(e);
       }
     },
-    [handleDelete, handleRotate],
+    [handleDelete, handleRotate, handleArrowNudge],
   );
 
   const handleDimensionsChange = useCallback(
