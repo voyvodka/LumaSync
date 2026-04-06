@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
+import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
+import type { HueChannelPlacement, RoomMapConfig } from "../../../shared/contracts/roomMap";
+import { shellStore } from "../../persistence/shellStore";
 import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
 import { buildHueRuntimeStatusCard } from "../../device/hueRuntimeStatusCard";
 import { buildHueStatusCard } from "../../device/hueStatusCard";
@@ -213,6 +216,53 @@ export function DeviceSection() {
     ready: canStartHue,
   };
 
+  // -------------------------------------------------------------------------
+  // Channel placement persistence (D-05a)
+  // -------------------------------------------------------------------------
+
+  const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
+  const [persistError, setPersistError] = useState(false);
+  const persistErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load placements from shellStore on mount and when selectedAreaId changes
+  useEffect(() => {
+    let cancelled = false;
+    shellStore.load().then((state) => {
+      if (cancelled) return;
+      setChannelPlacements(state.roomMap?.hueChannels ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [selectedAreaId]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
+    };
+  }, []);
+
+  const handlePositionChange = useCallback(async (updated: HueChannelPlacement[]) => {
+    setChannelPlacements(updated);
+    try {
+      const current = await shellStore.load();
+      const currentRoomMap = current.roomMap;
+      const updatedRoomMap: RoomMapConfig = {
+        ...(currentRoomMap ?? DEFAULT_ROOM_MAP),
+        hueChannels: updated,
+      };
+      await shellStore.save({
+        roomMap: updatedRoomMap,
+        roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+      });
+      setPersistError(false);
+    } catch {
+      setPersistError(true);
+      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
+      persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
+    }
+  }, []);
+
+  // -------------------------------------------------------------------------
   // Wizard accordion: user can click completed steps to revisit them
   const [hueExpandedStep, setHueExpandedStep] = useState<HueStepKey | null>(null);
   // Derive which step should be open: user override > active step
@@ -997,6 +1047,9 @@ export function DeviceSection() {
                         isLoading={isLoadingChannels}
                         overrides={channelRegionOverrides}
                         onSetRegion={setChannelRegion}
+                        placements={channelPlacements}
+                        onPositionChange={handlePositionChange}
+                        persistError={persistError}
                       />
                     ) : null}
                   </div>
