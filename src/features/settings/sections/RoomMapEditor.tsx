@@ -10,6 +10,7 @@ import { RoomMapEmptyHint } from "./room-map/RoomMapEmptyHint";
 import { FurnitureObject } from "./room-map/FurnitureObject";
 import { TvAnchorObject } from "./room-map/TvAnchorObject";
 import { UsbStripObject } from "./room-map/UsbStripObject";
+import { HueChannelOverlay } from "./room-map/HueChannelOverlay";
 import type {
   FurniturePlacement,
   TvAnchorPlacement,
@@ -267,6 +268,22 @@ export function RoomMapEditor() {
               snapEnabled={showGrid}
               onSelect={() => setSelectedId("tv")}
               onChange={(updated) => void updateConfig({ tvAnchor: updated })}
+            />
+          )}
+
+          {/* Hue channel dots */}
+          {config.hueChannels.length > 0 && (
+            <HueChannelOverlay
+              channels={config.hueChannels}
+              canvasSize={canvasSize}
+              selectedId={selectedId}
+              onSelect={(idx) => setSelectedId(`hue-${idx}`)}
+              onChange={(updated) => {
+                const next = config.hueChannels.map((ch) =>
+                  ch.channelIndex === updated.channelIndex ? updated : ch,
+                );
+                void updateConfig({ hueChannels: next });
+              }}
             />
           )}
         </RoomMapCanvas>
