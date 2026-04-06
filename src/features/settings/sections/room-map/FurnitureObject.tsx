@@ -121,7 +121,7 @@ export function FurnitureObject({
 
   // Resize handlers
   const handleResizeDragStart = (
-    e: React.PointerEvent,
+    _e: React.PointerEvent,
     corner: "nw" | "ne" | "sw" | "se",
   ) => {
     resizeRef.current = {

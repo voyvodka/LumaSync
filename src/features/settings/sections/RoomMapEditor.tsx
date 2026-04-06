@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -7,6 +7,9 @@ import { RoomMapCanvas } from "./room-map/RoomMapCanvas";
 import { RoomMapToolbar } from "./room-map/RoomMapToolbar";
 import { RoomMapSettingsPopover } from "./room-map/RoomMapSettingsPopover";
 import { RoomMapEmptyHint } from "./room-map/RoomMapEmptyHint";
+import { FurnitureObject } from "./room-map/FurnitureObject";
+import { TvAnchorObject } from "./room-map/TvAnchorObject";
+import { UsbStripObject } from "./room-map/UsbStripObject";
 import type {
   FurniturePlacement,
   TvAnchorPlacement,
@@ -22,6 +25,23 @@ export function RoomMapEditor() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [backgroundOpacity, setBackgroundOpacity] = useState(35);
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setCanvasSize({ w: width, h: height });
+      }
+    });
+    ro.observe(el);
+    const rect = el.getBoundingClientRect();
+    setCanvasSize({ w: rect.width, h: rect.height });
+    return () => ro.disconnect();
+  }, []);
 
   // Derived
   const hasTv = !!config.tvAnchor;
@@ -35,6 +55,14 @@ export function RoomMapEditor() {
     : null;
 
   const { widthMeters, depthMeters } = config.dimensions;
+
+  // pxPerMeter computed from container size and room dimensions
+  const pxPerMeter =
+    canvasSize.w > 0 && canvasSize.h > 0
+      ? Math.min(canvasSize.w / widthMeters, canvasSize.h / depthMeters)
+      : 100;
+  const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
+  const gridStepPx = gridStepM * pxPerMeter;
 
   // Handlers
   const handleAddTv = useCallback(() => {
@@ -100,23 +128,26 @@ export function RoomMapEditor() {
 
   const handleDelete = useCallback(() => {
     if (!selectedId) return;
-    if (selectedId.startsWith("furniture-")) {
-      void updateConfig({ furniture: config.furniture.filter((f) => f.id !== selectedId) });
+    if (selectedId === "tv") {
+      void updateConfig({ tvAnchor: undefined });
+    } else if (selectedId.startsWith("furniture-")) {
+      const fId = selectedId.replace("furniture-", "");
+      void updateConfig({ furniture: config.furniture.filter((f) => f.id !== fId) });
     } else if (selectedId.startsWith("usb-")) {
-      void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== selectedId) });
+      const sId = selectedId.replace("usb-", "");
+      void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== sId) });
     } else if (selectedId.startsWith("hue-")) {
       const idx = parseInt(selectedId.replace("hue-", ""), 10);
       void updateConfig({ hueChannels: config.hueChannels.filter((_, i) => i !== idx) });
-    } else if (selectedId === "tv") {
-      void updateConfig({ tvAnchor: undefined });
     }
     setSelectedId(null);
   }, [selectedId, config, updateConfig]);
 
   const handleRotate = useCallback(() => {
     if (!selectedId || !selectedId.startsWith("furniture-")) return;
+    const fId = selectedId.replace("furniture-", "");
     const updated = config.furniture.map((f) => {
-      if (f.id !== selectedId) return f;
+      if (f.id !== fId) return f;
       const current = f.rotation ?? 0;
       return { ...f, rotation: (current + 15) % 360 };
     });
@@ -165,7 +196,7 @@ export function RoomMapEditor() {
         settingsOpen={settingsOpen}
         onToggleSettings={() => setSettingsOpen((v) => !v)}
       />
-      <div className="relative flex-1">
+      <div className="relative flex-1" ref={canvasContainerRef}>
         {settingsOpen && (
           <RoomMapSettingsPopover
             open={settingsOpen}
@@ -189,7 +220,55 @@ export function RoomMapEditor() {
           onCanvasClick={() => setSelectedId(null)}
         >
           {isEmpty && <RoomMapEmptyHint />}
-          {/* Object components from Plan 03/04 will render here */}
+
+          {/* USB strip SVG overlay + handles */}
+          {config.usbStrips.map((strip) => (
+            <UsbStripObject
+              key={strip.stripId}
+              placement={strip}
+              pxPerMeter={pxPerMeter}
+              selected={selectedId === `usb-${strip.stripId}`}
+              onSelect={(id) => setSelectedId(`usb-${id}`)}
+              onChange={(updated) => {
+                const next = config.usbStrips.map((s) =>
+                  s.stripId === updated.stripId ? updated : s,
+                );
+                void updateConfig({ usbStrips: next });
+              }}
+            />
+          ))}
+
+          {/* Furniture objects */}
+          {config.furniture.map((f) => (
+            <FurnitureObject
+              key={f.id}
+              placement={f}
+              pxPerMeter={pxPerMeter}
+              selected={selectedId === `furniture-${f.id}`}
+              gridStepPx={gridStepPx}
+              snapEnabled={showGrid}
+              onSelect={(id) => setSelectedId(`furniture-${id}`)}
+              onChange={(updated) => {
+                const next = config.furniture.map((item) =>
+                  item.id === updated.id ? updated : item,
+                );
+                void updateConfig({ furniture: next });
+              }}
+            />
+          ))}
+
+          {/* TV anchor */}
+          {config.tvAnchor && (
+            <TvAnchorObject
+              placement={config.tvAnchor}
+              pxPerMeter={pxPerMeter}
+              selected={selectedId === "tv"}
+              gridStepPx={gridStepPx}
+              snapEnabled={showGrid}
+              onSelect={() => setSelectedId("tv")}
+              onChange={(updated) => void updateConfig({ tvAnchor: updated })}
+            />
+          )}
         </RoomMapCanvas>
       </div>
       {error && (
