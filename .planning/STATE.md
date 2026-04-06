@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
-status: executing
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-04-06T20:12:44.631Z"
+status: verifying
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-04-06T20:21:35.191Z"
 last_activity: 2026-04-06
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 14
-  completed_plans: 13
+  completed_plans: 14
   percent: 38
 ---
 
@@ -28,7 +28,7 @@ See: `.planning/PROJECT.md` (updated 2026-03-30)
 Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
 Phase: 18 (hue-standalone-mode) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-06
 
 Progress: [████░░░░░░] 38%
@@ -65,6 +65,8 @@ Progress: [████░░░░░░] 38%
 - [Phase 17]: Tauri protocol-asset feature enabled for convertFileSrc background image display in room map
 - [Phase 18-hue-standalone-mode]: targets=None preserves legacy USB-required behavior; needs_usb=true when targets empty or contains 'usb'
 - [Phase 18-hue-standalone-mode]: start_ambilight_worker accepts Option<String> port: None=Hue-only ambilight (captures frames, skips USB send, drives Hue channels)
+- [Phase 18-hue-standalone-mode]: bootstrapDone + prevUsbConnectedRef(null) ensures no false USB detected event at startup; separate from wasConnectedRef
+- [Phase 18-hue-standalone-mode]: usesUsb check treats empty or undefined selectedTargets as USB default for backward compatibility
 
 ## Accumulated Context
 
@@ -76,6 +78,6 @@ Progress: [████░░░░░░] 38%
 
 ### Session Continuity
 
-Last session: 2026-04-06T20:12:44.628Z
-Stopped at: Completed 18-01-PLAN.md
+Last session: 2026-04-06T20:21:27.144Z
+Stopped at: Completed 18-02-PLAN.md
 Resume file: None
