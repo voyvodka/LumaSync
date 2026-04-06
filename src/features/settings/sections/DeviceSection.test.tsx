@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -44,18 +44,25 @@ vi.mock("../../device/useHueOnboarding", () => ({
   useHueOnboarding: () => useHueOnboardingMock(),
 }));
 
+vi.mock("../../persistence/shellStore", () => ({
+  shellStore: {
+    load: vi.fn().mockResolvedValue({ roomMap: null }),
+    save: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 function createHueHookState(overrides: Record<string, unknown> = {}) {
   return {
     step: "ready",
-    bridges: [],
-    selectedBridgeId: null,
-    selectedBridge: null,
+    bridges: [{ id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" }],
+    selectedBridgeId: "test-bridge",
+    selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
     manualIp: "",
     manualIpError: null,
     credentialState: "valid",
     areaGroups: [],
-    selectedAreaId: null,
-    selectedArea: null,
+    selectedAreaId: "test-area",
+    selectedArea: { id: "test-area", name: "Test Area", readiness: { ready: true } },
     canStartHue: true,
     isDiscovering: false,
     isPairing: false,
@@ -76,6 +83,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     selectArea: vi.fn(),
     revalidateArea: vi.fn(),
     startRuntime: vi.fn(),
+    areaChannels: [],
     retryRuntimeTarget: vi.fn(),
     ...overrides,
   };
@@ -87,7 +95,7 @@ describe("DeviceSection hue runtime controls", () => {
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("keeps Start disabled while credential validating/unknown and shows stale readiness checklist", () => {
+  it("keeps Start disabled while credential validating/unknown and shows stale readiness checklist", async () => {
     useHueOnboardingMock.mockReturnValue(
       createHueHookState({
         credentialState: "unknown",
@@ -99,14 +107,22 @@ describe("DeviceSection hue runtime controls", () => {
 
     render(<DeviceSection />);
 
-    expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeDisabled();
+    });
     expect(screen.getByText("device.hue.runtime.checklist.revalidate")).toBeInTheDocument();
   });
 
   it("routes Device stop action to shared mode stop pipeline", async () => {
     const user = userEvent.setup();
+    useHueOnboardingMock.mockReturnValue(
+      createHueHookState({ runtimeStatus: { state: "Running" } }),
+    );
     render(<DeviceSection />);
 
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "device.hue.actions.stop" })).toBeInTheDocument();
+    });
     await user.click(screen.getByRole("button", { name: "device.hue.actions.stop" }));
 
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
@@ -119,6 +135,9 @@ describe("DeviceSection hue runtime controls", () => {
 
     render(<DeviceSection />);
 
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeInTheDocument();
+    });
     await user.click(screen.getByRole("button", { name: "device.hue.actions.start" }));
 
     expect(startRuntime).toHaveBeenCalledTimes(1);
@@ -147,7 +166,9 @@ describe("DeviceSection hue runtime controls", () => {
 
     render(<DeviceSection />);
 
-    expect(screen.getByRole("button", { name: "device.hue.runtime.targets.hue.retry" })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "device.hue.runtime.targets.hue.retry" })).toBeDisabled();
+    });
     expect(screen.getByText("device.hue.runtime.retryStatus")).toBeInTheDocument();
 
     const usbRetry = screen.getByRole("button", { name: "device.hue.runtime.targets.usb.retry" });
