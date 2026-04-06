@@ -73,12 +73,10 @@ describe("CHAN-01: channels rendered at positions", () => {
 
 describe("CHAN-02: drag to update position", () => {
   it("shows mode toggle with Position and Assign Zone options", () => {
-    // This test is upgraded to a real assertion in Task 2 after ModePillToggle
-    // is added to HueChannelMapPanel. Currently a stub — passes unconditionally.
-    // render(<HueChannelMapPanel {...defaultProps} />);
-    // expect(screen.getByText("device.hue.channelMap.modPosition")).toBeTruthy();
-    // expect(screen.getByText("device.hue.channelMap.modAssignZone")).toBeTruthy();
-    expect(true).toBe(true); // placeholder — upgraded in Task 2
+    render(<HueChannelMapPanel {...defaultProps} />);
+    // ModePillToggle renders both mode buttons in the panel header
+    expect(screen.getByText("device.hue.channelMap.modPosition")).toBeTruthy();
+    expect(screen.getByText("device.hue.channelMap.modAssignZone")).toBeTruthy();
   });
 
   it("clientToHueCoords is inverse of posToPercent (y-flip correctness)", () => {
