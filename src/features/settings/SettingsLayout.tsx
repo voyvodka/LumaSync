@@ -10,6 +10,7 @@ import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueRuntimeTarget } from "../../shared/contracts/hue";
 import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
 import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
+import { RoomMapEditor } from "./sections/RoomMapEditor";
 
 // Nav icons
 function IconLights() {
@@ -208,18 +209,8 @@ export function SettingsLayout({
         )}
 
         {activeSection === SECTION_IDS.ROOM_MAP && (
-          <div className="flex h-full items-center justify-center px-6 py-6">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <span className="text-slate-300 dark:text-zinc-600 [&>svg]:h-10 [&>svg]:w-10">
-                <IconRoomMap />
-              </span>
-              <p className="text-sm font-medium text-slate-700 dark:text-zinc-300">
-                {t("settings.sections.room-map")}
-              </p>
-              <p className="max-w-xs text-xs text-slate-400 dark:text-zinc-500">
-                {t("roomMap.comingSoon")}
-              </p>
-            </div>
+          <div className="h-full overflow-hidden">
+            <RoomMapEditor />
           </div>
         )}
 
