@@ -435,7 +435,43 @@
     }
   },
   "roomMap": {
-    "comingSoon": "Room map editor is coming in a future update."
+    "comingSoon": "Room map editor is coming in a future update.",
+    "toolbar": {
+      "addTv": "Add TV",
+      "addFurniture": "Add Furniture",
+      "addUsb": "Add LED Strip",
+      "addHue": "Add Hue Channel",
+      "settingsAriaLabel": "Map Settings",
+      "tvAlreadyPlaced": "TV already placed"
+    },
+    "empty": {
+      "heading": "No objects placed yet",
+      "body": "Use the toolbar above to add your TV, lights, and furniture."
+    },
+    "furniture": {
+      "type": {
+        "sofa": "Sofa",
+        "table": "Table",
+        "chair": "Chair",
+        "other": "Other"
+      }
+    },
+    "settings": {
+      "uploadBackground": "Upload floor plan",
+      "opacity": "Opacity",
+      "showGrid": "Show grid",
+      "roomWidth": "Width (m)",
+      "roomDepth": "Depth (m)",
+      "resetMap": "Reset map",
+      "resetMapConfirm": "Confirm reset?"
+    },
+    "persistError": "Map could not be saved. Changes may be lost on restart.",
+    "usbStrip": {
+      "ledCount": "LED count"
+    },
+    "hueChannel": {
+      "defaultLabel": "Channel {{index}}"
+    }
   },
   "calibration": {
     "section": {

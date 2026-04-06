@@ -435,7 +435,43 @@
     }
   },
   "roomMap": {
-    "comingSoon": "Oda haritası editörü ilerleyen bir güncellemede gelecek."
+    "comingSoon": "Oda haritası editörü ilerleyen bir güncellemede gelecek.",
+    "toolbar": {
+      "addTv": "TV Ekle",
+      "addFurniture": "Mobilya Ekle",
+      "addUsb": "LED Şerit Ekle",
+      "addHue": "Hue Kanal Ekle",
+      "settingsAriaLabel": "Harita Ayarları",
+      "tvAlreadyPlaced": "TV zaten eklendi"
+    },
+    "empty": {
+      "heading": "Henüz nesne eklenmedi",
+      "body": "Yukarıdaki araç çubuğundan TV, ışık ve mobilya ekleyin."
+    },
+    "furniture": {
+      "type": {
+        "sofa": "Kanepe",
+        "table": "Masa",
+        "chair": "Sandalye",
+        "other": "Diğer"
+      }
+    },
+    "settings": {
+      "uploadBackground": "Kat planı yükle",
+      "opacity": "Şeffaflık",
+      "showGrid": "Izgarayı göster",
+      "roomWidth": "Genişlik (m)",
+      "roomDepth": "Derinlik (m)",
+      "resetMap": "Haritayı sıfırla",
+      "resetMapConfirm": "Sıfırlamayı onayla?"
+    },
+    "persistError": "Harita kaydedilemedi. Değişiklikler yeniden başlatmada kaybolabilir.",
+    "usbStrip": {
+      "ledCount": "LED sayısı"
+    },
+    "hueChannel": {
+      "defaultLabel": "Kanal {{index}}"
+    }
   },
   "calibration": {
     "section": {
