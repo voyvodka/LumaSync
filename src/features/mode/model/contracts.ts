@@ -1,3 +1,5 @@
+import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+
 export const LIGHTING_MODE_KIND = {
   OFF: "off",
   AMBILIGHT: "ambilight",
@@ -21,6 +23,7 @@ export interface LightingModeConfig {
   kind: LightingModeKind;
   solid?: SolidColorPayload;
   ambilight?: AmbilightPayload;
+  targets?: HueRuntimeTarget[];
 }
 
 export function isLightingModeKind(value: unknown): value is LightingModeKind {
@@ -66,6 +69,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       kind,
       solid: normalizedSolid ?? normalizeSolidColorPayload(),
       ambilight: normalizedAmbilight,
+      targets: input?.targets,
     };
   }
 
@@ -74,6 +78,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       kind,
       ambilight: normalizedAmbilight ?? normalizeAmbilightPayload(),
       solid: normalizedSolid,
+      targets: input?.targets,
     };
   }
 
@@ -81,5 +86,10 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     kind: LIGHTING_MODE_KIND.OFF,
     solid: normalizedSolid,
     ambilight: normalizedAmbilight,
+    targets: input?.targets,
   };
+}
+
+export function resolveDefaultTargets(targets?: HueRuntimeTarget[]): HueRuntimeTarget[] {
+  return targets && targets.length > 0 ? targets : ["usb"];
 }
