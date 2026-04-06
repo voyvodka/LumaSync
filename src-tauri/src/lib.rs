@@ -52,7 +52,7 @@ use commands::hue_stream_lifecycle::{
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
-use commands::room_map::{load_room_map, save_room_map, update_hue_channel_positions};
+use commands::room_map::{copy_background_image, load_room_map, save_room_map, update_hue_channel_positions};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -158,6 +158,12 @@ pub fn run() {
 
     // 5. Opener (for external links)
     builder = builder.plugin(tauri_plugin_opener::init());
+
+    // 6a. Dialog (file picker for room map background)
+    builder = builder.plugin(tauri_plugin_dialog::init());
+
+    // 6b. Fs (file copy for room map background)
+    builder = builder.plugin(tauri_plugin_fs::init());
 
     // 6. Updater (auto-update from GitHub Releases)
     builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
@@ -327,6 +333,7 @@ pub fn run() {
             update_display_overlay_preview,
             save_room_map,
             load_room_map,
+            copy_background_image,
             update_hue_channel_positions,
             simulate_hue_fault
         ])
