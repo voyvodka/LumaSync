@@ -69,6 +69,8 @@ pub struct LightingModeConfig {
     pub solid: Option<SolidColorPayload>,
     #[serde(default)]
     pub ambilight: Option<AmbilightPayload>,
+    #[serde(default)]
+    pub targets: Option<Vec<String>>,
 }
 
 impl Default for LightingModeConfig {
@@ -77,6 +79,7 @@ impl Default for LightingModeConfig {
             kind: LightingModeKind::Off,
             solid: None,
             ambilight: None,
+            targets: None,
         }
     }
 }
@@ -154,14 +157,19 @@ fn clamp_brightness(value: Option<f32>, fallback: f32) -> f32 {
 }
 
 fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
+    let targets = config.targets.clone();
     match config.kind {
-        LightingModeKind::Off => LightingModeConfig::default(),
+        LightingModeKind::Off => LightingModeConfig {
+            targets,
+            ..LightingModeConfig::default()
+        },
         LightingModeKind::Ambilight => LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             solid: None,
             ambilight: Some(AmbilightPayload {
                 brightness: clamp_brightness(config.ambilight.map(|value| value.brightness), 1.0),
             }),
+            targets,
         },
         LightingModeKind::Solid => {
             let solid = config.solid.unwrap_or(SolidColorPayload {
@@ -179,6 +187,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                     brightness: clamp_brightness(Some(solid.brightness), 1.0),
                 }),
                 ambilight: None,
+                targets,
             }
         }
     }
@@ -313,7 +322,7 @@ impl AmbilightWorkerQualityState {
 
 fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
-    port_name: String,
+    port_name: Option<String>,
     brightness: f32,
     mut frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
@@ -337,14 +346,17 @@ fn start_ambilight_worker(
         telemetry_window.record_slot_overwrite();
     }
     let send_started = Instant::now();
-    let initial_sent = quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
-        AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-        send_ambilight_frame_hot_path_to_port(&output_bridge, &port_name, frame, brightness)
-            .map_err(|error| error.as_reason())
-    })?;
-    if initial_sent {
-        telemetry_window.record_send();
+    if let Some(ref port) = port_name {
+        let initial_sent = quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
+            AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+            send_ambilight_frame_hot_path_to_port(&output_bridge, port, frame, brightness)
+                .map_err(|error| error.as_reason())
+        })?;
+        if initial_sent {
+            telemetry_window.record_send();
+        }
     }
+    // Hue-only: no initial USB send needed, just apply Hue from capture
     quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
     telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot)?;
 
@@ -366,12 +378,13 @@ fn start_ambilight_worker(
                 }
 
                 let send_started = Instant::now();
-                let send_ms =
+                let send_ms = if let Some(ref port) = port_name {
+                    // USB send path: send frame to serial port
                     match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                         send_ambilight_frame_hot_path_to_port(
                             &output_bridge,
-                            &port_name,
+                            port,
                             frame,
                             brightness,
                         )
@@ -400,7 +413,36 @@ fn start_ambilight_worker(
                             send_started.elapsed().as_secs_f32() * 1000.0
                         }
                         _ => 0.0,
-                    };
+                    }
+                } else {
+                    // Hue-only path: no USB send, drive Hue channels directly from captured frame.
+                    // Quality gate is checked to maintain frame rate discipline.
+                    match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |_frame| {
+                        Ok(()) // no-op USB send; Hue update follows below
+                    }) {
+                        Ok(true) => {
+                            telemetry_window.record_send();
+                            if let Some(context) = hue_output.as_ref() {
+                                if !context.channels.is_empty() {
+                                    let channel_colors: Vec<(u8, u8, u8)> = context
+                                        .channels
+                                        .iter()
+                                        .map(|ch| {
+                                            sample_screen_region_avg(&raw_frame, &ch.screen_region)
+                                        })
+                                        .collect();
+                                    let _ = apply_hue_channels_with_context(
+                                        context,
+                                        channel_colors,
+                                        brightness,
+                                    );
+                                }
+                            }
+                            send_started.elapsed().as_secs_f32() * 1000.0
+                        }
+                        _ => 0.0,
+                    }
+                };
 
                 quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
                 let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
@@ -428,13 +470,32 @@ fn apply_mode_change(
 ) -> LightingModeCommandResult {
     let normalized_next = normalize_mode_config(next_mode);
 
-    if normalized_next.kind != LightingModeKind::Off && !device_connected {
+    // Derive target flags from the requested targets list.
+    // Empty/None targets = legacy behavior: USB is required (backward compat per D-10).
+    let requested_targets = normalized_next.targets.clone().unwrap_or_default();
+    let needs_usb = requested_targets.is_empty() || requested_targets.iter().any(|t| t == "usb");
+    let needs_hue = requested_targets.iter().any(|t| t == "hue");
+
+    // USB gate: only applies when USB is a required target (per D-01).
+    if normalized_next.kind != LightingModeKind::Off && needs_usb && !device_connected {
         return make_result(
             owner.active_mode.clone(),
             command_status(
                 "DEVICE_NOT_CONNECTED",
                 "Cannot apply lighting mode while device is disconnected.",
                 Some("Connect a supported serial controller before changing mode.".to_string()),
+            ),
+        );
+    }
+
+    // Hue gate: when Hue target requested, Hue output context must be available (per D-03).
+    if normalized_next.kind != LightingModeKind::Off && needs_hue && hue_output.is_none() {
+        return make_result(
+            owner.active_mode.clone(),
+            command_status(
+                "HUE_NOT_READY",
+                "Hue streaming is not available. Ensure bridge is paired and entertainment area is selected.",
+                Some("HUE_RUNTIME_GATE_FAILED".to_string()),
             ),
         );
     }
@@ -459,53 +520,60 @@ fn apply_mode_change(
                 brightness: 1.0,
             });
 
-            let Some(port_name) = connected_port else {
-                owner.active_mode = LightingModeConfig::default();
-                return make_result(
-                    owner.active_mode.clone(),
-                    command_status(
-                        "SOLID_MODE_APPLY_FAILED",
-                        "Solid mode payload could not be applied.",
-                        Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
-                    ),
-                );
-            };
+            // USB solid output (only if USB target requested and port available)
+            if needs_usb {
+                let Some(port_name) = connected_port else {
+                    owner.active_mode = LightingModeConfig::default();
+                    return make_result(
+                        owner.active_mode.clone(),
+                        command_status(
+                            "SOLID_MODE_APPLY_FAILED",
+                            "Solid mode payload could not be applied.",
+                            Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
+                        ),
+                    );
+                };
 
-            SOLID_OUTPUT_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+                SOLID_OUTPUT_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
 
-            if let Err(reason) = apply_solid_payload_to_port(
-                &owner.output_bridge,
-                port_name,
-                payload.r,
-                payload.g,
-                payload.b,
-                payload.brightness,
-            )
-            .map_err(|error| error.as_reason())
-            {
-                owner.active_mode = LightingModeConfig::default();
-                return make_result(
-                    owner.active_mode.clone(),
-                    command_status(
-                        "SOLID_MODE_APPLY_FAILED",
-                        "Solid mode payload could not be applied.",
-                        Some(reason),
-                    ),
-                );
-            }
-
-            owner.active_mode = normalized_next;
-            owner.active_port = Some(port_name.to_string());
-            if let Some(context) = hue_output.as_ref() {
-                let _ = apply_hue_color_with_context(
-                    context,
+                if let Err(reason) = apply_solid_payload_to_port(
+                    &owner.output_bridge,
+                    port_name,
                     payload.r,
                     payload.g,
                     payload.b,
                     payload.brightness,
-                );
+                )
+                .map_err(|error| error.as_reason())
+                {
+                    owner.active_mode = LightingModeConfig::default();
+                    return make_result(
+                        owner.active_mode.clone(),
+                        command_status(
+                            "SOLID_MODE_APPLY_FAILED",
+                            "Solid mode payload could not be applied.",
+                            Some(reason),
+                        ),
+                    );
+                }
+
+                owner.active_port = Some(port_name.to_string());
             }
 
+            // Hue solid output (if hue target requested and context available)
+            if needs_hue {
+                if let Some(context) = hue_output.as_ref() {
+                    let _ = apply_hue_color_with_context(
+                        context,
+                        payload.r,
+                        payload.g,
+                        payload.b,
+                        payload.brightness,
+                    );
+                }
+            }
+
+            owner.active_mode = normalized_next;
             make_result(
                 owner.active_mode.clone(),
                 command_status(
@@ -517,18 +585,6 @@ fn apply_mode_change(
         }
         LightingModeKind::Ambilight => {
             push_trace(&mut trace, "start_ambilight");
-
-            let Some(port_name) = connected_port else {
-                owner.active_mode = LightingModeConfig::default();
-                return make_result(
-                    owner.active_mode.clone(),
-                    command_status(
-                        "AMBILIGHT_MODE_START_FAILED",
-                        "Ambilight runtime could not start.",
-                        Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
-                    ),
-                );
-            };
 
             let brightness = normalized_next
                 .ambilight
@@ -551,9 +607,29 @@ fn apply_mode_change(
                 }
             };
 
+            // Resolve port for worker: only pass port if USB is a required target
+            let port_for_worker: Option<String> = if needs_usb {
+                match connected_port {
+                    Some(p) => Some(p.to_string()),
+                    None => {
+                        owner.active_mode = LightingModeConfig::default();
+                        return make_result(
+                            owner.active_mode.clone(),
+                            command_status(
+                                "AMBILIGHT_MODE_START_FAILED",
+                                "Ambilight runtime could not start.",
+                                Some("LED_OUTPUT_PORT_UNAVAILABLE".to_string()),
+                            ),
+                        );
+                    }
+                }
+            } else {
+                None
+            };
+
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
-                port_name.to_string(),
+                port_for_worker,
                 brightness,
                 frame_source,
                 telemetry_snapshot
@@ -563,7 +639,9 @@ fn apply_mode_change(
                 Ok(worker) => {
                     owner.worker = Some(worker);
                     owner.active_mode = normalized_next;
-                    owner.active_port = Some(port_name.to_string());
+                    if let Some(p) = connected_port {
+                        owner.active_port = Some(p.to_string());
+                    }
                     make_result(
                         owner.active_mode.clone(),
                         command_status(
@@ -758,6 +836,7 @@ mod tests {
             kind: LightingModeKind::Ambilight,
             solid: None,
             ambilight: Some(AmbilightPayload { brightness: 0.8 }),
+            targets: None,
         }
     }
 
@@ -771,6 +850,7 @@ mod tests {
                 brightness: 0.6,
             }),
             ambilight: None,
+            targets: None,
         }
     }
 
@@ -796,7 +876,7 @@ mod tests {
             worker: Some(
                 start_ambilight_worker(
                     owner.output_bridge.clone(),
-                    "COM1".to_string(),
+                    Some("COM1".to_string()),
                     0.8,
                     (owner.frame_source_factory)().expect("frame source should be available"),
                     shared_runtime_telemetry(),
@@ -1070,33 +1150,169 @@ mod tests {
 
 #[cfg(test)]
 mod lighting_mode_tests {
-    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use crate::commands::ambilight_capture::{
+        AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+    };
+    use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
+    use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
+
+    use super::{
+        apply_mode_change, AmbilightPayload, LightingModeConfig, LightingModeKind,
+        LightingRuntimeOwner, SolidColorPayload,
+    };
+
+    #[derive(Default)]
+    struct FakeLedSender {
+        writes: Mutex<Vec<(String, Vec<u8>)>>,
+    }
+
+    impl LedPacketSender for FakeLedSender {
+        fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+            self.writes
+                .lock()
+                .expect("writes lock poisoned")
+                .push((port_name.to_string(), packet.to_vec()));
+            Ok(())
+        }
+
+        fn disconnect_session(&self, _port_name: &str) {}
+    }
+
+    struct FakeFrameSource {
+        frame: CapturedFrame,
+    }
+
+    impl AmbilightFrameSource for FakeFrameSource {
+        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+            Ok(self.frame.clone())
+        }
+    }
+
+    fn owner_with_fake_sender() -> LightingRuntimeOwner {
+        LightingRuntimeOwner {
+            active_mode: LightingModeConfig::default(),
+            active_port: None,
+            worker: None,
+            output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            frame_source_factory: Arc::new(|| {
+                Ok(Box::new(FakeFrameSource {
+                    frame: CapturedFrame {
+                        width: 2,
+                        height: 2,
+                        pixels_rgb: vec![
+                            [10, 20, 30],
+                            [40, 50, 60],
+                            [70, 80, 90],
+                            [100, 110, 120],
+                        ],
+                    },
+                }))
+            }),
+        }
+    }
+
+    fn shared_telemetry() -> Arc<Mutex<RuntimeTelemetrySnapshot>> {
+        Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+    }
+
+    fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
+        LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            solid: None,
+            ambilight: Some(AmbilightPayload { brightness: 1.0 }),
+            targets,
+        }
+    }
+
+    fn solid_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
+        LightingModeConfig {
+            kind: LightingModeKind::Solid,
+            solid: Some(SolidColorPayload {
+                r: 255,
+                g: 0,
+                b: 0,
+                brightness: 1.0,
+            }),
+            ambilight: None,
+            targets,
+        }
+    }
 
     #[test]
     fn hue_only_target_bypasses_usb_gate() {
-        // Setup: device_connected=false, targets=Some(vec!["hue".to_string()])
-        // Expect: apply_mode_change does NOT return DEVICE_NOT_CONNECTED
-        todo!("Implement after Task 1 adds targets field")
+        // targets=["hue"], device_connected=false, hue_output=None
+        // USB gate should be bypassed; Hue gate should fire (HUE_NOT_READY)
+        // Either way: result must NOT be DEVICE_NOT_CONNECTED.
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_with_targets(Some(vec!["hue".to_string()])),
+            false, // device not connected
+            None,  // no serial port
+            None,  // hue_output=None triggers HUE_NOT_READY gate
+            None,
+            None,
+        );
+
+        assert_ne!(
+            result.status.code, "DEVICE_NOT_CONNECTED",
+            "Hue-only target should bypass USB gate; got: {}",
+            result.status.code
+        );
+        // Hue gate fires because hue_output is None
+        assert_eq!(result.status.code, "HUE_NOT_READY");
     }
 
     #[test]
     fn usb_target_requires_device_connected() {
-        // Setup: device_connected=false, targets=Some(vec!["usb".to_string()])
-        // Expect: apply_mode_change returns DEVICE_NOT_CONNECTED
-        todo!("Implement after Task 1 adds targets field")
+        // targets=["usb"], device_connected=false -> DEVICE_NOT_CONNECTED
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_with_targets(Some(vec!["usb".to_string()])),
+            false, // device not connected
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
     }
 
     #[test]
     fn none_targets_preserves_legacy_usb_gate() {
-        // Setup: device_connected=false, targets=None
-        // Expect: apply_mode_change returns DEVICE_NOT_CONNECTED (backward compat)
-        todo!("Implement after Task 1 adds targets field")
+        // targets=None, device_connected=false -> DEVICE_NOT_CONNECTED (backward compat per D-10)
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_with_targets(None),
+            false, // device not connected
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
     }
 
     #[test]
     fn hue_only_target_returns_hue_not_ready_when_no_hue_output() {
-        // Setup: targets=Some(vec!["hue".to_string()]), hue_output=None
-        // Expect: apply_mode_change returns HUE_NOT_READY
-        todo!("Implement after Task 1 adds targets field")
+        // targets=["hue"], hue_output=None -> HUE_NOT_READY
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            ambilight_with_targets(Some(vec!["hue".to_string()])),
+            false, // device not connected (irrelevant for hue-only)
+            None,
+            None, // no hue output -> HUE_NOT_READY
+            Some(shared_telemetry()),
+            None,
+        );
+
+        assert_eq!(result.status.code, "HUE_NOT_READY");
     }
 }
