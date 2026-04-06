@@ -106,7 +106,7 @@ Which requirements map to which phases. Updated during roadmap creation.
 | ROOM-01 | Phase 17 | Complete |
 | ROOM-02 | Phase 17 | Pending |
 | ROOM-03 | Phase 19 | Pending |
-| ROOM-04 | Phase 17 | Pending |
+| ROOM-04 | Phase 17 | Complete |
 | ROOM-05 | Phase 17 | Complete |
 | ROOM-06 | Phase 17 | Complete |
 | ROOM-07 | Phase 17 | Complete |

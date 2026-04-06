@@ -86,7 +86,7 @@ Plans:
 - [x] **Phase 14: Contract Foundation** - All v1.2 cross-boundary types defined before implementation begins. (completed 2026-03-30)
 - [x] **Phase 15: Fault Recovery and Diagnostics** - Hue session auto-recovers from transient faults; error states shown with actionable hints. (completed 2026-04-05)
 - [x] **Phase 16: Hue Channel Position Editor** - User can view and drag Hue channel positions on the map and optionally save to bridge. (completed 2026-04-06)
-- [ ] **Phase 17: Room Map UI** - User can build a 2D room map with lights, furniture, TV anchor, and background image.
+- [x] **Phase 17: Room Map UI** - User can build a 2D room map with lights, furniture, TV anchor, and background image. (completed 2026-04-06)
 - [ ] **Phase 18: Hue Standalone Mode** - App runs Hue streaming without a USB LED strip.
 - [ ] **Phase 19: LED Zone Auto-Derivation** - Ambilight screen-edge zones auto-derived from room map positions; named zone creation and light assignment.
 - [ ] **Phase 20: Device UX Polish and Channel Write-back** - Device surface Hue controls polished; CHAN-05 experimental write-back added if API confirmed.
@@ -157,9 +157,9 @@ Plans:
 
 Plans:
 - [x] 17-01-PLAN.md — Foundation: Tauri dialog/fs plugins, copy_background_image command, useRoomMapPersist hook, i18n keys, Wave 0 test stubs
-- [ ] 17-02-PLAN.md — Canvas framework: RoomMapEditor, RoomMapCanvas, RoomMapToolbar, RoomMapSettingsPopover, SettingsLayout wiring
-- [ ] 17-03-PLAN.md — Object components: FurnitureObject, TvAnchorObject, UsbStripObject with drag/resize/rotation
-- [ ] 17-04-PLAN.md — HueChannelOverlay, background image pipeline, and human verification checkpoint
+- [x] 17-02-PLAN.md — Canvas framework: RoomMapEditor, RoomMapCanvas, RoomMapToolbar, RoomMapSettingsPopover, SettingsLayout wiring
+- [x] 17-03-PLAN.md — Object components: FurnitureObject, TvAnchorObject, UsbStripObject with drag/resize/rotation
+- [x] 17-04-PLAN.md — HueChannelOverlay, background image pipeline, and human verification checkpoint
 
 ### Phase 18: Hue Standalone Mode
 **Goal**: Users can start and sustain Hue Entertainment streaming without a USB LED strip connected, and the app does not show USB error states in this mode.
@@ -206,7 +206,7 @@ Plans:
 | 14. Contract Foundation | v1.2 | 3/3 | Complete    | 2026-03-30 |
 | 15. Fault Recovery and Diagnostics | v1.2 | 3/3 | Complete    | 2026-04-05 |
 | 16. Hue Channel Position Editor | v1.2 | 2/2 | Complete    | 2026-04-06 |
-| 17. Room Map UI | v1.2 | 1/4 | In Progress|  |
+| 17. Room Map UI | v1.2 | 4/4 | Complete   | 2026-04-06 |
 | 18. Hue Standalone Mode | v1.2 | 0/TBD | Not started | - |
 | 19. LED Zone Auto-Derivation | v1.2 | 0/TBD | Not started | - |
 | 20. Device UX Polish and Channel Write-back | v1.2 | 0/TBD | Not started | - |
