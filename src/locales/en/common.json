@@ -479,6 +479,23 @@
     },
     "hueChannel": {
       "defaultLabel": "Channel {{index}}"
+    },
+    "zones": {
+      "deriveButton": "Derive Zones",
+      "confirmDeriveButton": "Confirm",
+      "cancelDeriveButton": "Discard Preview",
+      "addZoneButton": "+ Zone",
+      "namePlaceholder": "Zone name",
+      "defaultName": "Zone {{N}}",
+      "deleteAriaLabel": "Delete zone {{name}}",
+      "deriveDisabledTooltip": "Place a USB strip and TV anchor first",
+      "emptyPanel": "No zones defined. Press + Zone to create one.",
+      "deriveSuccess": "Zones derived — review and confirm",
+      "errNoTvAnchor": "Place a TV anchor on the map before deriving zones.",
+      "errNoUsbStrip": "Place a USB strip on the map before deriving zones.",
+      "calibrationApplyNote": "Zone counts applied. Save in Calibration to persist.",
+      "lightCount": "{{N}} lights",
+      "lightCountOne": "1 light"
     }
   },
   "calibration": {
