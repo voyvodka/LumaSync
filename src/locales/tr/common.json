@@ -481,6 +481,7 @@
       "defaultLabel": "Kanal {{index}}"
     },
     "zones": {
+      "panelTitle": "Bölgeler",
       "deriveButton": "Zone Türet",
       "confirmDeriveButton": "Onayla",
       "cancelDeriveButton": "Önizlemeyi İptal Et",

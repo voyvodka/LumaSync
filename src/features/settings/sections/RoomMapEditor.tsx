@@ -11,6 +11,7 @@ import { FurnitureObject } from "./room-map/FurnitureObject";
 import { TvAnchorObject } from "./room-map/TvAnchorObject";
 import { UsbStripObject } from "./room-map/UsbStripObject";
 import { HueChannelOverlay } from "./room-map/HueChannelOverlay";
+import { ZoneListPanel } from "./room-map/ZoneListPanel";
 import { deriveZones, type ZoneDeriveResult } from "./room-map/deriveZones";
 import { ZoneDeriveOverlay } from "./room-map/ZoneDeriveOverlay";
 import type {
@@ -19,12 +20,21 @@ import type {
   UsbStripPlacement,
   HueChannelPlacement,
   RoomDimensions,
+  ZoneDefinition,
 } from "../../../shared/contracts/roomMap";
 import type { LedSegmentCounts } from "../../calibration/model/contracts";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
 }
+
+// Hex colors matching ZONE_COLORS Tailwind classes (for inline boxShadow ring)
+const ZONE_COLOR_HEX = ["#3b82f6", "#10b981", "#a855f7", "#f59e0b", "#f43f5e", "#06b6d4"];
+
+function getZoneColorHex(index: number): string {
+  return ZONE_COLOR_HEX[index % ZONE_COLOR_HEX.length];
+}
+
 
 export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}) {
   const { t } = useTranslation("common");
@@ -37,6 +47,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
   const [backgroundOpacity, setBackgroundOpacity] = useState(35);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  // Zone management state
+  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  const [zonePanelOpen, setZonePanelOpen] = useState(false);
 
   useEffect(() => {
     const el = canvasContainerRef.current;
@@ -272,6 +286,63 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
     [updateConfig],
   );
 
+  // Zone CRUD handlers
+  const handleAddZone = useCallback(() => {
+    const id = `zone-${crypto.randomUUID()}`;
+    const name = t("roomMap.zones.defaultName", { N: String(config.zones.length + 1) });
+    const newZone: ZoneDefinition = { id, name, channelIndices: [] };
+    void updateConfig({ zones: [...config.zones, newZone] });
+    setActiveZoneId(id);
+    setZonePanelOpen(true);
+  }, [config.zones, updateConfig, t]);
+
+  const handleDeleteZone = useCallback(
+    (zoneId: string) => {
+      void updateConfig({ zones: config.zones.filter((z) => z.id !== zoneId) });
+      if (activeZoneId === zoneId) setActiveZoneId(null);
+    },
+    [config.zones, activeZoneId, updateConfig],
+  );
+
+  const handleRenameZone = useCallback(
+    (zoneId: string, name: string) => {
+      void updateConfig({
+        zones: config.zones.map((z) => (z.id === zoneId ? { ...z, name } : z)),
+      });
+    },
+    [config.zones, updateConfig],
+  );
+
+  const handleSelectZone = useCallback((zoneId: string | null) => {
+    setActiveZoneId(zoneId);
+  }, []);
+
+  const handleChannelZoneToggle = useCallback(
+    (channelIndex: number) => {
+      if (!activeZoneId) return;
+      const zone = config.zones.find((z) => z.id === activeZoneId);
+      if (!zone) return;
+      const hasChannel = zone.channelIndices.includes(channelIndex);
+      const updatedIndices = hasChannel
+        ? zone.channelIndices.filter((i) => i !== channelIndex)
+        : [...zone.channelIndices, channelIndex];
+      void updateConfig({
+        zones: config.zones.map((z) =>
+          z.id === activeZoneId ? { ...z, channelIndices: updatedIndices } : z,
+        ),
+      });
+    },
+    [activeZoneId, config.zones, updateConfig],
+  );
+
+  // Derived zone assign values
+  const zoneAssignMode = activeZoneId !== null;
+  const activeZone = config.zones.find((z) => z.id === activeZoneId);
+  const activeZoneIndex = config.zones.findIndex((z) => z.id === activeZoneId);
+  const activeZoneColor = activeZoneIndex >= 0 ? getZoneColorHex(activeZoneIndex) : null;
+  const assignedChannels = new Set(config.zones.flatMap((z) => z.channelIndices));
+  const activeZoneChannels = new Set(activeZone?.channelIndices ?? []);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -293,7 +364,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
         derivePreviewActive={derivePreviewActive}
         zoneCount={config.zones.length}
         onDeriveZones={handleDeriveZones}
-        onAddZone={() => { /* will be wired in Plan 03 */ }}
+        onAddZone={handleAddZone}
         onAddTv={handleAddTv}
         onAddFurniture={handleAddFurniture}
         onAddUsb={handleAddUsb}
@@ -394,6 +465,11 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
                 );
                 void updateConfig({ hueChannels: next });
               }}
+              zoneAssignMode={zoneAssignMode}
+              activeZoneColor={activeZoneColor}
+              assignedChannels={assignedChannels}
+              activeZoneChannels={activeZoneChannels}
+              onChannelZoneToggle={handleChannelZoneToggle}
             />
           )}
 
@@ -409,6 +485,19 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
           )}
         </RoomMapCanvas>
       </div>
+
+      {/* Zone list panel — shown when panel is open or at least one zone exists */}
+      {(zonePanelOpen || config.zones.length > 0) && (
+        <ZoneListPanel
+          zones={config.zones}
+          activeZoneId={activeZoneId}
+          onSelectZone={handleSelectZone}
+          onAddZone={handleAddZone}
+          onDeleteZone={handleDeleteZone}
+          onRenameZone={handleRenameZone}
+        />
+      )}
+
       {error && (
         <div className="px-3 py-1.5 text-[11px] text-red-500">
           {t("roomMap.persistError")}

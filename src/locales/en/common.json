@@ -481,6 +481,7 @@
       "defaultLabel": "Channel {{index}}"
     },
     "zones": {
+      "panelTitle": "Zones",
       "deriveButton": "Derive Zones",
       "confirmDeriveButton": "Confirm",
       "cancelDeriveButton": "Discard Preview",
