@@ -188,7 +188,7 @@ Plans:
 
 Plans:
 - [x] 19-01-PLAN.md — Pure zone derivation algorithm, Wave 0 test stubs, i18n keys
-- [ ] 19-02-PLAN.md — Zone derive preview overlay, toolbar integration, calibration transfer
+- [x] 19-02-PLAN.md — Zone derive preview overlay, toolbar integration, calibration transfer
 - [ ] 19-03-PLAN.md — Named zone list panel, Hue channel zone assign mode
 **UI hint**: yes
 
@@ -217,5 +217,5 @@ Plans:
 | 16. Hue Channel Position Editor | v1.2 | 2/2 | Complete    | 2026-04-06 |
 | 17. Room Map UI | v1.2 | 4/4 | Complete    | 2026-04-06 |
 | 18. Hue Standalone Mode | v1.2 | 2/2 | Complete    | 2026-04-06 |
-| 19. LED Zone Auto-Derivation | v1.2 | 1/3 | In Progress|  |
+| 19. LED Zone Auto-Derivation | v1.2 | 2/3 | In Progress|  |
 | 20. Device UX Polish and Channel Write-back | v1.2 | 0/3 | Planned | - |
