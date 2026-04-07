@@ -8,6 +8,16 @@ interface HueChannelOverlayProps {
   selectedId: string | null;
   onSelect: (channelIndex: number) => void;
   onChange: (updated: HueChannelPlacement) => void;
+  /** When true, clicks toggle zone membership instead of selecting */
+  zoneAssignMode?: boolean;
+  /** CSS/hex color for the active zone ring */
+  activeZoneColor?: string | null;
+  /** Channel indices assigned to ANY zone */
+  assignedChannels?: Set<number>;
+  /** Channel indices assigned to the ACTIVE zone */
+  activeZoneChannels?: Set<number>;
+  /** Called with channel index when toggling zone membership */
+  onChannelZoneToggle?: (channelIndex: number) => void;
 }
 
 /**
@@ -62,6 +72,11 @@ export function HueChannelOverlay({
   selectedId,
   onSelect,
   onChange,
+  zoneAssignMode = false,
+  activeZoneColor = null,
+  assignedChannels,
+  activeZoneChannels,
+  onChannelZoneToggle,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation("common");
 
@@ -76,6 +91,10 @@ export function HueChannelOverlay({
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  /** Ref for zone toggle callback to avoid stale closure (Pitfall 5) */
+  const onChannelZoneToggleRef = useRef(onChannelZoneToggle);
+  onChannelZoneToggleRef.current = onChannelZoneToggle;
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
@@ -149,6 +168,17 @@ export function HueChannelOverlay({
         const topPct = posToPercent(-ch.y);
 
         const isSelected = selectedId === `hue-${ch.channelIndex}`;
+        const isInActiveZone = activeZoneChannels?.has(ch.channelIndex) ?? false;
+        const isAssignedToAnyZone = assignedChannels?.has(ch.channelIndex) ?? false;
+
+        // Zone assign mode: unassigned channels render at reduced opacity
+        const isUnassignedInZoneMode = zoneAssignMode && !isAssignedToAnyZone;
+
+        // Ring style for active zone membership
+        const ringStyle: React.CSSProperties =
+          zoneAssignMode && isInActiveZone && activeZoneColor
+            ? { boxShadow: `0 0 0 2px ${activeZoneColor}` }
+            : {};
 
         const dotLabel =
           ch.label ??
@@ -169,19 +199,20 @@ export function HueChannelOverlay({
             <div
               role="button"
               tabIndex={0}
-              aria-pressed={isSelected}
+              aria-pressed={zoneAssignMode ? isInActiveZone : isSelected}
               aria-label={dotLabel}
               title={dotLabel}
               className={[
                 "flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none",
                 isSelected ? "w-4 h-4" : "w-3 h-3",
                 isSelected ? "bg-white border-white text-zinc-900" : "bg-white/80 border-zinc-400 text-zinc-900",
-                "cursor-grab active:cursor-grabbing",
+                zoneAssignMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+                isUnassignedInZoneMode ? "opacity-50" : "",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
               ]
                 .filter(Boolean)
                 .join(" ")}
-              style={{ touchAction: "none" }}
+              style={{ touchAction: "none", ...ringStyle }}
               onPointerDown={(e) => {
                 handlePointerDown(e, ch);
               }}
@@ -189,12 +220,20 @@ export function HueChannelOverlay({
               onPointerUp={handlePointerUp}
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect(ch.channelIndex);
+                if (zoneAssignMode) {
+                  onChannelZoneToggleRef.current?.(ch.channelIndex);
+                } else {
+                  onSelect(ch.channelIndex);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  onSelect(ch.channelIndex);
+                  if (zoneAssignMode) {
+                    onChannelZoneToggleRef.current?.(ch.channelIndex);
+                  } else {
+                    onSelect(ch.channelIndex);
+                  }
                 }
               }}
             >
