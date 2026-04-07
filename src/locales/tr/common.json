@@ -479,6 +479,24 @@
     },
     "hueChannel": {
       "defaultLabel": "Kanal {{index}}"
+    },
+    "zones": {
+      "panelTitle": "Bölgeler",
+      "addZoneButton": "+ Bölge",
+      "defaultName": "Bölge {{N}}",
+      "emptyPanel": "Henüz bölge tanımlanmadı. + Bölge'ye basarak oluşturun.",
+      "deleteAriaLabel": "{{name}} bölgesini sil",
+      "lightCount": "{{N}} ışık",
+      "lightCountOne": "1 ışık",
+      "deriveButton": "Bölgeleri Türet",
+      "confirmDeriveButton": "Onayla",
+      "cancelDeriveButton": "Önizlemeyi İptal Et",
+      "namePlaceholder": "Bölge adı",
+      "deriveDisabledTooltip": "Önce bir USB şerit ve TV yerleştirin",
+      "deriveSuccess": "Bölgeler türetildi — gözden geçirip onaylayın",
+      "errNoTvAnchor": "Bölgeleri türetmeden önce haritaya TV ekleyin.",
+      "errNoUsbStrip": "Bölgeleri türetmeden önce haritaya USB şerit ekleyin.",
+      "calibrationApplyNote": "Bölge sayıları uygulandı. Kalibrasyon'da kaydedin."
     }
   },
   "calibration": {
