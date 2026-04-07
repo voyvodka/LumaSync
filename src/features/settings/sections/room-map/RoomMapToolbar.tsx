@@ -19,6 +19,25 @@ function IconGear() {
   );
 }
 
+function IconGrid() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="1" y="1" width="6" height="6" rx="0.5" />
+      <rect x="9" y="1" width="6" height="6" rx="0.5" />
+      <rect x="1" y="9" width="6" height="6" rx="0.5" />
+      <rect x="9" y="9" width="6" height="6" rx="0.5" />
+    </svg>
+  );
+}
+
 interface RoomMapToolbarProps {
   hasTv: boolean;
   onAddTv: () => void;
@@ -27,6 +46,11 @@ interface RoomMapToolbarProps {
   onAddHue: () => void;
   settingsOpen: boolean;
   onToggleSettings: () => void;
+  hasUsb?: boolean;
+  derivePreviewActive?: boolean;
+  zoneCount?: number;
+  onDeriveZones?: () => void;
+  onAddZone?: () => void;
 }
 
 const FURNITURE_TYPES: FurniturePlacement["type"][] = ["sofa", "table", "chair", "other"];
@@ -39,6 +63,11 @@ export function RoomMapToolbar({
   onAddHue,
   settingsOpen,
   onToggleSettings,
+  hasUsb = false,
+  derivePreviewActive = false,
+  zoneCount = 0,
+  onDeriveZones = () => {},
+  onAddZone = () => {},
 }: RoomMapToolbarProps) {
   const { t } = useTranslation("common");
   const [furnitureDropdownOpen, setFurnitureDropdownOpen] = useState(false);
@@ -143,6 +172,42 @@ export function RoomMapToolbar({
       {/* Add Hue */}
       <button className={`${btnBase} ${btnActive}`} onClick={onAddHue}>
         {t("roomMap.toolbar.addHue")}
+      </button>
+
+      {/* Derive Zones */}
+      {(() => {
+        const deriveDisabled = !hasUsb || !hasTv;
+        return (
+          <button
+            className={`${btnBase} flex items-center gap-1 ${
+              deriveDisabled
+                ? "opacity-40 cursor-not-allowed text-slate-500 dark:text-zinc-500"
+                : derivePreviewActive
+                  ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
+                  : btnActive
+            }`}
+            onClick={deriveDisabled ? undefined : onDeriveZones}
+            disabled={deriveDisabled}
+            aria-disabled={deriveDisabled}
+            title={deriveDisabled ? t("roomMap.zones.deriveDisabledTooltip") : undefined}
+          >
+            <IconGrid />
+            {t("roomMap.zones.deriveButton")}
+          </button>
+        );
+      })()}
+
+      {/* + Zone */}
+      <button
+        className={`${btnBase} ${btnActive} flex items-center`}
+        onClick={onAddZone}
+      >
+        {t("roomMap.zones.addZoneButton")}
+        {zoneCount > 0 && (
+          <span className="ml-1 rounded-full bg-slate-200 dark:bg-zinc-700 px-1 text-[9px]">
+            {zoneCount}
+          </span>
+        )}
       </button>
 
       {/* Spacer */}
