@@ -1,16 +1,18 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
 import { GeneralSection } from "./sections/GeneralSection";
 import { CalibrationPage } from "../calibration/ui/CalibrationPage";
 import { DeviceSection } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
-import type { LedCalibrationConfig } from "../calibration/model/contracts";
+import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueRuntimeTarget } from "../../shared/contracts/hue";
 import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
 import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
 import { RoomMapEditor } from "./sections/RoomMapEditor";
+import { resetToManual } from "../calibration/model/templates";
 
 // Nav icons
 function IconLights() {
@@ -109,6 +111,7 @@ export function SettingsLayout({
   isCheckingForUpdates,
 }: SettingsLayoutProps) {
   const { t } = useTranslation("common");
+  const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-100/60 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
@@ -186,9 +189,19 @@ export function SettingsLayout({
           <CalibrationPage
             key="calibration-page"
             initialStep={calibrationStep}
-            initialConfig={calibration}
-            onNavigateBack={() => void onSectionChange(SECTION_IDS.LIGHTS)}
-            onSaved={onCalibrationSaved}
+            initialConfig={
+              pendingZoneCounts
+                ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
+                : calibration
+            }
+            onNavigateBack={() => {
+              setPendingZoneCounts(null);
+              void onSectionChange(SECTION_IDS.LIGHTS);
+            }}
+            onSaved={(cfg) => {
+              setPendingZoneCounts(null);
+              onCalibrationSaved(cfg);
+            }}
             onStepChange={onCalibrationStepChange}
           />
         )}
@@ -210,7 +223,7 @@ export function SettingsLayout({
 
         {activeSection === SECTION_IDS.ROOM_MAP && (
           <div className="h-full overflow-hidden">
-            <RoomMapEditor />
+            <RoomMapEditor onZoneCountsConfirmed={setPendingZoneCounts} />
           </div>
         )}
 

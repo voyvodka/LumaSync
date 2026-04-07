@@ -11,6 +11,8 @@ import { FurnitureObject } from "./room-map/FurnitureObject";
 import { TvAnchorObject } from "./room-map/TvAnchorObject";
 import { UsbStripObject } from "./room-map/UsbStripObject";
 import { HueChannelOverlay } from "./room-map/HueChannelOverlay";
+import { deriveZones, type ZoneDeriveResult } from "./room-map/deriveZones";
+import { ZoneDeriveOverlay } from "./room-map/ZoneDeriveOverlay";
 import type {
   FurniturePlacement,
   TvAnchorPlacement,
@@ -18,12 +20,18 @@ import type {
   HueChannelPlacement,
   RoomDimensions,
 } from "../../../shared/contracts/roomMap";
+import type { LedSegmentCounts } from "../../calibration/model/contracts";
 
-export function RoomMapEditor() {
+interface RoomMapEditorProps {
+  onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
+}
+
+export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}) {
   const { t } = useTranslation("common");
   const { config, updateConfig, resetConfig, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [derivePreview, setDerivePreview] = useState<ZoneDeriveResult | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [gridStrokeWidth, setGridStrokeWidth] = useState(0.5);
   const [backgroundOpacity, setBackgroundOpacity] = useState(35);
@@ -47,6 +55,8 @@ export function RoomMapEditor() {
 
   // Derived
   const hasTv = !!config.tvAnchor;
+  const hasUsb = config.usbStrips.length > 0;
+  const derivePreviewActive = derivePreview !== null;
   const isEmpty =
     !config.tvAnchor &&
     config.furniture.length === 0 &&
@@ -65,6 +75,33 @@ export function RoomMapEditor() {
       : 100;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
   const gridStepPx = gridStepM * pxPerMeter;
+
+  // Zone derivation handlers
+  const handleDeriveZones = useCallback(() => {
+    if (derivePreview) {
+      // Toggle off if already active
+      setDerivePreview(null);
+      return;
+    }
+    const strip = config.usbStrips[0];
+    const tv = config.tvAnchor;
+    if (!strip || !tv) return;
+    const result = deriveZones(strip, tv);
+    if (result.counts.top + result.counts.right + result.counts.bottom + result.counts.left === 0) {
+      return;
+    }
+    setDerivePreview(result);
+  }, [config.usbStrips, config.tvAnchor, derivePreview]);
+
+  const handleDeriveConfirm = useCallback(() => {
+    if (!derivePreview) return;
+    onZoneCountsConfirmed?.(derivePreview.counts);
+    setDerivePreview(null);
+  }, [derivePreview, onZoneCountsConfirmed]);
+
+  const handleDeriveDiscard = useCallback(() => {
+    setDerivePreview(null);
+  }, []);
 
   // Handlers
   const handleAddTv = useCallback(() => {
@@ -252,6 +289,11 @@ export function RoomMapEditor() {
     >
       <RoomMapToolbar
         hasTv={hasTv}
+        hasUsb={hasUsb}
+        derivePreviewActive={derivePreviewActive}
+        zoneCount={config.zones.length}
+        onDeriveZones={handleDeriveZones}
+        onAddZone={() => { /* will be wired in Plan 03 */ }}
         onAddTv={handleAddTv}
         onAddFurniture={handleAddFurniture}
         onAddUsb={handleAddUsb}
@@ -352,6 +394,17 @@ export function RoomMapEditor() {
                 );
                 void updateConfig({ hueChannels: next });
               }}
+            />
+          )}
+
+          {/* Zone derive preview overlay */}
+          {derivePreview && config.tvAnchor && (
+            <ZoneDeriveOverlay
+              result={derivePreview}
+              tv={config.tvAnchor}
+              pxPerMeter={pxPerMeter}
+              onConfirm={handleDeriveConfirm}
+              onDiscard={handleDeriveDiscard}
             />
           )}
         </RoomMapCanvas>
