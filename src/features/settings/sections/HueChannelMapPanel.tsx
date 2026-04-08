@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { HueAreaChannelInfo } from "../../device/hueOnboardingApi";
 import type { HueChannelPlacement } from "../../../shared/contracts/roomMap";
+import { HUE_COMMANDS, HUE_RUNTIME_STATUS } from "../../../shared/contracts/hue";
 
 const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
 type Region = (typeof REGIONS)[number];
@@ -21,6 +23,14 @@ interface Props {
   onPositionChange?: (updated: HueChannelPlacement[]) => void;
   /** When true, renders inline amber error message below the detail strip. */
   persistError?: boolean;
+  /** Bridge IP for write-back (CHAN-05). */
+  bridgeIp?: string;
+  /** Hue application key (username) for write-back (CHAN-05). */
+  username?: string;
+  /** Entertainment area ID for write-back (CHAN-05). */
+  areaId?: string;
+  /** When true, the save-to-bridge button is disabled with tooltip. */
+  isStreaming?: boolean;
 }
 
 /** Convert Hue position (x: -1..+1, y: -1..+1) to CSS % inside the grid box.
@@ -262,6 +272,10 @@ export function HueChannelMapPanel({
   placements,
   onPositionChange,
   persistError,
+  bridgeIp,
+  username,
+  areaId,
+  isStreaming = false,
 }: Props) {
   const { t } = useTranslation();
 
@@ -293,6 +307,11 @@ export function HueChannelMapPanel({
   // Saved flash state (zone assignment)
   const [savedChannelIndex, setSavedChannelIndex] = useState<number | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // CHAN-05: write-back state
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; code?: string; message?: string } | null>(null);
+  const saveResultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Local channel placements — initialized from bridge data + persisted overrides
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>(() =>
@@ -332,6 +351,43 @@ export function HueChannelMapPanel({
     },
     [onSetRegion],
   );
+
+  // -------------------------------------------------------------------------
+  // CHAN-05: Save to bridge handler
+  // -------------------------------------------------------------------------
+
+  const handleSaveToBridge = useCallback(async () => {
+    if (!bridgeIp || !username || !areaId) return;
+    const confirmed = window.confirm(t("device.hue.channelMap.saveConfirm", { ip: bridgeIp }));
+    if (!confirmed) return;
+
+    setIsSaving(true);
+    setSaveResult(null);
+    if (saveResultTimerRef.current !== null) {
+      clearTimeout(saveResultTimerRef.current);
+      saveResultTimerRef.current = null;
+    }
+
+    try {
+      const response = await invoke<{ code: string; message: string }>(
+        HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS,
+        { channels: channelPlacements, bridgeIp, username, areaId },
+      );
+      if (response.code === HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED) {
+        setSaveResult({ ok: true });
+        saveResultTimerRef.current = setTimeout(() => {
+          setSaveResult(null);
+          saveResultTimerRef.current = null;
+        }, 3000);
+      } else {
+        setSaveResult({ ok: false, code: response.code, message: response.message });
+      }
+    } catch (err) {
+      setSaveResult({ ok: false, code: "CHAN_WB_NETWORK_ERROR", message: String(err) });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [bridgeIp, username, areaId, channelPlacements, t]);
 
   // -------------------------------------------------------------------------
   // Z-axis change handler (D-02a, D-02b)
@@ -634,6 +690,49 @@ export function HueChannelMapPanel({
           {t("device.hue.channelMap.saveError")}
         </p>
       )}
+
+      {/* CHAN-05: Save to Bridge button with Beta badge */}
+      {bridgeIp && username && areaId ? (
+        <>
+          <div className="mt-3 flex items-center justify-end gap-2 px-4">
+            <span className="rounded px-2 py-1 text-[9px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">
+              {t("device.hue.channelMap.beta")}
+            </span>
+            <button
+              type="button"
+              disabled={isStreaming || isSaving}
+              title={isStreaming ? t("device.hue.channelMap.saveToBridgeTooltip") : undefined}
+              onClick={() => { void handleSaveToBridge(); }}
+              className={`rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-800
+                hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500
+                transition-colors duration-150
+                ${(isStreaming || isSaving) ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {isSaving ? t("device.hue.channelMap.saving") : t("device.hue.channelMap.saveToBridge")}
+            </button>
+          </div>
+          {saveResult !== null && (
+            <div className={`mt-1 px-4 text-[10px] ${saveResult.ok ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+              {saveResult.ok
+                ? t("device.hue.channelMap.savedToBridge")
+                : (
+                  <>
+                    {t("device.hue.channelMap.saveToBridgeError", { code: saveResult.code ?? "" })}
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => { void handleSaveToBridge(); }}
+                      className="text-xs underline hover:opacity-80"
+                    >
+                      {t("device.hue.channelMap.saveToBridgeErrorRetry")}
+                    </button>
+                  </>
+                )
+              }
+            </div>
+          )}
+        </>
+      ) : null}
 
       {/* Per-channel region assignment rows */}
       <div className="mt-2 space-y-1.5">

@@ -161,3 +161,69 @@ describe("CHAN-04: multi-select and group drag", () => {
     expect(true).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// CHAN-05: Save to Bridge write-back
+// ---------------------------------------------------------------------------
+
+describe("CHAN-05: save to bridge write-back", () => {
+  const writebackProps = {
+    ...defaultProps,
+    bridgeIp: "192.168.1.10",
+    username: "test-user-key",
+    areaId: "area-uuid-123",
+    isStreaming: false,
+  };
+
+  it("save button is disabled when isStreaming is true", () => {
+    render(<HueChannelMapPanel {...writebackProps} isStreaming={true} />);
+    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
+    expect(saveBtn).toHaveProperty("disabled", true);
+  });
+
+  it("save button is enabled when isStreaming is false and credentials present", () => {
+    render(<HueChannelMapPanel {...writebackProps} isStreaming={false} />);
+    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
+    expect(saveBtn).toHaveProperty("disabled", false);
+  });
+
+  it("cancelling confirm dialog does not invoke write-back", async () => {
+    const { invoke: mockInvoke } = await import("@tauri-apps/api/core");
+    vi.mocked(mockInvoke).mockClear();
+    // jsdom does not define window.confirm; assign a mock function directly
+    window.confirm = vi.fn().mockReturnValueOnce(false);
+
+    const user = userEvent.setup();
+    render(<HueChannelMapPanel {...writebackProps} />);
+    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
+    await user.click(saveBtn);
+
+    expect(mockInvoke).not.toHaveBeenCalledWith(
+      "update_hue_channel_positions",
+      expect.anything(),
+    );
+  });
+
+  it("failed write-back shows inline error with retry", async () => {
+    const { invoke: mockInvoke } = await import("@tauri-apps/api/core");
+    vi.mocked(mockInvoke).mockResolvedValueOnce({
+      code: "CHAN_WB_SCHEMA_REJECTED",
+      message: "Bridge rejected the format",
+    });
+    // jsdom does not define window.confirm; assign a mock function directly
+    window.confirm = vi.fn().mockReturnValueOnce(true);
+
+    const user = userEvent.setup();
+    render(<HueChannelMapPanel {...writebackProps} />);
+    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
+    await user.click(saveBtn);
+
+    // Error message should appear — i18n mock returns "key {opts}" format
+    // Use findAllByText since the error + retry share the same container text
+    const errorEls = await screen.findAllByText(/channelMap\.saveToBridgeError/);
+    expect(errorEls.length).toBeGreaterThan(0);
+    // Retry button should appear
+    const retryBtns = screen.getAllByRole("button", { name: /saveToBridgeErrorRetry/ });
+    expect(retryBtns.length).toBeGreaterThan(0);
+  });
+});
