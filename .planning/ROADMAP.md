@@ -88,7 +88,7 @@ Plans:
 - [x] **Phase 16: Hue Channel Position Editor** - User can view and drag Hue channel positions on the map and optionally save to bridge. (completed 2026-04-06)
 - [x] **Phase 17: Room Map UI** - User can build a 2D room map with lights, furniture, TV anchor, and background image. (completed 2026-04-06)
 - [x] **Phase 18: Hue Standalone Mode** - App runs Hue streaming without a USB LED strip. (completed 2026-04-06)
-- [ ] **Phase 19: LED Zone Auto-Derivation** - Ambilight screen-edge zones auto-derived from room map positions; named zone creation and light assignment.
+- [x] **Phase 19: LED Zone Auto-Derivation** - Ambilight screen-edge zones auto-derived from room map positions; named zone creation and light assignment. (completed 2026-04-07)
 - [ ] **Phase 20: Device UX Polish and Channel Write-back** - Device surface Hue controls polished; CHAN-05 experimental write-back added if API confirmed.
 
 ## Phase Details
@@ -217,5 +217,5 @@ Plans:
 | 16. Hue Channel Position Editor | v1.2 | 2/2 | Complete    | 2026-04-06 |
 | 17. Room Map UI | v1.2 | 4/4 | Complete    | 2026-04-06 |
 | 18. Hue Standalone Mode | v1.2 | 2/2 | Complete    | 2026-04-06 |
-| 19. LED Zone Auto-Derivation | v1.2 | 2/3 | In Progress|  |
+| 19. LED Zone Auto-Derivation | v1.2 | 2/3 | Complete    | 2026-04-07 |
 | 20. Device UX Polish and Channel Write-back | v1.2 | 0/3 | Planned | - |

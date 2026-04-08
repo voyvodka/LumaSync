@@ -1,4 +1,6 @@
+use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tauri::Manager;
 
 use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
@@ -56,10 +58,79 @@ pub async fn copy_background_image(
 }
 
 #[tauri::command]
-pub fn update_hue_channel_positions(_channels: Vec<HueChannelPlacement>) -> CommandStatus {
-    CommandStatus {
-        code: "STUB_NOT_IMPLEMENTED".to_string(),
-        message: "Phase 14 stub - implemented in Phase 16".to_string(),
-        details: None,
+pub fn update_hue_channel_positions(
+    channels: Vec<HueChannelPlacement>,
+    bridge_ip: String,
+    username: String,
+    area_id: String,
+) -> CommandStatus {
+    // Build TLS-skip HTTP client (Hue bridges use self-signed certificates)
+    let client = match BlockingClient::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(std::time::Duration::from_millis(5_000))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return CommandStatus {
+                code: "CHAN_WB_NETWORK_ERROR".to_string(),
+                message: format!("Failed to build HTTP client: {e}"),
+                details: None,
+            };
+        }
+    };
+
+    // Build CLIP v2 channel positions payload
+    let channel_positions: Vec<serde_json::Value> = channels
+        .iter()
+        .map(|ch| {
+            json!({
+                "channel_id": ch.channel_index,
+                "position": {
+                    "x": ch.x,
+                    "y": ch.y,
+                    "z": ch.z
+                }
+            })
+        })
+        .collect();
+
+    let body = json!({ "channels": channel_positions });
+
+    let endpoint = format!(
+        "https://{}/clip/v2/resource/entertainment_configuration/{}",
+        bridge_ip, area_id
+    );
+
+    let response = match client
+        .put(&endpoint)
+        .header("hue-application-key", &username)
+        .json(&body)
+        .send()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return CommandStatus {
+                code: "CHAN_WB_NETWORK_ERROR".to_string(),
+                message: format!("Could not reach the bridge: {e}"),
+                details: None,
+            };
+        }
+    };
+
+    let status = response.status();
+    if status.is_success() {
+        CommandStatus {
+            code: "HUE_CHANNEL_POSITIONS_UPDATED".to_string(),
+            message: "Positions saved to bridge.".to_string(),
+            details: None,
+        }
+    } else {
+        let body_text = response.text().unwrap_or_default();
+        CommandStatus {
+            code: "CHAN_WB_SCHEMA_REJECTED".to_string(),
+            message: format!("Bridge rejected: {status}"),
+            details: Some(body_text),
+        }
     }
 }
