@@ -2522,6 +2522,10 @@ async fn internal_restart_stream(
             }
         })
         .await;
+        // Give the bridge ~1 s to propagate the deactivation before checking readiness.
+        // Without this delay, the bridge may still report active_streamer=true and
+        // the reconnect fails immediately.
+        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 
     // 2. Readiness check (async, no lock held).

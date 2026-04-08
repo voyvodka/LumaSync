@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -328,14 +329,44 @@ fn start_ambilight_worker(
     telemetry_snapshot: SharedRuntimeTelemetry,
     hue_output: Option<HueActiveOutputContext>,
 ) -> Result<LightingWorkerRuntime, String> {
-    let initial_frame = frame_source
-        .capture_frame()
-        .map_err(|error| error.as_reason())?;
-    let calibration = SamplingCalibration {
-        led_count: initial_frame.pixels_rgb.len(),
+    // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
+    // Retry for up to ~1 s to give the capture session time to warm up.
+    let initial_frame = {
+        const MAX_ATTEMPTS: u32 = 20;
+        const RETRY_MS: u64 = 50;
+        let mut last_err = String::new();
+        let mut found = None;
+        for _ in 0..MAX_ATTEMPTS {
+            match frame_source.capture_frame() {
+                Ok(frame) => { found = Some(frame); break; }
+                Err(crate::commands::ambilight_capture::AmbilightCaptureError::FrameUnavailable) => {
+                    last_err = "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE".to_string();
+                    thread::sleep(Duration::from_millis(RETRY_MS));
+                }
+                Err(other) => return Err(other.as_reason()),
+            }
+        }
+        found.ok_or(last_err)?
     };
+    // led_count=1 is a safe placeholder for the quality-gate smoothing pipeline.
+    // USB LED count is a separate concern (room-map config); using pixel count here
+    // produced ~11 MB serial packets and blocked the Hue update path entirely.
+    let calibration = SamplingCalibration { led_count: 1 };
 
-    let mut quality_state = AmbilightWorkerQualityState::new(RuntimeQualityConfig::default());
+    let hue_only = port_name.is_none() && hue_output.is_some();
+    let quality_config = if hue_only {
+        // Hue bridge enforces 50 ms minimum (20 Hz). Target ~25 FPS capture
+        // to stay just above the send rate without flooding the queue.
+        RuntimeQualityConfig {
+            base_interval_ms: 40,
+            min_interval_ms: 30,
+            max_interval_ms: 100,
+            ..RuntimeQualityConfig::default()
+        }
+    } else {
+        RuntimeQualityConfig::default()
+    };
+    let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut frame_slot = RuntimeFrameSlot::new();
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
 
@@ -365,11 +396,23 @@ fn start_ambilight_worker(
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
+        let has_hue = hue_output.as_ref().map(|c| !c.channels.is_empty()).unwrap_or(false);
+        info!("[ambilight-worker] started — port={:?} hue={} channels={}", port_name, has_hue, hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0));
+        let mut hue_send_count = 0u32;
+        let mut hue_skip_count = 0u32;
+        let mut last_hue_colors: Vec<(u8, u8, u8)> = Vec::new();
 
+        let mut capture_fail_count = 0u32;
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
-            if let Ok((raw_frame, sampled)) =
-                capture_sample_send_frame(frame_source.as_mut(), &calibration)
+            let capture_result = capture_sample_send_frame(frame_source.as_mut(), &calibration);
+            if let Err(ref e) = capture_result {
+                capture_fail_count += 1;
+                if capture_fail_count <= 5 || capture_fail_count % 50 == 0 {
+                    warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
+                }
+            }
+            if let Ok((raw_frame, sampled)) = capture_result
             {
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
                 telemetry_window.record_capture();
@@ -379,7 +422,7 @@ fn start_ambilight_worker(
 
                 let send_started = Instant::now();
                 let send_ms = if let Some(ref port) = port_name {
-                    // USB send path: send frame to serial port
+                    // USB send path: send frame to serial port.
                     match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                         send_ambilight_frame_hot_path_to_port(
@@ -392,64 +435,74 @@ fn start_ambilight_worker(
                     }) {
                         Ok(true) => {
                             telemetry_window.record_send();
-                            // Fire-and-forget per-channel Hue update.
-                            // Rate limiting (50ms) is handled inside the sender.
-                            if let Some(context) = hue_output.as_ref() {
-                                if !context.channels.is_empty() {
-                                    let channel_colors: Vec<(u8, u8, u8)> = context
-                                        .channels
-                                        .iter()
-                                        .map(|ch| {
-                                            sample_screen_region_avg(&raw_frame, &ch.screen_region)
-                                        })
-                                        .collect();
-                                    let _ = apply_hue_channels_with_context(
-                                        context,
-                                        channel_colors,
-                                        brightness,
-                                    );
-                                }
-                            }
                             send_started.elapsed().as_secs_f32() * 1000.0
                         }
                         _ => 0.0,
                     }
                 } else {
-                    // Hue-only path: no USB send, drive Hue channels directly from captured frame.
-                    // Quality gate is checked to maintain frame rate discipline.
-                    match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |_frame| {
-                        Ok(()) // no-op USB send; Hue update follows below
+                    // Hue-only path: quality gate controls telemetry cadence only.
+                    match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |_| {
+                        Ok(())
                     }) {
                         Ok(true) => {
                             telemetry_window.record_send();
-                            if let Some(context) = hue_output.as_ref() {
-                                if !context.channels.is_empty() {
-                                    let channel_colors: Vec<(u8, u8, u8)> = context
-                                        .channels
-                                        .iter()
-                                        .map(|ch| {
-                                            sample_screen_region_avg(&raw_frame, &ch.screen_region)
-                                        })
-                                        .collect();
-                                    let _ = apply_hue_channels_with_context(
-                                        context,
-                                        channel_colors,
-                                        brightness,
-                                    );
-                                }
-                            }
                             send_started.elapsed().as_secs_f32() * 1000.0
                         }
                         _ => 0.0,
                     }
                 };
 
+                // Hue update: skip if colors haven't changed enough (delta threshold).
+                // This avoids redundant DTLS sends when the screen is static.
+                if let Some(context) = hue_output.as_ref() {
+                    if !context.channels.is_empty() {
+                        let channel_colors: Vec<(u8, u8, u8)> = context
+                            .channels
+                            .iter()
+                            .map(|ch| sample_screen_region_avg(&raw_frame, &ch.screen_region))
+                            .collect();
+
+                        // Delta check: skip if max per-channel diff < threshold.
+                        const COLOR_DELTA_THRESHOLD: u8 = 3;
+                        let colors_changed = if last_hue_colors.len() != channel_colors.len() {
+                            true
+                        } else {
+                            last_hue_colors.iter().zip(channel_colors.iter()).any(|(prev, cur)| {
+                                (prev.0 as i16 - cur.0 as i16).unsigned_abs() as u8 > COLOR_DELTA_THRESHOLD
+                                || (prev.1 as i16 - cur.1 as i16).unsigned_abs() as u8 > COLOR_DELTA_THRESHOLD
+                                || (prev.2 as i16 - cur.2 as i16).unsigned_abs() as u8 > COLOR_DELTA_THRESHOLD
+                            })
+                        };
+
+                        if colors_changed {
+                            hue_send_count += 1;
+                            if hue_send_count <= 3 || hue_send_count % 100 == 0 {
+                                info!("[ambilight-worker] hue update #{hue_send_count} (skipped {hue_skip_count}) — colors: {:?}", &channel_colors[..channel_colors.len().min(3)]);
+                            }
+                            last_hue_colors = channel_colors.clone();
+                            hue_skip_count = 0;
+                            let _ = apply_hue_channels_with_context(context, channel_colors, brightness);
+                        } else {
+                            hue_skip_count += 1;
+                        }
+                    }
+                }
+
                 quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
                 let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
             }
 
             let interval_ms = quality_state.current_send_interval().as_millis() as u64;
-            let sleep_ms = (interval_ms / 4).clamp(1, 8);
+            // USB mode: capture slightly faster than send to keep the slot fresh.
+            // Hue-only mode: match capture rate to send rate (~20 Hz) to avoid
+            // queue overwrite pressure (slot overwrites → "Critical" health).
+            let sleep_ms = if hue_only {
+                // Sleep for ~90% of the send interval. Capture cost (~4ms) fills
+                // the remaining 10%, yielding capture FPS ≈ send FPS.
+                (interval_ms * 9 / 10).clamp(15, 50)
+            } else {
+                (interval_ms / 2).clamp(5, 50)
+            };
             thread::sleep(Duration::from_millis(sleep_ms));
         }
 
@@ -592,9 +645,12 @@ fn apply_mode_change(
                 .map(|payload| payload.brightness)
                 .unwrap_or(1.0);
 
+            info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
+
             let frame_source = match (owner.frame_source_factory)() {
-                Ok(source) => source,
+                Ok(source) => { info!("[apply_mode_change] frame_source created OK"); source }
                 Err(reason) => {
+                    warn!("[apply_mode_change] frame_source FAILED: {}", reason.as_reason());
                     owner.active_mode = LightingModeConfig::default();
                     return make_result(
                         owner.active_mode.clone(),

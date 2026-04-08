@@ -137,6 +137,7 @@ function App() {
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
   const modeTransitionLockRef = useRef(false);
+  const bootstrapRanRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
   const persistLightingModeTimeoutRef = useRef<number | null>(null);
   const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
@@ -292,8 +293,24 @@ function App() {
   }, [activeOutputTargets]);
 
   useEffect(() => {
+    // StrictMode guard: prevent double bootstrap in dev mode.
+    // React.StrictMode unmounts/remounts, running the effect twice.
+    // A ref guard ensures only the first invocation proceeds.
+    if (bootstrapRanRef.current) return;
+    bootstrapRanRef.current = true;
     async function bootstrap() {
       try {
+        // Restore window geometry immediately — before any heavy async work —
+        // so the window settles into its saved position without a visible jump.
+        await initWindowLifecycle({
+          onFirstCloseToTray: () => {
+            console.info(
+              "[LumaSync] Hint: The app is still running in the system tray. " +
+              "Click the tray icon to reopen settings.",
+            );
+          },
+        });
+
         const state = await loadShellState();
         // Map old section IDs to new ones for backward compatibility
         const sectionMap: Record<string, SectionId> = {
@@ -368,29 +385,31 @@ function App() {
         if (isActive && restoredTargets.includes("hue") && hueBootstrapConfig) {
           try {
             const startResult = await startHue(hueBootstrapConfig);
-            if (
-              isHueStartCodeOk(startResult.status.code) &&
-              restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
-              restoredMode.solid
-            ) {
-              await setHueSolidColor({
-                r: restoredMode.solid.r,
-                g: restoredMode.solid.g,
-                b: restoredMode.solid.b,
-                brightness: restoredMode.solid.brightness,
-              });
+            if (isHueStartCodeOk(startResult.status.code)) {
+              if (
+                restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
+                restoredMode.solid
+              ) {
+                await setHueSolidColor({
+                  r: restoredMode.solid.r,
+                  g: restoredMode.solid.g,
+                  b: restoredMode.solid.b,
+                  brightness: restoredMode.solid.brightness,
+                });
+              } else if (restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+                // Use filtered targets (USB removed if not connected) so the
+                // backend USB gate doesn't block Hue-only ambilight at startup.
+                const bootTargets = restoredTargets.filter(
+                  (t) => t !== "usb" || bootstrapUsbAvailable,
+                );
+                await setLightingMode({
+                  ...restoredMode,
+                  targets: bootTargets,
+                });
+              }
             }
           } catch { }
         }
-
-        await initWindowLifecycle({
-          onFirstCloseToTray: () => {
-            console.info(
-              "[LumaSync] Hint: The app is still running in the system tray. " +
-              "Click the tray icon to reopen settings.",
-            );
-          },
-        });
 
         // Check for updates silently after startup
         void checkForUpdates();
@@ -470,14 +489,14 @@ function App() {
     // Delta-start: for each added target, start the current mode on it
     for (const target of addedTargets) {
       if (target === "usb") {
+        // Note: was previously using invoke("set_lighting_mode", { request: {...} })
+        // which is the wrong key name (Tauri expects "payload") and silently failed.
         try {
-          await invoke("set_lighting_mode", {
-            request: {
-              kind: lightingMode.kind,
-              solid: lightingMode.solid ?? null,
-              ambilight: lightingMode.ambilight ?? null,
-              targets: normalizedTargets,
-            },
+          await setLightingMode({
+            kind: lightingMode.kind,
+            solid: lightingMode.solid,
+            ambilight: lightingMode.ambilight,
+            targets: normalizedTargets,
           });
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
         } catch {
@@ -496,13 +515,28 @@ function App() {
           const hueResult = await startHue(runtimeHueConfig);
           if (isHueStartCodeOk(hueResult.status.code)) {
             setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
-            if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
-              await setHueSolidColor({
-                r: lightingMode.solid.r,
-                g: lightingMode.solid.g,
-                b: lightingMode.solid.b,
-                brightness: lightingMode.solid.brightness,
+            // Re-apply lighting mode so the ambilight worker picks up the now-live
+            // Hue stream context. Without this, the running worker has hue_output=None
+            // and never sends colors to Hue (solid color push handles SOLID mode too).
+            try {
+              await setLightingMode({
+                kind: lightingMode.kind,
+                solid: lightingMode.solid,
+                ambilight: lightingMode.ambilight,
+                targets: normalizedTargets,
               });
+            } catch {
+              // Non-fatal for ambilight worker restart; fall through to solid push
+            }
+            if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
+              try {
+                await setHueSolidColor({
+                  r: lightingMode.solid.r,
+                  g: lightingMode.solid.g,
+                  b: lightingMode.solid.b,
+                  brightness: lightingMode.solid.brightness,
+                });
+              } catch { /* non-fatal */ }
             }
           }
         } catch {
@@ -679,27 +713,19 @@ function App() {
         });
 
         const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
-        for (const target of runtimePlan.startTargets) {
-          if (target === "usb") {
-            try {
-              await setLightingMode(normalizedNextMode);
-              targetResults.usb = { ok: true };
-            } catch (error) {
-              const reason = error instanceof Error ? error.message : String(error);
-              targetResults.usb = { ok: false, code: "USB_MODE_APPLY_FAILED", message: reason };
-            }
-          }
 
-          if (target === "hue") {
-            if (!runtimeHueStartConfig) {
-              targetResults.hue = {
-                ok: false,
-                code: "CONFIG_NOT_READY_GATE_BLOCKED",
-                message: "Hue start requires bridge, credential, and area configuration.",
-              };
-              continue;
-            }
-
+        // Phase 1: Start Hue streaming session FIRST.
+        // setLightingMode (Phase 2) calls snapshot_hue_output_context() on the backend,
+        // which must find an active stream to hand the ambilight worker a valid Hue context.
+        // Calling startHue after setLightingMode would leave hue_output=None in the worker.
+        if (runtimePlan.startTargets.includes("hue")) {
+          if (!runtimeHueStartConfig) {
+            targetResults.hue = {
+              ok: false,
+              code: "CONFIG_NOT_READY_GATE_BLOCKED",
+              message: "Hue start requires bridge, credential, and area configuration.",
+            };
+          } else {
             try {
               const hueResult = await startHue(runtimeHueStartConfig);
               targetResults.hue = {
@@ -707,24 +733,54 @@ function App() {
                 code: hueResult.status.code,
                 message: hueResult.status.message,
               };
-
-              if (
-                targetResults.hue.ok &&
-                normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
-                normalizedNextMode.solid
-              ) {
-                await setHueSolidColor({
-                  r: normalizedNextMode.solid.r,
-                  g: normalizedNextMode.solid.g,
-                  b: normalizedNextMode.solid.b,
-                  brightness: normalizedNextMode.solid.brightness,
-                });
-              }
             } catch (error) {
               const reason = error instanceof Error ? error.message : String(error);
               targetResults.hue = { ok: false, code: "HUE_MODE_APPLY_FAILED", message: reason };
             }
           }
+        }
+
+        // Phase 2: Apply lighting mode to backend.
+        // Runs when: USB target is requested, OR Hue target started successfully.
+        // For Hue-only targets this call starts the ambilight worker (which was
+        // previously never called, leaving the Hue stream with no color driver).
+        // For USB+Hue, Hue stream is now live so snapshot_hue_output_context()
+        // returns a valid context and the worker can send to both outputs.
+        const hueStartedOk = targetResults.hue?.ok === true;
+        const needsLightingModeApply =
+          runtimePlan.startTargets.includes("usb") ||
+          (runtimePlan.startTargets.includes("hue") && hueStartedOk);
+
+        if (needsLightingModeApply) {
+          try {
+            await setLightingMode(normalizedNextMode);
+            if (runtimePlan.startTargets.includes("usb")) {
+              targetResults.usb = { ok: true };
+            }
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            if (runtimePlan.startTargets.includes("usb")) {
+              targetResults.usb = { ok: false, code: "USB_MODE_APPLY_FAILED", message: reason };
+            }
+          }
+        }
+
+        // Phase 3: Push initial solid color to Hue (solid mode only).
+        // The backend set_lighting_mode already handles this via apply_hue_color_with_context,
+        // but an explicit push here guarantees the bridge receives the latest UI color.
+        if (
+          hueStartedOk &&
+          normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
+          normalizedNextMode.solid
+        ) {
+          try {
+            await setHueSolidColor({
+              r: normalizedNextMode.solid.r,
+              g: normalizedNextMode.solid.g,
+              b: normalizedNextMode.solid.b,
+              brightness: normalizedNextMode.solid.brightness,
+            });
+          } catch { /* non-fatal: backend already applied the color */ }
         }
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
