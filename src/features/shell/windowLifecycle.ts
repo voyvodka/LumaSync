@@ -137,7 +137,9 @@ interface MonitorRect {
   height: number;
 }
 
-const WINDOW_EDGE_MARGIN = 8;
+// Zero margin: flush-edge positions (x=0, y=0) are valid on macOS.
+// The OS enforces its own constraints (menu bar, dock) natively.
+const WINDOW_EDGE_MARGIN = 0;
 
 function buildMonitorRect(monitor: { position: { x: number; y: number }; size: { width: number; height: number } }): MonitorRect {
   return {

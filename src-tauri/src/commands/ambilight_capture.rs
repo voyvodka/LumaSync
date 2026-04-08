@@ -17,7 +17,10 @@ pub struct SampledLedFrame {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AmbilightCaptureError {
-    #[cfg_attr(not(any(test, target_os = "windows")), allow(dead_code))]
+    #[cfg_attr(
+        not(any(test, target_os = "windows", target_os = "macos")),
+        allow(dead_code)
+    )]
     FrameUnavailable,
     InvalidFrame(&'static str),
 }
@@ -222,7 +225,145 @@ mod platform {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "macos")]
+mod platform {
+    use std::sync::{Arc, Mutex};
+
+    use screencapturekit::cv::CVPixelBufferLockFlags;
+    use screencapturekit::prelude::*;
+
+    use super::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
+
+    type SharedFrame = Arc<Mutex<Option<CapturedFrame>>>;
+
+    pub(super) fn create_live_frame_source(
+    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+        let content = SCShareableContent::get().map_err(|_| {
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_PERMISSION_DENIED")
+        })?;
+
+        let display = content
+            .displays()
+            .into_iter()
+            .next()
+            .ok_or(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ))?;
+
+        let filter = SCContentFilter::create()
+            .with_display(&display)
+            .with_excluding_windows(&[])
+            .build();
+
+        let capture_width = display.width() as u32;
+        let capture_height = display.height() as u32;
+
+        // 20 Hz = 50ms interval, matching Hue streaming constraint
+        let frame_interval = CMTime::new(1, 20);
+
+        let config = SCStreamConfiguration::new()
+            .with_width(capture_width)
+            .with_height(capture_height)
+            .with_pixel_format(PixelFormat::BGRA)
+            .with_shows_cursor(false)
+            .with_minimum_frame_interval(&frame_interval);
+
+        let latest_frame: SharedFrame = Arc::new(Mutex::new(None));
+        let frame_writer = Arc::clone(&latest_frame);
+
+        let mut stream = SCStream::new(&filter, &config);
+
+        stream.add_output_handler(
+            move |sample: CMSampleBuffer, of_type: SCStreamOutputType| {
+                if of_type != SCStreamOutputType::Screen {
+                    return;
+                }
+
+                let buffer = match sample.image_buffer() {
+                    Some(buf) => buf,
+                    None => return,
+                };
+
+                let guard = match buffer.lock(CVPixelBufferLockFlags::READ_ONLY) {
+                    Ok(g) => g,
+                    Err(_) => return,
+                };
+
+                let width = guard.width() as u32;
+                let height = guard.height() as u32;
+                let bytes_per_row = guard.bytes_per_row();
+                let raw_data = guard.as_slice();
+
+                if width == 0 || height == 0 || raw_data.is_empty() {
+                    return;
+                }
+
+                let pixel_count = (width as usize).saturating_mul(height as usize);
+                let mut pixels_rgb = Vec::with_capacity(pixel_count);
+
+                // BGRA pixel data — rows may have padding (bytes_per_row > width * 4)
+                for y in 0..height as usize {
+                    let row_start = y * bytes_per_row;
+                    for x in 0..width as usize {
+                        let offset = row_start + x * 4;
+                        if offset + 3 <= raw_data.len() {
+                            // BGRA → RGB
+                            pixels_rgb.push([
+                                raw_data[offset + 2], // R
+                                raw_data[offset + 1], // G
+                                raw_data[offset],     // B
+                            ]);
+                        }
+                    }
+                }
+
+                if let Ok(mut frame_guard) = frame_writer.lock() {
+                    *frame_guard = Some(CapturedFrame {
+                        width,
+                        height,
+                        pixels_rgb,
+                    });
+                }
+            },
+            SCStreamOutputType::Screen,
+        );
+
+        stream.start_capture().map_err(|_| {
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SESSION_START_FAILED")
+        })?;
+
+        Ok(Box::new(MacOSLiveFrameSource {
+            latest_frame,
+            _stream: stream,
+        }))
+    }
+
+    struct MacOSLiveFrameSource {
+        latest_frame: SharedFrame,
+        _stream: SCStream,
+    }
+
+    // SCStream stop_capture is called on Drop by screencapturekit internally,
+    // but we hold the stream to keep it alive for the lifetime of this source.
+
+    impl AmbilightFrameSource for MacOSLiveFrameSource {
+        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+            let frame_guard = self.latest_frame.lock().map_err(|_| {
+                AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
+            })?;
+
+            frame_guard
+                .clone()
+                .ok_or(AmbilightCaptureError::FrameUnavailable)
+        }
+    }
+
+    // Safety: SCStream is created and owned; the Arc<Mutex<>> shared state is Send+Sync.
+    // The closure handler is moved into SCStream which manages its own dispatch queue.
+    unsafe impl Send for MacOSLiveFrameSource {}
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
 mod platform {
     use super::{AmbilightCaptureError, AmbilightFrameSource};
 
@@ -337,11 +478,11 @@ mod tests {
         assert_eq!(sampled.colors.len(), 6);
     }
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     #[test]
-    fn live_source_factory_returns_coded_unsupported_error_on_non_windows() {
+    fn live_source_factory_returns_coded_unsupported_error_on_unsupported_platform() {
         let error = match create_live_frame_source() {
-            Ok(_) => panic!("non-windows live source should fail"),
+            Ok(_) => panic!("unsupported platform live source should fail"),
             Err(error) => error,
         };
 
