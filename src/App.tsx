@@ -440,9 +440,78 @@ function App() {
 
   const handleOutputTargetsChange = useCallback(async (targets: HueRuntimeTarget[]) => {
     const normalizedTargets = normalizeOutputTargets(targets);
+    const prevTargets = selectedOutputTargets;
     setSelectedOutputTargets(normalizedTargets);
     try { await saveShellState({ lastOutputTargets: normalizedTargets }); } catch { }
-  }, []);
+
+    // Delta logic — only when a mode is actively running (not OFF)
+    if (lightingMode.kind === LIGHTING_MODE_KIND.OFF) return;
+
+    const currentActive = activeOutputTargetsRef.current;
+    const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
+    const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
+
+    // Delta-stop: for each removed target that is currently active, stop it
+    for (const target of removedTargets) {
+      if (!currentActive.includes(target)) continue;
+      if (target === "usb") {
+        try { await invoke("stop_lighting"); } catch { }
+      }
+      if (target === "hue") {
+        try { await invoke("stop_hue_stream"); } catch { }
+      }
+    }
+    // Update activeOutputTargets by removing stopped targets
+    if (removedTargets.length > 0) {
+      const nextActive = currentActive.filter((t) => !removedTargets.includes(t));
+      setActiveOutputTargets(nextActive);
+    }
+
+    // Delta-start: for each added target, start the current mode on it
+    for (const target of addedTargets) {
+      if (target === "usb") {
+        try {
+          await invoke("set_lighting_mode", {
+            request: {
+              kind: lightingMode.kind,
+              solid: lightingMode.solid ?? null,
+              ambilight: lightingMode.ambilight ?? null,
+              targets: normalizedTargets,
+            },
+          });
+          setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
+        } catch {
+          // D-06: silently skip failed target, existing targets continue
+          console.warn("[seamless-switch] USB delta-start failed, skipping");
+        }
+      }
+      if (target === "hue") {
+        try {
+          const latestShellState = await loadShellState();
+          const runtimeHueConfig = toHueStartConfig(latestShellState) ?? hueStartConfig;
+          if (!runtimeHueConfig) {
+            console.warn("[seamless-switch] Hue delta-start skipped — no bridge config");
+            continue;
+          }
+          const hueResult = await startHue(runtimeHueConfig);
+          if (isHueStartCodeOk(hueResult.status.code)) {
+            setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
+            if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
+              await setHueSolidColor({
+                r: lightingMode.solid.r,
+                g: lightingMode.solid.g,
+                b: lightingMode.solid.b,
+                brightness: lightingMode.solid.brightness,
+              });
+            }
+          }
+        } catch {
+          // D-06: silently skip failed target, existing targets continue
+          console.warn("[seamless-switch] Hue delta-start failed, skipping");
+        }
+      }
+    }
+  }, [lightingMode, selectedOutputTargets, hueStartConfig]);
 
   // ---------------------------------------------------------------------------
   // Hot-plug detection: USB plug/unplug target management (D-07, D-08)

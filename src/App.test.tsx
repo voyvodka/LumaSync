@@ -43,11 +43,16 @@ vi.mock("./features/mode/state/modeGuard", () => ({
   canEnableLedMode: () => ({ canEnable: true, reason: null }),
 }));
 
+const getHueStreamStatusMock = vi.fn();
+const setHueSolidColorMock = vi.fn();
+
 vi.mock("./features/mode/modeApi", () => ({
   setLightingMode: (payload: LightingModeConfig) => setLightingModeMock(payload),
   stopLighting: () => stopLightingMock(),
   startHue: (payload: { bridgeIp: string; username: string; clientKey: string; areaId: string }) => startHueMock(payload),
   stopHue: () => stopHueMock(),
+  getHueStreamStatus: () => getHueStreamStatusMock(),
+  setHueSolidColor: (payload: unknown) => setHueSolidColorMock(payload),
 }));
 
 vi.mock("./features/calibration/ui/CalibrationOverlay", () => ({
@@ -67,6 +72,18 @@ vi.mock("./features/settings/SettingsLayout", () => ({
         onClick={() => props.onOutputTargetsChange(["hue"])}
       >
         set-hue-target
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onOutputTargetsChange(["usb"])}
+      >
+        set-usb-target
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onOutputTargetsChange(["usb", "hue"])}
+      >
+        set-both-targets
       </button>
       <button
         type="button"
@@ -97,6 +114,12 @@ describe("App mode orchestration", () => {
     mockIsConnected = true;
     // Default: USB is connected at startup
     invokeMock.mockResolvedValue({ connected: true });
+    getHueStreamStatusMock.mockResolvedValue({
+      active: false,
+      lastSolidColor: null,
+      status: { state: "Idle", code: "HUE_STREAM_STOPPED", message: "Stopped", details: null },
+    });
+    setHueSolidColorMock.mockResolvedValue({ ok: true });
     loadShellStateMock.mockResolvedValue({
       lastSection: "general",
       ledCalibration: {
@@ -373,6 +396,154 @@ describe("App mode orchestration", () => {
     // saveShellState should have been called (target update)
     // The exact call assertion depends on timing, but app should still render
     expect(screen.getByTestId("active-mode")).toBeInTheDocument();
+  });
+
+  it("handleOutputTargetsChange delta-start: adding hue while usb active calls start_hue_stream", async () => {
+    // Setup: Start with usb selected, solid mode active, usb connected
+    loadShellStateMock.mockResolvedValueOnce({
+      lastSection: "general",
+      ledCalibration: {
+        templateId: "monitor-27-16-9",
+        counts: { top: 10, right: 10, bottom: 10, left: 10 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "subtle",
+        startAnchor: "top-start",
+        direction: "cw",
+        totalLeds: 40,
+      },
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastOutputTargets: ["usb"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+    // Second loadShellState call is made inside delta-start for Hue config
+    loadShellStateMock.mockResolvedValue({
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastOutputTargets: ["usb"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+    });
+
+    // Activate usb mode first
+    await act(async () => {
+      screen.getByRole("button", { name: "set-solid" }).click();
+    });
+
+    startHueMock.mockClear();
+    invokeMock.mockClear();
+
+    // Now add hue target while usb is active
+    await act(async () => {
+      screen.getByRole("button", { name: "set-both-targets" }).click();
+    });
+
+    await waitFor(() => {
+      expect(startHueMock).toHaveBeenCalledWith({
+        bridgeIp: "192.168.1.10",
+        username: "app-user",
+        clientKey: "AABBCCDD11223344",
+        areaId: "area-1",
+      });
+    });
+  });
+
+  it("handleOutputTargetsChange delta-stop: removing usb while hue active calls stop_lighting", async () => {
+    // Setup: Start with both targets, solid mode active
+    loadShellStateMock.mockResolvedValue({
+      lastSection: "general",
+      ledCalibration: {
+        templateId: "monitor-27-16-9",
+        counts: { top: 10, right: 10, bottom: 10, left: 10 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "subtle",
+        startAnchor: "top-start",
+        direction: "cw",
+        totalLeds: 40,
+      },
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastOutputTargets: ["usb", "hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+    });
+
+    // Activate both targets
+    await act(async () => {
+      screen.getByRole("button", { name: "set-both-targets" }).click();
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "set-solid" }).click();
+    });
+
+    invokeMock.mockClear();
+
+    // Now remove usb target (keep only hue)
+    await act(async () => {
+      screen.getByRole("button", { name: "set-hue-target" }).click();
+    });
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("stop_lighting");
+    });
+  });
+
+  it("handleOutputTargetsChange no delta when mode is OFF", async () => {
+    loadShellStateMock.mockResolvedValue({
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: { kind: "off" },
+      lastOutputTargets: ["usb"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+    });
+
+    invokeMock.mockClear();
+    startHueMock.mockClear();
+    stopLightingMock.mockClear();
+    stopHueMock.mockClear();
+
+    // Change targets while mode is OFF — no start/stop should be invoked
+    await act(async () => {
+      screen.getByRole("button", { name: "set-both-targets" }).click();
+    });
+
+    expect(invokeMock).not.toHaveBeenCalledWith("start_hue_stream");
+    expect(invokeMock).not.toHaveBeenCalledWith("stop_hue_stream");
+    expect(invokeMock).not.toHaveBeenCalledWith("set_lighting_mode");
+    expect(invokeMock).not.toHaveBeenCalledWith("stop_lighting");
+    expect(startHueMock).not.toHaveBeenCalled();
+    expect(stopLightingMock).not.toHaveBeenCalled();
+    expect(stopHueMock).not.toHaveBeenCalled();
   });
 
   it("routes stop to selected targets and does not re-trigger hue start after manual stop", async () => {
