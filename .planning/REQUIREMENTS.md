@@ -50,8 +50,8 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### v1.1 Carry-overs
 
 - [x] **HUE-08**: User can continue a Hue session after transient stream faults without restarting the app
-- [x] **HUX-01**: User can manage Hue connection, area selection, and stream status from existing Device settings surfaces
-- [ ] **HUX-02**: User can switch output target (USB vs Hue) without losing saved calibration or active mode configuration
+- [ ] **HUX-01**: User can manage Hue connection, area selection, and stream status from existing Device settings surfaces
+- [x] **HUX-02**: User can switch output target (USB vs Hue) without losing saved calibration or active mode configuration
 - [x] **HDR-01**: User can see coded Hue-related error states with actionable recovery hints in the UI
 - [x] **HDR-02**: User can inspect basic Hue stream health signals for troubleshooting during runtime
 
@@ -99,8 +99,8 @@ Which requirements map to which phases. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | HUE-08 | Phase 15 | Complete |
-| HUX-01 | Phase 20 | Complete |
-| HUX-02 | Phase 20 | Pending |
+| HUX-01 | Phase 20 | Pending |
+| HUX-02 | Phase 20 | Complete |
 | HDR-01 | Phase 15 | Complete |
 | HDR-02 | Phase 15 | Complete |
 | ROOM-01 | Phase 17 | Complete |
