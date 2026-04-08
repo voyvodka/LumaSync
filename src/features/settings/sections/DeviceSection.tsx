@@ -109,6 +109,7 @@ export function DeviceSection() {
     isLoadingAreas,
     isCheckingReadiness,
     isValidatingCredential,
+    credentials,
     status: hueStatus,
     runtimeStatus,
     runtimeTargets,
@@ -306,6 +307,61 @@ export function DeviceSection() {
       className: "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-500",
     };
   })();
+
+  /* ── HueReadySummaryCard ─────────────────────────────── */
+  function HueReadySummaryCard() {
+    if (!canStartHue) return null;
+
+    const cardModel = buildHueRuntimeStatusCard({ status: runtimeStatus });
+    const variant = cardModel.variant;
+
+    const dotClass =
+      variant === "success"
+        ? "bg-emerald-500 animate-pulse"
+        : variant === "error"
+          ? "bg-rose-500"
+          : "bg-slate-300 dark:bg-zinc-600";
+
+    const labelKey =
+      variant === "success"
+        ? "device.hue.summary.streaming"
+        : variant === "error"
+          ? "device.hue.summary.error"
+          : "device.hue.summary.idle";
+
+    const isAccordionOpen = resolvedExpandedStep !== null;
+
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setHueExpandedStep(isAccordionOpen ? null : "ready");
+        }}
+        className="mt-5 w-full rounded-xl border border-slate-200/80 bg-white/90 px-5 py-4 text-left dark:border-zinc-800 dark:bg-zinc-900/80 cursor-pointer hover:border-slate-300 dark:hover:border-zinc-700 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
+          <span className="text-xs text-slate-800 dark:text-zinc-100 truncate">
+            {selectedArea?.name}
+          </span>
+          {selectedBridge?.ip ? (
+            <span className="ml-2 text-[11px] text-slate-400 dark:text-zinc-500 truncate">
+              {selectedBridge.ip}
+            </span>
+          ) : null}
+          <span className={`ml-auto shrink-0 text-[11px] font-semibold ${
+            variant === "success"
+              ? "text-emerald-600 dark:text-emerald-400"
+              : variant === "error"
+                ? "text-rose-600 dark:text-rose-400"
+                : "text-slate-500 dark:text-zinc-400"
+          }`}>
+            {t(labelKey)}
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   const renderPortRows = (kind: "supported" | "other") => {
     const list = kind === "supported" ? groupedPorts.supported : groupedPorts.other;
@@ -732,6 +788,9 @@ export function DeviceSection() {
         ) : null}
 
         <div className="p-6 pt-0">
+          {/* HUX-01: Hue ready summary card — visible only when canStartHue=true */}
+          <HueReadySummaryCard />
+
           {/* Empty state guide — no bridge at all, no history */}
           {!selectedBridgeId && bridges.length === 0 && !isHueDiscovering && !bridgeUnreachable ? (
             <div className="mt-5 flex flex-col items-center rounded-xl border border-dashed border-slate-200 bg-slate-50/40 px-6 py-8 text-center dark:border-zinc-700 dark:bg-zinc-800/20">
@@ -1056,6 +1115,10 @@ export function DeviceSection() {
                         placements={channelPlacements}
                         onPositionChange={handlePositionChange}
                         persistError={persistError}
+                        bridgeIp={selectedBridge?.ip}
+                        username={credentials?.username}
+                        areaId={selectedArea?.id}
+                        isStreaming={runtimeStatus?.state === "Running"}
                       />
                     ) : null}
                   </div>

@@ -89,6 +89,71 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe("HueReadySummaryCard", () => {
+  beforeEach(() => {
+    stopHueMock.mockReset();
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  it("renders when canStartHue is true", async () => {
+    useHueOnboardingMock.mockReturnValue(
+      createHueHookState({
+        canStartHue: true,
+        selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: true } },
+        selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
+        runtimeStatus: null,
+      }),
+    );
+
+    render(<DeviceSection />);
+
+    await waitFor(() => {
+      // Card renders summary label (idle state when runtimeStatus=null)
+      expect(screen.getByText("device.hue.summary.idle")).toBeInTheDocument();
+    });
+  });
+
+  it("hidden when canStartHue is false", async () => {
+    useHueOnboardingMock.mockReturnValue(
+      createHueHookState({
+        canStartHue: false,
+        selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: false } },
+        selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
+        runtimeStatus: null,
+      }),
+    );
+
+    render(<DeviceSection />);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Living Room")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows streaming dot when runtimeStatus state is Running", async () => {
+    useHueOnboardingMock.mockReturnValue(
+      createHueHookState({
+        canStartHue: true,
+        selectedArea: { id: "test-area", name: "Test Zone", readiness: { ready: true } },
+        selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
+        runtimeStatus: {
+          state: "Running",
+          code: "HUE_STREAM_RUNNING",
+          message: "Streaming",
+          triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+        },
+      }),
+    );
+
+    render(<DeviceSection />);
+
+    await waitFor(() => {
+      const dot = document.querySelector(".bg-emerald-500.animate-pulse");
+      expect(dot).toBeTruthy();
+    });
+  });
+});
+
 describe("DeviceSection hue runtime controls", () => {
   beforeEach(() => {
     stopHueMock.mockReset();

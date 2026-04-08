@@ -242,6 +242,14 @@
         "tooltipAriaLabel": "Canli konum: x {{x}}, y {{y}}",
         "multiSelectCount": "{{count}} secili",
         "saveError": "Konum kaydedilemedi — depolama hatasi. Kanali tekrar tasiyin.",
+        "saveToBridge": "Pozisyonlari Bridge'e Kaydet",
+        "saveToBridgeTooltip": "Stream'i once durdurun",
+        "saving": "Kaydediliyor...",
+        "savedToBridge": "Pozisyonlar bridge'e kaydedildi.",
+        "saveToBridgeError": "{{code}}: Pozisyonlar yazilamadi.",
+        "saveToBridgeErrorRetry": "Tekrar dene",
+        "saveConfirm": "Bridge uzerindeki kanal pozisyonlari guncellenecek. Bridge: {{ip}}. Devam edilsin mi?",
+        "beta": "Beta",
         "noChannelsHeading": "Kanal Yok",
         "noChannelsBody": "Kanal bulunamadi. Once bir Eglence Alani secin.",
         "regions": {
@@ -295,6 +303,11 @@
         "offlineRediscover": "Yeniden keşfet",
         "offlineTryIp": "Farklı bir IP dene",
         "offlineReset": "Bu bridge'i kaldır ve baştan başla"
+      },
+      "summary": {
+        "idle": "Bağlı, akış yok",
+        "streaming": "Akış aktif",
+        "error": "Akış hatası"
       },
       "status": {
         "validatingTitle": "Kayıtlı kimlik bilgileri doğrulanıyor",
@@ -404,7 +417,14 @@
           "HUE-STR-04": { "description": "Gönderici beklenmedik şekilde sonlandı", "hint": "Stream'i yeniden deneyin" },
           "HUE-CFG-01": { "description": "Entertainment alanı seçilmemiş", "hint": "Cihaz ayarlarından bir alan seçin" },
           "HUE-CFG-02": { "description": "Bridge IP adresi değişmiş", "hint": "Cihaz ayarlarından bridge IP'sini güncelleyin" }
+        },
+      "writeback": {
+        "codes": {
+          "CHAN_WB_SCHEMA_REJECTED": "Bridge konum formatini reddetti.",
+          "CHAN_WB_STREAM_ACTIVE": "Kaydetmeden once akisi durdurun.",
+          "CHAN_WB_NETWORK_ERROR": "Bridge'e ulasilamiyor."
         }
+      }
       }
     }
   },

@@ -242,6 +242,14 @@
         "tooltipAriaLabel": "Live position: x {{x}}, y {{y}}",
         "multiSelectCount": "{{count}} selected",
         "saveError": "Position not saved — store error. Retry by moving the channel again.",
+        "saveToBridge": "Save positions to bridge",
+        "saveToBridgeTooltip": "Stop the stream first",
+        "saving": "Saving...",
+        "savedToBridge": "Positions saved to bridge.",
+        "saveToBridgeError": "{{code}}: Failed to write positions.",
+        "saveToBridgeErrorRetry": "Try again",
+        "saveConfirm": "Channel positions on bridge will be updated. Bridge: {{ip}}. Continue?",
+        "beta": "Beta",
         "noChannelsHeading": "No Channels",
         "noChannelsBody": "No channels available. Select an Entertainment Area first.",
         "regions": {
@@ -295,6 +303,11 @@
         "offlineRediscover": "Rediscover",
         "offlineTryIp": "Try a different IP",
         "offlineReset": "Remove this bridge and start over"
+      },
+      "summary": {
+        "idle": "Ready, not streaming",
+        "streaming": "Streaming",
+        "error": "Stream error"
       },
       "status": {
         "validatingTitle": "Validating saved credentials",
@@ -404,7 +417,14 @@
           "HUE-STR-04": { "description": "Sender exited unexpectedly", "hint": "Retry stream" },
           "HUE-CFG-01": { "description": "No entertainment area selected", "hint": "Choose an area in Device settings" },
           "HUE-CFG-02": { "description": "Bridge IP has changed", "hint": "Update bridge IP in Device settings" }
+        },
+      "writeback": {
+        "codes": {
+          "CHAN_WB_SCHEMA_REJECTED": "Bridge rejected the position format.",
+          "CHAN_WB_STREAM_ACTIVE": "Stop streaming before saving.",
+          "CHAN_WB_NETWORK_ERROR": "Could not reach the bridge."
         }
+      }
       }
     }
   },
