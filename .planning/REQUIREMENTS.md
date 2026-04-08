@@ -50,7 +50,7 @@ Requirements for this milestone. Each maps to roadmap phases.
 ### v1.1 Carry-overs
 
 - [x] **HUE-08**: User can continue a Hue session after transient stream faults without restarting the app
-- [ ] **HUX-01**: User can manage Hue connection, area selection, and stream status from existing Device settings surfaces
+- [x] **HUX-01**: User can manage Hue connection, area selection, and stream status from existing Device settings surfaces
 - [x] **HUX-02**: User can switch output target (USB vs Hue) without losing saved calibration or active mode configuration
 - [x] **HDR-01**: User can see coded Hue-related error states with actionable recovery hints in the UI
 - [x] **HDR-02**: User can inspect basic Hue stream health signals for troubleshooting during runtime
@@ -99,7 +99,7 @@ Which requirements map to which phases. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | HUE-08 | Phase 15 | Complete |
-| HUX-01 | Phase 20 | Pending |
+| HUX-01 | Phase 20 | Complete |
 | HUX-02 | Phase 20 | Complete |
 | HDR-01 | Phase 15 | Complete |
 | HDR-02 | Phase 15 | Complete |
@@ -115,7 +115,7 @@ Which requirements map to which phases. Updated during roadmap creation.
 | CHAN-02 | Phase 16 | Complete |
 | CHAN-03 | Phase 16 | Complete |
 | CHAN-04 | Phase 16 | Complete |
-| CHAN-05 | Phase 20 | Pending (optional — experimental) |
+| CHAN-05 | Phase 20 | Complete (optional — experimental) |
 | ZONE-01 | Phase 19 | Complete |
 | ZONE-02 | Phase 19 | Complete |
 | ZONE-03 | Phase 19 | Complete |
@@ -139,4 +139,4 @@ Which requirements map to which phases. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-04-06 — ROOM-03 moved from Phase 17 to Phase 19 (zone creation UI belongs with zone auto-derivation)*
+*Last updated: 2026-04-08 — Phase 20 complete: HUX-01, HUX-02, CHAN-05 verified*
