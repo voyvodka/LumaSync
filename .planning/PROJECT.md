@@ -15,7 +15,7 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 - **Release gate:** QUAL-04 (60 dakika stabilite) APPROVED
 - **Archive refs:** `.planning/milestones/v1.0-ROADMAP.md`, `.planning/milestones/v1.0-REQUIREMENTS.md`
 - **v1.1 progress:** Phase 01 complete (2026-03-29) — tray-first shell, startup toggle Rust-authoritative, all UAT gaps closed
-- **v1.2 progress:** Phase 17 complete (2026-04-06) — 2D room map UI with draggable TV, furniture, USB strip, Hue channels, background image, persist
+- **v1.2 progress:** Phase 20 complete (2026-04-08) — Device UX Polish + Channel Write-Back: Hue status summary card, seamless output target switching, experimental CHAN-05 channel position write-back to bridge
 
 ## Requirements
 
@@ -36,10 +36,10 @@ Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected
 - [ ] User can position all light sources (Hue, USB LED, future protocols) on a 2D room map
 - [ ] User can edit Hue Entertainment Area channel positions and optionally save them back to the bridge
 - [ ] User can have Ambilight LED zone assignments auto-derived from the room map
-- [ ] User can use Hue standalone (without a USB LED strip) for room-only Hue control
+- [~] User can use Hue standalone (without a USB LED strip) for room-only Hue control — Validated in Phase 18 (Solid verified, Ambilight pending macOS frame capture)
 - [ ] User can continue a Hue session after transient stream faults without restarting the app (HUE-08)
-- [ ] User can manage Hue connection and stream status from Device settings surfaces (HUX-01)
-- [ ] User can switch output target between USB and Hue without losing calibration or mode config (HUX-02)
+- ✓ User can manage Hue connection and stream status from Device settings surfaces (HUX-01) — Validated in Phase 20
+- ✓ User can switch output target between USB and Hue without losing calibration or mode config (HUX-02) — Validated in Phase 20
 - [ ] User can see coded Hue error states with actionable recovery hints in UI (HDR-01)
 - [ ] User can inspect basic Hue stream health signals for troubleshooting during runtime (HDR-02)
 - [ ] User can save and reuse lighting/calibration profiles
@@ -107,4 +107,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after Phase 17 (Room Map UI) completion*
+*Last updated: 2026-04-08 after Phase 20 (Device UX Polish + Channel Write-Back) completion*
