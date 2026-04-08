@@ -9,6 +9,41 @@ https://keepachangelog.com/en/1.1.0/
 
 ---
 
+## [1.0.3] — 2026-04-08
+
+### Added
+
+- Room map canvas editor with draggable furniture, TV anchor, and USB strip objects (`RoomMapEditor`, `RoomMapCanvas`, `RoomMapToolbar`)
+- `HueChannelOverlay` renders channel positions on the room map using a `[-1,1]` normalized coordinate system
+- `HueChannelMapPanel`: drag-and-drop single and multi-channel positioning, z-axis detail strip, coordinate tooltips, positions persisted via `shellStore`
+- Zone auto-derivation: `deriveZones` algorithm maps LED strip positions to Hue channel regions automatically (13 unit tests)
+- `ZoneDeriveOverlay` and `ZoneListPanel` for reviewing, renaming, and deleting derived zones; zone assignment mode in `HueChannelOverlay`
+- `HueReadySummaryCard` in Device section — shows stream state indicator, entertainment area name, and bridge IP when Hue is connected
+- `update_hue_channel_positions` Rust command writes edited channel positions back to the Hue bridge with save confirmation UI
+- Target-aware lighting pipeline: `targets` field on `LightingModeConfig` selects which output devices (USB / Hue) participate per mode
+- `resolveDefaultTargets` helper preserves backward compatibility with persisted configs that predate the targets field
+- USB hot-plug detection: suggestion banner appears when a USB controller is plugged in while Hue-only mode is active
+- Startup target filtering: USB target is silently removed from persisted state if the device is not connected on launch
+- Delta start/stop in `handleOutputTargetsChange` — adding or removing an output target while a mode is active no longer restarts the full pipeline
+- `HueTelemetryGrid` component in Diagnostics tab showing live DTLS stream metrics
+- `HUE_FAULT_CODES` typed constant map replaces raw string matching for all DTLS fault conditions
+- `FullTelemetrySnapshot` type and `get_full_telemetry_snapshot` Tauri command for combined runtime diagnostics
+- `simulate_hue_fault` Rust command for fault injection during development and testing
+- `copy_background_image` Rust command for importing a floor-plan background into the room map
+- `roomMap.ts` contract: placement types, `RoomMapObject` discriminated union, coordinate definitions
+- `UPDATE_CHANNEL_POSITIONS` command and associated status codes added to `hue.ts` contract
+- `roomMap` persistence field and `ROOM_MAP` section ID added to `shell.ts` contract
+- Shell contracts verifier extended to validate room map and Hue channel position contract coverage
+- `targetFailed` i18n key under `device.hue` namespace (EN + TR)
+- Tauri `dialog` and `fs` plugins for background image import
+
+### Fixed
+
+- `handleOutputTargetsChange` no longer stops an active lighting mode when a target is only being added (not removed)
+- DTLS reconnect monitor correctly detects and registers thread death in all failure paths
+
+---
+
 ## [1.1.0] — 2026-03-28
 
 ### Added

@@ -53,6 +53,21 @@ jobs:
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        shell: bash
+        run: |
+          VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          NOTES=$(awk "/^## \[${VERSION}\]/{p=1; next} /^## \[/{if(p) exit} /^---$/{if(p) exit} p" CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          fi
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            echo "$NOTES"
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build and upload release assets
         uses: tauri-apps/tauri-action@v0
         env:
@@ -62,6 +77,6 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "LumaSync ${{ github.ref_name }}"
-          releaseBody: "Automated release for ${{ github.ref_name }}"
+          releaseBody: ${{ steps.changelog.outputs.notes }}
           releaseDraft: false
           prerelease: false

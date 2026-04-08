@@ -1,3 +1,15 @@
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+*.crt
+id_rsa
+id_ed25519
+
 # Logs
 logs
 *.log
