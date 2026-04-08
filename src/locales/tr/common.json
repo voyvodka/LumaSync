@@ -272,6 +272,7 @@
         "selectZoneHint": "Seçili kanalı atamak için haritada bir bölgeye tıkla.",
         "chipLabel": "Kn {{index}}"
       },
+      "targetFailed": "{{target}} hedefi baslatılamadı, mevcut çıkış devam ediyor.",
       "readiness": {
         "ready": "Hazır",
         "notReady": "Hazır değil",

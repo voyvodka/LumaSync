@@ -272,6 +272,7 @@
         "selectZoneHint": "Click a zone on the map to assign the selected channel.",
         "chipLabel": "Ch {{index}}"
       },
+      "targetFailed": "Could not add {{target}} to active output.",
       "readiness": {
         "ready": "Ready",
         "notReady": "Not ready",
