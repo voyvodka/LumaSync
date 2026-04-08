@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Oda Gorselleştirme ve Evrensel Isik Yonetimi
 status: executing
-stopped_at: Completed 19-02-PLAN.md
-last_updated: "2026-04-07T07:47:47.906Z"
-last_activity: 2026-04-07
+stopped_at: Completed 20-03-PLAN.md
+last_updated: "2026-04-08T08:47:27.408Z"
+last_activity: 2026-04-08
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 20
+  completed_plans: 19
   percent: 38
 ---
 
@@ -21,15 +21,15 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-03-30)
 
 **Core value:** Users can get smooth, stable, low-overhead Ambilight behavior on a USB-connected WS2812B setup with minimal setup friction.
-**Current focus:** Phase 19 — led-zone-auto-derivation
+**Current focus:** Phase 20 — device-ux-polish-and-channel-write-back
 
 ## Current Position
 
 Milestone: v1.2 (Oda Görselleştirme ve Evrensel Işık Yönetimi)
-Phase: 20
-Plan: Not started
+Phase: 20 (device-ux-polish-and-channel-write-back) — EXECUTING
+Plan: 3 of 3
 Status: Ready to execute
-Last activity: 2026-04-07
+Last activity: 2026-04-08
 
 Progress: [████░░░░░░] 38%
 
@@ -71,6 +71,9 @@ Progress: [████░░░░░░] 38%
 - [Phase 19-led-zone-auto-derivation]: Left-edge test uses y=[0.47..0.53] (TV vertical midspan) to avoid corner tie-breaking ambiguity in deriveZones edge assignment
 - [Phase 19-led-zone-auto-derivation]: @vitest-environment node used for ZoneDeriveOverlay tests — jsdom v29/Node v25 ESM incompatibility blocks all tsx render tests project-wide
 - [Phase 19-led-zone-auto-derivation]: pendingZoneCounts state in SettingsLayout transfers derived zone counts to CalibrationPage without shell store persist (D-03a compliance)
+- [Phase 20-device-ux-polish-and-channel-write-back]: HueReadySummaryCard inline in DeviceSection — closure over hook state avoids prop drilling; vitest migrated to happy-dom (Node.js v25 jsdom ESM compat fix)
+- [Phase 20]: window.confirm used for CHAN-05 D-08 confirmation dialog — native browser dialog, no custom modal needed
+- [Phase 20]: CHAN-05 write-back: save button only rendered when bridgeIp+username+areaId all present, guarding against partial state
 
 ## Accumulated Context
 
@@ -82,6 +85,6 @@ Progress: [████░░░░░░] 38%
 
 ### Session Continuity
 
-Last session: 2026-04-07T07:31:06.605Z
-Stopped at: Completed 19-02-PLAN.md
+Last session: 2026-04-08T08:47:27.405Z
+Stopped at: Completed 20-03-PLAN.md
 Resume file: None

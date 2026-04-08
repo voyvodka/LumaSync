@@ -200,7 +200,12 @@ Plans:
   1. User can see Hue stream status (connected, streaming, error state) and the selected entertainment area name in the Device settings section without opening a separate panel.
   2. User can switch the active output target between USB and Hue in Device settings and have the active lighting mode continue without requiring re-configuration.
   3. *(CHAN-05 — conditional on API verification)* User can press "Save positions to bridge" in the channel editor after stopping the stream and have the edited x/y/z positions written to the bridge; a subsequent read confirms the positions match.
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [x] 20-01-PLAN.md — HueReadySummaryCard: Hue stream status summary card in Device settings (HUX-01)
+- [ ] 20-02-PLAN.md — Seamless output target switching with delta-start/stop (HUX-02)
+- [x] 20-03-PLAN.md — CHAN-05 experimental channel position write-back to Hue bridge
 **UI hint**: yes
 
 ## Progress
@@ -218,4 +223,4 @@ Plans:
 | 17. Room Map UI | v1.2 | 4/4 | Complete    | 2026-04-06 |
 | 18. Hue Standalone Mode | v1.2 | 2/2 | Complete    | 2026-04-06 |
 | 19. LED Zone Auto-Derivation | v1.2 | 2/3 | Complete    | 2026-04-07 |
-| 20. Device UX Polish and Channel Write-back | v1.2 | 0/3 | Planned | - |
+| 20. Device UX Polish and Channel Write-back | v1.2 | 2/3 | In Progress|  |
