@@ -726,6 +726,25 @@ function App() {
         return;
       }
 
+      // Fast path: ambilight already running and only settings changed (brightness,
+      // smoothing, black border) — send live update without the full transition flow.
+      // The Rust backend detects this case and updates live atomics in-place
+      // (AMBILIGHT_MODE_UPDATED) without touching the worker or SCStream.
+      const isQuickAmbilightAdjustment =
+        normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
+        lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
+        isSameTargetSet(selectedOutputTargets, activeOutputTargets);
+
+      if (isQuickAmbilightAdjustment) {
+        setLightingModeState(normalizedNextMode);
+        scheduleLightingModePersist(normalizedNextMode);
+        void setLightingMode(normalizedNextMode).catch((error) => {
+          console.error("[LumaSync] Failed to push Ambilight settings update:", error);
+        });
+        modeTransitionLockRef.current = false;
+        return;
+      }
+
       if (!isQuickSolidAdjustment) setIsModeTransitioning(true);
 
       // D-05: USB target requires calibration; Hue-only does not
