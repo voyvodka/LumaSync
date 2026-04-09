@@ -217,25 +217,23 @@ fn open_overlay_window<R: Runtime>(
 fn propagate_transparent_to_children<R: Runtime>(window: &tauri::WebviewWindow<R>) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumChildWindows, GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
-        WS_EX_LAYERED, WS_EX_TRANSPARENT,
-    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::EnumChildWindows;
 
     let parent_hwnd: HWND = match window.window_handle() {
         Ok(handle) => match handle.as_raw() {
-            RawWindowHandle::Win32(h) => h.hwnd.as_ptr() as HWND,
+            // raw-window-handle 0.6: hwnd is NonZero<isize>, use .get()
+            RawWindowHandle::Win32(h) => h.hwnd.get() as HWND,
             _ => return,
         },
         Err(_) => return,
     };
 
     unsafe extern "system" fn set_clickthrough(hwnd: HWND, _: LPARAM) -> i32 {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
+            WS_EX_LAYERED, WS_EX_TRANSPARENT,
+        };
         unsafe {
-            use windows_sys::Win32::UI::WindowsAndMessaging::{
-                GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
-                WS_EX_LAYERED, WS_EX_TRANSPARENT,
-            };
             let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
             SetWindowLongPtrW(
                 hwnd,
