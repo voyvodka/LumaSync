@@ -1,6 +1,6 @@
 [package]
 name = "lumasync"
-version = "1.0.3"
+version = "1.0.4"
 description = "LumaSync — tray-first ambient lighting desktop app"
 authors = ["voyvodka"]
 edition = "2021"

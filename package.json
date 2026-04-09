@@ -1,15 +1,16 @@
 {
   "name": "lumasync",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
+  "packageManager": "pnpm@10.33.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "lint": "yarn typecheck",
+    "lint": "pnpm typecheck",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "check:all": "yarn lint && yarn check:rust && yarn verify:shell-contracts",
+    "check:all": "pnpm lint && pnpm check:rust && pnpm verify:shell-contracts",
     "preview": "vite preview",
     "tauri": "tauri",
     "verify:shell-contracts": "node scripts/verify/phase01-shell-contracts.mjs"
@@ -45,6 +46,6 @@
     "tailwindcss": "^4.2.2",
     "typescript": "~6.0.2",
     "vite": "^8.0.8",
-    "vitest": "^4.1.3"
+    "vitest": "^4.1.4"
   }
 }
