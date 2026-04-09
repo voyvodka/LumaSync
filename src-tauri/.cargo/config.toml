@@ -1,0 +1,15 @@
+# Set macOS deployment target to 12.3 — the minimum for ScreenCaptureKit.
+#
+# Without this, Rust's linker defaults to macOS 11.0 (`minos 11.0`). The
+# Swift SDK's TBD stub for libswift_Concurrency.dylib contains a `$ld$previous`
+# linker directive that, for deployment targets < 12.0, redirects the install
+# name to `@rpath/libswift_Concurrency.dylib`. This @rpath resolves to the
+# Xcode Swift 5.5 copy of the library, while macOS simultaneously pre-loads
+# its own libswift_Concurrency from the dyld shared cache (for ScreenCaptureKit).
+# Two copies → duplicate class registration → spurious crashes.
+#
+# With MACOSX_DEPLOYMENT_TARGET >= 12.0 the linker uses the system install
+# name (/usr/lib/swift/libswift_Concurrency.dylib) — the same instance already
+# in the dyld cache — so only one copy is loaded and the crash is eliminated.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "12.3"

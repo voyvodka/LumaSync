@@ -86,9 +86,19 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: safe quit — no deferred LED shutdown in Phase 1
+// Helper: safe quit — stop active workers before exiting
 // ---------------------------------------------------------------------------
 fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
+    // 1. Stop ambilight / serial worker synchronously.
+    //    Joins the worker thread and drops SCStream (the frame source) from
+    //    this thread — preventing SCStream::stop_capture from being called on
+    //    the OS process-cleanup thread, which causes a macOS crash.
+    let _ = stop_lighting(app.state::<LightingRuntimeState>());
+
+    // 2. Deactivate Hue entertainment area so the bridge turns lights off.
+    //    stop_hue_stream is synchronous (waits up to HUE_STOP_TIMEOUT_SECS=3s).
+    let _ = stop_hue_stream(None, app.state::<HueRuntimeStateStore>());
+
     app.exit(0);
 }
 
@@ -199,6 +209,7 @@ pub fn run() {
                 .level_for("hyper_util", log::LevelFilter::Warn)
                 .level_for("openssl", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
                 ))
@@ -220,6 +231,7 @@ pub fn run() {
                 .level_for("hyper_util", log::LevelFilter::Warn)
                 .level_for("openssl", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
                 ))
