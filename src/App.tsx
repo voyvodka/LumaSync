@@ -835,9 +835,18 @@ function App() {
         // For USB+Hue, Hue stream is now live so snapshot_hue_output_context()
         // returns a valid context and the worker can send to both outputs.
         const hueStartedOk = targetResults.hue?.ok === true;
+        // For Ambilight mode with a transient Hue failure (e.g. bridge has a stale
+        // session — CONFIG_NOT_READY_GATE_BLOCKED): still start the backend worker.
+        // The worker runs without Hue context initially; the stream auto-reconnects
+        // in ~30s and the user can re-select Ambilight to pick up colors.
+        const hueTransientFail =
+          !hueStartedOk &&
+          normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
+          runtimePlan.startTargets.includes("hue");
         const needsLightingModeApply =
           runtimePlan.startTargets.includes("usb") ||
-          (runtimePlan.startTargets.includes("hue") && hueStartedOk);
+          (runtimePlan.startTargets.includes("hue") && hueStartedOk) ||
+          hueTransientFail;
 
         if (needsLightingModeApply) {
           try {
@@ -873,10 +882,11 @@ function App() {
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
         setActiveOutputTargets(merged.activeTargets);
-        if (merged.activeTargets.length > 0) {
-          setLightingModeState(normalizedNextMode);
-          scheduleLightingModePersist(normalizedNextMode);
-        }
+        // Always reflect user intent in the UI, even if targets failed transiently.
+        // The OFF path returns early above and never reaches this code, so this
+        // unconditional update is safe for Ambilight and Solid modes.
+        setLightingModeState(normalizedNextMode);
+        scheduleLightingModePersist(normalizedNextMode);
       } catch (error) {
         console.error(`[LumaSync] Failed to switch lighting mode to ${normalizedNextMode.kind}:`, error);
       } finally {
