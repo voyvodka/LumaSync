@@ -357,6 +357,7 @@ fn capture_sample_send_frame(
 /// Average the colour of the pixels in the screen strip corresponding to
 /// `region`, respecting black-border `insets` so letterbox / pillarbox areas
 /// are excluded. Uses a step of 8 pixels in both axes for fast sub-sampling.
+#[allow(dead_code)]
 fn sample_screen_region_avg(
     frame: &CapturedFrame,
     region: &HueScreenRegion,
@@ -422,6 +423,83 @@ fn sample_screen_region_avg(
     ((sum_r / count) as u8, (sum_g / count) as u8, (sum_b / count) as u8)
 }
 
+/// Continuous position-based colour sampling for Hue entertainment channels.
+///
+/// Instead of mapping to 5 discrete regions (Top/Bottom/Left/Right/Center),
+/// this uses the channel's exact (x, y) position to define a sampling window
+/// on the screen. Channels at different positions always sample different areas,
+/// even when positions are close together.
+///
+/// Coordinate system:
+///   x: -1.0 (left edge) ... +1.0 (right edge)
+///   y: -1.0 (bottom edge) ... +1.0 (top edge)
+///
+/// The sampling window is 30% of content area dimensions, centered on the
+/// position. Sub-sampled every 8 pixels for speed.
+fn sample_screen_position_avg(
+    frame: &CapturedFrame,
+    pos_x: f32,
+    pos_y: f32,
+    insets: &BlackBorderInsets,
+) -> (u8, u8, u8) {
+    let w = frame.width as usize;
+    let h = frame.height as usize;
+    if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
+        return (0, 0, 0);
+    }
+
+    const WINDOW_FRAC: f32 = 0.30; // 30% of content dimension
+    const STEP: usize = 8;
+
+    // Content area bounds (excluding black borders).
+    let ct = (h as f32 * insets.top) as usize;
+    let cb = h.saturating_sub((h as f32 * insets.bottom) as usize).max(ct + 1);
+    let cl = (w as f32 * insets.left) as usize;
+    let cr = w.saturating_sub((w as f32 * insets.right) as usize).max(cl + 1);
+    let cw = (cr - cl) as f32;
+    let ch = (cb - ct) as f32;
+
+    // Map Hue position [-1, +1] to content area.
+    // x: -1 → left edge, +1 → right edge
+    // y: +1 → top edge (screen row 0), -1 → bottom edge
+    let norm_x = (pos_x.clamp(-1.0, 1.0) + 1.0) / 2.0; // [0, 1]
+    let norm_y = (1.0 - pos_y.clamp(-1.0, 1.0)) / 2.0;  // [0, 1], flipped for screen coords
+
+    let center_col = cl as f32 + norm_x * cw;
+    let center_row = ct as f32 + norm_y * ch;
+
+    let half_w = (cw * WINDOW_FRAC / 2.0).max(1.0);
+    let half_h = (ch * WINDOW_FRAC / 2.0).max(1.0);
+
+    let row_start = (center_row - half_h).max(ct as f32) as usize;
+    let row_end = (center_row + half_h).min(cb as f32) as usize;
+    let col_start = (center_col - half_w).max(cl as f32) as usize;
+    let col_end = (center_col + half_w).min(cr as f32) as usize;
+
+    let mut sum_r = 0u32;
+    let mut sum_g = 0u32;
+    let mut sum_b = 0u32;
+    let mut count = 0u32;
+
+    let mut row = row_start;
+    while row < row_end {
+        let mut col = col_start;
+        while col < col_end {
+            if let Some(pixel) = frame.pixels_rgb.get(row * w + col) {
+                sum_r += u32::from(pixel[0]);
+                sum_g += u32::from(pixel[1]);
+                sum_b += u32::from(pixel[2]);
+                count += 1;
+            }
+            col += STEP;
+        }
+        row += STEP;
+    }
+
+    if count == 0 { return (0, 0, 0); }
+    ((sum_r / count) as u8, (sum_g / count) as u8, (sum_b / count) as u8)
+}
+
 struct AmbilightWorkerQualityState {
     controller: RuntimeQualityController,
 }
@@ -472,6 +550,53 @@ impl AmbilightWorkerQualityState {
 
     fn current_send_interval(&self) -> Duration {
         self.controller.current_send_interval()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hue per-channel EWMA smoother
+// ---------------------------------------------------------------------------
+// Maintains a smoothed (r, g, b) per Hue entertainment channel.  Operates
+// independently from the USB LED smoothing (RuntimeQualityController) so that
+// Hue-only and mixed modes both get correct temporal smoothing.
+
+struct HueChannelSmoother {
+    previous: Vec<(f32, f32, f32)>,
+}
+
+impl HueChannelSmoother {
+    fn new() -> Self {
+        Self { previous: Vec::new() }
+    }
+
+    /// Apply EWMA smoothing to incoming channel colors.
+    ///
+    /// `alpha` in `[0.05, 1.0]`:
+    ///   - 1.0 = no smoothing (output equals input)
+    ///   - 0.05 = very slow, gradual transitions
+    fn smooth(&mut self, incoming: &[(u8, u8, u8)], alpha: f32) -> Vec<(u8, u8, u8)> {
+        let a = alpha.clamp(0.05, 1.0);
+
+        // Channel count changed → reset state (e.g. entertainment area switched).
+        if self.previous.len() != incoming.len() {
+            self.previous = incoming.iter()
+                .map(|&(r, g, b)| (r as f32, g as f32, b as f32))
+                .collect();
+            return incoming.to_vec();
+        }
+
+        let mut result = Vec::with_capacity(incoming.len());
+        for (prev, &(tr, tg, tb)) in self.previous.iter_mut().zip(incoming.iter()) {
+            prev.0 += a * (tr as f32 - prev.0);
+            prev.1 += a * (tg as f32 - prev.1);
+            prev.2 += a * (tb as f32 - prev.2);
+            result.push((
+                prev.0.round().clamp(0.0, 255.0) as u8,
+                prev.1.round().clamp(0.0, 255.0) as u8,
+                prev.2.round().clamp(0.0, 255.0) as u8,
+            ));
+        }
+        result
     }
 }
 
@@ -573,9 +698,17 @@ fn start_ambilight_worker(
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
         let has_hue = hue_output.as_ref().map(|c| !c.channels.is_empty()).unwrap_or(false);
         info!("[ambilight-worker] started — port={:?} hue={} channels={}", port_name, has_hue, hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0));
+        if let Some(ctx) = hue_output.as_ref() {
+            for ch in &ctx.channels {
+                let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
+                let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
+                info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) screen_norm=({:.1}%,{:.1}%) region={:?}",
+                    ch.channel_id, ch.position_x, ch.position_y,
+                    norm_x * 100.0, norm_y * 100.0, ch.screen_region);
+            }
+        }
         let mut hue_send_count = 0u32;
-        let mut hue_skip_count = 0u32;
-        let mut last_hue_colors: Vec<(u8, u8, u8)> = Vec::new();
+        let mut hue_channel_smoother = HueChannelSmoother::new();
         // Border cache is refreshed each iteration from live_settings.
         let mut border_cache = BlackBorderCache::new(live_settings.read_black_border_detection());
 
@@ -629,51 +762,35 @@ fn start_ambilight_worker(
                         _ => 0.0,
                     }
                 } else {
-                    // Hue-only path: quality gate controls telemetry cadence only.
-                    match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |_| {
-                        Ok(())
-                    }) {
-                        Ok(true) => {
-                            telemetry_window.record_send();
-                            send_started.elapsed().as_secs_f32() * 1000.0
-                        }
-                        _ => 0.0,
-                    }
+                    // Hue-only path: skip the USB quality gate entirely.
+                    // The real Hue send happens below via apply_hue_channels_with_context,
+                    // which has its own 50ms rate-limit in the DTLS sender thread.
+                    // We just drain the slot to prevent indefinite overwrite accumulation.
+                    let _ = frame_slot.take_latest();
+                    0.0
                 };
 
-                // Hue update: skip if colors haven't changed enough (delta threshold).
-                // This avoids redundant DTLS sends when the screen is static.
+                // Hue update: sample raw screen regions, apply per-channel EWMA
+                // smoothing, then send every frame to the bridge. Sending every
+                // frame (instead of delta-skipping) lets the bridge's internal
+                // ~100ms hardware interpolation produce smooth gradients.
                 if let Some(context) = hue_output.as_ref() {
                     if !context.channels.is_empty() {
-                        let channel_colors: Vec<(u8, u8, u8)> = context
+                        let raw_colors: Vec<(u8, u8, u8)> = context
                             .channels
                             .iter()
-                            .map(|ch| sample_screen_region_avg(&raw_frame, &ch.screen_region, border_cache.insets()))
+                            .map(|ch| sample_screen_position_avg(&raw_frame, ch.position_x, ch.position_y, border_cache.insets()))
                             .collect();
 
-                        // Delta check: skip if max per-channel diff < threshold.
-                        const COLOR_DELTA_THRESHOLD: u8 = 3;
-                        let colors_changed = if last_hue_colors.len() != channel_colors.len() {
-                            true
-                        } else {
-                            last_hue_colors.iter().zip(channel_colors.iter()).any(|(prev, cur)| {
-                                (prev.0 as i16 - cur.0 as i16).unsigned_abs() as u8 > COLOR_DELTA_THRESHOLD
-                                || (prev.1 as i16 - cur.1 as i16).unsigned_abs() as u8 > COLOR_DELTA_THRESHOLD
-                                || (prev.2 as i16 - cur.2 as i16).unsigned_abs() as u8 > COLOR_DELTA_THRESHOLD
-                            })
-                        };
+                        let smoothing_alpha = live_settings.read_smoothing_alpha();
+                        let smoothed = hue_channel_smoother.smooth(&raw_colors, smoothing_alpha);
 
-                        if colors_changed {
-                            hue_send_count += 1;
-                            if hue_send_count <= 3 || hue_send_count % 100 == 0 {
-                                info!("[ambilight-worker] hue update #{hue_send_count} (skipped {hue_skip_count}) — colors: {:?}", &channel_colors[..channel_colors.len().min(3)]);
-                            }
-                            last_hue_colors = channel_colors.clone();
-                            hue_skip_count = 0;
-                            let _ = apply_hue_channels_with_context(context, channel_colors, brightness);
-                        } else {
-                            hue_skip_count += 1;
+                        hue_send_count += 1;
+                        if hue_send_count <= 3 || hue_send_count % 200 == 0 {
+                            info!("[ambilight-worker] hue update #{hue_send_count} — colors: {:?}", &smoothed[..smoothed.len().min(3)]);
                         }
+                        let _ = apply_hue_channels_with_context(context, smoothed, brightness);
+                        telemetry_window.record_send();
                     }
                 }
 
@@ -744,9 +861,9 @@ fn apply_mode_change(
 
     let mut trace = trace;
 
-    // Fast path: ambilight already running and only settings (brightness / black border)
-    // changed — update live atomics in-place without stopping the worker.
-    // This prevents the macOS SCStream stop/recreate cycle that causes crashes.
+    // Fast path: ambilight already running and only settings changed (brightness,
+    // black border detection, smoothing alpha) — update live atomics in-place
+    // without stopping the worker or recreating SCStream.
     if normalized_next.kind == LightingModeKind::Ambilight
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
