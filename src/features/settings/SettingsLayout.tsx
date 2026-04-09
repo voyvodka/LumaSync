@@ -13,6 +13,7 @@ import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
 import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
 import { RoomMapEditor } from "./sections/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
+import { SidebarFpsWidget } from "../telemetry/ui/SidebarFpsWidget";
 
 // Nav icons
 function IconLights() {
@@ -156,6 +157,9 @@ export function SettingsLayout({
             );
           })}
         </ul>
+
+        {/* Debug: FPS widget — dev builds only */}
+        {import.meta.env.DEV && <SidebarFpsWidget />}
 
         {/* Version */}
         <div className="border-t border-slate-200/70 px-4 py-3 dark:border-zinc-800">
