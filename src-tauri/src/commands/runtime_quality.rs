@@ -52,21 +52,21 @@ impl RuntimeQualityController {
         }
 
         let alpha = self.config.smoothing_alpha.clamp(0.0, 1.0);
-        let smoothed = self
-            .previous_frame
-            .iter()
+        // Update previous_frame in-place and collect result in a single pass.
+        // Eliminates the extra clone() that the old version required.
+        self.previous_frame
+            .iter_mut()
             .zip(target_frame.iter())
             .map(|(previous, target)| {
-                [
+                let smoothed = [
                     lerp_channel(previous[0], target[0], alpha),
                     lerp_channel(previous[1], target[1], alpha),
                     lerp_channel(previous[2], target[2], alpha),
-                ]
+                ];
+                *previous = smoothed;
+                smoothed
             })
-            .collect::<Vec<_>>();
-
-        self.previous_frame = smoothed.clone();
-        smoothed
+            .collect()
     }
 
     pub fn observe_timing(&mut self, capture_ms: f32, send_ms: f32) {

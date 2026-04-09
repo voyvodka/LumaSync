@@ -34,8 +34,10 @@ impl AmbilightCaptureError {
     }
 }
 
+use std::sync::Arc;
+
 pub trait AmbilightFrameSource: Send {
-    fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError>;
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError>;
 }
 
 pub fn create_live_frame_source() -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
@@ -67,8 +69,8 @@ impl Default for StaticFrameSource {
 }
 
 impl AmbilightFrameSource for StaticFrameSource {
-    fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
-        Ok(self.frame.clone())
+    fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        Ok(Arc::new(self.frame.clone()))
     }
 }
 
@@ -89,7 +91,7 @@ mod platform {
 
     use super::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
 
-    type SharedFrame = Arc<Mutex<Option<CapturedFrame>>>;
+    type SharedFrame = Arc<Mutex<Option<Arc<CapturedFrame>>>>;
 
     pub(super) fn create_live_frame_source(
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
@@ -158,7 +160,7 @@ mod platform {
     }
 
     impl AmbilightFrameSource for WindowsLiveFrameSource {
-        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
             let frame_guard = self.latest_frame.lock().map_err(|_| {
                 AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
             })?;
@@ -214,11 +216,11 @@ mod platform {
                 .latest_frame
                 .lock()
                 .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")?;
-            *frame_guard = Some(CapturedFrame {
+            *frame_guard = Some(Arc::new(CapturedFrame {
                 width,
                 height,
                 pixels_rgb,
-            });
+            }));
 
             Ok(())
         }
@@ -234,7 +236,7 @@ mod platform {
 
     use super::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
 
-    type SharedFrame = Arc<Mutex<Option<CapturedFrame>>>;
+    type SharedFrame = Arc<Mutex<Option<Arc<CapturedFrame>>>>;
 
     pub(super) fn create_live_frame_source(
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
@@ -255,8 +257,20 @@ mod platform {
             .with_excluding_windows(&[])
             .build();
 
-        let capture_width = display.width() as u32;
-        let capture_height = display.height() as u32;
+        // Downscale to ~640px max dimension for ambilight color sampling.
+        // SCStream performs hardware-accelerated scaling on the GPU — zero extra CPU cost.
+        // Full resolution (e.g. 2560x1600) wastes CPU on BGRA→RGB conversion,
+        // frame cloning, and pixel iteration. ~640x400 is more than sufficient
+        // for averaging colors in screen regions.
+        let native_w = display.width() as u32;
+        let native_h = display.height() as u32;
+        const MAX_CAPTURE_DIM: u32 = 640;
+        let (capture_width, capture_height) = if native_w.max(native_h) > MAX_CAPTURE_DIM {
+            let scale = native_w.max(native_h) / MAX_CAPTURE_DIM;
+            ((native_w / scale).max(1), (native_h / scale).max(1))
+        } else {
+            (native_w, native_h)
+        };
 
         // 20 Hz = 50ms interval, matching Hue streaming constraint
         let frame_interval = CMTime::new(1, 20);
@@ -318,11 +332,11 @@ mod platform {
                 }
 
                 if let Ok(mut frame_guard) = frame_writer.lock() {
-                    *frame_guard = Some(CapturedFrame {
+                    *frame_guard = Some(Arc::new(CapturedFrame {
                         width,
                         height,
                         pixels_rgb,
-                    });
+                    }));
                 }
             },
             SCStreamOutputType::Screen,
@@ -372,11 +386,12 @@ mod platform {
     }
 
     impl AmbilightFrameSource for MacOSLiveFrameSource {
-        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
             let frame_guard = self.latest_frame.lock().map_err(|_| {
                 AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")
             })?;
 
+            // Arc::clone is 8 bytes (refcount bump) vs full CapturedFrame clone (~768 KB).
             frame_guard
                 .clone()
                 .ok_or(AmbilightCaptureError::FrameUnavailable)
@@ -519,7 +534,8 @@ pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> BlackBorder
 /// Return a new `CapturedFrame` that contains only the non-black-border region.
 ///
 /// When `insets.is_zero()` this clones the original frame unchanged.
-/// Used by the USB sampling path so that `sample_led_frame` only sees content pixels.
+/// Kept for potential future use; the hot path now uses bounds-based sampling instead.
+#[allow(dead_code)]
 pub fn crop_frame_to_content(frame: &CapturedFrame, insets: &BlackBorderInsets) -> CapturedFrame {
     if insets.is_zero() {
         return frame.clone();
@@ -588,9 +604,10 @@ mod tests {
     }
 
     impl AmbilightFrameSource for SingleFrameSource {
-        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
             self.frame
                 .take()
+                .map(Arc::new)
                 .ok_or(AmbilightCaptureError::FrameUnavailable)
         }
     }

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::ambilight_capture::{
-    create_live_frame_source, crop_frame_to_content, detect_black_borders, sample_led_frame,
+    create_live_frame_source, detect_black_borders, sample_led_frame,
     AmbilightCaptureError, AmbilightFrameSource, BlackBorderInsets, CapturedFrame,
     SamplingCalibration, StaticFrameSource,
 };
@@ -340,17 +340,14 @@ impl BlackBorderCache {
 fn capture_sample_send_frame(
     source: &mut dyn AmbilightFrameSource,
     calibration: &SamplingCalibration,
-    border_insets: &BlackBorderInsets,
-) -> Result<(CapturedFrame, Vec<[u8; 3]>), String> {
+    _border_insets: &BlackBorderInsets,
+) -> Result<(Arc<CapturedFrame>, Vec<[u8; 3]>), String> {
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     let frame = source.capture_frame().map_err(|error| error.as_reason())?;
-    let sampled = if border_insets.is_zero() {
-        sample_led_frame(&frame, calibration)
-    } else {
-        let cropped = crop_frame_to_content(&frame, border_insets);
-        sample_led_frame(&cropped, calibration)
-    }
-    .map_err(|error| error.as_reason())?;
+    // Crop removed: Hue path uses bounds-based sampling via insets directly.
+    // USB path uses led_count=1 (placeholder), so crop was a no-op in practice.
+    let sampled = sample_led_frame(&frame, calibration)
+        .map_err(|error| error.as_reason())?;
     Ok((frame, sampled.colors))
 }
 
@@ -562,19 +559,22 @@ impl AmbilightWorkerQualityState {
 
 struct HueChannelSmoother {
     previous: Vec<(f32, f32, f32)>,
+    /// Reusable buffer for the rounded u8 output — avoids per-frame allocation.
+    result: Vec<(u8, u8, u8)>,
 }
 
 impl HueChannelSmoother {
     fn new() -> Self {
-        Self { previous: Vec::new() }
+        Self { previous: Vec::new(), result: Vec::new() }
     }
 
-    /// Apply EWMA smoothing to incoming channel colors.
+    /// Apply EWMA smoothing to incoming channel colors, returning a reference
+    /// to an internal buffer (zero allocation on the steady-state path).
     ///
     /// `alpha` in `[0.05, 1.0]`:
     ///   - 1.0 = no smoothing (output equals input)
     ///   - 0.05 = very slow, gradual transitions
-    fn smooth(&mut self, incoming: &[(u8, u8, u8)], alpha: f32) -> Vec<(u8, u8, u8)> {
+    fn smooth(&mut self, incoming: &[(u8, u8, u8)], alpha: f32) -> &[(u8, u8, u8)] {
         let a = alpha.clamp(0.05, 1.0);
 
         // Channel count changed → reset state (e.g. entertainment area switched).
@@ -582,21 +582,23 @@ impl HueChannelSmoother {
             self.previous = incoming.iter()
                 .map(|&(r, g, b)| (r as f32, g as f32, b as f32))
                 .collect();
-            return incoming.to_vec();
+            self.result = incoming.to_vec();
+            return &self.result;
         }
 
-        let mut result = Vec::with_capacity(incoming.len());
-        for (prev, &(tr, tg, tb)) in self.previous.iter_mut().zip(incoming.iter()) {
+        // Reuse result buffer (same capacity across frames).
+        self.result.resize(incoming.len(), (0, 0, 0));
+        for (i, (prev, &(tr, tg, tb))) in self.previous.iter_mut().zip(incoming.iter()).enumerate() {
             prev.0 += a * (tr as f32 - prev.0);
             prev.1 += a * (tg as f32 - prev.1);
             prev.2 += a * (tb as f32 - prev.2);
-            result.push((
+            self.result[i] = (
                 prev.0.round().clamp(0.0, 255.0) as u8,
                 prev.1.round().clamp(0.0, 255.0) as u8,
                 prev.2.round().clamp(0.0, 255.0) as u8,
-            ));
+            );
         }
-        result
+        &self.result
     }
 }
 
@@ -655,7 +657,9 @@ fn start_ambilight_worker(
     let mut frame_slot = RuntimeFrameSlot::new();
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
 
-    let mut initial_frame_source = StaticFrameSource::new(initial_frame);
+    let mut initial_frame_source = StaticFrameSource::new(
+        Arc::try_unwrap(initial_frame).unwrap_or_else(|arc| (*arc).clone()),
+    );
     // No border detection for the initial warmup frame — detection runs in the worker loop.
     let (_, initial_sampled) = capture_sample_send_frame(
         &mut initial_frame_source,
@@ -789,7 +793,7 @@ fn start_ambilight_worker(
                         if hue_send_count <= 3 || hue_send_count % 200 == 0 {
                             info!("[ambilight-worker] hue update #{hue_send_count} — colors: {:?}", &smoothed[..smoothed.len().min(3)]);
                         }
-                        let _ = apply_hue_channels_with_context(context, smoothed, brightness);
+                        let _ = apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
                         telemetry_window.record_send();
                     }
                 }
@@ -1181,11 +1185,11 @@ mod tests {
     }
 
     impl AmbilightFrameSource for FakeFrameSource {
-        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
             if self.fail_with_unavailable {
                 return Err(AmbilightCaptureError::FrameUnavailable);
             }
-            Ok(self.frame.clone())
+            Ok(Arc::new(self.frame.clone()))
         }
     }
 
@@ -1582,8 +1586,8 @@ mod lighting_mode_tests {
     }
 
     impl AmbilightFrameSource for FakeFrameSource {
-        fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
-            Ok(self.frame.clone())
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+            Ok(Arc::new(self.frame.clone()))
         }
     }
 
