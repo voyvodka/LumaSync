@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShellState } from "../../../../shared/contracts/shell";
@@ -110,7 +110,9 @@ describe("useRoomMapPersist (ROOM-07)", () => {
     const { result } = renderHook(() => useRoomMapPersist());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await result.current.resetConfig();
+    await act(async () => {
+      await result.current.resetConfig();
+    });
 
     expect(result.current.config).toEqual(DEFAULT_ROOM_MAP);
     expect(mockSave).toHaveBeenCalledWith(

@@ -50,11 +50,15 @@ describe("manual connect flow", () => {
       .mockResolvedValueOnce(initial)
       .mockReturnValueOnce(pendingRefresh.promise);
 
+    let nowMs = 0;
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
       getSerialConnectionStatus: vi.fn(),
       persistLastSuccessfulPort: vi.fn(),
+      refreshMinIntervalMs: 250,
+      refreshVisibleWaitMs: 0,
+      now: () => { nowMs += 500; return nowMs; },
     });
 
     await controller.initialize();
@@ -200,12 +204,16 @@ describe("manual connect flow", () => {
         ]),
       );
 
+    let nowMs = 0;
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
       getSerialConnectionStatus: vi.fn(),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM7",
+      refreshMinIntervalMs: 250,
+      refreshVisibleWaitMs: 0,
+      now: () => { nowMs += 500; return nowMs; },
     });
 
     await controller.initialize();
@@ -233,12 +241,16 @@ describe("manual connect flow", () => {
         ]),
       );
 
+    let nowMs = 0;
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
       getSerialConnectionStatus: vi.fn(),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM5",
+      refreshMinIntervalMs: 250,
+      refreshVisibleWaitMs: 0,
+      now: () => { nowMs += 500; return nowMs; },
     });
 
     await controller.initialize();
@@ -276,12 +288,14 @@ describe("manual connect flow", () => {
       getSerialConnectionStatus: vi.fn(),
       persistLastSuccessfulPort: vi.fn(),
       refreshMinIntervalMs: 250,
+      refreshVisibleWaitMs: 0,
       now: () => nowMs,
     });
 
-    await controller.initialize();
-    await controller.refreshPorts();
-    await controller.refreshPorts();
+    await controller.initialize();       // Call #1, lastRefreshAt = 1000
+    nowMs += 250;                         // Advance past rate limit window
+    await controller.refreshPorts();     // Call #2
+    await controller.refreshPorts();     // Rate-limited (nowMs unchanged)
 
     expect(listSerialPorts).toHaveBeenCalledTimes(2);
   });
@@ -345,15 +359,17 @@ describe("manual connect flow", () => {
       getSerialConnectionStatus: vi.fn(),
       persistLastSuccessfulPort: vi.fn(),
       refreshMinIntervalMs: 250,
+      refreshVisibleWaitMs: 0,
       now: () => nowMs,
     });
 
-    await controller.initialize();
-    await controller.refreshPorts();
-    await controller.refreshPorts();
+    await controller.initialize();       // Call #1, lastRefreshAt = 2000
+    nowMs += 260;                         // Advance past rate limit window
+    await controller.refreshPorts();     // Call #2
+    await controller.refreshPorts();     // Rate-limited (nowMs unchanged)
 
     nowMs += 260;
-    await controller.refreshPorts();
+    await controller.refreshPorts();     // Call #3
 
     expect(listSerialPorts).toHaveBeenCalledTimes(3);
     expect(controller.getState().status).toBe("ready");

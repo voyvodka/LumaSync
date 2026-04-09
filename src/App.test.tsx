@@ -173,13 +173,19 @@ describe("App mode orchestration", () => {
     expect(setLightingModeMock).toHaveBeenCalledWith({
       kind: "solid",
       solid: { r: 10, g: 20, b: 30, brightness: 0.8 },
+      ambilight: undefined,
+      targets: ["usb"],
     });
 
-    expect(saveShellStateMock).toHaveBeenCalledWith({
-      lightingMode: {
-        kind: "solid",
-        solid: { r: 10, g: 20, b: 30, brightness: 0.8 },
-      },
+    await waitFor(() => {
+      expect(saveShellStateMock).toHaveBeenCalledWith({
+        lightingMode: {
+          kind: "solid",
+          solid: { r: 10, g: 20, b: 30, brightness: 0.8 },
+          ambilight: undefined,
+          targets: ["usb"],
+        },
+      });
     });
   });
 
@@ -221,6 +227,19 @@ describe("App mode orchestration", () => {
     startHueMock.mockResolvedValueOnce({
       active: false,
       status: { code: "CONFIG_NOT_READY_GATE_BLOCKED", message: "Gate blocked", details: "readiness" },
+    });
+
+    // Ensure handleLightingModeChange's loadShellState() call also returns Hue config
+    // so runtimeHueStartConfig is populated from the shell state rather than hueStartConfig React state
+    loadShellStateMock.mockResolvedValue({
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: { kind: "off" },
+      lastOutputTargets: ["hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
     });
 
     render(<App />);

@@ -62,6 +62,7 @@ export interface DeviceConnectionControllerDeps {
   recoveryFastDelayMs?: number;
   recoveryRetryDelayMs?: number;
   recoveryMaxAttempts?: number;
+  refreshVisibleWaitMs?: number;
 }
 
 export interface DeviceConnectionController {
@@ -145,9 +146,11 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
   const refreshMinIntervalMs = deps.refreshMinIntervalMs ?? 250;
   const scheduleTimeout = deps.scheduleTimeout ?? ((callback: () => void, delayMs: number) => setTimeout(callback, delayMs));
   const clearScheduledTimeout = deps.clearScheduledTimeout ?? ((timer: ReturnType<typeof setTimeout>) => clearTimeout(timer));
+  const REFRESH_MIN_VISIBLE_MS = 600;
   const recoveryFastDelayMs = deps.recoveryFastDelayMs ?? 150;
   const recoveryRetryDelayMs = deps.recoveryRetryDelayMs ?? 600;
   const recoveryMaxAttempts = deps.recoveryMaxAttempts ?? 4;
+  const refreshVisibleWaitMs = deps.refreshVisibleWaitMs ?? REFRESH_MIN_VISIBLE_MS;
   const runHealthCheckRequest =
     deps.runSerialHealthCheck ??
     (async () => ({
@@ -274,8 +277,6 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
 
     return resolveSelectionAfterRefresh(ports, state.selectedPort, state.lastSuccessfulPort);
   };
-
-  const REFRESH_MIN_VISIBLE_MS = 600;
 
   const startAutoRecovery = (targetPort: string) => {
     clearRecoveryTimer();
@@ -421,7 +422,7 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
     try {
       const minWait = isInitialScan
         ? Promise.resolve()
-        : new Promise<void>((resolve) => setTimeout(resolve, REFRESH_MIN_VISIBLE_MS));
+        : new Promise<void>((resolve) => setTimeout(resolve, refreshVisibleWaitMs));
 
       const [response] = await Promise.all([deps.listSerialPorts(), minWait]);
       if (currentToken !== refreshToken) {

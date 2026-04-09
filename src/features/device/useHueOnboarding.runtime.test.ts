@@ -26,6 +26,7 @@ vi.mock("../persistence/shellStore", () => ({
 vi.mock("./hueOnboardingApi", () => ({
   checkHueStreamReadiness: vi.fn(),
   discoverHueBridges: vi.fn(),
+  getHueAreaChannels: vi.fn().mockResolvedValue([]),
   listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
   pairHueBridge: vi.fn(),
   validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
@@ -144,6 +145,11 @@ describe("useHueOnboarding runtime wiring", () => {
     });
 
     const { result } = mountProbe();
+
+    // Wait for hook initialization to load bridge/credentials from shell store
+    await waitFor(() => {
+      expect(result.current.credentials).toBeTruthy();
+    });
 
     await act(async () => {
       await (result.current.retryRuntimeTarget as ((target: string) => Promise<void>) | undefined)?.("hue");

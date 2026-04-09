@@ -785,8 +785,10 @@ function App() {
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
         setActiveOutputTargets(merged.activeTargets);
-        setLightingModeState(normalizedNextMode);
-        scheduleLightingModePersist(normalizedNextMode);
+        if (merged.activeTargets.length > 0) {
+          setLightingModeState(normalizedNextMode);
+          scheduleLightingModePersist(normalizedNextMode);
+        }
       } catch (error) {
         console.error(`[LumaSync] Failed to switch lighting mode to ${normalizedNextMode.kind}:`, error);
       } finally {

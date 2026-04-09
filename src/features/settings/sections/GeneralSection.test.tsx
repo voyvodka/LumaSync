@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -101,10 +101,12 @@ describe("GeneralSection", () => {
       target: { value: "#00ff00" },
     });
 
-    expect(onModeChange).toHaveBeenLastCalledWith({
-      kind: "solid",
-      solid: { r: 0, g: 255, b: 0, brightness: 0.35 },
-    } satisfies LightingModeConfig);
+    await waitFor(() => {
+      expect(onModeChange).toHaveBeenLastCalledWith({
+        kind: "solid",
+        solid: { r: 0, g: 255, b: 0, brightness: 0.35 },
+      } satisfies LightingModeConfig);
+    });
   });
 
   it("keeps controls disabled and opens calibration CTA when lock reason is CALIBRATION_REQUIRED", async () => {
