@@ -59,7 +59,11 @@
       "openCalibration": "Kalibrasyonu aç",
       "ambilight": {
         "blackBorderTitle": "Siyah kenar algılama",
-        "blackBorderDescription": "Ekran rengi örneklenirken letterbox / pillarbox siyah bantları otomatik olarak atlar."
+        "blackBorderDescription": "Ekran rengi örneklenirken letterbox / pillarbox siyah bantları otomatik olarak atlar.",
+        "smoothingTitle": "Renk geçiş hızı",
+        "smoothingDescription": "Düşük değerler daha yumuşak geçişler üretir; yüksek değerler ekran değişimlerine daha hızlı tepki verir.",
+        "smoothingSlowLabel": "Yumuşak",
+        "smoothingFastLabel": "Anlık"
       }
     }
   },

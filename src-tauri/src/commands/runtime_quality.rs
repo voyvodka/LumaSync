@@ -99,6 +99,10 @@ impl RuntimeQualityController {
         Duration::from_millis(adaptive_ms.clamp(min_interval_ms, max_interval_ms))
     }
 
+    pub fn set_smoothing_alpha(&mut self, alpha: f32) {
+        self.config.smoothing_alpha = alpha.clamp(0.0, 1.0);
+    }
+
     pub fn should_send_now(&mut self, now: Instant) -> bool {
         let Some(last_sent_at) = self.last_sent_at else {
             self.last_sent_at = Some(now);

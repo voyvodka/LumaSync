@@ -64,6 +64,11 @@ pub struct AmbilightPayload {
     /// When true, black borders are detected every ~2.5 s and excluded from sampling.
     #[serde(default)]
     pub black_border_detection: bool,
+    /// EWMAalpha for per-frame color smoothing. Range [0.05, 1.0].
+    /// 1.0 = instant (no smoothing); lower values = slower, smoother transitions.
+    /// Defaults to 0.35 when absent.
+    #[serde(default)]
+    pub smoothing_alpha: Option<f32>,
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
@@ -135,13 +140,16 @@ struct AmbilightLiveSettings {
     /// Brightness as f32 bit pattern stored in an AtomicU32.
     brightness: AtomicU32,
     black_border_detection: AtomicBool,
+    /// EWMA smoothing alpha as f32 bit pattern. Range [0.05, 1.0].
+    smoothing_alpha: AtomicU32,
 }
 
 impl AmbilightLiveSettings {
-    fn new(brightness: f32, black_border_detection: bool) -> Arc<Self> {
+    fn new(brightness: f32, black_border_detection: bool, smoothing_alpha: f32) -> Arc<Self> {
         Arc::new(Self {
             brightness: AtomicU32::new(brightness.to_bits()),
             black_border_detection: AtomicBool::new(black_border_detection),
+            smoothing_alpha: AtomicU32::new(smoothing_alpha.clamp(0.05, 1.0).to_bits()),
         })
     }
 
@@ -153,9 +161,14 @@ impl AmbilightLiveSettings {
         self.black_border_detection.load(Ordering::Relaxed)
     }
 
-    fn update(&self, brightness: f32, black_border_detection: bool) {
+    fn read_smoothing_alpha(&self) -> f32 {
+        f32::from_bits(self.smoothing_alpha.load(Ordering::Relaxed))
+    }
+
+    fn update(&self, brightness: f32, black_border_detection: bool, smoothing_alpha: f32) {
         self.brightness.store(brightness.to_bits(), Ordering::Relaxed);
         self.black_border_detection.store(black_border_detection, Ordering::Relaxed);
+        self.smoothing_alpha.store(smoothing_alpha.clamp(0.05, 1.0).to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -230,6 +243,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 ambilight: Some(AmbilightPayload {
                     brightness: clamp_brightness(Some(incoming.brightness), 1.0),
                     black_border_detection: incoming.black_border_detection,
+                    smoothing_alpha: incoming.smoothing_alpha,
                 }),
                 targets,
             }
@@ -419,6 +433,10 @@ impl AmbilightWorkerQualityState {
         }
     }
 
+    fn set_smoothing_alpha(&mut self, alpha: f32) {
+        self.controller.set_smoothing_alpha(alpha);
+    }
+
     fn queue_processed_frame(
         &mut self,
         slot: &mut RuntimeFrameSlot,
@@ -491,6 +509,7 @@ fn start_ambilight_worker(
     let calibration = SamplingCalibration { led_count: 1 };
 
     let hue_only = port_name.is_none() && hue_output.is_some();
+    let initial_smoothing_alpha = live_settings.read_smoothing_alpha();
     let quality_config = if hue_only {
         // Hue bridge enforces 50 ms minimum (20 Hz). Target ~25 FPS capture
         // to stay just above the send rate without flooding the queue.
@@ -498,10 +517,14 @@ fn start_ambilight_worker(
             base_interval_ms: 40,
             min_interval_ms: 30,
             max_interval_ms: 100,
+            smoothing_alpha: initial_smoothing_alpha,
             ..RuntimeQualityConfig::default()
         }
     } else {
-        RuntimeQualityConfig::default()
+        RuntimeQualityConfig {
+            smoothing_alpha: initial_smoothing_alpha,
+            ..RuntimeQualityConfig::default()
+        }
     };
     let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut frame_slot = RuntimeFrameSlot::new();
@@ -577,6 +600,7 @@ fn start_ambilight_worker(
                 // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
                 border_cache.set_enabled(live_settings.read_black_border_detection());
                 let brightness = live_settings.read_brightness();
+                quality_state.set_smoothing_alpha(live_settings.read_smoothing_alpha());
                 // Update black border detection cache from the raw (uncropped) frame.
                 border_cache.update_if_due(&raw_frame);
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
@@ -730,7 +754,7 @@ fn apply_mode_change(
     {
         if let Some(live) = &owner.ambilight_live {
             let cfg = normalized_next.ambilight.as_ref().cloned().unwrap_or_default();
-            live.update(cfg.brightness, cfg.black_border_detection);
+            live.update(cfg.brightness, cfg.black_border_detection, cfg.smoothing_alpha.unwrap_or(0.35));
             owner.active_mode = normalized_next;
             return make_result(
                 owner.active_mode.clone(),
@@ -832,6 +856,7 @@ fn apply_mode_change(
             let live_settings = AmbilightLiveSettings::new(
                 ambilight_cfg.brightness,
                 ambilight_cfg.black_border_detection,
+                ambilight_cfg.smoothing_alpha.unwrap_or(0.35),
             );
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
@@ -1131,7 +1156,7 @@ mod tests {
                 start_ambilight_worker(
                     owner.output_bridge.clone(),
                     Some("COM1".to_string()),
-                    AmbilightLiveSettings::new(0.8, false),
+                    AmbilightLiveSettings::new(0.8, false, 0.35),
                     (owner.frame_source_factory)().expect("frame source should be available"),
                     shared_runtime_telemetry(),
                     None,

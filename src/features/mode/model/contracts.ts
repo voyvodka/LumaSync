@@ -18,6 +18,8 @@ export interface SolidColorPayload {
 export interface AmbilightPayload {
   brightness: number;
   blackBorderDetection?: boolean;
+  /** EWMA alpha for color smoothing. Range [0.05, 1.0]. 1.0 = instant; lower = smoother. Default 0.35. */
+  smoothingAlpha?: number;
 }
 
 export interface LightingModeConfig {
@@ -58,6 +60,7 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): Am
   return {
     brightness: clampFloat(input?.brightness, 0, 1, 1),
     blackBorderDetection: input?.blackBorderDetection ?? false,
+    smoothingAlpha: clampFloat(input?.smoothingAlpha, 0.05, 1, 0.35),
   };
 }
 

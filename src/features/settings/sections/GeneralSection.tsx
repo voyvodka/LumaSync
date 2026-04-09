@@ -166,6 +166,44 @@ export function GeneralSection({
                 </button>
               </div>
             </div>
+            <div className="border-t border-slate-100 px-5 py-4 dark:border-zinc-800/70">
+              <div className="mb-2 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900 dark:text-zinc-100">
+                    {t("general.mode.ambilight.smoothingTitle")}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">
+                    {t("general.mode.ambilight.smoothingDescription")}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="w-14 shrink-0 text-right text-xs text-slate-400 dark:text-zinc-500">
+                  {t("general.mode.ambilight.smoothingSlowLabel")}
+                </span>
+                <input
+                  type="range"
+                  min={0.05}
+                  max={1}
+                  step={0.05}
+                  disabled={lockState.showReason}
+                  value={incomingAmbilight.smoothingAlpha ?? 0.35}
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-700 dark:accent-zinc-100"
+                  onChange={(e) =>
+                    onModeChange({
+                      kind: LIGHTING_MODE_KIND.AMBILIGHT,
+                      ambilight: {
+                        ...incomingAmbilight,
+                        smoothingAlpha: parseFloat(e.target.value),
+                      },
+                    })
+                  }
+                />
+                <span className="w-14 shrink-0 text-xs text-slate-400 dark:text-zinc-500">
+                  {t("general.mode.ambilight.smoothingFastLabel")}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

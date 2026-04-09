@@ -59,7 +59,11 @@
       "openCalibration": "Open calibration",
       "ambilight": {
         "blackBorderTitle": "Black border detection",
-        "blackBorderDescription": "Automatically detects and skips letterbox / pillarbox bars when sampling screen color."
+        "blackBorderDescription": "Automatically detects and skips letterbox / pillarbox bars when sampling screen color.",
+        "smoothingTitle": "Color transition speed",
+        "smoothingDescription": "Lower values produce smoother gradients; higher values react faster to screen changes.",
+        "smoothingSlowLabel": "Smooth",
+        "smoothingFastLabel": "Instant"
       }
     }
   },
