@@ -7,6 +7,30 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-04-09
+
+### Added
+
+- Ambilight: black border detection to crop letterbox bars before color sampling
+- Ambilight: user-configurable color transition speed (smoothing alpha) in settings
+- Tray: quick-action menu items (Lights Off, Resume Last Mode, Solid Color) with i18n label support
+- CI: universal macOS binary (x86_64 + arm64) support in release workflow
+- Debug: sidebar FPS widget in development builds
+
+### Changed
+
+- Hue: per-channel EWMA smoothing and continuous position sampling for smoother color transitions
+- App version now resolved dynamically from the build instead of a hardcoded string
+- macOS deployment target set to 12.3 for SCStream compatibility
+
+### Fixed
+
+- WS2812B output: apply gamma 2.2 correction for accurate perceived brightness
+- Ambilight UI: reflect mode state correctly in UI on transient Hue failure
+- Hue telemetry: fix stream state reporting after per-channel smoothing refactor
+- Tests: fix 2 failing unit tests and resolve 12 unhandled rejections in App test suite
+- SCStream: fix log timestamp formatting and release crash on session stop
+
 ## [1.0.4] — 2026-04-09
 
 ### Changed

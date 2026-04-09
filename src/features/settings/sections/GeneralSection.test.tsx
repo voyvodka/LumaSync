@@ -61,7 +61,7 @@ describe("GeneralSection", () => {
 
     expect(onModeChange).toHaveBeenCalledWith({
       kind: "ambilight",
-      ambilight: { brightness: 1 },
+      ambilight: { brightness: 1, blackBorderDetection: false, smoothingAlpha: 0.35 },
     } satisfies LightingModeConfig);
   });
 

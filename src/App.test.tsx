@@ -21,6 +21,14 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
+vi.mock("./features/tray/trayController", () => ({
+  listenTrayLightsOff: () => Promise.resolve(() => {}),
+  listenTrayResumeLastMode: () => Promise.resolve(() => {}),
+  listenTraySolidColor: () => Promise.resolve(() => {}),
+  listenStartupToggle: () => Promise.resolve(() => {}),
+  updateTrayLabels: () => Promise.resolve(),
+}));
+
 vi.mock("./features/shell/windowLifecycle", () => ({
   loadShellState: () => loadShellStateMock(),
   saveShellState: (patch: unknown) => saveShellStateMock(patch),

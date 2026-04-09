@@ -901,11 +901,13 @@ function App() {
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
         setActiveOutputTargets(merged.activeTargets);
-        // Always reflect user intent in the UI, even if targets failed transiently.
-        // The OFF path returns early above and never reaches this code, so this
-        // unconditional update is safe for Ambilight and Solid modes.
-        setLightingModeState(normalizedNextMode);
-        scheduleLightingModePersist(normalizedNextMode);
+        // Only reflect user intent in the UI when at least one backend command was
+        // issued. If all targets were gate-blocked (e.g. Hue config missing), the
+        // mode stays unchanged so the UI matches actual backend state.
+        if (needsLightingModeApply) {
+          setLightingModeState(normalizedNextMode);
+          scheduleLightingModePersist(normalizedNextMode);
+        }
       } catch (error) {
         console.error(`[LumaSync] Failed to switch lighting mode to ${normalizedNextMode.kind}:`, error);
       } finally {
