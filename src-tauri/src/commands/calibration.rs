@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, PhysicalPosition,
-    PhysicalSize, Position, Runtime, Size, State, WebviewUrl, WebviewWindowBuilder,
+    window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, Position, Runtime, Size,
+    State, WebviewUrl, WebviewWindowBuilder,
 };
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
@@ -150,56 +150,26 @@ fn open_overlay_window<R: Runtime>(
         .map_err(|error| format!("OVERLAY_WINDOW_OPEN_FAILED: {error}"))?;
 
     if cfg!(target_os = "windows") {
+        // Use the display's known scale factor for logical coordinate conversion.
+        // window.scale_factor() is unreliable immediately after build() because the
+        // window may not have moved to the target monitor's DPI context yet.
+        let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
+            target_display.scale_factor
+        } else {
+            1.0
+        };
+
+        let logical_x = f64::from(target_display.x) / safe_scale;
+        let logical_y = f64::from(target_display.y) / safe_scale;
+        let logical_width = f64::from(target_display.width) / safe_scale;
+        let logical_height = f64::from(target_display.height) / safe_scale;
+
         window
-            .set_position(Position::Physical(PhysicalPosition::new(
-                target_display.x,
-                target_display.y,
-            )))
+            .set_position(Position::Logical(LogicalPosition::new(logical_x, logical_y)))
             .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
-
         window
-            .set_size(Size::Physical(PhysicalSize::new(
-                target_display.width,
-                target_display.height,
-            )))
+            .set_size(Size::Logical(LogicalSize::new(logical_width, logical_height)))
             .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
-
-        let applied_size = window
-            .outer_size()
-            .map_err(|error| format!("OVERLAY_WINDOW_SIZE_READ_FAILED: {error}"))?;
-        let width_mismatch = target_display.width.saturating_sub(applied_size.width) > 2
-            || applied_size.width.saturating_sub(target_display.width) > 2;
-        let height_mismatch = target_display.height.saturating_sub(applied_size.height) > 2
-            || applied_size.height.saturating_sub(target_display.height) > 2;
-
-        if width_mismatch || height_mismatch {
-            let runtime_scale = window
-                .scale_factor()
-                .map_err(|error| format!("OVERLAY_WINDOW_SCALE_READ_FAILED: {error}"))?;
-            let safe_scale = if runtime_scale.is_finite() && runtime_scale > 0.0 {
-                runtime_scale
-            } else {
-                1.0
-            };
-
-            let logical_x = f64::from(target_display.x) / safe_scale;
-            let logical_y = f64::from(target_display.y) / safe_scale;
-            let logical_width = f64::from(target_display.width) / safe_scale;
-            let logical_height = f64::from(target_display.height) / safe_scale;
-
-            window
-                .set_position(Position::Logical(LogicalPosition::new(
-                    logical_x, logical_y,
-                )))
-                .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
-            window
-                .set_size(Size::Logical(LogicalSize::new(
-                    logical_width,
-                    logical_height,
-                )))
-                .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
-
-        }
     } else {
         let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
             target_display.scale_factor
@@ -226,12 +196,59 @@ fn open_overlay_window<R: Runtime>(
         .set_ignore_cursor_events(true)
         .map_err(|error| format!("OVERLAY_WINDOW_CLICKTHROUGH_FAILED: {error}"))?;
 
+    // On Windows, WebView2 creates child windows that do not inherit WS_EX_TRANSPARENT
+    // from the parent. Propagate the flag to all child windows so the overlay is truly
+    // click-through and does not block mouse events for windows behind it.
+    #[cfg(target_os = "windows")]
+    propagate_transparent_to_children(&window);
 
     let _ = window.eval(
         "window.dispatchEvent(new CustomEvent('lumasync-overlay-preview', { detail: window.__LUMASYNC_OVERLAY_PREVIEW__ ?? null }));",
     );
 
     Ok(())
+}
+
+/// Walk every child HWND of the overlay window and apply WS_EX_TRANSPARENT | WS_EX_LAYERED
+/// so that WebView2's internal child windows do not intercept mouse events. Without this,
+/// the WebView2 host HWND (a child of our outer window) captures mouse events even though
+/// the outer window has WS_EX_TRANSPARENT, making the overlay block all clicks behind it.
+#[cfg(target_os = "windows")]
+fn propagate_transparent_to_children<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows_sys::Win32::Foundation::{HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumChildWindows, GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
+        WS_EX_LAYERED, WS_EX_TRANSPARENT,
+    };
+
+    let parent_hwnd: HWND = match window.window_handle() {
+        Ok(handle) => match handle.as_raw() {
+            RawWindowHandle::Win32(h) => h.hwnd.as_ptr() as HWND,
+            _ => return,
+        },
+        Err(_) => return,
+    };
+
+    unsafe extern "system" fn set_clickthrough(hwnd: HWND, _: LPARAM) -> i32 {
+        unsafe {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{
+                GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
+                WS_EX_LAYERED, WS_EX_TRANSPARENT,
+            };
+            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(
+                hwnd,
+                GWL_EXSTYLE,
+                ex | WS_EX_TRANSPARENT as isize | WS_EX_LAYERED as isize,
+            );
+        }
+        1
+    }
+
+    unsafe {
+        EnumChildWindows(parent_hwnd, Some(set_clickthrough), 0);
+    }
 }
 
 fn default_overlay_preview_payload() -> OverlayPreviewPayload {

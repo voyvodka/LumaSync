@@ -286,8 +286,11 @@ pub fn run() {
 
             Ok(())
         })
-        // Close-to-tray interception
+        // Close-to-tray interception (main window only — overlay windows must close freely)
         .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Prevent default close (process exit) and hide to tray instead
                 api.prevent_close();

@@ -7,6 +7,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-04-09
+
+### Fixed
+
+- Windows: calibration overlay close event no longer intercepted by the close-to-tray handler (overlay was preventing app quit)
+- Windows: overlay positioning now uses display's scale factor instead of window's runtime scale factor, fixing placement on DPI-scaled monitors
+- Windows: WebView2 child windows now receive `WS_EX_TRANSPARENT | WS_EX_LAYERED` so the overlay is truly click-through and does not block mouse events behind it
+
 ## [1.1.0] — 2026-04-09
 
 ### Added
