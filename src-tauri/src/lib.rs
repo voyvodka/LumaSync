@@ -10,11 +10,10 @@
 
 use std::{thread, time::Duration};
 use tauri::{
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, Runtime, State,
 };
-use tauri_plugin_autostart::ManagerExt;
 
 mod commands {
     pub mod ambilight_capture;
@@ -58,7 +57,21 @@ use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 const TRAY_ICON_ID: &str = "main-tray";
 
 struct TrayState<R: Runtime> {
-    startup_toggle: CheckMenuItem<R>,
+    open_settings: MenuItem<R>,
+    lights_off: MenuItem<R>,
+    resume_last_mode: MenuItem<R>,
+    solid_color: MenuItem<R>,
+    quit: MenuItem<R>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TrayLabels {
+    open_settings: String,
+    lights_off: String,
+    resume_last_mode: String,
+    solid_color: String,
+    quit: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -85,33 +98,29 @@ fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
 }
 
 #[tauri::command]
-fn set_tray_startup_checked(
+fn update_tray_labels(
     tray_state: State<'_, TrayState<tauri::Wry>>,
-    checked: bool,
+    labels: TrayLabels,
 ) -> Result<(), String> {
-    tray_state
-        .startup_toggle
-        .set_checked(checked)
-        .map_err(|error| format!("Failed to set startup tray check state: {error}"))
+    tray_state.open_settings.set_text(&labels.open_settings).map_err(|e| e.to_string())?;
+    tray_state.lights_off.set_text(&labels.lights_off).map_err(|e| e.to_string())?;
+    tray_state.resume_last_mode.set_text(&labels.resume_last_mode).map_err(|e| e.to_string())?;
+    tray_state.solid_color.set_text(&labels.solid_color).map_err(|e| e.to_string())?;
+    tray_state.quit.set_text(&labels.quit).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // Build tray menu
 // ---------------------------------------------------------------------------
-fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, CheckMenuItem<R>)> {
+fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, TrayState<R>)> {
     let open = MenuItem::with_id(app, "open-settings", "Open Settings", true, None::<&str>)?;
     let separator1 = PredefinedMenuItem::separator(app)?;
-    // Status indicator — disabled label (Phase 1: always "Idle")
     let status = MenuItem::with_id(app, "status-indicator", "● Idle", false, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
-    let startup = CheckMenuItem::with_id(
-        app,
-        "startup-toggle",
-        "Start at Login",
-        true,
-        false,
-        None::<&str>,
-    )?;
+    let lights_off = MenuItem::with_id(app, "tray-lights-off", "Lights Off", true, None::<&str>)?;
+    let resume_last = MenuItem::with_id(app, "tray-resume-last-mode", "Resume Last Mode", true, None::<&str>)?;
+    let solid_color = MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
     let separator3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
@@ -122,13 +131,23 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Ch
             &separator1,
             &status,
             &separator2,
-            &startup,
+            &lights_off,
+            &resume_last,
+            &solid_color,
             &separator3,
             &quit,
         ],
     )?;
 
-    Ok((menu, startup))
+    let tray_state = TrayState {
+        open_settings: open,
+        lights_off,
+        resume_last_mode: resume_last,
+        solid_color,
+        quit,
+    };
+
+    Ok((menu, tray_state))
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +235,10 @@ pub fn run() {
     builder
         .setup(|app| {
             // Build tray menu
-            let (menu, startup_toggle) = build_tray_menu(app.handle())?;
+            let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();
 
-            app.manage(TrayState { startup_toggle });
+            app.manage(tray_state);
             app.manage(SerialConnectionState::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
@@ -245,36 +264,13 @@ pub fn run() {
                 // Menu item actions
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
-                    "startup-toggle" => {
-                        let manager = app.autolaunch();
-                        let new_state = match manager.is_enabled() {
-                            Ok(true) => {
-                                let _ = manager.disable();
-                                false
-                            }
-                            _ => {
-                                let _ = manager.enable();
-                                true
-                            }
-                        };
-                        // Sync the CheckMenuItem visual to the new state
-                        // (CheckMenuItem auto-toggles on click, but we override to match truth)
-                        if let Some(tray_state) = app.try_state::<TrayState<tauri::Wry>>() {
-                            let _ = tray_state.startup_toggle.set_checked(new_state);
-                        }
-                        // Notify frontend so UI can update if settings window is open
-                        let _ = app.emit("tray:startup-state-changed", new_state);
-                    }
+                    "tray-lights-off" => { let _ = app.emit("tray:lights-off", ()); }
+                    "tray-resume-last-mode" => { let _ = app.emit("tray:resume-last-mode", ()); }
+                    "tray-solid-color" => { let _ = app.emit("tray:solid-color", ()); }
                     "quit" => safe_quit(app),
                     _ => {}
                 })
                 .build(&app_handle)?;
-
-            // Initialize tray checkmark from actual autostart state
-            if let Ok(enabled) = app.handle().autolaunch().is_enabled() {
-                let tray_state: State<TrayState<tauri::Wry>> = app.handle().state();
-                let _ = tray_state.startup_toggle.set_checked(enabled);
-            }
 
             Ok(())
         })
@@ -304,7 +300,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            set_tray_startup_checked,
+            update_tray_labels,
             list_serial_ports,
             connect_serial_port,
             get_serial_connection_status,

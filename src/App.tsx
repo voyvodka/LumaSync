@@ -59,6 +59,13 @@ import {
 } from "./shared/contracts/shell";
 import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
 import { DEVICE_COMMANDS } from "./shared/contracts/device";
+import {
+  listenTrayLightsOff,
+  listenTrayResumeLastMode,
+  listenTraySolidColor,
+  updateTrayLabels,
+} from "./features/tray/trayController";
+import { i18next } from "./features/i18n/i18n";
 
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
@@ -141,6 +148,10 @@ function App() {
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
   const persistLightingModeTimeoutRef = useRef<number | null>(null);
   const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
+  // Tray quick-action refs — always hold latest values for use in stable listeners
+  const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
+  const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
+  const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
   /**
    * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
    * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
@@ -414,6 +425,15 @@ function App() {
         // Check for updates silently after startup
         void checkForUpdates();
 
+        // Push localized tray labels to Rust
+        void updateTrayLabels({
+          openSettings: i18next.t("tray.openSettings"),
+          lightsOff: i18next.t("tray.lightsOff"),
+          resumeLastMode: i18next.t("tray.resumeLastMode"),
+          solidColor: i18next.t("tray.solidColor"),
+          quit: i18next.t("tray.quit"),
+        });
+
         // Mark bootstrap complete — hot-plug useEffect may now run
         setBootstrapDone(true);
       } catch (err) {
@@ -424,6 +444,74 @@ function App() {
     }
 
     bootstrap();
+  }, []);
+
+  // Keep tray refs in sync with latest state
+  useEffect(() => { lightingModeRef.current = lightingMode; }, [lightingMode]);
+  useEffect(() => { selectedOutputTargetsRef.current = selectedOutputTargets; }, [selectedOutputTargets]);
+  useEffect(() => {
+    if (lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
+      lastNonOffModeRef.current = lightingMode;
+    }
+  }, [lightingMode]);
+
+  // Register i18n languageChanged hook to re-push tray labels
+  useEffect(() => {
+    const handler = () => {
+      void updateTrayLabels({
+        openSettings: i18next.t("tray.openSettings"),
+        lightsOff: i18next.t("tray.lightsOff"),
+        resumeLastMode: i18next.t("tray.resumeLastMode"),
+        solidColor: i18next.t("tray.solidColor"),
+        quit: i18next.t("tray.quit"),
+      });
+    };
+    i18next.on("languageChanged", handler);
+    return () => { i18next.off("languageChanged", handler); };
+  }, []);
+
+  // Tray quick action listeners (registered once, use refs for fresh state)
+  const handleLightingModeChangeRef = useRef<((m: LightingModeConfig) => Promise<void>) | null>(null);
+
+  useEffect(() => {
+    let unlistenOff: (() => void) | null = null;
+    let unlistenResume: (() => void) | null = null;
+    let unlistenSolid: (() => void) | null = null;
+
+    void Promise.all([
+      listenTrayLightsOff(() => {
+        const handler = handleLightingModeChangeRef.current;
+        if (handler) void handler({ kind: LIGHTING_MODE_KIND.OFF });
+      }),
+      listenTrayResumeLastMode(() => {
+        const handler = handleLightingModeChangeRef.current;
+        const mode = lastNonOffModeRef.current ?? lightingModeRef.current;
+        if (handler && mode.kind !== LIGHTING_MODE_KIND.OFF) {
+          void handler({ ...mode, targets: selectedOutputTargetsRef.current });
+        }
+      }),
+      listenTraySolidColor(() => {
+        const handler = handleLightingModeChangeRef.current;
+        const currentMode = lightingModeRef.current;
+        if (handler) {
+          void handler({
+            kind: LIGHTING_MODE_KIND.SOLID,
+            solid: currentMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 },
+            targets: selectedOutputTargetsRef.current,
+          });
+        }
+      }),
+    ]).then(([u1, u2, u3]) => {
+      unlistenOff = u1;
+      unlistenResume = u2;
+      unlistenSolid = u3;
+    });
+
+    return () => {
+      unlistenOff?.();
+      unlistenResume?.();
+      unlistenSolid?.();
+    };
   }, []);
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
@@ -812,6 +900,9 @@ function App() {
       selectedOutputTargets,
     ],
   );
+
+  // Keep handleLightingModeChangeRef in sync so tray listeners always use latest handler
+  handleLightingModeChangeRef.current = handleLightingModeChange;
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 

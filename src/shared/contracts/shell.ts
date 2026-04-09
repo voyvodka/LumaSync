@@ -23,7 +23,7 @@ import type { RoomMapConfig } from "./roomMap";
 
 /** Canonical Tauri command names for shell-level operations */
 export const SHELL_COMMANDS = {
-  SET_TRAY_STARTUP_CHECKED: "set_tray_startup_checked",
+  UPDATE_TRAY_LABELS: "update_tray_labels",
 } as const;
 
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
@@ -36,7 +36,9 @@ export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
 export const TRAY_MENU_IDS = {
   OPEN_SETTINGS: "open-settings",
   STATUS_INDICATOR: "status-indicator",
-  STARTUP_TOGGLE: "startup-toggle",
+  LIGHTS_OFF: "tray-lights-off",
+  RESUME_LAST_MODE: "tray-resume-last-mode",
+  SOLID_COLOR: "tray-solid-color",
   QUIT: "quit",
 } as const;
 

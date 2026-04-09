@@ -628,5 +628,12 @@
         "bottom": "Alt"
       }
     }
+  },
+  "tray": {
+    "openSettings": "Ayarları Aç",
+    "lightsOff": "Işıkları Kapat",
+    "resumeLastMode": "Son Modda Aç",
+    "solidColor": "Sabit Renk",
+    "quit": "LumaSync'ten Çık"
   }
 }

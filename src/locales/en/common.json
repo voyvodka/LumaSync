@@ -628,5 +628,12 @@
         "bottom": "Bottom"
       }
     }
+  },
+  "tray": {
+    "openSettings": "Open Settings",
+    "lightsOff": "Lights Off",
+    "resumeLastMode": "Resume Last Mode",
+    "solidColor": "Solid Color",
+    "quit": "Quit LumaSync"
   }
 }

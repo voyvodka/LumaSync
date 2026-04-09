@@ -40,7 +40,9 @@ const REQUIRED_EXPORTS = [
 const REQUIRED_TRAY_IDS = [
   "open-settings",
   "status-indicator",
-  "startup-toggle",
+  "tray-lights-off",
+  "tray-resume-last-mode",
+  "tray-solid-color",
   "quit",
 ];
 
