@@ -50,6 +50,10 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
+      - name: Install macOS universal targets
+        if: matrix.os == 'macos-latest'
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
@@ -89,3 +93,4 @@ jobs:
           releaseBody: ${{ steps.changelog.outputs.notes }}
           releaseDraft: false
           prerelease: false
+          args: ${{ matrix.os == 'macos-latest' && '--target universal-apple-darwin' || '' }}
