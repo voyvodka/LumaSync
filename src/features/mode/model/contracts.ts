@@ -17,6 +17,7 @@ export interface SolidColorPayload {
 
 export interface AmbilightPayload {
   brightness: number;
+  blackBorderDetection?: boolean;
 }
 
 export interface LightingModeConfig {
@@ -56,6 +57,7 @@ export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): 
 export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): AmbilightPayload {
   return {
     brightness: clampFloat(input?.brightness, 0, 1, 1),
+    blackBorderDetection: input?.blackBorderDetection ?? false,
   };
 }
 

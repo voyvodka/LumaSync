@@ -56,7 +56,11 @@
       "solidColor": "Sabit renk",
       "brightness": "Parlaklık",
       "lockedReasonCalibration": "LED modunu etkinleştirmeden önce kalibrasyonu tamamlayın.",
-      "openCalibration": "Kalibrasyonu aç"
+      "openCalibration": "Kalibrasyonu aç",
+      "ambilight": {
+        "blackBorderTitle": "Siyah kenar algılama",
+        "blackBorderDescription": "Ekran rengi örneklenirken letterbox / pillarbox siyah bantları otomatik olarak atlar."
+      }
     }
   },
   "startupTray": {

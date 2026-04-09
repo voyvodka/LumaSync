@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   LIGHTING_MODE_KIND,
+  type AmbilightPayload,
   type LightingModeConfig,
   type LightingModeKind,
 } from "../../../mode/model/contracts";
@@ -9,7 +10,7 @@ import {
 interface ModeSelectorRowProps {
   activeKind: LightingModeKind;
   disabled: boolean;
-  ambilightBrightness: number;
+  ambilightConfig: AmbilightPayload;
   solidDraft: { r: number; g: number; b: number; brightness: number };
   onModeChange: (nextMode: LightingModeConfig) => void;
 }
@@ -17,7 +18,7 @@ interface ModeSelectorRowProps {
 export function ModeSelectorRow({
   activeKind,
   disabled,
-  ambilightBrightness,
+  ambilightConfig,
   solidDraft,
   onModeChange,
 }: ModeSelectorRowProps) {
@@ -47,7 +48,7 @@ export function ModeSelectorRow({
       onClick: () =>
         onModeChange({
           kind: LIGHTING_MODE_KIND.AMBILIGHT,
-          ambilight: { brightness: ambilightBrightness },
+          ambilight: ambilightConfig,
         }),
     },
     {

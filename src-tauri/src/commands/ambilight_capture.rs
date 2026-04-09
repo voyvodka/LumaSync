@@ -334,17 +334,42 @@ mod platform {
 
         Ok(Box::new(MacOSLiveFrameSource {
             latest_frame,
-            _stream: stream,
+            stream,
         }))
     }
 
     struct MacOSLiveFrameSource {
         latest_frame: SharedFrame,
-        _stream: SCStream,
+        stream: SCStream,
     }
 
-    // SCStream stop_capture is called on Drop by screencapturekit internally,
-    // but we hold the stream to keep it alive for the lifetime of this source.
+    impl Drop for MacOSLiveFrameSource {
+        fn drop(&mut self) {
+            // SCStream::Drop only calls sc_stream_release (not sc_stream_stop_capture).
+            // Releasing a capturing stream without stopping it first causes a macOS crash.
+            //
+            // We clone the stream (Swift retain +1) and stop it on a dedicated thread so
+            // this Drop returns immediately and does not freeze the Tauri command thread.
+            //
+            // RACE CONDITION: after stop_capture() returns, the macOS DispatchQueue may
+            // still have in-flight sample_handler callbacks that reference StreamContext.
+            // If we drop the clone immediately after stop_capture(), StreamContext reaches
+            // ref-count 0 and is freed while those callbacks are still running → SIGBUS.
+            //
+            // Fix: sleep 150 ms after stop_capture() so the DispatchQueue drains before
+            // StreamContext is freed (clone dropped at end of closure).
+            let stream = self.stream.clone();
+            let _ = std::thread::Builder::new()
+                .name("sc-stream-stop".into())
+                .spawn(move || {
+                    let _ = stream.stop_capture();
+                    // Grace period: let macOS DispatchQueue drain any pending
+                    // sample_handler callbacks before StreamContext is freed.
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    // stream dropped here → StreamContext ref 0 → safe.
+                });
+        }
+    }
 
     impl AmbilightFrameSource for MacOSLiveFrameSource {
         fn capture_frame(&mut self) -> Result<CapturedFrame, AmbilightCaptureError> {
@@ -373,6 +398,152 @@ mod platform {
             "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM",
         ))
     }
+}
+
+/// Detected black border insets, expressed as fractions of the frame dimensions.
+///
+/// Each field is in [0.0, 0.5]. A zero value means no border was found on
+/// that edge. Used by both the USB sampling path (frame crop) and the Hue
+/// sampling path (region bounds adjustment).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct BlackBorderInsets {
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+}
+
+impl BlackBorderInsets {
+    /// Returns `true` when all insets are effectively zero (no border detected).
+    pub fn is_zero(&self) -> bool {
+        self.top < f32::EPSILON
+            && self.bottom < f32::EPSILON
+            && self.left < f32::EPSILON
+            && self.right < f32::EPSILON
+    }
+}
+
+const BORDER_SCAN_STEP: usize = 8;
+const BORDER_MAX_INSET: f32 = 0.40;
+
+fn row_has_content(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> bool {
+    for col in (0..w).step_by(BORDER_SCAN_STEP) {
+        if let Some(pixel) = pixels.get(row * w + col) {
+            if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn col_has_content(pixels: &[[u8; 3]], w: usize, h: usize, col: usize, threshold: u8) -> bool {
+    for row in (0..h).step_by(BORDER_SCAN_STEP) {
+        if let Some(pixel) = pixels.get(row * w + col) {
+            if pixel[0].max(pixel[1]).max(pixel[2]) > threshold {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Detect letterbox / pillarbox black borders in `frame`.
+///
+/// Scans inward from each edge (every `BORDER_SCAN_STEP` pixels for speed)
+/// until a pixel brighter than `threshold` is found. Returns the resulting
+/// insets as fractions of the frame dimensions, capped at `BORDER_MAX_INSET`.
+pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> BlackBorderInsets {
+    let w = frame.width as usize;
+    let h = frame.height as usize;
+    if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
+        return BlackBorderInsets::default();
+    }
+
+    let px = frame.pixels_rgb.as_slice();
+
+    // Top
+    let mut top_rows = 0usize;
+    for row in (0..h).step_by(BORDER_SCAN_STEP) {
+        if row_has_content(px, w, row, threshold) {
+            top_rows = row;
+            break;
+        }
+    }
+
+    // Bottom
+    let mut bottom_rows = 0usize;
+    let mut row = h.saturating_sub(1);
+    loop {
+        if row_has_content(px, w, row, threshold) {
+            bottom_rows = h.saturating_sub(row + 1);
+            break;
+        }
+        if row < BORDER_SCAN_STEP {
+            break;
+        }
+        row -= BORDER_SCAN_STEP;
+    }
+
+    // Left
+    let mut left_cols = 0usize;
+    for col in (0..w).step_by(BORDER_SCAN_STEP) {
+        if col_has_content(px, w, h, col, threshold) {
+            left_cols = col;
+            break;
+        }
+    }
+
+    // Right
+    let mut right_cols = 0usize;
+    let mut col = w.saturating_sub(1);
+    loop {
+        if col_has_content(px, w, h, col, threshold) {
+            right_cols = w.saturating_sub(col + 1);
+            break;
+        }
+        if col < BORDER_SCAN_STEP {
+            break;
+        }
+        col -= BORDER_SCAN_STEP;
+    }
+
+    BlackBorderInsets {
+        top: (top_rows as f32 / h as f32).min(BORDER_MAX_INSET),
+        bottom: (bottom_rows as f32 / h as f32).min(BORDER_MAX_INSET),
+        left: (left_cols as f32 / w as f32).min(BORDER_MAX_INSET),
+        right: (right_cols as f32 / w as f32).min(BORDER_MAX_INSET),
+    }
+}
+
+/// Return a new `CapturedFrame` that contains only the non-black-border region.
+///
+/// When `insets.is_zero()` this clones the original frame unchanged.
+/// Used by the USB sampling path so that `sample_led_frame` only sees content pixels.
+pub fn crop_frame_to_content(frame: &CapturedFrame, insets: &BlackBorderInsets) -> CapturedFrame {
+    if insets.is_zero() {
+        return frame.clone();
+    }
+    let w = frame.width as usize;
+    let h = frame.height as usize;
+    let top = (h as f32 * insets.top) as usize;
+    let bottom = h.saturating_sub((h as f32 * insets.bottom) as usize);
+    let left = (w as f32 * insets.left) as usize;
+    let right = w.saturating_sub((w as f32 * insets.right) as usize);
+    if top >= bottom || left >= right {
+        return frame.clone();
+    }
+    let new_h = bottom - top;
+    let new_w = right - left;
+    let mut pixels_rgb = Vec::with_capacity(new_h * new_w);
+    for row in top..bottom {
+        for col in left..right {
+            if let Some(pixel) = frame.pixels_rgb.get(row * w + col) {
+                pixels_rgb.push(*pixel);
+            }
+        }
+    }
+    CapturedFrame { width: new_w as u32, height: new_h as u32, pixels_rgb }
 }
 
 pub fn sample_led_frame(

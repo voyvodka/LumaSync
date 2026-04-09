@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -8,8 +8,9 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::ambilight_capture::{
-    create_live_frame_source, sample_led_frame, AmbilightCaptureError, AmbilightFrameSource,
-    CapturedFrame, SamplingCalibration, StaticFrameSource,
+    create_live_frame_source, crop_frame_to_content, detect_black_borders, sample_led_frame,
+    AmbilightCaptureError, AmbilightFrameSource, BlackBorderInsets, CapturedFrame,
+    SamplingCalibration, StaticFrameSource,
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::hue_stream_lifecycle::{
@@ -55,10 +56,14 @@ pub struct SolidColorPayload {
     pub brightness: f32,
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AmbilightPayload {
     pub brightness: f32,
+    /// Enable automatic letterbox / pillarbox detection.
+    /// When true, black borders are detected every ~2.5 s and excluded from sampling.
+    #[serde(default)]
+    pub black_border_detection: bool,
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
@@ -96,12 +101,61 @@ pub struct LightingModeCommandResult {
 struct LightingWorkerRuntime {
     cancel: Arc<AtomicBool>,
     handle: JoinHandle<()>,
+    /// Holds the frame source alongside the worker thread.
+    ///
+    /// The worker thread captures a clone of this Arc. When the thread exits it
+    /// drops its clone (refcount → 1). Then `stop()` drops `self`, which drops
+    /// this field (refcount → 0) from the calling thread — the Tauri command
+    /// thread. This ensures `SCStream::stop_capture` is never called from the
+    /// worker thread, preventing a macOS crash on rapid mode switches.
+    _frame_source: Arc<Mutex<Box<dyn AmbilightFrameSource>>>,
 }
 
 impl LightingWorkerRuntime {
     fn stop(self) {
+        let t0 = std::time::Instant::now();
         self.cancel.store(true, Ordering::Relaxed);
         let _ = self.handle.join();
+        let join_ms = t0.elapsed().as_millis();
+        info!("[stop-worker] join completed in {join_ms}ms");
+        // `_frame_source` drops here — from the calling (command) thread,
+        // after the worker thread has already released its Arc clone.
+        // MacOSLiveFrameSource::Drop spawns a thread to call stop_capture()
+        // so this drop is non-blocking.
+    }
+}
+
+/// Live-tunable settings shared between the owner and the running ambilight worker.
+///
+/// Updated in-place when the user changes ambilight settings (brightness, black
+/// border detection) while the mode is already active, so the worker never
+/// needs to be stopped/restarted just for a setting tweak. This prevents
+/// the macOS SCStream rapid stop/recreate cycle that causes crashes.
+struct AmbilightLiveSettings {
+    /// Brightness as f32 bit pattern stored in an AtomicU32.
+    brightness: AtomicU32,
+    black_border_detection: AtomicBool,
+}
+
+impl AmbilightLiveSettings {
+    fn new(brightness: f32, black_border_detection: bool) -> Arc<Self> {
+        Arc::new(Self {
+            brightness: AtomicU32::new(brightness.to_bits()),
+            black_border_detection: AtomicBool::new(black_border_detection),
+        })
+    }
+
+    fn read_brightness(&self) -> f32 {
+        f32::from_bits(self.brightness.load(Ordering::Relaxed))
+    }
+
+    fn read_black_border_detection(&self) -> bool {
+        self.black_border_detection.load(Ordering::Relaxed)
+    }
+
+    fn update(&self, brightness: f32, black_border_detection: bool) {
+        self.brightness.store(brightness.to_bits(), Ordering::Relaxed);
+        self.black_border_detection.store(black_border_detection, Ordering::Relaxed);
     }
 }
 
@@ -112,6 +166,9 @@ struct LightingRuntimeOwner {
     /// via disconnect_session, preventing stale handle reuse on reconnect.
     active_port: Option<String>,
     worker: Option<LightingWorkerRuntime>,
+    /// Shared settings for the currently running ambilight worker.
+    /// Updated in-place when only ambilight settings change, avoiding worker restart.
+    ambilight_live: Option<Arc<AmbilightLiveSettings>>,
     output_bridge: LedOutputBridge,
     frame_source_factory: Arc<AmbilightFrameSourceFactory>,
 }
@@ -122,6 +179,7 @@ impl Default for LightingRuntimeOwner {
             active_mode: LightingModeConfig::default(),
             active_port: None,
             worker: None,
+            ambilight_live: None,
             output_bridge: LedOutputBridge::default(),
             frame_source_factory: Arc::new(create_live_frame_source),
         }
@@ -164,14 +222,18 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
             targets,
             ..LightingModeConfig::default()
         },
-        LightingModeKind::Ambilight => LightingModeConfig {
-            kind: LightingModeKind::Ambilight,
-            solid: None,
-            ambilight: Some(AmbilightPayload {
-                brightness: clamp_brightness(config.ambilight.map(|value| value.brightness), 1.0),
-            }),
-            targets,
-        },
+        LightingModeKind::Ambilight => {
+            let incoming = config.ambilight.unwrap_or_default();
+            LightingModeConfig {
+                kind: LightingModeKind::Ambilight,
+                solid: None,
+                ambilight: Some(AmbilightPayload {
+                    brightness: clamp_brightness(Some(incoming.brightness), 1.0),
+                    black_border_detection: incoming.black_border_detection,
+                }),
+                targets,
+            }
+        }
         LightingModeKind::Solid => {
             let solid = config.solid.unwrap_or(SolidColorPayload {
                 r: 255,
@@ -202,47 +264,121 @@ fn push_trace(trace: &mut Option<&mut Vec<&'static str>>, step: &'static str) {
 
 fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&'static str>>) {
     push_trace(trace, "stop_previous");
+    let t0 = std::time::Instant::now();
+    owner.ambilight_live = None;
     if let Some(worker) = owner.worker.take() {
         worker.stop();
     }
-    // Release the cached serial handle for the port that was active.
-    // This prevents the next connect from inheriting a stale file descriptor.
     if let Some(port_name) = owner.active_port.take() {
         owner.output_bridge.disconnect_session(&port_name);
+    }
+    let total_ms = t0.elapsed().as_millis();
+    info!("[stop_previous] completed in {total_ms}ms");
+}
+
+/// Periodically caches detected black border insets for the ambilight worker.
+///
+/// Detection runs at most once every `UPDATE_INTERVAL` to avoid per-frame overhead.
+/// When disabled all insets remain zero (full-frame sampling).
+struct BlackBorderCache {
+    insets: BlackBorderInsets,
+    last_updated: Instant,
+    enabled: bool,
+}
+
+impl BlackBorderCache {
+    const UPDATE_INTERVAL: Duration = Duration::from_millis(2500);
+    const THRESHOLD: u8 = 15;
+
+    fn new(enabled: bool) -> Self {
+        // Subtract the interval so the very first frame triggers a detection pass.
+        let past = Instant::now()
+            .checked_sub(Self::UPDATE_INTERVAL)
+            .unwrap_or_else(Instant::now);
+        Self { insets: BlackBorderInsets::default(), last_updated: past, enabled }
+    }
+
+    fn set_enabled(&mut self, enabled: bool) {
+        if self.enabled != enabled {
+            self.enabled = enabled;
+            if !enabled {
+                self.insets = BlackBorderInsets::default();
+            }
+        }
+    }
+
+    fn update_if_due(&mut self, frame: &CapturedFrame) {
+        if !self.enabled {
+            self.insets = BlackBorderInsets::default();
+            return;
+        }
+        if self.last_updated.elapsed() >= Self::UPDATE_INTERVAL {
+            self.insets = detect_black_borders(frame, Self::THRESHOLD);
+            self.last_updated = Instant::now();
+        }
+    }
+
+    fn insets(&self) -> &BlackBorderInsets {
+        &self.insets
     }
 }
 
 fn capture_sample_send_frame(
     source: &mut dyn AmbilightFrameSource,
     calibration: &SamplingCalibration,
+    border_insets: &BlackBorderInsets,
 ) -> Result<(CapturedFrame, Vec<[u8; 3]>), String> {
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
     let frame = source.capture_frame().map_err(|error| error.as_reason())?;
-    let sampled = sample_led_frame(&frame, calibration).map_err(|error| error.as_reason())?;
+    let sampled = if border_insets.is_zero() {
+        sample_led_frame(&frame, calibration)
+    } else {
+        let cropped = crop_frame_to_content(&frame, border_insets);
+        sample_led_frame(&cropped, calibration)
+    }
+    .map_err(|error| error.as_reason())?;
     Ok((frame, sampled.colors))
 }
 
 /// Average the colour of the pixels in the screen strip corresponding to
-/// `region`. Uses a step of 8 pixels in both axes for fast sub-sampling.
-fn sample_screen_region_avg(frame: &CapturedFrame, region: &HueScreenRegion) -> (u8, u8, u8) {
+/// `region`, respecting black-border `insets` so letterbox / pillarbox areas
+/// are excluded. Uses a step of 8 pixels in both axes for fast sub-sampling.
+fn sample_screen_region_avg(
+    frame: &CapturedFrame,
+    region: &HueScreenRegion,
+    insets: &BlackBorderInsets,
+) -> (u8, u8, u8) {
     let w = frame.width as usize;
     let h = frame.height as usize;
     if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
         return (0, 0, 0);
     }
 
-    const STRIP: f32 = 0.20; // 20% strip depth
+    const STRIP: f32 = 0.20; // 20% strip depth within content area
     const STEP: usize = 8;   // sub-sample every 8th pixel for speed
 
-    let strip_h = ((h as f32 * STRIP) as usize).max(1);
-    let strip_w = ((w as f32 * STRIP) as usize).max(1);
+    // Derive content-area bounds from detected insets.
+    let top_border    = (h as f32 * insets.top)    as usize;
+    let bottom_border = (h as f32 * insets.bottom) as usize;
+    let left_border   = (w as f32 * insets.left)   as usize;
+    let right_border  = (w as f32 * insets.right)  as usize;
+
+    let ct = top_border;                              // content top row
+    let cb = h.saturating_sub(bottom_border).max(ct + 1); // content bottom row
+    let cl = left_border;                             // content left col
+    let cr = w.saturating_sub(right_border).max(cl + 1);  // content right col
+    let ch = cb - ct;                                 // content height
+    let cw = cr - cl;                                 // content width
+
+    let strip_h = ((ch as f32 * STRIP) as usize).max(1);
+    let strip_w = ((cw as f32 * STRIP) as usize).max(1);
 
     let (row_start, row_end, col_start, col_end) = match region {
-        HueScreenRegion::Top    => (0,           strip_h,     0,           w          ),
-        HueScreenRegion::Bottom => (h - strip_h, h,           0,           w          ),
-        HueScreenRegion::Left   => (0,           h,           0,           strip_w    ),
-        HueScreenRegion::Right  => (0,           h,           w - strip_w, w          ),
-        HueScreenRegion::Center => (h / 4,       3 * h / 4,   w / 4,       3 * w / 4 ),
+        HueScreenRegion::Top    => (ct,                    (ct + strip_h).min(cb), cl, cr),
+        HueScreenRegion::Bottom => (cb.saturating_sub(strip_h), cb,                cl, cr),
+        HueScreenRegion::Left   => (ct, cb,  cl,                    (cl + strip_w).min(cr)),
+        HueScreenRegion::Right  => (ct, cb,  cr.saturating_sub(strip_w), cr              ),
+        HueScreenRegion::Center => (h / 4, 3 * h / 4, w / 4, 3 * w / 4),
     };
 
     let mut sum_r = 0u32;
@@ -324,11 +460,12 @@ impl AmbilightWorkerQualityState {
 fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
     port_name: Option<String>,
-    brightness: f32,
-    mut frame_source: Box<dyn AmbilightFrameSource>,
+    live_settings: Arc<AmbilightLiveSettings>,
+    frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
     hue_output: Option<HueActiveOutputContext>,
 ) -> Result<LightingWorkerRuntime, String> {
+    let mut frame_source = frame_source;
     // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
     // Retry for up to ~1 s to give the capture session time to warm up.
     let initial_frame = {
@@ -371,16 +508,22 @@ fn start_ambilight_worker(
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
 
     let mut initial_frame_source = StaticFrameSource::new(initial_frame);
-    let (_, initial_sampled) = capture_sample_send_frame(&mut initial_frame_source, &calibration)?;
+    // No border detection for the initial warmup frame — detection runs in the worker loop.
+    let (_, initial_sampled) = capture_sample_send_frame(
+        &mut initial_frame_source,
+        &calibration,
+        &BlackBorderInsets::default(),
+    )?;
     telemetry_window.record_capture();
     if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
         telemetry_window.record_slot_overwrite();
     }
     let send_started = Instant::now();
     if let Some(ref port) = port_name {
+        let initial_brightness = live_settings.read_brightness();
         let initial_sent = quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
             AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-            send_ambilight_frame_hot_path_to_port(&output_bridge, port, frame, brightness)
+            send_ambilight_frame_hot_path_to_port(&output_bridge, port, frame, initial_brightness)
                 .map_err(|error| error.as_reason())
         })?;
         if initial_sent {
@@ -394,6 +537,15 @@ fn start_ambilight_worker(
     let cancel = Arc::new(AtomicBool::new(false));
     let cancel_flag = Arc::clone(&cancel);
 
+    // Wrap the frame source in Arc<Mutex<...>> so ownership stays on the command
+    // thread. The worker receives only a clone (refcount=2). When the worker loop
+    // exits it drops its clone (refcount→1). Then LightingWorkerRuntime::stop()
+    // drops `self` from the command thread, dropping the last Arc (refcount→0) and
+    // calling SCStream::stop_capture safely — never from the worker thread.
+    let frame_source_arc: Arc<Mutex<Box<dyn AmbilightFrameSource>>> =
+        Arc::new(Mutex::new(frame_source));
+    let worker_source = Arc::clone(&frame_source_arc);
+
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
         let has_hue = hue_output.as_ref().map(|c| !c.channels.is_empty()).unwrap_or(false);
@@ -401,19 +553,32 @@ fn start_ambilight_worker(
         let mut hue_send_count = 0u32;
         let mut hue_skip_count = 0u32;
         let mut last_hue_colors: Vec<(u8, u8, u8)> = Vec::new();
+        // Border cache is refreshed each iteration from live_settings.
+        let mut border_cache = BlackBorderCache::new(live_settings.read_black_border_detection());
 
         let mut capture_fail_count = 0u32;
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
-            let capture_result = capture_sample_send_frame(frame_source.as_mut(), &calibration);
+            let capture_result = match worker_source.lock() {
+                Ok(mut src) => capture_sample_send_frame(
+                    src.as_mut(),
+                    &calibration,
+                    border_cache.insets(),
+                ),
+                Err(_) => Err("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED".to_string()),
+            };
             if let Err(ref e) = capture_result {
                 capture_fail_count += 1;
                 if capture_fail_count <= 5 || capture_fail_count % 50 == 0 {
                     warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
                 }
             }
-            if let Ok((raw_frame, sampled)) = capture_result
-            {
+            if let Ok((raw_frame, sampled)) = capture_result {
+                // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
+                border_cache.set_enabled(live_settings.read_black_border_detection());
+                let brightness = live_settings.read_brightness();
+                // Update black border detection cache from the raw (uncropped) frame.
+                border_cache.update_if_due(&raw_frame);
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
                 telemetry_window.record_capture();
                 if quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice()) {
@@ -459,7 +624,7 @@ fn start_ambilight_worker(
                         let channel_colors: Vec<(u8, u8, u8)> = context
                             .channels
                             .iter()
-                            .map(|ch| sample_screen_region_avg(&raw_frame, &ch.screen_region))
+                            .map(|ch| sample_screen_region_avg(&raw_frame, &ch.screen_region, border_cache.insets()))
                             .collect();
 
                         // Delta check: skip if max per-channel diff < threshold.
@@ -509,7 +674,7 @@ fn start_ambilight_worker(
         ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
     });
 
-    Ok(LightingWorkerRuntime { cancel, handle })
+    Ok(LightingWorkerRuntime { cancel, handle, _frame_source: frame_source_arc })
 }
 
 fn apply_mode_change(
@@ -554,6 +719,30 @@ fn apply_mode_change(
     }
 
     let mut trace = trace;
+
+    // Fast path: ambilight already running and only settings (brightness / black border)
+    // changed — update live atomics in-place without stopping the worker.
+    // This prevents the macOS SCStream stop/recreate cycle that causes crashes.
+    if normalized_next.kind == LightingModeKind::Ambilight
+        && owner.active_mode.kind == LightingModeKind::Ambilight
+        && owner.worker.is_some()
+        && normalized_next.targets == owner.active_mode.targets
+    {
+        if let Some(live) = &owner.ambilight_live {
+            let cfg = normalized_next.ambilight.as_ref().cloned().unwrap_or_default();
+            live.update(cfg.brightness, cfg.black_border_detection);
+            owner.active_mode = normalized_next;
+            return make_result(
+                owner.active_mode.clone(),
+                command_status(
+                    "AMBILIGHT_MODE_UPDATED",
+                    "Ambilight settings updated in running worker.",
+                    None,
+                ),
+            );
+        }
+    }
+
     stop_previous(owner, &mut trace);
 
     match normalized_next.kind {
@@ -639,11 +828,11 @@ fn apply_mode_change(
         LightingModeKind::Ambilight => {
             push_trace(&mut trace, "start_ambilight");
 
-            let brightness = normalized_next
-                .ambilight
-                .as_ref()
-                .map(|payload| payload.brightness)
-                .unwrap_or(1.0);
+            let ambilight_cfg = normalized_next.ambilight.as_ref().cloned().unwrap_or_default();
+            let live_settings = AmbilightLiveSettings::new(
+                ambilight_cfg.brightness,
+                ambilight_cfg.black_border_detection,
+            );
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
 
@@ -686,7 +875,7 @@ fn apply_mode_change(
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
                 port_for_worker,
-                brightness,
+                Arc::clone(&live_settings),
                 frame_source,
                 telemetry_snapshot
                     .unwrap_or_else(|| Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))),
@@ -694,6 +883,7 @@ fn apply_mode_change(
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
+                    owner.ambilight_live = Some(live_settings);
                     owner.active_mode = normalized_next;
                     if let Some(p) = connected_port {
                         owner.active_port = Some(p.to_string());
@@ -731,20 +921,26 @@ pub fn set_lighting_mode(
     hue_runtime_state: State<'_, HueRuntimeStateStore>,
     telemetry_state: State<'_, RuntimeTelemetryState>,
 ) -> Result<LightingModeCommandResult, String> {
+    let t_cmd = std::time::Instant::now();
+    info!("[set_lighting_mode] invoked kind={:?}", payload.kind);
+
     let connection_snapshot = connection_state
         .last_status
         .lock()
         .map(|status| status.clone())
         .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
 
+    let lock_t = std::time::Instant::now();
     let mut owner = runtime_state
         .runtime
         .lock()
         .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+    let lock_ms = lock_t.elapsed().as_millis();
+    if lock_ms > 10 { info!("[set_lighting_mode] runtime lock waited {lock_ms}ms"); }
 
     let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
 
-    Ok(apply_mode_change(
+    let result = apply_mode_change(
         &mut owner,
         payload,
         connection_snapshot.connected,
@@ -752,7 +948,9 @@ pub fn set_lighting_mode(
         hue_output,
         Some(telemetry_state.shared_snapshot()),
         None,
-    ))
+    );
+    info!("[set_lighting_mode] completed in {}ms", t_cmd.elapsed().as_millis());
+    Ok(result)
 }
 
 #[tauri::command]
@@ -810,10 +1008,10 @@ mod tests {
     use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 
     use super::{
-        apply_mode_change, start_ambilight_worker, stop_previous, AmbilightPayload,
-        AmbilightWorkerQualityState, LightingModeConfig, LightingModeKind, LightingRuntimeOwner,
-        SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS,
-        AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
+        apply_mode_change, start_ambilight_worker, stop_previous, AmbilightLiveSettings,
+        AmbilightPayload, AmbilightWorkerQualityState, LightingModeConfig, LightingModeKind,
+        LightingRuntimeOwner, SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
+        AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
 
     #[derive(Default)]
@@ -891,7 +1089,7 @@ mod tests {
         LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             solid: None,
-            ambilight: Some(AmbilightPayload { brightness: 0.8 }),
+            ambilight: Some(AmbilightPayload { brightness: 0.8, ..Default::default() }),
             targets: None,
         }
     }
@@ -933,13 +1131,14 @@ mod tests {
                 start_ambilight_worker(
                     owner.output_bridge.clone(),
                     Some("COM1".to_string()),
-                    0.8,
+                    AmbilightLiveSettings::new(0.8, false),
                     (owner.frame_source_factory)().expect("frame source should be available"),
                     shared_runtime_telemetry(),
                     None,
                 )
                 .expect("worker start should succeed"),
             ),
+            ambilight_live: None,
             output_bridge: owner.output_bridge,
             frame_source_factory: owner.frame_source_factory,
         };
@@ -1277,7 +1476,7 @@ mod lighting_mode_tests {
         LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             solid: None,
-            ambilight: Some(AmbilightPayload { brightness: 1.0 }),
+            ambilight: Some(AmbilightPayload { brightness: 1.0, ..Default::default() }),
             targets,
         }
     }

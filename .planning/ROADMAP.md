@@ -57,10 +57,10 @@
 > Sıralama netleşti (2026-04-09). Adım adım ilerlenecek.
 
 ### Uygulama Sırası
-1. **B-06 (mini)** — Tray quick actions: Işıkları Kapat / Son Modda Aç / Sabit Renk
-2. **Gamma düzeltmesi** — Kritik kalite fix, küçük iş (B-05 analizinden)
-3. **B-03** — Smoothing / renk geçiş ayarları (test gerektirir)
-4. **Black border detection** — Letterbox/pillarbox algılama (B-05 analizinden)
+1. ✅ **B-06 (mini)** — Tray quick actions: Işıkları Kapat / Son Modda Aç / Sabit Renk
+2. ✅ **Gamma düzeltmesi** — Kritik kalite fix, küçük iş (B-05 analizinden)
+3. ❓ **B-03** — Smoothing / renk geçiş ayarları (değerlendirme bekliyor)
+4. ✅ **Black border detection** — Letterbox/pillarbox algılama (B-05 analizinden)
 5. **B-07** — Oda haritası editörü geliştirme
 6. **B-06 (tam)** — Kapsamlı UI redesign (diğer özellikler bitince içerik netleşir)
 7. Orta vadeli: Color temperature, Night mode, Black-to-power-off (Hue)

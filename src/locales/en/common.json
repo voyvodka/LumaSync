@@ -56,7 +56,11 @@
       "solidColor": "Solid color",
       "brightness": "Brightness",
       "lockedReasonCalibration": "Complete calibration before enabling LED mode.",
-      "openCalibration": "Open calibration"
+      "openCalibration": "Open calibration",
+      "ambilight": {
+        "blackBorderTitle": "Black border detection",
+        "blackBorderDescription": "Automatically detects and skips letterbox / pillarbox bars when sampling screen color."
+      }
     }
   },
   "startupTray": {
