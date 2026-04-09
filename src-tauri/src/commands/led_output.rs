@@ -9,6 +9,19 @@ use super::device_connection::SerialConnectionState;
 const OUTPUT_BAUD_RATE: u32 = 115_200;
 const OUTPUT_TIMEOUT_MS: u64 = 500;
 
+/// Gamma 2.2 lookup table for WS2812B LEDs.
+///
+/// WS2812B responds linearly to PWM values but human vision is non-linear.
+/// Without gamma correction mid-range colours appear washed out and dim content
+/// loses detail. Each entry: `round((i / 255)^2.2 * 255)`.
+static GAMMA_LUT: std::sync::LazyLock<[u8; 256]> = std::sync::LazyLock::new(|| {
+    let mut lut = [0u8; 256];
+    for (i, entry) in lut.iter_mut().enumerate() {
+        *entry = ((i as f32 / 255.0_f32).powf(2.2_f32) * 255.0_f32).round() as u8;
+    }
+    lut
+});
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
     pub code: &'static str,
@@ -200,8 +213,9 @@ pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
     packet.push(clamped_brightness);
     packet.extend_from_slice(&led_count.to_le_bytes());
 
-    for rgb in rgb_triplets {
-        packet.extend_from_slice(rgb);
+    let lut = &*GAMMA_LUT;
+    for &[r, g, b] in rgb_triplets {
+        packet.extend_from_slice(&[lut[r as usize], lut[g as usize], lut[b as usize]]);
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
@@ -367,9 +381,11 @@ mod tests {
 
     #[test]
     fn solid_payload_encodes_to_deterministic_packet() {
+        // Gamma 2.2 is applied to RGB values: gamma(128) = 56, gamma(255) = 255, gamma(0) = 0.
+        // Brightness byte (127) and packet structure are unchanged by gamma.
         let packet = encode_led_packet(0.5, &[[255, 0, 128]]);
 
-        assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 128, 254]);
+        assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 56, 70]);
     }
 
     #[test]
