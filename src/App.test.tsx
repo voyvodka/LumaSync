@@ -62,11 +62,13 @@ vi.mock("./features/calibration/ui/CalibrationOverlay", () => ({
 vi.mock("./features/settings/SettingsLayout", () => ({
   SettingsLayout: (props: {
     lightingMode: LightingModeConfig;
+    outputTargets: Array<"usb" | "hue">;
     onLightingModeChange: (mode: LightingModeConfig) => void;
     onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
   }) => (
     <div>
       <p data-testid="active-mode">{props.lightingMode.kind}</p>
+      <p data-testid="output-targets">{props.outputTargets.join(",")}</p>
       <button
         type="button"
         onClick={() => props.onOutputTargetsChange(["hue"])}
@@ -244,8 +246,9 @@ describe("App mode orchestration", () => {
 
     render(<App />);
 
+    // Wait for bootstrap to complete — output-targets reflects persisted ["hue"]
     await waitFor(() => {
-      expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      expect(screen.getByTestId("output-targets")).toHaveTextContent("hue");
     });
 
     await act(async () => {
@@ -295,8 +298,9 @@ describe("App mode orchestration", () => {
 
     render(<App />);
 
+    // Wait for bootstrap to complete — output-targets reflects persisted ["hue"]
     await waitFor(() => {
-      expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      expect(screen.getByTestId("output-targets")).toHaveTextContent("hue");
     });
 
     await act(async () => {
@@ -588,8 +592,9 @@ describe("App mode orchestration", () => {
 
     render(<App />);
 
+    // Wait for bootstrap to complete — output-targets reflects persisted ["usb", "hue"]
     await waitFor(() => {
-      expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      expect(screen.getByTestId("output-targets")).toHaveTextContent("usb,hue");
     });
 
     await act(async () => {
