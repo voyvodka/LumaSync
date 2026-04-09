@@ -12,11 +12,11 @@ Describe what changed and why.
 
 ## Validation
 
-- [ ] `yarn typecheck`
+- [ ] `pnpm typecheck`
 - [ ] Targeted frontend tests (if applicable)
-- [ ] `yarn check:rust` (if Rust/Tauri touched)
-- [ ] `yarn verify:shell-contracts` (if contracts touched)
-- [ ] `yarn build` (when integration confidence is needed)
+- [ ] `pnpm check:rust` (if Rust/Tauri touched)
+- [ ] `pnpm verify:shell-contracts` (if contracts touched)
+- [ ] `pnpm build` (when integration confidence is needed)
 
 ## Screenshots / Recordings
 

@@ -36,9 +36,9 @@ This Code of Conduct applies within all project spaces and also applies when an 
 
 If you experience or witness unacceptable behavior, report it by contacting the maintainers.
 
-Recommended channel for this repository:
+Recommended channels:
 
-- Open a private security-style report if sensitive details are involved
+- Use [GitHub private vulnerability reporting](https://github.com/voyvodka/lumasync/security/advisories/new) for sensitive or confidential reports
 - Otherwise open an issue labeled `conduct` with clear facts and context
 
 All reports will be reviewed and investigated promptly and fairly.

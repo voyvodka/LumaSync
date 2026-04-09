@@ -15,13 +15,13 @@ This guide helps you contribute in a way that keeps the codebase stable and main
 ### 1) Install dependencies
 
 ```bash
-yarn install
+pnpm install
 ```
 
 ### 2) Run the app
 
 ```bash
-yarn tauri dev
+pnpm tauri dev
 ```
 
 ## Code Style Expectations
@@ -37,32 +37,39 @@ yarn tauri dev
 Run only what is relevant to your change.
 
 ```bash
-yarn typecheck
+pnpm typecheck
 ```
 
 Frontend tests (targeted):
 
 ```bash
-yarn vitest run src/features/<feature>
+pnpm vitest run src/features/<feature>
 ```
 
 Rust checks (if Rust/Tauri touched):
 
 ```bash
-yarn check:rust
+pnpm check:rust
 ```
 
 Contract checks (if shell/contracts touched):
 
 ```bash
-yarn verify:shell-contracts
+pnpm verify:shell-contracts
 ```
 
 Integration confidence:
 
 ```bash
-yarn build
+pnpm build
 ```
+
+## Workflow
+
+1. Fork the repository and clone your fork.
+2. Create a feature branch from `main` (e.g. `feat/my-feature`).
+3. Make your changes, following the code style and commit guidance below.
+4. Push your branch and open a pull request against `main`.
 
 ## Pull Request Guidelines
 
@@ -72,15 +79,26 @@ yarn build
 - Include verification steps and results.
 - Keep unrelated cleanup out of the PR.
 
+## Review Process
+
+- A maintainer will review your PR and may request changes.
+- Address feedback by pushing new commits (do not force-push during review).
+- Once approved, a maintainer will merge the PR.
+
 ## Commit Message Guidance
 
 Use concise, intent-first messages.
 
+Use a conventional commit type prefix with a scope matching the affected area.
+
 Examples:
 
-- `fix: prevent duplicate tray icon creation on startup`
-- `feat: add calibration template validation for edge segments`
-- `docs: expand debugging guide with focused shell checks`
+- `fix(tray): prevent duplicate tray icon creation on startup`
+- `feat(calibration): add template validation for edge segments`
+- `docs(debug): expand debugging guide with focused shell checks`
+- `chore(deps): bump frontend dependencies`
+
+Common scopes: `tray`, `hue`, `serial`, `calibration`, `mode`, `ui`, `deps`, `ci`, `debug`.
 
 ## Reporting Issues
 

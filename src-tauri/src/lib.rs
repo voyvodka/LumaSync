@@ -335,7 +335,7 @@ pub fn run() {
             load_room_map,
             copy_background_image,
             update_hue_channel_positions,
-            simulate_hue_fault
+            simulate_hue_fault, // debug: real fault injection, release: returns error stub
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

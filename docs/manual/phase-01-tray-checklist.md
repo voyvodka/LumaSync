@@ -1,15 +1,15 @@
 # Phase 1 — Tray UX Manual Validation Checklist
 
 **Purpose:** Repeatable manual smoke test for UX-01 Phase 1 tray and settings shell behavior.  
-**Prerequisites:** Run `yarn tauri dev` and ensure the app launches.  
+**Prerequisites:** Run `pnpm tauri dev` and ensure the app launches.  
 **Usage:** Go through each item in order. Mark PASS/FAIL with notes.
 
 ---
 
 ## Pre-flight
 
-- [ ] `yarn tauri dev` starts without build errors
-- [ ] No TypeScript errors (`yarn tsc --noEmit` passes)
+- [ ] `pnpm tauri dev` starts without build errors
+- [ ] No TypeScript errors (`pnpm tsc --noEmit` passes)
 - [ ] Shell contracts verifier passes (`node scripts/verify/phase01-shell-contracts.mjs`)
 
 ---
@@ -141,7 +141,7 @@ _Note: This can be tested by editing the store file directly and setting windowX
 
 ## 7. Single-Instance Behavior
 
-- [ ] With app running, attempt to launch a second instance (run `yarn tauri dev` again or open built binary)
+- [ ] With app running, attempt to launch a second instance (run `pnpm tauri dev` again or open built binary)
 - [ ] Second launch does NOT create a new window
 - [ ] Existing settings window comes to focus (or tray icon is focused)
 

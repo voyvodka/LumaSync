@@ -3,11 +3,11 @@
 ## 1) Baseline run
 
 ```bash
-yarn tauri dev
+pnpm tauri dev
 ```
 
 - Frontend runtime errors appear in the webview console.
-- Rust/Tauri errors appear in the terminal that started `yarn tauri dev`.
+- Rust/Tauri errors appear in the terminal that started `pnpm tauri dev`.
 
 ## 2) Open webview devtools
 
@@ -19,13 +19,13 @@ Use the Console tab for React/i18n/tray bridge logs.
 ## 3) Increase Rust/Tauri log verbosity
 
 ```bash
-RUST_LOG=info yarn tauri dev
+RUST_LOG=info pnpm tauri dev
 ```
 
 For more detail:
 
 ```bash
-RUST_LOG=debug yarn tauri dev
+RUST_LOG=debug pnpm tauri dev
 ```
 
 ## 4) Useful focused checks
@@ -38,7 +38,7 @@ This confirms shell contracts and baseline IDs are intact.
 
 ## 5) Quick triage flow
 
-1. Reproduce once with `yarn tauri dev`
+1. Reproduce once with `pnpm tauri dev`
 2. Check terminal (Rust/Tauri side)
 3. Check DevTools Console (frontend side)
 4. If tray behavior is involved, run `docs/manual/phase-01-tray-checklist.md`

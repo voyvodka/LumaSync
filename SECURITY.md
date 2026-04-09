@@ -2,13 +2,12 @@
 
 ## Supported Versions
 
-The project is currently pre-1.0.
-Security updates are provided on a best-effort basis for active development versions.
+Security updates are provided for the latest stable release.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x | Yes |
-| < 0.1.0 | No |
+| 1.0.x (current: 1.0.4) | Yes |
+| < 1.0.0 | No |
 
 ## Reporting a Vulnerability
 
@@ -16,9 +15,10 @@ Please do not open public issues for potential security vulnerabilities.
 
 Instead:
 
-1. Share details privately with maintainers.
-2. Include reproduction steps, impact, and affected versions.
-3. If possible, include a minimal proof of concept.
+1. Use [GitHub's private vulnerability reporting](https://github.com/voyvodka/lumasync/security/advisories/new) if available.
+2. Alternatively, share details privately with maintainers via email or a direct message.
+3. Include reproduction steps, impact, and affected versions.
+4. If possible, include a minimal proof of concept.
 
 Suggested report template:
 

@@ -1,5 +1,10 @@
 # LumaSync
 
+[![CI](https://github.com/voyvodka/lumasync/actions/workflows/ci.yml/badge.svg)](https://github.com/voyvodka/lumasync/actions/workflows/ci.yml)
+[![Release](https://github.com/voyvodka/lumasync/releases/latest/badge.svg)](https://github.com/voyvodka/lumasync/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: macOS | Windows | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#platform-support)
+
 LumaSync is a tray-first desktop app that synchronizes WS2812B LED strips with screen content and controls Philips Hue entertainment areas — all from a single compact interface.
 
 It combines a React + TypeScript frontend with a Rust/Tauri runtime to keep the UI responsive while handling native desktop behavior.
@@ -20,7 +25,7 @@ It combines a React + TypeScript frontend with a Rust/Tauri runtime to keep the 
 - Frontend: Vite, React 19, TypeScript (strict), Tailwind CSS
 - Desktop runtime: Tauri v2, Rust
 - Testing: Vitest + Testing Library, Cargo test
-- Package manager: Yarn
+- Package manager: pnpm
 
 ## Supported Hardware
 
@@ -41,44 +46,52 @@ Baud rate: 115200 (Adalight-compatible protocol).
 - At least one configured **Entertainment Area** in the Hue app
 - macOS only: `macos-private-api` is required for fullscreen calibration overlays — the app requests this automatically
 
+## Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS | Full support | Primary development target. `macos-private-api` enabled for fullscreen overlays. |
+| Windows | Supported | USB and Hue features work. Fullscreen overlay behavior may vary. |
+| Linux | Experimental | Requires GTK 3, WebKitGTK 4.1, and `libudev`. Tray behavior depends on desktop environment. |
+
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 20+
-- Yarn 1.x (classic)
+- pnpm 10+
 - Rust toolchain (stable)
 - Tauri platform prerequisites for your OS
 
 ### Install
 
 ```bash
-yarn install
+pnpm install
 ```
 
 ### Development
 
 ```bash
-yarn tauri dev
+pnpm tauri dev
 ```
 
 ### Build
 
 ```bash
-yarn tauri build
+pnpm tauri build
 ```
 
 ## Common Scripts
 
-- `yarn dev`: run web-only Vite dev server
-- `yarn tauri dev`: run desktop app in development mode
-- `yarn typecheck`: run TypeScript type checks (no emit)
-- `yarn lint`: alias for typecheck
-- `yarn vitest run`: run frontend unit tests once
-- `yarn vitest`: run frontend tests in watch mode
-- `yarn verify:shell-contracts`: validate Rust command handlers match frontend contract definitions
-- `yarn check:rust`: run Rust `cargo check`
-- `yarn check:all`: run JS + Rust + shell contract checks together
+- `pnpm dev`: run web-only Vite dev server
+- `pnpm tauri dev`: run desktop app in development mode
+- `pnpm typecheck`: run TypeScript type checks (no emit)
+- `pnpm lint`: alias for typecheck
+- `pnpm vitest run`: run frontend unit tests once
+- `pnpm vitest`: run frontend tests in watch mode
+- `pnpm verify:shell-contracts`: validate Rust command handlers match frontend contract definitions
+- `pnpm check:rust`: run Rust `cargo check`
+- `pnpm check:all`: run JS + Rust + shell contract checks together
 
 ## Project Structure
 

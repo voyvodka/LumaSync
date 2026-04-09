@@ -7,6 +7,36 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-04-09
+
+### Changed
+
+- Migrated package manager from Yarn Classic (1.x) to pnpm 10; updated all scripts, CI/CD workflows, docs, and `tauri.conf.json`
+- SECURITY.md: updated supported versions table from `0.1.x` to `1.0.x` and added private vulnerability reporting link
+- README.md: added CI, Release, License, and Platform badges; added Platform Support table (macOS / Windows / Linux)
+- CONTRIBUTING.md: commit examples updated with scope prefixes; added fork workflow and review process sections
+- CODE_OF_CONDUCT.md: added GitHub private vulnerability reporting as a confidential report channel
+
+### Fixed
+
+- Release workflow (`release.yml`): added `typecheck`, `verify:shell-contracts`, and `vitest run` validation steps before build
+- CI workflow (`ci.yml`): added `vitest run` step for frontend test coverage
+- CHANGELOG.md: removed stale separator under `[Unreleased]`
+
+### Added
+
+- `.github/ISSUE_TEMPLATE/config.yml`: issue template chooser with security advisory link and blank issue restriction
+- CLAUDE.md: added Code Style, Verification Flow sections; consolidated with AGENTS.md as single source of truth
+- AGENTS.md: rewritten as thin reference to CLAUDE.md with agent-specific behavioral rules only
+
+### Fixed (tests)
+
+- `App.test.tsx`: fixed mode orchestration tests for updated output target and Hue gate behavior
+- `manualConnectFlow.test.ts`: fixed auto-scan, stale selection, remembered port, and refresh throttle tests
+- `useHueOnboarding.runtime.test.ts`: fixed retry pipeline routing test
+- `GeneralSection.test.tsx`: fixed solid payload color change test
+- `useRoomMapPersist.test.ts`: fixed resetConfig default room map test
+
 ---
 
 ## [1.0.3] — 2026-04-08

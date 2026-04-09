@@ -10,25 +10,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Development
-yarn tauri dev          # Full app with hot reload (primary dev command)
-yarn dev                # Vite dev server only (web, no Tauri)
+pnpm tauri dev          # Full app with hot reload (primary dev command)
+pnpm dev                # Vite dev server only (web, no Tauri)
 
 # Type checking & linting
-yarn typecheck          # TypeScript type check (no emit)
-yarn lint               # Alias for typecheck
-yarn check:rust         # cargo check on Rust code
-yarn check:all          # JS + Rust + shell contract checks
+pnpm typecheck          # TypeScript type check (no emit)
+pnpm lint               # Alias for typecheck
+pnpm check:rust         # cargo check on Rust code
+pnpm check:all          # JS + Rust + shell contract checks
 
 # Build
-yarn build              # TypeScript + Vite production build
-yarn tauri build        # Build distributable binaries
+pnpm build              # TypeScript + Vite production build
+pnpm tauri build        # Build distributable binaries
 
 # Tests
-yarn vitest run         # Run frontend unit tests once
-yarn vitest             # Watch mode
+pnpm vitest run         # Run frontend unit tests once
+pnpm vitest             # Watch mode
 
 # Validation
-yarn verify:shell-contracts   # Validate shell contract compatibility
+pnpm verify:shell-contracts   # Validate shell contract compatibility
 ```
 
 ## Architecture
@@ -52,7 +52,7 @@ All frontend–backend communication is defined in `src/shared/contracts/` **bef
 - `shell.ts` — Tray menu IDs, section IDs, persisted state shape
 - `display.ts` — Display enumeration
 
-The `scripts/verify/phase01-shell-contracts.mjs` script validates that Rust handlers match frontend contract definitions. Run `yarn verify:shell-contracts` after modifying contracts or Rust command handlers.
+The `scripts/verify/phase01-shell-contracts.mjs` script validates that Rust handlers match frontend contract definitions. Run `pnpm verify:shell-contracts` after modifying contracts or Rust command handlers.
 
 ### Feature Modules (`src/features/`)
 
@@ -93,14 +93,68 @@ Tauri `plugin-store` persists state to `~/.config/lumasync/app.json`. The `shell
 
 GitHub Releases with minisign verification. The updater checks on startup and surfaces `UpdateModal.tsx` if a newer version exists. Release artifacts must include a `latest.json` endpoint.
 
+## Code Style
+
+### TypeScript + React
+
+- TypeScript strict-safe code; avoid `any` unless unavoidable.
+- Prefer explicit domain interfaces/types for API payloads and state.
+- Use `const` by default; `let` only when reassignment is needed.
+- Keep components focused; move non-UI logic into feature `state/` or `model/` files.
+- Functional components and hooks only. Side effects in `useEffect` with accurate deps.
+- Use `useCallback` for handlers passed to children.
+- Fire-and-forget async: `void someAsyncCall()`.
+- Imports: external packages first, then internal. Use `import type` where practical.
+- Components: PascalCase. Hooks: `useXxx`. Helpers: camelCase. Constants: UPPER_SNAKE_CASE.
+
+### Rust / Tauri
+
+- Command payloads: strongly typed `struct`s with `#[derive(Serialize)]`.
+- Use `#[serde(rename_all = "camelCase")]` for frontend compatibility.
+- Return stable machine-readable status codes plus human-readable messages.
+- Keep command handlers focused; extract helpers for mapping/validation.
+- Follow `rustfmt` defaults.
+
+### Error Handling
+
+- Never swallow failures silently.
+- TS: `try/catch` around async IO/runtime command boundaries.
+- Log with contextual prefixes (`[LumaSync] ...`).
+- Rust: return coded error context via status objects or `Result<_, String>`.
+- Prefer explicit fallback values for invalid external input.
+
+### Testing
+
+- Tests next to feature code: `*.test.ts` / `*.test.tsx`.
+- Use Testing Library + Vitest globals (`describe`, `it`, `expect`, `vi`).
+- Mock Tauri/plugin boundaries for deterministic frontend tests.
+- Rust: focused behavior tests with clear scenario names.
+- Only add/adjust tests for changed behavior, not unrelated areas.
+
+### Contracts & i18n
+
+- `src/shared/contracts/**` is the source of truth for cross-layer data shapes.
+- Preserve command/status code semantics; avoid ad-hoc code strings.
+- Keep i18n keys stable and scoped by feature. Update EN + TR locale files consistently.
+
+## Verification Flow
+
+Run after any change, lightest checks first:
+
+1. `pnpm typecheck`
+2. `pnpm vitest run <changed-test-or-folder>`
+3. `pnpm verify:shell-contracts` (if contracts/commands touched)
+4. `pnpm check:rust` (if Rust touched)
+5. `pnpm build` (integration confidence)
+
 ## Debugging: Live Log Analysis
 
 When a bug cannot be reproduced or diagnosed from code alone, run the app and observe runtime logs:
 
 ```bash
 # Kill any running instance, then start fresh
-pkill -f "target/debug/lumasync" 2>/dev/null; pkill -f "yarn tauri dev" 2>/dev/null; sleep 2
-yarn tauri dev 2>&1 &
+pkill -f "target/debug/lumasync" 2>/dev/null; pkill -f "pnpm tauri dev" 2>/dev/null; sleep 2
+pnpm tauri dev 2>&1 &
 sleep <seconds> && echo "--- timeout ---"
 ```
 
@@ -116,6 +170,72 @@ Key log patterns to watch for:
 - `DTLS entertainment stream established` — Hue streaming connected
 - `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` — bridge has stale session
 - `AMBILIGHT_CAPTURE_PERMISSION_DENIED` — macOS screen recording permission missing
+
+## Release Workflow
+
+When the user says they want to release a new version (e.g. "1.0.5 atacağım", "yeni versiyon", "release hazırla"), follow these steps **in order**:
+
+### 1. Open Source Audit (opensource-guardian agent)
+
+Run the `opensource-guardian` agent to scan the entire project. Fix all blocker and high-priority issues before proceeding.
+
+### 2. Version Bump
+
+Update the version string in **all three** locations — they must match:
+
+- `src-tauri/Cargo.toml` → `version = "X.Y.Z"`
+- `package.json` → `"version": "X.Y.Z"`
+- `SECURITY.md` → update the supported versions table
+
+Run `cargo check` in `src-tauri/` after bumping to update `Cargo.lock`.
+
+### 3. CHANGELOG Entry
+
+Add a new section under `## [Unreleased]` in `CHANGELOG.md`:
+
+```markdown
+## [X.Y.Z] — YYYY-MM-DD
+
+### Added
+- ...
+
+### Changed
+- ...
+
+### Fixed
+- ...
+```
+
+Populate from git log since the last release tag. Group changes by type (Added/Changed/Fixed/Removed). Use concise descriptions.
+
+### 4. Validation
+
+Run these checks and confirm all pass:
+
+```bash
+pnpm typecheck
+pnpm check:rust       # or cargo check in src-tauri/
+pnpm verify:shell-contracts
+pnpm vitest run
+```
+
+### 5. Final Verification
+
+Run the `opensource-guardian` agent one more time to confirm:
+- Version numbers are aligned across all files
+- CHANGELOG entry exists and is well-formed
+- No secrets or sensitive data in the diff
+- CI/CD workflows include all required validation steps
+
+### 6. Report
+
+Present a summary to the user:
+- Version: old → new
+- Files changed
+- Validation results (all pass/fail)
+- Reminder: commit, tag (`vX.Y.Z`), and push when ready
+
+**Do NOT commit, tag, or push unless the user explicitly asks.**
 
 ## Key Constraints
 
