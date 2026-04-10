@@ -7,6 +7,29 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-04-10
+
+### Added
+
+- Room map editor: undo/redo with Cmd+Z / Cmd+Shift+Z (max 50 steps)
+- Room map editor: collapsible object list panel (right sidebar) with grouped objects and inline rename
+- Room map editor: smart snap alignment guides (edge/center) during drag operations
+- Room map editor: origin crosshair marker with snap-to-center
+- Room map editor: right-click context menu (duplicate, delete, lock, z-order, rename, rotate)
+- Room map editor: property bar with numeric x/y/w/h/rotation inputs for precise positioning
+- Room map editor: extended keyboard shortcuts (Cmd+D duplicate, Shift+Arrow 10x nudge, L lock, [ ] z-order)
+- Room map editor: scroll wheel zoom (0.5x–3x) with mouse-centered scaling and Cmd+0 fit-to-view
+- Room map editor: space+drag and middle-mouse pan navigation
+- Room map editor: real-time mouse coordinate display in meters
+- Room map editor: template system with presets (TV 55", L-desk, full room, blank canvas)
+- Room map editor: multi-image background layers with per-layer opacity, lock, and reorder
+- Room map editor: universal object lock and resize handles for all object types
+- Room map editor: floating left toolbar replacing fixed top toolbar
+
+### Fixed
+
+- Room map editor: rotated furniture resize now uses anchor-based positioning for correct behavior
+
 ## [1.1.1] — 2026-04-09
 
 ### Fixed

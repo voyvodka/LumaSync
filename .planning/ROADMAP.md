@@ -2,18 +2,21 @@
 
 ## Milestones
 
-- ✅ **v1.0 MVP** — Phases 1-8 (shipped 2026-03-21)
-- ✅ **v1.1 Hue Entertainment Integration** — Phases 9-13 (shipped 2026-03-29)
-- ✅ **v1.2 Oda Görselleştirme ve Evrensel Işık Yönetimi** — Phases 14-20 (shipped 2026-04-09, v1.0.4)
-- 🚧 **v1.3 Kalite & Performans** — v1.1.0-v1.1.1 (shipped 2026-04-09)
-- 📋 **v1.4 Backlog** — Aşağıda listelenen çalışma alanları (planlanacak)
+> Not: Milestone numaraları (M1, M2...) planlama içindir. Release versiyonları (v1.0.x, v1.1.x) ayrı izlenir.
+
+- ✅ **M1 — USB Ambilight MVP** — Phases 1-8 → release `v1.0` — `v1.0.2` (2026-03-21)
+- ✅ **M2 — Hue Entertainment Integration** — Phases 9-13 → release `v1.0.3` (2026-03-29)
+- ✅ **M3 — Oda Görselleştirme ve Evrensel Işık Yönetimi** — Phases 14-20 → release `v1.0.4` (2026-04-09)
+- ✅ **M4 — Kalite & Performans** — release `v1.1.0` — `v1.1.1` (2026-04-09 — 2026-04-10)
+- ✅ **M5 — Room Map Editor (B-07)** — release `v1.2.0` (2026-04-10)
+- 🚧 **M6 — UI/UX Redesign (B-06) + Backlog** — planlanacak
 
 ---
 
-## Tamamlanan Özellikler (v1.0 — v1.2)
+## Tamamlanan Özellikler (M1 — M5)
 
 <details>
-<summary>v1.0 — USB Ambilight MVP</summary>
+<summary>M1 — USB Ambilight MVP (v1.0 — v1.0.2)</summary>
 
 - Tray-first shell: tek pencere, tray'e küçült, tray'den aç
 - USB serial cihaz keşfi (CH340 / FTDI), auto-reconnect
@@ -27,7 +30,7 @@
 </details>
 
 <details>
-<summary>v1.1 — Hue Entertainment Integration</summary>
+<summary>M2 — Hue Entertainment Integration (v1.0.3)</summary>
 
 - Hue DTLS 1.2 PSK streaming (UDP, port 2100)
 - Bridge keşif, eşleştirme, credential doğrulama
@@ -39,7 +42,7 @@
 </details>
 
 <details>
-<summary>v1.2 — Oda Görselleştirme ve Evrensel Işık Yönetimi</summary>
+<summary>M3 — Oda Görselleştirme ve Evrensel Işık Yönetimi (v1.0.4)</summary>
 
 - Contract-first cross-boundary tipler (roomMap.ts, shell.ts, hue.ts)
 - DTLS fault recovery, auto-reconnect, telemetri grid
@@ -52,7 +55,7 @@
 </details>
 
 <details>
-<summary>v1.3 — Kalite & Performans (v1.1.0 — v1.1.1)</summary>
+<summary>M4 — Kalite & Performans (v1.1.0 — v1.1.1)</summary>
 
 - Tray quick actions: Lights Off / Resume Last / Solid Color (B-06 mini)
 - WS2812B gamma 2.2 LUT correction
@@ -69,9 +72,9 @@
 
 ---
 
-## 📋 v1.4 Backlog — Çalışma Alanları
+## 📋 M6 Backlog — Çalışma Alanları
 
-> Güncelleme: 2026-04-10. v1.3 tamamlandı, sırada B-07 ve B-06 tam.
+> Güncelleme: 2026-04-10. M4 (Kalite) ve M5 (B-07) tamamlandı, sırada B-06 UI/UX Redesign.
 
 ### Uygulama Sırası
 1. ✅ ~~B-06 (mini)~~ — Tray quick actions (v1.1.0'da tamamlandı)
@@ -79,18 +82,19 @@
 3. ✅ ~~B-03~~ — Smoothing / renk geçiş ayarları (v1.1.0'da tamamlandı)
 4. ✅ ~~Black border detection~~ — Letterbox/pillarbox algılama (v1.1.0'da tamamlandı)
 5. ✅ ~~B-04~~ — Performans + kanal doğruluğu (v1.1.0'da tamamlandı)
-6. **B-07** — Oda haritası editörü geliştirme
-7. **B-06 (tam)** — Kapsamlı UI redesign (diğer özellikler bitince içerik netleşir)
-8. Orta vadeli: Color temperature, Night mode, Black-to-power-off (Hue)
-9. Uzun vadeli: Profil sistemi, Config import/export, Efekt motoru, MQTT
+6. ✅ ~~B-07~~ — Oda haritası editörü geliştirme (tamamlandı, detay: `.planning/b07-room-map-editor/ANALYSIS.md`)
+7. **B-06 (tam)** — Kapsamlı UI redesign — **sıradaki ana iş**
+8. **LED Preview & Test Experience** — Digital twin overlay, kontrol popup, spiral test pattern (detay: `.planning/led-preview-experience/ANALYSIS.md`)
+9. Orta/uzun vadeli özellikler (B-06 redesign ile birlikte veya sonrasında değerlendirilecek)
 
 ---
 
-### B-01: Mevcut Eksiklerin Tespiti
-Projede TODO, FIXME, eksik olarak işaretlenmiş tüm alanları tara ve mevcut roadmap ile karşılaştır.
+### B-01: Mevcut Eksiklerin Tespiti ✅
+Tarandı (2026-04-10): Kodda TODO/FIXME/HACK yok. Tüm bilinen eksikler roadmap'te listelendi.
 
-### B-02: Auto-Updater Doğrulaması
-Versiyon tespit, latest.json, minisign signature akışının end-to-end doğru çalıştığını doğrula.
+### B-02: Auto-Updater Doğrulaması ✅
+Canlıda end-to-end test edildi (2026-04-10): versiyon tespit, latest.json, minisign signature akışı çalışıyor.
+**Açık iş:** Update modal UI geliştirmesi yapılacak (B-06 redesign kapsamında değerlendirilecek).
 
 ### B-03: Ambilight Renk Geçiş Ayarları ✅
 Tamamlandı (v1.1.0). EWMA alpha slider (0.05–1.0), AmbilightLiveSettings atomik güncelleme, isQuickAmbilightAdjustment fast path.
@@ -133,25 +137,47 @@ Analiz tamamlandı (2026-04-09). Incelenenler: Hyperion.NG, Firefly Luciferin, L
 | Çoklu LED protokolü (WLED, Art-Net) | Hyperion | Geniş ekosistem |
 | Home Assistant / MQTT | Firefly, Lightpack | Akıllı ev entegrasyonu |
 
-#### UX Pattern'ları (B-06 redesign için)
-- **Status-first dashboard** — açılışta "ne açık, hangi renk, bağlı mı?" (Hue, Govee)
-- **Aktif rengi UI'a yansıtma** (ambient coloring) — Nanoleaf, Hue
-- **Büyük renk-thumbnail preset kartları** — Hue Scene Gallery
-- **Quick brightness slider sabit üstte** — WLED, Hue
-- **Liveview/peek** — küçük gerçek zamanlı LED önizleme (WLED)
+#### UX Pattern'ları → B-06 bölümüne taşındı
 
-### B-06: UI/UX Kapsamlı Yeniden Tasarım ⭐
+### B-06: UI/UX Kapsamlı Yeniden Tasarım ⭐ — SIRADAKİ ANA İŞ
 **En büyük iş — tartışarak iteratif ilerlemeli.**
+
+> **Yaklaşım:** Tasarıma başlamadan önce B-05 rakip analizleri ve aşağıdaki özellik listesi referans alınarak
+> içerik envanteri çıkarılacak. Neyin tasarlanacağını net görmeden UI'a geçilmeyecek.
+> Rakip analizlerine göre eklenecek özellikler belirlendikten sonra tasarım başlayacak.
+> Detaylı analiz: `.planning/b07-room-map-editor/ANALYSIS.md` (B-05 rakip UX pattern'ları)
+
+**Temel Prensipler:**
 - Mevcut tasarım "ayarlar uygulaması" gibi; ışık yönetimi UX'ine uygun değil
-- **Açılış ekranı:** Hızlı mod seçimi, önceki modlar, bağlı cihaz/kanal bilgileri, zengin ve kaliteli içerik
 - Uygulama bir "ışık kontrol merkezi" gibi hissettirmeli
 - Bilgi mimarisi ve kullanım akışı öncelikli (tema/renk ikincil)
-- B-05 UX pattern'ları referans alınacak (status-first, ambient coloring, preset kartları)
 
-### B-07: Oda Haritası Editörü Geliştirme
-- Layout paneli: yanda tüm objeleri listele
-- Obje işlemleri: ekle, kaldır, çoğalt, adını değiştir, konum kilitle
-- Resim: ekle, kilitle, yeniden adlandır
-- Oda merkezi belirgin + hareket ettirilebilir
-- Taşıma sonrası kolay ortalama (snap-to-center)
-- Profesyonel seviye editör deneyimi
+**İçerik Alanları (tasarımda yer alacak):**
+- **Açılış ekranı / Dashboard:** Status-first — ne açık, hangi renk, bağlı cihazlar, hızlı mod seçimi
+- **Solid mod preset'leri:** Hazır renk kartları (Warm White, Movie Red, Gaming Blue vb.) — tek tıkla seçim
+- **Ambilight ayarları:** Mevcut smoothing/gamma/border detection kontrolleri + olası alt modlar
+- **Quick brightness slider:** Sabit üstte, her zaman erişilebilir
+- **Aktif rengi UI'a yansıtma:** Ambient coloring (Nanoleaf, Hue pattern)
+- **Liveview/peek:** Küçük gerçek zamanlı LED önizleme
+- **Büyük renk-thumbnail preset kartları:** Hue Scene Gallery pattern
+- **Update modal:** Mevcut auto-updater modal UI geliştirmesi
+
+**Orta/Uzun Vadeli Özellikler (B-06 tasarımıyla birlikte veya sonrasında):**
+- Bu özellikler B-06 redesign sürecinde UI'da yer alıp almayacaklarına karar verilecek
+- Bazıları tasarımda placeholder olarak planlanabilir, implementasyon sonra yapılır
+- Detay: aşağıdaki 🟡 Orta Vadeli ve 🟢 Uzun Vadeli tablolar
+
+**B-05 UX Pattern'ları (referans):**
+- Status-first dashboard (Hue, Govee)
+- Ambient coloring (Nanoleaf, Hue)
+- Büyük renk-thumbnail preset kartları (Hue Scene Gallery)
+- Quick brightness slider sabit üstte (WLED, Hue)
+- Liveview/peek (WLED)
+
+### B-07: Oda Haritası Editörü Geliştirme ✅
+Tamamlandı. 11 özellik implemente edildi (detay: `.planning/b07-room-map-editor/ANALYSIS.md`):
+Undo/Redo, Object List Panel, Smart Snap Guides, Origin Marker, Context Menu,
+Property Bar, Keyboard Shortcuts, Zoom+Pan, Mouse Koordinat, Duplicate, Şablon Sistemi.
+
+**Sonraya bırakılan:** Hue Zone sistemi (zone-relative koordinatlar, çoklu zone, kanal sınırlama).
+Detaylı plan memory'de: `project_hue_zone_plan.md`
