@@ -6,6 +6,8 @@ interface UsbStripObjectProps {
   placement: UsbStripPlacement;
   pxPerMeter: number;
   selected: boolean;
+  zoom?: number;
+  panMode?: boolean;
   onSelect: (id: string) => void;
   onChange: (updated: UsbStripPlacement) => void;
 }
@@ -19,6 +21,8 @@ export function UsbStripObject({
   placement,
   pxPerMeter,
   selected,
+  zoom = 1,
+  panMode = false,
   onSelect,
   onChange,
 }: UsbStripObjectProps) {
@@ -103,7 +107,10 @@ export function UsbStripObject({
     e: React.PointerEvent<HTMLDivElement | SVGLineElement>,
     handle: HandleType,
   ) => {
+    if (panMode) return;
     e.stopPropagation();
+    onSelect(placement.stripId);
+    if (placement.locked) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = {
       active: true,
@@ -117,13 +124,13 @@ export function UsbStripObject({
       startEX: localEX,
       startEY: localEY,
     };
-    onSelect(placement.stripId);
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement | SVGLineElement>) => {
     if (!dragRef.current.active || !dragRef.current.handle) return;
-    const dx = (e.clientX - dragRef.current.startClientX) / pxPerMeter;
-    const dy = (e.clientY - dragRef.current.startClientY) / pxPerMeter;
+    const effectivePpm = pxPerMeter * zoom;
+    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
+    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
     const handle = dragRef.current.handle;
 
     if (handle === "line") {
@@ -154,13 +161,20 @@ export function UsbStripObject({
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
     setAxisSnap(null);
-    onChange({
-      ...placement,
-      startX: localSX,
-      startY: localSY,
-      endX: localEX,
-      endY: localEY,
-    });
+    if (
+      localSX !== placement.startX ||
+      localSY !== placement.startY ||
+      localEX !== placement.endX ||
+      localEY !== placement.endY
+    ) {
+      onChange({
+        ...placement,
+        startX: localSX,
+        startY: localSY,
+        endX: localEX,
+        endY: localEY,
+      });
+    }
   };
 
   const handleLedCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,7 +202,7 @@ export function UsbStripObject({
       {/* SVG line + arrow + invisible wide hit area for line drag */}
       <svg
         className="absolute inset-0 w-full h-full"
-        style={{ zIndex: 1, pointerEvents: "none" }}
+        style={{ zIndex: 1, pointerEvents: "none", overflow: "visible" }}
       >
         {/* Invisible wide stroke for easier line grab (pointer-events: stroke) */}
         <line
@@ -213,7 +227,7 @@ export function UsbStripObject({
           y1={sy}
           x2={ex}
           y2={ey}
-          stroke={selected ? "#ffffff" : "#06b6d4"}
+          stroke={selected ? (placement.locked ? "rgba(255,255,255,0.4)" : "#ffffff") : "#06b6d4"}
           strokeWidth={selected ? 2.5 : 2}
           strokeDasharray="4 4"
           style={{ pointerEvents: "none" }}

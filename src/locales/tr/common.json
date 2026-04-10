@@ -477,8 +477,11 @@
       "addFurniture": "Mobilya Ekle",
       "addUsb": "LED Şerit Ekle",
       "addHue": "Hue Kanal Ekle",
+      "addImage": "Resim Ekle",
       "settingsAriaLabel": "Harita Ayarları",
-      "tvAlreadyPlaced": "TV zaten eklendi"
+      "tvAlreadyPlaced": "TV zaten eklendi",
+      "undo": "Geri Al",
+      "redo": "Yinele"
     },
     "empty": {
       "heading": "Henüz nesne eklenmedi",
@@ -490,6 +493,14 @@
         "table": "Masa",
         "chair": "Sandalye",
         "other": "Diğer"
+      },
+      "templateLabel": {
+        "sofa": "Kanepe",
+        "desk": "Masa",
+        "side": "Yan",
+        "chair": "Sandalye",
+        "coffeeTable": "Sehpa",
+        "armchair": "Tekli Koltuk"
       }
     },
     "settings": {
@@ -526,6 +537,71 @@
       "calibrationApplyNote": "Zone sayıları uygulandı. Kalıcı yapmak için Kalibrasyonda Kaydedin.",
       "lightCount": "{{N}} ışık",
       "lightCountOne": "1 ışık"
+    },
+    "objectPanel": {
+      "objectsTab": "Nesneler",
+      "zonesTab": "Zone'lar",
+      "empty": "Henüz nesne eklenmedi.",
+      "tvLabel": "TV",
+      "ledLabel": "LED {{count}}",
+      "hueLabel": "Hue {{index}}",
+      "lock": "Kilitle",
+      "unlock": "Kilidi Aç",
+      "delete": "Sil"
+    },
+    "propertyBar": {
+      "aspectLocked": "En boy oranı kilitli",
+      "aspectUnlocked": "En boy oranı serbest",
+      "resetScale": "En boy oranını sıfırla"
+    },
+    "edges": {
+      "top": "Üst",
+      "right": "Sağ",
+      "bottom": "Alt",
+      "left": "Sol"
+    },
+    "contextMenu": {
+      "duplicate": "Çoğalt",
+      "delete": "Sil",
+      "rotate": "15° Döndür",
+      "rename": "Yeniden Adlandır",
+      "renamePrompt": "Yeni ad girin:"
+    },
+    "shortcuts": {
+      "title": "Klavye Kısayolları",
+      "undo": "Geri al",
+      "redo": "Yinele",
+      "duplicate": "Çoğalt",
+      "fitToView": "Görünüme sığdır",
+      "delete": "Sil",
+      "rotate": "15° Döndür",
+      "togglePanel": "Panel aç/kapat",
+      "deselect": "Seçimi kaldır",
+      "nudgeLarge": "1m kaydır",
+      "nudge": "0.1m kaydır",
+      "pan": "Haritayı kaydır",
+      "zoom": "Yakınlaştır",
+      "scrollWheel": "Kaydırma"
+    },
+    "templates": {
+      "title": "Şablon Seçin",
+      "subtitle": "Hazır bir düzenle başlayın veya boş tuvalden başlayın.",
+      "tv55": {
+        "name": "TV Kurulumu (55\")",
+        "desc": "Oturma odasında TV, LED şerit ve koltuk"
+      },
+      "ldesk": {
+        "name": "L-Masa Kurulumu",
+        "desc": "L şeklinde masada monitör ve yan uzantı"
+      },
+      "fullroom": {
+        "name": "Tam Oda",
+        "desc": "TV, koltuk, sehpa ve tekli koltuk"
+      },
+      "empty": {
+        "name": "Boş Tuval",
+        "desc": "Sıfırdan başla"
+      }
     }
   },
   "calibration": {

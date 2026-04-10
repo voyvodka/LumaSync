@@ -4,7 +4,10 @@ import type { HueChannelPlacement } from "../../../../shared/contracts/roomMap";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
-  canvasSize: { w: number; h: number };
+  pxPerMeter: number;
+  roomWidthM: number;
+  roomDepthM: number;
+  zoom?: number;
   selectedId: string | null;
   onSelect: (channelIndex: number) => void;
   onChange: (updated: HueChannelPlacement) => void;
@@ -18,15 +21,17 @@ interface HueChannelOverlayProps {
   activeZoneChannels?: Set<number>;
   /** Called with channel index when toggling zone membership */
   onChannelZoneToggle?: (channelIndex: number) => void;
+  /** When true, space is held — don't start drag */
+  panMode?: boolean;
 }
 
 /**
- * Convert Hue coordinate [-1, 1] to CSS percentage [0%, 100%].
- *
- * Hue x: -1=left  -> 0%,  +1=right -> 100%
+ * Convert Hue coordinate [-1, 1] to room metres [0, roomSize].
+ * Hue x: -1=left edge, +1=right edge
+ * Hue y: +1=front wall (bottom of canvas), -1=back wall (top of canvas)
  */
-function posToPercent(val: number): number {
-  return ((val + 1) / 2) * 100;
+function hueToMetres(hueVal: number, roomSizeM: number): number {
+  return ((hueVal + 1) / 2) * roomSizeM;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -40,10 +45,8 @@ interface DragState {
   startClientY: number;
   startX: number;
   startY: number;
-  /** Live drag position — updated on each pointer move so pointerUp can read final value */
   currentX: number;
   currentY: number;
-  /** The element whose render needs updating */
   element: HTMLDivElement | null;
 }
 
@@ -62,13 +65,15 @@ const EMPTY_DRAG: DragState = {
 /**
  * Renders Hue channel dots on the room map canvas.
  *
- * Uses imperative DOM manipulation during drag to avoid React re-render overhead
- * and stale closure issues with pointer capture. Position is committed to React
- * state only on pointer up via onChange callback.
+ * Positions are computed in pixels (pxPerMeter * room metres) so they stay
+ * aligned with all other room objects regardless of panel open/close resizing.
  */
 export function HueChannelOverlay({
   channels,
-  canvasSize,
+  pxPerMeter,
+  roomWidthM,
+  roomDepthM,
+  zoom = 1,
   selectedId,
   onSelect,
   onChange,
@@ -77,28 +82,36 @@ export function HueChannelOverlay({
   assignedChannels,
   activeZoneChannels,
   onChannelZoneToggle,
+  panMode = false,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation("common");
 
   const dragRef = useRef<DragState>({ ...EMPTY_DRAG });
 
-  /** Lookup channel by index from current channels prop via ref to avoid stale closure */
   const channelsRef = useRef(channels);
   channelsRef.current = channels;
 
-  const canvasSizeRef = useRef(canvasSize);
-  canvasSizeRef.current = canvasSize;
+  const ppmRef = useRef(pxPerMeter);
+  ppmRef.current = pxPerMeter;
+  const widthRef = useRef(roomWidthM);
+  widthRef.current = roomWidthM;
+  const depthRef = useRef(roomDepthM);
+  depthRef.current = roomDepthM;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  /** Ref for zone toggle callback to avoid stale closure (Pitfall 5) */
   const onChannelZoneToggleRef = useRef(onChannelZoneToggle);
   onChannelZoneToggleRef.current = onChannelZoneToggle;
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
+      if (panMode) return;
       e.stopPropagation();
+      onSelect(ch.channelIndex);
+      if (ch.locked) return;
       const el = e.currentTarget;
       el.setPointerCapture(e.pointerId);
 
@@ -113,24 +126,22 @@ export function HueChannelOverlay({
         currentY: ch.y,
         element: el,
       };
-
-      onSelect(ch.channelIndex);
     },
     [onSelect],
   );
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const dr = dragRef.current;
-    const cs = canvasSizeRef.current;
-    if (!dr.active || cs.w === 0 || cs.h === 0) return;
+    if (!dr.active) return;
 
+    const effectivePpm = ppmRef.current * zoomRef.current;
     const dxPx = e.clientX - dr.startClientX;
     const dyPx = e.clientY - dr.startClientY;
 
     // Convert pixel delta to Hue coordinate delta
-    const dxHue = (dxPx / cs.w) * 2;
+    const dxHue = (dxPx / effectivePpm) / widthRef.current * 2;
     // Y inverted: CSS down = Hue y decrease
-    const dyHue = -(dyPx / cs.h) * 2;
+    const dyHue = -(dyPx / effectivePpm) / depthRef.current * 2;
 
     const newX = clamp(dr.startX + dxHue, -1, 1);
     const newY = clamp(dr.startY + dyHue, -1, 1);
@@ -141,8 +152,10 @@ export function HueChannelOverlay({
     // Imperative DOM update for smooth drag — avoids re-render
     const wrapper = dr.element?.parentElement;
     if (wrapper) {
-      wrapper.style.left = `${posToPercent(newX)}%`;
-      wrapper.style.top = `${posToPercent(-newY)}%`;
+      const leftPx = hueToMetres(newX, widthRef.current) * ppmRef.current;
+      const topPx = hueToMetres(-newY, depthRef.current) * ppmRef.current;
+      wrapper.style.left = `${leftPx}px`;
+      wrapper.style.top = `${topPx}px`;
     }
   }, []);
 
@@ -153,7 +166,7 @@ export function HueChannelOverlay({
     e.currentTarget.releasePointerCapture(e.pointerId);
 
     const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
-    if (ch) {
+    if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
       onChangeRef.current({ ...ch, x: dr.currentX, y: dr.currentY });
     }
 
@@ -163,18 +176,16 @@ export function HueChannelOverlay({
   return (
     <>
       {channels.map((ch) => {
-        const leftPct = posToPercent(ch.x);
+        const leftPx = hueToMetres(ch.x, roomWidthM) * pxPerMeter;
         // Invert Y: Hue +y = front wall (bottom of canvas)
-        const topPct = posToPercent(-ch.y);
+        const topPx = hueToMetres(-ch.y, roomDepthM) * pxPerMeter;
 
         const isSelected = selectedId === `hue-${ch.channelIndex}`;
         const isInActiveZone = activeZoneChannels?.has(ch.channelIndex) ?? false;
         const isAssignedToAnyZone = assignedChannels?.has(ch.channelIndex) ?? false;
 
-        // Zone assign mode: unassigned channels render at reduced opacity
         const isUnassignedInZoneMode = zoneAssignMode && !isAssignedToAnyZone;
 
-        // Ring style for active zone membership
         const ringStyle: React.CSSProperties =
           zoneAssignMode && isInActiveZone && activeZoneColor
             ? { boxShadow: `0 0 0 2px ${activeZoneColor}` }
@@ -189,8 +200,8 @@ export function HueChannelOverlay({
             key={ch.channelIndex}
             className="absolute"
             style={{
-              left: `${leftPct}%`,
-              top: `${topPct}%`,
+              left: leftPx,
+              top: topPx,
               transform: "translate(-50%, -50%)",
               zIndex: 20,
               touchAction: "none",

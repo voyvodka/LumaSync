@@ -41,6 +41,7 @@ export interface HueChannelPlacement {
   z: number;
   /** Optional user-assigned label */
   label?: string;
+  locked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,7 @@ export interface UsbStripPlacement {
   endY: number;
   /** Number of LEDs on this strip segment */
   ledCount: number;
+  locked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,7 @@ export interface FurniturePlacement {
   /** Rotation in degrees (0-360) */
   rotation?: number;
   label?: string;
+  locked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +90,7 @@ export interface TvAnchorPlacement {
   width: number;
   /** TV height in room units */
   height: number;
+  locked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -116,6 +120,34 @@ export interface ZoneDefinition {
 }
 
 // ---------------------------------------------------------------------------
+// Image Layer
+// ---------------------------------------------------------------------------
+
+export interface ImageLayer {
+  id: string;
+  /** Absolute path to the image file */
+  path: string;
+  /** Display label (filename without extension) */
+  label: string;
+  /** Offset X in object-layer pixels */
+  offsetX: number;
+  /** Offset Y in object-layer pixels */
+  offsetY: number;
+  /** Scale factor (1 = original size) */
+  scale: number;
+  /** Separate X scale factor — used when aspect ratio is unlocked */
+  scaleX?: number;
+  /** Separate Y scale factor — used when aspect ratio is unlocked */
+  scaleY?: number;
+  /** Opacity 0-100 (default 100) */
+  opacity?: number;
+  /** Whether this layer is locked (cannot be moved/deleted) */
+  locked?: boolean;
+  /** Aspect ratio lock (default true) */
+  aspectLocked?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // Room Map Config
 // ---------------------------------------------------------------------------
 
@@ -130,13 +162,20 @@ export interface RoomMapConfig {
   furniture: FurniturePlacement[];
   tvAnchor?: TvAnchorPlacement;
   zones: ZoneDefinition[];
-  /** Path to a user-provided background floor plan image */
+  /** Image layers (floor plans, reference images, etc.) */
+  imageLayers: ImageLayer[];
+  /** @deprecated Use imageLayers instead — kept for migration */
   backgroundImagePath?: string;
-  /** Background image offset in metres from canvas top-left */
+  /** @deprecated */
   backgroundOffsetX?: number;
+  /** @deprecated */
   backgroundOffsetY?: number;
-  /** Background image scale factor (1 = fit to canvas, >1 = zoomed in) */
+  /** @deprecated */
   backgroundScale?: number;
+  /** Custom room origin X position in metres (defaults to room center) */
+  originX?: number;
+  /** Custom room origin Y position in metres (defaults to room center) */
+  originY?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,4 +194,5 @@ export const DEFAULT_ROOM_MAP: RoomMapConfig = {
   usbStrips: [],
   furniture: [],
   zones: [],
+  imageLayers: [],
 };

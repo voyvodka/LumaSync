@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { FurniturePlacement } from "../../../../shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
+import type { SnapResult } from "./useSnapGuides";
 
 const FURNITURE_COLORS: Record<
   FurniturePlacement["type"],
@@ -32,8 +33,12 @@ interface FurnitureObjectProps {
   selected: boolean;
   gridStepPx: number;
   snapEnabled: boolean;
+  zoom?: number;
+  panMode?: boolean;
   onSelect: (id: string) => void;
   onChange: (updated: FurniturePlacement) => void;
+  onSnapDragMove?: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
+  onSnapDragEnd?: () => void;
 }
 
 export function FurnitureObject({
@@ -44,6 +49,10 @@ export function FurnitureObject({
   snapEnabled,
   onSelect,
   onChange,
+  onSnapDragMove,
+  onSnapDragEnd,
+  zoom = 1,
+  panMode = false,
 }: FurnitureObjectProps) {
   const [localX, setLocalX] = useState(placement.x);
   const [localY, setLocalY] = useState(placement.y);
@@ -81,6 +90,9 @@ export function FurnitureObject({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (resizeRef.current.active) return;
+    if (panMode) return; // Let event bubble up for canvas pan
+    onSelect(placement.id);
+    if (placement.locked) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = {
       active: true,
@@ -89,15 +101,22 @@ export function FurnitureObject({
       startX: localX,
       startY: localY,
     };
-    onSelect(placement.id);
   };
+
+  const snapResultRef = useRef<SnapResult | null>(null);
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
-    const dx = (e.clientX - dragRef.current.startClientX) / pxPerMeter;
-    const dy = (e.clientY - dragRef.current.startClientY) / pxPerMeter;
-    setLocalX(dragRef.current.startX + dx);
-    setLocalY(dragRef.current.startY + dy);
+    const effectivePpm = pxPerMeter * zoom;
+    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
+    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
+    const newX = dragRef.current.startX + dx;
+    const newY = dragRef.current.startY + dy;
+    setLocalX(newX);
+    setLocalY(newY);
+    if (onSnapDragMove) {
+      snapResultRef.current = onSnapDragMove(`furniture-${placement.id}`, newX, newY, localW, localH);
+    }
   };
 
   const snapValue = (val: number, step: number) => {
@@ -108,15 +127,25 @@ export function FurnitureObject({
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current.active) return;
     dragRef.current.active = false;
-    const dx = (e.clientX - dragRef.current.startClientX) / pxPerMeter;
-    const dy = (e.clientY - dragRef.current.startClientY) / pxPerMeter;
+    const effectivePpm = pxPerMeter * zoom;
+    const dx = (e.clientX - dragRef.current.startClientX) / effectivePpm;
+    const dy = (e.clientY - dragRef.current.startClientY) / effectivePpm;
     let newX = dragRef.current.startX + dx;
     let newY = dragRef.current.startY + dy;
-    if (snapEnabled && gridStepPx > 0) {
+    // Apply snap guide position if available
+    const snap = snapResultRef.current;
+    if (snap) {
+      if (snap.snapX !== null) newX = snap.snapX;
+      if (snap.snapY !== null) newY = snap.snapY;
+      snapResultRef.current = null;
+    } else if (snapEnabled && gridStepPx > 0) {
       newX = snapValue(newX, gridStepPx);
       newY = snapValue(newY, gridStepPx);
     }
-    onChange({ ...placement, x: newX, y: newY });
+    onSnapDragEnd?.();
+    if (newX !== placement.x || newY !== placement.y) {
+      onChange({ ...placement, x: newX, y: newY });
+    }
   };
 
   // Resize handlers
@@ -135,8 +164,8 @@ export function FurnitureObject({
   };
 
   const handleResizeDragMove = (dx: number, dy: number, corner: "nw" | "ne" | "sw" | "se") => {
-    const dxM = dx / pxPerMeter;
-    const dyM = dy / pxPerMeter;
+    const dxM = dx / (pxPerMeter * zoom);
+    const dyM = dy / (pxPerMeter * zoom);
     const ref = resizeRef.current;
 
     let newX = ref.startX;
@@ -186,15 +215,15 @@ export function FurnitureObject({
 
   const colors = FURNITURE_COLORS[placement.type];
   const rotation = placement.rotation ?? 0;
-  const showResizeHandles = selected && rotation === 0;
+  const showResizeHandles = selected && !placement.locked;
 
   return (
     <div
       className={`absolute border-2 ${colors.bg} ${
         selected
-          ? "border-white dark:border-white"
+          ? placement.locked ? "border-white/40 dark:border-white/40" : "border-white dark:border-white"
           : colors.border
-      } cursor-grab active:cursor-grabbing`}
+      } ${placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
       style={{
         left: localX * pxPerMeter,
         top: localY * pxPerMeter,

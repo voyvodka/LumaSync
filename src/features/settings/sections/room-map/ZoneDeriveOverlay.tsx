@@ -115,10 +115,10 @@ export function ZoneDeriveOverlay({
 
   // Edge label names for badges
   const EDGE_LABELS: Record<"top" | "right" | "bottom" | "left", string> = {
-    top: "Top",
-    right: "Right",
-    bottom: "Bottom",
-    left: "Left",
+    top: t("roomMap.edges.top"),
+    right: t("roomMap.edges.right"),
+    bottom: t("roomMap.edges.bottom"),
+    left: t("roomMap.edges.left"),
   };
 
   return (

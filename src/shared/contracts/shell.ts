@@ -150,6 +150,12 @@ export interface ShellState {
    * Allows downstream consumers to detect stale in-memory state.
    */
   roomMapVersion?: number;
+  /** Room map editor grid visibility */
+  roomMapShowGrid?: boolean;
+  /** Room map editor grid stroke width (px) */
+  roomMapGridStrokeWidth?: number;
+  /** Room map editor background image opacity (0-100) */
+  roomMapBackgroundOpacity?: number;
 }
 
 /** Default shell state for first launch */

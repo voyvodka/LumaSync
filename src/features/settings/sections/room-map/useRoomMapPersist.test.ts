@@ -33,6 +33,7 @@ function makePersistedConfig(): RoomMapConfig {
       { id: "f1", type: "sofa", x: 1, y: 2, width: 2, height: 1 },
     ],
     zones: [],
+    imageLayers: [],
     tvAnchor: { x: 3, y: 0.5, width: 1.5, height: 0.9 },
   };
 }

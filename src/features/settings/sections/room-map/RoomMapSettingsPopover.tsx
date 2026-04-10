@@ -1,6 +1,60 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { RoomDimensions } from "../../../../shared/contracts/roomMap";
+
+/** Numeric input that holds local string state and commits a clamped number on blur/Enter */
+function NumericField({
+  value,
+  min,
+  max,
+  step,
+  onChange,
+  className,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  className?: string;
+}) {
+  const [local, setLocal] = useState(String(value));
+
+  // Sync when external value changes (e.g. undo)
+  const prevValue = useRef(value);
+  if (prevValue.current !== value) {
+    prevValue.current = value;
+    setLocal(String(value));
+  }
+
+  const commit = useCallback(() => {
+    const num = parseFloat(local);
+    if (isNaN(num)) {
+      setLocal(String(value));
+      return;
+    }
+    const clamped = Math.max(min, Math.min(max, num));
+    onChange(clamped);
+    setLocal(String(clamped));
+  }, [local, value, min, max, onChange]);
+
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") commit();
+      }}
+      className={className}
+    />
+  );
+}
 
 interface RoomMapSettingsPopoverProps {
   open: boolean;
@@ -8,13 +62,9 @@ interface RoomMapSettingsPopoverProps {
   dimensions: RoomDimensions;
   showGrid: boolean;
   gridStrokeWidth: number;
-  backgroundOpacity: number;
-  backgroundFileName: string | null;
   onDimensionsChange: (d: RoomDimensions) => void;
   onGridToggle: (v: boolean) => void;
   onGridStrokeWidthChange: (v: number) => void;
-  onOpacityChange: (v: number) => void;
-  onUploadBackground: () => void;
   onReset: () => void;
 }
 
@@ -24,13 +74,9 @@ export function RoomMapSettingsPopover({
   dimensions,
   showGrid,
   gridStrokeWidth,
-  backgroundOpacity,
-  backgroundFileName,
   onDimensionsChange,
   onGridToggle,
   onGridStrokeWidthChange,
-  onOpacityChange,
-  onUploadBackground,
   onReset,
 }: RoomMapSettingsPopoverProps) {
   const { t } = useTranslation("common");
@@ -94,18 +140,12 @@ export function RoomMapSettingsPopover({
           <label className={labelClass}>
             {t("roomMap.settings.roomWidth")}
           </label>
-          <input
-            type="number"
+          <NumericField
+            value={dimensions.widthMeters}
             min={1}
             max={30}
             step={0.5}
-            value={dimensions.widthMeters}
-            onChange={(e) =>
-              onDimensionsChange({
-                ...dimensions,
-                widthMeters: parseFloat(e.target.value) || 1,
-              })
-            }
+            onChange={(v) => onDimensionsChange({ ...dimensions, widthMeters: v })}
             className={inputClass}
           />
         </div>
@@ -115,54 +155,14 @@ export function RoomMapSettingsPopover({
           <label className={labelClass}>
             {t("roomMap.settings.roomDepth")}
           </label>
-          <input
-            type="number"
+          <NumericField
+            value={dimensions.depthMeters}
             min={1}
             max={30}
             step={0.5}
-            value={dimensions.depthMeters}
-            onChange={(e) =>
-              onDimensionsChange({
-                ...dimensions,
-                depthMeters: parseFloat(e.target.value) || 1,
-              })
-            }
+            onChange={(v) => onDimensionsChange({ ...dimensions, depthMeters: v })}
             className={inputClass}
           />
-        </div>
-
-        {/* Background section */}
-        <div>
-          <span className={labelClass}>
-            {t("roomMap.settings.uploadBackground")}
-          </span>
-          <button
-            className="w-full rounded-md border border-slate-200/70 dark:border-zinc-700 px-3 py-1.5 text-sm text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
-            onClick={onUploadBackground}
-          >
-            {t("roomMap.settings.uploadBackground")}
-          </button>
-          {backgroundFileName && (
-            <p className="mt-1 text-[10px] text-slate-400 dark:text-zinc-500 truncate">
-              {backgroundFileName}
-            </p>
-          )}
-          {/* Opacity slider */}
-          {backgroundFileName && (
-            <div className="mt-2">
-              <label className={labelClass}>
-                {t("roomMap.settings.opacity")}: {backgroundOpacity}%
-              </label>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={backgroundOpacity}
-                onChange={(e) => onOpacityChange(parseInt(e.target.value, 10))}
-                className="w-full accent-slate-700 dark:accent-zinc-300"
-              />
-            </div>
-          )}
         </div>
 
         {/* Grid toggle */}

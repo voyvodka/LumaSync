@@ -477,8 +477,11 @@
       "addFurniture": "Add Furniture",
       "addUsb": "Add LED Strip",
       "addHue": "Add Hue Channel",
+      "addImage": "Add Image",
       "settingsAriaLabel": "Map Settings",
-      "tvAlreadyPlaced": "TV already placed"
+      "tvAlreadyPlaced": "TV already placed",
+      "undo": "Undo",
+      "redo": "Redo"
     },
     "empty": {
       "heading": "No objects placed yet",
@@ -490,6 +493,14 @@
         "table": "Table",
         "chair": "Chair",
         "other": "Other"
+      },
+      "templateLabel": {
+        "sofa": "Sofa",
+        "desk": "Desk",
+        "side": "Side",
+        "chair": "Chair",
+        "coffeeTable": "Coffee Table",
+        "armchair": "Armchair"
       }
     },
     "settings": {
@@ -526,6 +537,71 @@
       "calibrationApplyNote": "Zone counts applied. Save in Calibration to persist.",
       "lightCount": "{{N}} lights",
       "lightCountOne": "1 light"
+    },
+    "objectPanel": {
+      "objectsTab": "Objects",
+      "zonesTab": "Zones",
+      "empty": "No objects placed yet.",
+      "tvLabel": "TV",
+      "ledLabel": "LED {{count}}",
+      "hueLabel": "Hue {{index}}",
+      "lock": "Lock",
+      "unlock": "Unlock",
+      "delete": "Delete"
+    },
+    "propertyBar": {
+      "aspectLocked": "Aspect ratio locked",
+      "aspectUnlocked": "Aspect ratio unlocked",
+      "resetScale": "Reset aspect ratio"
+    },
+    "edges": {
+      "top": "Top",
+      "right": "Right",
+      "bottom": "Bottom",
+      "left": "Left"
+    },
+    "contextMenu": {
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "rotate": "Rotate 15°",
+      "rename": "Rename",
+      "renamePrompt": "Enter new name:"
+    },
+    "shortcuts": {
+      "title": "Keyboard Shortcuts",
+      "undo": "Undo",
+      "redo": "Redo",
+      "duplicate": "Duplicate",
+      "fitToView": "Fit to view",
+      "delete": "Delete",
+      "rotate": "Rotate 15°",
+      "togglePanel": "Toggle panel",
+      "deselect": "Deselect",
+      "nudgeLarge": "Nudge 1m",
+      "nudge": "Nudge 0.1m",
+      "pan": "Pan canvas",
+      "zoom": "Zoom",
+      "scrollWheel": "Scroll"
+    },
+    "templates": {
+      "title": "Choose a Template",
+      "subtitle": "Pick a starting layout or start with a blank canvas.",
+      "tv55": {
+        "name": "TV Setup (55\")",
+        "desc": "TV, LED strip, and sofa in a living room"
+      },
+      "ldesk": {
+        "name": "L-Desk Setup",
+        "desc": "Monitor on an L-shaped desk with side extension"
+      },
+      "fullroom": {
+        "name": "Full Room",
+        "desc": "TV, sofa, coffee table, and armchair"
+      },
+      "empty": {
+        "name": "Blank Canvas",
+        "desc": "Start from scratch"
+      }
     }
   },
   "calibration": {
