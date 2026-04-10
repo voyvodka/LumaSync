@@ -5,7 +5,8 @@
 - ✅ **v1.0 MVP** — Phases 1-8 (shipped 2026-03-21)
 - ✅ **v1.1 Hue Entertainment Integration** — Phases 9-13 (shipped 2026-03-29)
 - ✅ **v1.2 Oda Görselleştirme ve Evrensel Işık Yönetimi** — Phases 14-20 (shipped 2026-04-09, v1.0.4)
-- 📋 **v1.3 Backlog** — Aşağıda listelenen çalışma alanları (planlanacak)
+- 🚧 **v1.3 Kalite & Performans** — v1.1.0-v1.1.1 (shipped 2026-04-09)
+- 📋 **v1.4 Backlog** — Aşağıda listelenen çalışma alanları (planlanacak)
 
 ---
 
@@ -50,21 +51,38 @@
 
 </details>
 
+<details>
+<summary>v1.3 — Kalite & Performans (v1.1.0 — v1.1.1)</summary>
+
+- Tray quick actions: Lights Off / Resume Last / Solid Color (B-06 mini)
+- WS2812B gamma 2.2 LUT correction
+- User-configurable smoothing/transition speed (B-03)
+- Black border detection — letterbox/pillarbox crop (B-05)
+- Per-channel EWMA smoothing + continuous position sampling for Hue (B-04)
+- Capture performance: SCStream GPU downscale (~640px), Arc zero-copy frame sharing, crop elimination
+- Sidebar FPS debug widget (dev builds)
+- Quick adjustment fast path (no worker restart on setting tweaks)
+- Hue telemetry fix (queue health accuracy in Hue-only mode)
+- Windows: calibration overlay DPI, click-through, close interception fixes
+
+</details>
+
 ---
 
-## 📋 v1.3 Backlog — Çalışma Alanları
+## 📋 v1.4 Backlog — Çalışma Alanları
 
-> Sıralama netleşti (2026-04-09). Adım adım ilerlenecek.
+> Güncelleme: 2026-04-10. v1.3 tamamlandı, sırada B-07 ve B-06 tam.
 
 ### Uygulama Sırası
-1. ✅ **B-06 (mini)** — Tray quick actions: Işıkları Kapat / Son Modda Aç / Sabit Renk
-2. ✅ **Gamma düzeltmesi** — Kritik kalite fix, küçük iş (B-05 analizinden)
-3. ❓ **B-03** — Smoothing / renk geçiş ayarları (değerlendirme bekliyor)
-4. ✅ **Black border detection** — Letterbox/pillarbox algılama (B-05 analizinden)
-5. **B-07** — Oda haritası editörü geliştirme
-6. **B-06 (tam)** — Kapsamlı UI redesign (diğer özellikler bitince içerik netleşir)
-7. Orta vadeli: Color temperature, Night mode, Black-to-power-off (Hue)
-8. Uzun vadeli: Profil sistemi, Config import/export, Efekt motoru, MQTT
+1. ✅ ~~B-06 (mini)~~ — Tray quick actions (v1.1.0'da tamamlandı)
+2. ✅ ~~Gamma düzeltmesi~~ — WS2812B gamma 2.2 LUT (v1.1.0'da tamamlandı)
+3. ✅ ~~B-03~~ — Smoothing / renk geçiş ayarları (v1.1.0'da tamamlandı)
+4. ✅ ~~Black border detection~~ — Letterbox/pillarbox algılama (v1.1.0'da tamamlandı)
+5. ✅ ~~B-04~~ — Performans + kanal doğruluğu (v1.1.0'da tamamlandı)
+6. **B-07** — Oda haritası editörü geliştirme
+7. **B-06 (tam)** — Kapsamlı UI redesign (diğer özellikler bitince içerik netleşir)
+8. Orta vadeli: Color temperature, Night mode, Black-to-power-off (Hue)
+9. Uzun vadeli: Profil sistemi, Config import/export, Efekt motoru, MQTT
 
 ---
 
@@ -74,13 +92,11 @@ Projede TODO, FIXME, eksik olarak işaretlenmiş tüm alanları tara ve mevcut r
 ### B-02: Auto-Updater Doğrulaması
 Versiyon tespit, latest.json, minisign signature akışının end-to-end doğru çalıştığını doğrula.
 
-### B-03: Ambilight Renk Geçiş Ayarları
-Hue kanalları için renk geçiş agresifliği (smoothing/transition speed) parametresi. Kullanıcının geçiş yumuşaklığını ayarlayabilmesi.
+### B-03: Ambilight Renk Geçiş Ayarları ✅
+Tamamlandı (v1.1.0). EWMA alpha slider (0.05–1.0), AmbilightLiveSettings atomik güncelleme, isQuickAmbilightAdjustment fast path.
 
-### B-04: Ambilight Performans ve Kanal Doğruluğu
-- Her kanal, ekranın doğru bölgesinden mi renk alıyor?
-- Kanal bazlı ayrı ayrı renk gönderme kalitesi
-- FPS, latency, capture overhead profiling
+### B-04: Ambilight Performans ve Kanal Doğruluğu ✅
+Tamamlandı (v1.1.0–v1.1.1). Per-channel EWMA, continuous position sampling, SCStream GPU downscale (~640px), Arc zero-copy, crop eliminasyonu, telemetri fix.
 
 ### B-05: Referans Proje ve Rakip Analizi ✅
 Analiz tamamlandı (2026-04-09). Incelenenler: Hyperion.NG, Firefly Luciferin, Lightpack/Prismatik, WLED, Govee, Nanoleaf, Hue app.
@@ -92,12 +108,12 @@ Analiz tamamlandı (2026-04-09). Incelenenler: Hyperion.NG, Firefly Luciferin, L
 - Zone auto-derivation — rakiplerde yok
 - Kolay onboarding (az adım) — Hyperion/Lightpack karmaşık
 
-#### 🔴 Kritik Feature Gap'ler (v1.3 öncelikli)
-| Özellik | Referans | Not |
+#### 🔴 Kritik Feature Gap'ler — ✅ Tümü kapatıldı (v1.1.0)
+| Özellik | Referans | Durum |
 |---|---|---|
-| Gamma düzeltmesi | Hyperion, Firefly, Lightpack | WS2812B'de olmadan renkler "yırtık"; LUT eklemek yeterli |
-| Smoothing / renk geçiş ayarları | Tüm rakipler | B-03 zaten backlog'da |
-| Black border detection | Hyperion, Firefly | Letterbox filmde üst/alt LED'ler gereksiz yanar |
+| Gamma düzeltmesi | Hyperion, Firefly, Lightpack | ✅ WS2812B gamma 2.2 LUT |
+| Smoothing / renk geçiş ayarları | Tüm rakipler | ✅ B-03 tamamlandı |
+| Black border detection | Hyperion, Firefly | ✅ Letterbox/pillarbox algılama |
 
 #### 🟡 Orta Vadeli Feature'lar (vakti var)
 | Özellik | Referans | Not |

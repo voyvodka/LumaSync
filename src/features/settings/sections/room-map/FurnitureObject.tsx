@@ -164,39 +164,52 @@ export function FurnitureObject({
   };
 
   const handleResizeDragMove = (dx: number, dy: number, corner: "nw" | "ne" | "sw" | "se") => {
-    const dxM = dx / (pxPerMeter * zoom);
-    const dyM = dy / (pxPerMeter * zoom);
+    const θ = (placement.rotation ?? 0) * (Math.PI / 180);
+    const cosT = Math.cos(θ);
+    const sinT = Math.sin(θ);
     const ref = resizeRef.current;
 
-    let newX = ref.startX;
-    let newY = ref.startY;
+    // Rotate screen delta into object's local coordinate system
+    const localDx = (dx * cosT + dy * sinT) / (pxPerMeter * zoom);
+    const localDy = (-dx * sinT + dy * cosT) / (pxPerMeter * zoom);
+
+    // Compute new width/height based on which corner is being dragged
     let newW = ref.startW;
     let newH = ref.startH;
-
     if (corner === "se") {
-      newW = Math.max(minSizeM, ref.startW + dxM);
-      newH = Math.max(minSizeM, ref.startH + dyM);
+      newW = Math.max(minSizeM, ref.startW + localDx);
+      newH = Math.max(minSizeM, ref.startH + localDy);
     } else if (corner === "sw") {
-      const rawW = ref.startW - dxM;
-      newW = Math.max(minSizeM, rawW);
-      newX = rawW < minSizeM ? ref.startX + ref.startW - minSizeM : ref.startX + dxM;
-      newH = Math.max(minSizeM, ref.startH + dyM);
+      newW = Math.max(minSizeM, ref.startW - localDx);
+      newH = Math.max(minSizeM, ref.startH + localDy);
     } else if (corner === "ne") {
-      newW = Math.max(minSizeM, ref.startW + dxM);
-      const rawH = ref.startH - dyM;
-      newH = Math.max(minSizeM, rawH);
-      newY = rawH < minSizeM ? ref.startY + ref.startH - minSizeM : ref.startY + dyM;
+      newW = Math.max(minSizeM, ref.startW + localDx);
+      newH = Math.max(minSizeM, ref.startH - localDy);
     } else if (corner === "nw") {
-      const rawW = ref.startW - dxM;
-      newW = Math.max(minSizeM, rawW);
-      newX = rawW < minSizeM ? ref.startX + ref.startW - minSizeM : ref.startX + dxM;
-      const rawH = ref.startH - dyM;
-      newH = Math.max(minSizeM, rawH);
-      newY = rawH < minSizeM ? ref.startY + ref.startH - minSizeM : ref.startY + dyM;
+      newW = Math.max(minSizeM, ref.startW - localDx);
+      newH = Math.max(minSizeM, ref.startH - localDy);
     }
 
-    setLocalX(newX);
-    setLocalY(newY);
+    // Keep the opposite (anchor) corner fixed in world space.
+    // CSS model: element at (x,y), then rotated around its center.
+    // World pos of a corner = center + rotate(localOffset, θ)
+    const anchor = { se: "nw", ne: "sw", sw: "ne", nw: "se" }[corner] as typeof corner;
+    const aOldLx = (anchor === "ne" || anchor === "se") ? ref.startW / 2 : -ref.startW / 2;
+    const aOldLy = (anchor === "sw" || anchor === "se") ? ref.startH / 2 : -ref.startH / 2;
+    const origCx = ref.startX + ref.startW / 2;
+    const origCy = ref.startY + ref.startH / 2;
+    const anchorWx = origCx + aOldLx * cosT - aOldLy * sinT;
+    const anchorWy = origCy + aOldLx * sinT + aOldLy * cosT;
+
+    // Anchor's local offset in the new dimensions
+    const aNewLx = (anchor === "ne" || anchor === "se") ? newW / 2 : -newW / 2;
+    const aNewLy = (anchor === "sw" || anchor === "se") ? newH / 2 : -newH / 2;
+    // New center = anchorWorld - rotate(newAnchorLocal, θ)
+    const newCx = anchorWx - (aNewLx * cosT - aNewLy * sinT);
+    const newCy = anchorWy - (aNewLx * sinT + aNewLy * cosT);
+
+    setLocalX(newCx - newW / 2);
+    setLocalY(newCy - newH / 2);
     setLocalW(newW);
     setLocalH(newH);
   };
