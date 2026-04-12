@@ -2,6 +2,8 @@
   "settings": {
     "title": "Settings",
     "navigationAria": "Main navigation",
+    "switchToCompact": "Compact view",
+    "switchToFull": "Full settings",
     "sections": {
       "lights": "Lights",
       "led-setup": "LED Setup",
@@ -64,6 +66,21 @@
         "smoothingDescription": "Lower values produce smoother gradients; higher values react faster to screen changes.",
         "smoothingSlowLabel": "Smooth",
         "smoothingFastLabel": "Instant"
+      }
+    },
+    "compact": {
+      "presets": "Presets",
+      "targets": {
+        "usb": "USB",
+        "hue": "Hue"
+      },
+      "presetNames": {
+        "warmWhite": "Warm",
+        "coolWhite": "Cool",
+        "red": "Red",
+        "green": "Green",
+        "blue": "Blue",
+        "purple": "Purple"
       }
     }
   },

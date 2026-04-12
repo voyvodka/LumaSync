@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { SECTION_IDS, SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
+import { SECTION_IDS, SECTION_ORDER, type SectionId, type UIMode } from "../../shared/contracts/shell";
 import { GeneralSection } from "./sections/GeneralSection";
 import { CalibrationPage } from "../calibration/ui/CalibrationPage";
 import { DeviceSection } from "./sections/DeviceSection";
@@ -10,10 +10,11 @@ import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueRuntimeTarget } from "../../shared/contracts/hue";
 import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
-import { APP_NAME, APP_VERSION } from "../../shared/constants/app";
+import { APP_VERSION } from "../../shared/constants/app";
 import { RoomMapEditor } from "./sections/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
 import { SidebarFpsWidget } from "../telemetry/ui/SidebarFpsWidget";
+import { CompactLayout } from "./sections/compact/CompactLayout";
 
 // Nav icons
 function IconLights() {
@@ -71,6 +72,7 @@ const NAV_ICONS: Record<SectionId, React.ReactNode> = {
 };
 
 interface SettingsLayoutProps {
+  uiMode: UIMode;
   activeSection: SectionId;
   onSectionChange: (sectionId: SectionId) => Promise<void>;
   calibration?: LedCalibrationConfig;
@@ -92,6 +94,7 @@ interface SettingsLayoutProps {
 }
 
 export function SettingsLayout({
+  uiMode,
   activeSection,
   onSectionChange,
   calibration,
@@ -114,19 +117,30 @@ export function SettingsLayout({
   const { t } = useTranslation("common");
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
 
+  // ── Compact mode ──────────────────────────────────────────────────────
+  if (uiMode === "compact") {
+    return (
+      <CompactLayout
+        lightingMode={lightingMode}
+        outputTargets={outputTargets}
+        usbConnected={usbConnected}
+        hueConfigured={hueConfigured}
+        hueReachable={hueReachable}
+        hueStreaming={hueStreaming}
+        isModeTransitioning={isModeTransitioning}
+        onLightingModeChange={onLightingModeChange}
+      />
+    );
+  }
+
+  // ── Full mode ─────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-100/60 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <div className="relative flex h-full w-full overflow-hidden bg-slate-100/60 text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
       {/* Sidebar */}
       <nav
         className="flex w-48 min-w-[160px] flex-col border-r border-slate-200/70 bg-white/80 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/80"
         aria-label={t("settings.navigationAria")}
       >
-        {/* App name */}
-        <div className="border-b border-slate-200/70 px-4 py-4 dark:border-zinc-800">
-          <span className="text-[11px] font-bold tracking-[0.18em] text-slate-500 uppercase dark:text-zinc-400">
-            {APP_NAME}
-          </span>
-        </div>
 
         {/* Nav items */}
         <ul className="flex flex-1 flex-col gap-0.5 p-2" role="list">
@@ -136,7 +150,7 @@ export function SettingsLayout({
             return (
               <li key={sectionId}>
                 <button
-                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 ${
+                  className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300/70 focus-visible:ring-offset-2 dark:focus-visible:ring-zinc-500/70 dark:focus-visible:ring-offset-zinc-900 ${
                     isActive
                       ? "bg-slate-900 text-white shadow-sm dark:bg-zinc-100 dark:text-zinc-900"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
@@ -161,7 +175,7 @@ export function SettingsLayout({
         {/* Debug: FPS widget — dev builds only */}
         {import.meta.env.DEV && <SidebarFpsWidget />}
 
-        {/* Version */}
+        {/* Version footer */}
         <div className="border-t border-slate-200/70 px-4 py-3 dark:border-zinc-800">
           <span className="text-[10px] tabular-nums text-slate-400 dark:text-zinc-600">
             v{APP_VERSION}

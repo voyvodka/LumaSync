@@ -4,6 +4,12 @@
 
 :root {
   font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+
+  /* Lighting accent — driven by useAccentTheme. Fallbacks below match
+     AMBILIGHT_ACCENT so the UI has a sensible default before the hook mounts. */
+  --accent-color: rgb(20, 184, 166);
+  --accent-color-soft: rgba(20, 184, 166, 0.12);
+  --accent-gradient: linear-gradient(180deg, var(--accent-color-soft), transparent 70%);
 }
 
 * {
@@ -24,16 +30,76 @@ body {
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(circle at 12% 20%, rgba(14, 116, 144, 0.14), transparent 45%),
-    radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.2), transparent 52%),
+    radial-gradient(circle at 12% 20%, rgba(148, 163, 184, 0.14), transparent 45%),
+    radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.18), transparent 52%),
     linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
 }
 
 @media (prefers-color-scheme: dark) {
   body {
     background:
-      radial-gradient(circle at 12% 20%, rgba(6, 182, 212, 0.2), transparent 45%),
-      radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.25), transparent 52%),
-      linear-gradient(180deg, #111827 0%, #09090b 100%);
+      radial-gradient(circle at 12% 20%, rgba(63, 63, 70, 0.45), transparent 45%),
+      radial-gradient(circle at 88% 18%, rgba(39, 39, 42, 0.55), transparent 52%),
+      linear-gradient(180deg, #18181b 0%, #09090b 100%);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Scrollbars
+   ─────────────────────────────────────────────────────────────────────
+   macOS Chromium uses native overlay scrollbars that only appear while
+   scrolling, which look great and need no override. Windows and Linux
+   Chromium render thick, opaque default scrollbars that clash with the
+   translucent LumaSync surfaces. We normalize with `::-webkit-scrollbar`
+   so every platform gets a thin, dark-aware, fade-on-hover track that
+   feels native to the app.
+
+   Firefox fallback uses `scrollbar-width: thin` + `scrollbar-color`,
+   which is all we can style on Gecko.
+   ────────────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  * {
+    scrollbar-color: rgba(82, 82, 91, 0.55) transparent;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 160ms ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.55);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  *::-webkit-scrollbar-thumb {
+    background-color: rgba(82, 82, 91, 0.55);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(113, 113, 122, 0.75);
   }
 }

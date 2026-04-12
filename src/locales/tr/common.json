@@ -2,6 +2,8 @@
   "settings": {
     "title": "Ayarlar",
     "navigationAria": "Ana gezinti",
+    "switchToCompact": "Kompakt görünüm",
+    "switchToFull": "Tam ayarlar",
     "sections": {
       "lights": "Işıklar",
       "led-setup": "LED Kurulumu",
@@ -64,6 +66,21 @@
         "smoothingDescription": "Düşük değerler daha yumuşak geçişler üretir; yüksek değerler ekran değişimlerine daha hızlı tepki verir.",
         "smoothingSlowLabel": "Yumuşak",
         "smoothingFastLabel": "Anlık"
+      }
+    },
+    "compact": {
+      "presets": "Hazır ayarlar",
+      "targets": {
+        "usb": "USB",
+        "hue": "Hue"
+      },
+      "presetNames": {
+        "warmWhite": "Sıcak",
+        "coolWhite": "Soğuk",
+        "red": "Kırmızı",
+        "green": "Yeşil",
+        "blue": "Mavi",
+        "purple": "Mor"
       }
     }
   },

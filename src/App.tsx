@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
+import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
 import {
@@ -53,6 +54,7 @@ import {
   loadShellState,
   saveShellState,
 } from "./features/shell/windowLifecycle";
+import { useUIMode } from "./features/shell/useUIMode";
 import {
   SECTION_IDS,
   type SectionId,
@@ -117,15 +119,19 @@ function isHueStopCodeOk(code: string): boolean {
   return code === "HUE_STREAM_STOPPED";
 }
 
-function isSameTargetSet(a: HueRuntimeTarget[], b: HueRuntimeTarget[]): boolean {
-  if (a.length !== b.length) return false;
-  const set = new Set(a);
-  return b.every((t) => set.has(t));
-}
-
 function App() {
   const { t } = useTranslation("common");
   const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
+  const {
+    currentMode,
+    incomingMode,
+    isIncomingVisible,
+    outgoingSize,
+    incomingSize,
+    incomingRef,
+    switchUIMode,
+    setCurrentMode,
+  } = useUIMode();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [calibrationStep, setCalibrationStep] = useState<CalibrationOverlayStep>("editor");
@@ -323,6 +329,8 @@ function App() {
         });
 
         const state = await loadShellState();
+        // Always start in compact — ignore any persisted uiMode.
+        setCurrentMode("compact");
         // Map old section IDs to new ones for backward compatibility
         const sectionMap: Record<string, SectionId> = {
           // Legacy IDs from persisted state before navigation restructure
@@ -696,10 +704,16 @@ function App() {
         ambilight: nextMode.ambilight ?? lightingMode.ambilight,
         targets: selectedOutputTargets,
       });
+      // Quick adjustment: same mode kind → pure config nudge (color/brightness).
+      // We intentionally DO NOT require `isSameTargetSet(selected, active)` here.
+      // If selected != active we still take the quick path and push the update
+      // to whatever IS currently active; falling through to the full transition
+      // path just to "reconcile" targets would flip `isModeTransitioning = true`,
+      // which disables the brightness slider mid-drag and makes the browser
+      // release pointer capture — symptom: drag breaks after a single commit.
       const isQuickSolidAdjustment =
         normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
-        lightingMode.kind === LIGHTING_MODE_KIND.SOLID &&
-        isSameTargetSet(selectedOutputTargets, activeOutputTargets);
+        lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
 
       if (isQuickSolidAdjustment && normalizedNextMode.solid) {
         setLightingModeState(normalizedNextMode);
@@ -730,10 +744,12 @@ function App() {
       // smoothing, black border) — send live update without the full transition flow.
       // The Rust backend detects this case and updates live atomics in-place
       // (AMBILIGHT_MODE_UPDATED) without touching the worker or SCStream.
+      // Same reasoning as isQuickSolidAdjustment — see note above. An ambilight
+      // brightness nudge during a drag must never promote to the full transition
+      // path just because target reconciliation is pending.
       const isQuickAmbilightAdjustment =
         normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-        lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-        isSameTargetSet(selectedOutputTargets, activeOutputTargets);
+        lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
 
       if (isQuickAmbilightAdjustment) {
         setLightingModeState(normalizedNextMode);
@@ -937,30 +953,98 @@ function App() {
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
+  // Shared SettingsLayout props — only `uiMode` differs between the
+  // outgoing and incoming cross-fade slots.
+  const sharedSettingsLayoutProps = {
+    activeSection,
+    onSectionChange: handleSectionChange,
+    calibration: savedCalibration,
+    calibrationStep,
+    lightingMode,
+    outputTargets: selectedOutputTargets,
+    usbConnected: isConnected,
+    hueConfigured: hueStartConfig !== null,
+    hueReachable: hueReachable || hueStreaming,
+    hueStreaming,
+    modeLockReason:
+      modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED
+        ? modeGuard.reason
+        : null,
+    isModeTransitioning,
+    onLightingModeChange: handleLightingModeChange,
+    onOutputTargetsChange: handleOutputTargetsChange,
+    onCalibrationSaved: (config: LedCalibrationConfig) => {
+      setSavedCalibration(config);
+    },
+    onCalibrationStepChange: setCalibrationStep,
+    onCheckForUpdates: checkForUpdates,
+    isCheckingForUpdates: updaterState.status === "checking",
+  } as const;
+
   return (
     <>
-      <SettingsLayout
-        activeSection={activeSection}
-        onSectionChange={handleSectionChange}
-        calibration={savedCalibration}
-        calibrationStep={calibrationStep}
-        lightingMode={lightingMode}
-        outputTargets={selectedOutputTargets}
-        usbConnected={isConnected}
-        hueConfigured={hueStartConfig !== null}
-        hueReachable={hueReachable || hueStreaming}
-        hueStreaming={hueStreaming}
-        modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
-        isModeTransitioning={isModeTransitioning}
-        onLightingModeChange={handleLightingModeChange}
-        onOutputTargetsChange={handleOutputTargetsChange}
-        onCalibrationSaved={(config) => {
-          setSavedCalibration(config);
-        }}
-        onCalibrationStepChange={setCalibrationStep}
-        onCheckForUpdates={checkForUpdates}
-        isCheckingForUpdates={updaterState.status === "checking"}
-      />
+      {/* Custom cross-platform title bar. Sits above everything. Handles
+          native drag + double-click zoom, hosts the compact-mode toggle, and
+          (on Windows/Linux) draws custom min/max/close buttons since native
+          decorations are disabled there. See TitleBar.tsx for details. */}
+      <TitleBar uiMode={currentMode} onSwitchUIMode={switchUIMode} />
+
+      {/* Persistent dark backdrop so the empty area between cross-faded
+          slots blends with the layout backgrounds instead of revealing the
+          desktop. Offset by the title bar so layouts render below it. */}
+      <div
+        className="fixed right-0 bottom-0 left-0 overflow-hidden bg-slate-100/60 dark:bg-zinc-950"
+        style={{ top: `${TITLE_BAR_HEIGHT_PX}px` }}
+      >
+        {/*
+         * Outgoing slot — fades 1 → 0 when an incoming slot is mounted.
+         *
+         * Pinned size: during a transition, the slot's width/height are
+         * locked to the logical pixel size the window had at transition
+         * start. This prevents the layout from reflowing every frame as
+         * the window itself animates its size. Outside a transition the
+         * slot falls back to 100%×100% and fills the container.
+         */}
+        <div
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-200 ease-out ${
+            incomingMode && isIncomingVisible
+              ? "pointer-events-none opacity-0"
+              : "opacity-100"
+          }`}
+          style={{
+            width: outgoingSize ? `${outgoingSize.width}px` : "100%",
+            height: outgoingSize ? `${outgoingSize.height}px` : "100%",
+          }}
+        >
+          <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
+        </div>
+
+        {/*
+         * Incoming slot — mounted only during a transition. Pinned to the
+         * TARGET logical size so its layout renders stably while the
+         * window grows/shrinks around it. Fades 0 → 1 in parallel with
+         * the animated window resize.
+         */}
+        {incomingMode && incomingSize && (
+          <div
+            ref={incomingRef}
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-200 ease-out ${
+              isIncomingVisible
+                ? "opacity-100"
+                : "pointer-events-none opacity-0"
+            }`}
+            style={{
+              width: `${incomingSize.width}px`,
+              height: `${incomingSize.height}px`,
+            }}
+          >
+            <SettingsLayout
+              uiMode={incomingMode}
+              {...sharedSettingsLayoutProps}
+            />
+          </div>
+        )}
+      </div>
       <UpdateModal
         state={updaterState}
         onInstall={downloadAndInstall}
