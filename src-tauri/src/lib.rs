@@ -183,7 +183,17 @@ pub fn run() {
     builder = builder.plugin(tauri_plugin_store::Builder::default().build());
 
     // 4. Window-state (geometry persistence)
-    builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+    //
+    // Default flags (`StateFlags::all()`) would auto-restore SIZE and
+    // VISIBLE on launch, which fights our "always start in compact, hidden
+    // until React is ready" rule and causes a visible big→compact flash.
+    // `skip_initial_state("main")` keeps the save-on-close behavior but
+    // disables the automatic restore so the JS bootstrap owns everything.
+    builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .skip_initial_state("main")
+            .build(),
+    );
 
     // 5. Opener (for external links)
     builder = builder.plugin(tauri_plugin_opener::init());
@@ -249,6 +259,16 @@ pub fn run() {
             // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();
+
+            // On non-macOS platforms, disable native window decorations so the
+            // custom React <TitleBar /> can render icon+name+window controls
+            // consistently. macOS keeps native traffic lights via the
+            // `titleBarStyle: "Overlay"` + `hiddenTitle: true` combo set in
+            // tauri.conf.json (content extends under the traffic lights).
+            #[cfg(not(target_os = "macos"))]
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.set_decorations(false);
+            }
 
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());

@@ -156,6 +156,14 @@ export interface ShellState {
   roomMapGridStrokeWidth?: number;
   /** Room map editor background image opacity (0-100) */
   roomMapBackgroundOpacity?: number;
+  /** Active UI layout mode (compact tray panel vs full settings window) */
+  uiMode?: UIMode;
+  /**
+   * Last known full-mode window size (logical pixels).
+   * Captured when switching out of full mode so the next compact→full
+   * restore returns to the user's preferred full-mode dimensions.
+   */
+  lastFullSize?: { width: number; height: number };
 }
 
 /** Default shell state for first launch */
@@ -182,3 +190,16 @@ export const SHELL_STORE_KEY = "shell-state";
 
 export const WINDOW_MIN_WIDTH = 720;
 export const WINDOW_MIN_HEIGHT = 480;
+
+// ---------------------------------------------------------------------------
+// UI Mode (compact / full)
+// ---------------------------------------------------------------------------
+
+/** Window layout mode — compact for tray-first quick controls, full for settings */
+export type UIMode = "compact" | "full";
+
+/** Logical pixel dimensions for each UI mode */
+export const UI_MODE_SIZES: Record<UIMode, { width: number; height: number }> = {
+  compact: { width: 320, height: 480 },
+  full: { width: 900, height: 620 },
+};
