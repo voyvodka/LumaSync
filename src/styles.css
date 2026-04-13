@@ -2,14 +2,2627 @@
 @source "../index.html";
 @source "./**/*.{ts,tsx}";
 
+/* ─────────────────────────────────────────────────────────────────────
+   Self-hosted IBM Plex (Rev 07 typography). Loaded via @fontsource so
+   the app stays offline-safe and the existing CSP `font-src 'self'`
+   stays unchanged.
+   ───────────────────────────────────────────────────────────────────── */
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+
 :root {
   font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+
+  /* ─────────────────────────────────────────────────────────────────
+     LumaSync amber dark theme tokens (UI Mockup Rev 07).
+     Prefixed `--lm-*` so legacy slate/zinc Tailwind utilities can
+     keep coexisting while sections migrate phase by phase. The
+     palette is dark-only; light variants are intentionally absent
+     because the app is dark-mode-primary.
+     ───────────────────────────────────────────────────────────────── */
+  --lm-bg:        #07080a;
+  --lm-panel:     #0e1014;
+  --lm-panel-2:   #14171d;
+  --lm-line:      #1a1e25;
+  --lm-line-2:    #252b34;
+  --lm-ink:       #eaeef4;
+  --lm-ink-dim:   #8a94a3;
+  --lm-ink-faint: #4d5564;
+  --lm-amber:     #ffb020;
+  --lm-amber-2:   #ff7a1a;
+  --lm-cyan:      #22d3ee;
+  --lm-green:     #4ade80;
+  --lm-red:       #ef5b5b;
+  --lm-mono:      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --lm-sans:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Lighting accent — driven by useAccentTheme. Fallbacks below match
      AMBILIGHT_ACCENT so the UI has a sensible default before the hook mounts. */
   --accent-color: rgb(20, 184, 166);
   --accent-color-soft: rgba(20, 184, 166, 0.12);
   --accent-gradient: linear-gradient(180deg, var(--accent-color-soft), transparent 70%);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   TitleBar (LumaSync amber dark chrome — Phase 1 of UI Mockup Rev 07)
+   Always dark regardless of system theme: chrome lives outside the
+   light/dark body and remains visually consistent.
+   ───────────────────────────────────────────────────────────────────── */
+.lm-titlebar {
+  background-color: rgba(8, 9, 12, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--lm-line);
+  color: var(--lm-ink);
+}
+
+.lm-titlebar-brand {
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #f1f4f9;
+  white-space: nowrap;
+}
+.lm-titlebar-brand .accent {
+  color: var(--lm-amber);
+}
+
+.lm-titlebar-toggle {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.22);
+  background: rgba(255, 176, 32, 0.06);
+  color: #d4a254;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease;
+  padding: 0;
+}
+.lm-titlebar-toggle:hover {
+  border-color: rgba(255, 176, 32, 0.5);
+  background: rgba(255, 176, 32, 0.12);
+  color: var(--lm-amber);
+}
+.lm-titlebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+}
+.lm-titlebar-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Titlebar tabs — full mode navigation (Phase 10) */
+.lm-titlebar-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 100%;
+  margin-left: 4px;
+}
+.lm-titlebar-tab {
+  height: 100%;
+  padding: 0 13px;
+  border: 0;
+  background: transparent;
+  color: var(--lm-ink-faint);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  position: relative;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+}
+.lm-titlebar-tab:hover {
+  color: var(--lm-ink-dim);
+}
+.lm-titlebar-tab:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+}
+.lm-titlebar-tab.is-on {
+  color: var(--lm-ink);
+}
+.lm-titlebar-tab.is-on::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  background: var(--lm-amber);
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.5);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   StatusBar (LumaSync amber dark chrome — Phase 2 of UI Mockup Rev 07)
+   Mirrors the title bar at the bottom: full width, always dark, hosts
+   subsystem pills + (full mode only) keyboard hints + version pill.
+   ───────────────────────────────────────────────────────────────────── */
+.lm-statusbar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 14px;
+  background-color: rgba(8, 9, 12, 0.9);
+  border-top: 1px solid var(--lm-line);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  user-select: none;
+}
+.lm-statusbar.is-compact {
+  gap: 9px;
+  padding: 0 10px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+}
+
+.lm-statusbar-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lm-statusbar.is-compact .lm-statusbar-pair {
+  gap: 4px;
+}
+.lm-statusbar-label {
+  color: var(--lm-ink-faint);
+}
+.lm-statusbar-value {
+  font-weight: 500;
+  color: var(--lm-ink-dim);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-statusbar-value.is-ok {
+  color: var(--lm-green);
+}
+.lm-statusbar-value.is-active {
+  color: var(--lm-amber);
+}
+.lm-statusbar-value.is-idle {
+  color: var(--lm-ink-dim);
+}
+.lm-statusbar-value.is-off {
+  color: var(--lm-ink-faint);
+}
+
+.lm-statusbar-spacer {
+  flex: 1;
+}
+
+.lm-statusbar-kbd {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--lm-ink-faint);
+}
+.lm-statusbar-kbd kbd {
+  font: inherit;
+  font-size: 8.5px;
+  padding: 1px 5px;
+  border: 1px solid var(--lm-line-2);
+  border-radius: 3px;
+  background: #0f1217;
+  color: var(--lm-ink-dim);
+}
+
+.lm-statusbar-version {
+  color: var(--lm-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Win/Linux native control replacements — same amber dark language */
+.lm-titlebar-ctrl {
+  width: 44px;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--lm-ink-faint);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.lm-titlebar-ctrl:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+.lm-titlebar-ctrl.is-danger:hover {
+  background: var(--lm-red);
+  color: #fff;
+}
+.lm-titlebar-ctrl:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+}
+
+/* Small leading brand mark on Win/Linux (where mac traffic-lights live
+   on the left). Shares the amber tint with the rest of the chrome. */
+.lm-titlebar-mark {
+  color: var(--lm-amber);
+  width: 14px;
+  height: 14px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Compact layout (UI Mockup Rev 07 — `10-compact.html`, Phase 3 Scope A)
+   Visual-only restyle of the existing compact mode. Backend wiring,
+   throttling, and lighting mode contracts stay untouched — these classes
+   purely re-skin Off/Ambilight/Solid cards + scene tile presets in the
+   amber dark language.
+   ───────────────────────────────────────────────────────────────────── */
+.lm-compact {
+  position: relative;
+  display: flex;
+  height: 100%;
+  width: 100%;
+  flex-direction: column;
+  background-color: var(--lm-bg);
+  color: var(--lm-ink);
+  font-family: var(--lm-sans);
+  overflow: hidden;
+}
+.lm-compact::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255, 176, 32, 0.07), transparent 65%);
+}
+
+.lm-compact-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 12px 10px;
+  overflow-y: auto;
+}
+
+/* Section title — uppercase mono small + flexed gradient line */
+.lm-compact-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--lm-line-2), transparent);
+}
+
+/* Mode strip — 3-col grid with amber-glow on active */
+.lm-compact-mode-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+.lm-compact-mbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px 9px;
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
+  border-radius: 9px;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+  color: var(--lm-ink-dim);
+}
+.lm-compact-mbtn:hover:not(:disabled) {
+  border-color: var(--lm-line-2);
+}
+.lm-compact-mbtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-mbtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+}
+.lm-compact-mbtn .ico {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--lm-ink-dim);
+}
+.lm-compact-mbtn .ico svg {
+  width: 16px;
+  height: 16px;
+}
+.lm-compact-mbtn .tn {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-compact-mbtn.is-on {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.14), rgba(255, 176, 32, 0.03));
+  border-color: rgba(255, 176, 32, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 32, 0.18),
+    0 0 18px -4px rgba(255, 176, 32, 0.35);
+}
+.lm-compact-mbtn.is-on .ico,
+.lm-compact-mbtn.is-on .tn {
+  color: var(--lm-amber);
+}
+
+/* Active mode card */
+.lm-compact-card {
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lm-compact-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px 8px;
+}
+.lm-compact-card-header .l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+}
+.lm-compact-card-header .l::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  box-shadow: 0 0 6px var(--lm-amber);
+}
+
+/* Slider rows — native input with amber gradient track + custom thumb */
+.lm-compact-slider-row {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-slider-row + .lm-compact-slider-row {
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-slider-row .srow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-slider-row .srow b {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--lm-ink);
+}
+.lm-compact-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.lm-compact-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border: 1px solid var(--lm-line);
+  border-radius: 3px;
+  background:
+    linear-gradient(
+      to right,
+      var(--lm-amber-2) 0%,
+      var(--lm-amber) var(--lm-fill, 0%),
+      #0a0c0f var(--lm-fill, 0%),
+      #0a0c0f 100%
+    );
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.25);
+}
+.lm-compact-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  margin-top: -5px;
+  box-shadow:
+    0 0 0 3px rgba(255, 176, 32, 0.25),
+    0 2px 5px rgba(0, 0, 0, 0.55);
+}
+.lm-compact-slider::-moz-range-track {
+  height: 4px;
+  border: 1px solid var(--lm-line);
+  border-radius: 3px;
+  background:
+    linear-gradient(
+      to right,
+      var(--lm-amber-2) 0%,
+      var(--lm-amber) var(--lm-fill, 0%),
+      #0a0c0f var(--lm-fill, 0%),
+      #0a0c0f 100%
+    );
+}
+.lm-compact-slider::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  border: 0;
+  box-shadow:
+    0 0 0 3px rgba(255, 176, 32, 0.25),
+    0 2px 5px rgba(0, 0, 0, 0.55);
+}
+
+/* Hero color tile (Solid mode) — picker target */
+.lm-compact-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 14px;
+  margin: 10px 12px 0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lm-compact-hero.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-hero-text {
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+  line-height: 1;
+}
+.lm-compact-hero-hex {
+  font-family: var(--lm-mono);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+}
+.lm-compact-hero-sub {
+  margin-top: 4px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.lm-compact-hero-eye {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+.lm-compact-hero-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.lm-compact-hero-input:disabled {
+  cursor: not-allowed;
+}
+
+/* Scene tile row — 5-flex with gradient backgrounds */
+.lm-compact-scenes {
+  display: flex;
+  gap: 6px;
+}
+.lm-compact-scene-tile {
+  position: relative;
+  flex: 1;
+  height: 34px;
+  padding: 0 0 4px;
+  border-radius: 7px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: var(--lm-mono);
+  font-size: 7.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.lm-compact-scene-tile:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--lm-line-2);
+}
+.lm-compact-scene-tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-compact-scene-tile:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+}
+.lm-compact-scene-tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 30%, rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+}
+.lm-compact-scene-tile span {
+  position: relative;
+  z-index: 1;
+}
+.lm-compact-scene-tile.is-selected {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 32, 0.3),
+    0 0 12px rgba(255, 176, 32, 0.2);
+}
+
+/* ── Updater modal (Phase 4) ────────────────────────────────────────── */
+.lm-updater-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 5, 8, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.lm-updater-modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: linear-gradient(180deg, #0f1115, #0b0d11);
+  border: 1px solid #242a33;
+  border-radius: 14px;
+  padding: 22px 22px 18px;
+  color: var(--lm-ink, #eaeef4);
+  font-family: var(--lm-sans, "IBM Plex Sans", ui-sans-serif, system-ui);
+  box-shadow:
+    0 30px 70px -20px #000,
+    0 0 0 1px rgba(255, 176, 32, 0.08),
+    0 0 60px -20px rgba(255, 176, 32, 0.15);
+}
+.lm-updater-modal::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.3), transparent 35%);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(0.5px);
+}
+.lm-updater-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.lm-updater-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(255, 176, 32, 0.18), rgba(255, 122, 26, 0.06));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  display: grid;
+  place-items: center;
+  color: var(--lm-amber, #ffb020);
+  box-shadow: inset 0 0 14px rgba(255, 176, 32, 0.1);
+  flex-shrink: 0;
+}
+.lm-updater-badge svg {
+  width: 19px;
+  height: 19px;
+}
+.lm-updater-badge.is-error {
+  background: linear-gradient(135deg, rgba(239, 91, 91, 0.18), rgba(239, 91, 91, 0.05));
+  border-color: rgba(239, 91, 91, 0.4);
+  color: #ef5b5b;
+  box-shadow: inset 0 0 14px rgba(239, 91, 91, 0.12);
+}
+.lm-updater-titlewrap {
+  flex: 1;
+  min-width: 0;
+}
+.lm-updater-eyebrow {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: var(--lm-amber, #ffb020);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.lm-updater-eyebrow.is-error {
+  color: #ef5b5b;
+}
+.lm-updater-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.lm-updater-body {
+  margin-top: 14px;
+  font-size: 12.5px;
+  color: #8a94a3;
+  line-height: 1.55;
+}
+.lm-updater-body b {
+  color: #eaeef4;
+  font-weight: 500;
+}
+
+/* Version diff row */
+.lm-updater-verdiff {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 4px;
+  padding: 10px 12px;
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+}
+.lm-updater-verdiff-from {
+  color: #4d5564;
+  text-decoration: line-through;
+  text-decoration-color: #4d5564;
+}
+.lm-updater-verdiff-arrow {
+  color: var(--lm-amber, #ffb020);
+  font-size: 12px;
+}
+.lm-updater-verdiff-to {
+  color: var(--lm-amber, #ffb020);
+  font-weight: 500;
+}
+.lm-updater-verdiff-size {
+  margin-left: auto;
+  color: #4d5564;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Release notes block */
+.lm-updater-notes {
+  margin-top: 12px;
+  padding: 11px 13px;
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #8a94a3;
+  line-height: 1.65;
+  max-height: 140px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.25) transparent;
+}
+.lm-updater-notes::-webkit-scrollbar {
+  width: 4px;
+}
+.lm-updater-notes::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lm-updater-notes::-webkit-scrollbar-thumb {
+  background: rgba(255, 176, 32, 0.2);
+  border-radius: 2px;
+}
+.lm-updater-notes::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 176, 32, 0.35);
+}
+.lm-updater-notes-line {
+  display: block;
+}
+.lm-updater-notes-line + .lm-updater-notes-line {
+  margin-top: 2px;
+}
+.lm-updater-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-right: 6px;
+  font-weight: 500;
+}
+.lm-updater-tag.is-add {
+  background: rgba(74, 222, 128, 0.14);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+.lm-updater-tag.is-fix {
+  background: rgba(255, 176, 32, 0.14);
+  color: var(--lm-amber, #ffb020);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+}
+
+/* Progress */
+.lm-updater-prog {
+  margin: 16px 0 4px;
+}
+.lm-updater-prog-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #4d5564;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 7px;
+}
+.lm-updater-prog-row b {
+  color: #eaeef4;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+.lm-updater-prog-row em {
+  font-style: normal;
+  color: var(--lm-amber, #ffb020);
+}
+.lm-updater-prog-track {
+  height: 6px;
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.lm-updater-prog-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff7a1a, var(--lm-amber, #ffb020));
+  border-radius: 4px;
+  box-shadow: 0 0 10px rgba(255, 176, 32, 0.4);
+  position: relative;
+  transition: width 120ms linear;
+}
+.lm-updater-prog-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
+  animation: lm-updater-shine 1.8s linear infinite;
+}
+@keyframes lm-updater-shine {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.lm-updater-prog-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  color: #4d5564;
+  letter-spacing: 0.06em;
+}
+.lm-updater-prog-stats b {
+  color: #8a94a3;
+  font-weight: 500;
+}
+
+/* Installing spinner */
+.lm-updater-spinner {
+  width: 52px;
+  height: 52px;
+  margin: 10px auto 6px;
+  position: relative;
+}
+.lm-updater-spinner::before,
+.lm-updater-spinner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+.lm-updater-spinner::before {
+  border-top-color: var(--lm-amber, #ffb020);
+  border-right-color: var(--lm-amber, #ffb020);
+  animation: lm-updater-spin 1.1s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+  box-shadow: 0 0 14px rgba(255, 176, 32, 0.35);
+}
+.lm-updater-spinner::after {
+  border: 1px solid rgba(255, 176, 32, 0.18);
+  inset: -4px;
+}
+@keyframes lm-updater-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.lm-updater-install-txt {
+  text-align: center;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #8a94a3;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+  line-height: 1.55;
+}
+.lm-updater-install-txt b {
+  color: var(--lm-amber, #ffb020);
+  display: block;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 9.5px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+/* Error box */
+.lm-updater-errbox {
+  margin-top: 14px;
+  padding: 11px 13px;
+  background: rgba(239, 91, 91, 0.06);
+  border: 1px solid rgba(239, 91, 91, 0.25);
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #f1a0a0;
+  line-height: 1.65;
+}
+.lm-updater-errbox b {
+  color: #ef5b5b;
+  display: block;
+  margin-bottom: 3px;
+  font-weight: 500;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Actions */
+.lm-updater-actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}
+.lm-updater-actions-spacer {
+  flex: 1;
+}
+.lm-updater-btn-ghost,
+.lm-updater-btn-primary,
+.lm-updater-btn-retry {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+.lm-updater-btn-ghost {
+  padding: 8px 14px;
+  letter-spacing: 0.14em;
+  color: #8a94a3;
+  background: transparent;
+  border: 1px solid transparent;
+}
+.lm-updater-btn-ghost:hover {
+  color: #eaeef4;
+  background: rgba(255, 255, 255, 0.03);
+}
+.lm-updater-btn-primary {
+  padding: 8px 16px;
+  letter-spacing: 0.16em;
+  color: #05070a;
+  background: linear-gradient(180deg, #ffc658, #ffb030);
+  border: 1px solid rgba(255, 176, 32, 0.55);
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px rgba(255, 176, 32, 0.25),
+    0 4px 14px -4px rgba(255, 176, 32, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.lm-updater-btn-primary:hover {
+  background: linear-gradient(180deg, #ffd478, #ffbb40);
+}
+.lm-updater-btn-retry {
+  padding: 8px 14px;
+  letter-spacing: 0.14em;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+}
+.lm-updater-btn-retry:hover {
+  background: rgba(255, 176, 32, 0.14);
+}
+.lm-updater-btn-ghost:focus-visible,
+.lm-updater-btn-primary:focus-visible,
+.lm-updater-btn-retry:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 176, 32, 0.35),
+    0 0 0 4px rgba(255, 176, 32, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-updater-prog-fill::after {
+    animation: none;
+  }
+  .lm-updater-spinner::before {
+    animation-duration: 2.2s;
+  }
+}
+
+/* ── Settings page (Phase 6) ────────────────────────────────────────── */
+.lm-settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 28px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  height: 100%;
+}
+.lm-settings-page > * {
+  flex-shrink: 0;
+}
+.lm-settings-head h1 {
+  margin: 0 0 2px;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.lm-settings-head-sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #8a94a3;
+  letter-spacing: 0.02em;
+}
+.lm-settings-group {
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  position: relative;
+}
+.lm-settings-group-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid #1a1e25;
+  background: rgba(255, 255, 255, 0.01);
+  gap: 12px;
+}
+.lm-settings-group-h .t {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: #eaeef4;
+  text-transform: uppercase;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lm-settings-group-h .t::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px var(--lm-amber, #ffb020);
+}
+.lm-settings-group-h .sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  letter-spacing: 0.02em;
+}
+.lm-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid #1a1e25;
+  gap: 16px;
+}
+.lm-settings-row:last-child {
+  border-bottom: 0;
+}
+.lm-settings-row-l {
+  flex: 1;
+  min-width: 0;
+}
+.lm-settings-row-name {
+  font-size: 12.5px;
+  color: #eaeef4;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+.lm-settings-row-desc {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  margin-top: 2px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+.lm-settings-row-r {
+  flex-shrink: 0;
+}
+
+/* Toggle */
+.lm-settings-tg {
+  width: 30px;
+  height: 16px;
+  border-radius: 10px;
+  background: #1a1d23;
+  border: 1px solid #252b34;
+  position: relative;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+}
+.lm-settings-tg::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3a3f48;
+  transition: transform 160ms cubic-bezier(0.33, 1, 0.68, 1), background 120ms ease, box-shadow 120ms ease;
+}
+.lm-settings-tg.is-on {
+  background: rgba(255, 176, 32, 0.15);
+  border-color: rgba(255, 176, 32, 0.4);
+}
+.lm-settings-tg.is-on::after {
+  transform: translateX(13px);
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+}
+.lm-settings-tg:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+}
+.lm-settings-tg:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Segmented (2-up for language) */
+.lm-settings-seg {
+  display: flex;
+  background: #0a0c0f;
+  border: 1px solid #252b34;
+  border-radius: 7px;
+  padding: 2px;
+  gap: 2px;
+}
+.lm-settings-seg button {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 14px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a94a3;
+  border-radius: 5px;
+  font-weight: 500;
+  transition: color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+.lm-settings-seg button:hover {
+  color: #eaeef4;
+}
+.lm-settings-seg button.is-on {
+  background: rgba(255, 176, 32, 0.12);
+  color: var(--lm-amber, #ffb020);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.25);
+}
+.lm-settings-seg button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.5), 0 0 0 2px rgba(255, 176, 32, 0.2);
+}
+
+/* Updates row button (amber ghost primary) */
+.lm-settings-btn {
+  padding: 6px 12px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease, color 120ms ease;
+}
+.lm-settings-btn:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.14);
+}
+.lm-settings-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-settings-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+}
+
+/* About block */
+.lm-settings-about {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  padding: 16px;
+  align-items: center;
+}
+.lm-settings-about-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ffb020, #ff6a3d);
+  box-shadow: 0 0 24px rgba(255, 176, 32, 0.3);
+  display: grid;
+  place-items: center;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 22px;
+  font-weight: 700;
+  color: #05070a;
+}
+.lm-settings-about-tx-n {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+.lm-settings-about-tx-s {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #4d5564;
+  margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+.lm-settings-about-tx-s b {
+  color: #8a94a3;
+  font-weight: 500;
+}
+.lm-settings-about-v {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--lm-amber, #ffb020);
+  padding: 5px 10px;
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 20px;
+  letter-spacing: 0.1em;
+}
+
+/* ── Devices page (Phase 7) ─────────────────────────────────────────── */
+.lm-device-page {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  height: 100%;
+  min-height: 0;
+  background: #07080a;
+  color: #eaeef4;
+}
+
+/* Left category rail */
+.lm-device-rail {
+  border-right: 1px solid #1a1e25;
+  padding: 20px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(8, 9, 12, 0.3);
+  overflow-y: auto;
+}
+.lm-device-rail-h {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  letter-spacing: 0.2em;
+  color: #4d5564;
+  text-transform: uppercase;
+  padding: 14px 18px 6px;
+  margin-top: 10px;
+}
+.lm-device-rail-h:first-child {
+  margin-top: 0;
+}
+.lm-device-cat {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  cursor: pointer;
+  color: #8a94a3;
+  border-left: 2px solid transparent;
+  font-family: var(--lm-sans, "IBM Plex Sans", ui-sans-serif, system-ui);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  transition: color 120ms ease, background 120ms ease;
+}
+.lm-device-cat:hover {
+  color: #eaeef4;
+  background: rgba(255, 255, 255, 0.02);
+}
+.lm-device-cat.is-on {
+  color: var(--lm-amber, #ffb020);
+  border-left-color: var(--lm-amber, #ffb020);
+  background: linear-gradient(90deg, rgba(255, 176, 32, 0.08), transparent 60%);
+}
+.lm-device-cat:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 32, 0.4);
+}
+.lm-device-cat-ic {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.lm-device-cat-ic svg {
+  width: 16px;
+  height: 16px;
+}
+.lm-device-cat-tx {
+  flex: 1;
+}
+.lm-device-cat-cnt {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #0a0c0f;
+  border: 1px solid #252b34;
+  color: #4d5564;
+  letter-spacing: 0.08em;
+}
+.lm-device-cat.is-on .lm-device-cat-cnt {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.3);
+  color: var(--lm-amber, #ffb020);
+}
+
+/* Main content area */
+.lm-device-main {
+  padding: 22px 26px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.lm-device-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.lm-device-head h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.lm-device-head-sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #8a94a3;
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+}
+.lm-device-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.lm-device-btn {
+  all: unset;
+  box-sizing: border-box;
+  padding: 7px 13px;
+  border-radius: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8a94a3;
+  background: #0e1014;
+  border: 1px solid #252b34;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+  transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.lm-device-btn:hover:not(:disabled) {
+  border-color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-device-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-device-btn svg {
+  width: 12px;
+  height: 12px;
+}
+.lm-device-btn.is-primary {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.4);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-device-btn.is-primary:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-device-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+}
+
+/* Category body — each rail category has its own content column */
+.lm-device-cat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+}
+.lm-device-cat-body > * {
+  flex-shrink: 0;
+}
+.lm-device-cat-body.hidden {
+  display: none;
+}
+.lm-device-main > * {
+  flex-shrink: 0;
+}
+
+/* Card grid */
+.lm-device-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  min-height: 0;
+}
+
+/* Device card */
+.lm-dcard {
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+.lm-dcard.is-on {
+  border-color: rgba(255, 176, 32, 0.3);
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.04), transparent 40%);
+}
+.lm-dcard.is-sel {
+  border-color: rgba(255, 176, 32, 0.55);
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.07), transparent 50%);
+  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.35), 0 8px 24px -12px rgba(255, 176, 32, 0.4);
+}
+.lm-dcard[role="button"] {
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.lm-dcard[role="button"]:hover:not(.is-on):not(.is-sel) {
+  border-color: #2c3440;
+  background: #101319;
+}
+.lm-dcard[role="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+}
+.lm-dcard::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(255, 255, 255, 0.06), transparent);
+  pointer-events: none;
+}
+.lm-dcard.is-ghost {
+  border-style: dashed;
+  border-color: #252b34;
+  opacity: 0.9;
+}
+
+.lm-dcard-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.lm-dcard-ic {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #252b34;
+  color: #8a94a3;
+  flex-shrink: 0;
+}
+.lm-dcard-ic svg {
+  width: 20px;
+  height: 20px;
+}
+.lm-dcard.is-on .lm-dcard-ic {
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.3);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-dcard-tx {
+  flex: 1;
+  min-width: 0;
+}
+.lm-dcard-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.lm-dcard.is-ghost .lm-dcard-name {
+  color: #8a94a3;
+}
+.lm-dcard-sub {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  color: #4d5564;
+  margin-top: 3px;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.lm-dcard-pill {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 20px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-dcard-pill.is-ok {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.25);
+}
+.lm-dcard-pill.is-ok::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px #4ade80;
+}
+.lm-dcard-pill.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.25);
+}
+.lm-dcard-pill.is-warn::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lm-amber, #ffb020);
+}
+
+/* Stats grid inside card */
+.lm-dcard-body {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: #1a1e25;
+  border: 1px solid #1a1e25;
+  border-radius: 7px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.lm-dcard-cell {
+  background: #14171d;
+  padding: 7px 10px;
+}
+.lm-dcard-cell-k {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  color: #4d5564;
+  text-transform: uppercase;
+}
+.lm-dcard-cell-v {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 11px;
+  color: #eaeef4;
+  font-weight: 500;
+  margin-top: 2px;
+}
+.lm-dcard-cell-v.is-am {
+  color: var(--lm-amber, #ffb020);
+}
+
+/* Actions row */
+.lm-dcard-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.lm-dcard-act {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid #252b34;
+  border-radius: 6px;
+  background: #0a0c0f;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a94a3;
+  cursor: pointer;
+  text-align: center;
+  font-weight: 500;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.lm-dcard-act:hover:not(:disabled) {
+  border-color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber, #ffb020);
+}
+.lm-dcard-act:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-dcard-act:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.4);
+}
+
+/* Ghost card pair button */
+.lm-dcard-pair {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  margin-top: 4px;
+  padding: 9px;
+  text-align: center;
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 7px;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.05);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 120ms ease;
+}
+.lm-dcard-pair:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-dcard-pair:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-dcard-pair:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35);
+}
+
+/* Empty state */
+.lm-device-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed #252b34;
+  border-radius: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  color: #8a94a3;
+}
+.lm-device-empty h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #eaeef4;
+}
+.lm-device-empty p {
+  margin: 0;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  color: #4d5564;
+}
+
+/* Hue wrapper — holds the existing wizard in its new dark frame */
+.lm-device-hue-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+/* ── Temporary top tab strip (pre-Phase 10 titlebar migration) ──────── */
+/* ── Lights page (Phase 9) ──────────────────────────────────────────── */
+.lm-lights-page {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 256px;
+  min-height: 0;
+  background: #07080a;
+  color: #eaeef4;
+  font-family: var(--lm-sans, "IBM Plex Sans", ui-sans-serif, system-ui);
+  overflow: hidden;
+}
+.lm-lights-center {
+  padding: 20px 22px 16px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+}
+.lm-lights-center > * {
+  flex-shrink: 0;
+}
+.lm-lights-slab {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  color: #4d5564;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 9px;
+}
+.lm-lights-slab::before {
+  content: "";
+  width: 14px;
+  height: 1px;
+  background: #252b34;
+}
+.lm-lights-slab::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, #252b34, transparent);
+}
+.lm-lights-slab b {
+  color: #8a94a3;
+  font-weight: 500;
+}
+
+/* Mode strip */
+.lm-mstrip {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: mstrip;
+}
+.lm-mbtn {
+  padding: 14px 15px;
+  cursor: pointer;
+  border: 0;
+  border-right: 1px solid #1a1e25;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  transition: background 0.15s ease;
+}
+.lm-mbtn:last-child {
+  border-right: 0;
+}
+.lm-mbtn:hover:not(:disabled) {
+  background: #14171d;
+}
+.lm-mbtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.lm-mbtn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+}
+.lm-mbtn .ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #252b34;
+  color: #8a94a3;
+  flex-shrink: 0;
+}
+.lm-mbtn .ico svg {
+  width: 16px;
+  height: 16px;
+}
+.lm-mbtn .tx {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.lm-mbtn .tn {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: #8a94a3;
+  text-transform: uppercase;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lm-mbtn .ts {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 10.5px;
+  color: #4d5564;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lm-mbtn .kb {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  color: #4d5564;
+  padding: 2px 5px;
+  border: 1px solid #252b34;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+/* Responsive: when the strip container is narrow, shed non-essential pieces
+   so the mode title stays visible. Uses container queries so the breakpoints
+   react to the strip's own width (dock + sidebar agnostic). */
+@container mstrip (max-width: 580px) {
+  .lm-mbtn {
+    padding: 12px 11px;
+    gap: 9px;
+  }
+  .lm-mbtn .kb {
+    display: none;
+  }
+}
+@container mstrip (max-width: 460px) {
+  .lm-mbtn {
+    padding: 11px 9px;
+    gap: 8px;
+  }
+  .lm-mbtn .ts {
+    display: none;
+  }
+  .lm-mbtn .ico {
+    width: 26px;
+    height: 26px;
+  }
+  .lm-mbtn .ico svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+@container mstrip (max-width: 340px) {
+  .lm-mbtn {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 4px;
+    text-align: center;
+  }
+  .lm-mbtn .tx {
+    flex: 0 0 auto;
+    width: 100%;
+    align-items: center;
+  }
+  .lm-mbtn .tn {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+  }
+}
+.lm-mbtn.is-on {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.09), rgba(255, 176, 32, 0.02));
+}
+.lm-mbtn.is-on .tn {
+  color: #ffb020;
+}
+.lm-mbtn.is-on .ts {
+  color: #c9a568;
+}
+.lm-mbtn.is-on .ico {
+  background: rgba(255, 176, 32, 0.12);
+  border-color: rgba(255, 176, 32, 0.35);
+  color: #ffb020;
+}
+.lm-mbtn.is-on::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(to right, transparent, #ffb020, transparent);
+}
+
+/* Edge signal + profile */
+.lm-signal {
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lm-signal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 14px 0;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.lm-signal-head .l {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #eaeef4;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-shrink: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lm-signal-head .l::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #ffb020;
+  box-shadow: 0 0 6px #ffb020;
+}
+.lm-signal-head .meta-pill {
+  display: flex;
+  gap: 14px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.lm-signal-head .meta-pill b {
+  color: #ffb020;
+  font-weight: 500;
+}
+.lm-edges {
+  display: grid;
+  grid-template-columns: 30px 1fr 30px;
+  grid-template-rows: 12px 1fr 12px;
+  gap: 4px;
+  height: 110px;
+  margin: 10px 14px 12px;
+}
+.lm-edge {
+  background: #0a0c10;
+  border: 1px solid #1a1e25;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+.lm-edge .label {
+  position: absolute;
+  inset: auto 5px 2px auto;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 7.5px;
+  color: rgba(255, 255, 255, 0.72);
+  letter-spacing: 0.1em;
+}
+.lm-edge-top {
+  grid-column: 2;
+  grid-row: 1;
+  background: linear-gradient(
+    90deg,
+    #ff7a1a,
+    #ffb030,
+    #ffd060,
+    #ffa820,
+    #ff5a22,
+    #cc2e1a,
+    #aa2040,
+    #802056,
+    #5a1a4a,
+    #2a1858,
+    #0e1a48,
+    #08182e
+  );
+}
+.lm-edge-bot {
+  grid-column: 2;
+  grid-row: 3;
+  background: linear-gradient(
+    90deg,
+    #091527,
+    #0b2038,
+    #13324b,
+    #1b4462,
+    #245679,
+    #2c6990,
+    #1e5078,
+    #17385a,
+    #10253e,
+    #081a2e,
+    #061328,
+    #051027
+  );
+}
+.lm-edge-l {
+  grid-column: 1;
+  grid-row: 2;
+  background: linear-gradient(
+    #201305,
+    #3f2408,
+    #62380c,
+    #8a4b10,
+    #a55414,
+    #b25818,
+    #90461a,
+    #5e2e10,
+    #3a1c08,
+    #1a0e04
+  );
+}
+.lm-edge-r {
+  grid-column: 3;
+  grid-row: 2;
+  background: linear-gradient(
+    #1c0b25,
+    #2b1234,
+    #3b1a4a,
+    #4d2563,
+    #5c2f7a,
+    #63358b,
+    #542c76,
+    #3d1f5a,
+    #281240,
+    #14072a
+  );
+}
+.lm-edge-c {
+  grid-column: 2;
+  grid-row: 2;
+  background: #05070a;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #252b34;
+}
+.lm-edge-c .scene {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  color: #4d5564;
+  text-align: center;
+  line-height: 1.55;
+  letter-spacing: 0.08em;
+}
+.lm-edge-c .scene b {
+  color: #8a94a3;
+  font-weight: 500;
+  display: block;
+  margin-bottom: 2px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lm-profile {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+  border-top: 1px solid #1a1e25;
+}
+.lm-psl {
+  padding: 10px 14px 14px;
+  border-right: 1px solid #1a1e25;
+}
+.lm-psl:last-child {
+  border-right: 0;
+}
+.lm-psl .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  margin-bottom: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lm-psl .row > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-psl .row b {
+  color: #eaeef4;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 10.5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.lm-psl .tr {
+  position: relative;
+  height: 18px;
+  display: flex;
+  align-items: center;
+}
+.lm-psl .tr-track {
+  height: 3px;
+  width: 100%;
+  background: #0a0c0f;
+  border: 1px solid #1a1e25;
+  border-radius: 3px;
+  position: relative;
+  overflow: visible;
+}
+.lm-psl .tr-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(to right, #ffb020, #ff7a1a);
+  border-radius: 3px;
+  position: relative;
+  box-shadow: 0 0 8px rgba(255, 176, 32, 0.35);
+}
+.lm-psl .tr-fill::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 3px rgba(255, 176, 32, 0.22), 0 2px 4px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.lm-psl .tr input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+.lm-psl .tr input[type="range"]:disabled {
+  cursor: not-allowed;
+}
+.lm-psl.is-toggle .tr-toggle {
+  width: 100%;
+  height: 18px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.lm-psl.is-toggle .tr-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Scene presets */
+.lm-scenes {
+  display: flex;
+  gap: 8px;
+}
+.lm-sc {
+  flex: 1;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #1a1e25;
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 0 10px 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.lm-sc:hover {
+  transform: translateY(-1px);
+  border-color: #252b34;
+}
+.lm-sc:focus-visible {
+  outline: none;
+  border-color: rgba(255, 176, 32, 0.6);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.4);
+}
+.lm-sc.is-sel {
+  border-color: rgba(255, 176, 32, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.3), 0 0 12px rgba(255, 176, 32, 0.15);
+}
+.lm-sc::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+}
+.lm-sc b {
+  position: relative;
+  z-index: 1;
+  font-weight: 500;
+}
+
+/* Dock */
+.lm-dock {
+  border-left: 1px solid #1a1e25;
+  background: rgba(8, 9, 12, 0.4);
+  padding: 18px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.lm-dock > * {
+  flex-shrink: 0;
+}
+.lm-dock h4 {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  color: #4d5564;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.lm-dock h4 .t {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lm-dock h4 .t::before {
+  content: "";
+  width: 10px;
+  height: 1px;
+  background: #252b34;
+}
+.lm-dock h4 .add {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  color: #4d5564;
+  border: 1px solid #252b34;
+  background: #0a0c0f;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+.lm-out-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lm-out-row {
+  background: #0e1014;
+  border: 1px solid #1a1e25;
+  border-radius: 8px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.lm-out-row:hover:not(:disabled) {
+  border-color: #252b34;
+}
+.lm-out-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.lm-out-row:focus-visible {
+  outline: none;
+  border-color: rgba(255, 176, 32, 0.5);
+  box-shadow: 0 0 0 1px rgba(255, 176, 32, 0.35);
+}
+.lm-out-row .st {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 8px #4ade80;
+  flex-shrink: 0;
+}
+.lm-out-row.is-off .st {
+  background: #4d5564;
+  box-shadow: none;
+}
+.lm-out-row.is-unavailable .st {
+  background: #3a3f48;
+  box-shadow: none;
+}
+.lm-out-row .tx {
+  flex: 1;
+  min-width: 0;
+}
+.lm-out-row .tx .n {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #eaeef4;
+  font-weight: 500;
+  text-transform: uppercase;
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+}
+.lm-out-row .tx .n em {
+  font-style: normal;
+  color: #4d5564;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+.lm-out-row .tx .s {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: #4d5564;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-out-row .tx .s b {
+  color: #8a94a3;
+  font-weight: 500;
+}
+.lm-out-row .tg {
+  width: 22px;
+  height: 12px;
+  border-radius: 7px;
+  background: #1a1d23;
+  border: 1px solid #252b34;
+  position: relative;
+  flex-shrink: 0;
+}
+.lm-out-row .tg::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffb020;
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+  transition: left 0.15s ease, background 0.15s ease;
+}
+.lm-out-row.is-off .tg::after {
+  left: 1px;
+  background: #3a3f48;
+  box-shadow: none;
+}
+.lm-hint-box {
+  border: 1px dashed #252b34;
+  border-radius: 8px;
+  padding: 12px;
+  color: #4d5564;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+.lm-hint-box b {
+  color: #8a94a3;
+  display: block;
+  margin-bottom: 3px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Calibration required banner (Phase 9 — amber dark variant) */
+.lm-lights-cal-banner {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #eaeef4;
+}
+.lm-lights-cal-banner .ttl {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffb020;
+  font-weight: 500;
+}
+.lm-lights-cal-banner .sub {
+  font-size: 11px;
+  color: #8a94a3;
+  margin-top: 2px;
+}
+.lm-lights-cal-banner .act {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.1);
+  color: #ffb020;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+}
+.lm-lights-cal-banner .act:hover {
+  background: rgba(255, 176, 32, 0.18);
+  border-color: rgba(255, 176, 32, 0.55);
+}
+
+/* ── UI mode transition — LED edge sweep (Phase 5) ──────────────────── */
+.lm-led-sweep {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+.lm-led-sweep i {
+  position: absolute;
+  background: var(--lm-amber, #ffb020);
+  box-shadow:
+    0 0 14px var(--lm-amber, #ffb020),
+    0 0 6px #fff;
+  border-radius: 1px;
+}
+.lm-led-sweep .t {
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 0;
+}
+.lm-led-sweep .r {
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 0;
+}
+.lm-led-sweep .b {
+  bottom: 0;
+  right: 0;
+  height: 2px;
+  width: 0;
+}
+.lm-led-sweep .l {
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  height: 0;
+}
+.lm-led-sweep.playing .t {
+  animation: lm-led-sweep-t 420ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+}
+.lm-led-sweep.playing .r {
+  animation: lm-led-sweep-r 420ms cubic-bezier(0.33, 1, 0.68, 1) 50ms forwards;
+}
+.lm-led-sweep.playing .b {
+  animation: lm-led-sweep-b 420ms cubic-bezier(0.33, 1, 0.68, 1) 100ms forwards;
+}
+.lm-led-sweep.playing .l {
+  animation: lm-led-sweep-l 420ms cubic-bezier(0.33, 1, 0.68, 1) 150ms forwards;
+}
+@keyframes lm-led-sweep-t {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+@keyframes lm-led-sweep-r {
+  0% {
+    height: 0;
+  }
+  100% {
+    height: 100%;
+  }
+}
+@keyframes lm-led-sweep-b {
+  0% {
+    width: 0;
+  }
+  100% {
+    width: 100%;
+  }
+}
+@keyframes lm-led-sweep-l {
+  0% {
+    height: 0;
+  }
+  100% {
+    height: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-led-sweep,
+  .lm-led-sweep.playing i {
+    display: none;
+  }
 }
 
 * {

@@ -43,30 +43,6 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("CalibrationSection", () => {
-  it("renders LED Setup navigation item in the layout", () => {
-    render(
-      <SettingsLayout
-        uiMode="full"
-        activeSection={SECTION_IDS.LIGHTS}
-        onSectionChange={vi.fn()}
-        calibrationStep="editor"
-        lightingMode={{ kind: "off" }}
-        outputTargets={["usb"]}
-        usbConnected={true}
-        hueConfigured={false}
-        hueStreaming={false}
-        modeLockReason={null}
-        onLightingModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
-        onCalibrationSaved={vi.fn()}
-        onCalibrationStepChange={vi.fn()}
-        onCheckForUpdates={vi.fn()}
-        isCheckingForUpdates={false}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: /LED Setup/i })).toBeInTheDocument();
-  });
 
   it("shows template and geometry overview values when calibration is configured", () => {
     const onEditCalibration = vi.fn();

@@ -16,9 +16,9 @@ import {
   resolveLedModeEnableAttempt,
 } from "../../../mode/state/modeGuard";
 import {
-  getGeneralModeLockState,
+  getLightsModeLockState,
   triggerCalibrationFromLock,
-} from "../../../settings/sections/GeneralSection";
+} from "../../../settings/sections/LightsSection";
 
 const EXISTING_CALIBRATION: LedCalibrationConfig = {
   templateId: "monitor-27-16-9",
@@ -126,7 +126,7 @@ describe("calibration entry flow", () => {
   });
 
   it("open calibration CTA state is visible when mode is locked", () => {
-    const lockState = getGeneralModeLockState(MODE_GUARD_REASONS.CALIBRATION_REQUIRED);
+    const lockState = getLightsModeLockState(MODE_GUARD_REASONS.CALIBRATION_REQUIRED);
     const openCalibrationOverlay = vi.fn();
 
     triggerCalibrationFromLock(lockState, openCalibrationOverlay);

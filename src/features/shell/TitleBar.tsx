@@ -19,6 +19,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
 
 type Platform = "macos" | "windows" | "linux";
 
@@ -33,11 +34,15 @@ function detectPlatform(): Platform {
 interface TitleBarProps {
   uiMode: "full" | "compact";
   onSwitchUIMode: (mode: "full" | "compact") => void;
+  /** Active navigation tab — only relevant in full mode. */
+  activeSection?: SectionId;
+  /** Called when user clicks a tab — only relevant in full mode. */
+  onSectionChange?: (id: SectionId) => void;
 }
 
 export const TITLE_BAR_HEIGHT_PX = 36;
 
-export function TitleBar({ uiMode, onSwitchUIMode }: TitleBarProps) {
+export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange }: TitleBarProps) {
   const { t } = useTranslation("common");
   const [platform] = useState<Platform>(detectPlatform);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -65,71 +70,98 @@ export function TitleBar({ uiMode, onSwitchUIMode }: TitleBarProps) {
   const toggleTitle = t(
     toggleVariant === "to-full" ? "settings.switchToFull" : "settings.switchToCompact",
   );
-  const handleToggle = () => onSwitchUIMode(uiMode === "compact" ? "full" : "compact");
+  const handleToggle = () => void onSwitchUIMode(uiMode === "compact" ? "full" : "compact");
 
   const isMac = platform === "macos";
 
   return (
     <div
       data-tauri-drag-region
-      className="fixed top-0 right-0 left-0 z-40 flex items-center border-b border-slate-200/70 bg-white/80 text-slate-700 backdrop-blur-md select-none dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:text-zinc-300"
-      style={{ height: `${TITLE_BAR_HEIGHT_PX}px` }}
+      className="lm-titlebar fixed top-0 right-0 left-0 z-40 flex items-center select-none"
+      style={{
+        height: `${TITLE_BAR_HEIGHT_PX}px`,
+        gap: "20px",
+        // Right edge padding mirrors the mockup (`padding: 0 10px 0 0`) on
+        // mac so the compact toggle never sits flush against the window
+        // corner. On win/linux the custom min/max/close buttons take the
+        // edge, so we let them flush against it for a native feel.
+        paddingRight: isMac ? "10px" : "0",
+      }}
     >
-      {/* Left: traffic-light reservation (mac) or app brand (win/linux) */}
+      {/* Left: traffic-light reservation (mac) or leading brand mark (win/linux).
+          Mac keeps a hard 80px reservation so native traffic lights never
+          collide with our drag region; win/linux gets a small amber LumaIcon
+          where the system would normally draw its own icon. */}
       {isMac ? (
         <div
           data-tauri-drag-region
           className="shrink-0"
-          style={{ width: "80px" }}
+          style={{ width: "80px", height: "100%" }}
           aria-hidden="true"
         />
       ) : (
         <div
           data-tauri-drag-region
-          className="flex shrink-0 items-center gap-2 pr-3 pl-3"
+          className="flex shrink-0 items-center pr-1 pl-3"
         >
           <LumaIcon />
         </div>
       )}
 
-      {/* App name */}
-      <div
-        data-tauri-drag-region
-        className="flex min-w-0 flex-1 items-center"
-      >
-        <span
-          data-tauri-drag-region
-          className="truncate text-[12px] font-medium tracking-wide"
-        >
-          LumaSync
+      {/* Brand — `LUMA/SYNC` with an amber slash, IBM Plex Mono. */}
+      <div data-tauri-drag-region className="flex shrink-0 items-center">
+        <span data-tauri-drag-region className="lm-titlebar-brand">
+          LUMA<span className="accent">/</span>SYNC
         </span>
       </div>
 
-      {/* Right: compact toggle (+ window controls on win/linux) */}
-      <div className="flex shrink-0 items-center">
+      {/* Nav tabs — full mode only, between brand and spacer. */}
+      {uiMode === "full" && activeSection != null && onSectionChange != null && (
+        <div className="lm-titlebar-tabs" role="tablist">
+          {SECTION_ORDER.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              data-tauri-drag-region="false"
+              className={`lm-titlebar-tab${id === activeSection ? " is-on" : ""}`}
+              aria-selected={id === activeSection}
+              onClick={() => onSectionChange(id)}
+            >
+              {t(`settings.sections.${id}`)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Spacer — pushes right cluster to the edge. */}
+      <div data-tauri-drag-region className="min-w-0 flex-1" />
+
+      {/* Right cluster: compact/full toggle (+ window controls on win/linux). */}
+      <div className="flex shrink-0 items-center" style={{ height: "100%" }}>
         <button
           type="button"
           data-tauri-drag-region="false"
           onClick={handleToggle}
           title={toggleTitle}
           aria-label={toggleTitle}
-          className="flex h-9 w-11 items-center justify-center text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-800 dark:text-zinc-400 dark:hover:bg-zinc-800/80 dark:hover:text-zinc-100"
+          className="lm-titlebar-toggle"
         >
           {toggleVariant === "to-full" ? <ExpandIcon /> : <CollapseIcon />}
         </button>
 
         {!isMac && (
-          <WindowControls
-            isMaximized={isMaximized}
-            onMinimize={() => void getCurrentWindow().minimize()}
-            onToggleMaximize={() => void getCurrentWindow().toggleMaximize()}
-            onClose={() => void getCurrentWindow().close()}
-          />
+          <>
+            {/* small breathing room between toggle and native-replacement controls */}
+            <span aria-hidden className="inline-block" style={{ width: "8px" }} />
+            <WindowControls
+              isMaximized={isMaximized}
+              onMinimize={() => void getCurrentWindow().minimize()}
+              onToggleMaximize={() => void getCurrentWindow().toggleMaximize()}
+              onClose={() => void getCurrentWindow().close()}
+            />
+          </>
         )}
-
-        {/* Right edge padding — on mac keeps the toggle off the window corner;
-            on win/linux WindowControls provides its own edge flush. */}
-        {isMac && <div className="w-1" />}
       </div>
     </div>
   );
@@ -185,11 +217,7 @@ function CtrlButton({
       onClick={onClick}
       title={aria}
       aria-label={aria}
-      className={`flex h-9 w-11 items-center justify-center text-slate-500 transition-colors dark:text-zinc-400 ${
-        danger
-          ? "hover:bg-red-500 hover:text-white"
-          : "hover:bg-slate-200/70 hover:text-slate-800 dark:hover:bg-zinc-800/80 dark:hover:text-zinc-100"
-      }`}
+      className={`lm-titlebar-ctrl${danger ? " is-danger" : ""}`}
     >
       {children}
     </button>
@@ -204,10 +232,10 @@ function LumaIcon() {
   return (
     <svg
       viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-300"
+      className="lm-titlebar-mark"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

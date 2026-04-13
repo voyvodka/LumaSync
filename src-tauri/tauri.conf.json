@@ -16,14 +16,14 @@
         "title": "LumaSync",
         "width": 320,
         "height": 480,
-        "minWidth": 320,
-        "minHeight": 400,
+        "minWidth": 300,
+        "minHeight": 420,
         "resizable": true,
         "center": true,
         "visible": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "backgroundColor": "#09090b"
+        "backgroundColor": "#07080a"
       }
     ],
     "security": {

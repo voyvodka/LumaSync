@@ -64,8 +64,8 @@ export const SECTION_ORDER: SectionId[] = [
   SECTION_IDS.LIGHTS,
   SECTION_IDS.LED_SETUP,
   SECTION_IDS.DEVICES,
-  SECTION_IDS.SYSTEM,
   SECTION_IDS.ROOM_MAP,
+  SECTION_IDS.SYSTEM,
 ];
 
 // ---------------------------------------------------------------------------
@@ -199,7 +199,22 @@ export const WINDOW_MIN_HEIGHT = 480;
 export type UIMode = "compact" | "full";
 
 /** Logical pixel dimensions for each UI mode */
-export const UI_MODE_SIZES: Record<UIMode, { width: number; height: number }> = {
+export const UI_MODE_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {
   compact: { width: 320, height: 480 },
   full: { width: 900, height: 620 },
+};
+
+/**
+ * Per-mode minimum window size. Applied dynamically via `setMinSize` when
+ * `resizeToMode` runs so each mode enforces a floor that keeps its own layout
+ * readable at every resolution.
+ *
+ * - Compact min (300×420): tight but keeps tray-style controls usable.
+ * - Full min (800×560): derived from the Lights mode-strip container-query
+ *   breakpoints — at ≥800px the strip is ≥460px wide, so mode title + subtitle
+ *   stay visible (only the decorative ⌥1-3 kb pill sheds below 580px mstrip).
+ */
+export const UI_MODE_MIN_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {
+  compact: { width: 300, height: 420 },
+  full: { width: 800, height: 560 },
 };

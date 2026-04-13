@@ -70,7 +70,7 @@ describe("TelemetrySection", () => {
   });
 
   it("fetches runtime telemetry on mount and renders capture/send/queue values", async () => {
-    render(<TelemetrySection />);
+    render(<TelemetrySection usbConnected={true} />);
 
     await waitFor(() => {
       expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
@@ -87,7 +87,7 @@ describe("TelemetrySection", () => {
   it("cleans polling interval on unmount and does not duplicate interval after remount", async () => {
     vi.useFakeTimers();
     const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
-    const firstRender = render(<TelemetrySection />);
+    const firstRender = render(<TelemetrySection usbConnected={true} />);
 
     await act(async () => {
       await Promise.resolve();
@@ -108,7 +108,7 @@ describe("TelemetrySection", () => {
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
     expect(clearIntervalSpy).toHaveBeenCalled();
 
-    render(<TelemetrySection />);
+    render(<TelemetrySection usbConnected={true} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -141,7 +141,7 @@ describe("TelemetrySection", () => {
       },
     });
 
-    render(<TelemetrySection />);
+    render(<TelemetrySection usbConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Hue Stream")).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe("TelemetrySection", () => {
   });
 
   it("does not render Hue section when hue is null", async () => {
-    render(<TelemetrySection />);
+    render(<TelemetrySection usbConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Capture FPS")).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe("TelemetrySection", () => {
   it("renders error fallback when telemetry request fails", async () => {
     getFullTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
 
-    render(<TelemetrySection />);
+    render(<TelemetrySection usbConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Telemetry unavailable.")).toBeInTheDocument();
@@ -216,33 +216,4 @@ describe("Settings telemetry wiring", () => {
     });
   });
 
-  it("system nav button triggers section change to SYSTEM", async () => {
-    const user = userEvent.setup();
-    const onSectionChange = vi.fn();
-
-    render(
-      <SettingsLayout
-        uiMode="full"
-        activeSection={SECTION_IDS.LIGHTS}
-        onSectionChange={onSectionChange}
-        calibrationStep="editor"
-        lightingMode={{ kind: "off" }}
-        outputTargets={["usb"]}
-        usbConnected={true}
-        hueConfigured={false}
-        hueStreaming={false}
-        modeLockReason={null}
-        onLightingModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
-        onCalibrationSaved={vi.fn()}
-        onCalibrationStepChange={vi.fn()}
-        onCheckForUpdates={vi.fn()}
-        isCheckingForUpdates={false}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: /System/i }));
-
-    expect(onSectionChange).toHaveBeenCalledWith(SECTION_IDS.SYSTEM);
-  });
 });

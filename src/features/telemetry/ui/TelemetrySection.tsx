@@ -18,13 +18,23 @@ function queueHealthColor(health: string): string {
   return "text-slate-900 dark:text-zinc-100";
 }
 
-export function TelemetrySection() {
+interface TelemetrySectionProps {
+  usbConnected: boolean;
+}
+
+export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
   const { t } = useTranslation("common");
   const [snapshot, setSnapshot] = useState<FullTelemetrySnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
+    // Don't poll when device is disconnected
+    if (!usbConnected) {
+      setIsLoading(false);
+      return;
+    }
+
     let mounted = true;
 
     const refresh = async () => {
@@ -51,7 +61,7 @@ export function TelemetrySection() {
       mounted = false;
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [usbConnected]);
 
   const showEmpty =
     !isLoading

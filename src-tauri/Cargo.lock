@@ -2337,6 +2337,8 @@ name = "lumasync"
 version = "1.2.0"
 dependencies = [
  "log",
+ "objc2",
+ "objc2-app-kit",
  "openssl",
  "raw-window-handle",
  "reqwest",

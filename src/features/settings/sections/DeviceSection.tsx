@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
+import type { DisplayInfo } from "../../../shared/contracts/display";
 import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
 import type { HueChannelPlacement, RoomMapConfig } from "../../../shared/contracts/roomMap";
 import { shellStore } from "../../persistence/shellStore";
+import { listDisplays } from "../../calibration/calibrationApi";
 import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
 import { buildHueRuntimeStatusCard } from "../../device/hueRuntimeStatusCard";
 import { buildHueStatusCard } from "../../device/hueStatusCard";
@@ -12,6 +14,8 @@ import { useDeviceConnection } from "../../device/useDeviceConnection";
 import { useHueOnboarding } from "../../device/useHueOnboarding";
 import { stopHue } from "../../mode/modeApi";
 import { HueChannelMapPanel, MiniSpatialPreview } from "./HueChannelMapPanel";
+
+type DeviceCategory = "usb" | "hue" | "displays" | "manual";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -88,6 +92,52 @@ function IconBridge() {
   );
 }
 
+function IconUsb() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="9" width="18" height="10" rx="2" />
+      <path d="M8 9V6a2 2 0 012-2h4a2 2 0 012 2v3" />
+      <circle cx="12" cy="14" r="1.3" fill="currentColor" />
+    </svg>
+  );
+}
+
+function IconHueBridgeGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3v18M3 12h18" />
+    </svg>
+  );
+}
+
+function IconDisplayGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="13" rx="1.5" />
+      <path d="M8 21h8M12 18v3" />
+    </svg>
+  );
+}
+
+function IconPencil() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 113 3L7 19l-4 1 1-4z" />
+    </svg>
+  );
+}
+
+function IconRefresh() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12a9 9 0 11-3-6.7L21 8" />
+      <path d="M21 3v5h-5" />
+    </svg>
+  );
+}
+
 export function DeviceSection() {
   const { t } = useTranslation("common");
   const {
@@ -132,7 +182,6 @@ export function DeviceSection() {
 
   const {
     status,
-    groupedPorts,
     ports,
     selectedPort,
     connectedPort,
@@ -141,27 +190,13 @@ export function DeviceSection() {
     isReconnecting,
     isHealthChecking,
     isConnected,
-    canConnect,
     statusCard,
     latestHealthCheck,
     refreshPorts,
     selectPort,
     connectSelectedPort,
     runHealthCheck,
-    connectButtonLabel,
   } = useDeviceConnection();
-
-  const selected = ports.find((port) => port.portName === selectedPort) ?? null;
-
-  const connectLabelKey =
-    connectButtonLabel === "connected"
-      ? "device.actions.connected"
-      : connectButtonLabel === "reconnect"
-        ? "device.actions.reconnect"
-        : "device.actions.connect";
-
-  const connectDisabled =
-    !canConnect || isScanning || (connectButtonLabel === "connected" && connectedPort === selectedPort);
 
   const statusModel = buildDeviceStatusCard({
     status,
@@ -241,6 +276,24 @@ export function DeviceSection() {
     return () => {
       if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
     };
+  }, []);
+
+  // -------------------------------------------------------------------------
+  // Phase 7: category rail + displays list
+  // -------------------------------------------------------------------------
+  const [activeCategory, setActiveCategory] = useState<DeviceCategory>("usb");
+  const [displays, setDisplays] = useState<DisplayInfo[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listDisplays()
+      .then((result) => {
+        if (!cancelled) setDisplays(result);
+      })
+      .catch(() => {
+        if (!cancelled) setDisplays([]);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const handlePositionChange = useCallback(async (updated: HueChannelPlacement[]) => {
@@ -363,97 +416,6 @@ export function DeviceSection() {
     );
   }
 
-  const renderPortRows = (kind: "supported" | "other") => {
-    const list = kind === "supported" ? groupedPorts.supported : groupedPorts.other;
-
-    if (list.length === 0) {
-      return (
-        <li className="rounded-xl border border-dashed border-slate-200 px-3 py-2.5 text-xs text-slate-400 dark:border-zinc-700 dark:text-zinc-500">
-          {t("device.groups.empty")}
-        </li>
-      );
-    }
-
-    return list.map((port) => {
-      const active = selectedPort === port.portName;
-      const isConnectedPort = connectedPort === port.portName;
-
-      // State-aware connection badge — mirrors Hue bridge reachability badge
-      let connBadgeLabel: string | null = null;
-      let connBadgeActiveClass = "";
-      let connBadgeInactiveClass = "";
-
-      if (isConnectedPort) {
-        if (isReconnecting) {
-          connBadgeLabel = t("device.badges.reconnecting");
-          connBadgeActiveClass = "bg-amber-400/20 text-amber-100 dark:bg-amber-500/20 dark:text-amber-800";
-          connBadgeInactiveClass = "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
-        } else if (isHealthChecking) {
-          connBadgeLabel = t("device.badges.checking");
-          connBadgeActiveClass = "bg-white/15 text-white/80 dark:bg-zinc-700/25 dark:text-zinc-600";
-          connBadgeInactiveClass = "bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400";
-        } else if (status === "error" || status === "manual_required") {
-          connBadgeLabel = t("device.badges.error");
-          connBadgeActiveClass = "bg-rose-400/20 text-rose-100 dark:bg-rose-500/20 dark:text-rose-800";
-          connBadgeInactiveClass = "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300";
-        } else {
-          connBadgeLabel = t("device.badges.connected");
-          connBadgeActiveClass = "bg-white/20 text-white dark:bg-emerald-500/15 dark:text-emerald-400";
-          connBadgeInactiveClass = "bg-slate-100 text-slate-600 dark:bg-zinc-800 dark:text-zinc-300";
-        }
-      }
-
-      return (
-        <li key={port.portName}>
-          <button
-            type="button"
-            onClick={() => {
-              selectPort(port.portName);
-            }}
-            className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
-              active
-                ? "border-slate-900 bg-slate-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
-                : "border-slate-200 bg-white text-slate-800 hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-xs font-medium">
-                  {portDisplayName(port.portName, port.product, port.manufacturer)}
-                </p>
-                <p className={`mt-0.5 font-mono truncate text-[11px] ${active ? "text-white/70 dark:text-zinc-600" : "text-slate-400 dark:text-zinc-500"}`}>
-                  {port.portName}
-                </p>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-1.5">
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                    port.isSupported
-                      ? active
-                        ? "bg-emerald-400/20 text-emerald-100 dark:bg-emerald-500/20 dark:text-emerald-400"
-                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-                      : active
-                        ? "bg-amber-400/20 text-amber-100 dark:bg-amber-400/20 dark:text-amber-300"
-                        : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
-                  }`}
-                >
-                  {port.isSupported ? t("device.badges.supported") : t("device.badges.other")}
-                </span>
-
-                {connBadgeLabel ? (
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${active ? connBadgeActiveClass : connBadgeInactiveClass}`}>
-                    {connBadgeLabel}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </button>
-        </li>
-      );
-    });
-  };
-
   /* ── Wizard step header row helper ──────────────────── */
   function renderWizardStepHeader(
     stepKey: HueStepKey,
@@ -541,169 +503,212 @@ export function DeviceSection() {
   }
 
   return (
-    <div className="w-full space-y-5">
-      {/* ── Serial Device ─────────────────────────────────────── */}
-      <section className="rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4 dark:border-zinc-800">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold tracking-tight text-slate-900 dark:text-zinc-100">{t("device.title")}</h2>
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-zinc-400">{t("device.description")}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                void refreshPorts();
-              }}
-              disabled={isScanning}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-            >
-              {isScanning ? t("device.actions.scanning") : t("device.actions.refresh")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void runHealthCheck();
-              }}
-              disabled={healthActionDisabled}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-            >
-              {isHealthChecking ? t("device.healthCheck.runningAction") : t("device.healthCheck.runAction")}
-            </button>
-          </div>
-        </div>
+    <div className="lm-device-page">
+      {/* ── Left category rail ───────────────────────────────── */}
+      <nav className="lm-device-rail">
+        <div className="lm-device-rail-h">{t("devicesPage.rail.connected")}</div>
+        <button
+          type="button"
+          className={`lm-device-cat ${activeCategory === "usb" ? "is-on" : ""}`}
+          onClick={() => setActiveCategory("usb")}
+        >
+          <span className="lm-device-cat-ic"><IconUsb /></span>
+          <span className="lm-device-cat-tx">{t("devicesPage.rail.usbStrips")}</span>
+          {ports.length > 0 ? <span className="lm-device-cat-cnt">{ports.length}</span> : null}
+        </button>
+        <button
+          type="button"
+          className={`lm-device-cat ${activeCategory === "hue" ? "is-on" : ""}`}
+          onClick={() => setActiveCategory("hue")}
+        >
+          <span className="lm-device-cat-ic"><IconHueBridgeGlyph /></span>
+          <span className="lm-device-cat-tx">{t("devicesPage.rail.hueBridges")}</span>
+          {selectedBridge ? <span className="lm-device-cat-cnt">1</span> : null}
+        </button>
+        <button
+          type="button"
+          className={`lm-device-cat ${activeCategory === "displays" ? "is-on" : ""}`}
+          onClick={() => setActiveCategory("displays")}
+        >
+          <span className="lm-device-cat-ic"><IconDisplayGlyph /></span>
+          <span className="lm-device-cat-tx">{t("devicesPage.rail.displays")}</span>
+          {displays.length > 0 ? <span className="lm-device-cat-cnt">{displays.length}</span> : null}
+        </button>
 
-        <div className="p-6">
-          {/* D-04: USB disconnected status message */}
+        <div className="lm-device-rail-h">{t("devicesPage.rail.other")}</div>
+        <button
+          type="button"
+          className={`lm-device-cat ${activeCategory === "manual" ? "is-on" : ""}`}
+          onClick={() => setActiveCategory("manual")}
+        >
+          <span className="lm-device-cat-ic"><IconPencil /></span>
+          <span className="lm-device-cat-tx">{t("devicesPage.rail.manualEntry")}</span>
+        </button>
+      </nav>
+
+      {/* ── Main content area ────────────────────────────────── */}
+      <div className="lm-device-main">
+        {/* ── USB Strips category ───────────────────────────── */}
+        <div className={activeCategory === "usb" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "usb"}>
+          <div className="lm-device-head">
+            <div>
+              <h1>{t("devicesPage.header.usbTitle")}</h1>
+              <div className="lm-device-head-sub">
+                {connectedPort
+                  ? t("devicesPage.header.usbSub", { count: 1 })
+                  : t("devicesPage.header.usbSubNone")}
+              </div>
+            </div>
+            <div className="lm-device-head-actions">
+              <button
+                type="button"
+                className="lm-device-btn"
+                onClick={() => { void refreshPorts(); }}
+                disabled={isScanning}
+              >
+                <IconRefresh />
+                <span>{isScanning ? t("device.actions.scanning") : t("devicesPage.actions.rescan")}</span>
+              </button>
+            </div>
+          </div>
+
           {!isConnected && (
-            <p className="mb-4 text-sm text-zinc-500">{t("device.usbDisconnected")}</p>
+            <p className="text-[11px] text-zinc-500">{t("device.usbDisconnected")}</p>
           )}
 
-          {/* Port grid */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{t("device.groups.supportedTitle")}</p>
-              <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.groups.supportedDescription")}</p>
-              <ul className="mt-2.5 space-y-1.5">{renderPortRows("supported")}</ul>
-            </div>
-            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">{t("device.groups.otherTitle")}</p>
-              <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.groups.otherDescription")}</p>
-              <ul className="mt-2.5 space-y-1.5">{renderPortRows("other")}</ul>
-            </div>
-          </div>
-
-          {/* Connect bar */}
-          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/60 dark:border-zinc-800 dark:bg-zinc-800/30">
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                {selected ? (
-                  <>
-                    <p className="truncate text-xs font-medium text-slate-800 dark:text-zinc-100">
-                      {portDisplayName(selected.portName, selected.product, selected.manufacturer)}
-                    </p>
-                    <p className="mt-0.5 font-mono truncate text-[11px] text-slate-400 dark:text-zinc-500">{selected.portName}</p>
-                  </>
-                ) : (
-                  <p className="text-xs text-slate-400 dark:text-zinc-500">{t("device.selection.emptyHint")}</p>
-                )}
+          <div className="lm-device-grid">
+            {ports.length === 0 ? (
+              <div className="lm-device-empty">
+                <h3>{t("devicesPage.usb.empty.title")}</h3>
+                <p>{t("devicesPage.usb.empty.body")}</p>
               </div>
-              <div className="flex shrink-0 items-center gap-2.5">
-                {/* Connection status indicator */}
-                {selected && (
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                        status === "connected"
-                          ? "bg-emerald-500"
-                          : isReconnecting
-                            ? "bg-amber-500"
-                            : status === "error" || status === "manual_required"
-                              ? "bg-rose-500"
-                              : isConnecting || isHealthChecking
-                                ? "bg-slate-400 dark:bg-zinc-500"
-                                : "bg-transparent"
-                      }`}
-                    />
-                    <span
-                      className={`text-[11px] font-medium ${
-                        status === "connected"
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : isReconnecting
-                            ? "text-amber-600 dark:text-amber-400"
-                            : status === "error" || status === "manual_required"
-                              ? "text-rose-600 dark:text-rose-400"
-                              : "text-slate-400 dark:text-zinc-500"
-                      }`}
-                    >
-                      {status === "connected"
-                        ? t("device.actions.connected")
-                        : isReconnecting
-                          ? t("device.badges.reconnecting")
-                          : status === "error" || status === "manual_required"
-                            ? t("device.badges.error")
-                            : isConnecting
-                              ? t("device.actions.connecting")
-                              : isHealthChecking
-                                ? t("device.badges.checking")
-                                : null}
-                    </span>
+            ) : (
+              ports.map((port) => {
+                const isConnectedCard = connectedPort === port.portName;
+                const isSelectedCard = selectedPort === port.portName && !isConnectedCard;
+                const pillLabel = isConnectedCard
+                  ? t("devicesPage.usb.pill.online")
+                  : t("devicesPage.usb.pill.discovered");
+                const pillClass = isConnectedCard ? "is-ok" : "is-warn";
+                const cardStateClass = isConnectedCard
+                  ? "is-on"
+                  : isSelectedCard
+                    ? "is-sel"
+                    : "is-ghost";
+                return (
+                  <div
+                    key={port.portName}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelectedCard || isConnectedCard}
+                    className={`lm-dcard ${cardStateClass}`}
+                    onClick={() => {
+                      if (!isConnectedCard) selectPort(port.portName);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        if (!isConnectedCard) selectPort(port.portName);
+                      }
+                    }}
+                  >
+                    <div className="lm-dcard-head">
+                      <div className="lm-dcard-ic"><IconUsb /></div>
+                      <div className="lm-dcard-tx">
+                        <div className="lm-dcard-name">
+                          <span>{portDisplayName(port.portName, port.product, port.manufacturer)}</span>
+                          <span className={`lm-dcard-pill ${pillClass}`}>{pillLabel}</span>
+                        </div>
+                        <div className="lm-dcard-sub">{port.portName}</div>
+                      </div>
+                    </div>
+
+                    <div className="lm-dcard-body">
+                      <div className="lm-dcard-cell">
+                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.ledCount")}</div>
+                        <div className="lm-dcard-cell-v">{t("devicesPage.usb.stats.na")}</div>
+                      </div>
+                      <div className="lm-dcard-cell">
+                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.baud")}</div>
+                        <div className="lm-dcard-cell-v">115200</div>
+                      </div>
+                      <div className="lm-dcard-cell">
+                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.protocol")}</div>
+                        <div className="lm-dcard-cell-v">Adalight</div>
+                      </div>
+                      <div className="lm-dcard-cell">
+                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.latency")}</div>
+                        <div className={`lm-dcard-cell-v ${isConnectedCard ? "is-am" : ""}`}>
+                          {t("devicesPage.usb.stats.na")}
+                        </div>
+                      </div>
+                    </div>
+
+                    {isConnectedCard ? (
+                      <div className="lm-dcard-actions">
+                        <button
+                          type="button"
+                          className="lm-dcard-act"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void runHealthCheck();
+                          }}
+                          disabled={healthActionDisabled}
+                        >
+                          {isHealthChecking ? t("device.healthCheck.runningAction") : t("device.healthCheck.runAction")}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="lm-dcard-pair"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectPort(port.portName);
+                          void connectSelectedPort();
+                        }}
+                        disabled={isConnecting && isSelectedCard}
+                      >
+                        {isConnecting && isSelectedCard
+                          ? t("device.actions.connecting")
+                          : t("devicesPage.usb.pairAsStrip")}
+                      </button>
+                    )}
                   </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    void connectSelectedPort();
-                  }}
-                  disabled={connectDisabled}
-                  className="rounded-lg bg-slate-900 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isConnecting ? t("device.actions.connecting") : t(connectLabelKey)}
-                </button>
-              </div>
-            </div>
-
-            {/* Missing port hint — analogous to bridge network hint */}
-            {statusCard?.code === "SELECTED_PORT_MISSING" ? (
-              <div className="flex items-start gap-2 border-t border-slate-100 px-4 py-2.5 dark:border-zinc-800">
-                <IconInfo />
-                <p className="text-[11px] text-slate-500 dark:text-zinc-400">
-                  {t("device.port.missingHint", { port: selectedPort ?? "-" })}
-                </p>
-              </div>
-            ) : null}
+                );
+              })
+            )}
           </div>
 
-          {/* Status card */}
+          {/* Status card — preserved for diagnostics & test compatibility */}
           <div
-            className={`mt-4 rounded-xl border p-4 ${
+            className={`rounded-lg border p-3 ${
               statusVariant === "success"
-                ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/40 dark:bg-emerald-900/20"
+                ? "border-emerald-500/40 bg-emerald-900/20"
                 : statusVariant === "error"
-                  ? "border-rose-200 bg-rose-50/70 dark:border-rose-500/40 dark:bg-rose-900/20"
-                  : "border-slate-100 bg-slate-50/60 dark:border-zinc-800 dark:bg-zinc-800/30"
+                  ? "border-rose-500/40 bg-rose-900/20"
+                  : "border-zinc-800 bg-zinc-800/30"
             }`}
           >
-            <p className="text-xs font-semibold text-slate-900 dark:text-zinc-100">{statusTitle}</p>
-            <p className="mt-1 text-xs text-slate-600 dark:text-zinc-300">{statusBody}</p>
-            {statusModel.details ? <p className="mt-1 text-[11px] text-slate-400 dark:text-zinc-500">{statusModel.details}</p> : null}
+            <p className="text-[11px] font-semibold text-zinc-100">{statusTitle}</p>
+            <p className="mt-0.5 text-[11px] text-zinc-300">{statusBody}</p>
+            {statusModel.details ? <p className="mt-0.5 text-[10px] text-zinc-500">{statusModel.details}</p> : null}
             {showHealthStepOutcomes ? (
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-2 space-y-1">
                 {healthStepOutcomes.map((stepOutcome) => (
-                  <div key={stepOutcome.step} className="flex items-start gap-3 rounded-lg border border-slate-200/70 bg-white/60 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/30">
+                  <div key={stepOutcome.step} className="flex items-start gap-2 rounded border border-zinc-700 bg-zinc-900/30 px-2 py-1.5">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-slate-800 dark:text-zinc-100">
+                      <p className="text-[10px] font-medium text-zinc-100">
                         {t(`device.healthCheck.steps.labels.${stepOutcome.step}`)}
                       </p>
-                      <p className="mt-0.5 text-[11px] text-slate-500 dark:text-zinc-400">{stepOutcome.message}</p>
-                      {stepOutcome.details ? <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">{stepOutcome.details}</p> : null}
+                      <p className="mt-0.5 text-[10px] text-zinc-400">{stepOutcome.message}</p>
+                      {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-zinc-500">{stepOutcome.details}</p> : null}
                     </div>
                     <span
-                      className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold ${
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold ${
                         stepOutcome.pass
-                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
-                          : "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300"
+                          ? "bg-emerald-500/20 text-emerald-300"
+                          : "bg-rose-500/20 text-rose-300"
                       }`}
                     >
                       {stepOutcome.pass ? t("device.healthCheck.steps.outcome.pass") : t("device.healthCheck.steps.outcome.fail")}
@@ -712,11 +717,24 @@ export function DeviceSection() {
                 ))}
               </div>
             ) : null}
-            <p className="mt-2 text-[11px] text-slate-400 dark:text-zinc-500">{t("device.status.nextSteps")}</p>
+            {statusCard?.code === "SELECTED_PORT_MISSING" ? (
+              <p className="mt-1 text-[10px] text-zinc-500">
+                {t("device.port.missingHint", { port: selectedPort ?? "-" })}
+              </p>
+            ) : null}
           </div>
-        </div>
-      </section>
 
+        </div>
+
+        {/* ── Hue Bridges category ───────────────────────────── */}
+        <div className={activeCategory === "hue" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "hue"}>
+          <div className="lm-device-head">
+            <div>
+              <h1>{t("devicesPage.header.hueTitle")}</h1>
+              <div className="lm-device-head-sub">{t("devicesPage.header.hueSub")}</div>
+            </div>
+          </div>
+          <div className="lm-device-hue-wrap">
       {/* ── Philips Hue ───────────────────────────────────────── */}
       <section className="rounded-xl border border-slate-200/80 bg-white/90 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
         {/* Header */}
@@ -1290,6 +1308,66 @@ export function DeviceSection() {
           )}
         </div>
       </section>
+          </div>
+        </div>
+
+        {/* ── Displays category ──────────────────────────────── */}
+        <div className={activeCategory === "displays" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "displays"}>
+          <div className="lm-device-head">
+            <div>
+              <h1>{t("devicesPage.header.displaysTitle")}</h1>
+              <div className="lm-device-head-sub">{t("devicesPage.header.displaysSub")}</div>
+            </div>
+          </div>
+          <div className="lm-device-grid">
+            {displays.length === 0 ? (
+              <div className="lm-device-empty">
+                <p>{t("devicesPage.displays.empty")}</p>
+              </div>
+            ) : (
+              displays.map((display) => (
+                <div key={display.id} className="lm-dcard is-ghost">
+                  <div className="lm-dcard-head">
+                    <div className="lm-dcard-ic"><IconDisplayGlyph /></div>
+                    <div className="lm-dcard-tx">
+                      <div className="lm-dcard-name">
+                        <span>{display.label}</span>
+                        {display.isPrimary ? (
+                          <span className="lm-dcard-pill is-ok">{t("devicesPage.displays.primary")}</span>
+                        ) : null}
+                      </div>
+                      <div className="lm-dcard-sub">{`${display.width} × ${display.height}`}</div>
+                    </div>
+                  </div>
+                  <div className="lm-dcard-body">
+                    <div className="lm-dcard-cell">
+                      <div className="lm-dcard-cell-k">ID</div>
+                      <div className="lm-dcard-cell-v">{display.id}</div>
+                    </div>
+                    <div className="lm-dcard-cell">
+                      <div className="lm-dcard-cell-k">Scale</div>
+                      <div className="lm-dcard-cell-v">{(display.scaleFactor ?? 1).toFixed(1)}x</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* ── Manual Entry category ──────────────────────────── */}
+        <div className={activeCategory === "manual" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "manual"}>
+          <div className="lm-device-head">
+            <div>
+              <h1>{t("devicesPage.header.manualTitle")}</h1>
+              <div className="lm-device-head-sub">{t("devicesPage.header.manualSub")}</div>
+            </div>
+          </div>
+          <div className="lm-device-empty">
+            <p>{t("devicesPage.manual.body")}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

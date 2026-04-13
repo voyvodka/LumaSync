@@ -14,6 +14,7 @@ import {
   SHELL_STORE_KEY,
   DEFAULT_SHELL_STATE,
   UI_MODE_SIZES,
+  UI_MODE_MIN_SIZES,
   type ShellState,
   type UIMode,
 } from "../../shared/contracts/shell";
@@ -348,6 +349,19 @@ export async function persistWindowState(): Promise<void> {
 /** Duration of the animated window resize between UI modes. */
 const UI_MODE_RESIZE_DURATION_MS = 220;
 
+/**
+ * Apply the per-mode minimum window size (logical px). Keeps the OS-level
+ * resize handles from letting the user drag the window smaller than each
+ * mode's supported floor.
+ */
+async function applyModeMinSize(
+  win: ReturnType<typeof getCurrentWindow>,
+  mode: UIMode,
+): Promise<void> {
+  const min = UI_MODE_MIN_SIZES[mode];
+  await win.setMinSize(new LogicalSize(min.width, min.height));
+}
+
 /** Read the current main-window inner size in LOGICAL (DPI-independent) px. */
 export async function getCurrentLogicalSize(): Promise<{ width: number; height: number }> {
   const win = getCurrentWindow();
@@ -484,6 +498,12 @@ export async function resizeToMode(mode: UIMode): Promise<void> {
     targetY = Math.round(adjustedPhys.y / scaleFactor);
   }
 
+  // Lower min-size to the smallest floor for the duration of the animation
+  // so neither OS clamping nor Tauri's setSize call rejects intermediate
+  // frames. The target mode's min-size is re-applied at the end.
+  const animFloor = UI_MODE_MIN_SIZES.compact;
+  await win.setMinSize(new LogicalSize(animFloor.width, animFloor.height));
+
   // Suppress debounced geometry persistence while the animator is driving
   // setSize/setPosition every frame — otherwise an intermediate frame could
   // be written to disk as the user's chosen window rect.
@@ -503,6 +523,9 @@ export async function resizeToMode(mode: UIMode): Promise<void> {
     // explicitly below.
     cancelPendingGeometryPersist();
   }
+
+  // Re-apply the target mode's min-size so OS resize handles enforce the floor.
+  await applyModeMinSize(win, mode);
 
   await saveShellState(partialUpdate);
   await persistWindowState();
@@ -535,6 +558,11 @@ export async function initWindowLifecycle(opts?: {
       // or visibility — only position is restored here, from our own
       // shellStore, which means the user never sees a big→compact flash.
       const win = getCurrentWindow();
+      // Launch always starts in compact (see comment above) — enforce its
+      // floor so OS resize handles respect the compact min from frame 0.
+      // If the user toggles to full later, `resizeToMode` will raise the
+      // floor to full's min when that transition completes.
+      await applyModeMinSize(win, "compact");
       await restoreWindowState();
       await win.show();
       // Force the window to the front on launch. Without this, on some

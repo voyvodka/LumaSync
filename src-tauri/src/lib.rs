@@ -8,7 +8,6 @@
 //   5. tray icon + menu construction
 //   6. close-to-tray interception via on_window_event
 
-use std::{thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -27,6 +26,9 @@ mod commands {
     pub mod runtime_quality;
     pub mod runtime_telemetry;
 }
+
+#[cfg(target_os = "macos")]
+mod macos_window;
 
 mod models {
     pub mod room_map;
@@ -270,6 +272,21 @@ pub fn run() {
                 let _ = main_window.set_decorations(false);
             }
 
+            // On macOS, forbid native fullscreen so the system's auto-hiding
+            // fullscreen title bar can never collide with our custom one.
+            #[cfg(target_os = "macos")]
+            if let Some(main_window) = app.get_webview_window("main") {
+                macos_window::forbid_native_fullscreen(&main_window);
+            }
+
+            // Debug builds: auto-open WebView devtools in a detached window so
+            // frontend `console.log` is visible without manually toggling it
+            // from the WebView context menu each launch.
+            #[cfg(debug_assertions)]
+            if let Some(main_window) = app.get_webview_window("main") {
+                main_window.open_devtools();
+            }
+
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());
             app.manage(OverlayState::default());
@@ -314,23 +331,6 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Prevent default close (process exit) and hide to tray instead
                 api.prevent_close();
-
-                if cfg!(target_os = "macos") && window.is_fullscreen().unwrap_or(false) {
-                    let _ = window.set_fullscreen(false);
-                    let app_handle = window.app_handle().clone();
-                    let window_label = window.label().to_string();
-
-                    thread::spawn(move || {
-                        thread::sleep(Duration::from_millis(120));
-                        if let Some(main_window) = app_handle.get_webview_window(&window_label) {
-                            let _ = main_window.hide();
-                            let _ = main_window.emit("shell:close-to-tray", ());
-                        }
-                    });
-
-                    return;
-                }
-
                 hide_to_tray(window);
             }
         })

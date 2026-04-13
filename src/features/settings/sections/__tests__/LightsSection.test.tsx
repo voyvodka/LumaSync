@@ -5,59 +5,61 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MODE_GUARD_REASONS } from "../../../mode/state/modeGuard";
 import type { LightingModeConfig } from "../../../mode/model/contracts";
-import { GeneralSection } from "../GeneralSection";
+import { LightsSection } from "../LightsSection";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, opts?: Record<string, unknown>) => {
       const dict: Record<string, string> = {
-        "general.title": "General",
-        "general.description": "General application settings.",
-        "general.mode.title": "Lighting mode",
-        "general.mode.description": "Select output mode.",
-        "general.output.title": "Output targets",
-        "general.output.devices.usb": "USB LED Strip",
-        "general.output.devices.hue": "Philips Hue",
-        "general.output.status.connected": "Connected",
-        "general.output.status.notConnected": "Not connected",
-        "general.output.status.ready": "Ready",
-        "general.output.status.notConfigured": "Not configured",
-        "general.output.noDevices": "No devices available",
-        "general.output.noDevicesHint": "Connect your devices in Settings",
-        "general.mode.options.off": "Off",
-        "general.mode.options.ambilight": "Ambilight",
-        "general.mode.options.solid": "Solid",
+        "lightsPage.mode.off.title": "Off",
+        "lightsPage.mode.off.subtitle": "Outputs parked",
+        "lightsPage.mode.ambilight.title": "Ambilight",
+        "lightsPage.mode.ambilight.subtitleFallback": "Live screen capture",
+        "lightsPage.mode.solid.title": "Solid",
+        "lightsPage.calibrationBanner.title": "Calibration required",
+        "lightsPage.calibrationBanner.sub": "Finish LED layout before enabling this mode.",
+        "lightsPage.calibrationBanner.action": "Open calibration",
+        "lightsPage.dock.outputs": "Outputs",
+        "lightsPage.dock.rows.usbName": "USB",
+        "lightsPage.dock.rows.usbType": "CH340",
+        "lightsPage.dock.rows.hueName": "HUE",
+        "lightsPage.dock.rows.hueType": "ENTERTAINMENT",
+        "lightsPage.dock.rows.hueSubIdle": "Bridge · standby",
         "general.mode.brightness": "Brightness",
         "general.mode.solidColor": "Solid color",
-        "general.mode.lockedReasonCalibration": "Complete calibration before enabling LED mode.",
-        "general.mode.openCalibration": "Open calibration",
       };
 
-      return dict[key] ?? key;
+      let value = dict[key] ?? key;
+      if (opts) {
+        for (const [k, v] of Object.entries(opts)) {
+          value = value.replace(`{{${k}}}`, String(v));
+        }
+      }
+      return value;
     },
   }),
 }));
 
-describe("GeneralSection", () => {
+describe("LightsSection", () => {
   it("calls onModeChange with ambilight payload when Ambilight is selected", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
 
     render(
-        <GeneralSection
-          mode={{ kind: "off" }}
-          outputTargets={["usb"]}
-          usbConnected={true}
-          hueConfigured={false}
-          hueStreaming={false}
-          modeLockReason={null}
-          onModeChange={onModeChange}
-          onOutputTargetsChange={vi.fn()}
-          onOpenCalibration={vi.fn()}
-        />,
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        usbConnected={true}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={onModeChange}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Ambilight" }));
+    await user.click(screen.getByRole("button", { name: /Ambilight/ }));
 
     expect(onModeChange).toHaveBeenCalledWith({
       kind: "ambilight",
@@ -75,7 +77,7 @@ describe("GeneralSection", () => {
       });
 
       return (
-        <GeneralSection
+        <LightsSection
           mode={mode}
           outputTargets={["usb"]}
           usbConnected={true}
@@ -115,21 +117,21 @@ describe("GeneralSection", () => {
     const onModeChange = vi.fn();
 
     render(
-        <GeneralSection
-          mode={{ kind: "off" }}
-          outputTargets={["usb"]}
-          usbConnected={true}
-          hueConfigured={false}
-          hueStreaming={false}
-          modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
-          onModeChange={onModeChange}
-          onOutputTargetsChange={vi.fn()}
-          onOpenCalibration={onOpenCalibration}
-        />,
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        usbConnected={true}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
+        onModeChange={onModeChange}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={onOpenCalibration}
+      />,
     );
 
-    expect(screen.getByRole("button", { name: "Ambilight" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Solid" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Open calibration" }));
 
@@ -142,7 +144,7 @@ describe("GeneralSection", () => {
     const onOutputTargetsChange = vi.fn();
 
     render(
-      <GeneralSection
+      <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
         usbConnected={true}
@@ -156,7 +158,7 @@ describe("GeneralSection", () => {
     );
 
     // Hue is configured but not selected — clicking adds it
-    await user.click(screen.getByRole("button", { name: /Philips Hue/i }));
+    await user.click(screen.getByRole("button", { name: /HUE/ }));
 
     expect(onOutputTargetsChange).toHaveBeenCalledWith(["usb", "hue"]);
   });

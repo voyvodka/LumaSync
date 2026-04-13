@@ -8,8 +8,8 @@
       "lights": "Işıklar",
       "led-setup": "LED Kurulumu",
       "devices": "Cihazlar",
-      "system": "Sistem",
-      "room-map": "Oda Haritası",
+      "system": "Ayarlar",
+      "room-map": "Oda",
       "control": "Kontrol",
       "calibration": "Kalibrasyon",
       "settings": "Ayarlar"
@@ -69,19 +69,176 @@
       }
     },
     "compact": {
-      "presets": "Hazır ayarlar",
-      "targets": {
-        "usb": "USB",
-        "hue": "Hue"
+      "sections": {
+        "mode": "Mod",
+        "scene": "Sahne"
       },
-      "presetNames": {
-        "warmWhite": "Sıcak",
-        "coolWhite": "Soğuk",
-        "red": "Kırmızı",
-        "green": "Yeşil",
-        "blue": "Mavi",
-        "purple": "Mor"
+      "scenes": {
+        "movie": "Film",
+        "game": "Oyun",
+        "music": "Müzik",
+        "chill": "Sakin",
+        "read": "Okuma"
       }
+    }
+  },
+  "devicesPage": {
+    "rail": {
+      "connected": "Bağlı",
+      "other": "Diğer",
+      "usbStrips": "USB Şeritleri",
+      "hueBridges": "Hue Köprüleri",
+      "displays": "Ekranlar",
+      "manualEntry": "Manuel Giriş"
+    },
+    "header": {
+      "usbTitle": "USB Şeritleri",
+      "usbSub": "{{count}} bağlı",
+      "usbSubNone": "Bağlı şerit yok",
+      "hueTitle": "Hue Köprüleri",
+      "hueSub": "Philips Hue eğlence alanları",
+      "displaysTitle": "Ekranlar",
+      "displaysSub": "Ambilight yakalama için kullanılabilir ekranlar",
+      "manualTitle": "Manuel Giriş",
+      "manualSub": "Cihaz bilgilerini elle gir"
+    },
+    "actions": {
+      "rescan": "Yeniden Tara",
+      "addDevice": "Cihaz Ekle"
+    },
+    "usb": {
+      "pill": {
+        "online": "BAĞLI",
+        "discovered": "BULUNDU"
+      },
+      "stats": {
+        "ledCount": "LED Sayısı",
+        "baud": "Baud",
+        "protocol": "Protokol",
+        "latency": "Gecikme",
+        "na": "—"
+      },
+      "traffic": "Trafik",
+      "pairAsStrip": "+ LED Şerit Olarak Eşle",
+      "empty": {
+        "title": "USB portu bulunamadı",
+        "body": "Denetleyiciyi bağlayıp Yeniden Tara'ya basın."
+      }
+    },
+    "displays": {
+      "primary": "Birincil",
+      "empty": "Ekran bulunamadı."
+    },
+    "manual": {
+      "body": "Manuel cihaz girişi henüz kullanılabilir değil. Yukarıdan Yeniden Tara'yı kullanın veya seri kabloları kontrol edin."
+    }
+  },
+  "lightsPage": {
+    "slab": {
+      "modeText": "Aydınlatma",
+      "modeAccent": "Modu",
+      "signalText": "Kenar sinyali",
+      "signalAccent": "· canlı · mod ayarları",
+      "scenesText": "Sahne",
+      "scenesAccent": "ön ayarları"
+    },
+    "mode": {
+      "off": {
+        "title": "Kapalı",
+        "subtitle": "Çıkışlar beklemede"
+      },
+      "ambilight": {
+        "title": "Ambilight",
+        "subtitle": "Ekran 1 · {{count}} LED",
+        "subtitleFallback": "Canlı ekran yakalama"
+      },
+      "solid": {
+        "title": "Sabit",
+        "subtitle": "{{hex}} · %{{brightness}}"
+      }
+    },
+    "signal": {
+      "title": "Yakalama → Şerit",
+      "delta": "Δ",
+      "fps": "Σ",
+      "placeholderLatency": "11ms",
+      "placeholderFps": "58 fps",
+      "edges": {
+        "top": "ÜST · {{count}}",
+        "bot": "ALT · {{count}}",
+        "left": "SOL · {{count}}",
+        "right": "SAĞ · {{count}}"
+      },
+      "display": {
+        "label": "EKRAN 1",
+        "sub": "2560 × 1440 · HDR"
+      },
+      "profile": {
+        "smoothing": "Yumuşatma",
+        "saturation": "Doygunluk",
+        "blackBorder": "Siyah kenar",
+        "blackBorderAuto": "oto",
+        "blackBorderOff": "kapalı"
+      }
+    },
+    "scenes": {
+      "movie": "Film",
+      "game": "Oyun",
+      "music": "Müzik",
+      "chill": "Sakin",
+      "reading": "Okuma"
+    },
+    "dock": {
+      "outputs": "Çıkışlar",
+      "addAria": "Çıkış ekle",
+      "hintTitle": "Oda alanı",
+      "hintBody": "Telemetri / mini oda\nönizlemesi / kısayollar\niçin yer tutucu",
+      "rows": {
+        "usbName": "USB",
+        "usbType": "CH340",
+        "usbSub": "{{count}} LED · <b>seri</b>",
+        "usbSubUnavailable": "Şerit bağlı değil",
+        "hueName": "HUE",
+        "hueType": "ENTERTAINMENT",
+        "hueSubStreaming": "Köprü · <b>DTLS 50hz</b>",
+        "hueSubIdle": "Köprü · <b>bekleme</b>",
+        "hueSubUnavailable": "Yapılandırılmadı"
+      }
+    },
+    "calibrationBanner": {
+      "title": "Kalibrasyon gerekli",
+      "sub": "Bu modu etkinleştirmeden önce LED düzenini tamamlayın.",
+      "action": "Kurulumu aç"
+    }
+  },
+  "settingsPage": {
+    "title": "Genel",
+    "subtitle": "Başlangıç davranışı ve dil",
+    "groups": {
+      "startup": {
+        "title": "Başlangıç",
+        "sub": "Başlat · tepsi"
+      },
+      "language": {
+        "title": "Dil",
+        "sub": "Arayüz yerelleştirmesi"
+      },
+      "updates": {
+        "title": "Güncellemeler",
+        "sub": "Sürüm kontrolü"
+      },
+      "about": {
+        "title": "Hakkında",
+        "sub": "Build · lisans"
+      }
+    },
+    "language": {
+      "label": "Arayüz dili",
+      "description": "Değişiklik için yeniden başlatma gerekir"
+    },
+    "about": {
+      "tagline": "Tepsi öncelikli ortam aydınlatması",
+      "license": "MIT"
     }
   },
   "startupTray": {
@@ -99,14 +256,39 @@
     "logsDescription": "Uygulama günlükleri hata ayıklama için yerel olarak saklanır."
   },
   "updater": {
-    "title": "Güncelleme mevcut",
-    "available": "{{version}} sürümü yüklenmeye hazır.",
-    "install": "Yükle ve Yeniden Başlat",
-    "later": "Sonra",
-    "downloading": "İndiriliyor... %{{progress}}",
-    "installing": "Güncelleme yükleniyor, uygulama yeniden başlıyor...",
-    "error": "Güncelleme başarısız: {{message}}",
-    "close": "Kapat",
+    "available": {
+      "eyebrow": "Güncelleme hazır",
+      "title": "Yeni bir sürüm var",
+      "body": "LumaSync <b>v{{version}}</b> indirilmeye hazır. Uygulama yeniden başlatıldığında yüklenir."
+    },
+    "downloading": {
+      "eyebrow": "İndiriliyor",
+      "title": "v{{version}} hazırlanıyor",
+      "body": "İmza doğrulaması ile indirme sürüyor — tamamlanınca otomatik olarak kurulum aşamasına geçer.",
+      "progressLabel": "İlerleme",
+      "etaLabel": "Kalan"
+    },
+    "installing": {
+      "eyebrow": "Kuruluyor",
+      "title": "Yeni sürüm yazılıyor",
+      "verify": "minisign doğrulaması",
+      "body": "LumaSync v{{version}} dosyaları yazılıyor.<br/>Kurulum tamamlanınca uygulama otomatik yeniden başlayacak — lütfen pencereyi kapatma."
+    },
+    "error": {
+      "eyebrow": "Güncelleme başarısız",
+      "title": "Kurulum tamamlanamadı",
+      "body": "LumaSync mevcut sürümünü kullanmaya devam edebilirsin. Aşağıdaki hatayı kontrol et veya tekrar dene.",
+      "boxTitle": "Güncelleme hatası"
+    },
+    "actions": {
+      "later": "Sonra",
+      "install": "Kur ve yeniden başlat",
+      "background": "Arkaplana al",
+      "showLogs": "Log göster",
+      "close": "Kapat",
+      "retry": "Tekrar dene"
+    },
+    "sizeUnknown": "Boyut bilinmiyor",
     "checkForUpdates": "Yazılım güncellemesi",
     "checkForUpdatesDescription": "LumaSync'in en son sürümünü kontrol et.",
     "checkAction": "Güncellemeleri kontrol et",

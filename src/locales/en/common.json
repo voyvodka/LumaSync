@@ -8,8 +8,8 @@
       "lights": "Lights",
       "led-setup": "LED Setup",
       "devices": "Devices",
-      "system": "System",
-      "room-map": "Room Map",
+      "system": "Settings",
+      "room-map": "Room",
       "control": "Control",
       "calibration": "Calibration",
       "settings": "Settings"
@@ -69,18 +69,16 @@
       }
     },
     "compact": {
-      "presets": "Presets",
-      "targets": {
-        "usb": "USB",
-        "hue": "Hue"
+      "sections": {
+        "mode": "Mode",
+        "scene": "Scene"
       },
-      "presetNames": {
-        "warmWhite": "Warm",
-        "coolWhite": "Cool",
-        "red": "Red",
-        "green": "Green",
-        "blue": "Blue",
-        "purple": "Purple"
+      "scenes": {
+        "movie": "Movie",
+        "game": "Game",
+        "music": "Music",
+        "chill": "Chill",
+        "read": "Read"
       }
     }
   },
@@ -92,6 +90,165 @@
     "minimizeOnClose": "Minimize to tray on close",
     "alwaysOn": "Always on"
   },
+  "devicesPage": {
+    "rail": {
+      "connected": "Connected",
+      "other": "Other",
+      "usbStrips": "USB Strips",
+      "hueBridges": "Hue Bridges",
+      "displays": "Displays",
+      "manualEntry": "Manual Entry"
+    },
+    "header": {
+      "usbTitle": "USB Strips",
+      "usbSub": "{{count}} connected",
+      "usbSubNone": "No strips connected",
+      "hueTitle": "Hue Bridges",
+      "hueSub": "Philips Hue entertainment areas",
+      "displaysTitle": "Displays",
+      "displaysSub": "Screens available for Ambilight capture",
+      "manualTitle": "Manual Entry",
+      "manualSub": "Enter device details by hand"
+    },
+    "actions": {
+      "rescan": "Rescan",
+      "addDevice": "Add Device"
+    },
+    "usb": {
+      "pill": {
+        "online": "ONLINE",
+        "discovered": "DISCOVERED"
+      },
+      "stats": {
+        "ledCount": "LED Count",
+        "baud": "Baud",
+        "protocol": "Protocol",
+        "latency": "Latency",
+        "na": "—"
+      },
+      "traffic": "Traffic",
+      "pairAsStrip": "+ Pair as LED Strip",
+      "empty": {
+        "title": "No USB ports found",
+        "body": "Plug in your controller and click Rescan."
+      }
+    },
+    "displays": {
+      "primary": "Primary",
+      "empty": "No displays enumerated."
+    },
+    "manual": {
+      "body": "Manual device entry isn't available yet. Use Rescan above or check serial cables."
+    }
+  },
+  "lightsPage": {
+    "slab": {
+      "modeText": "Lighting",
+      "modeAccent": "Mode",
+      "signalText": "Edge signal",
+      "signalAccent": "· live · mode settings",
+      "scenesText": "Scene",
+      "scenesAccent": "presets"
+    },
+    "mode": {
+      "off": {
+        "title": "Off",
+        "subtitle": "Outputs parked"
+      },
+      "ambilight": {
+        "title": "Ambilight",
+        "subtitle": "Display 1 · {{count}} LED",
+        "subtitleFallback": "Live screen capture"
+      },
+      "solid": {
+        "title": "Solid",
+        "subtitle": "{{hex}} · {{brightness}}%"
+      }
+    },
+    "signal": {
+      "title": "Capture → Strip",
+      "delta": "Δ",
+      "fps": "Σ",
+      "placeholderLatency": "11ms",
+      "placeholderFps": "58 fps",
+      "edges": {
+        "top": "TOP · {{count}}",
+        "bot": "BOT · {{count}}",
+        "left": "L · {{count}}",
+        "right": "R · {{count}}"
+      },
+      "display": {
+        "label": "DISPLAY 1",
+        "sub": "2560 × 1440 · HDR"
+      },
+      "profile": {
+        "smoothing": "Smoothing",
+        "saturation": "Saturation",
+        "blackBorder": "Black border",
+        "blackBorderAuto": "auto",
+        "blackBorderOff": "off"
+      }
+    },
+    "scenes": {
+      "movie": "Movie",
+      "game": "Game",
+      "music": "Music",
+      "chill": "Chill",
+      "reading": "Reading"
+    },
+    "dock": {
+      "outputs": "Outputs",
+      "addAria": "Add output",
+      "hintTitle": "Room space",
+      "hintBody": "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
+      "rows": {
+        "usbName": "USB",
+        "usbType": "CH340",
+        "usbSub": "{{count}} LEDs · <b>serial</b>",
+        "usbSubUnavailable": "No strip connected",
+        "hueName": "HUE",
+        "hueType": "ENTERTAINMENT",
+        "hueSubStreaming": "Bridge · <b>DTLS 50hz</b>",
+        "hueSubIdle": "Bridge · <b>standby</b>",
+        "hueSubUnavailable": "Not configured"
+      }
+    },
+    "calibrationBanner": {
+      "title": "Calibration required",
+      "sub": "Finish LED layout before enabling this mode.",
+      "action": "Open setup"
+    }
+  },
+  "settingsPage": {
+    "title": "General",
+    "subtitle": "Launch behavior and language",
+    "groups": {
+      "startup": {
+        "title": "Startup",
+        "sub": "Launch · tray"
+      },
+      "language": {
+        "title": "Language",
+        "sub": "Interface locale"
+      },
+      "updates": {
+        "title": "Updates",
+        "sub": "Version check"
+      },
+      "about": {
+        "title": "About",
+        "sub": "Build · license"
+      }
+    },
+    "language": {
+      "label": "Interface language",
+      "description": "Restart required to apply"
+    },
+    "about": {
+      "tagline": "Tray-first ambient lighting",
+      "license": "MIT"
+    }
+  },
   "aboutLogs": {
     "title": "About & Logs",
     "version": "Version",
@@ -99,14 +256,39 @@
     "logsDescription": "Application logs are stored locally for debugging."
   },
   "updater": {
-    "title": "Update available",
-    "available": "Version {{version}} is ready to install.",
-    "install": "Install & Relaunch",
-    "later": "Later",
-    "downloading": "Downloading... {{progress}}%",
-    "installing": "Installing update, relaunching shortly...",
-    "error": "Update failed: {{message}}",
-    "close": "Close",
+    "available": {
+      "eyebrow": "Update ready",
+      "title": "A new version is available",
+      "body": "LumaSync <b>v{{version}}</b> is ready to download. It will be installed on next relaunch."
+    },
+    "downloading": {
+      "eyebrow": "Downloading",
+      "title": "v{{version}} preparing",
+      "body": "Signed download in progress — installation will begin automatically when complete.",
+      "progressLabel": "Progress",
+      "etaLabel": "ETA"
+    },
+    "installing": {
+      "eyebrow": "Installing",
+      "title": "Writing new version",
+      "verify": "minisign verification",
+      "body": "LumaSync v{{version}} files are being written.<br/>The app will relaunch automatically once installation finishes — please don't close the window."
+    },
+    "error": {
+      "eyebrow": "Update failed",
+      "title": "Installation could not complete",
+      "body": "You can keep using the current version. Check the error below or try again.",
+      "boxTitle": "Update error"
+    },
+    "actions": {
+      "later": "Later",
+      "install": "Install & relaunch",
+      "background": "Move to background",
+      "showLogs": "Show logs",
+      "close": "Close",
+      "retry": "Try again"
+    },
+    "sizeUnknown": "Size unknown",
     "checkForUpdates": "Software update",
     "checkForUpdatesDescription": "Check for the latest version of LumaSync.",
     "checkAction": "Check for updates",

@@ -21,6 +21,20 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
+// TitleBar's win/linux branch calls `getCurrentWindow()` from
+// @tauri-apps/api/window during mount to track maximize state. jsdom has
+// no Tauri internals so the call would throw — stub the bits TitleBar
+// actually touches with no-op promises.
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    isMaximized: () => Promise.resolve(false),
+    onResized: () => Promise.resolve(() => {}),
+    minimize: () => Promise.resolve(),
+    toggleMaximize: () => Promise.resolve(),
+    close: () => Promise.resolve(),
+  }),
+}));
+
 vi.mock("../features/tray/trayController", () => ({
   listenTrayLightsOff: () => Promise.resolve(() => {}),
   listenTrayResumeLastMode: () => Promise.resolve(() => {}),
@@ -273,7 +287,13 @@ describe("App mode orchestration", () => {
     expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
   });
 
-  it("treats repeated start as idempotent when hue runtime reports already active", async () => {
+  it("repeated set-solid: first call starts hue, second falls into the quick fast path", async () => {
+    // Off → Solid is a full transition that opens the Hue stream.
+    // Solid → Solid is a "quick adjustment" (App.tsx ~L716) that pushes the
+    // new color via setHueSolidColor without re-issuing startHue — that's
+    // the optimization that keeps brightness drags from stuttering. So the
+    // idempotent contract is: the second click MUST NOT re-trigger startHue,
+    // but it MUST still propagate the color update through setHueSolidColor.
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
       ledCalibration: {
@@ -294,19 +314,13 @@ describe("App mode orchestration", () => {
       lastHueAreaId: "area-1",
     });
 
-    startHueMock
-      .mockResolvedValueOnce({
-        active: true,
-        status: { code: "HUE_STREAM_RUNNING", message: "Running", details: null },
-      })
-      .mockResolvedValueOnce({
-        active: true,
-        status: { code: "HUE_START_NOOP_ALREADY_ACTIVE", message: "No-op", details: null },
-      });
+    startHueMock.mockResolvedValueOnce({
+      active: true,
+      status: { code: "HUE_STREAM_RUNNING", message: "Running", details: null },
+    });
 
     render(<App />);
 
-    // Wait for bootstrap to complete — output-targets reflects persisted ["hue"]
     await waitFor(() => {
       expect(screen.getByTestId("output-targets")).toHaveTextContent("hue");
     });
@@ -319,7 +333,8 @@ describe("App mode orchestration", () => {
       screen.getByRole("button", { name: "set-solid" }).click();
     });
 
-    expect(startHueMock).toHaveBeenCalledTimes(2);
+    expect(startHueMock).toHaveBeenCalledTimes(1);
+    expect(setHueSolidColorMock).toHaveBeenCalled();
     expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
   });
 

@@ -14,6 +14,8 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
+import { StatusBar, statusBarHeightPx, type StatusItem } from "./features/shell/StatusBar";
+import { UIModeTransitionOverlay } from "./features/shell/UIModeTransitionOverlay";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
 import {
@@ -125,10 +127,11 @@ function isHueStopCodeOk(code: string): boolean {
 
 function App() {
   const { t } = useTranslation("common");
-  const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
+  const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss, devSetState: devSetUpdaterState } = useAutoUpdater();
   const {
     currentMode,
     isContentVisible,
+    isSweepActive,
     contentRef,
     switchUIMode,
     setCurrentMode,
@@ -349,6 +352,7 @@ function App() {
           "led-setup": SECTION_IDS.LED_SETUP,
           devices: SECTION_IDS.DEVICES,
           system: SECTION_IDS.SYSTEM,
+          "room-map": SECTION_IDS.ROOM_MAP,
         };
         // On first launch keep the default LIGHTS section.
         // On a page refresh (sessionStorage survives the reload) restore the last section.
@@ -980,7 +984,42 @@ function App() {
     onCalibrationStepChange: setCalibrationStep,
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
+    devSetUpdaterState,
   } as const;
+
+  // Derive runtime status items for the bottom StatusBar. Order matches the
+  // mockup (CAP / USB / HUE). CAP is "ok" only while ambilight is the active
+  // mode — that's the only mode that actually consumes screen frames.
+  const statusItems: StatusItem[] = [
+    {
+      label: "CAP",
+      state: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT ? "OK" : "—",
+      kind: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT ? "ok" : "idle",
+    },
+    {
+      label: "USB",
+      state: isConnected ? "OK" : "OFF",
+      kind: isConnected ? "ok" : "off",
+    },
+    {
+      label: "HUE",
+      state: hueStreaming
+        ? "STREAMING"
+        : hueReachable
+          ? "OK"
+          : hueStartConfig
+            ? "IDLE"
+            : "OFF",
+      kind: hueStreaming
+        ? "active"
+        : hueReachable
+          ? "ok"
+          : hueStartConfig
+            ? "idle"
+            : "off",
+    },
+  ];
+  const statusBarHeight = statusBarHeightPx(currentMode);
 
   return (
     <>
@@ -988,15 +1027,24 @@ function App() {
           native drag + double-click zoom, hosts the compact-mode toggle, and
           (on Windows/Linux) draws custom min/max/close buttons since native
           decorations are disabled there. See TitleBar.tsx for details. */}
-      <TitleBar uiMode={currentMode} onSwitchUIMode={switchUIMode} />
+      <TitleBar
+        uiMode={currentMode}
+        onSwitchUIMode={switchUIMode}
+        activeSection={activeSection}
+        onSectionChange={(id) => void handleSectionChange(id)}
+      />
 
       {/* Persistent dark backdrop so the space between the fade-out and
           fade-in phases blends with the layout background instead of
-          revealing the desktop. Offset by the title bar so the layout
-          renders below it. */}
+          revealing the desktop. Offset by the title bar at the top and the
+          status bar at the bottom so neither overlaps the content slot. */}
       <div
-        className="fixed right-0 bottom-0 left-0 overflow-hidden bg-slate-100/60 dark:bg-zinc-950"
-        style={{ top: `${TITLE_BAR_HEIGHT_PX}px` }}
+        className="fixed right-0 left-0 overflow-hidden"
+        style={{
+          top: `${TITLE_BAR_HEIGHT_PX}px`,
+          bottom: `${statusBarHeight}px`,
+          background: "var(--lm-bg)",
+        }}
       >
         {/*
          * Single content slot — sequential fade-out → window resize →
@@ -1030,33 +1078,42 @@ function App() {
           <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
         </div>
       </div>
+      <StatusBar items={statusItems} uiMode={currentMode} />
+      <UIModeTransitionOverlay isActive={isSweepActive} />
       <UpdateModal
         state={updaterState}
         onInstall={downloadAndInstall}
         onDismiss={dismiss}
+        onRetry={() => void checkForUpdates()}
       />
       {showUsbSuggest && (
-        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 shadow-lg">
-          <span className="text-sm text-zinc-200">{t("hotplug.usbDetected")}</span>
+        <div
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg"
+          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
+        >
+          <span style={{ fontSize: "12px" }}>{t("hotplug.usbDetected")}</span>
           <button
             type="button"
             onClick={() => { void handleAcceptUsbTarget(); }}
-            className="rounded bg-zinc-600 px-3 py-1 text-xs text-white hover:bg-zinc-500"
+            style={{ fontSize: "11px", padding: "2px 10px", borderRadius: "4px", background: "var(--lm-amber)", color: "#07080a", fontWeight: 600, border: "none", cursor: "pointer" }}
           >
             {t("hotplug.addTarget")}
           </button>
           <button
             type="button"
             onClick={handleDismissUsbSuggest}
-            className="text-xs text-zinc-400 hover:text-zinc-200"
+            style={{ fontSize: "11px", color: "var(--lm-muted)", background: "transparent", border: "none", cursor: "pointer" }}
           >
             {t("hotplug.dismiss")}
           </button>
         </div>
       )}
       {usbDisconnectNotice && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 shadow-lg">
-          <span className="text-sm text-zinc-400">{t("hotplug.usbDisconnected")}</span>
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
+          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
+        >
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
         </div>
       )}
     </>
