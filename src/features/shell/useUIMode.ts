@@ -1,18 +1,18 @@
 /**
  * useUIMode — UI layout mode hook (compact / full).
  *
- * Manages the active UIMode and orchestrates a cross-fade transition between
- * modes. The hook keeps two mode slots:
+ * Orchestrates a fully sequential transition between layout modes to eliminate
+ * the progressive-clipping artifact that a parallel cross-fade produces when
+ * the incoming slot is pinned at its target size while the window is still
+ * animating toward that size.
  *
- *   - `currentMode`  — the layout currently mounted as the "outgoing" slot.
- *   - `incomingMode` — the layout being faded IN (null when not transitioning).
- *
- * During a switch, both slots are rendered simultaneously inside a stable
- * container. Their dimensions are **pinned** to the from/to logical pixel
- * sizes for the duration of the transition. This prevents layout reflow as
- * the window itself animates its size — without pinning, every `setSize`
- * frame would change `100vh`, causing the layout to visibly wobble as flex
- * items redistribute.
+ * Transition phases (single slot, no pinning):
+ *   1. Fade the current content out (opacity 1 → 0).
+ *   2. Animate the Tauri window to the target mode size. The backdrop is the
+ *      only thing visible during this step, so reflow of either layout is
+ *      invisible to the user.
+ *   3. Swap `currentMode` so the incoming layout mounts at the final size,
+ *      wait one paint, then fade it back in (opacity 0 → 1).
  *
  * Re-entrancy: a second `switchUIMode` call while a transition is still
  * running is ignored.
@@ -20,21 +20,18 @@
 
 import { useState, useCallback, useRef } from "react";
 import type { UIMode } from "../../shared/contracts/shell";
-import {
-  getCurrentLogicalSize,
-  getTargetModeSize,
-  resizeToMode,
-} from "./windowLifecycle";
+import { resizeToMode } from "./windowLifecycle";
 
-/** Must match the Tailwind `duration-200` on the cross-fade slots. */
-const FADE_DURATION_MS = 200;
+/** Fade-out / fade-in duration. Kept short so total transition feels snappy. */
+export const UI_MODE_FADE_DURATION_MS = 160;
+/**
+ * Easing applied to both the CSS opacity fade and the window resize. Matches
+ * `easeOutCubic` used by `animateWindowRect` so the two halves of the
+ * transition feel like one continuous motion.
+ */
+export const UI_MODE_FADE_TIMING = "cubic-bezier(0.33, 1, 0.68, 1)";
 /** Safety net: never hang the chain if `transitionend` misfires. */
-const FADE_SAFETY_TIMEOUT_MS = FADE_DURATION_MS + 100;
-
-export interface SlotSize {
-  width: number;
-  height: number;
-}
+const FADE_SAFETY_TIMEOUT_MS = UI_MODE_FADE_DURATION_MS + 120;
 
 function waitForOpacityTransition(el: HTMLElement | null): Promise<void> {
   return new Promise((resolve) => {
@@ -72,63 +69,48 @@ function nextDoublePaint(): Promise<void> {
 
 export function useUIMode() {
   const [currentMode, setCurrentMode] = useState<UIMode>("compact");
-  const [incomingMode, setIncomingMode] = useState<UIMode | null>(null);
-  const [isIncomingVisible, setIsIncomingVisible] = useState(false);
-  const [outgoingSize, setOutgoingSize] = useState<SlotSize | null>(null);
-  const [incomingSize, setIncomingSize] = useState<SlotSize | null>(null);
-  const incomingRef = useRef<HTMLDivElement>(null);
-
-  const isUITransitioning = incomingMode !== null;
+  const [isContentVisible, setIsContentVisible] = useState(true);
+  const [isUITransitioning, setIsUITransitioning] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const transitionLockRef = useRef(false);
 
   const switchUIMode = useCallback(
     async (nextMode: UIMode) => {
       if (nextMode === currentMode) return;
-      if (incomingMode !== null) return; // re-entrancy guard
+      if (transitionLockRef.current) return; // re-entrancy guard
+      transitionLockRef.current = true;
+      setIsUITransitioning(true);
 
-      // Capture from/to logical sizes BEFORE any state update. The outgoing
-      // slot will be pinned to its current on-screen size so committing the
-      // pinned width/height is a no-op visually.
-      const fromSize = await getCurrentLogicalSize();
-      const toSize = await getTargetModeSize(nextMode);
+      try {
+        // Phase 1: fade the current layout out. Backdrop stays visible.
+        setIsContentVisible(false);
+        await waitForOpacityTransition(contentRef.current);
 
-      // 1. Pin slot sizes and mount the incoming slot at opacity 0.
-      setOutgoingSize(fromSize);
-      setIncomingSize(toSize);
-      setIncomingMode(nextMode);
-      setIsIncomingVisible(false);
-      // Double rAF so the browser commits the initial pinned styles and
-      // opacity-0 state before we flip to the visible state that triggers
-      // the CSS transition.
-      await nextDoublePaint();
+        // Phase 2: animate the window to the new size while nothing content-
+        // level is visible. Any layout reflow caused by the resize is hidden
+        // by the opacity-0 state, so the original "wobble" is eliminated.
+        await resizeToMode(nextMode);
 
-      // 2. Trigger the cross-fade and animated window resize in parallel.
-      //    Neither slot reflows during the window animation because their
-      //    logical dimensions are pinned via inline style.
-      setIsIncomingVisible(true);
-      const fadePromise = waitForOpacityTransition(incomingRef.current);
-      const resizePromise = resizeToMode(nextMode);
-      await Promise.all([fadePromise, resizePromise]);
-
-      // 3. Promote incoming → current, unmount the outgoing slot, and drop
-      //    the pinned sizes so the layout once again fills the window via
-      //    100% parent-relative dimensions.
-      setCurrentMode(nextMode);
-      setIncomingMode(null);
-      setIsIncomingVisible(false);
-      setOutgoingSize(null);
-      setIncomingSize(null);
+        // Phase 3: swap the mode so the new layout mounts at the final
+        // window size, wait one paint cycle to ensure it renders at
+        // opacity 0, then trigger the fade-in.
+        setCurrentMode(nextMode);
+        await nextDoublePaint();
+        setIsContentVisible(true);
+        await waitForOpacityTransition(contentRef.current);
+      } finally {
+        setIsUITransitioning(false);
+        transitionLockRef.current = false;
+      }
     },
-    [currentMode, incomingMode],
+    [currentMode],
   );
 
   return {
     currentMode,
-    incomingMode,
-    isIncomingVisible,
+    isContentVisible,
     isUITransitioning,
-    outgoingSize,
-    incomingSize,
-    incomingRef,
+    contentRef,
     switchUIMode,
     setCurrentMode,
   } as const;

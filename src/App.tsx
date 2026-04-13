@@ -54,7 +54,11 @@ import {
   loadShellState,
   saveShellState,
 } from "./features/shell/windowLifecycle";
-import { useUIMode } from "./features/shell/useUIMode";
+import {
+  useUIMode,
+  UI_MODE_FADE_DURATION_MS,
+  UI_MODE_FADE_TIMING,
+} from "./features/shell/useUIMode";
 import {
   SECTION_IDS,
   type SectionId,
@@ -124,11 +128,8 @@ function App() {
   const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
   const {
     currentMode,
-    incomingMode,
-    isIncomingVisible,
-    outgoingSize,
-    incomingSize,
-    incomingRef,
+    isContentVisible,
+    contentRef,
     switchUIMode,
     setCurrentMode,
   } = useUIMode();
@@ -989,61 +990,45 @@ function App() {
           decorations are disabled there. See TitleBar.tsx for details. */}
       <TitleBar uiMode={currentMode} onSwitchUIMode={switchUIMode} />
 
-      {/* Persistent dark backdrop so the empty area between cross-faded
-          slots blends with the layout backgrounds instead of revealing the
-          desktop. Offset by the title bar so layouts render below it. */}
+      {/* Persistent dark backdrop so the space between the fade-out and
+          fade-in phases blends with the layout background instead of
+          revealing the desktop. Offset by the title bar so the layout
+          renders below it. */}
       <div
         className="fixed right-0 bottom-0 left-0 overflow-hidden bg-slate-100/60 dark:bg-zinc-950"
         style={{ top: `${TITLE_BAR_HEIGHT_PX}px` }}
       >
         {/*
-         * Outgoing slot — fades 1 → 0 when an incoming slot is mounted.
-         *
-         * Pinned size: during a transition, the slot's width/height are
-         * locked to the logical pixel size the window had at transition
-         * start. This prevents the layout from reflowing every frame as
-         * the window itself animates its size. Outside a transition the
-         * slot falls back to 100%×100% and fills the container.
+         * Single content slot — sequential fade-out → window resize →
+         * fade-in, orchestrated by `useUIMode`. Running the resize while
+         * the content is at opacity 0 removes the progressive-clipping
+         * artifact that a parallel cross-fade produced when slot pinning
+         * forced the incoming layout to overflow the still-animating
+         * window. Easing matches `easeOutCubic` in `animateWindowRect`
+         * so the three phases read as one continuous motion.
          */}
         <div
-          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-200 ease-out ${
-            incomingMode && isIncomingVisible
-              ? "pointer-events-none opacity-0"
-              : "opacity-100"
+          ref={contentRef}
+          className={`absolute inset-0 ${
+            isContentVisible ? "" : "pointer-events-none"
           }`}
           style={{
-            width: outgoingSize ? `${outgoingSize.width}px` : "100%",
-            height: outgoingSize ? `${outgoingSize.height}px` : "100%",
+            opacity: isContentVisible ? 1 : 0,
+            // Soft "materialize" — on fade-out the content subtly recedes
+            // (scale down + slight blur) and on fade-in it settles back in
+            // place. Paired with the matched backdrop color this replaces
+            // the "content disappears" feeling with a gentle breathe.
+            transform: isContentVisible ? "scale(1)" : "scale(0.985)",
+            filter: isContentVisible ? "blur(0px)" : "blur(6px)",
+            transformOrigin: "center center",
+            willChange: "opacity, transform, filter",
+            transitionProperty: "opacity, transform, filter",
+            transitionDuration: `${UI_MODE_FADE_DURATION_MS}ms`,
+            transitionTimingFunction: UI_MODE_FADE_TIMING,
           }}
         >
           <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
         </div>
-
-        {/*
-         * Incoming slot — mounted only during a transition. Pinned to the
-         * TARGET logical size so its layout renders stably while the
-         * window grows/shrinks around it. Fades 0 → 1 in parallel with
-         * the animated window resize.
-         */}
-        {incomingMode && incomingSize && (
-          <div
-            ref={incomingRef}
-            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 transition-opacity duration-200 ease-out ${
-              isIncomingVisible
-                ? "opacity-100"
-                : "pointer-events-none opacity-0"
-            }`}
-            style={{
-              width: `${incomingSize.width}px`,
-              height: `${incomingSize.height}px`,
-            }}
-          >
-            <SettingsLayout
-              uiMode={incomingMode}
-              {...sharedSettingsLayoutProps}
-            />
-          </div>
-        )}
       </div>
       <UpdateModal
         state={updaterState}
