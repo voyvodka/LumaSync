@@ -31,3 +31,37 @@ pnpm verify:shell-contracts # Contract validation
 ## Local UI/UX Reference
 
 For settings IA/UI/UX tasks, consult the local blueprint at `docs/settings-ui-ux-blueprint.local`. This file is gitignored (`*.local`) and serves as current design intent for settings redesign decisions.
+
+## Hard Constraints (Do Not Violate)
+
+- **macOS private API** (`macos-private-api: true` in `tauri.conf.json`) — required for fullscreen calibration overlays across all displays. Never remove.
+- **Hue streaming interval: minimum 50ms (20 Hz max)** — exceeding this throttles or drops the Hue bridge connection.
+- **Supported USB chip IDs only**: CH340 (`0x1A86:0x7523`), FTDI (`0x0403:0x6001`). Do not widen serial port discovery beyond these.
+- **Window size**: 900×620, minimum 720×480. Do not change without explicit instruction.
+- **State persistence**: Tauri `plugin-store` → `~/.config/lumasync/app.json`. Keys are defined in `src/shared/contracts/shell.ts` — do not add ad-hoc keys.
+- **i18n**: Every user-facing string must have entries in both `src/locales/en/common.json` and `src/locales/tr/common.json`.
+- **Contract alignment**: After any change to `src/shared/contracts/` or Rust command handlers, run `pnpm verify:shell-contracts` to confirm they stay in sync.
+
+## Security Guidelines
+
+- Tauri commands never throw — errors are returned as status objects (`{ code, message }`). Always check `status.code`; never assume success from a resolved promise.
+- Never log or store Hue API credentials, bridge tokens, or user secrets in plaintext (logs, localStorage, or unencrypted files).
+- Auto-update artifacts are verified with minisign — do not bypass or skip signature verification.
+- No `eval`, dynamic `require`, or unsanitized shell execution anywhere in frontend or Rust.
+- Serial port access is intentionally scoped to the two known USB vendor/product IDs above — do not broaden this without explicit justification.
+- Avoid introducing `any` casts in TypeScript that touch security-sensitive paths (auth, persistence, IPC payloads).
+
+## Architecture Summary (for Security/Performance Scans)
+
+```
+Frontend (React 19, src/)
+  └─ Tauri IPC (invoke) ──→ Rust commands (src-tauri/src/commands/)
+                                  ├─ Serial port (USB, 115200 baud)
+                                  └─ Philips Hue CLIP v2 REST + DTLS streaming
+```
+
+Key data flows to audit:
+- `src/features/hue/` → DTLS entertainment streaming, bridge credentials
+- `src/features/device/` → USB serial connection, health checks
+- `src/features/persistence/` → app state read/write via plugin-store
+- `src-tauri/src/commands/` → all IPC boundary handlers
