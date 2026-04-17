@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { useTranslation } from "react-i18next";
 import { SECTION_IDS, SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
 import { GeneralSection } from "./sections/GeneralSection";
@@ -91,7 +91,15 @@ interface SettingsLayoutProps {
   isCheckingForUpdates: boolean;
 }
 
-export function SettingsLayout({
+/**
+ * ⚡ Bolt Optimization:
+ * Wrapped SettingsLayout in React.memo to prevent unnecessary deep re-renders
+ * of the entire settings UI when top-level App state changes (e.g., hue streaming health checks)
+ * that don't affect the layout props. The parent (App.tsx) already wraps callback
+ * handlers in useCallback, making this memoization highly effective.
+ * Expected impact: Reduces main thread blocking when background polls trigger App state updates.
+ */
+export const SettingsLayout = memo(function SettingsLayout({
   activeSection,
   onSectionChange,
   calibration,
@@ -234,4 +242,4 @@ export function SettingsLayout({
       </main>
     </div>
   );
-}
+});
