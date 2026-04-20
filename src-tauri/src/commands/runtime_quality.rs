@@ -103,6 +103,12 @@ impl RuntimeQualityController {
         self.config.smoothing_alpha = alpha.clamp(0.0, 1.0);
     }
 
+    /// Current smoothed capture+send cost in milliseconds. Returns 0.0 before
+    /// the first observation lands.
+    pub fn observed_cost_ms(&self) -> f32 {
+        self.observed_cost_ewma_ms.unwrap_or(0.0)
+    }
+
     pub fn should_send_now(&mut self, now: Instant) -> bool {
         let Some(last_sent_at) = self.last_sent_at else {
             self.last_sent_at = Some(now);

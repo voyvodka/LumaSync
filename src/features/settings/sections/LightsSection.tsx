@@ -1,20 +1,47 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
 } from "../../mode/state/modeGuard";
 import {
+  EDGE_SIGNAL_EVENT,
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
+  type EdgeSignalPayload,
   type LightingModeConfig,
 } from "../../mode/model/contracts";
+import {
+  SCENE_PRESETS,
+  findMatchingScenePreset,
+  type ScenePreset,
+} from "../../mode/model/scenePresets";
 import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { DisplayInfo } from "../../../shared/contracts/display";
+import { listDisplays } from "../../calibration/calibrationApi";
 import type { LedCalibrationConfig } from "../../calibration/model/contracts";
+import { getFullTelemetrySnapshot } from "../../telemetry/telemetryApi";
+import type { RuntimeTelemetrySnapshot } from "../../telemetry/model/contracts";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
+
+const TELEMETRY_POLL_INTERVAL_MS = 1000;
+
+function rgbTripletToCss(triplet: [number, number, number]): string {
+  return `rgb(${triplet[0]},${triplet[1]},${triplet[2]})`;
+}
+
+function buildLinearGradient(
+  direction: "to right" | "to bottom",
+  samples: Array<[number, number, number]>,
+): string | undefined {
+  if (samples.length === 0) return undefined;
+  if (samples.length === 1) return rgbTripletToCss(samples[0]);
+  return `linear-gradient(${direction},${samples.map(rgbTripletToCss).join(",")})`;
+}
 
 export interface LightsModeLockState {
   reason: ModeGuardReason | null;
@@ -52,15 +79,6 @@ interface LightsSectionProps {
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onOpenCalibration: () => void;
 }
-
-// Scene presets — gradient + representative solid color for SOLID mode output.
-const SCENE_PRESETS = [
-  { id: "movie",   gradient: "linear-gradient(135deg,#2a1235,#6a1c50,#d9521e,#ffb030)", r: 217, g:  82, b:  30, brightness: 0.85 },
-  { id: "game",    gradient: "linear-gradient(135deg,#0a1838,#1e4878,#66b4ff,#a8e0ff)", r: 102, g: 180, b: 255, brightness: 0.90 },
-  { id: "music",   gradient: "linear-gradient(135deg,#1a0a22,#3e1858,#a03878,#ff6a88)", r: 255, g: 106, b: 136, brightness: 0.90 },
-  { id: "chill",   gradient: "linear-gradient(135deg,#1a1305,#4e3010,#d9821e,#ffc860)", r: 255, g: 200, b:  96, brightness: 0.75 },
-  { id: "reading", gradient: "linear-gradient(135deg,#0a1a0a,#1e4428,#4cad70,#a8e0b4)", r:  76, g: 173, b: 112, brightness: 0.75 },
-] as const;
 
 function toHexPair(value: number): string {
   return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
@@ -121,8 +139,22 @@ export function LightsSection({
   const solidHex = `#${toHexPair(incomingSolid.r)}${toHexPair(incomingSolid.g)}${toHexPair(incomingSolid.b)}`;
   const solidBrightnessPct = Math.round(incomingSolid.brightness * 100);
 
-  // Visual-only scene state — no backend binding yet.
-  const [selectedScene, setSelectedScene] = useState<string | null>(null);
+  // Scene selection is derived from the active SOLID color, not stored
+  // locally — that keeps the highlight in sync with the persisted mode
+  // across reloads and across the Compact/Lights views.
+  const activeScenePreset = isSolid ? findMatchingScenePreset(incomingSolid) : undefined;
+
+  const handleScenePresetClick = (preset: ScenePreset) => {
+    onModeChange({
+      kind: LIGHTING_MODE_KIND.SOLID,
+      solid: {
+        r: preset.r,
+        g: preset.g,
+        b: preset.b,
+        brightness: isSolid ? incomingSolid.brightness : preset.brightness,
+      },
+    });
+  };
 
   // Compute USB/Hue availability + selection.
   const usbSelected = outputTargets.includes("usb");
@@ -159,6 +191,89 @@ export function LightsSection({
   const [saturationPlaceholder, setSaturationPlaceholder] = useState(118);
 
   const totalLeds = calibration?.totalLeds;
+
+  // Poll runtime telemetry while Ambilight is active so the meta pill
+  // (Δ latency / Σ fps) reflects live worker state. Paused when tab hidden
+  // or when any other mode is selected — nothing to measure otherwise.
+  const [liveTelemetry, setLiveTelemetry] = useState<RuntimeTelemetrySnapshot | null>(null);
+  useEffect(() => {
+    if (!isAmbilight) {
+      setLiveTelemetry(null);
+      return;
+    }
+    let mounted = true;
+    const refresh = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const snap = await getFullTelemetrySnapshot();
+        if (mounted) setLiveTelemetry(snap.usb);
+      } catch {
+        /* swallow — next tick retries */
+      }
+    };
+    void refresh();
+    const id = window.setInterval(() => { void refresh(); }, TELEMETRY_POLL_INTERVAL_MS);
+    return () => {
+      mounted = false;
+      window.clearInterval(id);
+    };
+  }, [isAmbilight]);
+
+  const latencyLabel = liveTelemetry ? `${Math.round(liveTelemetry.frameLatencyMs)}ms` : "—";
+  const fpsLabel = liveTelemetry ? `${Math.round(liveTelemetry.sendFps)} fps` : "—";
+
+  // Edge signal preview — streamed from the ambilight worker (~10 Hz).
+  // Subscribe only while Ambilight mode is active to avoid unnecessary IPC traffic.
+  const [edgeSignal, setEdgeSignal] = useState<EdgeSignalPayload | null>(null);
+  useEffect(() => {
+    if (!isAmbilight) {
+      setEdgeSignal(null);
+      return;
+    }
+    let unlisten: UnlistenFn | undefined;
+    let cancelled = false;
+    void listen<EdgeSignalPayload>(EDGE_SIGNAL_EVENT, (event) => {
+      if (!cancelled) setEdgeSignal(event.payload);
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [isAmbilight]);
+
+  // Primary display info for the edge center tile. Loaded once on mount.
+  const [displays, setDisplays] = useState<DisplayInfo[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    listDisplays()
+      .then((result) => {
+        if (!cancelled) setDisplays(result);
+      })
+      .catch(() => {
+        if (!cancelled) setDisplays([]);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const primaryDisplay = displays.find((d) => d.isPrimary) ?? displays[0];
+  const displayIndex = primaryDisplay
+    ? Math.max(1, displays.findIndex((d) => d.id === primaryDisplay.id) + 1)
+    : 1;
+  const resolutionLabel = primaryDisplay
+    ? `${primaryDisplay.width} × ${primaryDisplay.height}`
+    : null;
+
+  const edgeGradients = useMemo(() => ({
+    top: edgeSignal ? buildLinearGradient("to right", edgeSignal.top) : undefined,
+    bottom: edgeSignal ? buildLinearGradient("to right", edgeSignal.bottom) : undefined,
+    left: edgeSignal ? buildLinearGradient("to bottom", edgeSignal.left) : undefined,
+    right: edgeSignal ? buildLinearGradient("to bottom", edgeSignal.right) : undefined,
+  }), [edgeSignal]);
+
+  const counts = calibration?.counts;
 
   const smoothingValue = incomingAmbilight.smoothingAlpha ?? 0.35;
   const smoothingPercent = Math.round(((smoothingValue - 0.05) / 0.95) * 100);
@@ -276,18 +391,56 @@ export function LightsSection({
             {t("lightsPage.slab.signalText")} <b>{t("lightsPage.slab.signalAccent")}</b>
           </div>
           <div className="lm-signal">
-            {/* TODO: latency and FPS are static i18n placeholders ("11ms", "58 fps").
-                Wire to get_runtime_telemetry once the command exposes ambilight capture stats. */}
             <div className="lm-signal-head">
               <span className="l">{t("lightsPage.signal.title")}</span>
               <span className="meta-pill">
                 <span>
-                  {t("lightsPage.signal.delta")} <b>{t("lightsPage.signal.placeholderLatency")}</b>
+                  {t("lightsPage.signal.delta")} <b>{latencyLabel}</b>
                 </span>
                 <span>
-                  {t("lightsPage.signal.fps")} <b>{t("lightsPage.signal.placeholderFps")}</b>
+                  {t("lightsPage.signal.fps")} <b>{fpsLabel}</b>
                 </span>
               </span>
+            </div>
+            <div className="lm-edges" aria-label={t("lightsPage.signal.edgesAria")}>
+              <div
+                className="lm-edge lm-edge-top"
+                style={edgeGradients.top ? { background: edgeGradients.top } : undefined}
+              >
+                <span className="label">
+                  {t("lightsPage.signal.edges.top", { count: counts?.top ?? 0 })}
+                </span>
+              </div>
+              <div
+                className="lm-edge lm-edge-l"
+                style={edgeGradients.left ? { background: edgeGradients.left } : undefined}
+              >
+                <span className="label">
+                  {t("lightsPage.signal.edges.left", { count: counts?.left ?? 0 })}
+                </span>
+              </div>
+              <div className="lm-edge lm-edge-c">
+                <div className="scene">
+                  <b>{t("lightsPage.signal.display.label", { index: displayIndex })}</b>
+                  {resolutionLabel ?? t("lightsPage.signal.display.sub")}
+                </div>
+              </div>
+              <div
+                className="lm-edge lm-edge-r"
+                style={edgeGradients.right ? { background: edgeGradients.right } : undefined}
+              >
+                <span className="label">
+                  {t("lightsPage.signal.edges.right", { count: counts?.right ?? 0 })}
+                </span>
+              </div>
+              <div
+                className="lm-edge lm-edge-bot"
+                style={edgeGradients.bottom ? { background: edgeGradients.bottom } : undefined}
+              >
+                <span className="label">
+                  {t("lightsPage.signal.edges.bot", { count: counts?.bottom ?? 0 })}
+                </span>
+              </div>
             </div>
             <div className="lm-profile">
               {/* Smoothing — wired */}
@@ -365,33 +518,27 @@ export function LightsSection({
           </div>
         </div>}
 
-        {/* Scene presets — visual placeholder */}
+        {/* Scene presets — click switches to SOLID with the preset RGB.
+            Highlight is derived from the active solid color so it stays
+            in sync after reloads and Compact-view edits. */}
         <div>
           <div className="lm-lights-slab">
             {t("lightsPage.slab.scenesText")} <b>{t("lightsPage.slab.scenesAccent")}</b>
           </div>
           <div className="lm-scenes">
             {SCENE_PRESETS.map((preset) => {
-              const isSelected = selectedScene === preset.id;
+              const isSelected = activeScenePreset?.id === preset.id;
               return (
                 <button
                   key={preset.id}
                   type="button"
+                  disabled={modeSelectorDisabled}
                   className={`lm-sc ${isSelected ? "is-sel" : ""}`}
                   style={{ background: preset.gradient }}
-                  onClick={() => {
-                    if (isSelected) {
-                      setSelectedScene(null);
-                    } else {
-                      setSelectedScene(preset.id);
-                      onModeChange({
-                        kind: LIGHTING_MODE_KIND.SOLID,
-                        solid: { r: preset.r, g: preset.g, b: preset.b, brightness: preset.brightness },
-                      });
-                    }
-                  }}
+                  aria-pressed={isSelected}
+                  onClick={() => handleScenePresetClick(preset)}
                 >
-                  <b>{t(`lightsPage.scenes.${preset.id}`)}</b>
+                  <b>{t(preset.labelKey)}</b>
                 </button>
               );
             })}
@@ -404,7 +551,14 @@ export function LightsSection({
         <div>
           <h4>
             <span className="t">{t("lightsPage.dock.outputs")}</span>
-            <button type="button" className="add" aria-label={t("lightsPage.dock.addAria")}>
+            <button
+              type="button"
+              className="add"
+              disabled
+              aria-disabled="true"
+              aria-label={t("lightsPage.dock.addAria")}
+              title={t("lightsPage.dock.addTooltip")}
+            >
               +
             </button>
           </h4>

@@ -11,6 +11,8 @@ export interface RuntimeTelemetrySnapshot {
   captureFps: number;
   sendFps: number;
   queueHealth: TelemetryQueueHealth;
+  /** EWMA of capture+send cost in milliseconds. 0 before the first frame. */
+  frameLatencyMs: number;
 }
 
 export interface RuntimeTelemetryDisplayModel {

@@ -22,6 +22,8 @@ pub struct RuntimeTelemetrySnapshot {
     pub capture_fps: f32,
     pub send_fps: f32,
     pub queue_health: TelemetryQueueHealth,
+    /// EWMA of capture+send cost in milliseconds. 0.0 before the first frame.
+    pub frame_latency_ms: f32,
 }
 
 impl Default for RuntimeTelemetrySnapshot {
@@ -30,6 +32,7 @@ impl Default for RuntimeTelemetrySnapshot {
             capture_fps: 0.0,
             send_fps: 0.0,
             queue_health: TelemetryQueueHealth::Healthy,
+            frame_latency_ms: 0.0,
         }
     }
 }
@@ -175,6 +178,9 @@ pub struct RuntimeTelemetryWindow {
     capture_count: u32,
     send_count: u32,
     slot_overwrite_count: u32,
+    /// Last observed frame latency (capture+send EWMA cost) in ms. Updated
+    /// every frame via `record_latency`; surfaces on the next window flush.
+    latest_latency_ms: f32,
 }
 
 impl RuntimeTelemetryWindow {
@@ -184,6 +190,7 @@ impl RuntimeTelemetryWindow {
             capture_count: 0,
             send_count: 0,
             slot_overwrite_count: 0,
+            latest_latency_ms: 0.0,
         }
     }
 
@@ -197,6 +204,10 @@ impl RuntimeTelemetryWindow {
 
     pub fn record_slot_overwrite(&mut self) {
         self.slot_overwrite_count = self.slot_overwrite_count.saturating_add(1);
+    }
+
+    pub fn record_latency(&mut self, ms: f32) {
+        self.latest_latency_ms = ms.max(0.0);
     }
 
     pub fn flush_if_due(
@@ -222,6 +233,7 @@ impl RuntimeTelemetryWindow {
                 capture_fps: round_two_decimals(self.capture_count as f32 / elapsed_secs),
                 send_fps: round_two_decimals(self.send_count as f32 / elapsed_secs),
                 queue_health: queue_health_from_ratio(overwrite_ratio),
+                frame_latency_ms: round_two_decimals(self.latest_latency_ms),
             },
         )?;
 
@@ -268,6 +280,7 @@ mod tests {
         assert_eq!(snapshot.capture_fps, 0.0);
         assert_eq!(snapshot.send_fps, 0.0);
         assert_eq!(snapshot.queue_health, TelemetryQueueHealth::Healthy);
+        assert_eq!(snapshot.frame_latency_ms, 0.0);
     }
 
     #[test]
@@ -285,6 +298,7 @@ mod tests {
         for _ in 0..6 {
             window.record_slot_overwrite();
         }
+        window.record_latency(12.345);
 
         window
             .flush_if_due(base + Duration::from_secs(1), &metrics)
@@ -294,6 +308,7 @@ mod tests {
         assert_eq!(snapshot.capture_fps, 60.0);
         assert_eq!(snapshot.send_fps, 30.0);
         assert_eq!(snapshot.queue_health, TelemetryQueueHealth::Healthy);
+        assert_eq!(snapshot.frame_latency_ms, 12.35);
     }
 
     #[test]

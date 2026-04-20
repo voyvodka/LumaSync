@@ -205,8 +205,7 @@
       "title": "Capture → Strip",
       "delta": "Δ",
       "fps": "Σ",
-      "placeholderLatency": "11ms",
-      "placeholderFps": "58 fps",
+      "edgesAria": "Live edge preview",
       "edges": {
         "top": "TOP · {{count}}",
         "bot": "BOT · {{count}}",
@@ -214,8 +213,8 @@
         "right": "R · {{count}}"
       },
       "display": {
-        "label": "DISPLAY 1",
-        "sub": "2560 × 1440 · HDR"
+        "label": "DISPLAY {{index}}",
+        "sub": "—"
       },
       "profile": {
         "smoothing": "Smoothing",
@@ -225,16 +224,10 @@
         "blackBorderOff": "off"
       }
     },
-    "scenes": {
-      "movie": "Movie",
-      "game": "Game",
-      "music": "Music",
-      "chill": "Chill",
-      "reading": "Reading"
-    },
     "dock": {
       "outputs": "Outputs",
       "addAria": "Add output",
+      "addTooltip": "Coming soon — multi Hue zone",
       "hintTitle": "Room space",
       "hintBody": "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
       "rows": {

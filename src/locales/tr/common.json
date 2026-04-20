@@ -197,8 +197,7 @@
       "title": "Yakalama → Şerit",
       "delta": "Δ",
       "fps": "Σ",
-      "placeholderLatency": "11ms",
-      "placeholderFps": "58 fps",
+      "edgesAria": "Canlı kenar önizlemesi",
       "edges": {
         "top": "ÜST · {{count}}",
         "bot": "ALT · {{count}}",
@@ -206,8 +205,8 @@
         "right": "SAĞ · {{count}}"
       },
       "display": {
-        "label": "EKRAN 1",
-        "sub": "2560 × 1440 · HDR"
+        "label": "EKRAN {{index}}",
+        "sub": "—"
       },
       "profile": {
         "smoothing": "Yumuşatma",
@@ -217,16 +216,10 @@
         "blackBorderOff": "kapalı"
       }
     },
-    "scenes": {
-      "movie": "Film",
-      "game": "Oyun",
-      "music": "Müzik",
-      "chill": "Sakin",
-      "reading": "Okuma"
-    },
     "dock": {
       "outputs": "Çıkışlar",
       "addAria": "Çıkış ekle",
+      "addTooltip": "Yakında — çoklu Hue alanı",
       "hintTitle": "Oda alanı",
       "hintBody": "Telemetri / mini oda\nönizlemesi / kısayollar\niçin yer tutucu",
       "rows": {

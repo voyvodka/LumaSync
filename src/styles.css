@@ -2956,6 +2956,11 @@
   font-size: 11px;
   line-height: 1;
 }
+.lm-dock h4 .add:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  color: #343a45;
+}
 .lm-out-list {
   display: flex;
   flex-direction: column;

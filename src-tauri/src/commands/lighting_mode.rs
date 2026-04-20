@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, Runtime, State};
 
 use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, sample_led_frame,
@@ -145,7 +145,11 @@ struct AmbilightLiveSettings {
 }
 
 impl AmbilightLiveSettings {
-    fn new(brightness: f32, black_border_detection: bool, smoothing_alpha: f32) -> Arc<Self> {
+    fn new(
+        brightness: f32,
+        black_border_detection: bool,
+        smoothing_alpha: f32,
+    ) -> Arc<Self> {
         Arc::new(Self {
             brightness: AtomicU32::new(brightness.to_bits()),
             black_border_detection: AtomicBool::new(black_border_detection),
@@ -165,7 +169,12 @@ impl AmbilightLiveSettings {
         f32::from_bits(self.smoothing_alpha.load(Ordering::Relaxed))
     }
 
-    fn update(&self, brightness: f32, black_border_detection: bool, smoothing_alpha: f32) {
+    fn update(
+        &self,
+        brightness: f32,
+        black_border_detection: bool,
+        smoothing_alpha: f32,
+    ) {
         self.brightness.store(brightness.to_bits(), Ordering::Relaxed);
         self.black_border_detection.store(black_border_detection, Ordering::Relaxed);
         self.smoothing_alpha.store(smoothing_alpha.clamp(0.05, 1.0).to_bits(), Ordering::Relaxed);
@@ -497,6 +506,70 @@ fn sample_screen_position_avg(
     ((sum_r / count) as u8, (sum_g / count) as u8, (sum_b / count) as u8)
 }
 
+// ---------------------------------------------------------------------------
+// Edge signal preview — live capture feed for LightsSection
+// ---------------------------------------------------------------------------
+//
+// Emitted at ~10 Hz while the ambilight worker is running so the frontend
+// can render the four edges of the screen the way they're being sampled.
+// Decoupled from the LED-driving pipeline: uses its own lightweight edge
+// sampling so a rework of the LED mapping logic doesn't break the preview.
+
+pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";
+pub const EDGE_SIGNAL_MIN_INTERVAL_MS: u64 = 100;
+pub const EDGE_SIGNAL_SAMPLES_PER_EDGE: usize = 16;
+/// How far inside the screen edges the preview samples. 0.92 picks up the
+/// dominant fringe color without dipping too deep into the center.
+const EDGE_SIGNAL_AXIS_OFFSET: f32 = 0.92;
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EdgeSignalPayload {
+    pub top: Vec<[u8; 3]>,
+    pub bottom: Vec<[u8; 3]>,
+    pub left: Vec<[u8; 3]>,
+    pub right: Vec<[u8; 3]>,
+}
+
+/// Thread-safe emitter the worker calls to surface edge previews. Thin
+/// wrapper over `AppHandle::emit` so the worker doesn't depend on the
+/// Tauri runtime type parameter.
+pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
+
+pub fn compute_edge_signal(
+    frame: &CapturedFrame,
+    insets: &BlackBorderInsets,
+) -> EdgeSignalPayload {
+    let samples = EDGE_SIGNAL_SAMPLES_PER_EDGE;
+    let mut top = Vec::with_capacity(samples);
+    let mut bottom = Vec::with_capacity(samples);
+    let mut left = Vec::with_capacity(samples);
+    let mut right = Vec::with_capacity(samples);
+
+    let denom = if samples > 1 { (samples - 1) as f32 } else { 1.0 };
+    let span = 2.0 * EDGE_SIGNAL_AXIS_OFFSET;
+
+    for i in 0..samples {
+        let t = i as f32 / denom;
+        // Horizontal traversal for top/bottom, vertical for left/right.
+        let x = -EDGE_SIGNAL_AXIS_OFFSET + t * span;
+        // y: +1 at top → -1 at bottom (sample_screen_position_avg convention).
+        let y = EDGE_SIGNAL_AXIS_OFFSET - t * span;
+
+        let t_color = sample_screen_position_avg(frame, x, EDGE_SIGNAL_AXIS_OFFSET, insets);
+        let b_color = sample_screen_position_avg(frame, x, -EDGE_SIGNAL_AXIS_OFFSET, insets);
+        let l_color = sample_screen_position_avg(frame, -EDGE_SIGNAL_AXIS_OFFSET, y, insets);
+        let r_color = sample_screen_position_avg(frame, EDGE_SIGNAL_AXIS_OFFSET, y, insets);
+
+        top.push([t_color.0, t_color.1, t_color.2]);
+        bottom.push([b_color.0, b_color.1, b_color.2]);
+        left.push([l_color.0, l_color.1, l_color.2]);
+        right.push([r_color.0, r_color.1, r_color.2]);
+    }
+
+    EdgeSignalPayload { top, bottom, left, right }
+}
+
 struct AmbilightWorkerQualityState {
     controller: RuntimeQualityController,
 }
@@ -543,6 +616,10 @@ impl AmbilightWorkerQualityState {
 
     fn observe_capture_and_send_cost(&mut self, capture_ms: f32, send_ms: f32) {
         self.controller.observe_timing(capture_ms, send_ms);
+    }
+
+    fn observed_cost_ms(&self) -> f32 {
+        self.controller.observed_cost_ms()
     }
 
     fn current_send_interval(&self) -> Duration {
@@ -609,6 +686,7 @@ fn start_ambilight_worker(
     frame_source: Box<dyn AmbilightFrameSource>,
     telemetry_snapshot: SharedRuntimeTelemetry,
     hue_output: Option<HueActiveOutputContext>,
+    edge_signal_emitter: Option<EdgeSignalEmitter>,
 ) -> Result<LightingWorkerRuntime, String> {
     let mut frame_source = frame_source;
     // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
@@ -684,6 +762,7 @@ fn start_ambilight_worker(
     }
     // Hue-only: no initial USB send needed, just apply Hue from capture
     quality_state.observe_capture_and_send_cost(0.0, send_started.elapsed().as_secs_f32() * 1000.0);
+    telemetry_window.record_latency(quality_state.observed_cost_ms());
     telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot)?;
 
     let cancel = Arc::new(AtomicBool::new(false));
@@ -717,6 +796,7 @@ fn start_ambilight_worker(
         let mut border_cache = BlackBorderCache::new(live_settings.read_black_border_detection());
 
         let mut capture_fail_count = 0u32;
+        let mut last_edge_emit_at: Option<Instant> = None;
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
             let capture_result = match worker_source.lock() {
@@ -799,7 +879,21 @@ fn start_ambilight_worker(
                 }
 
                 quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
+                telemetry_window.record_latency(quality_state.observed_cost_ms());
                 let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
+
+                // Edge signal preview — throttled to ~10 Hz.
+                if let Some(emitter) = edge_signal_emitter.as_ref() {
+                    let now = Instant::now();
+                    let due = last_edge_emit_at
+                        .map(|prev| now.duration_since(prev) >= Duration::from_millis(EDGE_SIGNAL_MIN_INTERVAL_MS))
+                        .unwrap_or(true);
+                    if due {
+                        let payload = compute_edge_signal(&raw_frame, border_cache.insets());
+                        emitter(payload);
+                        last_edge_emit_at = Some(now);
+                    }
+                }
             }
 
             let interval_ms = quality_state.current_send_interval().as_millis() as u64;
@@ -829,6 +923,7 @@ fn apply_mode_change(
     connected_port: Option<&str>,
     hue_output: Option<HueActiveOutputContext>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
+    edge_signal_emitter: Option<EdgeSignalEmitter>,
     trace: Option<&mut Vec<&'static str>>,
 ) -> LightingModeCommandResult {
     let normalized_next = normalize_mode_config(next_mode);
@@ -1026,6 +1121,7 @@ fn apply_mode_change(
                 telemetry_snapshot
                     .unwrap_or_else(|| Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))),
                 hue_output,
+                edge_signal_emitter,
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
@@ -1060,7 +1156,8 @@ fn apply_mode_change(
 }
 
 #[tauri::command]
-pub fn set_lighting_mode(
+pub fn set_lighting_mode<R: Runtime>(
+    app: AppHandle<R>,
     payload: LightingModeConfig,
     runtime_state: State<'_, LightingRuntimeState>,
     connection_state: State<'_, SerialConnectionState>,
@@ -1086,6 +1183,13 @@ pub fn set_lighting_mode(
 
     let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
 
+    let edge_emitter: Option<EdgeSignalEmitter> = {
+        let app_handle = app.clone();
+        Some(Arc::new(move |payload: EdgeSignalPayload| {
+            let _ = app_handle.emit(EDGE_SIGNAL_EVENT, payload);
+        }))
+    };
+
     let result = apply_mode_change(
         &mut owner,
         payload,
@@ -1093,6 +1197,7 @@ pub fn set_lighting_mode(
         connection_snapshot.port_name.as_deref(),
         hue_output,
         Some(telemetry_state.shared_snapshot()),
+        edge_emitter,
         None,
     );
     info!("[set_lighting_mode] completed in {}ms", t_cmd.elapsed().as_millis());
@@ -1112,6 +1217,7 @@ pub fn stop_lighting(
         &mut owner,
         LightingModeConfig::default(),
         true,
+        None,
         None,
         None,
         None,
@@ -1281,6 +1387,7 @@ mod tests {
                     (owner.frame_source_factory)().expect("frame source should be available"),
                     shared_runtime_telemetry(),
                     None,
+                    None,
                 )
                 .expect("worker start should succeed"),
             ),
@@ -1297,6 +1404,7 @@ mod tests {
             Some("COM1"),
             None,
             Some(shared_runtime_telemetry()),
+            None,
             Some(&mut trace),
         );
 
@@ -1319,6 +1427,7 @@ mod tests {
             solid_mode(),
             true,
             Some("COM4"),
+            None,
             None,
             None,
             None,
@@ -1347,6 +1456,7 @@ mod tests {
             Some("COM7"),
             None,
             Some(shared_runtime_telemetry()),
+            None,
             None,
         );
 
@@ -1377,6 +1487,7 @@ mod tests {
             None,
             Some(shared_runtime_telemetry()),
             None,
+            None,
         );
         assert_eq!(first.mode.kind, LightingModeKind::Ambilight);
         wait_for_worker_count(1);
@@ -1390,6 +1501,7 @@ mod tests {
             None,
             Some(shared_runtime_telemetry()),
             None,
+            None,
         );
         assert_eq!(second.mode.kind, LightingModeKind::Ambilight);
         wait_for_worker_count(1);
@@ -1400,6 +1512,7 @@ mod tests {
             solid_mode(),
             true,
             Some("COM2"),
+            None,
             None,
             None,
             None,
@@ -1422,6 +1535,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         let denied = apply_mode_change(
@@ -1431,6 +1545,7 @@ mod tests {
             None,
             None,
             Some(shared_runtime_telemetry()),
+            None,
             None,
         );
 
@@ -1449,6 +1564,7 @@ mod tests {
             Some("COM1"),
             None,
             Some(shared_runtime_telemetry()),
+            None,
             None,
         );
 
@@ -1655,6 +1771,7 @@ mod lighting_mode_tests {
             None,  // hue_output=None triggers HUE_NOT_READY gate
             None,
             None,
+            None,
         );
 
         assert_ne!(
@@ -1678,6 +1795,7 @@ mod lighting_mode_tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
@@ -1691,6 +1809,7 @@ mod lighting_mode_tests {
             &mut owner,
             solid_with_targets(None),
             false, // device not connected
+            None,
             None,
             None,
             None,
@@ -1711,6 +1830,7 @@ mod lighting_mode_tests {
             None,
             None, // no hue output -> HUE_NOT_READY
             Some(shared_telemetry()),
+            None,
             None,
         );
 

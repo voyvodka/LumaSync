@@ -12,6 +12,7 @@ interface RuntimeTelemetrySnapshotDto {
   captureFps: number;
   sendFps: number;
   queueHealth: string;
+  frameLatencyMs: number;
 }
 
 interface HueTelemetrySnapshotDto {
@@ -53,11 +54,19 @@ function normalizeQueueHealth(value: unknown): RuntimeTelemetrySnapshot["queueHe
   return TELEMETRY_QUEUE_HEALTH.HEALTHY;
 }
 
+function normalizeLatencyMs(value: unknown): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return 0;
+  }
+  return Math.max(0, value);
+}
+
 export function mapRuntimeTelemetrySnapshot(dto: RuntimeTelemetrySnapshotDto): RuntimeTelemetrySnapshot {
   return {
     captureFps: normalizeFps(dto.captureFps),
     sendFps: normalizeFps(dto.sendFps),
     queueHealth: normalizeQueueHealth(dto.queueHealth),
+    frameLatencyMs: normalizeLatencyMs(dto.frameLatencyMs),
   };
 }
 

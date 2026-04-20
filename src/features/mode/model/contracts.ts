@@ -6,6 +6,18 @@ export const LIGHTING_MODE_KIND = {
   SOLID: "solid",
 } as const;
 
+/** Tauri event channel name for live edge-signal previews emitted by the ambilight worker. */
+export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal";
+
+/** Live edge-preview payload emitted by the Rust ambilight worker.
+ * Each edge array contains `EDGE_SIGNAL_SAMPLES_PER_EDGE` RGB triplets. */
+export interface EdgeSignalPayload {
+  top: Array<[number, number, number]>;
+  bottom: Array<[number, number, number]>;
+  left: Array<[number, number, number]>;
+  right: Array<[number, number, number]>;
+}
+
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
 
 export interface SolidColorPayload {

@@ -29,7 +29,7 @@ import {
   type ModeGuardReason,
 } from "../../../mode/state/modeGuard";
 import type { HueRuntimeTarget } from "../../../../shared/contracts/hue";
-import { SCENE_PRESETS, type ScenePreset } from "./SCENE_PRESETS";
+import { SCENE_PRESETS, type ScenePreset } from "../../../mode/model/scenePresets";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
@@ -119,10 +119,10 @@ export function CompactLayout({
     [outputTargets, onLightingModeChange],
   );
 
-  // Click → SOLID mode with the preset RGB. Brightness is preserved if
-  // we're already in SOLID, otherwise resets to 100%. Scene gradient is
-  // purely visual today; future Phase 3.5 may extend ScenePreset with
-  // brightness/saturation/smoothing overrides for ambilight scenes.
+  // Click → SOLID mode with the preset RGB. When we're already in SOLID
+  // the user's current brightness is preserved so manual tweaks survive;
+  // otherwise the preset's own brightness is used so a fresh scene hits
+  // the intended mood on entry.
   const handleScenePresetClick = useCallback(
     (preset: ScenePreset) => {
       onLightingModeChange({
@@ -131,7 +131,7 @@ export function CompactLayout({
           r: preset.r,
           g: preset.g,
           b: preset.b,
-          brightness: isSolid ? incomingSolid.brightness : 1,
+          brightness: isSolid ? incomingSolid.brightness : preset.brightness,
         },
         targets: outputTargets,
       });
