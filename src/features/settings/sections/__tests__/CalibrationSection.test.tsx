@@ -2,8 +2,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { SECTION_IDS } from "../../../../shared/contracts/shell";
-import { SettingsLayout } from "../../SettingsLayout";
 import { CalibrationSection } from "../CalibrationSection";
 
 vi.mock("react-i18next", () => ({
