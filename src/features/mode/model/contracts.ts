@@ -32,6 +32,8 @@ export interface AmbilightPayload {
   blackBorderDetection?: boolean;
   /** EWMA alpha for color smoothing. Range [0.05, 1.0]. 1.0 = instant; lower = smoother. Default 0.35. */
   smoothingAlpha?: number;
+  /** Luminance-preserving saturation factor. Range [0.5, 2.0]. 1.0 = identity. Default 1.0. */
+  saturation?: number;
 }
 
 export interface LightingModeConfig {
@@ -73,6 +75,7 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): Am
     brightness: clampFloat(input?.brightness, 0, 1, 1),
     blackBorderDetection: input?.blackBorderDetection ?? false,
     smoothingAlpha: clampFloat(input?.smoothingAlpha, 0.05, 1, 0.35),
+    saturation: clampFloat(input?.saturation, 0.5, 2, 1),
   };
 }
 

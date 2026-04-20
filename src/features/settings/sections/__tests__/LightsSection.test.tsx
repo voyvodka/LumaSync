@@ -64,7 +64,7 @@ describe("LightsSection", () => {
 
     expect(onModeChange).toHaveBeenCalledWith({
       kind: "ambilight",
-      ambilight: { brightness: 1, blackBorderDetection: false, smoothingAlpha: 0.35 },
+      ambilight: { brightness: 1, blackBorderDetection: false, smoothingAlpha: 0.35, saturation: 1 },
     } satisfies LightingModeConfig);
   });
 

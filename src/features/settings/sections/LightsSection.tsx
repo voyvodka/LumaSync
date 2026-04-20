@@ -186,9 +186,13 @@ export function LightsSection({
     });
   };
 
-  // TODO: saturation is UI-local state only — AmbilightPayload has no saturation field yet.
-  // Wire to onModeChange once the contract and Rust handler are extended.
-  const [saturationPlaceholder, setSaturationPlaceholder] = useState(118);
+  // Slider shows saturation as a 50–200% dial; payload is a 0.5–2.0 factor.
+  const handleSaturationChange = (percent: number) => {
+    onModeChange({
+      kind: LIGHTING_MODE_KIND.AMBILIGHT,
+      ambilight: { ...incomingAmbilight, saturation: percent / 100 },
+    });
+  };
 
   const totalLeds = calibration?.totalLeds;
 
@@ -277,7 +281,8 @@ export function LightsSection({
 
   const smoothingValue = incomingAmbilight.smoothingAlpha ?? 0.35;
   const smoothingPercent = Math.round(((smoothingValue - 0.05) / 0.95) * 100);
-  const saturationPercent = Math.round(((saturationPlaceholder - 50) / 150) * 100);
+  const saturationValue = Math.round((incomingAmbilight.saturation ?? 1) * 100);
+  const saturationFillPercent = Math.round(((saturationValue - 50) / 150) * 100);
   const blackBorderOn = incomingAmbilight.blackBorderDetection ?? false;
 
   const slidersDisabled = !isAmbilight || modeSelectorDisabled;
@@ -465,25 +470,25 @@ export function LightsSection({
                   />
                 </div>
               </div>
-              {/* Saturation — visual-only placeholder */}
+              {/* Saturation — wired to AmbilightPayload.saturation (0.5–2.0). */}
               <div className="lm-psl">
                 <div className="row">
                   <span>{t("lightsPage.signal.profile.saturation")}</span>
-                  <b>{saturationPlaceholder}%</b>
+                  <b>{saturationValue}%</b>
                 </div>
                 <div className="tr">
                   <div className="tr-track">
-                    <span className="tr-fill" style={{ width: `${saturationPercent}%` }} />
+                    <span className="tr-fill" style={{ width: `${saturationFillPercent}%` }} />
                   </div>
                   <input
                     type="range"
                     min={50}
                     max={200}
                     step={1}
-                    value={saturationPlaceholder}
+                    value={saturationValue}
                     disabled={slidersDisabled}
                     aria-label={t("lightsPage.signal.profile.saturation")}
-                    onChange={(e) => setSaturationPlaceholder(parseInt(e.target.value, 10))}
+                    onChange={(e) => handleSaturationChange(parseInt(e.target.value, 10))}
                   />
                 </div>
               </div>

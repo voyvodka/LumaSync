@@ -69,6 +69,11 @@ pub struct AmbilightPayload {
     /// Defaults to 0.35 when absent.
     #[serde(default)]
     pub smoothing_alpha: Option<f32>,
+    /// Post-sampling color saturation factor. Range [0.5, 2.0].
+    /// 1.0 = identity (no change); 0.5 ≈ half-saturated; 2.0 ≈ vivid.
+    /// Defaults to 1.0 when absent.
+    #[serde(default)]
+    pub saturation: Option<f32>,
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
@@ -142,6 +147,8 @@ struct AmbilightLiveSettings {
     black_border_detection: AtomicBool,
     /// EWMA smoothing alpha as f32 bit pattern. Range [0.05, 1.0].
     smoothing_alpha: AtomicU32,
+    /// Saturation factor as f32 bit pattern. Range [0.5, 2.0]. 1.0 = identity.
+    saturation: AtomicU32,
 }
 
 impl AmbilightLiveSettings {
@@ -149,11 +156,13 @@ impl AmbilightLiveSettings {
         brightness: f32,
         black_border_detection: bool,
         smoothing_alpha: f32,
+        saturation: f32,
     ) -> Arc<Self> {
         Arc::new(Self {
             brightness: AtomicU32::new(brightness.to_bits()),
             black_border_detection: AtomicBool::new(black_border_detection),
             smoothing_alpha: AtomicU32::new(smoothing_alpha.clamp(0.05, 1.0).to_bits()),
+            saturation: AtomicU32::new(saturation.clamp(0.5, 2.0).to_bits()),
         })
     }
 
@@ -169,15 +178,21 @@ impl AmbilightLiveSettings {
         f32::from_bits(self.smoothing_alpha.load(Ordering::Relaxed))
     }
 
+    fn read_saturation(&self) -> f32 {
+        f32::from_bits(self.saturation.load(Ordering::Relaxed))
+    }
+
     fn update(
         &self,
         brightness: f32,
         black_border_detection: bool,
         smoothing_alpha: f32,
+        saturation: f32,
     ) {
         self.brightness.store(brightness.to_bits(), Ordering::Relaxed);
         self.black_border_detection.store(black_border_detection, Ordering::Relaxed);
         self.smoothing_alpha.store(smoothing_alpha.clamp(0.05, 1.0).to_bits(), Ordering::Relaxed);
+        self.saturation.store(saturation.clamp(0.5, 2.0).to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -253,6 +268,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                     brightness: clamp_brightness(Some(incoming.brightness), 1.0),
                     black_border_detection: incoming.black_border_detection,
                     smoothing_alpha: incoming.smoothing_alpha,
+                    saturation: incoming.saturation,
                 }),
                 targets,
             }
@@ -536,6 +552,47 @@ pub struct EdgeSignalPayload {
 /// Tauri runtime type parameter.
 pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
 
+/// Apply luminance-preserving saturation to an RGB triple.
+///
+/// `factor`:
+///   - 1.0  → identity (returns input unchanged)
+///   - <1.0 → desaturate (pulls toward gray at luminance L)
+///   - >1.0 → saturate (pushes away from gray)
+///
+/// Luminance formula: `L = 0.299·R + 0.587·G + 0.114·B` (Rec.601).
+/// New channel: `C' = L + factor · (C - L)`, clamped to `[0, 255]`.
+#[inline]
+fn apply_saturation_rgb(rgb: (u8, u8, u8), factor: f32) -> (u8, u8, u8) {
+    if (factor - 1.0).abs() < f32::EPSILON {
+        return rgb;
+    }
+    let r = rgb.0 as f32;
+    let g = rgb.1 as f32;
+    let b = rgb.2 as f32;
+    let l = 0.299 * r + 0.587 * g + 0.114 * b;
+    let nr = l + factor * (r - l);
+    let ng = l + factor * (g - l);
+    let nb = l + factor * (b - l);
+    (
+        nr.round().clamp(0.0, 255.0) as u8,
+        ng.round().clamp(0.0, 255.0) as u8,
+        nb.round().clamp(0.0, 255.0) as u8,
+    )
+}
+
+#[inline]
+fn apply_saturation_inplace(colors: &mut [[u8; 3]], factor: f32) {
+    if (factor - 1.0).abs() < f32::EPSILON {
+        return;
+    }
+    for c in colors.iter_mut() {
+        let (r, g, b) = apply_saturation_rgb((c[0], c[1], c[2]), factor);
+        c[0] = r;
+        c[1] = g;
+        c[2] = b;
+    }
+}
+
 pub fn compute_edge_signal(
     frame: &CapturedFrame,
     insets: &BlackBorderInsets,
@@ -813,15 +870,19 @@ fn start_ambilight_worker(
                     warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
                 }
             }
-            if let Ok((raw_frame, sampled)) = capture_result {
+            if let Ok((raw_frame, mut sampled)) = capture_result {
                 // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
                 border_cache.set_enabled(live_settings.read_black_border_detection());
                 let brightness = live_settings.read_brightness();
+                let saturation = live_settings.read_saturation();
                 quality_state.set_smoothing_alpha(live_settings.read_smoothing_alpha());
                 // Update black border detection cache from the raw (uncropped) frame.
                 border_cache.update_if_due(&raw_frame);
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
                 telemetry_window.record_capture();
+                // Apply saturation before smoothing/sending so the quality gate sees
+                // the corrected colors and temporal smoothing operates on final values.
+                apply_saturation_inplace(&mut sampled, saturation);
                 if quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice()) {
                     telemetry_window.record_slot_overwrite();
                 }
@@ -863,7 +924,15 @@ fn start_ambilight_worker(
                         let raw_colors: Vec<(u8, u8, u8)> = context
                             .channels
                             .iter()
-                            .map(|ch| sample_screen_position_avg(&raw_frame, ch.position_x, ch.position_y, border_cache.insets()))
+                            .map(|ch| {
+                                let rgb = sample_screen_position_avg(
+                                    &raw_frame,
+                                    ch.position_x,
+                                    ch.position_y,
+                                    border_cache.insets(),
+                                );
+                                apply_saturation_rgb(rgb, saturation)
+                            })
                             .collect();
 
                         let smoothing_alpha = live_settings.read_smoothing_alpha();
@@ -889,7 +958,11 @@ fn start_ambilight_worker(
                         .map(|prev| now.duration_since(prev) >= Duration::from_millis(EDGE_SIGNAL_MIN_INTERVAL_MS))
                         .unwrap_or(true);
                     if due {
-                        let payload = compute_edge_signal(&raw_frame, border_cache.insets());
+                        let mut payload = compute_edge_signal(&raw_frame, border_cache.insets());
+                        apply_saturation_inplace(&mut payload.top, saturation);
+                        apply_saturation_inplace(&mut payload.bottom, saturation);
+                        apply_saturation_inplace(&mut payload.left, saturation);
+                        apply_saturation_inplace(&mut payload.right, saturation);
                         emitter(payload);
                         last_edge_emit_at = Some(now);
                     }
@@ -970,7 +1043,12 @@ fn apply_mode_change(
     {
         if let Some(live) = &owner.ambilight_live {
             let cfg = normalized_next.ambilight.as_ref().cloned().unwrap_or_default();
-            live.update(cfg.brightness, cfg.black_border_detection, cfg.smoothing_alpha.unwrap_or(0.35));
+            live.update(
+                cfg.brightness,
+                cfg.black_border_detection,
+                cfg.smoothing_alpha.unwrap_or(0.35),
+                cfg.saturation.unwrap_or(1.0),
+            );
             owner.active_mode = normalized_next;
             return make_result(
                 owner.active_mode.clone(),
@@ -1073,6 +1151,7 @@ fn apply_mode_change(
                 ambilight_cfg.brightness,
                 ambilight_cfg.black_border_detection,
                 ambilight_cfg.smoothing_alpha.unwrap_or(0.35),
+                ambilight_cfg.saturation.unwrap_or(1.0),
             );
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
@@ -1383,7 +1462,7 @@ mod tests {
                 start_ambilight_worker(
                     owner.output_bridge.clone(),
                     Some("COM1".to_string()),
-                    AmbilightLiveSettings::new(0.8, false, 0.35),
+                    AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
                     (owner.frame_source_factory)().expect("frame source should be available"),
                     shared_runtime_telemetry(),
                     None,
