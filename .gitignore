@@ -48,4 +48,5 @@ src-tauri/target/
 .opencode/settings.json
 
 .claude/*
-.planning/.jules/
+.planning/
+.jules/
