@@ -89,67 +89,64 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function renderHueTab(state: ReturnType<typeof createHueHookState>) {
+  const user = userEvent.setup();
+  useHueOnboardingMock.mockReturnValue(state);
+  render(<DeviceSection />);
+  const hueTabBtn = screen.getByText("devicesPage.rail.hueBridges").closest("button")!;
+  await user.click(hueTabBtn);
+}
+
 describe("HueReadySummaryCard", () => {
   beforeEach(() => {
     stopHueMock.mockReset();
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("renders when canStartHue is true", async () => {
-    useHueOnboardingMock.mockReturnValue(
-      createHueHookState({
-        canStartHue: true,
-        selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: true } },
-        selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
-        runtimeStatus: null,
-      }),
-    );
-
-    render(<DeviceSection />);
+  it("renders idle state with area name and ready pill", async () => {
+    await renderHueTab(createHueHookState({
+      selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: true } },
+      selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
+      runtimeStatus: null,
+      isReadinessStale: false,
+    }));
 
     await waitFor(() => {
-      // Card renders summary label (idle state when runtimeStatus=null)
-      expect(screen.getByText("device.hue.summary.idle")).toBeInTheDocument();
+      expect(screen.getByText("Living Room")).toBeInTheDocument();
+      const pill = document.querySelector(".lm-dcard-pill.is-idle");
+      expect(pill).toBeTruthy();
     });
   });
 
-  it("hidden when canStartHue is false", async () => {
-    useHueOnboardingMock.mockReturnValue(
-      createHueHookState({
-        canStartHue: false,
-        selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: false } },
-        selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
-        runtimeStatus: null,
-      }),
-    );
-
-    render(<DeviceSection />);
+  it("disables start button when readiness is stale", async () => {
+    await renderHueTab(createHueHookState({
+      canStartHue: false,
+      isReadinessStale: true,
+      selectedArea: { id: "test-area", name: "Living Room", readiness: { ready: false } },
+      selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
+      runtimeStatus: null,
+    }));
 
     await waitFor(() => {
-      expect(screen.queryByText("Living Room")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeDisabled();
     });
   });
 
-  it("shows streaming dot when runtimeStatus state is Running", async () => {
-    useHueOnboardingMock.mockReturnValue(
-      createHueHookState({
-        canStartHue: true,
-        selectedArea: { id: "test-area", name: "Test Zone", readiness: { ready: true } },
-        selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
-        runtimeStatus: {
-          state: "Running",
-          code: "HUE_STREAM_RUNNING",
-          message: "Streaming",
-          triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-        },
-      }),
-    );
-
-    render(<DeviceSection />);
+  it("shows streaming pill when runtimeStatus state is Running", async () => {
+    await renderHueTab(createHueHookState({
+      selectedArea: { id: "test-area", name: "Test Zone", readiness: { ready: true } },
+      selectedBridge: { id: "test-bridge", name: "Test Bridge", ip: "192.168.1.100" },
+      runtimeStatus: {
+        state: "Running",
+        code: "HUE_STREAM_RUNNING",
+        message: "Streaming",
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+    }));
 
     await waitFor(() => {
-      const dot = document.querySelector(".bg-emerald-500.animate-pulse");
-      expect(dot).toBeTruthy();
+      const pill = document.querySelector(".lm-dcard-pill.is-streaming");
+      expect(pill).toBeTruthy();
     });
   });
 });
@@ -160,86 +157,89 @@ describe("DeviceSection hue runtime controls", () => {
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
-  it("keeps Start disabled while credential validating/unknown and shows stale readiness checklist", async () => {
-    useHueOnboardingMock.mockReturnValue(
-      createHueHookState({
-        credentialState: "unknown",
-        isValidatingCredential: true,
-        isReadinessStale: true,
-        canStartHue: true,
-      }),
-    );
-
-    render(<DeviceSection />);
+  it("keeps Start disabled in stale state and shows revalidate hint", async () => {
+    await renderHueTab(createHueHookState({
+      credentialState: "valid",
+      isValidatingCredential: true,
+      isReadinessStale: true,
+      canStartHue: true,
+    }));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeDisabled();
     });
-    expect(screen.getByText("device.hue.runtime.checklist.revalidate")).toBeInTheDocument();
+    expect(screen.getAllByText("device.hue.runtime.checklist.revalidate")[0]).toBeInTheDocument();
   });
 
-  it("routes Device stop action to shared mode stop pipeline", async () => {
+  it("routes stop action to stopHue when stream is reconnecting", async () => {
     const user = userEvent.setup();
-    useHueOnboardingMock.mockReturnValue(
-      createHueHookState({ runtimeStatus: { state: "Running" } }),
-    );
-    render(<DeviceSection />);
+    await renderHueTab(createHueHookState({
+      runtimeStatus: {
+        state: "Reconnecting",
+        code: "TRANSIENT_RETRY_SCHEDULED",
+        message: "reconnecting",
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+    }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "device.hue.actions.stop" })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "devicesPage.hue.stopRetrying" })[0]).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: "device.hue.actions.stop" }));
+    await user.click(screen.getAllByRole("button", { name: "devicesPage.hue.stopRetrying" })[0]);
 
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
   });
 
-  it("routes Device start action to onboarding runtime start pipeline", async () => {
+  it("routes reconnect action to startRuntime when streaming", async () => {
     const user = userEvent.setup();
     const startRuntime = vi.fn();
-    useHueOnboardingMock.mockReturnValue(createHueHookState({ startRuntime }));
-
-    render(<DeviceSection />);
+    await renderHueTab(createHueHookState({
+      startRuntime,
+      runtimeStatus: {
+        state: "Running",
+        code: "HUE_STREAM_RUNNING",
+        message: "Streaming",
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+    }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" })).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: "device.hue.actions.start" }));
+    await user.click(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" }));
 
     expect(startRuntime).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps healthy target controls enabled while recovering target remains constrained", async () => {
+  it("calls retryRuntimeTarget with first target when reconnecting", async () => {
     const user = userEvent.setup();
     const retryRuntimeTarget = vi.fn();
 
-    useHueOnboardingMock.mockReturnValue(
-      createHueHookState({
-        runtimeTargets: [
-          {
-            target: "hue",
-            state: "Reconnecting",
-            code: "TRANSIENT_RETRY_SCHEDULED",
-            message: "reconnecting",
-            remainingAttempts: 2,
-            nextAttemptMs: 1200,
-          },
-          { target: "usb", state: "Running", code: "USB_STREAM_RUNNING", message: "running" },
-        ],
-        retryRuntimeTarget,
-      }),
-    );
-
-    render(<DeviceSection />);
+    await renderHueTab(createHueHookState({
+      runtimeStatus: {
+        state: "Reconnecting",
+        code: "TRANSIENT_RETRY_SCHEDULED",
+        message: "reconnecting",
+        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
+      },
+      runtimeTargets: [
+        {
+          target: "hue",
+          state: "Reconnecting",
+          code: "TRANSIENT_RETRY_SCHEDULED",
+          message: "reconnecting",
+          remainingAttempts: 2,
+          nextAttemptMs: 1200,
+        },
+      ],
+      retryRuntimeTarget,
+    }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "device.hue.runtime.targets.hue.retry" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" })).toBeInTheDocument();
     });
-    expect(screen.getByText("device.hue.runtime.retryStatus")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" }));
 
-    const usbRetry = screen.getByRole("button", { name: "device.hue.runtime.targets.usb.retry" });
-    expect(usbRetry).toBeEnabled();
-
-    await user.click(usbRetry);
-    expect(retryRuntimeTarget).toHaveBeenCalledWith("usb");
+    expect(retryRuntimeTarget).toHaveBeenCalledWith("hue");
   });
 });
