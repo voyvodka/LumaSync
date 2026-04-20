@@ -38,6 +38,7 @@ vi.mock("react-i18next", () => ({
       return value;
     },
   }),
+  Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
 }));
 
 describe("LightsSection", () => {
