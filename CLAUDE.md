@@ -125,7 +125,7 @@ GitHub Releases with minisign verification. The updater checks on startup and su
 
 ### Testing
 
-- Tests next to feature code: `*.test.ts` / `*.test.tsx`.
+- Tests live in a `__tests__/` subfolder next to the code under test: `foo.ts` → `__tests__/foo.test.ts`.
 - Use Testing Library + Vitest globals (`describe`, `it`, `expect`, `vi`).
 - Mock Tauri/plugin boundaries for deterministic frontend tests.
 - Rust: focused behavior tests with clear scenario names.

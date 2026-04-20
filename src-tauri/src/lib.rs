@@ -8,7 +8,6 @@
 //   5. tray icon + menu construction
 //   6. close-to-tray interception via on_window_event
 
-use std::{thread, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -27,6 +26,9 @@ mod commands {
     pub mod runtime_quality;
     pub mod runtime_telemetry;
 }
+
+#[cfg(target_os = "macos")]
+mod macos_window;
 
 mod models {
     pub mod room_map;
@@ -183,7 +185,17 @@ pub fn run() {
     builder = builder.plugin(tauri_plugin_store::Builder::default().build());
 
     // 4. Window-state (geometry persistence)
-    builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
+    //
+    // Default flags (`StateFlags::all()`) would auto-restore SIZE and
+    // VISIBLE on launch, which fights our "always start in compact, hidden
+    // until React is ready" rule and causes a visible big→compact flash.
+    // `skip_initial_state("main")` keeps the save-on-close behavior but
+    // disables the automatic restore so the JS bootstrap owns everything.
+    builder = builder.plugin(
+        tauri_plugin_window_state::Builder::default()
+            .skip_initial_state("main")
+            .build(),
+    );
 
     // 5. Opener (for external links)
     builder = builder.plugin(tauri_plugin_opener::init());
@@ -250,6 +262,31 @@ pub fn run() {
             let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();
 
+            // On non-macOS platforms, disable native window decorations so the
+            // custom React <TitleBar /> can render icon+name+window controls
+            // consistently. macOS keeps native traffic lights via the
+            // `titleBarStyle: "Overlay"` + `hiddenTitle: true` combo set in
+            // tauri.conf.json (content extends under the traffic lights).
+            #[cfg(not(target_os = "macos"))]
+            if let Some(main_window) = app.get_webview_window("main") {
+                let _ = main_window.set_decorations(false);
+            }
+
+            // On macOS, forbid native fullscreen so the system's auto-hiding
+            // fullscreen title bar can never collide with our custom one.
+            #[cfg(target_os = "macos")]
+            if let Some(main_window) = app.get_webview_window("main") {
+                macos_window::forbid_native_fullscreen(&main_window);
+            }
+
+            // Debug builds: auto-open WebView devtools in a detached window so
+            // frontend `console.log` is visible without manually toggling it
+            // from the WebView context menu each launch.
+            #[cfg(debug_assertions)]
+            if let Some(main_window) = app.get_webview_window("main") {
+                main_window.open_devtools();
+            }
+
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());
             app.manage(OverlayState::default());
@@ -294,23 +331,6 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Prevent default close (process exit) and hide to tray instead
                 api.prevent_close();
-
-                if cfg!(target_os = "macos") && window.is_fullscreen().unwrap_or(false) {
-                    let _ = window.set_fullscreen(false);
-                    let app_handle = window.app_handle().clone();
-                    let window_label = window.label().to_string();
-
-                    thread::spawn(move || {
-                        thread::sleep(Duration::from_millis(120));
-                        if let Some(main_window) = app_handle.get_webview_window(&window_label) {
-                            let _ = main_window.hide();
-                            let _ = main_window.emit("shell:close-to-tray", ());
-                        }
-                    });
-
-                    return;
-                }
-
                 hide_to_tray(window);
             }
         })

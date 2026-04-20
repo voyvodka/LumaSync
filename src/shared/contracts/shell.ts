@@ -64,8 +64,8 @@ export const SECTION_ORDER: SectionId[] = [
   SECTION_IDS.LIGHTS,
   SECTION_IDS.LED_SETUP,
   SECTION_IDS.DEVICES,
-  SECTION_IDS.SYSTEM,
   SECTION_IDS.ROOM_MAP,
+  SECTION_IDS.SYSTEM,
 ];
 
 // ---------------------------------------------------------------------------
@@ -156,6 +156,14 @@ export interface ShellState {
   roomMapGridStrokeWidth?: number;
   /** Room map editor background image opacity (0-100) */
   roomMapBackgroundOpacity?: number;
+  /** Active UI layout mode (compact tray panel vs full settings window) */
+  uiMode?: UIMode;
+  /**
+   * Last known full-mode window size (logical pixels).
+   * Captured when switching out of full mode so the next compact→full
+   * restore returns to the user's preferred full-mode dimensions.
+   */
+  lastFullSize?: { width: number; height: number };
 }
 
 /** Default shell state for first launch */
@@ -182,3 +190,31 @@ export const SHELL_STORE_KEY = "shell-state";
 
 export const WINDOW_MIN_WIDTH = 720;
 export const WINDOW_MIN_HEIGHT = 480;
+
+// ---------------------------------------------------------------------------
+// UI Mode (compact / full)
+// ---------------------------------------------------------------------------
+
+/** Window layout mode — compact for tray-first quick controls, full for settings */
+export type UIMode = "compact" | "full";
+
+/** Logical pixel dimensions for each UI mode */
+export const UI_MODE_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {
+  compact: { width: 320, height: 480 },
+  full: { width: 900, height: 620 },
+};
+
+/**
+ * Per-mode minimum window size. Applied dynamically via `setMinSize` when
+ * `resizeToMode` runs so each mode enforces a floor that keeps its own layout
+ * readable at every resolution.
+ *
+ * - Compact min (300×420): tight but keeps tray-style controls usable.
+ * - Full min (800×560): derived from the Lights mode-strip container-query
+ *   breakpoints — at ≥800px the strip is ≥460px wide, so mode title + subtitle
+ *   stay visible (only the decorative ⌥1-3 kb pill sheds below 580px mstrip).
+ */
+export const UI_MODE_MIN_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {
+  compact: { width: 300, height: 420 },
+  full: { width: 800, height: 560 },
+};

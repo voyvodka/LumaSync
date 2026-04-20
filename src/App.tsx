@@ -13,6 +13,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
+import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
+import { StatusBar, statusBarHeightPx, type StatusItem } from "./features/shell/StatusBar";
+import { UIModeTransitionOverlay } from "./features/shell/UIModeTransitionOverlay";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
 import {
@@ -53,6 +56,11 @@ import {
   loadShellState,
   saveShellState,
 } from "./features/shell/windowLifecycle";
+import {
+  useUIMode,
+  UI_MODE_FADE_DURATION_MS,
+  UI_MODE_FADE_TIMING,
+} from "./features/shell/useUIMode";
 import {
   SECTION_IDS,
   type SectionId,
@@ -117,15 +125,17 @@ function isHueStopCodeOk(code: string): boolean {
   return code === "HUE_STREAM_STOPPED";
 }
 
-function isSameTargetSet(a: HueRuntimeTarget[], b: HueRuntimeTarget[]): boolean {
-  if (a.length !== b.length) return false;
-  const set = new Set(a);
-  return b.every((t) => set.has(t));
-}
-
 function App() {
   const { t } = useTranslation("common");
-  const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss } = useAutoUpdater();
+  const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss, devSetState: devSetUpdaterState } = useAutoUpdater();
+  const {
+    currentMode,
+    isContentVisible,
+    isSweepActive,
+    contentRef,
+    switchUIMode,
+    setCurrentMode,
+  } = useUIMode();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
   const [calibrationStep, setCalibrationStep] = useState<CalibrationOverlayStep>("editor");
@@ -323,6 +333,8 @@ function App() {
         });
 
         const state = await loadShellState();
+        // Always start in compact — ignore any persisted uiMode.
+        setCurrentMode("compact");
         // Map old section IDs to new ones for backward compatibility
         const sectionMap: Record<string, SectionId> = {
           // Legacy IDs from persisted state before navigation restructure
@@ -340,6 +352,7 @@ function App() {
           "led-setup": SECTION_IDS.LED_SETUP,
           devices: SECTION_IDS.DEVICES,
           system: SECTION_IDS.SYSTEM,
+          "room-map": SECTION_IDS.ROOM_MAP,
         };
         // On first launch keep the default LIGHTS section.
         // On a page refresh (sessionStorage survives the reload) restore the last section.
@@ -696,10 +709,16 @@ function App() {
         ambilight: nextMode.ambilight ?? lightingMode.ambilight,
         targets: selectedOutputTargets,
       });
+      // Quick adjustment: same mode kind → pure config nudge (color/brightness).
+      // We intentionally DO NOT require `isSameTargetSet(selected, active)` here.
+      // If selected != active we still take the quick path and push the update
+      // to whatever IS currently active; falling through to the full transition
+      // path just to "reconcile" targets would flip `isModeTransitioning = true`,
+      // which disables the brightness slider mid-drag and makes the browser
+      // release pointer capture — symptom: drag breaks after a single commit.
       const isQuickSolidAdjustment =
         normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
-        lightingMode.kind === LIGHTING_MODE_KIND.SOLID &&
-        isSameTargetSet(selectedOutputTargets, activeOutputTargets);
+        lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
 
       if (isQuickSolidAdjustment && normalizedNextMode.solid) {
         setLightingModeState(normalizedNextMode);
@@ -730,10 +749,12 @@ function App() {
       // smoothing, black border) — send live update without the full transition flow.
       // The Rust backend detects this case and updates live atomics in-place
       // (AMBILIGHT_MODE_UPDATED) without touching the worker or SCStream.
+      // Same reasoning as isQuickSolidAdjustment — see note above. An ambilight
+      // brightness nudge during a drag must never promote to the full transition
+      // path just because target reconciliation is pending.
       const isQuickAmbilightAdjustment =
         normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-        lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-        isSameTargetSet(selectedOutputTargets, activeOutputTargets);
+        lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
 
       if (isQuickAmbilightAdjustment) {
         setLightingModeState(normalizedNextMode);
@@ -937,57 +958,162 @@ function App() {
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
+  // Shared SettingsLayout props — only `uiMode` differs between the
+  // outgoing and incoming cross-fade slots.
+  const sharedSettingsLayoutProps = {
+    activeSection,
+    onSectionChange: handleSectionChange,
+    calibration: savedCalibration,
+    calibrationStep,
+    lightingMode,
+    outputTargets: selectedOutputTargets,
+    usbConnected: isConnected,
+    hueConfigured: hueStartConfig !== null,
+    hueReachable: hueReachable || hueStreaming,
+    hueStreaming,
+    modeLockReason:
+      modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED
+        ? modeGuard.reason
+        : null,
+    isModeTransitioning,
+    onLightingModeChange: handleLightingModeChange,
+    onOutputTargetsChange: handleOutputTargetsChange,
+    onCalibrationSaved: (config: LedCalibrationConfig) => {
+      setSavedCalibration(config);
+    },
+    onCalibrationStepChange: setCalibrationStep,
+    onCheckForUpdates: checkForUpdates,
+    isCheckingForUpdates: updaterState.status === "checking",
+    devSetUpdaterState,
+  } as const;
+
+  // Derive runtime status items for the bottom StatusBar. Order matches the
+  // mockup (CAP / USB / HUE). CAP is "ok" only while ambilight is the active
+  // mode — that's the only mode that actually consumes screen frames.
+  const statusItems: StatusItem[] = [
+    {
+      label: "CAP",
+      state: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT ? "OK" : "—",
+      kind: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT ? "ok" : "idle",
+    },
+    {
+      label: "USB",
+      state: isConnected ? "OK" : "OFF",
+      kind: isConnected ? "ok" : "off",
+    },
+    {
+      label: "HUE",
+      state: hueStreaming
+        ? "STREAMING"
+        : hueReachable
+          ? "OK"
+          : hueStartConfig
+            ? "IDLE"
+            : "OFF",
+      kind: hueStreaming
+        ? "active"
+        : hueReachable
+          ? "ok"
+          : hueStartConfig
+            ? "idle"
+            : "off",
+    },
+  ];
+  const statusBarHeight = statusBarHeightPx(currentMode);
+
   return (
     <>
-      <SettingsLayout
+      {/* Custom cross-platform title bar. Sits above everything. Handles
+          native drag + double-click zoom, hosts the compact-mode toggle, and
+          (on Windows/Linux) draws custom min/max/close buttons since native
+          decorations are disabled there. See TitleBar.tsx for details. */}
+      <TitleBar
+        uiMode={currentMode}
+        onSwitchUIMode={switchUIMode}
         activeSection={activeSection}
-        onSectionChange={handleSectionChange}
-        calibration={savedCalibration}
-        calibrationStep={calibrationStep}
-        lightingMode={lightingMode}
-        outputTargets={selectedOutputTargets}
-        usbConnected={isConnected}
-        hueConfigured={hueStartConfig !== null}
-        hueReachable={hueReachable || hueStreaming}
-        hueStreaming={hueStreaming}
-        modeLockReason={modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED ? modeGuard.reason : null}
-        isModeTransitioning={isModeTransitioning}
-        onLightingModeChange={handleLightingModeChange}
-        onOutputTargetsChange={handleOutputTargetsChange}
-        onCalibrationSaved={(config) => {
-          setSavedCalibration(config);
-        }}
-        onCalibrationStepChange={setCalibrationStep}
-        onCheckForUpdates={checkForUpdates}
-        isCheckingForUpdates={updaterState.status === "checking"}
+        onSectionChange={(id) => void handleSectionChange(id)}
       />
+
+      {/* Persistent dark backdrop so the space between the fade-out and
+          fade-in phases blends with the layout background instead of
+          revealing the desktop. Offset by the title bar at the top and the
+          status bar at the bottom so neither overlaps the content slot. */}
+      <div
+        className="fixed right-0 left-0 overflow-hidden"
+        style={{
+          top: `${TITLE_BAR_HEIGHT_PX}px`,
+          bottom: `${statusBarHeight}px`,
+          background: "var(--lm-bg)",
+        }}
+      >
+        {/*
+         * Single content slot — sequential fade-out → window resize →
+         * fade-in, orchestrated by `useUIMode`. Running the resize while
+         * the content is at opacity 0 removes the progressive-clipping
+         * artifact that a parallel cross-fade produced when slot pinning
+         * forced the incoming layout to overflow the still-animating
+         * window. Easing matches `easeOutCubic` in `animateWindowRect`
+         * so the three phases read as one continuous motion.
+         */}
+        <div
+          ref={contentRef}
+          className={`absolute inset-0 ${
+            isContentVisible ? "" : "pointer-events-none"
+          }`}
+          style={{
+            opacity: isContentVisible ? 1 : 0,
+            // Soft "materialize" — on fade-out the content subtly recedes
+            // (scale down + slight blur) and on fade-in it settles back in
+            // place. Paired with the matched backdrop color this replaces
+            // the "content disappears" feeling with a gentle breathe.
+            transform: isContentVisible ? "scale(1)" : "scale(0.985)",
+            filter: isContentVisible ? "blur(0px)" : "blur(6px)",
+            transformOrigin: "center center",
+            willChange: "opacity, transform, filter",
+            transitionProperty: "opacity, transform, filter",
+            transitionDuration: `${UI_MODE_FADE_DURATION_MS}ms`,
+            transitionTimingFunction: UI_MODE_FADE_TIMING,
+          }}
+        >
+          <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
+        </div>
+      </div>
+      <StatusBar items={statusItems} uiMode={currentMode} />
+      <UIModeTransitionOverlay isActive={isSweepActive} />
       <UpdateModal
         state={updaterState}
         onInstall={downloadAndInstall}
         onDismiss={dismiss}
+        onRetry={() => void checkForUpdates()}
       />
       {showUsbSuggest && (
-        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 shadow-lg">
-          <span className="text-sm text-zinc-200">{t("hotplug.usbDetected")}</span>
+        <div
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg"
+          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
+        >
+          <span style={{ fontSize: "12px" }}>{t("hotplug.usbDetected")}</span>
           <button
             type="button"
             onClick={() => { void handleAcceptUsbTarget(); }}
-            className="rounded bg-zinc-600 px-3 py-1 text-xs text-white hover:bg-zinc-500"
+            style={{ fontSize: "11px", padding: "2px 10px", borderRadius: "4px", background: "var(--lm-amber)", color: "#07080a", fontWeight: 600, border: "none", cursor: "pointer" }}
           >
             {t("hotplug.addTarget")}
           </button>
           <button
             type="button"
             onClick={handleDismissUsbSuggest}
-            className="text-xs text-zinc-400 hover:text-zinc-200"
+            style={{ fontSize: "11px", color: "var(--lm-muted)", background: "transparent", border: "none", cursor: "pointer" }}
           >
             {t("hotplug.dismiss")}
           </button>
         </div>
       )}
       {usbDisconnectNotice && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 shadow-lg">
-          <span className="text-sm text-zinc-400">{t("hotplug.usbDisconnected")}</span>
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
+          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
+        >
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
         </div>
       )}
     </>

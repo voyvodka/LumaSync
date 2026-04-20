@@ -2,12 +2,14 @@
   "settings": {
     "title": "Settings",
     "navigationAria": "Main navigation",
+    "switchToCompact": "Compact view",
+    "switchToFull": "Full settings",
     "sections": {
       "lights": "Lights",
       "led-setup": "LED Setup",
       "devices": "Devices",
-      "system": "System",
-      "room-map": "Room Map",
+      "system": "Settings",
+      "room-map": "Room",
       "control": "Control",
       "calibration": "Calibration",
       "settings": "Settings"
@@ -65,6 +67,19 @@
         "smoothingSlowLabel": "Smooth",
         "smoothingFastLabel": "Instant"
       }
+    },
+    "compact": {
+      "sections": {
+        "mode": "Mode",
+        "scene": "Scene"
+      },
+      "scenes": {
+        "movie": "Movie",
+        "game": "Game",
+        "music": "Music",
+        "chill": "Chill",
+        "read": "Read"
+      }
     }
   },
   "startupTray": {
@@ -75,6 +90,201 @@
     "minimizeOnClose": "Minimize to tray on close",
     "alwaysOn": "Always on"
   },
+  "devicesPage": {
+    "rail": {
+      "connected": "Connected",
+      "other": "Other",
+      "usbStrips": "USB Strips",
+      "hueBridges": "Hue Bridges",
+      "displays": "Displays",
+      "manualEntry": "Manual Entry"
+    },
+    "header": {
+      "usbTitle": "USB Strips",
+      "usbSub": "{{count}} connected",
+      "usbSubNone": "No strips connected",
+      "hueTitle": "Hue Bridges",
+      "hueSub": "Philips Hue entertainment areas",
+      "displaysTitle": "Displays",
+      "displaysSub": "Screens available for Ambilight capture",
+      "manualTitle": "Manual Entry",
+      "manualSub": "Enter device details by hand"
+    },
+    "actions": {
+      "rescan": "Rescan",
+      "addDevice": "Add Device"
+    },
+    "usb": {
+      "pill": {
+        "online": "ONLINE",
+        "discovered": "DISCOVERED"
+      },
+      "stats": {
+        "ledCount": "LED Count",
+        "baud": "Baud",
+        "protocol": "Protocol",
+        "latency": "Latency",
+        "na": "—"
+      },
+      "traffic": "Traffic",
+      "pairAsStrip": "+ Pair as LED Strip",
+      "empty": {
+        "title": "No USB ports found",
+        "body": "Plug in your controller and click Rescan."
+      }
+    },
+    "displays": {
+      "primary": "Primary",
+      "empty": "No displays enumerated.",
+      "cellId": "ID",
+      "cellScale": "Scale"
+    },
+    "manual": {
+      "body": "Manual device entry isn't available yet. Use Rescan above or check serial cables."
+    },
+    "hue": {
+      "scanNetwork": "Scan Network",
+      "scanning": "Scanning...",
+      "scanningDetail": "Scanning local network for Hue bridges...",
+      "addBridge": "+ Pair",
+      "forgotBridge": "Forget",
+      "forceForget": "Force Forget",
+      "changeArea": "Change Area",
+      "confirmArea": "Confirm Area",
+      "validate": "Revalidate",
+      "retryPair": "Retry Pair",
+      "reconnectNow": "Reconnect",
+      "retryStop": "Retry Stop",
+      "stopRetrying": "Stop",
+      "enterIp": "Verify IP",
+      "scanAgain": "Scan Again",
+      "cancel": "Cancel",
+      "tryDifferentIp": "Try Different IP",
+      "noResult": "No bridges found",
+      "noResultBody": "Discovery completed but found no bridges. Make sure your bridge is on the same network.",
+      "scanFailed": "Discovery failed",
+      "scanFailedBody": "Could not reach the discovery service. Check your network connection and try again.",
+      "pill": {
+        "streaming": "STREAMING",
+        "ready": "READY",
+        "awaiting": "AWAITING",
+        "paired": "PAIRED",
+        "authError": "AUTH ERROR",
+        "offline": "OFFLINE",
+        "reconnecting": "RECONNECTING",
+        "failed": "FAILED",
+        "discovered": "DISCOVERED"
+      }
+    }
+  },
+  "lightsPage": {
+    "slab": {
+      "modeText": "Lighting",
+      "modeAccent": "Mode",
+      "signalText": "Edge signal",
+      "signalAccent": "· live · mode settings",
+      "scenesText": "Scene",
+      "scenesAccent": "presets"
+    },
+    "mode": {
+      "off": {
+        "title": "Off",
+        "subtitle": "Outputs parked"
+      },
+      "ambilight": {
+        "title": "Ambilight",
+        "subtitle": "Display 1 · {{count}} LED",
+        "subtitleFallback": "Live screen capture"
+      },
+      "solid": {
+        "title": "Solid",
+        "subtitle": "{{hex}} · {{brightness}}%"
+      }
+    },
+    "signal": {
+      "title": "Capture → Strip",
+      "delta": "Δ",
+      "fps": "Σ",
+      "placeholderLatency": "11ms",
+      "placeholderFps": "58 fps",
+      "edges": {
+        "top": "TOP · {{count}}",
+        "bot": "BOT · {{count}}",
+        "left": "L · {{count}}",
+        "right": "R · {{count}}"
+      },
+      "display": {
+        "label": "DISPLAY 1",
+        "sub": "2560 × 1440 · HDR"
+      },
+      "profile": {
+        "smoothing": "Smoothing",
+        "saturation": "Saturation",
+        "blackBorder": "Black border",
+        "blackBorderAuto": "auto",
+        "blackBorderOff": "off"
+      }
+    },
+    "scenes": {
+      "movie": "Movie",
+      "game": "Game",
+      "music": "Music",
+      "chill": "Chill",
+      "reading": "Reading"
+    },
+    "dock": {
+      "outputs": "Outputs",
+      "addAria": "Add output",
+      "hintTitle": "Room space",
+      "hintBody": "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
+      "rows": {
+        "usbName": "USB",
+        "usbType": "CH340",
+        "usbSub": "{{count}} LEDs · <b>serial</b>",
+        "usbSubUnavailable": "No strip connected",
+        "hueName": "HUE",
+        "hueType": "ENTERTAINMENT",
+        "hueSubStreaming": "Bridge · <b>DTLS 50hz</b>",
+        "hueSubIdle": "Bridge · <b>standby</b>",
+        "hueSubUnavailable": "Not configured"
+      }
+    },
+    "calibrationBanner": {
+      "title": "Calibration required",
+      "sub": "Finish LED layout before enabling this mode.",
+      "action": "Open setup"
+    }
+  },
+  "settingsPage": {
+    "title": "General",
+    "subtitle": "Launch behavior and language",
+    "groups": {
+      "startup": {
+        "title": "Startup",
+        "sub": "Launch · tray"
+      },
+      "language": {
+        "title": "Language",
+        "sub": "Interface locale"
+      },
+      "updates": {
+        "title": "Updates",
+        "sub": "Version check"
+      },
+      "about": {
+        "title": "About",
+        "sub": "Build · license"
+      }
+    },
+    "language": {
+      "label": "Interface language",
+      "description": "Restart required to apply"
+    },
+    "about": {
+      "tagline": "Tray-first ambient lighting",
+      "license": "MIT"
+    }
+  },
   "aboutLogs": {
     "title": "About & Logs",
     "version": "Version",
@@ -82,14 +292,44 @@
     "logsDescription": "Application logs are stored locally for debugging."
   },
   "updater": {
-    "title": "Update available",
-    "available": "Version {{version}} is ready to install.",
-    "install": "Install & Relaunch",
-    "later": "Later",
-    "downloading": "Downloading... {{progress}}%",
-    "installing": "Installing update, relaunching shortly...",
-    "error": "Update failed: {{message}}",
-    "close": "Close",
+    "available": {
+      "eyebrow": "Update ready",
+      "title": "A new version is available",
+      "body": "LumaSync <b>v{{version}}</b> is ready to download. It will be installed on next relaunch."
+    },
+    "downloading": {
+      "eyebrow": "Downloading",
+      "title": "v{{version}} preparing",
+      "body": "Signed download in progress — installation will begin automatically when complete.",
+      "progressLabel": "Progress",
+      "etaLabel": "ETA"
+    },
+    "installing": {
+      "eyebrow": "Installing",
+      "title": "Writing new version",
+      "verify": "minisign verification",
+      "body": "LumaSync v{{version}} files are being written.<br/>The app will relaunch automatically once installation finishes — please don't close the window."
+    },
+    "error": {
+      "eyebrow": "Update failed",
+      "title": "Installation could not complete",
+      "body": "You can keep using the current version. Check the error below or try again.",
+      "boxTitle": "Update error"
+    },
+    "actions": {
+      "later": "Later",
+      "install": "Install & relaunch",
+      "background": "Move to background",
+      "showLogs": "Show logs",
+      "close": "Close",
+      "retry": "Try again"
+    },
+    "noteKind": {
+      "fix": "Fixed",
+      "add": "Added",
+      "change": "Changed"
+    },
+    "sizeUnknown": "Size unknown",
     "checkForUpdates": "Software update",
     "checkForUpdatesDescription": "Check for the latest version of LumaSync.",
     "checkAction": "Check for updates",
@@ -227,10 +467,13 @@
       },
       "areas": {
         "title": "Entertainment areas",
+        "selectLabel": "Select entertainment area",
         "empty": "No entertainment areas found. Create one in the Hue app first.",
         "channels": "{{count}} channels",
         "activeStreamer": "Active",
-        "activeStreamerHint": "Another app is streaming"
+        "activeStreamerHint": "Another app is streaming",
+        "conflictTitle": "Area already in use",
+        "conflictHint": "Another app is actively streaming to this area. Stop the other stream before starting."
       },
       "channelMap": {
         "title": "Channel screen regions",
@@ -306,12 +549,32 @@
         "emptyAction": "Discover bridges",
         "offlineTitle": "Bridge is not reachable",
         "offlineBody": "{{name}} ({{ip}}) is not responding right now. This usually means:",
+        "offlineReasonsTitle": "Possible reasons",
         "offlineReason1": "You are on a different Wi-Fi network",
         "offlineReason2": "The bridge is turned off or restarting",
         "offlineReason3": "The bridge IP address has changed",
         "offlineRediscover": "Rediscover",
         "offlineTryIp": "Try a different IP",
-        "offlineReset": "Remove this bridge and start over"
+        "offlineReset": "Remove this bridge and start over",
+        "pairingStep": "Pairing in progress",
+        "areaStep": "Select entertainment area",
+        "pairingFailed": "Pairing failed"
+      },
+      "card": {
+        "cellArea": "Area",
+        "cellProtocol": "Protocol",
+        "cellCh": "Ch",
+        "cellRate": "Rate",
+        "cellStatus": "Status",
+        "cellError": "Error",
+        "cellRetries": "Retries",
+        "cellNext": "Next",
+        "cellFault": "Fault",
+        "cellConfig": "Config",
+        "cellCredential": "Credential",
+        "cellCredentialInvalid": "Invalid",
+        "trafficLabel": "Stream",
+        "subtitleStreaming": "{{area}} · DTLS streaming"
       },
       "summary": {
         "idle": "Ready, not streaming",

@@ -2,12 +2,14 @@
   "settings": {
     "title": "Ayarlar",
     "navigationAria": "Ana gezinti",
+    "switchToCompact": "Kompakt görünüm",
+    "switchToFull": "Tam ayarlar",
     "sections": {
       "lights": "Işıklar",
       "led-setup": "LED Kurulumu",
       "devices": "Cihazlar",
-      "system": "Sistem",
-      "room-map": "Oda Haritası",
+      "system": "Ayarlar",
+      "room-map": "Oda",
       "control": "Kontrol",
       "calibration": "Kalibrasyon",
       "settings": "Ayarlar"
@@ -65,6 +67,214 @@
         "smoothingSlowLabel": "Yumuşak",
         "smoothingFastLabel": "Anlık"
       }
+    },
+    "compact": {
+      "sections": {
+        "mode": "Mod",
+        "scene": "Sahne"
+      },
+      "scenes": {
+        "movie": "Film",
+        "game": "Oyun",
+        "music": "Müzik",
+        "chill": "Sakin",
+        "read": "Okuma"
+      }
+    }
+  },
+  "devicesPage": {
+    "rail": {
+      "connected": "Bağlı",
+      "other": "Diğer",
+      "usbStrips": "USB Şeritleri",
+      "hueBridges": "Hue Köprüleri",
+      "displays": "Ekranlar",
+      "manualEntry": "Manuel Giriş"
+    },
+    "header": {
+      "usbTitle": "USB Şeritleri",
+      "usbSub": "{{count}} bağlı",
+      "usbSubNone": "Bağlı şerit yok",
+      "hueTitle": "Hue Köprüleri",
+      "hueSub": "Philips Hue eğlence alanları",
+      "displaysTitle": "Ekranlar",
+      "displaysSub": "Ambilight yakalama için kullanılabilir ekranlar",
+      "manualTitle": "Manuel Giriş",
+      "manualSub": "Cihaz bilgilerini elle gir"
+    },
+    "actions": {
+      "rescan": "Yeniden Tara",
+      "addDevice": "Cihaz Ekle"
+    },
+    "usb": {
+      "pill": {
+        "online": "BAĞLI",
+        "discovered": "BULUNDU"
+      },
+      "stats": {
+        "ledCount": "LED Sayısı",
+        "baud": "Baud",
+        "protocol": "Protokol",
+        "latency": "Gecikme",
+        "na": "—"
+      },
+      "traffic": "Trafik",
+      "pairAsStrip": "+ LED Şerit Olarak Eşle",
+      "empty": {
+        "title": "USB portu bulunamadı",
+        "body": "Denetleyiciyi bağlayıp Yeniden Tara'ya basın."
+      }
+    },
+    "displays": {
+      "primary": "Birincil",
+      "empty": "Ekran bulunamadı.",
+      "cellId": "ID",
+      "cellScale": "Ölçek"
+    },
+    "manual": {
+      "body": "Manuel cihaz girişi henüz kullanılabilir değil. Yukarıdan Yeniden Tara'yı kullanın veya seri kabloları kontrol edin."
+    },
+    "hue": {
+      "scanNetwork": "Ağı Tara",
+      "scanning": "Taranıyor...",
+      "scanningDetail": "Yerel ağda Hue köprüsü aranıyor...",
+      "addBridge": "+ Eşleştir",
+      "forgotBridge": "Unut",
+      "forceForget": "Zorla Unut",
+      "changeArea": "Alan Değiştir",
+      "confirmArea": "Alanı Onayla",
+      "validate": "Yeniden Doğrula",
+      "retryPair": "Tekrar Eşleştir",
+      "reconnectNow": "Yeniden Bağlan",
+      "retryStop": "Durdurmayı Tekrarla",
+      "stopRetrying": "Durdur",
+      "enterIp": "IP Doğrula",
+      "scanAgain": "Tekrar Tara",
+      "cancel": "İptal",
+      "tryDifferentIp": "Farklı IP Dene",
+      "noResult": "Köprü bulunamadı",
+      "noResultBody": "Tarama tamamlandı ancak köprü bulunamadı. Köprünüzün aynı ağda olduğundan emin olun.",
+      "scanFailed": "Keşif başarısız",
+      "scanFailedBody": "Keşif servisine ulaşılamadı. Ağ bağlantınızı kontrol edip tekrar deneyin.",
+      "pill": {
+        "streaming": "YAYIN",
+        "ready": "HAZIR",
+        "awaiting": "BEKLİYOR",
+        "paired": "EŞLEŞTİ",
+        "authError": "KİM. HATASI",
+        "offline": "ÇEVRIMDIŞI",
+        "reconnecting": "YEN. BAĞLANIYOR",
+        "failed": "BAŞARISIZ",
+        "discovered": "KEŞFEDİLDİ"
+      }
+    }
+  },
+  "lightsPage": {
+    "slab": {
+      "modeText": "Aydınlatma",
+      "modeAccent": "Modu",
+      "signalText": "Kenar sinyali",
+      "signalAccent": "· canlı · mod ayarları",
+      "scenesText": "Sahne",
+      "scenesAccent": "ön ayarları"
+    },
+    "mode": {
+      "off": {
+        "title": "Kapalı",
+        "subtitle": "Çıkışlar beklemede"
+      },
+      "ambilight": {
+        "title": "Ambilight",
+        "subtitle": "Ekran 1 · {{count}} LED",
+        "subtitleFallback": "Canlı ekran yakalama"
+      },
+      "solid": {
+        "title": "Sabit",
+        "subtitle": "{{hex}} · %{{brightness}}"
+      }
+    },
+    "signal": {
+      "title": "Yakalama → Şerit",
+      "delta": "Δ",
+      "fps": "Σ",
+      "placeholderLatency": "11ms",
+      "placeholderFps": "58 fps",
+      "edges": {
+        "top": "ÜST · {{count}}",
+        "bot": "ALT · {{count}}",
+        "left": "SOL · {{count}}",
+        "right": "SAĞ · {{count}}"
+      },
+      "display": {
+        "label": "EKRAN 1",
+        "sub": "2560 × 1440 · HDR"
+      },
+      "profile": {
+        "smoothing": "Yumuşatma",
+        "saturation": "Doygunluk",
+        "blackBorder": "Siyah kenar",
+        "blackBorderAuto": "oto",
+        "blackBorderOff": "kapalı"
+      }
+    },
+    "scenes": {
+      "movie": "Film",
+      "game": "Oyun",
+      "music": "Müzik",
+      "chill": "Sakin",
+      "reading": "Okuma"
+    },
+    "dock": {
+      "outputs": "Çıkışlar",
+      "addAria": "Çıkış ekle",
+      "hintTitle": "Oda alanı",
+      "hintBody": "Telemetri / mini oda\nönizlemesi / kısayollar\niçin yer tutucu",
+      "rows": {
+        "usbName": "USB",
+        "usbType": "CH340",
+        "usbSub": "{{count}} LED · <b>seri</b>",
+        "usbSubUnavailable": "Şerit bağlı değil",
+        "hueName": "HUE",
+        "hueType": "ENTERTAINMENT",
+        "hueSubStreaming": "Köprü · <b>DTLS 50hz</b>",
+        "hueSubIdle": "Köprü · <b>bekleme</b>",
+        "hueSubUnavailable": "Yapılandırılmadı"
+      }
+    },
+    "calibrationBanner": {
+      "title": "Kalibrasyon gerekli",
+      "sub": "Bu modu etkinleştirmeden önce LED düzenini tamamlayın.",
+      "action": "Kurulumu aç"
+    }
+  },
+  "settingsPage": {
+    "title": "Genel",
+    "subtitle": "Başlangıç davranışı ve dil",
+    "groups": {
+      "startup": {
+        "title": "Başlangıç",
+        "sub": "Başlat · tepsi"
+      },
+      "language": {
+        "title": "Dil",
+        "sub": "Arayüz yerelleştirmesi"
+      },
+      "updates": {
+        "title": "Güncellemeler",
+        "sub": "Sürüm kontrolü"
+      },
+      "about": {
+        "title": "Hakkında",
+        "sub": "Build · lisans"
+      }
+    },
+    "language": {
+      "label": "Arayüz dili",
+      "description": "Değişiklik için yeniden başlatma gerekir"
+    },
+    "about": {
+      "tagline": "Tepsi öncelikli ortam aydınlatması",
+      "license": "MIT"
     }
   },
   "startupTray": {
@@ -82,14 +292,44 @@
     "logsDescription": "Uygulama günlükleri hata ayıklama için yerel olarak saklanır."
   },
   "updater": {
-    "title": "Güncelleme mevcut",
-    "available": "{{version}} sürümü yüklenmeye hazır.",
-    "install": "Yükle ve Yeniden Başlat",
-    "later": "Sonra",
-    "downloading": "İndiriliyor... %{{progress}}",
-    "installing": "Güncelleme yükleniyor, uygulama yeniden başlıyor...",
-    "error": "Güncelleme başarısız: {{message}}",
-    "close": "Kapat",
+    "available": {
+      "eyebrow": "Güncelleme hazır",
+      "title": "Yeni bir sürüm var",
+      "body": "LumaSync <b>v{{version}}</b> indirilmeye hazır. Uygulama yeniden başlatıldığında yüklenir."
+    },
+    "downloading": {
+      "eyebrow": "İndiriliyor",
+      "title": "v{{version}} hazırlanıyor",
+      "body": "İmza doğrulaması ile indirme sürüyor — tamamlanınca otomatik olarak kurulum aşamasına geçer.",
+      "progressLabel": "İlerleme",
+      "etaLabel": "Kalan"
+    },
+    "installing": {
+      "eyebrow": "Kuruluyor",
+      "title": "Yeni sürüm yazılıyor",
+      "verify": "minisign doğrulaması",
+      "body": "LumaSync v{{version}} dosyaları yazılıyor.<br/>Kurulum tamamlanınca uygulama otomatik yeniden başlayacak — lütfen pencereyi kapatma."
+    },
+    "error": {
+      "eyebrow": "Güncelleme başarısız",
+      "title": "Kurulum tamamlanamadı",
+      "body": "LumaSync mevcut sürümünü kullanmaya devam edebilirsin. Aşağıdaki hatayı kontrol et veya tekrar dene.",
+      "boxTitle": "Güncelleme hatası"
+    },
+    "actions": {
+      "later": "Sonra",
+      "install": "Kur ve yeniden başlat",
+      "background": "Arkaplana al",
+      "showLogs": "Log göster",
+      "close": "Kapat",
+      "retry": "Tekrar dene"
+    },
+    "noteKind": {
+      "fix": "Düzeltildi",
+      "add": "Eklendi",
+      "change": "Değiştirildi"
+    },
+    "sizeUnknown": "Boyut bilinmiyor",
     "checkForUpdates": "Yazılım güncellemesi",
     "checkForUpdatesDescription": "LumaSync'in en son sürümünü kontrol et.",
     "checkAction": "Güncellemeleri kontrol et",
@@ -227,10 +467,13 @@
       },
       "areas": {
         "title": "Entertainment alanları",
+        "selectLabel": "Entertainment alanı seçin",
         "empty": "Entertainment alanı bulunamadı. Hue uygulamasından bir tane oluşturun.",
         "channels": "{{count}} kanal",
         "activeStreamer": "Aktif",
-        "activeStreamerHint": "Başka bir uygulama akış yapıyor"
+        "activeStreamerHint": "Başka bir uygulama akış yapıyor",
+        "conflictTitle": "Alan kullanımda",
+        "conflictHint": "Başka bir uygulama bu alana aktif olarak akış yapıyor. Başlamadan önce diğer akışı durdurun."
       },
       "channelMap": {
         "title": "Kanal ekran bölgeleri",
@@ -306,12 +549,32 @@
         "emptyAction": "Bridge keşfet",
         "offlineTitle": "Bridge'e ulaşılamıyor",
         "offlineBody": "{{name}} ({{ip}}) şu an yanıt vermiyor. Bunun olası nedenleri:",
+        "offlineReasonsTitle": "Olası nedenler",
         "offlineReason1": "Farklı bir Wi-Fi ağındasınız",
         "offlineReason2": "Bridge kapalı veya yeniden başlatılıyor",
         "offlineReason3": "Bridge'in IP adresi değişmiş olabilir",
         "offlineRediscover": "Yeniden keşfet",
         "offlineTryIp": "Farklı bir IP dene",
-        "offlineReset": "Bu bridge'i kaldır ve baştan başla"
+        "offlineReset": "Bu bridge'i kaldır ve baştan başla",
+        "pairingStep": "Eşleştirme devam ediyor",
+        "areaStep": "Eğlence alanı seçin",
+        "pairingFailed": "Eşleştirme başarısız"
+      },
+      "card": {
+        "cellArea": "Alan",
+        "cellProtocol": "Protokol",
+        "cellCh": "Kn",
+        "cellRate": "Hız",
+        "cellStatus": "Durum",
+        "cellError": "Hata",
+        "cellRetries": "Deneme",
+        "cellNext": "Sonraki",
+        "cellFault": "Arıza",
+        "cellConfig": "Yapılandırma",
+        "cellCredential": "Kimlik",
+        "cellCredentialInvalid": "Geçersiz",
+        "trafficLabel": "Yayın",
+        "subtitleStreaming": "{{area}} · DTLS yayını"
       },
       "summary": {
         "idle": "Bağlı, akış yok",

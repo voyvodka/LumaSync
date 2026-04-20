@@ -14,13 +14,16 @@
       {
         "label": "main",
         "title": "LumaSync",
-        "width": 900,
-        "height": 620,
-        "minWidth": 720,
-        "minHeight": 480,
+        "width": 320,
+        "height": 480,
+        "minWidth": 300,
+        "minHeight": 420,
         "resizable": true,
         "center": true,
-        "visible": true
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#07080a"
       }
     ],
     "security": {
