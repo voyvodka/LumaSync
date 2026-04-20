@@ -55,7 +55,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
   widthMeters: number;
   depthMeters: number;
 }) {
-  const [mouseCoord, setMouseCoord] = useState<{ x: number; y: number } | null>(null);
+  const displayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = canvasContainerRef.current;
@@ -65,11 +65,17 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
     let latestEvent: MouseEvent | null = null;
 
     const updateCoord = () => {
-      if (!latestEvent) return;
+      if (!latestEvent || !displayRef.current) return;
       const rect = el.getBoundingClientRect();
       const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
       const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
-      setMouseCoord({ x: mx - widthMeters / 2, y: my - depthMeters / 2 });
+
+      const worldX = mx - widthMeters / 2;
+      const worldY = my - depthMeters / 2;
+
+      displayRef.current.textContent = `x: ${worldX >= 0 ? "+" : ""}${worldX.toFixed(1)}m, y: ${worldY >= 0 ? "+" : ""}${worldY.toFixed(1)}m`;
+      displayRef.current.style.display = "block";
+
       ticking = false;
     };
 
@@ -83,7 +89,9 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 
     const handleMouseLeave = () => {
       latestEvent = null;
-      setMouseCoord(null);
+      if (displayRef.current) {
+        displayRef.current.style.display = "none";
+      }
     };
 
     el.addEventListener("mousemove", handleMouseMove);
@@ -95,12 +103,12 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
     };
   }, [canvasContainerRef, panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
 
-  if (!mouseCoord) return null;
-
   return (
-    <div className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-mono text-white/80 tabular-nums">
-      x: {mouseCoord.x >= 0 ? "+" : ""}{mouseCoord.x.toFixed(1)}m, y: {mouseCoord.y >= 0 ? "+" : ""}{mouseCoord.y.toFixed(1)}m
-    </div>
+    <div
+      ref={displayRef}
+      className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-mono text-white/80 tabular-nums"
+      style={{ display: "none" }}
+    />
   );
 });
 
