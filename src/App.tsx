@@ -202,29 +202,42 @@ function App() {
     if (!activeOutputTargets.includes("hue")) return;
 
     let active = true;
+    let timerId: number | null = null;
 
     const poll = async () => {
       if (!active) return;
       try {
         const result = await getHueStreamStatus();
         if (!active) return;
+
         const backendDead =
           result.status.state === HUE_RUNTIME_STATES.FAILED ||
           result.status.state === HUE_RUNTIME_STATES.IDLE;
+
         if (backendDead) {
+          console.warn(
+            `[LumaSync] Hue stream health check: backend reported ${result.status.state}. ` +
+              `Message: ${result.status.message}. Removing "hue" from active targets.`,
+          );
           setActiveOutputTargets((prev) => prev.filter((t) => t !== "hue"));
+          return; // Dead stream detected, stop polling
         }
       } catch {
         // Network error polling status — do not remove target on transient fetch failure.
       }
+
+      if (active) {
+        timerId = window.setTimeout(() => {
+          void poll();
+        }, HUE_STREAM_HEALTH_POLL_MS);
+      }
     };
 
     void poll();
-    const intervalId = window.setInterval(() => { void poll(); }, HUE_STREAM_HEALTH_POLL_MS);
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      if (timerId !== null) window.clearTimeout(timerId);
     };
   }, [activeOutputTargets]);
 
