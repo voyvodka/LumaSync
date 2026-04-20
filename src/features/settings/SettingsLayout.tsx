@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { SECTION_IDS, type SectionId, type UIMode } from "../../shared/contracts/shell";
 import { LightsSection } from "./sections/LightsSection";
 import { CalibrationPage } from "../calibration/ui/CalibrationPage";
@@ -38,7 +38,7 @@ interface SettingsLayoutProps {
   devSetUpdaterState?: (state: UpdaterState) => void;
 }
 
-export function SettingsLayout({
+export const SettingsLayout = memo(function SettingsLayout({
   uiMode,
   activeSection,
   onSectionChange,
@@ -149,4 +149,4 @@ export function SettingsLayout({
       </main>
     </div>
   );
-}
+});
