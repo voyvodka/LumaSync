@@ -1,3 +1,0 @@
-## 2024-05-18 - Isolate high-frequency event state updates
-**Learning:** In the RoomMapEditor component, an `onMouseMove` event was updating `mouseCoord` state locally. This caused the massive `RoomMapEditor` component and all its children to re-render synchronously with every pixel of mouse movement, which is extremely inefficient.
-**Action:** When tracking high-frequency events like mouse movement or scroll position, isolate the state into the smallest possible child component. Use DOM event listeners inside a `useEffect` inside this child component rather than relying on React's synthetic events at the parent layout level, significantly reducing render thrash.
