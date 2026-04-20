@@ -30,6 +30,7 @@ import type {
   ZoneDefinition,
 } from "../../../shared/contracts/roomMap";
 import type { LedSegmentCounts } from "../../calibration/model/contracts";
+import React from "react";
 import { shellStore } from "../../persistence/shellStore";
 
 interface RoomMapEditorProps {
@@ -38,6 +39,70 @@ interface RoomMapEditorProps {
 
 // Hex colors matching ZONE_COLORS Tailwind classes (for inline boxShadow ring)
 const ZONE_COLOR_HEX = ["#3b82f6", "#10b981", "#a855f7", "#f59e0b", "#f43f5e", "#06b6d4"];
+
+const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
+  canvasContainerRef,
+  panOffset,
+  pxPerMeter,
+  zoom,
+  widthMeters,
+  depthMeters,
+}: {
+  canvasContainerRef: React.RefObject<HTMLDivElement | null>;
+  panOffset: { x: number; y: number };
+  pxPerMeter: number;
+  zoom: number;
+  widthMeters: number;
+  depthMeters: number;
+}) {
+  const [mouseCoord, setMouseCoord] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const el = canvasContainerRef.current;
+    if (!el) return;
+
+    let ticking = false;
+    let latestEvent: MouseEvent | null = null;
+
+    const updateCoord = () => {
+      if (!latestEvent) return;
+      const rect = el.getBoundingClientRect();
+      const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
+      const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
+      setMouseCoord({ x: mx - widthMeters / 2, y: my - depthMeters / 2 });
+      ticking = false;
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      latestEvent = e;
+      if (!ticking) {
+        requestAnimationFrame(updateCoord);
+        ticking = true;
+      }
+    };
+
+    const handleMouseLeave = () => {
+      latestEvent = null;
+      setMouseCoord(null);
+    };
+
+    el.addEventListener("mousemove", handleMouseMove);
+    el.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      el.removeEventListener("mousemove", handleMouseMove);
+      el.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, [canvasContainerRef, panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+
+  if (!mouseCoord) return null;
+
+  return (
+    <div className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-mono text-white/80 tabular-nums">
+      x: {mouseCoord.x >= 0 ? "+" : ""}{mouseCoord.x.toFixed(1)}m, y: {mouseCoord.y >= 0 ? "+" : ""}{mouseCoord.y.toFixed(1)}m
+    </div>
+  );
+});
 
 function getZoneColorHex(index: number): string {
   return ZONE_COLOR_HEX[index % ZONE_COLOR_HEX.length];
@@ -57,7 +122,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
-  const [mouseCoord, setMouseCoord] = useState<{ x: number; y: number } | null>(null);
   const [renameTarget, setRenameTarget] = useState<{ id: string; currentLabel: string } | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
 
@@ -731,15 +795,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
         <div
           className="relative flex-1"
           ref={canvasContainerRef}
-          onMouseMove={(e) => {
-            const rect = canvasContainerRef.current?.getBoundingClientRect();
-            if (!rect) return;
-            const mx = (e.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
-            const my = (e.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
-            // Center-based: 0,0 = room center
-            setMouseCoord({ x: mx - widthMeters / 2, y: my - depthMeters / 2 });
-          }}
-          onMouseLeave={() => setMouseCoord(null)}
         >
           {/* Floating tool chips — top-left of canvas */}
           <LeftToolbar
@@ -900,11 +955,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
           </RoomMapCanvas>
 
           {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
-          {mouseCoord && (
-            <div className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-mono text-white/80 tabular-nums">
-              x: {mouseCoord.x >= 0 ? "+" : ""}{mouseCoord.x.toFixed(1)}m, y: {mouseCoord.y >= 0 ? "+" : ""}{mouseCoord.y.toFixed(1)}m
-            </div>
-          )}
+          <MouseCoordinateDisplay
+            canvasContainerRef={canvasContainerRef}
+            panOffset={panOffset}
+            pxPerMeter={pxPerMeter}
+            zoom={zoom}
+            widthMeters={widthMeters}
+            depthMeters={depthMeters}
+          />
         </div>
 
         {/* Object list panel — right sidebar, collapsible with F key */}
