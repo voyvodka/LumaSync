@@ -127,7 +127,9 @@
     },
     "displays": {
       "primary": "Birincil",
-      "empty": "Ekran bulunamadı."
+      "empty": "Ekran bulunamadı.",
+      "cellId": "ID",
+      "cellScale": "Ölçek"
     },
     "manual": {
       "body": "Manuel cihaz girişi henüz kullanılabilir değil. Yukarıdan Yeniden Tara'yı kullanın veya seri kabloları kontrol edin."
@@ -321,6 +323,11 @@
       "showLogs": "Log göster",
       "close": "Kapat",
       "retry": "Tekrar dene"
+    },
+    "noteKind": {
+      "fix": "Düzeltildi",
+      "add": "Eklendi",
+      "change": "Değiştirildi"
     },
     "sizeUnknown": "Boyut bilinmiyor",
     "checkForUpdates": "Yazılım güncellemesi",
@@ -548,7 +555,26 @@
         "offlineReason3": "Bridge'in IP adresi değişmiş olabilir",
         "offlineRediscover": "Yeniden keşfet",
         "offlineTryIp": "Farklı bir IP dene",
-        "offlineReset": "Bu bridge'i kaldır ve baştan başla"
+        "offlineReset": "Bu bridge'i kaldır ve baştan başla",
+        "pairingStep": "Eşleştirme devam ediyor",
+        "areaStep": "Eğlence alanı seçin",
+        "pairingFailed": "Eşleştirme başarısız"
+      },
+      "card": {
+        "cellArea": "Alan",
+        "cellProtocol": "Protokol",
+        "cellCh": "Kn",
+        "cellRate": "Hız",
+        "cellStatus": "Durum",
+        "cellError": "Hata",
+        "cellRetries": "Deneme",
+        "cellNext": "Sonraki",
+        "cellFault": "Arıza",
+        "cellConfig": "Yapılandırma",
+        "cellCredential": "Kimlik",
+        "cellCredentialInvalid": "Geçersiz",
+        "trafficLabel": "Yayın",
+        "subtitleStreaming": "{{area}} · DTLS yayını"
       },
       "summary": {
         "idle": "Bağlı, akış yok",

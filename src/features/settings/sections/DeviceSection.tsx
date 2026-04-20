@@ -531,7 +531,7 @@ export function DeviceSection() {
               <h1>{t("devicesPage.header.hueTitle")}</h1>
               <div className="lm-device-head-sub">
                 {hueBridgeState === "streaming"
-                  ? `${selectedArea?.name ?? "—"} · DTLS streaming`
+                  ? t("device.hue.card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
                   : hueBridgeState === "idle"
                   ? `${selectedArea?.name ?? "—"} · ${t("devicesPage.hue.pill.ready").toLowerCase()}`
                   : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton"
@@ -699,7 +699,7 @@ export function DeviceSection() {
                         <div className="lm-hue-traffic-fill" />
                       </div>
                       <div className="lm-hue-traffic-label">
-                        <span>Stream</span>
+                        <span>{t("device.hue.card.trafficLabel")}</span>
                         <b>DTLS · 20 Hz</b>
                       </div>
                     </div>
@@ -728,87 +728,87 @@ export function DeviceSection() {
                   {hueBridgeState === "streaming" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Area</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                         <div className="lm-dcard-cell-v is-am">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Protocol</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Ch</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Rate</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellRate")}</div>
                         <div className="lm-dcard-cell-v is-am">20 Hz</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "idle" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Area</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                         <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Protocol</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Ch</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Status</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellStatus")}</div>
                         <div className="lm-dcard-cell-v is-ok">{t("devicesPage.hue.pill.ready")}</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "stale" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Area</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                         <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Protocol</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Ch</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Status</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellStatus")}</div>
                         <div className="lm-dcard-cell-v is-warn">{t("devicesPage.hue.pill.awaiting")}</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "reconnecting" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Area</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                         <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
                       </div>
                       {hueStatus?.code ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Error</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellError")}</div>
                           <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                         </div>
                       ) : null}
                       {hueRuntimeModel.retry?.remainingAttempts !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Retries</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellRetries")}</div>
                           <div className="lm-dcard-cell-v is-am">{hueRuntimeModel.retry.remainingAttempts}</div>
                         </div>
                       ) : null}
                       {hueRuntimeModel.retry?.nextAttemptMs !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Next</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellNext")}</div>
                           <div className="lm-dcard-cell-v is-am">{(hueRuntimeModel.retry.nextAttemptMs / 1000).toFixed(1)} s</div>
                         </div>
                       ) : null}
@@ -817,12 +817,12 @@ export function DeviceSection() {
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Area</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Fault</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellFault")}</div>
                         <div className="lm-dcard-cell-v is-am" style={{ fontSize: "9px" }}>HUE_STOP_PARTIAL</div>
                       </div>
                     </div>
@@ -830,16 +830,16 @@ export function DeviceSection() {
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Area</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Protocol</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Config</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellConfig")}</div>
                         <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>NOT_READY</div>
                       </div>
                     </div>
@@ -847,17 +847,17 @@ export function DeviceSection() {
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Area</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">Credential</div>
-                        <div className="lm-dcard-cell-v is-error">Invalid</div>
+                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellCredential")}</div>
+                        <div className="lm-dcard-cell-v is-error">{t("device.hue.card.cellCredentialInvalid")}</div>
                       </div>
                       {hueStatus?.code ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">Fault</div>
+                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellFault")}</div>
                           <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                         </div>
                       ) : null}
@@ -1229,11 +1229,11 @@ export function DeviceSection() {
                   </div>
                   <div className="lm-dcard-body">
                     <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">ID</div>
+                      <div className="lm-dcard-cell-k">{t("devicesPage.displays.cellId")}</div>
                       <div className="lm-dcard-cell-v">{display.id}</div>
                     </div>
                     <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">Scale</div>
+                      <div className="lm-dcard-cell-k">{t("devicesPage.displays.cellScale")}</div>
                       <div className="lm-dcard-cell-v">{(display.scaleFactor ?? 1).toFixed(1)}x</div>
                     </div>
                   </div>

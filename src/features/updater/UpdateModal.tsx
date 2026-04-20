@@ -140,7 +140,7 @@ export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModa
 
         {/* ── Installing ────────────────────────────────────────────── */}
         {state.status === "installing" && (
-          <InstallingContent version={state.update.version} t={t} />
+          <InstallingContent version={state.update.version} onDismiss={onDismiss} t={t} />
         )}
 
         {/* ── Error ─────────────────────────────────────────────────── */}
@@ -208,7 +208,7 @@ function AvailableContent({
             <span key={idx} className="lm-updater-notes-line">
               {note.kind && (
                 <span className={`lm-updater-tag is-${note.kind === "fix" ? "fix" : "add"}`}>
-                  {note.kind === "fix" ? "Fixed" : note.kind === "add" ? "Added" : "Changed"}
+                  {note.kind === "fix" ? t("updater.noteKind.fix") : note.kind === "add" ? t("updater.noteKind.add") : t("updater.noteKind.change")}
                 </span>
               )}
               {note.text}
@@ -296,7 +296,7 @@ function DownloadingContent({
   );
 }
 
-function InstallingContent({ version, t }: { version: string; t: TFn }) {
+function InstallingContent({ version, onDismiss, t }: { version: string; onDismiss: () => void; t: TFn }) {
   return (
     <>
       <div className="lm-updater-head">
@@ -321,6 +321,14 @@ function InstallingContent({ version, t }: { version: string; t: TFn }) {
           }}
         />
       </div>
+
+      {import.meta.env.DEV && (
+        <div className="lm-updater-actions">
+          <button type="button" className="lm-updater-btn-ghost" onClick={onDismiss}>
+            [dev] Close
+          </button>
+        </div>
+      )}
     </>
   );
 }

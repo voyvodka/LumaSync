@@ -135,7 +135,9 @@
     },
     "displays": {
       "primary": "Primary",
-      "empty": "No displays enumerated."
+      "empty": "No displays enumerated.",
+      "cellId": "ID",
+      "cellScale": "Scale"
     },
     "manual": {
       "body": "Manual device entry isn't available yet. Use Rescan above or check serial cables."
@@ -321,6 +323,11 @@
       "showLogs": "Show logs",
       "close": "Close",
       "retry": "Try again"
+    },
+    "noteKind": {
+      "fix": "Fixed",
+      "add": "Added",
+      "change": "Changed"
     },
     "sizeUnknown": "Size unknown",
     "checkForUpdates": "Software update",
@@ -548,7 +555,26 @@
         "offlineReason3": "The bridge IP address has changed",
         "offlineRediscover": "Rediscover",
         "offlineTryIp": "Try a different IP",
-        "offlineReset": "Remove this bridge and start over"
+        "offlineReset": "Remove this bridge and start over",
+        "pairingStep": "Pairing in progress",
+        "areaStep": "Select entertainment area",
+        "pairingFailed": "Pairing failed"
+      },
+      "card": {
+        "cellArea": "Area",
+        "cellProtocol": "Protocol",
+        "cellCh": "Ch",
+        "cellRate": "Rate",
+        "cellStatus": "Status",
+        "cellError": "Error",
+        "cellRetries": "Retries",
+        "cellNext": "Next",
+        "cellFault": "Fault",
+        "cellConfig": "Config",
+        "cellCredential": "Credential",
+        "cellCredentialInvalid": "Invalid",
+        "trafficLabel": "Stream",
+        "subtitleStreaming": "{{area}} · DTLS streaming"
       },
       "summary": {
         "idle": "Ready, not streaming",
