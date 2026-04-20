@@ -53,13 +53,13 @@ interface LightsSectionProps {
   onOpenCalibration: () => void;
 }
 
-// Scene presets — visual-only for now. Gradients match mockup 06.
+// Scene presets — gradient + representative solid color for SOLID mode output.
 const SCENE_PRESETS = [
-  { id: "movie", gradient: "linear-gradient(135deg,#2a1235,#6a1c50,#d9521e,#ffb030)" },
-  { id: "game", gradient: "linear-gradient(135deg,#0a1838,#1e4878,#66b4ff,#a8e0ff)" },
-  { id: "music", gradient: "linear-gradient(135deg,#1a0a22,#3e1858,#a03878,#ff6a88)" },
-  { id: "chill", gradient: "linear-gradient(135deg,#1a1305,#4e3010,#d9821e,#ffc860)" },
-  { id: "reading", gradient: "linear-gradient(135deg,#0a1a0a,#1e4428,#4cad70,#a8e0b4)" },
+  { id: "movie",   gradient: "linear-gradient(135deg,#2a1235,#6a1c50,#d9521e,#ffb030)", r: 217, g:  82, b:  30, brightness: 0.85 },
+  { id: "game",    gradient: "linear-gradient(135deg,#0a1838,#1e4878,#66b4ff,#a8e0ff)", r: 102, g: 180, b: 255, brightness: 0.90 },
+  { id: "music",   gradient: "linear-gradient(135deg,#1a0a22,#3e1858,#a03878,#ff6a88)", r: 255, g: 106, b: 136, brightness: 0.90 },
+  { id: "chill",   gradient: "linear-gradient(135deg,#1a1305,#4e3010,#d9821e,#ffc860)", r: 255, g: 200, b:  96, brightness: 0.75 },
+  { id: "reading", gradient: "linear-gradient(135deg,#0a1a0a,#1e4428,#4cad70,#a8e0b4)", r:  76, g: 173, b: 112, brightness: 0.75 },
 ] as const;
 
 function toHexPair(value: number): string {
@@ -154,17 +154,11 @@ export function LightsSection({
     });
   };
 
-  // Placeholder: saturation is not in AmbilightPayload yet.
+  // TODO: saturation is UI-local state only — AmbilightPayload has no saturation field yet.
+  // Wire to onModeChange once the contract and Rust handler are extended.
   const [saturationPlaceholder, setSaturationPlaceholder] = useState(118);
 
-  // Real LED counts from calibration when available — fall back to mockup
-  // defaults so the page still renders before first calibration.
   const totalLeds = calibration?.totalLeds;
-  const edgeCounts = calibration?.counts;
-  const topCount = edgeCounts?.top ?? 24;
-  const botCount = edgeCounts?.bottom ?? 24;
-  const leftCount = edgeCounts?.left ?? 18;
-  const rightCount = edgeCounts?.right ?? 18;
 
   const smoothingValue = incomingAmbilight.smoothingAlpha ?? 0.35;
   const smoothingPercent = Math.round(((smoothingValue - 0.05) / 0.95) * 100);
@@ -276,12 +270,14 @@ export function LightsSection({
           </div>
         )}
 
-        {/* Edge signal + profile */}
-        <div>
+        {/* Edge signal + profile — only when Ambilight is active */}
+        {isAmbilight && <div>
           <div className="lm-lights-slab">
             {t("lightsPage.slab.signalText")} <b>{t("lightsPage.slab.signalAccent")}</b>
           </div>
           <div className="lm-signal">
+            {/* TODO: latency and FPS are static i18n placeholders ("11ms", "58 fps").
+                Wire to get_runtime_telemetry once the command exposes ambilight capture stats. */}
             <div className="lm-signal-head">
               <span className="l">{t("lightsPage.signal.title")}</span>
               <span className="meta-pill">
@@ -292,26 +288,6 @@ export function LightsSection({
                   {t("lightsPage.signal.fps")} <b>{t("lightsPage.signal.placeholderFps")}</b>
                 </span>
               </span>
-            </div>
-            <div className="lm-edges">
-              <div className="lm-edge lm-edge-top">
-                <span className="label">{t("lightsPage.signal.edges.top", { count: topCount })}</span>
-              </div>
-              <div className="lm-edge lm-edge-l">
-                <span className="label">{t("lightsPage.signal.edges.left", { count: leftCount })}</span>
-              </div>
-              <div className="lm-edge lm-edge-c">
-                <div className="scene">
-                  <b>{t("lightsPage.signal.display.label")}</b>
-                  {t("lightsPage.signal.display.sub")}
-                </div>
-              </div>
-              <div className="lm-edge lm-edge-r">
-                <span className="label">{t("lightsPage.signal.edges.right", { count: rightCount })}</span>
-              </div>
-              <div className="lm-edge lm-edge-bot">
-                <span className="label">{t("lightsPage.signal.edges.bot", { count: botCount })}</span>
-              </div>
             </div>
             <div className="lm-profile">
               {/* Smoothing — wired */}
@@ -387,7 +363,7 @@ export function LightsSection({
               </div>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Scene presets — visual placeholder */}
         <div>
@@ -403,7 +379,17 @@ export function LightsSection({
                   type="button"
                   className={`lm-sc ${isSelected ? "is-sel" : ""}`}
                   style={{ background: preset.gradient }}
-                  onClick={() => setSelectedScene(isSelected ? null : preset.id)}
+                  onClick={() => {
+                    if (isSelected) {
+                      setSelectedScene(null);
+                    } else {
+                      setSelectedScene(preset.id);
+                      onModeChange({
+                        kind: LIGHTING_MODE_KIND.SOLID,
+                        solid: { r: preset.r, g: preset.g, b: preset.b, brightness: preset.brightness },
+                      });
+                    }
+                  }}
                 >
                   <b>{t(`lightsPage.scenes.${preset.id}`)}</b>
                 </button>

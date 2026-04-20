@@ -139,6 +139,40 @@
     },
     "manual": {
       "body": "Manual device entry isn't available yet. Use Rescan above or check serial cables."
+    },
+    "hue": {
+      "scanNetwork": "Scan Network",
+      "scanning": "Scanning...",
+      "scanningDetail": "Scanning local network for Hue bridges...",
+      "addBridge": "+ Pair",
+      "forgotBridge": "Forget",
+      "forceForget": "Force Forget",
+      "changeArea": "Change Area",
+      "confirmArea": "Confirm Area",
+      "validate": "Revalidate",
+      "retryPair": "Retry Pair",
+      "reconnectNow": "Reconnect",
+      "retryStop": "Retry Stop",
+      "stopRetrying": "Stop",
+      "enterIp": "Verify IP",
+      "scanAgain": "Scan Again",
+      "cancel": "Cancel",
+      "tryDifferentIp": "Try Different IP",
+      "noResult": "No bridges found",
+      "noResultBody": "Discovery completed but found no bridges. Make sure your bridge is on the same network.",
+      "scanFailed": "Discovery failed",
+      "scanFailedBody": "Could not reach the discovery service. Check your network connection and try again.",
+      "pill": {
+        "streaming": "STREAMING",
+        "ready": "READY",
+        "awaiting": "AWAITING",
+        "paired": "PAIRED",
+        "authError": "AUTH ERROR",
+        "offline": "OFFLINE",
+        "reconnecting": "RECONNECTING",
+        "failed": "FAILED",
+        "discovered": "DISCOVERED"
+      }
     }
   },
   "lightsPage": {
@@ -426,10 +460,13 @@
       },
       "areas": {
         "title": "Entertainment areas",
+        "selectLabel": "Select entertainment area",
         "empty": "No entertainment areas found. Create one in the Hue app first.",
         "channels": "{{count}} channels",
         "activeStreamer": "Active",
-        "activeStreamerHint": "Another app is streaming"
+        "activeStreamerHint": "Another app is streaming",
+        "conflictTitle": "Area already in use",
+        "conflictHint": "Another app is actively streaming to this area. Stop the other stream before starting."
       },
       "channelMap": {
         "title": "Channel screen regions",
@@ -505,6 +542,7 @@
         "emptyAction": "Discover bridges",
         "offlineTitle": "Bridge is not reachable",
         "offlineBody": "{{name}} ({{ip}}) is not responding right now. This usually means:",
+        "offlineReasonsTitle": "Possible reasons",
         "offlineReason1": "You are on a different Wi-Fi network",
         "offlineReason2": "The bridge is turned off or restarting",
         "offlineReason3": "The bridge IP address has changed",

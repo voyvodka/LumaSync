@@ -131,6 +131,40 @@
     },
     "manual": {
       "body": "Manuel cihaz girişi henüz kullanılabilir değil. Yukarıdan Yeniden Tara'yı kullanın veya seri kabloları kontrol edin."
+    },
+    "hue": {
+      "scanNetwork": "Ağı Tara",
+      "scanning": "Taranıyor...",
+      "scanningDetail": "Yerel ağda Hue köprüsü aranıyor...",
+      "addBridge": "+ Eşleştir",
+      "forgotBridge": "Unut",
+      "forceForget": "Zorla Unut",
+      "changeArea": "Alan Değiştir",
+      "confirmArea": "Alanı Onayla",
+      "validate": "Yeniden Doğrula",
+      "retryPair": "Tekrar Eşleştir",
+      "reconnectNow": "Yeniden Bağlan",
+      "retryStop": "Durdurmayı Tekrarla",
+      "stopRetrying": "Durdur",
+      "enterIp": "IP Doğrula",
+      "scanAgain": "Tekrar Tara",
+      "cancel": "İptal",
+      "tryDifferentIp": "Farklı IP Dene",
+      "noResult": "Köprü bulunamadı",
+      "noResultBody": "Tarama tamamlandı ancak köprü bulunamadı. Köprünüzün aynı ağda olduğundan emin olun.",
+      "scanFailed": "Keşif başarısız",
+      "scanFailedBody": "Keşif servisine ulaşılamadı. Ağ bağlantınızı kontrol edip tekrar deneyin.",
+      "pill": {
+        "streaming": "YAYIN",
+        "ready": "HAZIR",
+        "awaiting": "BEKLİYOR",
+        "paired": "EŞLEŞTİ",
+        "authError": "KİM. HATASI",
+        "offline": "ÇEVRIMDIŞI",
+        "reconnecting": "YEN. BAĞLANIYOR",
+        "failed": "BAŞARISIZ",
+        "discovered": "KEŞFEDİLDİ"
+      }
     }
   },
   "lightsPage": {
@@ -426,10 +460,13 @@
       },
       "areas": {
         "title": "Entertainment alanları",
+        "selectLabel": "Entertainment alanı seçin",
         "empty": "Entertainment alanı bulunamadı. Hue uygulamasından bir tane oluşturun.",
         "channels": "{{count}} kanal",
         "activeStreamer": "Aktif",
-        "activeStreamerHint": "Başka bir uygulama akış yapıyor"
+        "activeStreamerHint": "Başka bir uygulama akış yapıyor",
+        "conflictTitle": "Alan kullanımda",
+        "conflictHint": "Başka bir uygulama bu alana aktif olarak akış yapıyor. Başlamadan önce diğer akışı durdurun."
       },
       "channelMap": {
         "title": "Kanal ekran bölgeleri",
@@ -505,6 +542,7 @@
         "emptyAction": "Bridge keşfet",
         "offlineTitle": "Bridge'e ulaşılamıyor",
         "offlineBody": "{{name}} ({{ip}}) şu an yanıt vermiyor. Bunun olası nedenleri:",
+        "offlineReasonsTitle": "Olası nedenler",
         "offlineReason1": "Farklı bir Wi-Fi ağındasınız",
         "offlineReason2": "Bridge kapalı veya yeniden başlatılıyor",
         "offlineReason3": "Bridge'in IP adresi değişmiş olabilir",
