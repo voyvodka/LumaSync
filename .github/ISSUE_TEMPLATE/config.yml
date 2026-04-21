@@ -3,6 +3,9 @@ contact_links:
   - name: Website
     url: https://lumasync.app
     about: Project website and downloads
+  - name: Questions & Discussion
+    url: https://github.com/voyvodka/LumaSync/discussions
+    about: Ask questions, share ideas, or discuss usage
   - name: Security Vulnerability
     url: https://github.com/voyvodka/lumasync/security/advisories/new
     about: Report security vulnerabilities privately
