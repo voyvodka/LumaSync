@@ -1,4 +1,4 @@
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import type { Update } from "@tauri-apps/plugin-updater";
 import type { UpdaterState } from "./useAutoUpdater";
 
@@ -188,12 +188,9 @@ function AvailableContent({
         </div>
       </div>
 
-      <div
-        className="lm-updater-body"
-        dangerouslySetInnerHTML={{
-          __html: t("updater.available.body", { version: nextVersion }),
-        }}
-      />
+      <div className="lm-updater-body">
+        <Trans t={t} i18nKey="updater.available.body" values={{ version: nextVersion }} components={{ b: <b /> }} />
+      </div>
 
       <div className="lm-updater-verdiff">
         <span className="lm-updater-verdiff-from">v{currentVersion}</span>
@@ -315,11 +312,9 @@ function InstallingContent({ version, onDismiss, t }: { version: string; onDismi
 
       <div className="lm-updater-install-txt">
         <b>{t("updater.installing.verify")}</b>
-        <span
-          dangerouslySetInnerHTML={{
-            __html: t("updater.installing.body", { version }),
-          }}
-        />
+        <span>
+          <Trans t={t} i18nKey="updater.installing.body" values={{ version }} components={{ br: <br /> }} />
+        </span>
       </div>
 
       {import.meta.env.DEV && (
