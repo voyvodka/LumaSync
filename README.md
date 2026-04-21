@@ -1,9 +1,12 @@
 # LumaSync
 
+[![Website](https://img.shields.io/badge/Website-lumasync.app-f59e0b.svg)](https://lumasync.app)
 [![CI](https://github.com/voyvodka/lumasync/actions/workflows/ci.yml/badge.svg)](https://github.com/voyvodka/lumasync/actions/workflows/ci.yml)
-[![Release](https://github.com/voyvodka/lumasync/releases/latest/badge.svg)](https://github.com/voyvodka/lumasync/releases/latest)
+[![Release](https://img.shields.io/github/v/release/voyvodka/LumaSync?color=f59e0b&label=Release)](https://github.com/voyvodka/LumaSync/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: macOS | Windows | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#platform-support)
+
+**Website:** [lumasync.app](https://lumasync.app)
 
 LumaSync is a tray-first desktop app that synchronizes WS2812B LED strips with screen content and controls Philips Hue entertainment areas — all from a single compact interface.
 

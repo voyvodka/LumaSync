@@ -167,7 +167,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
           <div>
             <div className="lm-settings-about-tx-n">{APP_NAME}</div>
             <div className="lm-settings-about-tx-s">
-              {t("settingsPage.about.tagline")} · <b>com.lumasync.app</b> · {t("settingsPage.about.license")}
+              {t("settingsPage.about.tagline")} · <b>com.lumasync.app</b> · {t("settingsPage.about.license")} · <a href="https://lumasync.app" target="_blank" rel="noreferrer noopener">lumasync.app</a>
             </div>
           </div>
           <div className="lm-settings-about-v">v{APP_VERSION}</div>
