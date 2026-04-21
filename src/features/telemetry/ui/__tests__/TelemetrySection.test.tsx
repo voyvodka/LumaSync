@@ -194,7 +194,6 @@ describe("Settings telemetry wiring", () => {
         uiMode="full"
         activeSection={SECTION_IDS.SYSTEM}
         onSectionChange={vi.fn()}
-        calibrationStep="editor"
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
         usbConnected={true}
@@ -204,7 +203,6 @@ describe("Settings telemetry wiring", () => {
         onLightingModeChange={vi.fn()}
         onOutputTargetsChange={vi.fn()}
         onCalibrationSaved={vi.fn()}
-        onCalibrationStepChange={vi.fn()}
         onCheckForUpdates={vi.fn()}
         isCheckingForUpdates={false}
       />,

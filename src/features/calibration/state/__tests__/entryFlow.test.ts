@@ -84,15 +84,13 @@ describe("calibration entry flow", () => {
     });
 
     expect(entry.open).toBe(true);
-    expect(entry.step).toBe("template");
     expect(entry.reason).toBe("first-connection");
   });
 
-  it("uses same overlay flow for settings edit and starts from editor with saved values", () => {
+  it("uses same overlay flow for settings edit and starts with saved values", () => {
     const entry = startCalibrationFromSettings(EXISTING_CALIBRATION);
 
     expect(entry.open).toBe(true);
-    expect(entry.step).toBe("editor");
     expect(entry.initialConfig).toEqual(EXISTING_CALIBRATION);
   });
 

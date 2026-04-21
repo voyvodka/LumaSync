@@ -8,7 +8,6 @@ import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/mode
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueRuntimeTarget } from "../../shared/contracts/hue";
-import type { CalibrationOverlayStep } from "../calibration/state/entryFlow";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import { RoomMapEditor } from "./sections/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
@@ -20,7 +19,6 @@ interface SettingsLayoutProps {
   activeSection: SectionId;
   onSectionChange: (sectionId: SectionId) => Promise<void>;
   calibration?: LedCalibrationConfig;
-  calibrationStep: CalibrationOverlayStep;
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
   usbConnected: boolean;
@@ -32,7 +30,6 @@ interface SettingsLayoutProps {
   onLightingModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onCalibrationSaved: (config: LedCalibrationConfig) => void;
-  onCalibrationStepChange: (step: CalibrationOverlayStep) => void;
   onCheckForUpdates: () => void;
   isCheckingForUpdates: boolean;
   devSetUpdaterState?: (state: UpdaterState) => void;
@@ -43,7 +40,6 @@ export const SettingsLayout = memo(function SettingsLayout({
   activeSection,
   onSectionChange,
   calibration,
-  calibrationStep,
   lightingMode,
   outputTargets,
   usbConnected,
@@ -55,7 +51,6 @@ export const SettingsLayout = memo(function SettingsLayout({
   onLightingModeChange,
   onOutputTargetsChange,
   onCalibrationSaved,
-  onCalibrationStepChange,
   onCheckForUpdates,
   isCheckingForUpdates,
   devSetUpdaterState,
@@ -105,7 +100,6 @@ export const SettingsLayout = memo(function SettingsLayout({
         {activeSection === SECTION_IDS.LED_SETUP && (
           <CalibrationPage
             key="calibration-page"
-            initialStep={calibrationStep}
             initialConfig={
               pendingZoneCounts
                 ? { ...(calibration ?? resetToManual()), counts: pendingZoneCounts }
@@ -119,7 +113,6 @@ export const SettingsLayout = memo(function SettingsLayout({
               setPendingZoneCounts(null);
               onCalibrationSaved(cfg);
             }}
-            onStepChange={onCalibrationStepChange}
           />
         )}
 

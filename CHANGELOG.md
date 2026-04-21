@@ -7,6 +7,51 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- Compact UI mode with dual-sized window (compact 320×480 / full 900×620), custom overlay title bar, and accent theme system driven by a new `UIMode` contract
+- CompactLayout view with quick-access mode presets, scene tiles, and integrated mode toggle for a tray-style experience
+- LightsSection redesign (M6): mode selector, scene presets, ambilight profile sliders, and live device/status visualisation
+- StatusBar with mode, device, and stream indicators alongside the new shell chrome
+- UpdateModal rewrite covering four states (available / downloading / installing / error) with i18n-backed labels
+- Hue Bridges section redesign (B-08): card state classes, pill variants, traffic bar label row, four-step pairing tracker with failure state, area-select label, conflict/repair/offline banners, and action buttons aligned to all 17 defined states
+- Edge signal preview panel: the ambilight worker now emits a throttled `ambilight://edge-signal` Tauri event (~10 Hz) with top/bottom/left/right RGB samples, rendered as live linear gradients next to a primary-display tile
+- Runtime telemetry meta pill showing live `Δ` frame latency and `Σ` FPS sourced from `get_runtime_telemetry` while Ambilight is active; polling pauses when the tab is hidden
+- Ambilight saturation control: luminance-preserving Rec.601 factor (range 0.5–2.0, identity 1.0) stored as an `AtomicU32` in the worker's live settings, applied on the hot path before smoothing so USB LEDs, Hue channels, and the edge-signal preview stay visually consistent; exposed in Lights as a 50–200% dial
+- Unified scene preset catalog (`src/features/mode/model/scenePresets.ts`) with a `brightness` field, shared by Compact and Lights; active preset is derived from the current SOLID payload so selection survives view switches and app restarts
+- Dock "+" add-zone affordance rendered as disabled with a tooltip, surfacing multi-zone support as a known-future feature
+- `EdgeSignalPayload` / `EDGE_SIGNAL_EVENT` exported from the mode contract module for typed event wiring
+- Jules agent documentation: hard constraints, security rules, and architecture data-flow map to guide automated security/performance scans
+- `LedRoomCanvas`: read-only SVG illustration of the monitor + desk scene with LED dots distributed per edge, a #1 start marker, and a direction arrow — driven purely from `LedCalibrationConfig`
+- `deriveDefaultCounts(display)`: frontend heuristic that assigns sensible per-edge LED counts from monitor resolution and aspect ratio so auto-selected displays fill the canvas on first run without a template picker
+
+### Changed
+
+- Compact/full UI mode transition now uses a single content slot with sequential fade + resize + fade and easing matched to the window animation, eliminating the progressive-clipping artefact where the incoming layout overflowed the still-animating window
+- Removed the orange edge-sweep animation from window mode transitions; the simpler fade + resize flow remains
+- LED Setup redesigned to a single-screen stage + 268px dock layout: the three-step display/template/editor wizard, template picker, and draggable editor canvas are gone; counts are adjusted directly in the dock and the test pattern runs in place with a preview/output HUD overlay on the canvas
+- LED Setup dock exposes the full strip topology: partial-edge setups (e.g. LEDs only on the top) are allowed (0-count edges), monitor stand gap (`bottomMissing`) has a dedicated stepper, LED direction toggles between CW / CCW, and start anchor is driven by edge tabs + Start/End/Gap-R/Gap-L endpoint buttons so all 10 `LedStartAnchor` positions are reachable. `LedRoomCanvas` now renders the stand gap and places the `#1` marker on the gap-adjacent LED for `bottom-gap-*` anchors
+- Calibration validation: 0-count edges are now accepted as long as `sum > 0` (`NO_LEDS_CONFIGURED`); stand gap wider than the bottom edge now fails with `BOTTOM_MISSING_EXCEEDS_BOTTOM`; `normalizeLedCalibrationConfig` auto-clamps `bottomMissing` to bottom count and auto-heals `startAnchor` when its edge is zeroed out
+- Hue stream health polling migrated from `setInterval` to recursive `setTimeout`, preventing overlapping probes when a health check takes longer than its interval and stopping polling as soon as the stream is detected dead
+- Internationalisation sweep: DeviceSection cell labels (Area, Protocol, Ch, Rate, Status, Error, Retries, Next, Fault, Config, Credential, Invalid), traffic bar Stream label, DTLS streaming subtitle, display card ID/Scale labels, previously-missing wizard step keys, and UpdateModal note kind tags moved to `updater.noteKind.*` — EN + TR locales kept in sync
+- Test layout: all colocated `*.test.ts(x)` files relocated into `__tests__/` subdirectories and CLAUDE.md updated to document the convention
+- Bumped tokio from 1.50.0 to 1.51.1
+- `.gitignore` now ignores `.planning/` and `.jules/` recursively so local planning artefacts never leak into status
+- Removed legacy `.jules` tracking files from the repository
+
+### Fixed
+
+- Hue stream polling overlapping probes when a health check ran longer than the interval (migrated to recursive `setTimeout`)
+- DeviceSection and SettingsLayout test suites updated for the b06 redesign markup
+- LightsSection test suite: added a `Trans` mock so rich-text i18n fragments render deterministically in jsdom
+- Removed unused imports that were failing `tsc --noEmit` with TS6133 after recent refactors
+- Hardcoded fallback strings in Device and Updater UIs replaced with `t()` keys so EN/TR locales render consistently
+
+### Performance
+
+- RoomMapEditor: isolated high-frequency mouse-coordinate state into a dedicated child that uses native DOM listeners with `requestAnimationFrame` throttling, eliminating full-editor re-renders on cursor movement
+- SettingsLayout: wrapped in `React.memo` to prevent polling-triggered re-renders of the entire settings tree
+
 ## [1.2.0] — 2026-04-10
 
 ### Added

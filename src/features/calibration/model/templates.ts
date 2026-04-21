@@ -1,5 +1,6 @@
 import type { CalibrationTemplate, LedCalibrationConfig } from "./contracts";
 import { sumSegmentCounts } from "./contracts";
+import type { DisplayInfo } from "../../../shared/contracts/display";
 
 const MANUAL_COUNTS = {
   top: 0,
@@ -81,6 +82,47 @@ export function applyTemplate(templateId: string): LedCalibrationConfig {
   }
 
   return toLedCalibrationConfig(template);
+}
+
+/**
+ * Resolution-aware default LED counts. Picks plausible per-edge counts based on
+ * the display's pixel resolution and aspect ratio. Assumes ~60 LED/m and a
+ * typical physical diagonal for each resolution class. User can always override
+ * via the dock steppers if their actual strip differs.
+ */
+export function deriveDefaultCounts(display: Pick<DisplayInfo, "width" | "height">): {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+} {
+  const width = Math.max(1, display.width);
+  const height = Math.max(1, display.height);
+  const aspect = width / height;
+
+  let topBase: number;
+  let sideBase: number;
+  if (width >= 3440) {
+    topBase = 60;
+    sideBase = 22;
+  } else if (width >= 2560) {
+    topBase = 48;
+    sideBase = 28;
+  } else if (width >= 1920) {
+    topBase = 40;
+    sideBase = 22;
+  } else {
+    topBase = 32;
+    sideBase = 18;
+  }
+
+  // Ultrawide (aspect > 2): shorten sides, widen top/bot.
+  if (aspect > 2.0) {
+    topBase = Math.round(topBase * 1.25);
+    sideBase = Math.round(sideBase * 0.75);
+  }
+
+  return { top: topBase, right: sideBase, bottom: topBase, left: sideBase };
 }
 
 export function resetToManual(): LedCalibrationConfig {

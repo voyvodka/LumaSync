@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-
-/** Overlay penceresi açıldıktan sonra ana pencereye focus geri verir. */
-function reclaimFocus() {
-  // İlk deneme hemen, ikinci deneme 150ms sonra (overlay render gecikmesi için)
-  void getCurrentWindow().setFocus();
-  setTimeout(() => void getCurrentWindow().setFocus(), 150);
-}
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
-import type { LedCalibrationConfig } from "../model/contracts";
+import type { LedCalibrationConfig, LedDirection, LedStartAnchor } from "../model/contracts";
 import { buildLedSequence } from "../model/indexMapping";
-import { applyTemplate, resetToManual } from "../model/templates";
+import { deriveDefaultCounts, resetToManual } from "../model/templates";
 import {
   validateCalibrationConfig,
   type CalibrationValidationError,
@@ -35,19 +28,19 @@ import {
 } from "../calibrationApi";
 import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
-import type { CalibrationOverlayStep } from "../state/entryFlow";
-import { CalibrationEditorCanvas } from "./CalibrationEditorCanvas";
-import { CalibrationTemplateStep } from "./CalibrationTemplateStep";
-import { DisplayMap } from "./DisplayMap";
+import { LedRoomCanvas } from "./LedRoomCanvas";
 import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
-import type { OverlayPreviewPayload } from "../../../shared/contracts/display";
+import type { DisplayInfo, OverlayPreviewPayload } from "../../../shared/contracts/display";
+
+function reclaimFocus() {
+  void getCurrentWindow().setFocus();
+  setTimeout(() => void getCurrentWindow().setFocus(), 150);
+}
 
 interface CalibrationPageProps {
-  initialStep: CalibrationOverlayStep;
   initialConfig?: LedCalibrationConfig;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
-  onStepChange?: (step: CalibrationOverlayStep) => void;
 }
 
 function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
@@ -64,18 +57,12 @@ function areSnapshotsEqual(left: TestPatternSnapshot, right: TestPatternSnapshot
   );
 }
 
-
 function buildOverlayPreviewPayload(
   config: LedCalibrationConfig,
   sequence: ReturnType<typeof buildLedSequence>,
 ): OverlayPreviewPayload {
   return {
-    counts: {
-      top: config.counts.top,
-      right: config.counts.right,
-      bottom: config.counts.bottom,
-      left: config.counts.left,
-    },
+    counts: { ...config.counts },
     bottomMissing: config.bottomMissing,
     cornerOwnership: config.cornerOwnership,
     visualPreset: config.visualPreset,
@@ -87,35 +74,31 @@ function buildOverlayPreviewPayload(
   };
 }
 
-function resolveAnchorForBottomMissing(
-  currentAnchor: LedCalibrationConfig["startAnchor"],
-  nextBottomMissing: number,
-) {
-  if (nextBottomMissing > 0) return currentAnchor;
-  if (currentAnchor === "bottom-gap-right") return "bottom-start";
-  if (currentAnchor === "bottom-gap-left") return "bottom-end";
-  return currentAnchor;
+type AnchorEdge = "top" | "right" | "bottom" | "left";
+type AnchorEndpoint = "start" | "end" | "gap-right" | "gap-left";
+
+function edgeOfAnchor(anchor: LedStartAnchor): AnchorEdge {
+  if (anchor.startsWith("top")) return "top";
+  if (anchor.startsWith("right")) return "right";
+  if (anchor.startsWith("bottom")) return "bottom";
+  return "left";
 }
 
-export function CalibrationPage({
-  initialStep,
-  initialConfig,
-  onNavigateBack,
-  onSaved,
-  onStepChange,
-}: CalibrationPageProps) {
+function endpointOfAnchor(anchor: LedStartAnchor): AnchorEndpoint {
+  if (anchor === "bottom-gap-right") return "gap-right";
+  if (anchor === "bottom-gap-left") return "gap-left";
+  return anchor.endsWith("-end") ? "end" : "start";
+}
+
+function anchorFromEdgeEndpoint(edge: AnchorEdge, endpoint: AnchorEndpoint): LedStartAnchor {
+  if (endpoint === "gap-right") return "bottom-gap-right";
+  if (endpoint === "gap-left") return "bottom-gap-left";
+  return `${edge}-${endpoint}` as LedStartAnchor;
+}
+
+export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: CalibrationPageProps) {
   const { t } = useTranslation("common");
-  const STEP_ORDER: CalibrationOverlayStep[] = ["template", "display", "editor"];
-  const stepIndex = (step: CalibrationOverlayStep) => STEP_ORDER.indexOf(step);
 
-  const [activeStep, setActiveStep] = useState<CalibrationOverlayStep>(initialStep);
-  const [maxStepReached, setMaxStepReached] = useState(() => stepIndex(initialStep));
-
-  const goToStep = useCallback((step: CalibrationOverlayStep) => {
-    setActiveStep(step);
-    setMaxStepReached((prev) => Math.max(prev, stepIndex(step)));
-    onStepChange?.(step);
-  }, [onStepChange]);
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
     buildInitialEditorState(initialConfig),
   );
@@ -136,14 +119,14 @@ export function CalibrationPage({
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<string | null>(null);
 
-  // Load displays on mount — auto-select when exactly one display is found (P0-2)
+  // Load displays on mount
   useEffect(() => {
     let cancelled = false;
     void listDisplays()
       .then((displays) => {
         if (cancelled) return;
         let newState = displayTargetRef.current.setDisplays(displays);
-        if (displays.length === 1) {
+        if (displays.length > 0 && !newState.selectedDisplayId) {
           newState = displayTargetRef.current.selectDisplay(displays[0].id);
         }
         setDisplayTarget(newState);
@@ -167,7 +150,6 @@ export function CalibrationPage({
   // rAF loop while test pattern is active
   useEffect(() => {
     if (!testPattern.isEnabled) return;
-
     let frameId: number | null = null;
     const syncSnapshot = () => {
       const latest = flowRef.current.getSnapshot();
@@ -177,13 +159,12 @@ export function CalibrationPage({
       }
     };
     frameId = window.requestAnimationFrame(syncSnapshot);
-
     return () => {
       if (frameId !== null) window.cancelAnimationFrame(frameId);
     };
   }, [testPattern.isEnabled]);
 
-  // Cleanup on unmount (navigating away)
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       void flowRef.current.dispose().then(() => {
@@ -201,7 +182,6 @@ export function CalibrationPage({
   // Push overlay preview updates
   useEffect(() => {
     if (!testPattern.isEnabled || !displayTarget.activeDisplayId || displayTarget.blocked) return;
-
     void updateDisplayOverlayPreview(overlayPreviewPayload).then((result) => {
       if (!result.ok) {
         const reason = result.reason ?? result.message;
@@ -247,7 +227,110 @@ export function CalibrationPage({
     }
   }, [testPattern.isEnabled, displayTarget, overlayPreviewPayload, t]);
 
-  function handleClose() {
+  const handleSelectDisplay = useCallback(async (display: DisplayInfo) => {
+    const selected = displayTargetRef.current.selectDisplay(display.id);
+    setDisplayTarget(selected);
+
+    // Auto-derive default counts only when the user hasn't customized yet
+    // (fresh manual default → totalLeds === 0).
+    if (editorState.current.totalLeds === 0) {
+      const defaults = deriveDefaultCounts(display);
+      setEditorState((prev) => updateEditorConfig(prev, { counts: defaults }));
+    }
+
+    if (!testPattern.isEnabled) return;
+    try {
+      const switched = await displayTargetRef.current.switchActiveDisplay(display.id, overlayPreviewPayload);
+      setDisplayTarget(switched);
+      reclaimFocus();
+      if (switched.blocked) {
+        const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+        const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
+        setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
+      } else {
+        setTestPatternError(null);
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      setTestPatternError(t("calibration.overlay.errors.displaySwitchFailed", { reason }));
+    }
+  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t]);
+
+  const handleCountChange = useCallback((segment: "top" | "right" | "bottom" | "left", delta: number) => {
+    setEditorState((prev) => {
+      const current = prev.current.counts[segment];
+      const next = Math.max(0, current + delta);
+      return updateEditorConfig(prev, { counts: { [segment]: next } });
+    });
+    setValidationErrors(null);
+  }, []);
+
+  const handleReset = useCallback(() => {
+    const display = displayTarget.displays.find((candidate) => candidate.id === displayTarget.selectedDisplayId);
+    if (display) {
+      const defaults = deriveDefaultCounts(display);
+      setEditorState((prev) => updateEditorConfig(prev, { counts: defaults }));
+    } else {
+      setEditorState((prev) => loadEditorConfig(prev, resetToManual()));
+    }
+    setValidationErrors(null);
+  }, [displayTarget]);
+
+  const handleBottomMissingChange = useCallback((delta: number) => {
+    setEditorState((prev) => {
+      const max = prev.current.counts.bottom;
+      const next = Math.max(0, Math.min(max, prev.current.bottomMissing + delta));
+      return updateEditorConfig(prev, { bottomMissing: next });
+    });
+    setValidationErrors(null);
+  }, []);
+
+  const handleDirectionChange = useCallback((direction: LedDirection) => {
+    setEditorState((prev) => updateEditorConfig(prev, { direction }));
+    setValidationErrors(null);
+  }, []);
+
+  const handleEdgeChange = useCallback((edge: AnchorEdge) => {
+    setEditorState((prev) => {
+      if (prev.current.counts[edge] === 0) return prev;
+      const currentEndpoint = endpointOfAnchor(prev.current.startAnchor);
+      const keep = currentEndpoint === "end" ? "end" : "start";
+      return updateEditorConfig(prev, { startAnchor: anchorFromEdgeEndpoint(edge, keep) });
+    });
+    setValidationErrors(null);
+  }, []);
+
+  const handleEndpointChange = useCallback((endpoint: AnchorEndpoint) => {
+    setEditorState((prev) => {
+      const edge = edgeOfAnchor(prev.current.startAnchor);
+      return updateEditorConfig(prev, { startAnchor: anchorFromEdgeEndpoint(edge, endpoint) });
+    });
+    setValidationErrors(null);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    const result = validateCalibrationConfig(editorState.current);
+    if (!result.ok) {
+      setValidationErrors(result.errors);
+      setIsSaving(false);
+      return;
+    }
+    setValidationErrors(null);
+    try {
+      const savedState = saveEditorCalibration(editorState);
+      await shellStore.save({ ledCalibration: savedState.current });
+      onSaved(savedState.current);
+      setEditorState(savedState);
+      await flowRef.current.dispose();
+      setTestPattern(flowRef.current.getSnapshot());
+      onNavigateBack();
+    } finally {
+      setIsSaving(false);
+    }
+  }, [editorState, onNavigateBack, onSaved]);
+
+  const handleClose = useCallback(() => {
     const closeState = requestEditorClose(editorState);
     setEditorState(closeState);
     if (closeState.shouldClose) {
@@ -255,156 +338,19 @@ export function CalibrationPage({
       setTestPattern(flowRef.current.getSnapshot());
       onNavigateBack();
     }
-  }
+  }, [editorState, onNavigateBack]);
+
+  const { counts, bottomMissing, startAnchor, direction, totalLeds } = editorState.current;
+  const currentEdge = edgeOfAnchor(startAnchor);
+  const currentEndpoint = endpointOfAnchor(startAnchor);
+  const meterLength = (totalLeds / 60).toFixed(1);
+  const powerWatts = (totalLeds * 0.06).toFixed(1); // ~0.06W per LED at medium brightness
 
   return (
-    <div className="flex h-full flex-col">
-      {/* ── Header ── */}
-      <div className="flex shrink-0 items-center gap-4 border-b border-slate-200/70 px-6 py-3 dark:border-zinc-800">
-        <h1 className="text-sm font-semibold text-slate-900 dark:text-zinc-100">
-          {t("calibration.page.title")}
-        </h1>
-
-        {/* Step indicator */}
-        <div className="flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-slate-50 px-3 py-1 dark:border-zinc-700 dark:bg-zinc-800/60">
-          <StepIndicator
-            number={1}
-            label={t("calibration.page.stepTemplate")}
-            active={activeStep === "template"}
-            done={maxStepReached >= stepIndex("template") && activeStep !== "template"}
-            onClick={activeStep !== "template" ? () => goToStep("template") : undefined}
-          />
-          <StepArrow />
-          <StepIndicator
-            number={2}
-            label={t("calibration.page.stepDisplay")}
-            active={activeStep === "display"}
-            done={maxStepReached >= stepIndex("display") && activeStep !== "display"}
-            onClick={maxStepReached >= stepIndex("display") && activeStep !== "display" ? () => goToStep("display") : undefined}
-          />
-          <StepArrow />
-          <StepIndicator
-            number={3}
-            label={t("calibration.page.stepEditor")}
-            active={activeStep === "editor"}
-            done={maxStepReached >= stepIndex("editor") && activeStep !== "editor"}
-            onClick={maxStepReached >= stepIndex("editor") && activeStep !== "editor" ? () => goToStep("editor") : undefined}
-          />
-        </div>
-
-        {/* Dirty badge */}
-        {editorState.isDirty && (
-          <span className="rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
-            {t("calibration.editor.dirty")}
-          </span>
-        )}
-      </div>
-
-      {/* ── Content ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-6">
-        {activeStep === "template" ? (
-          <CalibrationTemplateStep
-            selectedTemplateId={editorState.current.templateId}
-            onSelectTemplate={(templateId) => {
-              const config = applyTemplate(templateId);
-              setEditorState((prev) => loadEditorConfig(prev, config));
-            }}
-          />
-        ) : activeStep === "display" ? (
-          <div className="flex h-full flex-col items-center justify-center gap-8">
-            <div className="text-center">
-              <h2 className="text-base font-semibold text-slate-900 dark:text-zinc-100">
-                {t("calibration.page.displayTitle")}
-              </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
-                {t("calibration.page.displayDescription")}
-              </p>
-            </div>
-
-            {displayTarget.displays.length > 0 ? (
-              <DisplayMap
-                displays={displayTarget.displays}
-                selectedId={displayTarget.selectedDisplayId}
-                activeId={displayTarget.activeDisplayId}
-                isSwitching={displayTarget.isSwitching}
-                onSelect={async (displayId) => {
-                  const selected = displayTargetRef.current.selectDisplay(displayId);
-                  setDisplayTarget(selected);
-                  if (!testPattern.isEnabled) return;
-                  try {
-                    const switched = await displayTargetRef.current.switchActiveDisplay(displayId, overlayPreviewPayload);
-                    setDisplayTarget(switched);
-                    reclaimFocus();
-                    if (switched.blocked) {
-                      const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
-                      const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
-                      setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
-                    } else {
-                      setTestPatternError(null);
-                    }
-                  } catch (error) {
-                    const reason = error instanceof Error ? error.message : String(error);
-                    setTestPatternError(t("calibration.overlay.errors.displaySwitchFailed", { reason }));
-                  }
-                }}
-                maxWidth={520}
-                maxHeight={200}
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-slate-400 dark:text-zinc-500">
-                <svg viewBox="0 0 24 24" className="h-10 w-10 opacity-40" fill="none" stroke="currentColor" strokeWidth="1.4">
-                  <rect x="2" y="3" width="20" height="14" rx="2" />
-                  <path d="M8 21h8M12 17v4" />
-                </svg>
-                <span className="text-sm">{t("calibration.overlay.noDisplays")}</span>
-              </div>
-            )}
-          </div>
-        ) : (
-          <CalibrationEditorCanvas
-            config={editorState.current}
-            isDirty={editorState.isDirty}
-            onCountChange={(segment, value) => {
-              setEditorState((prev) =>
-                updateEditorConfig(prev, {
-                  counts: {
-                    [segment]: Number.isFinite(value) ? Math.max(0, value) : 0,
-                  },
-                }),
-              );
-              setValidationErrors(null);
-            }}
-            onStartAnchorChange={(startAnchor) => {
-              setEditorState((prev) => updateEditorConfig(prev, { startAnchor }));
-              setValidationErrors(null);
-            }}
-            onDirectionChange={(direction) => {
-              setEditorState((prev) => updateEditorConfig(prev, { direction }));
-              setValidationErrors(null);
-            }}
-            onBottomMissingChange={(count) => {
-              setEditorState((prev) => {
-                const startAnchor = resolveAnchorForBottomMissing(prev.current.startAnchor, count);
-                return updateEditorConfig(prev, { bottomMissing: count, startAnchor });
-              });
-              setValidationErrors(null);
-            }}
-            onCornerOwnershipChange={(cornerOwnership) => {
-              setEditorState((prev) => updateEditorConfig(prev, { cornerOwnership }));
-              setValidationErrors(null);
-            }}
-            onVisualPresetChange={(visualPreset) => {
-              setEditorState((prev) => updateEditorConfig(prev, { visualPreset }));
-              setValidationErrors(null);
-            }}
-            onResetTemplate={() => goToStep("template")}
-          />
-        )}
-      </div>
-
-      {/* ── Error strip ── */}
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Error strip */}
       {(testPatternError || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
-        <div className="shrink-0 mx-4 mb-2 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-50 px-3.5 py-2.5 dark:bg-rose-950/60">
+        <div className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-50 px-3.5 py-2.5 dark:bg-rose-950/60">
           {displayTarget.blocked && (
             <ErrorLine text={t("calibration.overlay.blockedReason", {
               code: displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED",
@@ -418,128 +364,197 @@ export function CalibrationPage({
         </div>
       )}
 
-      {/* ── Action bar (tüm adımlarda sabit) ── */}
-      <div className="shrink-0 flex items-center gap-3 border-t border-slate-200/70 bg-white/60 px-4 py-3 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60">
-        {/* Sol: preview toggle */}
-        <div className="flex min-w-0 flex-1 items-center gap-4 overflow-hidden">
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              role="switch"
-              aria-checked={testPattern.isEnabled}
-              disabled={displayTarget.isSwitching || displayTarget.displays.length === 0}
-              onClick={() => void handlePreviewToggle()}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 disabled:cursor-not-allowed disabled:opacity-40 ${
-                testPattern.isEnabled ? "bg-cyan-500" : "bg-slate-300 dark:bg-zinc-600"
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md transition-transform duration-200 ${
-                  testPattern.isEnabled ? "translate-x-4" : "translate-x-0"
+      {/* Main: stage + dock */}
+      <div className="flex min-h-0 flex-1">
+        {/* Stage */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Stage header */}
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200/70 px-6 py-2.5 dark:border-zinc-800">
+            <div className="flex min-w-0 items-baseline gap-2.5">
+              <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">
+                {t("calibration.page.totalStrip")}
+              </span>
+              <span className="font-mono text-lg font-semibold leading-none text-slate-900 dark:text-zinc-100">
+                {totalLeds}
+              </span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500 dark:text-zinc-500">
+                LEDs
+              </span>
+              <span className="font-mono text-[10px] text-slate-400 dark:text-zinc-600">·</span>
+              <span className="font-mono text-[10px] text-slate-500 dark:text-zinc-500">
+                ≈ {meterLength} m · {powerWatts} W
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={handleReset}
+                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M3 12l3-3 4 4 8-8 3 3" />
+                  <path d="M21 6v6h-6" />
+                </svg>
+                {t("calibration.page.reset")}
+              </button>
+              <button
+                type="button"
+                disabled={displayTarget.isSwitching || displayTarget.displays.length === 0}
+                onClick={() => void handlePreviewToggle()}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  testPattern.isEnabled
+                    ? "bg-amber-500 text-white hover:bg-amber-600"
+                    : "bg-slate-900 text-white hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                 }`}
-              />
-            </button>
-            <span className="select-none text-xs font-medium text-slate-600 dark:text-zinc-400">
-              {t("calibration.overlay.testPatternToggle")}
-            </span>
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" />
+                </svg>
+                {testPattern.isEnabled
+                  ? t("calibration.page.stopTestPattern")
+                  : t("calibration.page.runTestPattern")}
+              </button>
+            </div>
           </div>
 
-          {/* Preview durum göstergesi */}
-          {testPattern.isEnabled && (
-            <>
-              <div className="h-5 w-px shrink-0 bg-slate-200/80 dark:bg-zinc-700" />
-              <div className={`flex shrink-0 items-center gap-1.5 text-[11px] ${
+          {/* Canvas */}
+          <div className="relative min-h-0 flex-1 overflow-hidden bg-slate-50 dark:bg-black/30">
+            <LedRoomCanvas config={editorState.current} />
+            {testPattern.isEnabled && (
+              <div className={`absolute top-3 left-3 flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] ${
                 testPattern.mode === "preview-only"
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-emerald-600 dark:text-emerald-400"
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
               }`}>
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                <span className={`h-1.5 w-1.5 rounded-full ${
                   testPattern.mode === "preview-only" ? "bg-amber-400" : "animate-pulse bg-emerald-400"
                 }`} />
-                <span>
-                  {testPattern.mode === "preview-only"
-                    ? t("calibration.overlay.previewOnly")
-                    : t("calibration.overlay.outputActive")}
-                </span>
+                {testPattern.mode === "preview-only"
+                  ? t("calibration.overlay.previewOnly")
+                  : t("calibration.overlay.outputActive")}
               </div>
-            </>
-          )}
+            )}
+          </div>
+
+          {/* Edge summary */}
+          <div className="grid shrink-0 grid-cols-4 border-t border-slate-200/70 dark:border-zinc-800">
+            <EdgeSummary label={t("calibration.page.edgeTop")} value={counts.top} />
+            <EdgeSummary label={t("calibration.page.edgeRight")} value={counts.right} />
+            <EdgeSummary label={t("calibration.page.edgeBottom")} value={counts.bottom} />
+            <EdgeSummary label={t("calibration.page.edgeLeft")} value={counts.left} />
+          </div>
         </div>
 
-        {/* Sağ: adıma göre buton */}
-        <div className="flex shrink-0 items-center gap-2">
-          {activeStep === "template" && (
+        {/* Dock */}
+        <div className="flex w-[268px] shrink-0 flex-col border-l border-slate-200/70 bg-slate-50/50 dark:border-zinc-800 dark:bg-black/30">
+          <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
+          <DockSection title={t("calibration.page.dockCaptureSource")}>
+            <div className="flex flex-col gap-1.5">
+              {displayTarget.displays.length === 0 ? (
+                <div className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 dark:border-zinc-700 dark:text-zinc-500">
+                  {t("calibration.overlay.noDisplays")}
+                </div>
+              ) : (
+                displayTarget.displays.map((display) => {
+                  const isSelected = display.id === displayTarget.selectedDisplayId;
+                  return (
+                    <button
+                      key={display.id}
+                      type="button"
+                      onClick={() => void handleSelectDisplay(display)}
+                      className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors ${
+                        isSelected
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+                          : "border-slate-200 bg-white hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600"
+                      }`}
+                    >
+                      <div className={`h-4 w-6 shrink-0 rounded-sm border ${isSelected ? "border-amber-500" : "border-slate-400 dark:border-zinc-500"}`}>
+                        {isSelected && <div className="h-full w-full rounded-sm bg-amber-500/20" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-mono text-[10px] uppercase tracking-[0.1em] font-medium">
+                          {display.label}
+                        </div>
+                        <div className="truncate font-mono text-[9px] text-slate-500 dark:text-zinc-500">
+                          {display.width} × {display.height}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </DockSection>
+
+          <DockSection title={t("calibration.page.dockLedCountPerEdge")}>
+            <div className="grid grid-cols-2 gap-1.5">
+              <CountStepper label={t("calibration.page.edgeTop")} value={counts.top} onChange={(d) => handleCountChange("top", d)} />
+              <CountStepper label={t("calibration.page.edgeRight")} value={counts.right} onChange={(d) => handleCountChange("right", d)} />
+              <CountStepper label={t("calibration.page.edgeBottom")} value={counts.bottom} onChange={(d) => handleCountChange("bottom", d)} />
+              <CountStepper label={t("calibration.page.edgeLeft")} value={counts.left} onChange={(d) => handleCountChange("left", d)} />
+            </div>
+          </DockSection>
+
+          {counts.bottom > 0 && (
+            <DockSection title={t("calibration.page.dockStandGap")}>
+              <StandGapStepper
+                value={bottomMissing}
+                max={counts.bottom}
+                onChange={handleBottomMissingChange}
+              />
+            </DockSection>
+          )}
+
+          <DockSection title={t("calibration.page.dockStartAnchor")}>
+            <div className="grid grid-cols-4 gap-1">
+              <EdgeTab edge="top" label={t("calibration.page.startEdgeTop")} active={currentEdge === "top"} disabled={counts.top === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="right" label={t("calibration.page.startEdgeRight")} active={currentEdge === "right"} disabled={counts.right === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="bottom" label={t("calibration.page.startEdgeBottom")} active={currentEdge === "bottom"} disabled={counts.bottom === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="left" label={t("calibration.page.startEdgeLeft")} active={currentEdge === "left"} disabled={counts.left === 0} onClick={handleEdgeChange} />
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              <EndpointButton endpoint="start" label={t("calibration.page.anchorStart")} active={currentEndpoint === "start"} onClick={handleEndpointChange} />
+              {currentEdge === "bottom" && bottomMissing > 0 && (
+                <>
+                  <EndpointButton endpoint="gap-right" label={t("calibration.page.anchorGapRight")} active={currentEndpoint === "gap-right"} onClick={handleEndpointChange} />
+                  <EndpointButton endpoint="gap-left" label={t("calibration.page.anchorGapLeft")} active={currentEndpoint === "gap-left"} onClick={handleEndpointChange} />
+                </>
+              )}
+              <EndpointButton endpoint="end" label={t("calibration.page.anchorEnd")} active={currentEndpoint === "end"} onClick={handleEndpointChange} />
+            </div>
+          </DockSection>
+
+          <DockSection title={t("calibration.page.dockDirection")}>
+            <div className="grid grid-cols-2 gap-1">
+              <DirectionButton direction="cw" label={t("calibration.page.dockDirectionCw")} active={direction === "cw"} onClick={handleDirectionChange} />
+              <DirectionButton direction="ccw" label={t("calibration.page.dockDirectionCcw")} active={direction === "ccw"} onClick={handleDirectionChange} />
+            </div>
+          </DockSection>
+
+          </div>
+
+          {/* Sticky Save/Cancel footer */}
+          <div className="flex shrink-0 items-center gap-2 border-t border-slate-200/70 bg-slate-50/50 px-4 py-3 dark:border-zinc-800 dark:bg-black/30">
             <button
               type="button"
-              disabled={!editorState.current.templateId}
-              onClick={() => goToStep("display")}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+              onClick={handleClose}
+              className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              {t("calibration.page.displayContinue")} →
+              {t("calibration.overlay.cancel")}
             </button>
-          )}
-          {activeStep === "display" && (
-            <>
-              <button
-                type="button"
-                onClick={() => goToStep("template")}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                ← {t("calibration.page.back")}
-              </button>
-              <button
-                type="button"
-                disabled={!displayTarget.selectedDisplayId && displayTarget.displays.length > 0}
-                onClick={() => goToStep("editor")}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {t("calibration.page.displayContinue")} →
-              </button>
-            </>
-          )}
-          {activeStep === "editor" && (
-            <>
-              <button
-                type="button"
-                onClick={handleClose}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                {t("calibration.overlay.cancel")}
-              </button>
-              <button
-                type="button"
-                disabled={isSaving}
-                onClick={async () => {
-                  setIsSaving(true);
-                  const result = validateCalibrationConfig(editorState.current);
-                  if (!result.ok) {
-                    setValidationErrors(result.errors);
-                    setIsSaving(false);
-                    return;
-                  }
-                  setValidationErrors(null);
-                  try {
-                    const savedState = saveEditorCalibration(editorState);
-                    await shellStore.save({ ledCalibration: savedState.current });
-                    onSaved(savedState.current);
-                    setEditorState(savedState);
-                    await flowRef.current.dispose();
-                    setTestPattern(flowRef.current.getSnapshot());
-                    onNavigateBack();
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 disabled:opacity-50"
-              >
-                {isSaving ? t("calibration.overlay.saving") : t("calibration.overlay.save")}
-              </button>
-            </>
-          )}
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void handleSave()}
+              className="flex-1 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {isSaving ? t("calibration.overlay.saving") : t("calibration.overlay.save")}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ── Discard confirmation ── */}
+      {/* Discard confirmation */}
       {editorState.confirmDiscard && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
@@ -577,57 +592,133 @@ export function CalibrationPage({
   );
 }
 
-function StepIndicator({
-  number,
-  label,
-  active,
-  done,
-  onClick,
-}: {
-  number: number;
-  label: string;
-  active: boolean;
-  done: boolean;
-  onClick?: () => void;
-}) {
+function DockSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-2 font-mono text-[9.5px] uppercase tracking-[0.18em] text-slate-500 dark:text-zinc-500">
+        <span className="h-px w-2.5 bg-slate-300 dark:bg-zinc-600" />
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EdgeSummary({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline gap-1.5 px-4 py-2">
+      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500">{label}</span>
+      <span className="font-mono text-sm font-medium text-slate-900 dark:text-zinc-100">{value}</span>
+      <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-slate-400 dark:text-zinc-600">LED</span>
+    </div>
+  );
+}
+
+function CountStepper({ label, value, onChange }: { label: string; value: number; onChange: (delta: number) => void }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500">{label}</div>
+      <div className="mt-1 flex items-center gap-1.5">
+        <span className="flex-1 font-mono text-base font-medium text-slate-900 dark:text-zinc-100">{value}</span>
+        <div className="flex flex-col gap-0.5">
+          <button
+            type="button"
+            onClick={() => onChange(1)}
+            className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 dark:border-zinc-600 dark:text-zinc-400"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange(-1)}
+            className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 dark:border-zinc-600 dark:text-zinc-400"
+          >
+            −
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EdgeTab({ edge, label, active, disabled, onClick }: { edge: AnchorEdge; label: string; active: boolean; disabled: boolean; onClick: (e: AnchorEdge) => void }) {
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium transition-colors disabled:cursor-default ${
+      disabled={disabled}
+      onClick={() => onClick(edge)}
+      className={`rounded-md border px-1.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         active
-          ? "text-slate-900 dark:text-zinc-100"
-          : done
-            ? "cursor-pointer text-slate-500 hover:text-slate-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-            : "text-slate-400 dark:text-zinc-500"
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-600"
       }`}
     >
-      <span
-        className={`inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
-          active
-            ? "bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-            : done
-              ? "bg-emerald-500 text-white"
-              : "bg-slate-200 text-slate-500 dark:bg-zinc-700 dark:text-zinc-400"
-        }`}
-      >
-        {done ? (
-          <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M2 6l3 3 5-5" />
-          </svg>
-        ) : number}
-      </span>
       {label}
     </button>
   );
 }
 
-function StepArrow() {
+function EndpointButton({ endpoint, label, active, onClick }: { endpoint: AnchorEndpoint; label: string; active: boolean; onClick: (e: AnchorEndpoint) => void }) {
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3 shrink-0 text-slate-400 dark:text-zinc-500" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-      <path d="M3 6h6M7 4l2 2-2 2" />
-    </svg>
+    <button
+      type="button"
+      onClick={() => onClick(endpoint)}
+      className={`flex-1 rounded-md border px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] transition-colors ${
+        active
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-600"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function DirectionButton({ direction, label, active, onClick }: { direction: LedDirection; label: string; active: boolean; onClick: (d: LedDirection) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(direction)}
+      className={`rounded-md border px-2 py-1.5 font-mono text-[10px] tracking-[0.1em] transition-colors ${
+        active
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-600"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function StandGapStepper({ value, max, onChange }: { value: number; max: number; onChange: (delta: number) => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="min-w-0 flex-1">
+        <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500">
+          LED
+        </div>
+        <div className="font-mono text-base font-medium text-slate-900 dark:text-zinc-100">{value}</div>
+      </div>
+      <div className="font-mono text-[9px] text-slate-400 dark:text-zinc-600">/ {max}</div>
+      <div className="flex flex-col gap-0.5">
+        <button
+          type="button"
+          disabled={value >= max}
+          onClick={() => onChange(1)}
+          className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-35 dark:border-zinc-600 dark:text-zinc-400"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          disabled={value <= 0}
+          onClick={() => onChange(-1)}
+          className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-35 dark:border-zinc-600 dark:text-zinc-400"
+        >
+          −
+        </button>
+      </div>
+    </div>
   );
 }
 

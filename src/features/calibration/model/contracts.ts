@@ -143,6 +143,42 @@ export function normalizeStartAnchor(value: unknown): LedStartAnchor {
   return valid.includes(value as LedStartAnchor) ? (value as LedStartAnchor) : "top-start";
 }
 
+const ANCHOR_EDGE_ORDER: LedSegmentKey[] = ["top", "right", "bottom", "left"];
+
+function edgeOfAnchor(anchor: LedStartAnchor): LedSegmentKey {
+  if (anchor.startsWith("top")) return "top";
+  if (anchor.startsWith("right")) return "right";
+  if (anchor.startsWith("bottom")) return "bottom";
+  return "left";
+}
+
+function firstNonZeroEdge(counts: LedSegmentCounts): LedSegmentKey | null {
+  for (const edge of ANCHOR_EDGE_ORDER) {
+    if (counts[edge] > 0) return edge;
+  }
+  return null;
+}
+
+function healStartAnchor(
+  anchor: LedStartAnchor,
+  counts: LedSegmentCounts,
+  bottomMissing: number,
+): LedStartAnchor {
+  const currentEdge = edgeOfAnchor(anchor);
+  if (counts[currentEdge] === 0) {
+    const fallbackEdge = firstNonZeroEdge(counts);
+    if (!fallbackEdge) return anchor;
+    return `${fallbackEdge}-start` as LedStartAnchor;
+  }
+
+  if (bottomMissing === 0) {
+    if (anchor === "bottom-gap-right") return "bottom-start";
+    if (anchor === "bottom-gap-left") return "bottom-end";
+  }
+
+  return anchor;
+}
+
 export function normalizeLedCalibrationConfig(input?: unknown): LedCalibrationConfig | undefined {
   if (!input || typeof input !== "object") {
     return undefined;
@@ -150,16 +186,10 @@ export function normalizeLedCalibrationConfig(input?: unknown): LedCalibrationCo
 
   const source = input as Record<string, unknown>;
   const counts = normalizeCounts(source.counts);
-  const bottomMissing = toNonNegativeInt(source.bottomMissing);
+  const rawBottomMissing = toNonNegativeInt(source.bottomMissing);
+  const bottomMissing = Math.min(rawBottomMissing, counts.bottom);
   const normalizedStartAnchor = normalizeStartAnchor(source.startAnchor);
-  const startAnchor =
-    bottomMissing === 0
-      ? normalizedStartAnchor === "bottom-gap-right"
-        ? "bottom-start"
-        : normalizedStartAnchor === "bottom-gap-left"
-          ? "bottom-end"
-          : normalizedStartAnchor
-      : normalizedStartAnchor;
+  const startAnchor = healStartAnchor(normalizedStartAnchor, counts, bottomMissing);
 
   return {
     templateId: typeof source.templateId === "string" ? source.templateId : undefined,

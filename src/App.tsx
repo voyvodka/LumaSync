@@ -15,13 +15,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx, type StatusItem } from "./features/shell/StatusBar";
-import { UIModeTransitionOverlay } from "./features/shell/UIModeTransitionOverlay";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
 import {
   shouldAutoOpenCalibrationOnConnection,
   startCalibrationFromSettings,
-  type CalibrationOverlayStep,
 } from "./features/calibration/state/entryFlow";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import {
@@ -131,14 +129,12 @@ function App() {
   const {
     currentMode,
     isContentVisible,
-    isSweepActive,
     contentRef,
     switchUIMode,
     setCurrentMode,
   } = useUIMode();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
-  const [calibrationStep, setCalibrationStep] = useState<CalibrationOverlayStep>("editor");
   const [lightingMode, setLightingModeState] = useState<LightingModeConfig>({ kind: LIGHTING_MODE_KIND.OFF });
   const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
   const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
@@ -556,7 +552,6 @@ function App() {
 
     if (shouldOpen) {
       autoOpenTriggeredRef.current = true;
-      setCalibrationStep("template");
       setActiveSection(SECTION_IDS.LED_SETUP);
     }
 
@@ -566,7 +561,6 @@ function App() {
   const handleOpenCalibration = useCallback(() => {
     const entry = startCalibrationFromSettings(savedCalibration);
     if (entry.open) {
-      setCalibrationStep(entry.step);
       setActiveSection(SECTION_IDS.LED_SETUP);
     }
   }, [savedCalibration]);
@@ -977,7 +971,6 @@ function App() {
     activeSection,
     onSectionChange: handleSectionChange,
     calibration: savedCalibration,
-    calibrationStep,
     lightingMode,
     outputTargets: selectedOutputTargets,
     usbConnected: isConnected,
@@ -994,7 +987,6 @@ function App() {
     onCalibrationSaved: (config: LedCalibrationConfig) => {
       setSavedCalibration(config);
     },
-    onCalibrationStepChange: setCalibrationStep,
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
@@ -1092,7 +1084,6 @@ function App() {
         </div>
       </div>
       <StatusBar items={statusItems} uiMode={currentMode} />
-      <UIModeTransitionOverlay isActive={isSweepActive} />
       <UpdateModal
         state={updaterState}
         onInstall={downloadAndInstall}

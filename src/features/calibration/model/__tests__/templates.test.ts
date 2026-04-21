@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { applyTemplate, CALIBRATION_TEMPLATES, resetToManual } from "../templates";
+import { applyTemplate, CALIBRATION_TEMPLATES, deriveDefaultCounts, resetToManual } from "../templates";
 
 describe("calibration templates", () => {
   it("contains at least five hardcoded monitor templates", () => {
@@ -23,6 +23,20 @@ describe("calibration templates", () => {
     expect(config.startAnchor).toBe("top-start");
     expect(config.direction).toBe("cw");
     expect(config.totalLeds).toBe(114);
+  });
+
+  it("derives sensible default counts from monitor resolution", () => {
+    const fullHd = deriveDefaultCounts({ width: 1920, height: 1080 });
+    expect(fullHd.top).toBeGreaterThan(0);
+    expect(fullHd.top).toBe(fullHd.bottom);
+    expect(fullHd.left).toBe(fullHd.right);
+
+    const qhd = deriveDefaultCounts({ width: 2560, height: 1440 });
+    expect(qhd.top).toBeGreaterThan(fullHd.top);
+
+    const ultrawide = deriveDefaultCounts({ width: 3440, height: 1440 });
+    expect(ultrawide.top).toBeGreaterThan(qhd.top);
+    expect(ultrawide.top / ultrawide.left).toBeGreaterThan(qhd.top / qhd.left);
   });
 
   it("resets manual config to zeroed values", () => {

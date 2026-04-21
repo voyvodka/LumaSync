@@ -3,23 +3,18 @@ import { useTranslation } from "react-i18next";
 import { CalibrationPage } from "../../calibration/ui/CalibrationPage";
 import { RoomMapEditor } from "./RoomMapEditor";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../../calibration/model/contracts";
-import type { CalibrationOverlayStep } from "../../calibration/state/entryFlow";
 
 type ConfigureTab = "led-layout" | "room-map";
 
 interface ConfigurePageProps {
   calibration?: LedCalibrationConfig;
-  calibrationStep: CalibrationOverlayStep;
   onCalibrationSaved: (config: LedCalibrationConfig) => void;
-  onCalibrationStepChange: (step: CalibrationOverlayStep) => void;
   onZoneCountsConfirmed: (counts: LedSegmentCounts) => void;
 }
 
 export function ConfigurePage({
   calibration,
-  calibrationStep,
   onCalibrationSaved,
-  onCalibrationStepChange,
   onZoneCountsConfirmed,
 }: ConfigurePageProps) {
   const { t } = useTranslation("common");
@@ -64,11 +59,9 @@ export function ConfigurePage({
         {activeTab === "led-layout" && (
           <CalibrationPage
             key="calibration-page"
-            initialStep={calibrationStep}
             initialConfig={calibration}
             onNavigateBack={() => {}}
             onSaved={onCalibrationSaved}
-            onStepChange={onCalibrationStepChange}
           />
         )}
         {activeTab === "room-map" && (

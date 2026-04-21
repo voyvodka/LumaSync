@@ -77,10 +77,6 @@ vi.mock("../features/mode/modeApi", () => ({
   setHueSolidColor: (payload: unknown) => setHueSolidColorMock(payload),
 }));
 
-vi.mock("../features/calibration/ui/CalibrationOverlay", () => ({
-  CalibrationOverlay: () => null,
-}));
-
 vi.mock("../features/settings/SettingsLayout", () => ({
   SettingsLayout: (props: {
     lightingMode: LightingModeConfig;
