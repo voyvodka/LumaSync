@@ -11,6 +11,8 @@
  * `10-compact.html`.
  */
 
+import { useTranslation } from "react-i18next";
+
 import { APP_VERSION } from "../../shared/constants/app";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
@@ -37,6 +39,7 @@ interface StatusBarProps {
 }
 
 export function StatusBar({ items, uiMode }: StatusBarProps) {
+  const { t } = useTranslation("common");
   const isCompact = uiMode === "compact";
   return (
     <div
@@ -51,8 +54,8 @@ export function StatusBar({ items, uiMode }: StatusBarProps) {
       <div className="lm-statusbar-spacer" />
       {!isCompact && (
         <>
-          <KbdHint keys={["⌥", "1-3"]} label="mode" />
-          <KbdHint keys={["⌘", ","]} label="settings" />
+          <KbdHint keys={["⌥", "1-3"]} label={t("statusBar.kbdMode")} />
+          <KbdHint keys={["⌘", ","]} label={t("statusBar.kbdSettings")} />
           <span className="lm-statusbar-version">v{APP_VERSION}</span>
         </>
       )}

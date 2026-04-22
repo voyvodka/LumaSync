@@ -1068,6 +1068,7 @@ function RenameDialog({
   onConfirm: (name: string) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation("common");
   const [value, setValue] = useState(currentLabel);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -1108,13 +1109,13 @@ function RenameDialog({
             className="px-2.5 py-1 text-[11px] rounded text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
             onClick={onCancel}
           >
-            Cancel
+            {t("roomMap.contextMenu.renameCancel")}
           </button>
           <button
             className="px-2.5 py-1 text-[11px] rounded bg-cyan-500 text-white hover:bg-cyan-600"
             onClick={handleSubmit}
           >
-            OK
+            {t("roomMap.contextMenu.renameOk")}
           </button>
         </div>
       </div>

@@ -821,7 +821,9 @@
       "delete": "Delete",
       "rotate": "Rotate 15°",
       "rename": "Rename",
-      "renamePrompt": "Enter new name:"
+      "renamePrompt": "Enter new name:",
+      "renameCancel": "Cancel",
+      "renameOk": "OK"
     },
     "shortcuts": {
       "title": "Keyboard Shortcuts",
@@ -1006,5 +1008,9 @@
     "maximize": "Maximize",
     "restore": "Restore",
     "close": "Close"
+  },
+  "statusBar": {
+    "kbdMode": "mode",
+    "kbdSettings": "settings"
   }
 }

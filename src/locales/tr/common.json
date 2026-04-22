@@ -821,7 +821,9 @@
       "delete": "Sil",
       "rotate": "15° Döndür",
       "rename": "Yeniden Adlandır",
-      "renamePrompt": "Yeni ad girin:"
+      "renamePrompt": "Yeni ad girin:",
+      "renameCancel": "İptal",
+      "renameOk": "Tamam"
     },
     "shortcuts": {
       "title": "Klavye Kısayolları",
@@ -1006,5 +1008,9 @@
     "maximize": "Ekranı kapla",
     "restore": "Geri yükle",
     "close": "Kapat"
+  },
+  "statusBar": {
+    "kbdMode": "mod",
+    "kbdSettings": "ayarlar"
   }
 }
