@@ -43,7 +43,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1.52.1", features = ["rt"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-capture = "2.0.0"
+windows-capture = "1.5.0"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 raw-window-handle = "0.6"
 

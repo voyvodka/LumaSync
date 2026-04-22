@@ -37,7 +37,7 @@ https://keepachangelog.com/en/1.1.0/
 - Hue stream health polling migrated from `setInterval` to recursive `setTimeout`, preventing overlapping probes when a health check takes longer than its interval and stopping polling as soon as the stream is detected dead
 - Internationalisation sweep: DeviceSection cell labels (Area, Protocol, Ch, Rate, Status, Error, Retries, Next, Fault, Config, Credential, Invalid), traffic bar Stream label, DTLS streaming subtitle, display card ID/Scale labels, previously-missing wizard step keys, UpdateModal note kind tags moved to `updater.noteKind.*`, RenameDialog Cancel/OK buttons in RoomMapEditor, and StatusBar keyboard hint labels (mode / settings) — EN + TR locales kept in sync
 - Test layout: all colocated `*.test.ts(x)` files relocated into `__tests__/` subdirectories and CLAUDE.md updated to document the convention
-- Rust dependencies bumped: `tokio` 1.50.0 → 1.52.1, `openssl` 0.10.76 → 0.10.78, `windows-capture` 1.5.0 → 2.0.0 (major version)
+- Rust dependencies bumped: `tokio` 1.50.0 → 1.52.1, `openssl` 0.10.76 → 0.10.78
 - Frontend dependencies bumped (minor/patch): `i18next` 26.0.4 → 26.0.6, `react-i18next` 17.0.2 → 17.0.4, `tailwindcss` + `@tailwindcss/vite` 4.2.2 → 4.2.4, `typescript` 6.0.2 → 6.0.3, `vite` 8.0.8 → 8.0.9, `vitest` 4.1.4 → 4.1.5, `happy-dom` + `@happy-dom/global-registrator` 20.8.9 → 20.9.0
 - GitHub Actions bumped: `actions/checkout` 4 → 6, `actions/setup-node` 4 → 6, `pnpm/action-setup` 4 → 6
 - Dependabot configuration added for Cargo, npm, and GitHub Actions ecosystems so future dependency updates land as reviewable PRs
