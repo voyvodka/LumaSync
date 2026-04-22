@@ -206,7 +206,15 @@ Add a new section under `## [Unreleased]` in `CHANGELOG.md`:
 - ...
 ```
 
-Populate from git log since the last release tag. Group changes by type (Added/Changed/Fixed/Removed). Use concise descriptions.
+Populate from git log since the last release tag. Group changes by type (Added/Changed/Fixed/Removed).
+
+**Style: prefer high-level summaries over per-item enumeration.** CHANGELOG is a reader-facing release note, not an audit log. The commit history is the audit log.
+
+- Good: `i18n: localize remaining static labels across Device, Updater, RoomMap, and StatusBar (EN + TR in sync)`
+- Avoid: listing every translation key, every renamed file path, every internal refactor, every dependency point release
+- Group dependency bumps into one line per ecosystem (Rust / frontend / GitHub Actions) — only call out a bump individually when it is a **major version** or has user-visible implications.
+- Omit purely internal changes (dead-constant removal, test file relocations, gitignore tweaks) unless they affect contributors or downstream consumers.
+- Rule of thumb: each bullet should be meaningful to a user reading the release note cold. If it reads like a commit message, collapse it into the nearest theme.
 
 ### 4. Validation
 
