@@ -1,0 +1,73 @@
+# Dependabot configuration for LumaSync.
+#
+# Three ecosystems: Cargo (src-tauri), npm (pnpm at the repo root), and
+# GitHub Actions. Cadence is weekly — Monday mornings — so dependency
+# noise lands before the week's feature work starts. Minor and patch
+# updates are grouped per ecosystem to keep the PR queue short; majors
+# stay ungrouped so upstream breaking changes get individual review.
+#
+# Pre-release handling: Dependabot does not open PRs for pre-release
+# versions unless the package is already on a pre-release track, so the
+# "latest stable, no pre-releases" policy is satisfied by the default
+# behaviour — no explicit ignore rule is required (and `semver-prerelease`
+# is not a valid `update-types` value anyway).
+
+version: 2
+updates:
+  # ── Rust / Tauri backend ────────────────────────────────────────
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - rust
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── Frontend (Tauri webview) ────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - npm
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── CI workflows ────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - ci
