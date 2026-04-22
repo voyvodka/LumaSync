@@ -15,6 +15,7 @@ jobs:
   verify:
     name: Build and Check
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -38,9 +39,11 @@ jobs:
           workspaces: src-tauri
 
       - name: Install Linux deps for Tauri check
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             pkg-config \
             libudev-dev \
             libwebkit2gtk-4.1-dev \
