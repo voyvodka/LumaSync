@@ -71,3 +71,12 @@ updates:
     labels:
       - dependencies
       - ci
+    ignore:
+      # pnpm/action-setup v6 silently installs pnpm 11 on macOS/Windows despite
+      # package.json's packageManager pinning pnpm 10 — pnpm 11 requires Node
+      # 22.13+ and crashes under Node 20 with ERR_UNKNOWN_BUILTIN_MODULE on
+      # node:sqlite. Pin to the v4 major track until upstream fixes the
+      # packageManager parsing across platforms or we move to Node 22.
+      - dependency-name: 'pnpm/action-setup'
+        update-types:
+          - version-update:semver-major
