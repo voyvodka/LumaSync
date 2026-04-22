@@ -8,7 +8,7 @@
 
 **Website:** [lumasync.app](https://lumasync.app)
 
-LumaSync is a tray-first desktop app that synchronizes WS2812B LED strips with screen content and controls Philips Hue entertainment areas — all from a single compact interface.
+LumaSync is a native desktop app that mirrors your screen to WS2812B LED strips and Philips Hue entertainment areas in real time. A single calibrated room map drives per-edge LED layouts and Hue channel placement; all processing stays on your machine — no cloud, no telemetry.
 
 It combines a React + TypeScript frontend with a Rust/Tauri runtime to keep the UI responsive while handling native desktop behavior.
 
@@ -20,7 +20,7 @@ It combines a React + TypeScript frontend with a Rust/Tauri runtime to keep the 
 - **Solid color**: RGB + brightness push to USB and Hue with debounced 50 ms update
 - **LED calibration**: edge counts, gap, corner ownership, start anchor, direction — persisted per layout
 - **Target-aware pipeline**: choose USB, Hue, or both per mode; hot-plug detection with suggestion banner
-- **Tray-first UX**: single window hidden to tray on close; full control without cluttering the desktop
+- **Compact, stays out of your way**: lives in the tray; opens as a 320×480 panel for quick scene changes or a 900×620 full view for calibration, on demand
 - **Auto-updater**: GitHub Releases with minisign signature verification
 
 ## Tech Stack

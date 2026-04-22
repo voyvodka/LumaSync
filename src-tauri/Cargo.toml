@@ -1,7 +1,7 @@
 [package]
 name = "lumasync"
 version = "1.3.0"
-description = "LumaSync — tray-first ambient lighting desktop app"
+description = "LumaSync — screen-synced ambient lighting for WS2812B LEDs and Philips Hue"
 authors = ["voyvodka"]
 edition = "2021"
 homepage = "https://lumasync.app"

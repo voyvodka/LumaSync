@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**LumaSync** is a tray-first desktop application (Tauri 2 + React 19) that synchronizes WS2812B LED strips with screen content and controls Philips Hue entertainment areas. Package name: `lumasync`, identifier: `com.lumasync.app`.
+**LumaSync** is a native desktop application (Tauri 2 + React 19) that mirrors the screen to WS2812B LED strips and Philips Hue entertainment areas in real time, with per-edge room-map calibration and fully local processing. Package name: `lumasync`, identifier: `com.lumasync.app`.
 
 ## Commands
 

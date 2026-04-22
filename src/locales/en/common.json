@@ -274,7 +274,7 @@
       "description": "Restart required to apply"
     },
     "about": {
-      "tagline": "Tray-first ambient lighting",
+      "tagline": "Screen-synced ambient lighting",
       "license": "MIT"
     }
   },

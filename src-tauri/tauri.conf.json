@@ -36,8 +36,8 @@
     "createUpdaterArtifacts": true,
     "publisher": "voyvodka",
     "homepage": "https://lumasync.app",
-    "shortDescription": "Tray-first desktop Ambilight for WS2812B LED strips and Philips Hue.",
-    "longDescription": "LumaSync synchronizes WS2812B LED strips and Philips Hue entertainment areas with on-screen content, all from a compact tray-first interface. Built with Tauri 2 and React.",
+    "shortDescription": "Screen-synced ambient lighting for WS2812B LED strips and Philips Hue.",
+    "longDescription": "LumaSync mirrors your screen to WS2812B LED strips and Philips Hue entertainment areas in real time. A single calibrated room map drives per-edge LED layouts and Hue channel placement; all processing stays on your machine — no cloud, no telemetry.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

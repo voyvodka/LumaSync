@@ -2,7 +2,7 @@
   "name": "lumasync",
   "private": true,
   "version": "1.3.0",
-  "description": "Tray-first desktop Ambilight app for WS2812B LED strips and Philips Hue — built with Tauri 2 + React",
+  "description": "Native desktop app that mirrors your screen to WS2812B LED strips and Philips Hue entertainment areas in real time — per-edge room-map calibration, fully local processing.",
   "homepage": "https://lumasync.app",
   "repository": {
     "type": "git",

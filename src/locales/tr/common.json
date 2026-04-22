@@ -266,7 +266,7 @@
       "description": "Değişiklik için yeniden başlatma gerekir"
     },
     "about": {
-      "tagline": "Tepsi öncelikli ortam aydınlatması",
+      "tagline": "Ekran senkronlu ortam aydınlatması",
       "license": "MIT"
     }
   },
