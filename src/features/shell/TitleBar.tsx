@@ -184,15 +184,19 @@ function WindowControls({
   onToggleMaximize,
   onClose,
 }: WindowControlsProps) {
+  const { t } = useTranslation("common");
   return (
     <div className="flex h-9 items-center">
-      <CtrlButton onClick={onMinimize} aria="Minimize">
+      <CtrlButton onClick={onMinimize} aria={t("titleBar.minimize")}>
         <MinimizeIcon />
       </CtrlButton>
-      <CtrlButton onClick={onToggleMaximize} aria={isMaximized ? "Restore" : "Maximize"}>
+      <CtrlButton
+        onClick={onToggleMaximize}
+        aria={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")}
+      >
         {isMaximized ? <RestoreIcon /> : <MaximizeIcon />}
       </CtrlButton>
-      <CtrlButton onClick={onClose} aria="Close" danger>
+      <CtrlButton onClick={onClose} aria={t("titleBar.close")} danger>
         <CloseIcon />
       </CtrlButton>
     </div>

@@ -9,6 +9,13 @@ export const LIGHTING_MODE_KIND = {
 /** Tauri event channel name for live edge-signal previews emitted by the ambilight worker. */
 export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal";
 
+/**
+ * Number of RGB samples the Rust worker emits per edge in every `EdgeSignalPayload`.
+ * Mirrors the `EDGE_SIGNAL_SAMPLES_PER_EDGE` constant in `lighting_mode.rs` and lets
+ * consumers validate the invariant (`payload.top.length === EDGE_SIGNAL_SAMPLES_PER_EDGE`).
+ */
+export const EDGE_SIGNAL_SAMPLES_PER_EDGE = 16;
+
 /** Live edge-preview payload emitted by the Rust ambilight worker.
  * Each edge array contains `EDGE_SIGNAL_SAMPLES_PER_EDGE` RGB triplets. */
 export interface EdgeSignalPayload {

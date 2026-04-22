@@ -52,6 +52,11 @@ https://keepachangelog.com/en/1.1.0/
 - RoomMapEditor: isolated high-frequency mouse-coordinate state into a dedicated child that uses native DOM listeners with `requestAnimationFrame` throttling, eliminating full-editor re-renders on cursor movement
 - SettingsLayout: wrapped in `React.memo` to prevent polling-triggered re-renders of the entire settings tree
 
+### Known Limitations
+
+- USB output is single-zone: the ambilight worker currently samples one pixel and sends a single RGB triplet per frame to the controller, which the companion firmware extends across the full strip. Per-edge position sampling driven by `LedCalibrationConfig` (edge counts, start anchor, direction, bottom gap) is planned for v1.4; the calibration UI still records and persists the full layout so the Hue channel path and future USB wiring stay consistent.
+- The USB serial frame format is LumaSync-specific (`0xAA 0x55` header, LE LED count, gamma-corrected RGB, XOR checksum) — earlier documentation referred to this as "Adalight-compatible", which it is not.
+
 ## [1.2.0] — 2026-04-10
 
 ### Added

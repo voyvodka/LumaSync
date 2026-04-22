@@ -13,6 +13,7 @@ import { type ShellState } from "../../../../shared/contracts/shell";
 import {
   LIGHTING_MODE_KIND,
   isLightingModeKind,
+  normalizeAmbilightPayload,
   normalizeSolidColorPayload,
 } from "../contracts";
 
@@ -60,6 +61,56 @@ describe("lighting mode contracts", () => {
       b: 10,
       brightness: 1,
     });
+  });
+
+  it("clamps ambilight payload fields to contract ranges with sensible defaults", () => {
+    expect(normalizeAmbilightPayload({})).toEqual({
+      brightness: 1,
+      blackBorderDetection: false,
+      smoothingAlpha: 0.35,
+      saturation: 1,
+    });
+
+    expect(
+      normalizeAmbilightPayload({
+        brightness: 2,
+        smoothingAlpha: 5,
+        saturation: 9,
+      }),
+    ).toMatchObject({
+      brightness: 1,
+      smoothingAlpha: 1,
+      saturation: 2,
+    });
+
+    expect(
+      normalizeAmbilightPayload({
+        brightness: -0.5,
+        smoothingAlpha: 0,
+        saturation: 0,
+      }),
+    ).toMatchObject({
+      brightness: 0,
+      smoothingAlpha: 0.05,
+      saturation: 0.5,
+    });
+
+    // Non-finite inputs (NaN / ±Infinity) fall back to the per-field default
+    // BEFORE clamping — they do not clamp to min/max. This matches the
+    // toFiniteNumber + clampFloat pipeline in contracts.ts.
+    expect(
+      normalizeAmbilightPayload({
+        brightness: Number.NaN,
+        smoothingAlpha: Number.NEGATIVE_INFINITY,
+        saturation: Number.POSITIVE_INFINITY,
+      }),
+    ).toMatchObject({
+      brightness: 1,
+      smoothingAlpha: 0.35,
+      saturation: 1,
+    });
+
+    expect(normalizeAmbilightPayload({ blackBorderDetection: true }).blackBorderDetection).toBe(true);
   });
 
   it("keeps ledCalibration contract intact when shell state includes lighting mode fields", () => {

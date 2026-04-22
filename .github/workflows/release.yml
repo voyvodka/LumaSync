@@ -60,6 +60,9 @@ jobs:
       - name: TypeScript type check
         run: pnpm typecheck
 
+      - name: Rust check (cargo check)
+        run: pnpm check:rust
+
       - name: Verify shell contracts
         run: pnpm verify:shell-contracts
 

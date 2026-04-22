@@ -911,7 +911,13 @@
       "anchorEnd": "Son ▶",
       "anchorGapRight": "Boş-Sağ",
       "anchorGapLeft": "Boş-Sol",
-      "totalStrip": "Toplam şerit"
+      "totalStrip": "Toplam şerit",
+      "aria": {
+        "countIncrease": "{{label}} sayısını artır",
+        "countDecrease": "{{label}} sayısını azalt",
+        "gapIncrease": "Ayak boşluğunu artır",
+        "gapDecrease": "Ayak boşluğunu azalt"
+      }
     },
     "overlay": {
       "title": "Kalibrasyon Editörü",
@@ -994,5 +1000,11 @@
     "resumeLastMode": "Son Modda Aç",
     "solidColor": "Sabit Renk",
     "quit": "LumaSync'ten Çık"
+  },
+  "titleBar": {
+    "minimize": "Simge durumuna küçült",
+    "maximize": "Ekranı kapla",
+    "restore": "Geri yükle",
+    "close": "Kapat"
   }
 }

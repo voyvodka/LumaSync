@@ -32,7 +32,10 @@ export type DeviceStatus = (typeof DEVICE_STATUS)[keyof typeof DEVICE_STATUS];
 
 export const SUPPORTED_CONTROLLER_IDS = [
   "1A86:7523", // CH340
-  "0403:6001", // FTDI
+  "0403:6001", // FTDI FT232
+  "10C4:EA60", // CP2102 (Silicon Labs)
+  "2341:0043", // Arduino Uno R3
+  "2341:0001", // Arduino Uno (original USB ID)
 ] as const;
 
 export type SupportedControllerId = (typeof SUPPORTED_CONTROLLER_IDS)[number];

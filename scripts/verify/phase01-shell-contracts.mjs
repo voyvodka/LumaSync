@@ -30,8 +30,8 @@ const REQUIRED_EXPORTS = [
   "ShellState",
   "DEFAULT_SHELL_STATE",
   "SHELL_STORE_KEY",
-  "WINDOW_MIN_WIDTH",
-  "WINDOW_MIN_HEIGHT",
+  "UI_MODE_SIZES",
+  "UI_MODE_MIN_SIZES",
 ];
 
 // ---------------------------------------------------------------------------

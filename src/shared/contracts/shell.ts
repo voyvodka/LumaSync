@@ -185,13 +185,6 @@ export const DEFAULT_SHELL_STATE: ShellState = {
 export const SHELL_STORE_KEY = "shell-state";
 
 // ---------------------------------------------------------------------------
-// Window Constraints
-// ---------------------------------------------------------------------------
-
-export const WINDOW_MIN_WIDTH = 720;
-export const WINDOW_MIN_HEIGHT = 480;
-
-// ---------------------------------------------------------------------------
 // UI Mode (compact / full)
 // ---------------------------------------------------------------------------
 

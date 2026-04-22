@@ -432,7 +432,7 @@ export function DeviceSection() {
                       </div>
                       <div className="lm-dcard-cell">
                         <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.protocol")}</div>
-                        <div className="lm-dcard-cell-v">Adalight</div>
+                        <div className="lm-dcard-cell-v">LumaSync</div>
                       </div>
                       <div className="lm-dcard-cell">
                         <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.latency")}</div>
@@ -480,6 +480,8 @@ export function DeviceSection() {
 
           {/* Status card — preserved for diagnostics & test compatibility */}
           <div
+            role="status"
+            aria-live="polite"
             className={`rounded-lg border p-3 ${
               statusVariant === "success"
                 ? "border-emerald-500/40 bg-emerald-900/20"
@@ -529,7 +531,7 @@ export function DeviceSection() {
           <div className="lm-device-head">
             <div>
               <h1>{t("devicesPage.header.hueTitle")}</h1>
-              <div className="lm-device-head-sub">
+              <div className="lm-device-head-sub" role="status" aria-live="polite">
                 {hueBridgeState === "streaming"
                   ? t("device.hue.card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
                   : hueBridgeState === "idle"

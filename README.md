@@ -40,8 +40,11 @@ Microcontrollers using the following USB-to-serial chips are supported:
 |------|--------|
 | CH340 | `1A86:7523` |
 | FTDI FT232 | `0403:6001` |
+| CP2102 (Silicon Labs) | `10C4:EA60` |
+| Arduino Uno R3 | `2341:0043` |
+| Arduino Uno (original) | `2341:0001` |
 
-Baud rate: 115200 (Adalight-compatible protocol).
+Baud rate: 115200. Frame format is LumaSync-specific (`0xAA 0x55` header, LE LED count, gamma-corrected RGB triplets, XOR checksum) — not Adalight-compatible. A matching firmware sketch ships with the companion hardware repo.
 
 ### Philips Hue
 

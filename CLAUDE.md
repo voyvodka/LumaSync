@@ -242,4 +242,4 @@ Present a summary to the user:
 - **macOS private API** is enabled (`macos-private-api: true`) for fullscreen calibration overlays across all displays.
 - Hue streaming interval: minimum 50ms (20 Hz) — do not exceed this or the bridge will throttle.
 - Supported USB chip IDs: CH340 (0x1A86:0x7523), FTDI (0x0403:0x6001).
-- Window size: 900×620 (min 720×480).
+- Window size: per-mode (see `UI_MODE_SIZES` / `UI_MODE_MIN_SIZES` in `src/shared/contracts/shell.ts`): full 900×620 (min 800×560), compact 320×480 (min 300×420).

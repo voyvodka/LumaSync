@@ -615,6 +615,7 @@ function EdgeSummary({ label, value }: { label: string; value: number }) {
 }
 
 function CountStepper({ label, value, onChange }: { label: string; value: number; onChange: (delta: number) => void }) {
+  const { t } = useTranslation("common");
   return (
     <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900">
       <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500">{label}</div>
@@ -624,6 +625,7 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
           <button
             type="button"
             onClick={() => onChange(1)}
+            aria-label={t("calibration.page.aria.countIncrease", { label })}
             className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 dark:border-zinc-600 dark:text-zinc-400"
           >
             +
@@ -631,6 +633,7 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
           <button
             type="button"
             onClick={() => onChange(-1)}
+            aria-label={t("calibration.page.aria.countDecrease", { label })}
             className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 dark:border-zinc-600 dark:text-zinc-400"
           >
             −
@@ -647,6 +650,7 @@ function EdgeTab({ edge, label, active, disabled, onClick }: { edge: AnchorEdge;
       type="button"
       disabled={disabled}
       onClick={() => onClick(edge)}
+      aria-pressed={active}
       className={`rounded-md border px-1.5 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         active
           ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
@@ -663,6 +667,7 @@ function EndpointButton({ endpoint, label, active, onClick }: { endpoint: Anchor
     <button
       type="button"
       onClick={() => onClick(endpoint)}
+      aria-pressed={active}
       className={`flex-1 rounded-md border px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.1em] transition-colors ${
         active
           ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
@@ -679,6 +684,7 @@ function DirectionButton({ direction, label, active, onClick }: { direction: Led
     <button
       type="button"
       onClick={() => onClick(direction)}
+      aria-pressed={active}
       className={`rounded-md border px-2 py-1.5 font-mono text-[10px] tracking-[0.1em] transition-colors ${
         active
           ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
@@ -691,6 +697,7 @@ function DirectionButton({ direction, label, active, onClick }: { direction: Led
 }
 
 function StandGapStepper({ value, max, onChange }: { value: number; max: number; onChange: (delta: number) => void }) {
+  const { t } = useTranslation("common");
   return (
     <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 dark:border-zinc-700 dark:bg-zinc-900">
       <div className="min-w-0 flex-1">
@@ -705,6 +712,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
           type="button"
           disabled={value >= max}
           onClick={() => onChange(1)}
+          aria-label={t("calibration.page.aria.gapIncrease")}
           className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-35 dark:border-zinc-600 dark:text-zinc-400"
         >
           +
@@ -713,6 +721,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
           type="button"
           disabled={value <= 0}
           onClick={() => onChange(-1)}
+          aria-label={t("calibration.page.aria.gapDecrease")}
           className="flex h-4 w-5 items-center justify-center rounded border border-slate-300 text-[10px] leading-none text-slate-600 transition-colors hover:border-amber-500 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-35 dark:border-zinc-600 dark:text-zinc-400"
         >
           −

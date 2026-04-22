@@ -911,7 +911,13 @@
       "anchorEnd": "End ▶",
       "anchorGapRight": "Gap R",
       "anchorGapLeft": "Gap L",
-      "totalStrip": "Total strip"
+      "totalStrip": "Total strip",
+      "aria": {
+        "countIncrease": "Increase {{label}}",
+        "countDecrease": "Decrease {{label}}",
+        "gapIncrease": "Increase stand gap",
+        "gapDecrease": "Decrease stand gap"
+      }
     },
     "overlay": {
       "title": "Calibration Editor",
@@ -994,5 +1000,11 @@
     "resumeLastMode": "Resume Last Mode",
     "solidColor": "Solid Color",
     "quit": "Quit LumaSync"
+  },
+  "titleBar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
   }
 }

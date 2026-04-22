@@ -765,9 +765,15 @@ fn start_ambilight_worker(
         }
         found.ok_or(last_err)?
     };
-    // led_count=1 is a safe placeholder for the quality-gate smoothing pipeline.
-    // USB LED count is a separate concern (room-map config); using pixel count here
-    // produced ~11 MB serial packets and blocked the Hue update path entirely.
+    // TODO(v1.4): wire `LedCalibrationConfig.totalLeds` + per-edge `buildLedSequence`
+    // output through to this worker so USB output becomes position-aware.
+    // Current behaviour: led_count=1 samples a single frame pixel and ships one RGB
+    // triplet to the controller, which the companion firmware then extends across
+    // the full strip as a single-zone colour. This keeps the quality-gate smoothing
+    // pipeline small (pixel-count sampling previously produced ~11 MB packets and
+    // blocked the Hue path) but means USB currently ignores edge counts / start
+    // anchor / direction from calibration. The Hue path (`sample_screen_position_avg`
+    // below) is already per-channel and unaffected.
     let calibration = SamplingCalibration { led_count: 1 };
 
     let hue_only = port_name.is_none() && hue_output.is_some();
