@@ -7,6 +7,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-04-22
+
 ### Added
 
 - Compact UI mode with dual-sized window (compact 320×480 / full 900×620), custom overlay title bar, and accent theme system driven by a new `UIMode` contract
@@ -33,7 +35,7 @@ https://keepachangelog.com/en/1.1.0/
 - LED Setup dock exposes the full strip topology: partial-edge setups (e.g. LEDs only on the top) are allowed (0-count edges), monitor stand gap (`bottomMissing`) has a dedicated stepper, LED direction toggles between CW / CCW, and start anchor is driven by edge tabs + Start/End/Gap-R/Gap-L endpoint buttons so all 10 `LedStartAnchor` positions are reachable. `LedRoomCanvas` now renders the stand gap and places the `#1` marker on the gap-adjacent LED for `bottom-gap-*` anchors
 - Calibration validation: 0-count edges are now accepted as long as `sum > 0` (`NO_LEDS_CONFIGURED`); stand gap wider than the bottom edge now fails with `BOTTOM_MISSING_EXCEEDS_BOTTOM`; `normalizeLedCalibrationConfig` auto-clamps `bottomMissing` to bottom count and auto-heals `startAnchor` when its edge is zeroed out
 - Hue stream health polling migrated from `setInterval` to recursive `setTimeout`, preventing overlapping probes when a health check takes longer than its interval and stopping polling as soon as the stream is detected dead
-- Internationalisation sweep: DeviceSection cell labels (Area, Protocol, Ch, Rate, Status, Error, Retries, Next, Fault, Config, Credential, Invalid), traffic bar Stream label, DTLS streaming subtitle, display card ID/Scale labels, previously-missing wizard step keys, and UpdateModal note kind tags moved to `updater.noteKind.*` — EN + TR locales kept in sync
+- Internationalisation sweep: DeviceSection cell labels (Area, Protocol, Ch, Rate, Status, Error, Retries, Next, Fault, Config, Credential, Invalid), traffic bar Stream label, DTLS streaming subtitle, display card ID/Scale labels, previously-missing wizard step keys, UpdateModal note kind tags moved to `updater.noteKind.*`, RenameDialog Cancel/OK buttons in RoomMapEditor, and StatusBar keyboard hint labels (mode / settings) — EN + TR locales kept in sync
 - Test layout: all colocated `*.test.ts(x)` files relocated into `__tests__/` subdirectories and CLAUDE.md updated to document the convention
 - Bumped tokio from 1.50.0 to 1.51.1
 - `.gitignore` now ignores `.planning/` and `.jules/` recursively so local planning artefacts never leak into status

@@ -1,7 +1,7 @@
 {
   "name": "lumasync",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Tray-first desktop Ambilight app for WS2812B LED strips and Philips Hue — built with Tauri 2 + React",
   "homepage": "https://lumasync.app",
   "repository": {
