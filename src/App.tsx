@@ -469,7 +469,9 @@ function App() {
                 }));
               }
             }
-          } catch { }
+          } catch (err) {
+            console.error("[LumaSync] Bootstrap mode/targets restore failed:", err);
+          }
         }
 
         // Check for updates silently after startup
@@ -566,7 +568,11 @@ function App() {
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
     setActiveSection(sectionId);
-    try { await saveShellState({ lastSection: sectionId }); } catch { }
+    try {
+      await saveShellState({ lastSection: sectionId });
+    } catch (err) {
+      console.error("[LumaSync] saveShellState(lastSection) failed:", err);
+    }
   }, []);
 
   // Auto-open calibration when device connects for the first time
@@ -597,7 +603,11 @@ function App() {
     const normalizedTargets = normalizeOutputTargets(targets);
     const prevTargets = selectedOutputTargets;
     setSelectedOutputTargets(normalizedTargets);
-    try { await saveShellState({ lastOutputTargets: normalizedTargets }); } catch { }
+    try {
+      await saveShellState({ lastOutputTargets: normalizedTargets });
+    } catch (err) {
+      console.error("[LumaSync] saveShellState(lastOutputTargets) failed:", err);
+    }
 
     // Delta logic — only when a mode is actively running (not OFF)
     if (lightingMode.kind === LIGHTING_MODE_KIND.OFF) return;
@@ -610,10 +620,18 @@ function App() {
     for (const target of removedTargets) {
       if (!currentActive.includes(target)) continue;
       if (target === "usb") {
-        try { await invoke("stop_lighting"); } catch { }
+        try {
+          await invoke("stop_lighting");
+        } catch (err) {
+          console.error("[LumaSync] stop_lighting during delta-stop failed:", err);
+        }
       }
       if (target === "hue") {
-        try { await invoke("stop_hue_stream"); } catch { }
+        try {
+          await invoke("stop_hue_stream");
+        } catch (err) {
+          console.error("[LumaSync] stop_hue_stream during delta-stop failed:", err);
+        }
       }
     }
     // Update activeOutputTargets by removing stopped targets
@@ -672,7 +690,9 @@ function App() {
                   b: lightingMode.solid.b,
                   brightness: lightingMode.solid.brightness,
                 });
-              } catch { /* non-fatal */ }
+              } catch (err) {
+                console.error("[LumaSync] Hue solid push on delta-start non-fatal failure:", err);
+              }
             }
           }
         } catch {
@@ -952,7 +972,9 @@ function App() {
               b: normalizedNextMode.solid.b,
               brightness: normalizedNextMode.solid.brightness,
             });
-          } catch { /* non-fatal: backend already applied the color */ }
+          } catch (err) {
+            console.error("[LumaSync] Hue solid push after mode change non-fatal failure:", err);
+          }
         }
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);

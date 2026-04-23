@@ -8,6 +8,12 @@
  *
  * i18next is initialised BEFORE React renders to prevent hydration flicker
  * and ensure all components receive a ready translation instance.
+ *
+ * The whole shell is wrapped in `GlobalErrorBoundaryWithI18n` so an
+ * uncaught render error surfaces the amber Rev 07 fallback card instead
+ * of a white screen. The boundary lives INSIDE `<Providers>` so its
+ * `useTranslation` hook resolves against the live i18next context; a
+ * hardcoded English fallback still covers the i18n-not-ready race.
  */
 
 import React from "react";
@@ -17,6 +23,7 @@ import "./styles.css";
 import { Providers } from "./app/providers";
 import { resolveInitialLanguage } from "./features/i18n/languagePolicy";
 import { initI18n } from "./features/i18n/i18n";
+import { GlobalErrorBoundaryWithI18n } from "./features/shell/GlobalErrorBoundary";
 
 async function bootstrap() {
   // 1. Resolve language (honours I18N-02: English default on first launch)
@@ -29,7 +36,9 @@ async function bootstrap() {
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
       <Providers>
-        <App />
+        <GlobalErrorBoundaryWithI18n>
+          <App />
+        </GlobalErrorBoundaryWithI18n>
       </Providers>
     </React.StrictMode>,
   );
@@ -42,7 +51,9 @@ bootstrap().catch((err) => {
     ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <React.StrictMode>
         <Providers>
-          <App />
+          <GlobalErrorBoundaryWithI18n>
+            <App />
+          </GlobalErrorBoundaryWithI18n>
         </Providers>
       </React.StrictMode>,
     );
