@@ -391,7 +391,7 @@ fn build_huestream_frame(
         frame.extend_from_slice(&id_bytes[..UUID_LEN]);
     } else {
         frame.extend_from_slice(id_bytes);
-        frame.extend(std::iter::repeat(0u8).take(UUID_LEN - id_bytes.len()));
+        frame.extend(std::iter::repeat_n(0u8, UUID_LEN - id_bytes.len()));
     }
 
     let brightness_clamped = brightness.clamp(0.0, 1.0);
