@@ -1113,6 +1113,13 @@
       "copyError": "Copy error",
       "showDetails": "Show details",
       "hideDetails": "Hide details"
+    },
+    "fpsHud": {
+      "title": "FPS",
+      "inactive": "Ambilight off",
+      "lowFps": "Low FPS",
+      "latencyUnit": "ms",
+      "ariaLabel": "Rendering performance: {{fps}} frames per second, {{latency}} millisecond latency"
     }
   },
   "ledSettings": {

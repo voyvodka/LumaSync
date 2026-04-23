@@ -1113,6 +1113,13 @@
       "copyError": "Hatayı kopyala",
       "showDetails": "Detayları göster",
       "hideDetails": "Detayları gizle"
+    },
+    "fpsHud": {
+      "title": "FPS",
+      "inactive": "Ambilight kapalı",
+      "lowFps": "Düşük FPS",
+      "latencyUnit": "ms",
+      "ariaLabel": "Oluşturma performansı: saniye başına {{fps}} kare, {{latency}} milisaniye gecikme"
     }
   },
   "ledSettings": {
