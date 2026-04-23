@@ -252,6 +252,15 @@ pub fn run() {
     builder = builder.plugin(tauri_plugin_process::init());
 
     // 7. Logging
+    //
+    // Rotation strategy is split per build profile:
+    //   - debug: KeepAll so developers retain the full history across
+    //     long reproduction sessions without the sink silently
+    //     discarding context.
+    //   - release: KeepOne (current + one rotated) so a busy
+    //     ambilight run cannot balloon the log directory on disk.
+    // Both profiles share the same 5 MB per-file cap.
+    const LOG_MAX_FILE_SIZE: u128 = 5 * 1024 * 1024;
     #[cfg(debug_assertions)]
     {
         builder = builder.plugin(
@@ -264,6 +273,8 @@ pub fn run() {
                 .level_for("openssl", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .max_file_size(LOG_MAX_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
                 ))
@@ -286,6 +297,8 @@ pub fn run() {
                 .level_for("openssl", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .max_file_size(LOG_MAX_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
                 ))
