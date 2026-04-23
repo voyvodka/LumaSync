@@ -21,7 +21,9 @@ mod commands {
     pub mod hue_http;
     pub mod hue_onboarding;
     pub mod hue_stream_lifecycle;
+    pub mod led_calibration;
     pub mod led_output;
+    pub mod led_sink;
     pub mod lighting_mode;
     pub mod room_map;
     pub mod runtime_quality;
