@@ -1,0 +1,161 @@
+/**
+ * GlobalErrorBoundary styles — amber Rev 07 palette + a11y guards.
+ *
+ * Kept in a sibling CSS module (not styles.css) so the boundary can be
+ * loaded/tested in isolation without pulling in the full shell sheet.
+ * Tokens come from `:root` in `src/styles.css` so colors stay in sync
+ * with the migrated amber surfaces.
+ */
+
+.lm-errboundary-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(9, 11, 15, 0.92);
+  z-index: 9999;
+  /* Works in both compact 320×480 and full 900×620. */
+}
+
+.lm-errboundary-card {
+  max-width: 520px;
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  /* Inherits .lm-settings-group background + border + radius from
+     styles.css so the fallback matches the main amber shell surface. */
+}
+
+.lm-errboundary-body {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lm-errboundary-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lm-ink, #fff);
+}
+
+.lm-errboundary-copy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim, #8a94a3);
+}
+
+.lm-errboundary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lm-errboundary-btn {
+  /* 32px tap-target floor (ui-ux-expert a11y rule). */
+  min-height: 32px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line, #1a1e25);
+  background: var(--lm-panel-2, #14171d);
+  color: var(--lm-ink, #fff);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.lm-errboundary-btn:hover {
+  background: rgba(255, 176, 32, 0.08);
+  border-color: rgba(255, 176, 32, 0.35);
+}
+
+.lm-errboundary-btn:active {
+  background: rgba(255, 176, 32, 0.15);
+}
+
+.lm-errboundary-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(255, 176, 32, 0.6),
+    0 0 0 4px rgba(255, 176, 32, 0.16);
+}
+
+.lm-errboundary-btn-primary {
+  background: rgba(255, 176, 32, 0.18);
+  border-color: rgba(255, 176, 32, 0.45);
+  color: var(--lm-amber, #ffb020);
+}
+
+.lm-errboundary-btn-primary:hover {
+  background: rgba(255, 176, 32, 0.28);
+  border-color: rgba(255, 176, 32, 0.6);
+}
+
+.lm-errboundary-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--lm-ink-dim, #8a94a3);
+}
+
+.lm-errboundary-btn-ghost:hover {
+  border-color: var(--lm-line, #1a1e25);
+  color: var(--lm-ink, #fff);
+}
+
+.lm-errboundary-details {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--lm-line, #1a1e25);
+  border-radius: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--lm-ink-faint, #6b7280);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Reduced-motion: drop transitions under 120ms floor ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  .lm-errboundary-btn {
+    transition: none;
+  }
+}
+
+/* ── Forced-colors: use system tokens so high-contrast / Windows
+      contrast themes render the fallback legibly. ─────────────── */
+@media (forced-colors: active) {
+  .lm-errboundary-root {
+    background: Canvas;
+  }
+  .lm-errboundary-card {
+    background: Canvas;
+    border: 1px solid CanvasText;
+  }
+  .lm-errboundary-title,
+  .lm-errboundary-copy,
+  .lm-errboundary-details {
+    color: CanvasText;
+  }
+  .lm-errboundary-btn,
+  .lm-errboundary-btn-primary,
+  .lm-errboundary-btn-ghost {
+    background: ButtonFace;
+    color: ButtonText;
+    border: 1px solid ButtonText;
+  }
+  .lm-errboundary-btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
