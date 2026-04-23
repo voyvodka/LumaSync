@@ -201,6 +201,44 @@ pub fn apply_saturation_to_pixel(rgb: [u8; 3], saturation: f32) -> [u8; 3] {
 }
 
 // ---------------------------------------------------------------------------
+// Unified single-pixel colour correction — Hue pipeline helper
+// ---------------------------------------------------------------------------
+
+/// Apply the full colour-correction pipeline to a single pixel.
+///
+/// Pipeline order: saturation → Kelvin → gamma LUT.
+///
+/// This mirrors the order used inside `encode_led_packet_with_corrections`
+/// (the USB batch encoder) so that Hue single-pixel output and USB batch
+/// output produce identical colour rendering when given the same
+/// `ColorCorrectionConfig`. Any change to the USB encoder order **must**
+/// be reflected here to preserve LED-strip vs Hue bulb parity.
+///
+/// The function is intentionally allocation-free: it builds the gamma LUTs
+/// on each call. For the Hue path (called once per channel per frame, not
+/// per-LED on a 300-LED strip) this is negligible; pre-computed LUTs can be
+/// threaded through as a follow-up optimisation if profiling shows cost.
+pub fn apply_color_correction_rgb(
+    rgb: (u8, u8, u8),
+    corrections: &ColorCorrectionConfig,
+) -> (u8, u8, u8) {
+    // Step 1 — Saturation (BT.601 luminance blend).
+    let [r, g, b] = apply_saturation_to_pixel([rgb.0, rgb.1, rgb.2], corrections.saturation);
+
+    // Step 2 — Kelvin white-balance multipliers.
+    let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
+    let [r, g, b] = if corrections.kelvin == 6500 {
+        [r, g, b]
+    } else {
+        apply_kelvin_to_pixel([r, g, b], &kelvin_muls)
+    };
+
+    // Step 3 — Per-channel gamma LUT.
+    let luts = build_gamma_luts(corrections.gamma_r, corrections.gamma_g, corrections.gamma_b);
+    (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
+}
+
+// ---------------------------------------------------------------------------
 // Error type
 // ---------------------------------------------------------------------------
 
@@ -704,7 +742,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::{
-        apply_kelvin_to_pixel, apply_saturation_to_pixel, apply_solid_payload, build_gamma_luts,
+        apply_color_correction_rgb, apply_kelvin_to_pixel, apply_saturation_to_pixel,
+        apply_solid_payload, build_gamma_luts,
         encode_adalight_packet, encode_led_packet, encode_led_packet_with_corrections,
         encode_led_packet_with_kelvin, encode_packet_for_profile, kelvin_to_rgb_multipliers,
         send_ambilight_frame, ColorCorrectionConfig, FirmwareProfile, LedOutputBridge,
