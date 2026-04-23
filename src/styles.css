@@ -213,6 +213,42 @@
   color: var(--lm-ink-faint);
 }
 
+/* FPS/latency HUD pill (G1) — 4th StatusBar chip. `is-low` lights up when
+   the rolling FPS drops below the hard red threshold; the component also
+   renders a "Low FPS" text span so the state is never expressed by color
+   alone (WCAG SC 1.4.1). `is-idle` reuses the existing dim ink for the
+   Ambilight-off placeholder. */
+.lm-statusbar-value.is-low {
+  color: var(--lm-red);
+}
+.lm-statusbar-lowfps {
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--lm-red);
+}
+
+/* Forced-colors (Windows high contrast / accessibility skins) — the amber
+   palette collapses to system colors. Mirror the semantic kinds to the
+   closest CSS system color so the pill stays legible without relying on
+   our brand tokens. Narrow to the FPS pill + StatusBar chrome for now;
+   broader forced-colors coverage is tracked under UI Gap 7. */
+@media (forced-colors: active) {
+  .lm-statusbar-value.is-ok,
+  .lm-statusbar-value.is-active,
+  .lm-statusbar-value.is-idle,
+  .lm-statusbar-value.is-off,
+  .lm-statusbar-value.is-low,
+  .lm-statusbar-lowfps,
+  .lm-statusbar-label,
+  .lm-statusbar-version {
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-statusbar {
+    border-top-color: CanvasText;
+  }
+}
+
 .lm-statusbar-spacer {
   flex: 1;
 }
