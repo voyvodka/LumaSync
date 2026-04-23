@@ -3,11 +3,81 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 #[cfg(test)]
 use super::device_connection::SerialConnectionState;
 
 const OUTPUT_BAUD_RATE: u32 = 115_200;
 const OUTPUT_TIMEOUT_MS: u64 = 500;
+
+// ---------------------------------------------------------------------------
+// FirmwareProfile — user-selectable serial encoding profile
+//
+// IMPORTANT: changing the on-wire format is a breaking change for any
+// user-flashed firmware. New profiles are additive only. The active profile
+// is stored in `shell.ts` `firmwareProfile` and must be surfaced as a
+// user-visible "Firmware profile" setting — never switched silently.
+// ---------------------------------------------------------------------------
+
+/// Serial encoding profile — selects the on-wire frame format sent to the
+/// LED controller firmware.
+///
+/// `LumaSyncV1` is the default. `Adalight` enables compatibility with
+/// Prismatik, Hyperion, Boblight, and most DIY Arduino Adalight sketches.
+/// (v1.4 G11)
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum FirmwareProfile {
+    /// LumaSync v1 native protocol:
+    /// `[0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]`
+    #[default]
+    #[serde(rename = "lumasync-v1")]
+    LumaSyncV1,
+    /// Adalight-compatible protocol (no brightness byte, big-endian count-1):
+    /// `[0x41 0x64 0x61] [HIGH(count-1)] [LOW(count-1)] [HIGH^LOW^0x55] [R G B ...]`
+    Adalight,
+}
+
+// ---------------------------------------------------------------------------
+// ColorCorrectionConfig — per-channel colour correction parameters
+// ---------------------------------------------------------------------------
+
+/// Per-channel colour correction parameters applied in the LED encoder hot path.
+///
+/// Defaults (gamma 2.2, 6500 K, saturation 1.0) reproduce the original
+/// `encode_led_packet` output byte-for-byte. (v1.4 G4)
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorCorrectionConfig {
+    /// Gamma exponent for the red channel (typical range 1.0–3.0).
+    pub gamma_r: f32,
+    /// Gamma exponent for the green channel (typical range 1.0–3.0).
+    pub gamma_g: f32,
+    /// Gamma exponent for the blue channel (typical range 1.0–3.0).
+    pub gamma_b: f32,
+    /// White-point colour temperature in Kelvin (typical range 2700–9000).
+    /// 6500 K is the sRGB/D65 standard and produces an identity multiplier.
+    pub kelvin: u16,
+    /// Saturation multiplier (0.0 = greyscale, 1.0 = original, >1.0 = boost).
+    pub saturation: f32,
+}
+
+impl Default for ColorCorrectionConfig {
+    fn default() -> Self {
+        Self {
+            gamma_r: 2.2,
+            gamma_g: 2.2,
+            gamma_b: 2.2,
+            kelvin: 6500,
+            saturation: 1.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-channel gamma lookup tables
+// ---------------------------------------------------------------------------
 
 /// Per-channel gamma lookup tables for WS2812B LEDs.
 ///
@@ -41,6 +111,10 @@ pub fn build_gamma_luts(gamma_r: f32, gamma_g: f32, gamma_b: f32) -> GammaLuts {
 static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
     std::sync::LazyLock::new(|| build_gamma_luts(2.2, 2.2, 2.2));
 
+// ---------------------------------------------------------------------------
+// Kelvin white-balance
+// ---------------------------------------------------------------------------
+
 /// Convert a colour temperature in Kelvin to per-channel RGB multipliers.
 ///
 /// Uses the Tanner Helland curve-fit approximation, clamped to [0.0, 1.0] and
@@ -51,14 +125,12 @@ static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
 ///
 /// The returned array is `[r_mul, g_mul, b_mul]`.
 pub fn kelvin_to_rgb_multipliers(kelvin: u16) -> [f32; 3] {
-    // Identity fast-path for the default 6500 K setting.
     if kelvin == 6500 {
         return [1.0_f32, 1.0_f32, 1.0_f32];
     }
 
     let temp = kelvin as f32 / 100.0_f32;
 
-    // --- Red ---
     let r = if temp <= 66.0 {
         1.0_f32
     } else {
@@ -66,7 +138,6 @@ pub fn kelvin_to_rgb_multipliers(kelvin: u16) -> [f32; 3] {
         (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
     };
 
-    // --- Green ---
     let g = if temp <= 66.0 {
         let v = 99.470_802_586_f32 * temp.ln() - 161.119_568_166_f32;
         (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
@@ -75,7 +146,6 @@ pub fn kelvin_to_rgb_multipliers(kelvin: u16) -> [f32; 3] {
         (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
     };
 
-    // --- Blue ---
     let b = if temp >= 66.0 {
         1.0_f32
     } else if temp <= 19.0 {
@@ -89,8 +159,6 @@ pub fn kelvin_to_rgb_multipliers(kelvin: u16) -> [f32; 3] {
 }
 
 /// Apply Kelvin white-balance multipliers to a single pixel.
-///
-/// `multipliers` must be pre-computed via `kelvin_to_rgb_multipliers`.
 #[inline(always)]
 pub fn apply_kelvin_to_pixel(rgb: [u8; 3], multipliers: &[f32; 3]) -> [u8; 3] {
     [
@@ -100,16 +168,17 @@ pub fn apply_kelvin_to_pixel(rgb: [u8; 3], multipliers: &[f32; 3]) -> [u8; 3] {
     ]
 }
 
+// ---------------------------------------------------------------------------
+// Saturation correction
+// ---------------------------------------------------------------------------
+
 /// Apply saturation correction to a single pixel using BT.601 luminance blend.
 ///
 /// `saturation = 1.0` is the identity (epsilon fast-path, no arithmetic).
 /// `saturation = 0.0` produces a pure greyscale output.
 /// Values above 1.0 boost saturation beyond the original.
-///
-/// BT.601 luma coefficients: Y = 0.299·R + 0.587·G + 0.114·B
 #[inline(always)]
 pub fn apply_saturation_to_pixel(rgb: [u8; 3], saturation: f32) -> [u8; 3] {
-    // Fast-path: identity within floating-point epsilon.
     if (saturation - 1.0_f32).abs() < f32::EPSILON {
         return rgb;
     }
@@ -118,16 +187,18 @@ pub fn apply_saturation_to_pixel(rgb: [u8; 3], saturation: f32) -> [u8; 3] {
     let g = rgb[1] as f32;
     let b = rgb[2] as f32;
 
-    // BT.601 luma
     let luma = 0.299_f32 * r + 0.587_f32 * g + 0.114_f32 * b;
 
-    // Lerp each channel between luma (grey) and original value.
     let out_r = (luma + saturation * (r - luma)).round().clamp(0.0, 255.0) as u8;
     let out_g = (luma + saturation * (g - luma)).round().clamp(0.0, 255.0) as u8;
     let out_b = (luma + saturation * (b - luma)).round().clamp(0.0, 255.0) as u8;
 
     [out_r, out_g, out_b]
 }
+
+// ---------------------------------------------------------------------------
+// Error type
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
@@ -147,6 +218,10 @@ impl LedOutputError {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// LedPacketSender trait + SerialLedPacketSender
+// ---------------------------------------------------------------------------
 
 pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
@@ -235,6 +310,10 @@ impl LedPacketSender for SerialLedPacketSender {
     }
 }
 
+// ---------------------------------------------------------------------------
+// LedOutputBridge
+// ---------------------------------------------------------------------------
+
 #[derive(Clone)]
 pub struct LedOutputBridge {
     sender: Arc<dyn LedPacketSender>,
@@ -253,10 +332,6 @@ impl LedOutputBridge {
     }
 
     /// Drops the cached port handle for `port_name`.
-    ///
-    /// Must be called whenever the logical connection is terminated (disconnect
-    /// command, health-check failure, lighting stop) so that the next connect
-    /// attempt opens a fresh handle instead of reusing a stale one.
     pub fn disconnect_session(&self, port_name: &str) {
         self.sender.disconnect_session(port_name);
     }
@@ -310,18 +385,22 @@ impl Default for LedOutputBridge {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Packet encoders
+// ---------------------------------------------------------------------------
+
+/// Encode using the default profile (LumaSync v1) and default corrections.
+/// This is the backward-compat entry point — its output is byte-exact with
+/// every previous version of `encode_led_packet`.
 pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
     encode_led_packet_with_corrections(brightness, rgb_triplets, 6500, 1.0)
 }
 
-/// Encode a LumaSync v1 packet with optional Kelvin white-balance applied
-/// before gamma correction. Saturation correction is applied first.
+/// Encode a LumaSync v1 packet with full per-channel colour corrections.
+///
+/// Pipeline order: saturation → Kelvin → gamma LUT
 ///
 /// Wire format: `[0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]`
-///
-/// This replaces the previous `encode_led_packet_with_kelvin` and is the
-/// canonical LumaSync v1 encoder. Defaults (6500 K, sat=1.0) produce
-/// byte-exact output matching the original `encode_led_packet`.
 pub fn encode_led_packet_with_corrections(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
@@ -343,21 +422,18 @@ pub fn encode_led_packet_with_corrections(
     let sat_identity = (saturation - 1.0_f32).abs() < f32::EPSILON;
 
     for &pixel in rgb_triplets {
-        // 1. Saturation correction (BT.601 luminance blend)
         let after_sat = if sat_identity {
             pixel
         } else {
             apply_saturation_to_pixel(pixel, saturation)
         };
 
-        // 2. Kelvin white-balance
         let [r, g, b] = if kelvin_identity {
             after_sat
         } else {
             apply_kelvin_to_pixel(after_sat, &kelvin_muls)
         };
 
-        // 3. Gamma LUT
         packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
     }
 
@@ -366,7 +442,7 @@ pub fn encode_led_packet_with_corrections(
     packet
 }
 
-/// Backward-compat wrapper kept for callers that only need Kelvin (no saturation).
+/// Backward-compat wrapper: Kelvin only, saturation defaults to 1.0.
 pub fn encode_led_packet_with_kelvin(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
@@ -374,6 +450,85 @@ pub fn encode_led_packet_with_kelvin(
 ) -> Vec<u8> {
     encode_led_packet_with_corrections(brightness, rgb_triplets, kelvin, 1.0)
 }
+
+/// Encode an Adalight-compatible packet.
+///
+/// Wire format (no brightness byte):
+/// `[0x41 0x64 0x61] [HIGH(count-1)] [LOW(count-1)] [HIGH^LOW^0x55] [R G B ...]`
+///
+/// Colour corrections (saturation, Kelvin, gamma) are applied before packing
+/// in the same order as the LumaSync v1 encoder.
+pub fn encode_adalight_packet(
+    rgb_triplets: &[[u8; 3]],
+    corrections: &ColorCorrectionConfig,
+) -> Vec<u8> {
+    let count = rgb_triplets.len();
+    let count_minus_one = u16::try_from(count.saturating_sub(1)).unwrap_or(u16::MAX);
+    let hi = (count_minus_one >> 8) as u8;
+    let lo = (count_minus_one & 0xFF) as u8;
+    let header_checksum = hi ^ lo ^ 0x55;
+
+    let mut packet = Vec::with_capacity(6 + count * 3);
+    // "Ada" magic
+    packet.push(0x41);
+    packet.push(0x64);
+    packet.push(0x61);
+    packet.push(hi);
+    packet.push(lo);
+    packet.push(header_checksum);
+
+    let luts = build_gamma_luts(
+        corrections.gamma_r,
+        corrections.gamma_g,
+        corrections.gamma_b,
+    );
+    let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
+    let kelvin_identity = corrections.kelvin == 6500;
+    let sat_identity = (corrections.saturation - 1.0_f32).abs() < f32::EPSILON;
+
+    for &pixel in rgb_triplets {
+        let after_sat = if sat_identity {
+            pixel
+        } else {
+            apply_saturation_to_pixel(pixel, corrections.saturation)
+        };
+
+        let [r, g, b] = if kelvin_identity {
+            after_sat
+        } else {
+            apply_kelvin_to_pixel(after_sat, &kelvin_muls)
+        };
+
+        packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
+    }
+
+    packet
+}
+
+/// Dispatch encoder based on `FirmwareProfile`.
+///
+/// For `LumaSyncV1` the brightness value is encoded in the packet header.
+/// For `Adalight` the brightness byte is absent — it is handled in firmware.
+pub fn encode_packet_for_profile(
+    profile: FirmwareProfile,
+    brightness: f32,
+    rgb_triplets: &[[u8; 3]],
+    corrections: &ColorCorrectionConfig,
+) -> Vec<u8> {
+    match profile {
+        FirmwareProfile::LumaSyncV1 => encode_led_packet_with_corrections(
+            brightness,
+            rgb_triplets,
+            corrections.kelvin,
+            corrections.saturation,
+        ),
+        FirmwareProfile::Adalight => encode_adalight_packet(rgb_triplets, corrections),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Public helper functions (called by lighting_mode.rs worker)
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 pub fn apply_solid_payload(
@@ -433,18 +588,12 @@ pub fn send_ambilight_frame_hot_path_to_port(
 // ---------------------------------------------------------------------------
 // SerialSink — `LedSink` implementation backed by `LedOutputBridge`
 //
-// Wraps the existing `LedOutputBridge` + `encode_led_packet` chain behind the
-// `LedSink` trait so the worker loop can be written against the trait and
-// future sinks (v1.5 WledUdpSink, v2.0 OpenRgbClientSink) drop in without
-// touching the worker.
-//
-// Wire format is preserved exactly:
-//   [0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]
-// Never change this silently — use a user-visible "Firmware profile" setting.
+// Wire format is preserved exactly unless the user explicitly changes the
+// Firmware Profile setting. Never change the wire format silently.
 // ---------------------------------------------------------------------------
 
-/// A `LedSink` implementation that encodes frames as LumaSync v1 packets and
-/// writes them to a serial port via `LedOutputBridge`.
+/// A `LedSink` implementation that encodes frames and writes them to a serial
+/// port via `LedOutputBridge`. Supports both LumaSync v1 and Adalight profiles.
 // v1.4 anchor: wired into the ambilight worker via the LedSink trait.
 // Suppressed until the worker integration commit lands.
 #[allow(dead_code)]
@@ -452,24 +601,57 @@ pub struct SerialSink {
     bridge: LedOutputBridge,
     port_name: Option<String>,
     brightness: f32,
+    profile: FirmwareProfile,
+    corrections: ColorCorrectionConfig,
 }
 
 impl SerialSink {
-    /// Create a sink bound to the given port (or no-op when `port_name` is `None`).
+    /// Create a sink using the default LumaSync v1 profile and default corrections.
     #[allow(dead_code)]
     pub fn new(bridge: LedOutputBridge, port_name: Option<String>, brightness: f32) -> Self {
         Self {
             bridge,
             port_name,
             brightness,
+            profile: FirmwareProfile::default(),
+            corrections: ColorCorrectionConfig::default(),
         }
     }
 
-    /// Update brightness without stopping the sink. Called from the worker when
-    /// the user changes brightness while ambilight is running.
+    /// Create a sink with an explicit firmware profile and colour correction config.
+    #[allow(dead_code)]
+    pub fn with_profile_and_corrections(
+        bridge: LedOutputBridge,
+        port_name: Option<String>,
+        brightness: f32,
+        profile: FirmwareProfile,
+        corrections: ColorCorrectionConfig,
+    ) -> Self {
+        Self {
+            bridge,
+            port_name,
+            brightness,
+            profile,
+            corrections,
+        }
+    }
+
+    /// Update brightness without stopping the sink.
     #[allow(dead_code)]
     pub fn set_brightness(&mut self, brightness: f32) {
         self.brightness = brightness.clamp(0.0, 1.0);
+    }
+
+    /// Switch the firmware profile at runtime (e.g. user changed the setting).
+    #[allow(dead_code)]
+    pub fn set_profile(&mut self, profile: FirmwareProfile) {
+        self.profile = profile;
+    }
+
+    /// Replace the colour correction config at runtime.
+    #[allow(dead_code)]
+    pub fn set_corrections(&mut self, corrections: ColorCorrectionConfig) {
+        self.corrections = corrections;
     }
 }
 
@@ -478,26 +660,22 @@ impl super::led_sink::LedSink for SerialSink {
         "serial"
     }
 
-    /// No-op: the underlying `SerialLedPacketSender` opens the port lazily on
-    /// the first `send`. `start` is reserved for future sinks that need
-    /// explicit connection setup (e.g. UDP socket bind for WLED).
     fn start(&mut self) -> Result<(), String> {
         Ok(())
     }
 
-    /// Encode `colors` as a LumaSync v1 packet and write to the serial port.
-    /// Returns `Err` if no port is configured or the write fails.
     fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
         let port = match &self.port_name {
             Some(p) => p.clone(),
-            None => return Ok(()), // Hue-only mode — no serial port configured
+            None => return Ok(()),
         };
-        send_ambilight_frame_hot_path_to_port(&self.bridge, &port, colors, self.brightness)
+        let packet =
+            encode_packet_for_profile(self.profile, self.brightness, colors, &self.corrections);
+        self.bridge
+            .send_packet_to_port(&port, &packet)
             .map_err(|e| e.as_reason())
     }
 
-    /// Disconnect the cached serial port handle so the next `send_frame` opens
-    /// a fresh connection. This mirrors the existing `stop_previous` behaviour.
     fn stop(&mut self) -> Result<(), String> {
         if let Some(ref port) = self.port_name {
             self.bridge.disconnect_session(port);
@@ -505,6 +683,10 @@ impl super::led_sink::LedSink for SerialSink {
         Ok(())
     }
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -514,9 +696,10 @@ mod tests {
 
     use super::{
         apply_kelvin_to_pixel, apply_saturation_to_pixel, apply_solid_payload, build_gamma_luts,
-        encode_led_packet, encode_led_packet_with_corrections, encode_led_packet_with_kelvin,
-        kelvin_to_rgb_multipliers, send_ambilight_frame, LedOutputBridge, LedOutputError,
-        LedPacketSender, SerialSink,
+        encode_adalight_packet, encode_led_packet, encode_led_packet_with_corrections,
+        encode_led_packet_with_kelvin, encode_packet_for_profile, kelvin_to_rgb_multipliers,
+        send_ambilight_frame, ColorCorrectionConfig, FirmwareProfile, LedOutputBridge,
+        LedOutputError, LedPacketSender, SerialSink,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -611,16 +794,90 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // encode_led_packet regression
+    // LumaSync v1 regression
     // ---------------------------------------------------------------------------
 
     #[test]
     fn solid_payload_encodes_to_deterministic_packet() {
-        // Gamma 2.2 is applied to RGB values: gamma(128) = 56, gamma(255) = 255, gamma(0) = 0.
-        // Brightness byte (127) and packet structure are unchanged by gamma.
+        // Gamma 2.2: gamma(128) = 56, gamma(255) = 255, gamma(0) = 0.
         let packet = encode_led_packet(0.5, &[[255, 0, 128]]);
-
         assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 56, 70]);
+    }
+
+    #[test]
+    fn default_corrections_produce_byte_exact_output() {
+        let frame = &[[255_u8, 0, 128], [64, 200, 10]];
+        let default_packet = encode_led_packet(0.75, frame);
+        let corrections_packet = encode_led_packet_with_corrections(0.75, frame, 6500, 1.0);
+        assert_eq!(
+            default_packet, corrections_packet,
+            "default corrections must be byte-exact with encode_led_packet"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Adalight encoder — byte-exact header verification
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn adalight_header_is_byte_exact() {
+        // 1 LED → count-1 = 0 → hi=0, lo=0, checksum = 0^0^0x55 = 0x55
+        let packet = encode_adalight_packet(&[[255, 0, 0]], &ColorCorrectionConfig::default());
+        assert_eq!(
+            &packet[..6],
+            &[0x41, 0x64, 0x61, 0x00, 0x00, 0x55],
+            "Adalight 1-LED header must be [Ada, 0x00, 0x00, 0x55]"
+        );
+        // Gamma 2.2: 255→255, 0→0
+        assert_eq!(&packet[6..], &[255, 0, 0]);
+    }
+
+    #[test]
+    fn adalight_header_count_is_big_endian_count_minus_one() {
+        // 300 LEDs → count-1 = 299 = 0x012B → hi=0x01, lo=0x2B
+        // checksum = 0x01 ^ 0x2B ^ 0x55 = 0x7F
+        let colors: Vec<[u8; 3]> = vec![[0u8; 3]; 300];
+        let packet = encode_adalight_packet(&colors, &ColorCorrectionConfig::default());
+        assert_eq!(packet[3], 0x01, "HIGH byte of count-1 for 300 LEDs");
+        assert_eq!(packet[4], 0x2B, "LOW byte of count-1 for 300 LEDs");
+        assert_eq!(
+            packet[5],
+            0x01 ^ 0x2B ^ 0x55,
+            "Adalight header checksum mismatch"
+        );
+    }
+
+    #[test]
+    fn adalight_has_no_brightness_byte() {
+        // Adalight protocol does not include a brightness byte.
+        // The packet length must be exactly 6 (header) + N*3 (RGB).
+        let colors = vec![[128_u8; 3]; 10];
+        let packet = encode_adalight_packet(&colors, &ColorCorrectionConfig::default());
+        assert_eq!(
+            packet.len(),
+            6 + 10 * 3,
+            "Adalight packet length must be 6 header + N*3 RGB bytes (no brightness byte)"
+        );
+    }
+
+    #[test]
+    fn lumasync_v1_profile_dispatch_matches_direct_encoder() {
+        let frame = &[[100_u8, 150, 200]];
+        let corrections = ColorCorrectionConfig::default();
+        let direct = encode_led_packet(0.8, frame);
+        let dispatched =
+            encode_packet_for_profile(FirmwareProfile::LumaSyncV1, 0.8, frame, &corrections);
+        assert_eq!(direct, dispatched, "LumaSyncV1 dispatch must match direct encoder");
+    }
+
+    #[test]
+    fn adalight_profile_dispatch_matches_direct_encoder() {
+        let frame = &[[100_u8, 150, 200]];
+        let corrections = ColorCorrectionConfig::default();
+        let direct = encode_adalight_packet(frame, &corrections);
+        let dispatched =
+            encode_packet_for_profile(FirmwareProfile::Adalight, 0.8, frame, &corrections);
+        assert_eq!(direct, dispatched, "Adalight dispatch must match direct encoder");
     }
 
     // ---------------------------------------------------------------------------
@@ -660,10 +917,7 @@ mod tests {
         let frame = &[[255_u8, 128, 64]];
         let default_packet = encode_led_packet(1.0, frame);
         let kelvin_packet = encode_led_packet_with_kelvin(1.0, frame, 6500);
-        assert_eq!(
-            default_packet, kelvin_packet,
-            "6500 K must be a byte-exact identity"
-        );
+        assert_eq!(default_packet, kelvin_packet, "6500 K must be byte-exact identity");
     }
 
     #[test]
@@ -684,25 +938,20 @@ mod tests {
     #[test]
     fn saturation_1_0_is_identity() {
         let pixel = [200_u8, 100, 50];
-        assert_eq!(
-            apply_saturation_to_pixel(pixel, 1.0),
-            pixel,
-            "saturation 1.0 must return the pixel unchanged"
-        );
+        assert_eq!(apply_saturation_to_pixel(pixel, 1.0), pixel);
     }
 
     #[test]
     fn saturation_0_0_produces_greyscale() {
         let pixel = [200_u8, 100, 50];
         let out = apply_saturation_to_pixel(pixel, 0.0);
-        // All channels must equal the BT.601 luma value.
         assert_eq!(out[0], out[1], "R and G must be equal at saturation 0");
         assert_eq!(out[1], out[2], "G and B must be equal at saturation 0");
     }
 
     #[test]
     fn saturation_0_0_grey_matches_bt601_luma() {
-        // For [200, 100, 50]: Y = 0.299*200 + 0.587*100 + 0.114*50 = 59.8+58.7+5.7 = 124.2 → 124
+        // Y = 0.299*200 + 0.587*100 + 0.114*50 = 59.8+58.7+5.7 = 124.2 → 124
         let pixel = [200_u8, 100, 50];
         let out = apply_saturation_to_pixel(pixel, 0.0);
         assert_eq!(out[0], 124, "luma should round to 124 for [200,100,50]");
@@ -713,10 +962,7 @@ mod tests {
         let frame = &[[200_u8, 100, 50], [10, 20, 30]];
         let default_packet = encode_led_packet(0.8, frame);
         let corrections_packet = encode_led_packet_with_corrections(0.8, frame, 6500, 1.0);
-        assert_eq!(
-            default_packet, corrections_packet,
-            "default corrections must produce byte-exact output"
-        );
+        assert_eq!(default_packet, corrections_packet);
     }
 
     // ---------------------------------------------------------------------------
@@ -726,27 +972,16 @@ mod tests {
     #[test]
     fn per_channel_gamma_luts_are_independent() {
         let luts = build_gamma_luts(1.0, 2.2, 2.2);
-
-        assert_eq!(luts.r[128], 128, "R gamma 1.0 must be linear (128→128)");
-        assert_eq!(
-            luts.g[128], 56,
-            "G gamma 2.2 must match legacy value (128→56)"
-        );
-        assert_eq!(
-            luts.b[128], 56,
-            "B gamma 2.2 must match legacy value (128→56)"
-        );
-
-        assert_ne!(
-            luts.r[128], luts.g[128],
-            "R and G must differ when gammas differ"
-        );
+        assert_eq!(luts.r[128], 128, "R gamma 1.0 must be linear");
+        assert_eq!(luts.g[128], 56, "G gamma 2.2 must match legacy (128→56)");
+        assert_eq!(luts.b[128], 56, "B gamma 2.2 must match legacy (128→56)");
+        assert_ne!(luts.r[128], luts.g[128], "R and G must differ with different gammas");
     }
 
     #[test]
     fn build_gamma_luts_222_matches_legacy_unified_lut() {
         let luts = build_gamma_luts(2.2, 2.2, 2.2);
-        let legacy_spot_checks: &[(usize, u8)] = &[
+        let checks: &[(usize, u8)] = &[
             (0, 0),
             (1, 0),
             (10, 0),
@@ -756,22 +991,10 @@ mod tests {
             (254, 253),
             (255, 255),
         ];
-        for &(idx, expected) in legacy_spot_checks {
-            assert_eq!(
-                luts.r[idx], expected,
-                "R LUT mismatch at index {idx}: expected {expected}, got {}",
-                luts.r[idx]
-            );
-            assert_eq!(
-                luts.g[idx], expected,
-                "G LUT mismatch at index {idx}: expected {expected}, got {}",
-                luts.g[idx]
-            );
-            assert_eq!(
-                luts.b[idx], expected,
-                "B LUT mismatch at index {idx}: expected {expected}, got {}",
-                luts.b[idx]
-            );
+        for &(idx, expected) in checks {
+            assert_eq!(luts.r[idx], expected, "R LUT at {idx}");
+            assert_eq!(luts.g[idx], expected, "G LUT at {idx}");
+            assert_eq!(luts.b[idx], expected, "B LUT at {idx}");
         }
     }
 
@@ -785,11 +1008,10 @@ mod tests {
         let success_bridge = LedOutputBridge::from_sender(success_sender.clone());
         let state = connected_state("COM9");
 
-        let success = apply_solid_payload(&success_bridge, &state, 1, 2, 3, 1.0);
-        assert!(success.is_ok());
-        let writes = success_sender.writes();
-        assert_eq!(writes.len(), 1);
-        assert_eq!(writes[0].0, "COM9");
+        apply_solid_payload(&success_bridge, &state, 1, 2, 3, 1.0)
+            .expect("successful write should not error");
+        assert_eq!(success_sender.writes().len(), 1);
+        assert_eq!(success_sender.writes()[0].0, "COM9");
 
         let failing_sender = Arc::new(FakeSender::failing("LED_OUTPUT_WRITE_FAILED"));
         let failing_bridge = LedOutputBridge::from_sender(failing_sender);
@@ -809,9 +1031,7 @@ mod tests {
 
         let writes = sender.writes();
         assert_eq!(writes.len(), 1);
-
-        let expected = encode_led_packet(0.25, &frame);
-        assert_eq!(writes[0].1, expected);
+        assert_eq!(writes[0].1, encode_led_packet(0.25, &frame));
     }
 
     #[test]
@@ -823,13 +1043,8 @@ mod tests {
             Ok(Box::new(FakePort::default()))
         });
 
-        sender
-            .send("COM42", &[1, 2, 3])
-            .expect("first write should succeed");
-        sender
-            .send("COM42", &[4, 5, 6])
-            .expect("second write should reuse open session");
-
+        sender.send("COM42", &[1, 2, 3]).expect("first write");
+        sender.send("COM42", &[4, 5, 6]).expect("second write reuses session");
         assert_eq!(open_count.load(Ordering::SeqCst), 1);
     }
 
@@ -842,20 +1057,12 @@ mod tests {
             Ok(Box::new(FakePort::default()))
         });
 
-        sender
-            .send("COM42", &[1, 2, 3])
-            .expect("first write should open and succeed");
-        assert_eq!(
-            open_count.load(Ordering::SeqCst),
-            1,
-            "one open after first send"
-        );
+        sender.send("COM42", &[1, 2, 3]).expect("first write");
+        assert_eq!(open_count.load(Ordering::SeqCst), 1, "one open after first send");
 
         sender.disconnect_session("COM42");
 
-        sender
-            .send("COM42", &[4, 5, 6])
-            .expect("send after disconnect should reopen and succeed");
+        sender.send("COM42", &[4, 5, 6]).expect("send after disconnect reopens");
         assert_eq!(
             open_count.load(Ordering::SeqCst),
             2,
@@ -870,11 +1077,7 @@ mod tests {
 
         bridge.disconnect_session("COM5");
 
-        assert_eq!(
-            sender.disconnected_ports(),
-            vec!["COM5".to_string()],
-            "bridge must forward disconnect_session to inner sender"
-        );
+        assert_eq!(sender.disconnected_ports(), vec!["COM5".to_string()]);
     }
 
     // ---------------------------------------------------------------------------
@@ -894,9 +1097,7 @@ mod tests {
         let writes = sender.writes();
         assert_eq!(writes.len(), 1);
         assert_eq!(writes[0].0, "COM3");
-
-        let expected = encode_led_packet(1.0, &frame);
-        assert_eq!(writes[0].1, expected);
+        assert_eq!(writes[0].1, encode_led_packet(1.0, &frame));
     }
 
     #[test]
@@ -906,9 +1107,8 @@ mod tests {
         let mut sink = SerialSink::new(bridge, None, 1.0);
 
         sink.start().unwrap();
-        sink.send_frame(&[[1, 2, 3]])
-            .expect("no-port send should be a no-op");
-        assert_eq!(sender.writes().len(), 0, "no writes expected without port");
+        sink.send_frame(&[[1, 2, 3]]).expect("no-port send is a no-op");
+        assert_eq!(sender.writes().len(), 0);
     }
 
     #[test]
@@ -921,10 +1121,7 @@ mod tests {
         sink.send_frame(&[[10, 20, 30]]).unwrap();
         sink.stop().expect("stop should succeed");
 
-        assert!(
-            sender.disconnected_ports().contains(&"COM8".to_string()),
-            "stop must disconnect the serial session"
-        );
+        assert!(sender.disconnected_ports().contains(&"COM8".to_string()));
     }
 
     #[test]
@@ -939,5 +1136,27 @@ mod tests {
         sink.send_frame(&[[50, 100, 150]]).unwrap();
         sink.stop().unwrap();
         assert_eq!(sender.writes().len(), 1);
+    }
+
+    #[test]
+    fn serial_sink_adalight_profile_encodes_correct_header() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink = SerialSink::with_profile_and_corrections(
+            bridge,
+            Some("COM5".to_string()),
+            1.0,
+            FirmwareProfile::Adalight,
+            ColorCorrectionConfig::default(),
+        );
+
+        sink.start().unwrap();
+        sink.send_frame(&[[255, 0, 0]]).expect("Adalight send should succeed");
+
+        let writes = sender.writes();
+        assert_eq!(writes.len(), 1);
+        let pkt = &writes[0].1;
+        // Adalight header: "Ada" + 0x00 + 0x00 + 0x55 for 1 LED
+        assert_eq!(&pkt[..6], &[0x41, 0x64, 0x61, 0x00, 0x00, 0x55]);
     }
 }
