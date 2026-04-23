@@ -21,6 +21,12 @@ import {
 } from "../../mode/model/scenePresets";
 import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
 import type { DisplayInfo } from "../../../shared/contracts/display";
+import {
+  KEYBIND_ACTIONS,
+  type KeybindAction,
+  getKeybindDefinition,
+  resolveKeybindPlatform,
+} from "../../../shared/contracts/shell";
 import { listDisplays } from "../../calibration/calibrationApi";
 import type { LedCalibrationConfig } from "../../calibration/model/contracts";
 import { getFullTelemetrySnapshot } from "../../telemetry/telemetryApi";
@@ -109,6 +115,20 @@ function IconSolid() {
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
     </svg>
   );
+}
+
+/**
+ * Render a keybind badge (modifier + key) for a mode button. Badge labels
+ * come from the shared KEYBIND_REGISTRY so StatusBar + LightsSection stay
+ * in sync with the handler map wired in `useGlobalKeybinds`.
+ */
+function ModeKeybindBadge({ action }: { action: KeybindAction }) {
+  const platform = useMemo(() => resolveKeybindPlatform(), []);
+  const definition = useMemo(
+    () => getKeybindDefinition(action, platform),
+    [action, platform],
+  );
+  return <span className="kb">{definition.badge.join("")}</span>;
 }
 
 export function LightsSection({
@@ -321,7 +341,7 @@ export function LightsSection({
                 <span className="tn">{t("lightsPage.mode.off.title")}</span>
                 <span className="ts">{t("lightsPage.mode.off.subtitle")}</span>
               </span>
-              <span className="kb">⌥1</span>
+              <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_OFF} />
             </button>
             <button
               type="button"
@@ -341,7 +361,7 @@ export function LightsSection({
                     : t("lightsPage.mode.ambilight.subtitleFallback")}
                 </span>
               </span>
-              <span className="kb">⌥2</span>
+              <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_AMBILIGHT} />
             </button>
             <button
               type="button"
@@ -365,7 +385,7 @@ export function LightsSection({
                   })}
                 </span>
               </span>
-              <span className="kb">⌥3</span>
+              <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_SOLID} />
             </button>
           </div>
         </div>

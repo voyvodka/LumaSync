@@ -9,11 +9,22 @@
  * Compact mode hides the keyboard hints + version (no room in a 320px tray
  * panel) and uses a slightly tighter font + padding, matching mockup
  * `10-compact.html`.
+ *
+ * Keyboard hint badges are derived from `KEYBIND_REGISTRY` so every label
+ * shown here is backed by a matching handler in `useGlobalKeybinds`. Edit
+ * that registry instead of hand-patching `⌥1` / `Alt+1` strings.
  */
 
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { APP_VERSION } from "../../shared/constants/app";
+import {
+  KEYBIND_ACTIONS,
+  type KeybindAction,
+  getKeybindDefinition,
+  resolveKeybindPlatform,
+} from "../../shared/contracts/shell";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
 export const STATUS_BAR_HEIGHT_COMPACT_PX = 22;
@@ -41,6 +52,16 @@ interface StatusBarProps {
 export function StatusBar({ items, uiMode }: StatusBarProps) {
   const { t } = useTranslation("common");
   const isCompact = uiMode === "compact";
+  const platform = useMemo(() => resolveKeybindPlatform(), []);
+
+  // Mode badge renders the digit as a "1-3" span so the hint stays compact.
+  // Pull the modifier portion (⌥ / Alt) from the MODE_OFF definition — all
+  // three mode shortcuts share the same modifier by design.
+  const modeDefinition = getKeybindDefinition(KEYBIND_ACTIONS.MODE_OFF, platform);
+  const modeModifierBadge = modeDefinition.badge[0];
+  const modeDigitsBadge = "1-3";
+  const settingsDefinition = getKeybindDefinition(KEYBIND_ACTIONS.OPEN_SETTINGS, platform);
+
   return (
     <div
       className={`lm-statusbar${isCompact ? " is-compact" : ""}`}
@@ -54,8 +75,22 @@ export function StatusBar({ items, uiMode }: StatusBarProps) {
       <div className="lm-statusbar-spacer" />
       {!isCompact && (
         <>
-          <KbdHint keys={["⌥", "1-3"]} label={t("statusBar.kbdMode")} />
-          <KbdHint keys={["⌘", ","]} label={t("statusBar.kbdSettings")} />
+          <KbdHint
+            keys={[modeModifierBadge, modeDigitsBadge]}
+            label={t("statusBar.kbdMode")}
+            ariaLabel={t("shell.keybind.modeGroupAria", {
+              modifier: modeModifierBadge,
+              digits: modeDigitsBadge,
+            })}
+          />
+          <KbdHint
+            keys={settingsDefinition.badge}
+            label={t("statusBar.kbdSettings")}
+            ariaLabel={t("shell.keybind.openSettings", {
+              modifier: settingsDefinition.badge[0],
+              key: settingsDefinition.badge[1],
+            })}
+          />
           <span className="lm-statusbar-version">v{APP_VERSION}</span>
         </>
       )}
@@ -74,13 +109,31 @@ function StatusPill({ item }: { item: StatusItem }) {
   );
 }
 
-function KbdHint({ keys, label }: { keys: string[]; label: string }) {
+interface KbdHintProps {
+  keys: string[];
+  label: string;
+  ariaLabel: string;
+}
+
+function KbdHint({ keys, label, ariaLabel }: KbdHintProps) {
   return (
-    <div className="lm-statusbar-kbd">
+    <div
+      className="lm-statusbar-kbd"
+      role="group"
+      aria-label={ariaLabel}
+    >
       {keys.map((k) => (
         <kbd key={k}>{k}</kbd>
       ))}
-      <span>{label}</span>
+      <span aria-hidden>{label}</span>
     </div>
   );
+}
+
+/**
+ * Platform-aware helper for consumers (LightsSection mode strip, compact
+ * mode strip) that render a single keybind badge next to a mode button.
+ */
+export function getKeybindBadgeForAction(action: KeybindAction): string[] {
+  return getKeybindDefinition(action).badge;
 }
