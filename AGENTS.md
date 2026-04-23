@@ -32,12 +32,24 @@ pnpm verify:shell-contracts # Contract validation
 
 For settings IA/UI/UX tasks, consult the local blueprint at `docs/settings-ui-ux-blueprint.local`. This file is gitignored (`*.local`) and serves as current design intent for settings redesign decisions.
 
+## Planning Artifacts
+
+`.planning/` exists on the maintainer's local filesystem only — it is gitignored and **must never be committed, unignored, or distributed**. Agents running in CI, sandboxed environments, or on collaborator clones will not see this directory and should not ask about or rely on its contents.
+
+If the directory is present in your working copy, treat it as the single source of truth for planning context:
+
+- `ROADMAP.md` — master roadmap (milestones, backlog, rejected ideas, known limitations). Read this before proposing any feature work.
+- `competitive-research/comparison/<domain>-vs-lumasync.md` — primary source for roadmap gap items. Open the relevant file when the user references a gap by ID (`G1`, `GAP 5`, etc.) or by name.
+- Other subdirectories contain scoped research for specific features.
+
+Do not propose changes that assume `.planning/` visibility for anyone other than the local maintainer. Do not write CHANGELOG, commit messages, PR descriptions, or release notes that reference `.planning/` paths — collaborators cannot follow them.
+
 ## Hard Constraints (Do Not Violate)
 
 - **macOS private API** (`macos-private-api: true` in `tauri.conf.json`) — required for fullscreen calibration overlays across all displays. Never remove.
 - **Hue streaming interval: minimum 50ms (20 Hz max)** — exceeding this throttles or drops the Hue bridge connection.
 - **Supported USB chip IDs only**: CH340 (`0x1A86:0x7523`), FTDI (`0x0403:0x6001`). Do not widen serial port discovery beyond these.
-- **Window size**: 900×620, minimum 720×480. Do not change without explicit instruction.
+- **Window size**: per-mode, see `UI_MODE_SIZES` / `UI_MODE_MIN_SIZES` in `src/shared/contracts/shell.ts`. Full mode 900×620 (min 800×560), compact mode 320×480 (min 300×420). Do not change without explicit instruction.
 - **State persistence**: Tauri `plugin-store` → `~/.config/lumasync/app.json`. Keys are defined in `src/shared/contracts/shell.ts` — do not add ad-hoc keys.
 - **i18n**: Every user-facing string must have entries in both `src/locales/en/common.json` and `src/locales/tr/common.json`.
 - **Contract alignment**: After any change to `src/shared/contracts/` or Rust command handlers, run `pnpm verify:shell-contracts` to confirm they stay in sync.

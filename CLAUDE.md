@@ -6,6 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **LumaSync** is a native desktop application (Tauri 2 + React 19) that mirrors the screen to WS2812B LED strips and Philips Hue entertainment areas in real time, with per-edge room-map calibration and fully local processing. Package name: `lumasync`, identifier: `com.lumasync.app`.
 
+## Planning
+
+Local planning artifacts live under `.planning/` which is **gitignored and never committed, unignored, or distributed**. It is the maintainer's private workspace; it exists for session continuity, not for publication. Assume collaborators, CI, and sandboxed agents do not see this directory.
+
+- `.planning/ROADMAP.md` — master roadmap: shipped versions, active milestones (v1.4 / v1.5 / v2.0), domain-grouped backlog, rejected ideas (DNA-conflicts), and known limitations. Every milestone item references the research artefact that justifies it.
+- `.planning/competitive-research/` — 2026-04-22 competitive analysis of 11 ambient-lighting products. Layout: `inventory/` (LumaSync today), `competitors/` (per-product), `comparison/<domain>-vs-lumasync.md` (per-domain gap list with priorities). The per-domain comparison md's are the primary source for roadmap gap items.
+- Other subdirectories (`led-preview-experience/`, etc.) — scoped research or design notes for specific features.
+
+When the user asks about a feature, milestone, or gap ID (e.g. "v1.4", "USB per-LED sampling", "G2"), read `.planning/ROADMAP.md` first; then open the referenced comparison md for full context before proposing an implementation plan. **Never propose committing `.planning/` content, removing it from `.gitignore`, or otherwise distributing it.**
+
 ## Commands
 
 ```bash
