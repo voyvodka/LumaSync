@@ -451,6 +451,20 @@
       "pair": {
         "linkButtonHint": "Hue bridge'inizin üstündeki fiziksel butona basın ve bir an bekleyin."
       },
+      "pairing": {
+        "errors": {
+          "LINK_BUTTON_NOT_PRESSED": { "description": "Köprü üzerindeki link button'a bas ve 30 saniye içinde tekrar dene." },
+          "DEVICETYPE_INVALID": { "description": "Köprü eşleştirme isteği formatını reddetti." },
+          "BRIDGE_BUSY": { "description": "Köprü şu anda meşgul, biraz sonra tekrar dene." },
+          "RATE_LIMITED": { "description": "Çok fazla istek. Tekrar denemeden önce bir dakika bekle." }
+        }
+      },
+      "intensity": {
+        "subtle": "Yumuşak",
+        "moderate": "Dengeli",
+        "intense": "Yoğun",
+        "description": "Işıkların ekran değişikliklerini ne kadar agresif takip edeceğini belirler"
+      },
       "credential": {
         "valid": "Eşleştirildi",
         "needsRepair": "Yeniden eşleştirme gerekli",

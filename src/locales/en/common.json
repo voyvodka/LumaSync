@@ -451,6 +451,20 @@
       "pair": {
         "linkButtonHint": "Press the physical button on top of your Hue bridge, then wait a moment."
       },
+      "pairing": {
+        "errors": {
+          "LINK_BUTTON_NOT_PRESSED": { "description": "Press the bridge link button and retry within 30 seconds." },
+          "DEVICETYPE_INVALID": { "description": "Bridge rejected pairing request format." },
+          "BRIDGE_BUSY": { "description": "Bridge is busy. Try again in a moment." },
+          "RATE_LIMITED": { "description": "Too many requests. Wait a minute before retrying." }
+        }
+      },
+      "intensity": {
+        "subtle": "Subtle",
+        "moderate": "Moderate",
+        "intense": "Intense",
+        "description": "Controls how aggressively lights follow screen changes"
+      },
       "credential": {
         "valid": "Paired",
         "needsRepair": "Needs Re-pair",
