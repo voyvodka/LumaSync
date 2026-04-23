@@ -1,4 +1,5 @@
 import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { DisplayId } from "../../../shared/contracts/display";
 
 export const LIGHTING_MODE_KIND = {
   OFF: "off",
@@ -48,6 +49,14 @@ export interface LightingModeConfig {
   solid?: SolidColorPayload;
   ambilight?: AmbilightPayload;
   targets?: HueRuntimeTarget[];
+  /**
+   * Display the ambilight worker should sample from (v1.4 Platform GAP 2).
+   * Absent ⇒ backend falls back to the OS primary display so existing
+   * single-monitor behaviour is unchanged. Matched platform-side against the
+   * stable `DisplayInfo.id` form returned by `list_displays`; a missing or
+   * unplugged display id reverts to primary instead of failing the command.
+   */
+  displayId?: DisplayId;
 }
 
 export function isLightingModeKind(value: unknown): value is LightingModeKind {
@@ -86,10 +95,17 @@ export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): Am
   };
 }
 
+function normalizeDisplayId(value: unknown): DisplayId | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>): LightingModeConfig {
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
   const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
   const normalizedAmbilight = input?.ambilight ? normalizeAmbilightPayload(input.ambilight) : undefined;
+  const normalizedDisplayId = normalizeDisplayId(input?.displayId);
 
   if (kind === LIGHTING_MODE_KIND.SOLID) {
     return {
@@ -97,6 +113,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       solid: normalizedSolid ?? normalizeSolidColorPayload(),
       ambilight: normalizedAmbilight,
       targets: input?.targets,
+      displayId: normalizedDisplayId,
     };
   }
 
@@ -106,6 +123,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       ambilight: normalizedAmbilight ?? normalizeAmbilightPayload(),
       solid: normalizedSolid,
       targets: input?.targets,
+      displayId: normalizedDisplayId,
     };
   }
 
@@ -114,6 +132,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     solid: normalizedSolid,
     ambilight: normalizedAmbilight,
     targets: input?.targets,
+    displayId: normalizedDisplayId,
   };
 }
 

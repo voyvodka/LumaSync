@@ -28,6 +28,13 @@ export interface OverlayPreviewPayload {
   visualPreset: "subtle" | "vivid";
   sequence: OverlayPreviewSequenceItem[];
   frameMs?: number;
+  /**
+   * Optional display the preview targets. When absent the backend uses the
+   * previously-opened overlay display or primary as fallback. Added in v1.4
+   * (Platform GAP 2) so multi-monitor test-pattern previews honor the user's
+   * capture-source selection without adding a separate command surface.
+   */
+  displayId?: DisplayId;
 }
 
 export interface DisplayInfo {
