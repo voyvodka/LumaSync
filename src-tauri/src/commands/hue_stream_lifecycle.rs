@@ -2981,7 +2981,7 @@ mod tests {
             channel_region_overrides: None,
         };
 
-        let start_result = start_with_evidence(
+        let _ = start_with_evidence(
             &mut owner,
             &strict_gate_ready(),
             HueRuntimeTriggerSource::ModeControl,
