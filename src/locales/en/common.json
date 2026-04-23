@@ -1091,5 +1091,15 @@
       "adalightDescription": "Compatible with Prismatik, Hyperion, Boblight, and most DIY Arduino sketches.",
       "brightnessDisabledTooltip": "Adalight profile: brightness is fixed in firmware"
     }
+  },
+  "notifications": {
+    "permission": {
+      "denied": {
+        "title": "Notifications disabled",
+        "body": "Enable notifications in System Settings to see LumaSync alerts.",
+        "action": "Open Settings"
+      }
+    },
+    "unsupported": "This system does not support notifications."
   }
 }

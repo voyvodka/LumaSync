@@ -1091,5 +1091,15 @@
       "adalightDescription": "Prismatik, Hyperion, Boblight ve cogu DIY Arduino sketch ile uyumlu.",
       "brightnessDisabledTooltip": "Adalight profili: parlaklik firmware tarafindan kontrol edilir"
     }
+  },
+  "notifications": {
+    "permission": {
+      "denied": {
+        "title": "Bildirimler devre dışı",
+        "body": "LumaSync uyarılarını görmek için Sistem Ayarları'ndan bildirimleri etkinleştirin.",
+        "action": "Ayarları Aç"
+      }
+    },
+    "unsupported": "Bu sistem bildirimleri desteklemiyor."
   }
 }
