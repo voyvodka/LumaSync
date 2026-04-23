@@ -1,3 +1,19 @@
+//! Integration tests for `hue_onboarding.rs`.
+//!
+//! The module is brought in via `#[path = ...]` rather than through the
+//! library crate because these tests predate the lib structure and
+//! exercise private helpers (`parse_*_payload`, `verify_hue_bridge_ip_input`).
+//!
+//! `hue_onboarding.rs` now depends on `super::hue_http::classify_hue_response`.
+//! Because the `super::` prefix resolves against the module that owns
+//! `hue_onboarding`, we mount both files as siblings of the test crate
+//! root: when `hue_onboarding` lives at the crate root, `super::hue_http`
+//! resolves to another crate-root sibling we mount here with `#[path]`.
+
+#[path = "../src/commands/hue_http.rs"]
+#[allow(dead_code)]
+mod hue_http;
+
 #[path = "../src/commands/hue_onboarding.rs"]
 #[allow(dead_code)]
 mod hue_onboarding;

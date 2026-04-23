@@ -5,6 +5,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use super::hue_http::{classify_hue_response, HueHttpFault};
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandStatus {
@@ -112,22 +114,20 @@ pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
         }
     };
 
-    let fetch = async {
-        client
-            .get("https://discovery.meethue.com/")
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.get("https://discovery.meethue.com/").send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => parse_discovery_payload(&payload),
         Err(error) => HueDiscoveryResponse {
             status: command_status(
                 "HUE_DISCOVERY_FAILED",
                 "Could not discover Hue bridges automatically. You can continue with manual IP.",
-                Some(error.to_string()),
+                Some(error),
             ),
             bridges: Vec::new(),
         },
@@ -156,22 +156,20 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
     };
 
     let endpoint = format!("http://{bridge_ip}/api/config");
-    let fetch = async {
-        client
-            .get(endpoint)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.get(endpoint).send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => parse_bridge_config_payload(&bridge_ip, &payload),
         Err(error) => HueVerifyBridgeIpResponse {
             status: command_status(
                 "HUE_IP_UNREACHABLE",
                 "Could not reach Hue bridge at the provided IP. Verify bridge power/network and try again.",
-                Some(error.to_string()),
+                Some(error),
             ),
             bridge: None,
         },
@@ -208,17 +206,14 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         "devicetype": "lumasync#desktop",
         "generateclientkey": true,
     });
-    let fetch = async {
-        client
-            .post(endpoint)
-            .json(&body)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.post(endpoint).json(&body).send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => {
             let result = parse_pairing_payload(&payload);
             if result.status.code == "HUE_PAIRING_OK" {
@@ -234,7 +229,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                 status: command_status(
                     "HUE_PAIRING_FAILED",
                     "Pairing request failed. Press bridge link button, then retry within 30 seconds.",
-                    Some(error.to_string()),
+                    Some(error),
                 ),
                 credentials: None,
             }
@@ -271,16 +266,14 @@ pub async fn validate_hue_credentials(
     };
 
     let endpoint = format!("http://{bridge_ip}/api/{username}/config");
-    let fetch = async {
-        client
-            .get(endpoint)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.get(endpoint).send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => {
             let result = parse_credentials_validation_payload(&payload);
             if result.valid {
@@ -294,7 +287,7 @@ pub async fn validate_hue_credentials(
             status: command_status(
                 "HUE_CREDENTIAL_CHECK_FAILED",
                 "Could not validate Hue credentials. Check bridge reachability and retry.",
-                Some(error.to_string()),
+                Some(error),
             ),
             valid: false,
         },
@@ -340,12 +333,13 @@ pub async fn list_hue_entertainment_areas(
             }
         }
         Err(error) => {
-            warn!("Failed to list Hue entertainment areas: {error}");
+            let message = error.into_message();
+            warn!("Failed to list Hue entertainment areas: {message}");
             HueEntertainmentAreaListResponse {
                 status: command_status(
                     "HUE_AREA_LIST_FAILED",
                     "Could not list Hue entertainment areas with current credentials.",
-                    Some(error),
+                    Some(message),
                 ),
                 areas: Vec::new(),
             }
@@ -412,12 +406,13 @@ pub async fn check_hue_stream_readiness(
             }
         }
         Err(error) => {
-            warn!("Hue stream readiness check failed: {error}");
+            let message = error.into_message();
+            warn!("Hue stream readiness check failed: {message}");
             HueStreamReadinessResponse {
                 status: command_status(
                     "HUE_STREAM_READINESS_FAILED",
                     "Could not evaluate Hue stream readiness.",
-                    Some(error),
+                    Some(message),
                 ),
                 readiness: HueStreamReadiness {
                     ready: false,
@@ -642,23 +637,53 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
 async fn fetch_hue_entertainment_areas(
     bridge_ip: &str,
     username: &str,
-) -> Result<Vec<HueEntertainmentArea>, String> {
+) -> Result<Vec<HueEntertainmentArea>, AreaListError> {
     if !is_valid_ipv4(bridge_ip) {
-        return Err("Invalid bridge IPv4 format".to_string());
+        return Err(AreaListError::Other(
+            "Invalid bridge IPv4 format".to_string(),
+        ));
     }
 
-    let client = hue_http_client()?;
+    let client = hue_http_client().map_err(AreaListError::Other)?;
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration");
-    let response = client
+    let raw = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
         .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|error| error.to_string())?;
-    let payload = response.text().await.map_err(|error| error.to_string())?;
+        .map_err(|e| AreaListError::Other(e.to_string()))?;
 
-    parse_area_list_payload(&payload)
+    let response = classify_hue_response(raw)
+        .await
+        .map_err(|fault| match fault {
+            HueHttpFault::AuthInvalid => AreaListError::AuthInvalid,
+            other => AreaListError::Other(other.to_string()),
+        })?;
+
+    let payload = response
+        .text()
+        .await
+        .map_err(|e| AreaListError::Other(e.to_string()))?;
+
+    parse_area_list_payload(&payload).map_err(AreaListError::Other)
+}
+
+/// Carrier for `fetch_hue_entertainment_areas` faults. Keeps
+/// `AuthInvalid` distinguishable from generic transient failures so the
+/// public commands can collapse it onto the uniform
+/// `AUTH_INVALID_RE_PAIR_REQUIRED` status code without string matching.
+enum AreaListError {
+    AuthInvalid,
+    Other(String),
+}
+
+impl AreaListError {
+    fn into_message(self) -> String {
+        match self {
+            AreaListError::AuthInvalid => "AUTH_INVALID_RE_PAIR_REQUIRED".to_string(),
+            AreaListError::Other(msg) => msg,
+        }
+    }
 }
 
 fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, String> {

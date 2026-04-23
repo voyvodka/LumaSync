@@ -93,7 +93,6 @@ pub(crate) fn is_hue_unauthorized_body(body: &str) -> bool {
 /// keep chaining `.text().await`. On any non-success status the body is
 /// drained and inspected against the whitelist to decide if the call
 /// site is allowed to escalate to `AuthInvalid`.
-#[allow(dead_code)] // Wired up in commit 2 at 5 onboarding call sites.
 pub(crate) async fn classify_hue_response(
     response: reqwest::Response,
 ) -> Result<reqwest::Response, HueHttpFault> {
