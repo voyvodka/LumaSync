@@ -14,7 +14,7 @@ permissions:
 jobs:
   verify:
     name: Build and Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
 
     steps:
@@ -32,6 +32,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -59,3 +61,19 @@ jobs:
 
       - name: Run frontend tests
         run: pnpm vitest run
+
+      - name: Rust fmt check
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy (deny warnings)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Rust check (all targets, all features)
+        working-directory: src-tauri
+        run: cargo check --all-targets --all-features
+
+      - name: Rust test build (no execution)
+        working-directory: src-tauri
+        run: cargo test --no-run --all-features
