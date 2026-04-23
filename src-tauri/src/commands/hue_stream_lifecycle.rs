@@ -741,24 +741,18 @@ fn spawn_hue_http_sender(
             }
 
             let brightness = latest.brightness;
-            let client_ref: &BlockingClient = &client;
-            let bridge_ref: &str = &bridge_ip;
-            let username_ref: &str = &username;
+            let conn = HueBridgeConnection {
+                client: &client,
+                bridge_ip: &bridge_ip,
+                username: &username,
+            };
+            let conn_ref = &conn;
             thread::scope(|s| {
                 for (channel, color) in channels.iter().zip(latest.channel_colors.iter()) {
                     let (r, g, b) = *color;
                     let light_ids: &[String] = &channel.light_ids;
                     s.spawn(move || {
-                        send_color_to_lights(
-                            client_ref,
-                            bridge_ref,
-                            username_ref,
-                            light_ids,
-                            r,
-                            g,
-                            b,
-                            brightness,
-                        );
+                        send_color_to_lights(conn_ref, light_ids, r, g, b, brightness);
                     });
                 }
             });
@@ -773,12 +767,18 @@ fn spawn_hue_http_sender(
     (HueColorSender { tx, channel_count }, shutdown)
 }
 
+/// Connection handle bundling the reqwest client with bridge IP + app key so helper
+/// fns don't need to carry three correlated arguments through every call.
+struct HueBridgeConnection<'a> {
+    client: &'a BlockingClient,
+    bridge_ip: &'a str,
+    username: &'a str,
+}
+
 /// Send to all lights via HTTP. For a single light: direct call. For multiple: parallel
 /// threads via `thread::scope` so each HTTPS round-trip happens concurrently.
 fn send_color_to_lights(
-    client: &BlockingClient,
-    bridge_ip: &str,
-    username: &str,
+    conn: &HueBridgeConnection<'_>,
     light_ids: &[String],
     r: u8,
     g: u8,
@@ -793,32 +793,30 @@ fn send_color_to_lights(
     let dimming = f64::from(brightness.clamp(0.0, 1.0) * 100.0);
 
     if light_ids.len() == 1 {
-        let _ = send_light_put(client, bridge_ip, username, &light_ids[0], x, y, dimming);
+        let _ = send_light_put(conn, &light_ids[0], x, y, dimming);
         return;
     }
 
     thread::scope(|s| {
         for light_id in light_ids {
             s.spawn(|| {
-                let _ = send_light_put(client, bridge_ip, username, light_id, x, y, dimming);
+                let _ = send_light_put(conn, light_id, x, y, dimming);
             });
         }
     });
 }
 
 fn send_light_put(
-    client: &BlockingClient,
-    bridge_ip: &str,
-    username: &str,
+    conn: &HueBridgeConnection<'_>,
     light_id: &str,
     x: f64,
     y: f64,
     dimming: f64,
 ) -> Result<(), String> {
-    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
-    client
+    let endpoint = format!("https://{}/clip/v2/resource/light/{light_id}", conn.bridge_ip);
+    conn.client
         .put(endpoint)
-        .header("hue-application-key", username)
+        .header("hue-application-key", conn.username)
         .json(&json!({
             "on": { "on": true },
             "dimming": { "brightness": dimming },
