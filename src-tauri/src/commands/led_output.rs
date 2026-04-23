@@ -100,6 +100,35 @@ pub fn apply_kelvin_to_pixel(rgb: [u8; 3], multipliers: &[f32; 3]) -> [u8; 3] {
     ]
 }
 
+/// Apply saturation correction to a single pixel using BT.601 luminance blend.
+///
+/// `saturation = 1.0` is the identity (epsilon fast-path, no arithmetic).
+/// `saturation = 0.0` produces a pure greyscale output.
+/// Values above 1.0 boost saturation beyond the original.
+///
+/// BT.601 luma coefficients: Y = 0.299·R + 0.587·G + 0.114·B
+#[inline(always)]
+pub fn apply_saturation_to_pixel(rgb: [u8; 3], saturation: f32) -> [u8; 3] {
+    // Fast-path: identity within floating-point epsilon.
+    if (saturation - 1.0_f32).abs() < f32::EPSILON {
+        return rgb;
+    }
+
+    let r = rgb[0] as f32;
+    let g = rgb[1] as f32;
+    let b = rgb[2] as f32;
+
+    // BT.601 luma
+    let luma = 0.299_f32 * r + 0.587_f32 * g + 0.114_f32 * b;
+
+    // Lerp each channel between luma (grey) and original value.
+    let out_r = (luma + saturation * (r - luma)).round().clamp(0.0, 255.0) as u8;
+    let out_g = (luma + saturation * (g - luma)).round().clamp(0.0, 255.0) as u8;
+    let out_b = (luma + saturation * (b - luma)).round().clamp(0.0, 255.0) as u8;
+
+    [out_r, out_g, out_b]
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
     pub code: &'static str,
@@ -282,17 +311,22 @@ impl Default for LedOutputBridge {
 }
 
 pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
-    encode_led_packet_with_kelvin(brightness, rgb_triplets, 6500)
+    encode_led_packet_with_corrections(brightness, rgb_triplets, 6500, 1.0)
 }
 
 /// Encode a LumaSync v1 packet with optional Kelvin white-balance applied
-/// before gamma correction.
+/// before gamma correction. Saturation correction is applied first.
 ///
 /// Wire format: `[0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]`
-pub fn encode_led_packet_with_kelvin(
+///
+/// This replaces the previous `encode_led_packet_with_kelvin` and is the
+/// canonical LumaSync v1 encoder. Defaults (6500 K, sat=1.0) produce
+/// byte-exact output matching the original `encode_led_packet`.
+pub fn encode_led_packet_with_corrections(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
     kelvin: u16,
+    saturation: f32,
 ) -> Vec<u8> {
     let clamped_brightness = (brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
     let led_count = u16::try_from(rgb_triplets.len()).unwrap_or(u16::MAX);
@@ -305,21 +339,40 @@ pub fn encode_led_packet_with_kelvin(
 
     let luts = &*DEFAULT_GAMMA_LUTS;
     let kelvin_muls = kelvin_to_rgb_multipliers(kelvin);
-    // Fast-path: if kelvin == 6500 the multipliers are all 1.0, skip the multiply.
-    let identity = kelvin == 6500;
+    let kelvin_identity = kelvin == 6500;
+    let sat_identity = (saturation - 1.0_f32).abs() < f32::EPSILON;
 
     for &pixel in rgb_triplets {
-        let [r, g, b] = if identity {
+        // 1. Saturation correction (BT.601 luminance blend)
+        let after_sat = if sat_identity {
             pixel
         } else {
-            apply_kelvin_to_pixel(pixel, &kelvin_muls)
+            apply_saturation_to_pixel(pixel, saturation)
         };
+
+        // 2. Kelvin white-balance
+        let [r, g, b] = if kelvin_identity {
+            after_sat
+        } else {
+            apply_kelvin_to_pixel(after_sat, &kelvin_muls)
+        };
+
+        // 3. Gamma LUT
         packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
     packet.push(checksum);
     packet
+}
+
+/// Backward-compat wrapper kept for callers that only need Kelvin (no saturation).
+pub fn encode_led_packet_with_kelvin(
+    brightness: f32,
+    rgb_triplets: &[[u8; 3]],
+    kelvin: u16,
+) -> Vec<u8> {
+    encode_led_packet_with_corrections(brightness, rgb_triplets, kelvin, 1.0)
 }
 
 #[cfg(test)]
@@ -460,9 +513,10 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::{
-        apply_kelvin_to_pixel, apply_solid_payload, build_gamma_luts, encode_led_packet,
-        encode_led_packet_with_kelvin, kelvin_to_rgb_multipliers, send_ambilight_frame,
-        LedOutputBridge, LedOutputError, LedPacketSender, SerialSink,
+        apply_kelvin_to_pixel, apply_saturation_to_pixel, apply_solid_payload, build_gamma_luts,
+        encode_led_packet, encode_led_packet_with_corrections, encode_led_packet_with_kelvin,
+        kelvin_to_rgb_multipliers, send_ambilight_frame, LedOutputBridge, LedOutputError,
+        LedPacketSender, SerialSink,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -556,6 +610,10 @@ mod tests {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // encode_led_packet regression
+    // ---------------------------------------------------------------------------
+
     #[test]
     fn solid_payload_encodes_to_deterministic_packet() {
         // Gamma 2.2 is applied to RGB values: gamma(128) = 56, gamma(255) = 255, gamma(0) = 0.
@@ -565,6 +623,10 @@ mod tests {
         assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 56, 70]);
     }
 
+    // ---------------------------------------------------------------------------
+    // Kelvin white-balance
+    // ---------------------------------------------------------------------------
+
     #[test]
     fn kelvin_6500_returns_identity_multipliers() {
         let muls = kelvin_to_rgb_multipliers(6500);
@@ -573,33 +635,39 @@ mod tests {
 
     #[test]
     fn kelvin_3200_produces_warm_tint() {
-        // Warm temperature: R should be near 1.0, B should be below 0.7.
         let muls = kelvin_to_rgb_multipliers(3200);
         assert_eq!(muls[0], 1.0_f32, "R must be 1.0 below 6600 K");
-        assert!(muls[2] < 0.7_f32, "B multiplier must be <0.7 at 3200 K, got {}", muls[2]);
+        assert!(
+            muls[2] < 0.7_f32,
+            "B multiplier must be <0.7 at 3200 K, got {}",
+            muls[2]
+        );
     }
 
     #[test]
     fn kelvin_9000_produces_cool_tint() {
-        // Cool temperature: B should be 1.0, R should be below 0.9.
         let muls = kelvin_to_rgb_multipliers(9000);
         assert_eq!(muls[2], 1.0_f32, "B must be 1.0 above 6600 K");
-        assert!(muls[0] < 0.9_f32, "R multiplier must be <0.9 at 9000 K, got {}", muls[0]);
+        assert!(
+            muls[0] < 0.9_f32,
+            "R multiplier must be <0.9 at 9000 K, got {}",
+            muls[0]
+        );
     }
 
     #[test]
     fn kelvin_6500_packet_is_byte_exact_with_default_encode() {
-        // Kelvin 6500 must produce exactly the same bytes as `encode_led_packet`.
         let frame = &[[255_u8, 128, 64]];
         let default_packet = encode_led_packet(1.0, frame);
         let kelvin_packet = encode_led_packet_with_kelvin(1.0, frame, 6500);
-        assert_eq!(default_packet, kelvin_packet, "6500 K must be a byte-exact identity");
+        assert_eq!(
+            default_packet, kelvin_packet,
+            "6500 K must be a byte-exact identity"
+        );
     }
 
     #[test]
     fn kelvin_warm_tint_changes_blue_channel() {
-        // At 2700 K the blue multiplier is well below 1.0. A pure white pixel
-        // should result in a noticeably reduced blue byte.
         let muls = kelvin_to_rgb_multipliers(2700);
         let out = apply_kelvin_to_pixel([255, 255, 255], &muls);
         assert!(
@@ -609,15 +677,65 @@ mod tests {
         );
     }
 
+    // ---------------------------------------------------------------------------
+    // Saturation correction
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn saturation_1_0_is_identity() {
+        let pixel = [200_u8, 100, 50];
+        assert_eq!(
+            apply_saturation_to_pixel(pixel, 1.0),
+            pixel,
+            "saturation 1.0 must return the pixel unchanged"
+        );
+    }
+
+    #[test]
+    fn saturation_0_0_produces_greyscale() {
+        let pixel = [200_u8, 100, 50];
+        let out = apply_saturation_to_pixel(pixel, 0.0);
+        // All channels must equal the BT.601 luma value.
+        assert_eq!(out[0], out[1], "R and G must be equal at saturation 0");
+        assert_eq!(out[1], out[2], "G and B must be equal at saturation 0");
+    }
+
+    #[test]
+    fn saturation_0_0_grey_matches_bt601_luma() {
+        // For [200, 100, 50]: Y = 0.299*200 + 0.587*100 + 0.114*50 = 59.8+58.7+5.7 = 124.2 → 124
+        let pixel = [200_u8, 100, 50];
+        let out = apply_saturation_to_pixel(pixel, 0.0);
+        assert_eq!(out[0], 124, "luma should round to 124 for [200,100,50]");
+    }
+
+    #[test]
+    fn saturation_default_packet_is_byte_exact_with_encode_led_packet() {
+        let frame = &[[200_u8, 100, 50], [10, 20, 30]];
+        let default_packet = encode_led_packet(0.8, frame);
+        let corrections_packet = encode_led_packet_with_corrections(0.8, frame, 6500, 1.0);
+        assert_eq!(
+            default_packet, corrections_packet,
+            "default corrections must produce byte-exact output"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Per-channel gamma
+    // ---------------------------------------------------------------------------
+
     #[test]
     fn per_channel_gamma_luts_are_independent() {
-        // R channel uses gamma 1.0 (linear), G/B use 2.2.
-        // Changing R gamma must not affect G or B LUT values.
         let luts = build_gamma_luts(1.0, 2.2, 2.2);
 
         assert_eq!(luts.r[128], 128, "R gamma 1.0 must be linear (128→128)");
-        assert_eq!(luts.g[128], 56, "G gamma 2.2 must match legacy value (128→56)");
-        assert_eq!(luts.b[128], 56, "B gamma 2.2 must match legacy value (128→56)");
+        assert_eq!(
+            luts.g[128], 56,
+            "G gamma 2.2 must match legacy value (128→56)"
+        );
+        assert_eq!(
+            luts.b[128], 56,
+            "B gamma 2.2 must match legacy value (128→56)"
+        );
 
         assert_ne!(
             luts.r[128], luts.g[128],
@@ -656,6 +774,10 @@ mod tests {
             );
         }
     }
+
+    // ---------------------------------------------------------------------------
+    // Bridge / sender
+    // ---------------------------------------------------------------------------
 
     #[test]
     fn bridge_uses_connected_port_and_returns_coded_write_error() {
