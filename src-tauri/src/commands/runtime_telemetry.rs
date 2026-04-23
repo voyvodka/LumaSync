@@ -77,7 +77,7 @@ pub struct FullTelemetrySnapshot {
 /// Returns None if Hue has never been active in this session.
 pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTelemetrySnapshot> {
     let arc = hue_state.runtime_arc();
-    let mut owner = acquire_hue_runtime(&*arc);
+    let mut owner = acquire_hue_runtime(&arc);
 
     // Only return telemetry if Hue has been active at some point.
     let state_str = format!("{:?}", owner.state);
