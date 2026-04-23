@@ -353,15 +353,10 @@ pub fn sample_frame_for_sequence(
                 row += STEP;
             }
 
-            if count == 0 {
-                [0, 0, 0]
-            } else {
-                [
-                    (sum_r / count) as u8,
-                    (sum_g / count) as u8,
-                    (sum_b / count) as u8,
-                ]
-            }
+            std::num::NonZeroU32::new(count).map_or([0, 0, 0], |nz| {
+                let n = nz.get();
+                [(sum_r / n) as u8, (sum_g / n) as u8, (sum_b / n) as u8]
+            })
         })
         .collect()
 }
