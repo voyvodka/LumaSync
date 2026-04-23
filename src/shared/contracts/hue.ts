@@ -29,7 +29,35 @@ export const HUE_STATUS = {
   IP_UNREACHABLE: "HUE_IP_UNREACHABLE",
   PAIRING_OK: "HUE_PAIRING_OK",
   PAIRING_PENDING_LINK_BUTTON: "HUE_PAIRING_PENDING_LINK_BUTTON",
+  /**
+   * Catch-all pairing failure. Kept for backwards compatibility with
+   * frontends that shipped before v1.4 G7 split specific pairing
+   * failure modes. New call sites should prefer the specific codes
+   * below when the cause is known.
+   */
   PAIRING_FAILED: "HUE_PAIRING_FAILED",
+  /**
+   * Bridge responded with CLIP error 101 (link button not pressed).
+   * User needs to press the physical button and retry.
+   */
+  PAIRING_LINK_BUTTON_NOT_PRESSED: "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED",
+  /**
+   * Bridge rejected our `devicetype` string (too long, malformed,
+   * already used with a different client). Host must regenerate a
+   * unique `devicetype` before retrying.
+   */
+  PAIRING_DEVICETYPE_INVALID: "HUE_PAIRING_DEVICETYPE_INVALID",
+  /**
+   * Bridge is pairing another client right now; only one pairing can
+   * be in flight at a time. User should wait a few seconds and retry.
+   */
+  PAIRING_BRIDGE_BUSY: "HUE_PAIRING_BRIDGE_BUSY",
+  /**
+   * Bridge throttled our pairing attempts (too many retries in a short
+   * window). Surface a cooldown message and an exponential-backoff
+   * retry hint to the user.
+   */
+  PAIRING_RATE_LIMITED: "HUE_PAIRING_RATE_LIMITED",
   CREDENTIAL_VALID: "HUE_CREDENTIAL_VALID",
   CREDENTIAL_INVALID: "HUE_CREDENTIAL_INVALID",
   CREDENTIAL_CHECK_FAILED: "HUE_CREDENTIAL_CHECK_FAILED",
