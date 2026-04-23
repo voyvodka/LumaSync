@@ -1514,7 +1514,7 @@ async fn fetch_area_channels(
 
 /// Apply user-supplied region overrides to a channel list fetched from the bridge.
 fn apply_channel_region_overrides(
-    channels: &mut Vec<HueAreaChannel>,
+    channels: &mut [HueAreaChannel],
     overrides: &[Option<String>],
 ) {
     for (i, channel) in channels.iter_mut().enumerate() {
