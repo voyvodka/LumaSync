@@ -727,12 +727,7 @@ fn spawn_hue_http_sender(
             .checked_sub(min_interval)
             .unwrap_or_else(Instant::now);
 
-        loop {
-            let update = match rx.recv() {
-                Ok(u) => u,
-                Err(_) => break,
-            };
-
+        while let Ok(update) = rx.recv() {
             // Drain stale updates: keep only the latest.
             let mut latest = update;
             while let Ok(newer) = rx.try_recv() {
