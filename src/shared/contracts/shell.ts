@@ -1,4 +1,4 @@
-import type { LedCalibrationConfig } from "../../features/calibration/model/contracts";
+import type { LedCalibrationConfig } from "./calibration";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
 import type {
   HueBridgeSummary,
