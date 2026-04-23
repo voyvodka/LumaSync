@@ -240,3 +240,90 @@ export const UI_MODE_MIN_SIZES: Readonly<Record<UIMode, { width: number; height:
   compact: { width: 300, height: 420 },
   full: { width: 800, height: 560 },
 };
+
+// ---------------------------------------------------------------------------
+// Keybind Registry (G9 — launch-credibility fix)
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical identifiers for every global keyboard shortcut the shell wires
+ * up. Consumers (`useGlobalKeybinds`, `StatusBar`, `LightsSection`) import
+ * from this registry instead of hardcoding `⌥1` / `Alt+1` strings, so a
+ * badge rendered in the UI is always backed by a real keydown handler.
+ *
+ * `event.code` is used for detection (not `event.key`) to survive the TR
+ * keyboard layout — on `AltGr`/`Alt`+digit combinations the `event.key`
+ * value becomes a punctuation symbol (`¡`, `™`, `£`), but `event.code`
+ * stays stable at `Digit1` / `Digit2` / `Digit3` / `Comma`.
+ */
+export const KEYBIND_ACTIONS = {
+  MODE_OFF: "mode-off",
+  MODE_AMBILIGHT: "mode-ambilight",
+  MODE_SOLID: "mode-solid",
+  OPEN_SETTINGS: "open-settings",
+} as const;
+
+export type KeybindAction = (typeof KEYBIND_ACTIONS)[keyof typeof KEYBIND_ACTIONS];
+
+/** Platform variants for keybind label + detection. */
+export type KeybindPlatform = "macos" | "default";
+
+/**
+ * Per-action keybind definition. `code` matches `KeyboardEvent.code`, while
+ * `badge` is the visible label inside the `<kbd>` cluster and `labelKey`
+ * feeds the i18n aria-label.
+ */
+export interface KeybindDefinition {
+  /**
+   * Modifier requirement. `alt` = Option on macOS / Alt on Windows+Linux,
+   * `meta` = Command on macOS / Win key on Windows (we don't use meta on
+   * non-mac — `OPEN_SETTINGS` falls back to `ctrl+,` via the `default`
+   * variant).
+   */
+  modifier: "alt" | "meta" | "ctrl";
+  /** `KeyboardEvent.code` value — stable across keyboard layouts. */
+  code: string;
+  /** Single-character chunks that render as `<kbd>` badges, in order. */
+  badge: string[];
+}
+
+/**
+ * Platform-aware keybind map. macOS uses `⌥1/⌥2/⌥3` + `⌘,`; Windows/Linux
+ * show `Alt+1/Alt+2/Alt+3` + `Ctrl+,` with matching `Alt` / `Control`
+ * modifier requirements.
+ */
+export const KEYBIND_REGISTRY: Readonly<
+  Record<KeybindPlatform, Readonly<Record<KeybindAction, KeybindDefinition>>>
+> = {
+  macos: {
+    [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["⌥", "1"] },
+    [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["⌥", "2"] },
+    [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["⌥", "3"] },
+    [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "meta", code: "Comma", badge: ["⌘", ","] },
+  },
+  default: {
+    [KEYBIND_ACTIONS.MODE_OFF]: { modifier: "alt", code: "Digit1", badge: ["Alt", "1"] },
+    [KEYBIND_ACTIONS.MODE_AMBILIGHT]: { modifier: "alt", code: "Digit2", badge: ["Alt", "2"] },
+    [KEYBIND_ACTIONS.MODE_SOLID]: { modifier: "alt", code: "Digit3", badge: ["Alt", "3"] },
+    [KEYBIND_ACTIONS.OPEN_SETTINGS]: { modifier: "ctrl", code: "Comma", badge: ["Ctrl", ","] },
+  },
+} as const;
+
+/**
+ * Detect the platform variant that drives badge labels and modifier keys.
+ * Falls back to `"default"` (Windows/Linux layout) when `navigator` is
+ * unavailable (SSR / older jsdom).
+ */
+export function resolveKeybindPlatform(): KeybindPlatform {
+  if (typeof navigator === "undefined") return "default";
+  const ua = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+  return /mac|iphone|ipod|ipad/.test(ua) ? "macos" : "default";
+}
+
+/** Look up the per-platform definition for a keybind action. */
+export function getKeybindDefinition(
+  action: KeybindAction,
+  platform: KeybindPlatform = resolveKeybindPlatform(),
+): KeybindDefinition {
+  return KEYBIND_REGISTRY[platform][action];
+}
