@@ -937,6 +937,7 @@
       "previewProgress": "LED {{led}}/{{total}} on {{segment}}",
       "previewOnly": "Preview-only mode (device disconnected)",
       "outputActive": "Output active",
+      "noDisplays": "No displays detected.",
       "errors": {
         "testPatternBlocked": "Test pattern blocked ({{code}}): {{reason}}",
         "testPatternToggleFailed": "Test pattern toggle failed: {{reason}}",

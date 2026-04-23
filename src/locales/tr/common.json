@@ -937,6 +937,7 @@
       "previewProgress": "LED {{led}}/{{total}} - {{segment}}",
       "previewOnly": "Önizleme modu (cihaz bağlı değil)",
       "outputActive": "Çıkış aktif",
+      "noDisplays": "Ekran bulunamadı.",
       "errors": {
         "testPatternBlocked": "Test paterni engellendi ({{code}}): {{reason}}",
         "testPatternToggleFailed": "Test paterni değiştirilemedi: {{reason}}",
