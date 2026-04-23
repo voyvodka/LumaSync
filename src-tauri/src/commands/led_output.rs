@@ -124,6 +124,10 @@ static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
 /// configuration adds zero cost to the hot path.
 ///
 /// The returned array is `[r_mul, g_mul, b_mul]`.
+// The Tanner Helland constants deliberately exceed f32 representable precision;
+// the extra digits document the original source values and do not affect the
+// compiled output.
+#[allow(clippy::excessive_precision)]
 pub fn kelvin_to_rgb_multipliers(kelvin: u16) -> [f32; 3] {
     if kelvin == 6500 {
         return [1.0_f32, 1.0_f32, 1.0_f32];
@@ -443,6 +447,8 @@ pub fn encode_led_packet_with_corrections(
 }
 
 /// Backward-compat wrapper: Kelvin only, saturation defaults to 1.0.
+/// Used by tests and kept for future worker integration.
+#[allow(dead_code)]
 pub fn encode_led_packet_with_kelvin(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
@@ -849,8 +855,6 @@ mod tests {
 
     #[test]
     fn adalight_has_no_brightness_byte() {
-        // Adalight protocol does not include a brightness byte.
-        // The packet length must be exactly 6 (header) + N*3 (RGB).
         let colors = vec![[128_u8; 3]; 10];
         let packet = encode_adalight_packet(&colors, &ColorCorrectionConfig::default());
         assert_eq!(
@@ -867,7 +871,10 @@ mod tests {
         let direct = encode_led_packet(0.8, frame);
         let dispatched =
             encode_packet_for_profile(FirmwareProfile::LumaSyncV1, 0.8, frame, &corrections);
-        assert_eq!(direct, dispatched, "LumaSyncV1 dispatch must match direct encoder");
+        assert_eq!(
+            direct, dispatched,
+            "LumaSyncV1 dispatch must match direct encoder"
+        );
     }
 
     #[test]
@@ -877,7 +884,10 @@ mod tests {
         let direct = encode_adalight_packet(frame, &corrections);
         let dispatched =
             encode_packet_for_profile(FirmwareProfile::Adalight, 0.8, frame, &corrections);
-        assert_eq!(direct, dispatched, "Adalight dispatch must match direct encoder");
+        assert_eq!(
+            direct, dispatched,
+            "Adalight dispatch must match direct encoder"
+        );
     }
 
     // ---------------------------------------------------------------------------
@@ -917,7 +927,10 @@ mod tests {
         let frame = &[[255_u8, 128, 64]];
         let default_packet = encode_led_packet(1.0, frame);
         let kelvin_packet = encode_led_packet_with_kelvin(1.0, frame, 6500);
-        assert_eq!(default_packet, kelvin_packet, "6500 K must be byte-exact identity");
+        assert_eq!(
+            default_packet, kelvin_packet,
+            "6500 K must be byte-exact identity"
+        );
     }
 
     #[test]
@@ -975,7 +988,10 @@ mod tests {
         assert_eq!(luts.r[128], 128, "R gamma 1.0 must be linear");
         assert_eq!(luts.g[128], 56, "G gamma 2.2 must match legacy (128→56)");
         assert_eq!(luts.b[128], 56, "B gamma 2.2 must match legacy (128→56)");
-        assert_ne!(luts.r[128], luts.g[128], "R and G must differ with different gammas");
+        assert_ne!(
+            luts.r[128], luts.g[128],
+            "R and G must differ with different gammas"
+        );
     }
 
     #[test]
@@ -1044,7 +1060,9 @@ mod tests {
         });
 
         sender.send("COM42", &[1, 2, 3]).expect("first write");
-        sender.send("COM42", &[4, 5, 6]).expect("second write reuses session");
+        sender
+            .send("COM42", &[4, 5, 6])
+            .expect("second write reuses session");
         assert_eq!(open_count.load(Ordering::SeqCst), 1);
     }
 
@@ -1058,11 +1076,17 @@ mod tests {
         });
 
         sender.send("COM42", &[1, 2, 3]).expect("first write");
-        assert_eq!(open_count.load(Ordering::SeqCst), 1, "one open after first send");
+        assert_eq!(
+            open_count.load(Ordering::SeqCst),
+            1,
+            "one open after first send"
+        );
 
         sender.disconnect_session("COM42");
 
-        sender.send("COM42", &[4, 5, 6]).expect("send after disconnect reopens");
+        sender
+            .send("COM42", &[4, 5, 6])
+            .expect("send after disconnect reopens");
         assert_eq!(
             open_count.load(Ordering::SeqCst),
             2,
@@ -1107,7 +1131,8 @@ mod tests {
         let mut sink = SerialSink::new(bridge, None, 1.0);
 
         sink.start().unwrap();
-        sink.send_frame(&[[1, 2, 3]]).expect("no-port send is a no-op");
+        sink.send_frame(&[[1, 2, 3]])
+            .expect("no-port send is a no-op");
         assert_eq!(sender.writes().len(), 0);
     }
 
@@ -1151,7 +1176,8 @@ mod tests {
         );
 
         sink.start().unwrap();
-        sink.send_frame(&[[255, 0, 0]]).expect("Adalight send should succeed");
+        sink.send_frame(&[[255, 0, 0]])
+            .expect("Adalight send should succeed");
 
         let writes = sender.writes();
         assert_eq!(writes.len(), 1);
