@@ -29,8 +29,9 @@ static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 static AMBILIGHT_FRAME_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 static AMBILIGHT_CAPTURE_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 
-type AmbilightFrameSourceFactory =
-    dyn Fn() -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> + Send + Sync;
+type AmbilightFrameSourceFactory = dyn Fn(Option<&str>) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
+    + Send
+    + Sync;
 
 #[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -81,6 +82,13 @@ pub struct LightingModeConfig {
     pub ambilight: Option<AmbilightPayload>,
     #[serde(default)]
     pub targets: Option<Vec<String>>,
+    /// Capture display selected by the user (v1.4 Platform GAP 2).
+    /// Absent ⇒ the ambilight worker falls back to the OS primary
+    /// display. Matched against the stable `DisplayInfoPayload.id`
+    /// produced by `list_displays`; a missing or unplugged id reverts
+    /// to primary rather than failing the command.
+    #[serde(default)]
+    pub display_id: Option<String>,
 }
 
 impl Default for LightingModeConfig {
@@ -90,6 +98,7 @@ impl Default for LightingModeConfig {
             solid: None,
             ambilight: None,
             targets: None,
+            display_id: None,
         }
     }
 }
@@ -218,7 +227,7 @@ impl Default for LightingRuntimeOwner {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::default(),
-            frame_source_factory: Arc::new(create_live_frame_source),
+            frame_source_factory: Arc::new(|display_id| create_live_frame_source(display_id)),
         }
     }
 }
@@ -254,9 +263,11 @@ fn clamp_brightness(value: Option<f32>, fallback: f32) -> f32 {
 
 fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
     let targets = config.targets.clone();
+    let display_id = config.display_id.clone();
     match config.kind {
         LightingModeKind::Off => LightingModeConfig {
             targets,
+            display_id,
             ..LightingModeConfig::default()
         },
         LightingModeKind::Ambilight => {
@@ -271,6 +282,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                     saturation: incoming.saturation,
                 }),
                 targets,
+                display_id,
             }
         }
         LightingModeKind::Solid => {
@@ -290,6 +302,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 }),
                 ambilight: None,
                 targets,
+                display_id,
             }
         }
     }
@@ -1107,6 +1120,7 @@ fn apply_mode_change(
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
         && normalized_next.targets == owner.active_mode.targets
+        && normalized_next.display_id == owner.active_mode.display_id
     {
         if let Some(live) = &owner.ambilight_live {
             let cfg = normalized_next
@@ -1231,7 +1245,7 @@ fn apply_mode_change(
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
 
-            let frame_source = match (owner.frame_source_factory)() {
+            let frame_source = match (owner.frame_source_factory)(normalized_next.display_id.as_deref()) {
                 Ok(source) => {
                     info!("[apply_mode_change] frame_source created OK");
                     source
@@ -1471,7 +1485,7 @@ mod tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-            frame_source_factory: Arc::new(|| {
+            frame_source_factory: Arc::new(|_display_id| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
                         width: 2,
@@ -1491,7 +1505,7 @@ mod tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-            frame_source_factory: Arc::new(|| {
+            frame_source_factory: Arc::new(|_display_id| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
                         width: 1,
@@ -1513,6 +1527,7 @@ mod tests {
                 ..Default::default()
             }),
             targets: None,
+            display_id: None,
         }
     }
 
@@ -1527,6 +1542,7 @@ mod tests {
             }),
             ambilight: None,
             targets: None,
+            display_id: None,
         }
     }
 
@@ -1554,7 +1570,7 @@ mod tests {
                     owner.output_bridge.clone(),
                     Some("COM1".to_string()),
                     AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
-                    (owner.frame_source_factory)().expect("frame source should be available"),
+                    (owner.frame_source_factory)(None).expect("frame source should be available"),
                     shared_runtime_telemetry(),
                     None,
                     None,
@@ -1751,7 +1767,7 @@ mod tests {
     fn default_runtime_owner_uses_live_source_factory_contract() {
         let owner = LightingRuntimeOwner::default();
 
-        let error = match (owner.frame_source_factory)() {
+        let error = match (owner.frame_source_factory)(None) {
             Ok(_) => panic!("default frame source must not fall back to static source"),
             Err(error) => error,
         };
@@ -1884,7 +1900,7 @@ mod lighting_mode_tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
-            frame_source_factory: Arc::new(|| {
+            frame_source_factory: Arc::new(|_display_id| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
                         width: 2,
@@ -1909,6 +1925,7 @@ mod lighting_mode_tests {
                 ..Default::default()
             }),
             targets,
+            display_id: None,
         }
     }
 
@@ -1923,6 +1940,7 @@ mod lighting_mode_tests {
             }),
             ambilight: None,
             targets,
+            display_id: None,
         }
     }
 
