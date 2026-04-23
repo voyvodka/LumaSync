@@ -1,8 +1,11 @@
 import type { LedCalibrationConfig } from "./calibration";
+import type { ColorCorrectionConfig, FirmwareProfile } from "./device";
+import type { DisplayId } from "./display";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
 import type {
   HueBridgeSummary,
   HueCredentialStatus,
+  HueIntensityPreset,
   HueOnboardingStep,
   HueRuntimeTarget,
 } from "./hue";
@@ -164,6 +167,32 @@ export interface ShellState {
    * restore returns to the user's preferred full-mode dimensions.
    */
   lastFullSize?: { width: number; height: number };
+  /**
+   * User-facing intensity preset (v1.4) that maps to an EWMA coefficient
+   * on the Hue runtime pump. Absent ⇒ `DEFAULT_HUE_INTENSITY_PRESET`.
+   */
+  lightingIntensityPreset?: HueIntensityPreset;
+  /**
+   * Per-channel color correction (v1.4 G4) applied before sinks. Absent ⇒
+   * `DEFAULT_COLOR_CORRECTION` (gamma 2.2 / 6500K / saturation 1.0).
+   */
+  colorCorrection?: ColorCorrectionConfig;
+  /**
+   * Preferred firmware profile (v1.4 G11). Absent ⇒ backend falls back to
+   * `LUMASYNC_V1` on successful handshake, then `ADALIGHT` if the handshake
+   * fails, so plain Adalight sketches continue to light up.
+   */
+  firmwareProfile?: FirmwareProfile;
+  /**
+   * Display chosen for ambilight capture (v1.4 GAP 2). Absent ⇒ capture
+   * pipeline uses the OS primary display as it does today.
+   */
+  selectedDisplayId?: DisplayId;
+  /**
+   * Whether the OS-level notification surface is enabled (v1.4 Platform
+   * GAP). Absent ⇒ notifications disabled until the user opts in.
+   */
+  notificationsEnabled?: boolean;
 }
 
 /** Default shell state for first launch */
