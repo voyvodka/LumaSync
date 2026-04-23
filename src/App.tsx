@@ -9,7 +9,7 @@
 // import { HueAreaPreview } from "./dev/HueAreaPreview";
 // export { HueAreaPreview as default };
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
@@ -59,11 +59,14 @@ import {
   UI_MODE_FADE_DURATION_MS,
   UI_MODE_FADE_TIMING,
 } from "./features/shell/useUIMode";
+import { useGlobalKeybinds } from "./features/shell/useGlobalKeybinds";
 import {
+  KEYBIND_ACTIONS,
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
 import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
+import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
 import { DEVICE_COMMANDS } from "./shared/contracts/device";
 import {
   listenTrayLightsOff,
@@ -163,6 +166,11 @@ function App() {
   // shellStore on the hot path. Hydrated on bootstrap and refreshed when
   // the calibration surface signals a change via onSaved.
   const selectedDisplayIdRef = useRef<string | undefined>(undefined);
+  // User-facing Hue intensity preset (v1.4 G6). Cached alongside the
+  // display id for the same reason — every set_lighting_mode call stamps
+  // it into `ambilight.hueIntensityPreset` without a synchronous shellStore
+  // round-trip on the drag path.
+  const hueIntensityPresetRef = useRef<HueIntensityPreset>(DEFAULT_HUE_INTENSITY_PRESET);
   /**
    * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
    * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
@@ -186,6 +194,37 @@ function App() {
       return { ...mode, displayId: id };
     },
     [],
+  );
+
+  /**
+   * Stamp the user-selected Hue intensity preset onto the ambilight payload
+   * of an outgoing LightingModeConfig (v1.4 G6). Only ambilight runs use
+   * the preset — solid / off payloads pass through untouched. The preset is
+   * a property of `AmbilightPayload` today so this helper mirrors the
+   * shape the Rust `set_lighting_mode` handler expects.
+   */
+  const withAmbilightHueIntensityPreset = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig => {
+      if (mode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return mode;
+      const preset = hueIntensityPresetRef.current;
+      const nextAmbilight = {
+        ...(mode.ambilight ?? {}),
+        hueIntensityPreset: preset,
+      } as LightingModeConfig["ambilight"] & { hueIntensityPreset: HueIntensityPreset };
+      return { ...mode, ambilight: nextAmbilight };
+    },
+    [],
+  );
+
+  /**
+   * Compose display id + Hue intensity preset in a single helper so every
+   * call site stays short. Ordering is safe because the two helpers stamp
+   * non-overlapping fields.
+   */
+  const hydrateModePayload = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig =>
+      withAmbilightHueIntensityPreset(withSelectedDisplayId(mode)),
+    [withSelectedDisplayId, withAmbilightHueIntensityPreset],
   );
 
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
@@ -401,6 +440,10 @@ function App() {
           typeof state.selectedDisplayId === "string" && state.selectedDisplayId.length > 0
             ? state.selectedDisplayId
             : undefined;
+        // Hydrate Hue intensity preset ref. Absent ⇒ DEFAULT_HUE_INTENSITY_PRESET
+        // so the ambilight worker always receives a deterministic preset.
+        hueIntensityPresetRef.current =
+          state.lightingIntensityPreset ?? DEFAULT_HUE_INTENSITY_PRESET;
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);
@@ -463,7 +506,7 @@ function App() {
                 const bootTargets = restoredTargets.filter(
                   (t) => t !== "usb" || bootstrapUsbAvailable,
                 );
-                await setLightingMode(withSelectedDisplayId({
+                await setLightingMode(hydrateModePayload({
                   ...restoredMode,
                   targets: bootTargets,
                 }));
@@ -646,7 +689,7 @@ function App() {
         // Note: was previously using invoke("set_lighting_mode", { request: {...} })
         // which is the wrong key name (Tauri expects "payload") and silently failed.
         try {
-          await setLightingMode(withSelectedDisplayId({
+          await setLightingMode(hydrateModePayload({
             kind: lightingMode.kind,
             solid: lightingMode.solid,
             ambilight: lightingMode.ambilight,
@@ -673,7 +716,7 @@ function App() {
             // Hue stream context. Without this, the running worker has hue_output=None
             // and never sends colors to Hue (solid color push handles SOLID mode too).
             try {
-              await setLightingMode(withSelectedDisplayId({
+              await setLightingMode(hydrateModePayload({
                 kind: lightingMode.kind,
                 solid: lightingMode.solid,
                 ambilight: lightingMode.ambilight,
@@ -701,7 +744,7 @@ function App() {
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload]);
 
   // ---------------------------------------------------------------------------
   // Hot-plug detection: USB plug/unplug target management (D-07, D-08)
@@ -780,7 +823,7 @@ function App() {
         scheduleLightingModePersist(normalizedNextMode);
 
         if (activeOutputTargets.includes("usb")) {
-          void setLightingMode(withSelectedDisplayId(normalizedNextMode)).catch((error) => {
+          void setLightingMode(hydrateModePayload(normalizedNextMode)).catch((error) => {
             console.error("[LumaSync] Failed to push USB solid update:", error);
           });
         }
@@ -814,7 +857,7 @@ function App() {
       if (isQuickAmbilightAdjustment) {
         setLightingModeState(normalizedNextMode);
         scheduleLightingModePersist(normalizedNextMode);
-        void setLightingMode(withSelectedDisplayId(normalizedNextMode)).catch((error) => {
+        void setLightingMode(hydrateModePayload(normalizedNextMode)).catch((error) => {
           console.error("[LumaSync] Failed to push Ambilight settings update:", error);
         });
         modeTransitionLockRef.current = false;
@@ -945,7 +988,7 @@ function App() {
 
         if (needsLightingModeApply) {
           try {
-            await setLightingMode(withSelectedDisplayId(normalizedNextMode));
+            await setLightingMode(hydrateModePayload(normalizedNextMode));
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: true };
             }
@@ -1001,6 +1044,7 @@ function App() {
       activeOutputTargets,
       handleOpenCalibration,
       hueStartConfig,
+      hydrateModePayload,
       lightingMode.ambilight,
       lightingMode.kind,
       lightingMode.solid,
@@ -1012,6 +1056,58 @@ function App() {
 
   // Keep handleLightingModeChangeRef in sync so tray listeners always use latest handler
   handleLightingModeChangeRef.current = handleLightingModeChange;
+
+  // ---------------------------------------------------------------------------
+  // Global keyboard shortcuts (G9 — launch-credibility fix).
+  //
+  // Every `<kbd>` cluster rendered by StatusBar / LightsSection comes from
+  // `KEYBIND_REGISTRY`; here is where those badges become actual behaviour.
+  // `useGlobalKeybinds` owns the document-level keydown listener and routes
+  // each KeybindAction to the matching callback below. Disabling the hook
+  // while a UI-mode fade is in flight keeps `⌥1/⌥2/⌥3` from firing during
+  // the 180 ms cross-fade, where the lighting mode buttons would be invisible
+  // anyway — pressing them mid-transition was the main feedback loop that
+  // caused the "ghost mode flash" behaviour in preview builds.
+  // ---------------------------------------------------------------------------
+  const keybindHandlers = useMemo(
+    () => ({
+      [KEYBIND_ACTIONS.MODE_OFF]: () => {
+        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.OFF });
+      },
+      [KEYBIND_ACTIONS.MODE_AMBILIGHT]: () => {
+        void handleLightingModeChange({
+          kind: LIGHTING_MODE_KIND.AMBILIGHT,
+          ambilight: lightingMode.ambilight,
+        });
+      },
+      [KEYBIND_ACTIONS.MODE_SOLID]: () => {
+        void handleLightingModeChange({
+          kind: LIGHTING_MODE_KIND.SOLID,
+          solid: lightingMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 },
+        });
+      },
+      [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
+        // ⌘, / Ctrl+, is the canonical "open settings" shortcut across
+        // macOS / Linux / Windows desktop apps. Route to the System section
+        // in full mode; if the user is in compact, switch to full first so
+        // the settings surface is actually visible.
+        if (currentMode === "compact") {
+          switchUIMode("full");
+        }
+        void handleSectionChange(SECTION_IDS.SYSTEM);
+      },
+    }),
+    [
+      handleLightingModeChange,
+      handleSectionChange,
+      switchUIMode,
+      currentMode,
+      lightingMode.ambilight,
+      lightingMode.solid,
+    ],
+  );
+
+  useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
@@ -1040,6 +1136,17 @@ function App() {
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
+    onHueIntensityPresetChange: (preset: HueIntensityPreset) => {
+      hueIntensityPresetRef.current = preset;
+      // Hot-reload an in-flight ambilight worker so the new preset takes
+      // effect without a mode switch. For non-ambilight modes the preset
+      // simply rides along on the next start_lighting_mode dispatch.
+      if (lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+        void setLightingMode(hydrateModePayload(lightingMode)).catch((error) => {
+          console.error("[LumaSync] Failed to hot-reload Hue intensity preset:", error);
+        });
+      }
+    },
   } as const;
 
   // Derive runtime status items for the bottom StatusBar. Order matches the
