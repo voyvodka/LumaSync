@@ -7,6 +7,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-04-23
+
+### Fixed
+
+- CHANGELOG: de-duplicated `[1.1.0]` heading; the March 2026 foundation entry was never tagged and is now demoted to a historical sub-section so the release workflow's changelog extractor no longer silently drops it
+
 ## [1.3.0] — 2026-04-22
 
 ### Added
@@ -185,9 +191,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ---
 
-## [1.1.0] — 2026-03-28
+### Historical — Pre-1.1.0 Foundation (2026-03-28)
 
-### Added
+#### Added
 
 - Philips Hue DTLS 1.2 PSK entertainment streaming over UDP (cipher `PSK-AES128-GCM-SHA256`, port 2100) using vendored OpenSSL
 - `ShutdownSignal` mechanism: DTLS sender thread signals clean exit; `stop_hue_stream` waits up to 3 s and marks timeout on failure
@@ -203,7 +209,7 @@ https://keepachangelog.com/en/1.1.0/
 - Initial open-source contributor documentation (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`)
 - MIT License
 
-### Changed
+#### Changed
 
 - `stop_with_timeout` now clears `persistent_sender` on user-initiated stops (`ModeControl`, `DeviceSurface`) and preserves it on system-triggered stops
 - `start_hue_stream` guards against race condition: re-checks `owner.state` after async credential fetch before storing stream context
@@ -214,7 +220,7 @@ https://keepachangelog.com/en/1.1.0/
 - Dark mode badge color improvements in Device section (Connected, Checking, Unreachable badges)
 - Expanded `README.md` with setup, scripts, structure, and policy references
 
-### Fixed
+#### Fixed
 
 - DTLS thread death no longer causes silent stuck-`Running` state — fault is registered and UI reflects failure
 - Race condition in `start_hue_stream`: concurrent stop during async credential fetch no longer spawns a dangling sender

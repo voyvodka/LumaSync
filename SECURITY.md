@@ -6,7 +6,7 @@ Security updates are provided for the latest stable release.
 
 | Version | Supported |
 | --- | --- |
-| 1.3.x (current: 1.3.0) | Yes |
+| 1.3.x (current: 1.3.1) | Yes |
 | < 1.2.0 | No |
 
 ## Reporting a Vulnerability
