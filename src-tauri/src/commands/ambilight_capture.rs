@@ -40,8 +40,61 @@ pub trait AmbilightFrameSource: Send {
     fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError>;
 }
 
-pub fn create_live_frame_source() -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
-    platform::create_live_frame_source()
+/// Stable handle for a capture target enumerated by the platform adapter.
+///
+/// `id` must match the `DisplayInfoPayload.id` string produced by the
+/// `list_displays` Tauri command so the frontend selection round-trips
+/// losslessly. `is_primary` is the fallback beacon used by
+/// [`select_display_index`] when the requested id is missing (display
+/// unplugged / replugged with a different native handle, first launch
+/// before the user has picked one, etc).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DisplayCandidate {
+    pub id: String,
+    pub is_primary: bool,
+}
+
+/// Pick a display from `candidates` by matching the optional hint against
+/// the stable `DisplayCandidate.id`. Falls back to the first primary
+/// candidate, then the first candidate overall. Returns `None` only when
+/// the list is empty (platform returned zero displays).
+///
+/// The primary-fallback rule is required for volatile native handles
+/// (macOS `SCDisplay` ordering can change on replug, Windows `HMONITOR`
+/// is recycled) — the worker must not fail hard when a persisted id no
+/// longer resolves.
+pub fn select_display_index(
+    id_hint: Option<&str>,
+    candidates: &[DisplayCandidate],
+) -> Option<usize> {
+    if candidates.is_empty() {
+        return None;
+    }
+
+    if let Some(hint) = id_hint.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    }) {
+        if let Some(index) = candidates.iter().position(|candidate| candidate.id == hint) {
+            return Some(index);
+        }
+    }
+
+    if let Some(index) = candidates.iter().position(|candidate| candidate.is_primary) {
+        return Some(index);
+    }
+
+    Some(0)
+}
+
+pub fn create_live_frame_source(
+    display_id: Option<&str>,
+) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+    platform::create_live_frame_source(display_id)
 }
 
 pub struct StaticFrameSource {
@@ -89,16 +142,80 @@ mod platform {
         MinimumUpdateIntervalSettings, SecondaryWindowSettings, Settings,
     };
 
-    use super::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
+    use super::{
+        select_display_index, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+        DisplayCandidate,
+    };
 
     type SharedFrame = Arc<Mutex<Option<Arc<CapturedFrame>>>>;
 
-    pub(super) fn create_live_frame_source(
-    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
-        let latest_frame = Arc::new(Mutex::new(None));
-        let monitor = Monitor::primary().map_err(|_| {
+    /// Resolve a `Monitor` for the requested capture display.
+    ///
+    /// The stable id baked into `DisplayInfoPayload.id` on Windows is
+    /// `"<device_name>:<x>:<y>"` where `device_name` is the OS form
+    /// `\\.\DISPLAY<N>` returned by both Tauri's monitor API and
+    /// `windows-capture::Monitor::device_name`. We enumerate monitors,
+    /// reconstruct the same prefix via `device_name` (position is not
+    /// exposed on windows-capture `Monitor`; Windows guarantees
+    /// `\\.\DISPLAY<N>` uniqueness across active displays so the prefix
+    /// alone suffices), and let [`select_display_index`] pick with
+    /// primary fallback when the persisted id no longer resolves
+    /// (monitor unplugged / replugged into a different `DISPLAY<N>`
+    /// slot).
+    fn resolve_monitor(display_id: Option<&str>) -> Result<Monitor, AmbilightCaptureError> {
+        let monitors = Monitor::enumerate().map_err(|_| {
             AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
         })?;
+        if monitors.is_empty() {
+            return Err(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ));
+        }
+
+        let primary_device_name = Monitor::primary()
+            .ok()
+            .and_then(|monitor| monitor.device_name().ok());
+
+        let candidates: Vec<DisplayCandidate> = monitors
+            .iter()
+            .map(|monitor| {
+                let device = monitor.device_name().unwrap_or_default();
+                let is_primary = primary_device_name
+                    .as_deref()
+                    .is_some_and(|primary| primary == device);
+                DisplayCandidate {
+                    id: device,
+                    is_primary,
+                }
+            })
+            .collect();
+
+        // Strip trailing `":x:y"` so a persisted id from `list_displays`
+        // matches the monitor's device_name after resolution / position
+        // changes.
+        let hint_device = display_id.and_then(|raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let head = trimmed.rsplitn(3, ':').nth(2).unwrap_or(trimmed);
+            Some(head.to_string())
+        });
+
+        let index = select_display_index(hint_device.as_deref(), &candidates).ok_or(
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
+        )?;
+
+        monitors.into_iter().nth(index).ok_or(
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
+        )
+    }
+
+    pub(super) fn create_live_frame_source(
+        display_id: Option<&str>,
+    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+        let latest_frame = Arc::new(Mutex::new(None));
+        let monitor = resolve_monitor(display_id)?;
         let settings = Settings::new(
             monitor,
             CursorCaptureSettings::Default,
@@ -234,24 +351,98 @@ mod platform {
     use screencapturekit::cv::CVPixelBufferLockFlags;
     use screencapturekit::prelude::*;
 
-    use super::{AmbilightCaptureError, AmbilightFrameSource, CapturedFrame};
+    use super::{
+        select_display_index, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+        DisplayCandidate,
+    };
 
     type SharedFrame = Arc<Mutex<Option<Arc<CapturedFrame>>>>;
 
-    pub(super) fn create_live_frame_source(
-    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+    /// Resolve the SCDisplay matching the persisted `display_id` hint,
+    /// falling back to the primary (main) display on any mismatch.
+    ///
+    /// `DisplayInfoPayload.id` on macOS is `"<tao-name>:<x>:<y>"` where
+    /// `tao-name` is `"Monitor #<model>"`. `SCDisplay` does not expose
+    /// model number, so we use the trailing `"<x>:<y>"` portion as the
+    /// stable key — logical origin coordinates are available on both
+    /// `SCDisplay.frame()` and Tauri's `available_monitors()` and remain
+    /// stable while a display stays connected. On unplug/replug the
+    /// persisted id stops matching and we revert to primary via
+    /// `CGMainDisplayID`.
+    fn select_display(display_id: Option<&str>) -> Result<SCDisplay, AmbilightCaptureError> {
         let content = SCShareableContent::get().map_err(|_| {
             AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_PERMISSION_DENIED")
         })?;
 
-        let display =
-            content
-                .displays()
-                .into_iter()
-                .next()
-                .ok_or(AmbilightCaptureError::InvalidFrame(
-                    "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
-                ))?;
+        let displays = content.displays();
+        if displays.is_empty() {
+            return Err(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ));
+        }
+
+        let main_id = unsafe { main_display_id_ffi() };
+
+        let candidates: Vec<DisplayCandidate> = displays
+            .iter()
+            .map(|display| {
+                let frame = display.frame();
+                let origin = frame.origin();
+                let x = origin.x.round() as i32;
+                let y = origin.y.round() as i32;
+                let is_primary = display.display_id() == main_id;
+                DisplayCandidate {
+                    id: format!("{}:{}", x, y),
+                    is_primary,
+                }
+            })
+            .collect();
+
+        // Reduce the incoming Tauri id to `"<x>:<y>"` so it matches our
+        // position-keyed candidates.
+        let hint_key = display_id.and_then(|raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let tokens: Vec<&str> = trimmed.rsplitn(3, ':').collect();
+            // rsplitn yields tokens in reverse order; when `name:x:y`
+            // is supplied, tokens = ["y", "x", "name"] so the first two
+            // entries form the stable key.
+            if tokens.len() >= 2 {
+                Some(format!("{}:{}", tokens[1], tokens[0]))
+            } else {
+                None
+            }
+        });
+
+        let index = select_display_index(hint_key.as_deref(), &candidates).ok_or(
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
+        )?;
+
+        displays
+            .into_iter()
+            .nth(index)
+            .ok_or(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ))
+    }
+
+    /// Thin wrapper over CoreGraphics `CGMainDisplayID`. Declared inline
+    /// to keep the macOS capture surface self-contained; the same call
+    /// is used by tao/winit for primary detection so behaviour matches
+    /// what `list_displays` considers primary.
+    unsafe fn main_display_id_ffi() -> u32 {
+        extern "C" {
+            fn CGMainDisplayID() -> u32;
+        }
+        unsafe { CGMainDisplayID() }
+    }
+
+    pub(super) fn create_live_frame_source(
+        display_id: Option<&str>,
+    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+        let display = select_display(display_id)?;
 
         let filter = SCContentFilter::create()
             .with_display(&display)
@@ -409,6 +600,7 @@ mod platform {
     use super::{AmbilightCaptureError, AmbilightFrameSource};
 
     pub(super) fn create_live_frame_source(
+        _display_id: Option<&str>,
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         Err(AmbilightCaptureError::InvalidFrame(
             "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM",
@@ -604,8 +796,8 @@ mod tests {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     use super::create_live_frame_source;
     use super::{
-        sample_led_frame, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
-        SamplingCalibration,
+        sample_led_frame, select_display_index, AmbilightCaptureError, AmbilightFrameSource,
+        CapturedFrame, DisplayCandidate, SamplingCalibration,
     };
 
     struct SingleFrameSource {
@@ -678,7 +870,7 @@ mod tests {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     #[test]
     fn live_source_factory_returns_coded_unsupported_error_on_unsupported_platform() {
-        let error = match create_live_frame_source() {
+        let error = match create_live_frame_source(None) {
             Ok(_) => panic!("unsupported platform live source should fail"),
             Err(error) => error,
         };
@@ -691,5 +883,83 @@ mod tests {
             error.as_reason(),
             "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM".to_string()
         );
+    }
+
+    // ------------------------------------------------------------------
+    // select_display_index — display selection helper (Platform GAP 2)
+    // ------------------------------------------------------------------
+
+    fn sample_candidates() -> Vec<DisplayCandidate> {
+        vec![
+            DisplayCandidate {
+                id: "secondary:1920:0".to_string(),
+                is_primary: false,
+            },
+            DisplayCandidate {
+                id: "primary:0:0".to_string(),
+                is_primary: true,
+            },
+            DisplayCandidate {
+                id: "third:-1920:0".to_string(),
+                is_primary: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn select_display_index_returns_none_when_no_candidates() {
+        assert_eq!(select_display_index(Some("anything"), &[]), None);
+        assert_eq!(select_display_index(None, &[]), None);
+    }
+
+    #[test]
+    fn select_display_index_falls_back_to_primary_when_hint_absent() {
+        let candidates = sample_candidates();
+        let index = select_display_index(None, &candidates).expect("candidate expected");
+        assert_eq!(candidates[index].id, "primary:0:0");
+        assert!(candidates[index].is_primary);
+    }
+
+    #[test]
+    fn select_display_index_falls_back_to_primary_when_hint_unknown() {
+        // Simulates the unplugged / replugged monitor case: the persisted
+        // id no longer resolves to any enumerated candidate.
+        let candidates = sample_candidates();
+        let index = select_display_index(Some("removed-monitor:9999:9999"), &candidates)
+            .expect("candidate expected");
+        assert!(candidates[index].is_primary);
+        assert_eq!(candidates[index].id, "primary:0:0");
+    }
+
+    #[test]
+    fn select_display_index_matches_exact_id_when_hint_present() {
+        let candidates = sample_candidates();
+        let index = select_display_index(Some("secondary:1920:0"), &candidates)
+            .expect("candidate expected");
+        assert_eq!(candidates[index].id, "secondary:1920:0");
+        assert!(!candidates[index].is_primary);
+    }
+
+    #[test]
+    fn select_display_index_ignores_blank_or_whitespace_hint() {
+        let candidates = sample_candidates();
+        let index = select_display_index(Some("   "), &candidates).expect("candidate expected");
+        assert!(candidates[index].is_primary);
+    }
+
+    #[test]
+    fn select_display_index_falls_back_to_first_when_no_primary_flagged() {
+        let candidates = vec![
+            DisplayCandidate {
+                id: "a".to_string(),
+                is_primary: false,
+            },
+            DisplayCandidate {
+                id: "b".to_string(),
+                is_primary: false,
+            },
+        ];
+        let index = select_display_index(Some("missing"), &candidates).expect("candidate expected");
+        assert_eq!(candidates[index].id, "a");
     }
 }
