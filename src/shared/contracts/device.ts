@@ -13,6 +13,14 @@ export const DEVICE_COMMANDS = {
   STOP_LIGHTING: "stop_lighting",
   GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
+  /**
+   * Per-LED sampling frame pump (v1.4 anchor). The Rust handler computes
+   * the next frame's RGB triples from the configured sampling strategy
+   * and streams them through the active `LedSink`. Contract-first: the
+   * command name is reserved here so the frontend can already wire the
+   * sampling playground UI while the Rust handler lands in Wave 2.
+   */
+  SAMPLE_LED_FRAME: "sample_led_frame",
 } as const;
 
 export const DEVICE_STATUS = {
