@@ -332,8 +332,18 @@ pub async fn list_hue_entertainment_areas(
                 areas,
             }
         }
-        Err(error) => {
-            let message = error.into_message();
+        Err(AreaListError::AuthInvalid) => {
+            warn!("Hue area list rejected with 403 type=1 — re-pair required");
+            HueEntertainmentAreaListResponse {
+                status: command_status(
+                    "AUTH_INVALID_RE_PAIR_REQUIRED",
+                    "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                    Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
+                ),
+                areas: Vec::new(),
+            }
+        }
+        Err(AreaListError::Other(message)) => {
             warn!("Failed to list Hue entertainment areas: {message}");
             HueEntertainmentAreaListResponse {
                 status: command_status(
@@ -405,8 +415,21 @@ pub async fn check_hue_stream_readiness(
                 readiness: HueStreamReadiness { ready, reasons },
             }
         }
-        Err(error) => {
-            let message = error.into_message();
+        Err(AreaListError::AuthInvalid) => {
+            warn!("Hue readiness rejected with 403 type=1 — re-pair required");
+            HueStreamReadinessResponse {
+                status: command_status(
+                    "AUTH_INVALID_RE_PAIR_REQUIRED",
+                    "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                    Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
+                ),
+                readiness: HueStreamReadiness {
+                    ready: false,
+                    reasons: vec!["Bridge credentials are invalid; re-pair required.".to_string()],
+                },
+            }
+        }
+        Err(AreaListError::Other(message)) => {
             warn!("Hue stream readiness check failed: {message}");
             HueStreamReadinessResponse {
                 status: command_status(
@@ -675,15 +698,6 @@ async fn fetch_hue_entertainment_areas(
 enum AreaListError {
     AuthInvalid,
     Other(String),
-}
-
-impl AreaListError {
-    fn into_message(self) -> String {
-        match self {
-            AreaListError::AuthInvalid => "AUTH_INVALID_RE_PAIR_REQUIRED".to_string(),
-            AreaListError::Other(msg) => msg,
-        }
-    }
 }
 
 fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, String> {
