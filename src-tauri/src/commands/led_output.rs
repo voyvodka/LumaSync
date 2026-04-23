@@ -41,6 +41,65 @@ pub fn build_gamma_luts(gamma_r: f32, gamma_g: f32, gamma_b: f32) -> GammaLuts {
 static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
     std::sync::LazyLock::new(|| build_gamma_luts(2.2, 2.2, 2.2));
 
+/// Convert a colour temperature in Kelvin to per-channel RGB multipliers.
+///
+/// Uses the Tanner Helland curve-fit approximation, clamped to [0.0, 1.0] and
+/// normalized so the maximum multiplier of each channel is 1.0.
+///
+/// 6500 K returns `[1.0, 1.0, 1.0]` (identity fast-path) so the default
+/// configuration adds zero cost to the hot path.
+///
+/// The returned array is `[r_mul, g_mul, b_mul]`.
+pub fn kelvin_to_rgb_multipliers(kelvin: u16) -> [f32; 3] {
+    // Identity fast-path for the default 6500 K setting.
+    if kelvin == 6500 {
+        return [1.0_f32, 1.0_f32, 1.0_f32];
+    }
+
+    let temp = kelvin as f32 / 100.0_f32;
+
+    // --- Red ---
+    let r = if temp <= 66.0 {
+        1.0_f32
+    } else {
+        let v = 329.698_727_446_f32 * (temp - 60.0_f32).powf(-0.133_204_759_2_f32);
+        (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
+    };
+
+    // --- Green ---
+    let g = if temp <= 66.0 {
+        let v = 99.470_802_586_f32 * temp.ln() - 161.119_568_166_f32;
+        (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
+    } else {
+        let v = 288.122_169_528_f32 * (temp - 60.0_f32).powf(-0.075_514_849_2_f32);
+        (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
+    };
+
+    // --- Blue ---
+    let b = if temp >= 66.0 {
+        1.0_f32
+    } else if temp <= 19.0 {
+        0.0_f32
+    } else {
+        let v = 138.517_731_223_f32 * (temp - 10.0_f32).ln() - 305.044_792_730_f32;
+        (v / 255.0_f32).clamp(0.0_f32, 1.0_f32)
+    };
+
+    [r, g, b]
+}
+
+/// Apply Kelvin white-balance multipliers to a single pixel.
+///
+/// `multipliers` must be pre-computed via `kelvin_to_rgb_multipliers`.
+#[inline(always)]
+pub fn apply_kelvin_to_pixel(rgb: [u8; 3], multipliers: &[f32; 3]) -> [u8; 3] {
+    [
+        (rgb[0] as f32 * multipliers[0]).round().clamp(0.0, 255.0) as u8,
+        (rgb[1] as f32 * multipliers[1]).round().clamp(0.0, 255.0) as u8,
+        (rgb[2] as f32 * multipliers[2]).round().clamp(0.0, 255.0) as u8,
+    ]
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
     pub code: &'static str,
@@ -223,6 +282,18 @@ impl Default for LedOutputBridge {
 }
 
 pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
+    encode_led_packet_with_kelvin(brightness, rgb_triplets, 6500)
+}
+
+/// Encode a LumaSync v1 packet with optional Kelvin white-balance applied
+/// before gamma correction.
+///
+/// Wire format: `[0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]`
+pub fn encode_led_packet_with_kelvin(
+    brightness: f32,
+    rgb_triplets: &[[u8; 3]],
+    kelvin: u16,
+) -> Vec<u8> {
     let clamped_brightness = (brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
     let led_count = u16::try_from(rgb_triplets.len()).unwrap_or(u16::MAX);
 
@@ -233,7 +304,16 @@ pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
     packet.extend_from_slice(&led_count.to_le_bytes());
 
     let luts = &*DEFAULT_GAMMA_LUTS;
-    for &[r, g, b] in rgb_triplets {
+    let kelvin_muls = kelvin_to_rgb_multipliers(kelvin);
+    // Fast-path: if kelvin == 6500 the multipliers are all 1.0, skip the multiply.
+    let identity = kelvin == 6500;
+
+    for &pixel in rgb_triplets {
+        let [r, g, b] = if identity {
+            pixel
+        } else {
+            apply_kelvin_to_pixel(pixel, &kelvin_muls)
+        };
         packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
     }
 
@@ -380,7 +460,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::{
-        apply_solid_payload, build_gamma_luts, encode_led_packet, send_ambilight_frame,
+        apply_kelvin_to_pixel, apply_solid_payload, build_gamma_luts, encode_led_packet,
+        encode_led_packet_with_kelvin, kelvin_to_rgb_multipliers, send_ambilight_frame,
         LedOutputBridge, LedOutputError, LedPacketSender, SerialSink,
     };
     use crate::commands::device_connection::{
@@ -485,19 +566,59 @@ mod tests {
     }
 
     #[test]
+    fn kelvin_6500_returns_identity_multipliers() {
+        let muls = kelvin_to_rgb_multipliers(6500);
+        assert_eq!(muls, [1.0_f32, 1.0_f32, 1.0_f32]);
+    }
+
+    #[test]
+    fn kelvin_3200_produces_warm_tint() {
+        // Warm temperature: R should be near 1.0, B should be below 0.7.
+        let muls = kelvin_to_rgb_multipliers(3200);
+        assert_eq!(muls[0], 1.0_f32, "R must be 1.0 below 6600 K");
+        assert!(muls[2] < 0.7_f32, "B multiplier must be <0.7 at 3200 K, got {}", muls[2]);
+    }
+
+    #[test]
+    fn kelvin_9000_produces_cool_tint() {
+        // Cool temperature: B should be 1.0, R should be below 0.9.
+        let muls = kelvin_to_rgb_multipliers(9000);
+        assert_eq!(muls[2], 1.0_f32, "B must be 1.0 above 6600 K");
+        assert!(muls[0] < 0.9_f32, "R multiplier must be <0.9 at 9000 K, got {}", muls[0]);
+    }
+
+    #[test]
+    fn kelvin_6500_packet_is_byte_exact_with_default_encode() {
+        // Kelvin 6500 must produce exactly the same bytes as `encode_led_packet`.
+        let frame = &[[255_u8, 128, 64]];
+        let default_packet = encode_led_packet(1.0, frame);
+        let kelvin_packet = encode_led_packet_with_kelvin(1.0, frame, 6500);
+        assert_eq!(default_packet, kelvin_packet, "6500 K must be a byte-exact identity");
+    }
+
+    #[test]
+    fn kelvin_warm_tint_changes_blue_channel() {
+        // At 2700 K the blue multiplier is well below 1.0. A pure white pixel
+        // should result in a noticeably reduced blue byte.
+        let muls = kelvin_to_rgb_multipliers(2700);
+        let out = apply_kelvin_to_pixel([255, 255, 255], &muls);
+        assert!(
+            out[2] < 200,
+            "Blue channel should be reduced at 2700 K, got {}",
+            out[2]
+        );
+    }
+
+    #[test]
     fn per_channel_gamma_luts_are_independent() {
         // R channel uses gamma 1.0 (linear), G/B use 2.2.
         // Changing R gamma must not affect G or B LUT values.
         let luts = build_gamma_luts(1.0, 2.2, 2.2);
 
-        // R gamma 1.0 → linear passthrough: index 128 → 128
         assert_eq!(luts.r[128], 128, "R gamma 1.0 must be linear (128→128)");
-        // G gamma 2.2 → 128 → 56 (same as unified LUT)
         assert_eq!(luts.g[128], 56, "G gamma 2.2 must match legacy value (128→56)");
-        // B gamma 2.2 → 128 → 56
         assert_eq!(luts.b[128], 56, "B gamma 2.2 must match legacy value (128→56)");
 
-        // Verify R != G when using different gammas
         assert_ne!(
             luts.r[128], luts.g[128],
             "R and G must differ when gammas differ"
@@ -506,8 +627,6 @@ mod tests {
 
     #[test]
     fn build_gamma_luts_222_matches_legacy_unified_lut() {
-        // The default 2.2/2.2/2.2 tables must produce the same values as the
-        // old unified GAMMA_LUT to guarantee zero regression on the wire format.
         let luts = build_gamma_luts(2.2, 2.2, 2.2);
         let legacy_spot_checks: &[(usize, u8)] = &[
             (0, 0),
