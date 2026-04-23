@@ -9,18 +9,37 @@ use super::device_connection::SerialConnectionState;
 const OUTPUT_BAUD_RATE: u32 = 115_200;
 const OUTPUT_TIMEOUT_MS: u64 = 500;
 
-/// Gamma 2.2 lookup table for WS2812B LEDs.
+/// Per-channel gamma lookup tables for WS2812B LEDs.
 ///
-/// WS2812B responds linearly to PWM values but human vision is non-linear.
-/// Without gamma correction mid-range colours appear washed out and dim content
-/// loses detail. Each entry: `round((i / 255)^2.2 * 255)`.
-static GAMMA_LUT: std::sync::LazyLock<[u8; 256]> = std::sync::LazyLock::new(|| {
-    let mut lut = [0u8; 256];
-    for (i, entry) in lut.iter_mut().enumerate() {
-        *entry = ((i as f32 / 255.0_f32).powf(2.2_f32) * 255.0_f32).round() as u8;
+/// Splits the previously unified `GAMMA_LUT` into three independent tables so
+/// that each channel can be corrected with a different exponent. The default
+/// tables use gamma 2.2 for all three channels, preserving the existing wire
+/// behaviour until the user selects different values.
+pub struct GammaLuts {
+    pub r: [u8; 256],
+    pub g: [u8; 256],
+    pub b: [u8; 256],
+}
+
+/// Build three independent gamma LUTs from the supplied per-channel exponents.
+/// Each entry: `round((i / 255)^gamma * 255)`.
+pub fn build_gamma_luts(gamma_r: f32, gamma_g: f32, gamma_b: f32) -> GammaLuts {
+    let mut r = [0u8; 256];
+    let mut g = [0u8; 256];
+    let mut b = [0u8; 256];
+    for i in 0..=255usize {
+        let v = i as f32 / 255.0_f32;
+        r[i] = (v.powf(gamma_r) * 255.0_f32).round() as u8;
+        g[i] = (v.powf(gamma_g) * 255.0_f32).round() as u8;
+        b[i] = (v.powf(gamma_b) * 255.0_f32).round() as u8;
     }
-    lut
-});
+    GammaLuts { r, g, b }
+}
+
+/// Default gamma 2.2 / 2.2 / 2.2 tables — identical to the old unified
+/// `GAMMA_LUT`, kept as a static to avoid re-computing on every frame.
+static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
+    std::sync::LazyLock::new(|| build_gamma_luts(2.2, 2.2, 2.2));
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
@@ -213,9 +232,9 @@ pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
     packet.push(clamped_brightness);
     packet.extend_from_slice(&led_count.to_le_bytes());
 
-    let lut = &*GAMMA_LUT;
+    let luts = &*DEFAULT_GAMMA_LUTS;
     for &[r, g, b] in rgb_triplets {
-        packet.extend_from_slice(&[lut[r as usize], lut[g as usize], lut[b as usize]]);
+        packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
@@ -361,8 +380,8 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::{
-        apply_solid_payload, encode_led_packet, send_ambilight_frame, LedOutputBridge,
-        LedOutputError, LedPacketSender, SerialSink,
+        apply_solid_payload, build_gamma_luts, encode_led_packet, send_ambilight_frame,
+        LedOutputBridge, LedOutputError, LedPacketSender, SerialSink,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -463,6 +482,60 @@ mod tests {
         let packet = encode_led_packet(0.5, &[[255, 0, 128]]);
 
         assert_eq!(packet, vec![0xAA, 0x55, 127, 1, 0, 255, 0, 56, 70]);
+    }
+
+    #[test]
+    fn per_channel_gamma_luts_are_independent() {
+        // R channel uses gamma 1.0 (linear), G/B use 2.2.
+        // Changing R gamma must not affect G or B LUT values.
+        let luts = build_gamma_luts(1.0, 2.2, 2.2);
+
+        // R gamma 1.0 → linear passthrough: index 128 → 128
+        assert_eq!(luts.r[128], 128, "R gamma 1.0 must be linear (128→128)");
+        // G gamma 2.2 → 128 → 56 (same as unified LUT)
+        assert_eq!(luts.g[128], 56, "G gamma 2.2 must match legacy value (128→56)");
+        // B gamma 2.2 → 128 → 56
+        assert_eq!(luts.b[128], 56, "B gamma 2.2 must match legacy value (128→56)");
+
+        // Verify R != G when using different gammas
+        assert_ne!(
+            luts.r[128], luts.g[128],
+            "R and G must differ when gammas differ"
+        );
+    }
+
+    #[test]
+    fn build_gamma_luts_222_matches_legacy_unified_lut() {
+        // The default 2.2/2.2/2.2 tables must produce the same values as the
+        // old unified GAMMA_LUT to guarantee zero regression on the wire format.
+        let luts = build_gamma_luts(2.2, 2.2, 2.2);
+        let legacy_spot_checks: &[(usize, u8)] = &[
+            (0, 0),
+            (1, 0),
+            (10, 0),
+            (64, 13),
+            (128, 56),
+            (200, 148),
+            (254, 253),
+            (255, 255),
+        ];
+        for &(idx, expected) in legacy_spot_checks {
+            assert_eq!(
+                luts.r[idx], expected,
+                "R LUT mismatch at index {idx}: expected {expected}, got {}",
+                luts.r[idx]
+            );
+            assert_eq!(
+                luts.g[idx], expected,
+                "G LUT mismatch at index {idx}: expected {expected}, got {}",
+                luts.g[idx]
+            );
+            assert_eq!(
+                luts.b[idx], expected,
+                "B LUT mismatch at index {idx}: expected {expected}, got {}",
+                luts.b[idx]
+            );
+        }
     }
 
     #[test]
