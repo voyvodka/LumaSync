@@ -21,7 +21,8 @@ use super::led_calibration::{
     build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
-    apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, LedOutputBridge,
+    apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, ColorCorrectionConfig,
+    FirmwareProfile, LedOutputBridge,
 };
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
@@ -118,6 +119,16 @@ pub struct LightingModeConfig {
     /// When absent, the worker falls back to single-zone sampling.
     #[serde(default)]
     pub led_calibration: Option<LedCalibrationConfig>,
+    /// Per-channel color correction applied in the LED encoder (v1.4 G4).
+    /// Absent ⇒ backend uses `ColorCorrectionConfig::default()` (gamma 2.2 / 6500 K / sat 1.0).
+    /// Applies to USB output only — Hue sink is not affected.
+    #[serde(default)]
+    pub color_correction: Option<ColorCorrectionConfig>,
+    /// Firmware encoding profile (v1.4 G11). Absent ⇒ `FirmwareProfile::default()` (LumaSyncV1).
+    /// Changing this is a breaking wire-format change — only done via user-visible Firmware Profile
+    /// setting; never switched silently.
+    #[serde(default)]
+    pub firmware_profile: Option<FirmwareProfile>,
 }
 
 impl Default for LightingModeConfig {
@@ -129,6 +140,8 @@ impl Default for LightingModeConfig {
             targets: None,
             display_id: None,
             led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
         }
     }
 }
@@ -319,10 +332,14 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
     let targets = config.targets.clone();
     let display_id = config.display_id.clone();
     let led_calibration = config.led_calibration.clone();
+    let color_correction = config.color_correction.clone();
+    let firmware_profile = config.firmware_profile;
     match config.kind {
         LightingModeKind::Off => LightingModeConfig {
             targets,
             display_id,
+            color_correction,
+            firmware_profile,
             ..LightingModeConfig::default()
         },
         LightingModeKind::Ambilight => {
@@ -340,6 +357,8 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 targets,
                 display_id,
                 led_calibration,
+                color_correction,
+                firmware_profile,
             }
         }
         LightingModeKind::Solid => {
@@ -361,6 +380,8 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 targets,
                 display_id,
                 led_calibration,
+                color_correction,
+                firmware_profile,
             }
         }
     }
@@ -1194,13 +1215,16 @@ fn apply_mode_change(
     // Fast path: ambilight already running and only settings changed (brightness,
     // black border detection, smoothing alpha) — update live atomics in-place
     // without stopping the worker or recreating SCStream.
-    // NOTE: led_calibration change forces a worker restart (new sequence, new strip topology).
+    // NOTE: led_calibration, color_correction, or firmware_profile changes force a worker
+    // restart because they affect the LED encoder pipeline, not just runtime atomics.
     if normalized_next.kind == LightingModeKind::Ambilight
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
         && normalized_next.targets == owner.active_mode.targets
         && normalized_next.display_id == owner.active_mode.display_id
         && normalized_next.led_calibration == owner.active_mode.led_calibration
+        && normalized_next.color_correction == owner.active_mode.color_correction
+        && normalized_next.firmware_profile == owner.active_mode.firmware_profile
     {
         if let Some(live) = &owner.ambilight_live {
             let cfg = normalized_next
@@ -1628,6 +1652,8 @@ mod tests {
             targets: None,
             display_id: None,
             led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
         }
     }
 
@@ -1644,6 +1670,8 @@ mod tests {
             targets: None,
             display_id: None,
             led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
         }
     }
 
@@ -2036,6 +2064,8 @@ mod lighting_mode_tests {
             targets,
             display_id: None,
             led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
         }
     }
 
@@ -2052,6 +2082,8 @@ mod lighting_mode_tests {
             targets,
             display_id: None,
             led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
         }
     }
 
