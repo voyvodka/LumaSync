@@ -33,18 +33,13 @@ static AMBILIGHT_CAPTURE_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 type AmbilightFrameSourceFactory =
     dyn Fn() -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> + Send + Sync;
 
-#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
+#[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LightingModeKind {
+    #[default]
     Off,
     Ambilight,
     Solid,
-}
-
-impl Default for LightingModeKind {
-    fn default() -> Self {
-        Self::Off
-    }
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
