@@ -158,6 +158,11 @@ function App() {
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
   const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
   const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
+  // Capture display chosen by the user (v1.4 Platform GAP 2). Cached in a
+  // ref so every set_lighting_mode call can inject it without awaiting
+  // shellStore on the hot path. Hydrated on bootstrap and refreshed when
+  // the calibration surface signals a change via onSaved.
+  const selectedDisplayIdRef = useRef<string | undefined>(undefined);
   /**
    * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
    * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
@@ -165,6 +170,23 @@ function App() {
    * Kullanıcı renk değiştirirken bu bayrak DOKUNULMAZ — loop'u önler.
    */
   const hueSolidSyncedRef = useRef(false);
+
+  /**
+   * Inject the persisted capture-source display id into an outgoing
+   * LightingModeConfig payload (v1.4 Platform GAP 2). The ambilight
+   * worker uses this id to bind its SCStream / windows-capture session
+   * to the selected monitor; an absent or unknown id falls back to the
+   * OS primary on the backend, so we only stamp the field when it is
+   * actually set.
+   */
+  const withSelectedDisplayId = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig => {
+      const id = selectedDisplayIdRef.current;
+      if (!id || id.length === 0) return mode;
+      return { ...mode, displayId: id };
+    },
+    [],
+  );
 
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
     if (persistLightingModeTimeoutRef.current !== null) {
@@ -373,6 +395,12 @@ function App() {
           setActiveSection(mappedSection);
         }
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
+        // Hydrate capture-source ref so the bootstrap set_lighting_mode
+        // call (below) honours the user's persisted display selection.
+        selectedDisplayIdRef.current =
+          typeof state.selectedDisplayId === "string" && state.selectedDisplayId.length > 0
+            ? state.selectedDisplayId
+            : undefined;
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);
@@ -435,10 +463,10 @@ function App() {
                 const bootTargets = restoredTargets.filter(
                   (t) => t !== "usb" || bootstrapUsbAvailable,
                 );
-                await setLightingMode({
+                await setLightingMode(withSelectedDisplayId({
                   ...restoredMode,
                   targets: bootTargets,
-                });
+                }));
               }
             }
           } catch { }
@@ -600,12 +628,12 @@ function App() {
         // Note: was previously using invoke("set_lighting_mode", { request: {...} })
         // which is the wrong key name (Tauri expects "payload") and silently failed.
         try {
-          await setLightingMode({
+          await setLightingMode(withSelectedDisplayId({
             kind: lightingMode.kind,
             solid: lightingMode.solid,
             ambilight: lightingMode.ambilight,
             targets: normalizedTargets,
-          });
+          }));
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
         } catch {
           // D-06: silently skip failed target, existing targets continue
@@ -627,12 +655,12 @@ function App() {
             // Hue stream context. Without this, the running worker has hue_output=None
             // and never sends colors to Hue (solid color push handles SOLID mode too).
             try {
-              await setLightingMode({
+              await setLightingMode(withSelectedDisplayId({
                 kind: lightingMode.kind,
                 solid: lightingMode.solid,
                 ambilight: lightingMode.ambilight,
                 targets: normalizedTargets,
-              });
+              }));
             } catch {
               // Non-fatal for ambilight worker restart; fall through to solid push
             }
@@ -732,7 +760,7 @@ function App() {
         scheduleLightingModePersist(normalizedNextMode);
 
         if (activeOutputTargets.includes("usb")) {
-          void setLightingMode(normalizedNextMode).catch((error) => {
+          void setLightingMode(withSelectedDisplayId(normalizedNextMode)).catch((error) => {
             console.error("[LumaSync] Failed to push USB solid update:", error);
           });
         }
@@ -766,7 +794,7 @@ function App() {
       if (isQuickAmbilightAdjustment) {
         setLightingModeState(normalizedNextMode);
         scheduleLightingModePersist(normalizedNextMode);
-        void setLightingMode(normalizedNextMode).catch((error) => {
+        void setLightingMode(withSelectedDisplayId(normalizedNextMode)).catch((error) => {
           console.error("[LumaSync] Failed to push Ambilight settings update:", error);
         });
         modeTransitionLockRef.current = false;
@@ -897,7 +925,7 @@ function App() {
 
         if (needsLightingModeApply) {
           try {
-            await setLightingMode(normalizedNextMode);
+            await setLightingMode(withSelectedDisplayId(normalizedNextMode));
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: true };
             }
