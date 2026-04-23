@@ -373,7 +373,11 @@ mod tests {
             Ok(())
         }
 
-        fn read_with_timeout(&mut self, buf: &mut [u8], _timeout: Duration) -> std::io::Result<usize> {
+        fn read_with_timeout(
+            &mut self,
+            buf: &mut [u8],
+            _timeout: Duration,
+        ) -> std::io::Result<usize> {
             if self.silent {
                 return Ok(0);
             }
@@ -426,8 +430,8 @@ mod tests {
         assert_eq!(ping[2], HANDSHAKE_OPCODE_PING, "opcode");
         assert_eq!(ping[3], 0x00, "payload_len");
 
-        // Checksum: 0xAA ^ 0x55 ^ 0x10 ^ 0x00 = ?
-        let expected_checksum: u8 = 0xAA ^ 0x55 ^ 0x10 ^ 0x00;
+        // Checksum: 0xAA ^ 0x55 ^ 0x10 (payload_len 0x00 contributes nothing to XOR)
+        let expected_checksum: u8 = 0xAA ^ 0x55 ^ 0x10;
         assert_eq!(ping[4], expected_checksum, "xor checksum");
         assert_eq!(ping.len(), 5, "PING must be exactly 5 bytes");
     }
@@ -455,14 +459,11 @@ mod tests {
     fn decode_pong_bad_magic_returns_error() {
         let mut pong = build_valid_pong(0x0104, PROFILE_BYTE_LUMASYNC_V1);
         pong[0] = 0xFF; // corrupt magic_hi
-        // Re-compute checksum so we isolate the magic failure
+                        // Re-compute checksum so we isolate the magic failure
         let checksum = pong[..6].iter().fold(0_u8, |acc, b| acc ^ b);
         pong[6] = checksum;
 
-        assert_eq!(
-            decode_handshake_pong(&pong),
-            Err(HandshakeError::BadMagic)
-        );
+        assert_eq!(decode_handshake_pong(&pong), Err(HandshakeError::BadMagic));
     }
 
     // -----------------------------------------------------------------------
@@ -488,10 +489,7 @@ mod tests {
     #[test]
     fn decode_pong_too_short_returns_error() {
         let short = vec![0xAA, 0x55, HANDSHAKE_OPCODE_PONG]; // only 3 bytes
-        assert_eq!(
-            decode_handshake_pong(&short),
-            Err(HandshakeError::TooShort)
-        );
+        assert_eq!(decode_handshake_pong(&short), Err(HandshakeError::TooShort));
     }
 
     // -----------------------------------------------------------------------
@@ -502,7 +500,7 @@ mod tests {
     fn decode_pong_wrong_opcode_returns_error() {
         let mut pong = build_valid_pong(0x0104, PROFILE_BYTE_LUMASYNC_V1);
         pong[2] = 0xFF; // not HANDSHAKE_OPCODE_PONG
-        // Re-compute checksum
+                        // Re-compute checksum
         let checksum = pong[..6].iter().fold(0_u8, |acc, b| acc ^ b);
         pong[6] = checksum;
 
@@ -521,9 +519,8 @@ mod tests {
         let pong = build_valid_pong(0x0104, PROFILE_BYTE_LUMASYNC_V1);
         let mut port = MockPort::with_response(pong);
 
-        let (response, elapsed_ms) =
-            perform_handshake(&mut port, Duration::from_millis(1_000))
-                .expect("valid mock PONG should succeed");
+        let (response, elapsed_ms) = perform_handshake(&mut port, Duration::from_millis(1_000))
+            .expect("valid mock PONG should succeed");
 
         assert_eq!(response.firmware_version, 0x0104);
         assert_eq!(response.firmware_profile, FirmwareProfile::LumaSyncV1);
@@ -571,9 +568,8 @@ mod tests {
         let pong = build_valid_pong(0x0104, PROFILE_BYTE_ADALIGHT);
         let mut port = MockPort::with_response(pong);
 
-        let (response, elapsed_ms) =
-            perform_handshake(&mut port, Duration::from_millis(1_000))
-                .expect("valid PONG should succeed");
+        let (response, elapsed_ms) = perform_handshake(&mut port, Duration::from_millis(1_000))
+            .expect("valid PONG should succeed");
 
         assert_eq!(response.firmware_profile, FirmwareProfile::Adalight);
         // elapsed_ms is u32; 0 is valid for in-memory mock

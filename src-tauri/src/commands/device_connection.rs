@@ -4,9 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serialport::{available_ports, SerialPortType};
 
-use super::device_handshake::{
-    perform_handshake, HandshakeError, TimedSerialPort,
-};
+use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
 use super::led_output::FirmwareProfile;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
