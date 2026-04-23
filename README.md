@@ -4,7 +4,7 @@
 [![CI](https://github.com/voyvodka/lumasync/actions/workflows/ci.yml/badge.svg)](https://github.com/voyvodka/lumasync/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/voyvodka/LumaSync?color=f59e0b&label=Release)](https://github.com/voyvodka/LumaSync/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: macOS | Windows | Linux](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey.svg)](#platform-support)
+[![Platform: macOS | Windows](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey.svg)](#platform-support)
 
 **Website:** [lumasync.app](https://lumasync.app)
 
@@ -12,15 +12,25 @@ LumaSync is a native desktop app that mirrors your screen to WS2812B LED strips 
 
 It combines a React + TypeScript frontend with a Rust/Tauri runtime to keep the UI responsive while handling native desktop behavior.
 
+## Screenshots
+
+> Screenshots pending refresh for the v1.4 UI. See `docs/screenshots/` once populated.
+
 ## Features
 
-- **Ambilight**: real-time screen capture drives LED strips and/or Hue lights simultaneously
+- **Ambilight**: real-time screen capture drives LED strips and/or Hue lights simultaneously, with per-LED edge sampling anchored to the room map
 - **Philips Hue**: DTLS 1.2 PSK entertainment streaming, channel position editor, zone auto-derivation from room map
 - **Room map editor**: drag-and-drop canvas with furniture, TV anchor, and USB strip objects; Hue channels overlaid on normalized coordinates
+- **Multi-monitor capture**: pick which display feeds the lights; hot-plug and resolution changes are handled without restart
+- **Color correction**: per-channel R/G/B gamma, Kelvin white-balance, and saturation trim — tuned once per strip, persisted per layout
 - **Solid color**: RGB + brightness push to USB and Hue with debounced 50 ms update
 - **LED calibration**: edge counts, gap, corner ownership, start anchor, direction — persisted per layout
+- **Firmware profiles**: LumaSync-native framing out of the box; Adalight profile for off-the-shelf microcontrollers
 - **Target-aware pipeline**: choose USB, Hue, or both per mode; hot-plug detection with suggestion banner
 - **Compact, stays out of your way**: lives in the tray; opens as a 320×480 panel for quick scene changes or a 900×620 full view for calibration, on demand
+- **Runtime HUD**: StatusBar pill surfaces live FPS and end-to-end latency with green/amber/red thresholds
+- **Native notifications**: OS-level toast for connection, stream, and update events; permission banner asks once and never re-prompts
+- **Resilient shell**: global error boundary catches render faults and offers a localized restart/logs card instead of a white-screened tray window
 - **Auto-updater**: GitHub Releases with minisign signature verification
 
 ## Tech Stack
@@ -44,7 +54,12 @@ Microcontrollers using the following USB-to-serial chips are supported:
 | Arduino Uno R3 | `2341:0043` |
 | Arduino Uno (original) | `2341:0001` |
 
-Baud rate: 115200. Frame format is LumaSync-specific (`0xAA 0x55` header, LE LED count, gamma-corrected RGB triplets, XOR checksum) — not Adalight-compatible. A matching firmware sketch ships with the companion hardware repo.
+Baud rate: 115200. LumaSync ships with two firmware profiles:
+
+- **LumaSync-native** (default): `0xAA 0x55` header, LE LED count, gamma-corrected RGB triplets, XOR checksum. A matching firmware sketch ships with the companion hardware repo.
+- **Adalight**: the widely-used `"Ada"` header format, compatible with off-the-shelf WS2812B controllers and existing Adalight firmware builds.
+
+Profile is selected per device in the Devices section.
 
 ### Philips Hue
 
@@ -57,8 +72,8 @@ Baud rate: 115200. Frame format is LumaSync-specific (`0xAA 0x55` header, LE LED
 | Platform | Status | Notes |
 |----------|--------|-------|
 | macOS | Full support | Primary development target. `macos-private-api` enabled for fullscreen overlays. |
-| Windows | Supported | USB and Hue features work. Fullscreen overlay behavior may vary. |
-| Linux | Experimental | Requires GTK 3, WebKitGTK 4.1, and `libudev`. Tray behavior depends on desktop environment. |
+| Windows | Full support | USB and Hue features work. Windows Graphics Capture powers the capture pipeline. |
+| Linux | Planned (v1.5) | Not shipped in v1.4. Targeted for the next release; requires GTK 3, WebKitGTK 4.1, and `libudev`. |
 
 ## Getting Started
 
