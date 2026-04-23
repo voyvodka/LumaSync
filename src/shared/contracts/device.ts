@@ -94,3 +94,56 @@ export const FIRMWARE_PROFILE = {
 } as const;
 
 export type FirmwareProfile = (typeof FIRMWARE_PROFILE)[keyof typeof FIRMWARE_PROFILE];
+
+// ---------------------------------------------------------------------------
+// Color correction (v1.4 G4 — per-channel gamma, Kelvin, saturation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-channel color correction applied to the LED pixel buffer before
+ * hand-off to a `LedSink`. Identical shape is used for both USB and Hue
+ * surfaces so a single UI surface edits one persisted struct.
+ *
+ * Fields live under `ShellState.colorCorrection`. Absent ⇒
+ * `DEFAULT_COLOR_CORRECTION` (identity-ish correction for a 6500K white
+ * point and no saturation bump).
+ */
+export interface ColorCorrectionConfig {
+  /** Gamma curve exponent for the red channel. */
+  gammaR: number;
+  /** Gamma curve exponent for the green channel. */
+  gammaG: number;
+  /** Gamma curve exponent for the blue channel. */
+  gammaB: number;
+  /**
+   * White-point temperature in Kelvin. Lower = warmer, higher = cooler.
+   * Applied as a per-channel multiplier on top of gamma.
+   */
+  kelvin: number;
+  /**
+   * Saturation multiplier. `1.0` leaves colors untouched, `0.0` produces
+   * grayscale, `>1.0` boosts chroma (clipped per-channel at the sink).
+   */
+  saturation: number;
+}
+
+/** Inclusive min/max for each gamma channel. Outside this range firmware clipping is unpredictable. */
+export const GAMMA_RANGE = { min: 1.0, max: 3.0 } as const;
+
+/**
+ * Inclusive min/max for the Kelvin white-point slider. 2000K ≈ candlelight,
+ * 8000K ≈ overcast daylight; the bridge + most panels behave well in this band.
+ */
+export const KELVIN_RANGE_K = { min: 2000, max: 8000 } as const;
+
+/** Inclusive min/max for saturation. */
+export const SATURATION_RANGE = { min: 0.0, max: 2.0 } as const;
+
+/** Identity-ish baseline used when the user has never opened the correction panel. */
+export const DEFAULT_COLOR_CORRECTION: ColorCorrectionConfig = {
+  gammaR: 2.2,
+  gammaG: 2.2,
+  gammaB: 2.2,
+  kelvin: 6500,
+  saturation: 1.0,
+};
