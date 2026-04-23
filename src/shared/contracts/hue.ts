@@ -2,6 +2,12 @@
  * Hue onboarding contracts for frontend <-> backend command bridge.
  */
 
+import {
+  DEFAULT_LIGHTING_SMOOTHING_PRESET,
+  LIGHTING_SMOOTHING_PRESET_COEFFICIENTS,
+  type LightingSmoothingPreset,
+} from "./lighting";
+
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
   VERIFY_BRIDGE_IP: "verify_hue_bridge_ip",
@@ -249,35 +255,30 @@ export type HueRoomArchetype = (typeof HUE_ROOM_ARCHETYPES)[number];
 export const HUE_ARCHETYPE_FALLBACK: HueRoomArchetype = "other";
 
 // ---------------------------------------------------------------------------
-// Hue intensity presets (v1.4 — EWMA smoothing tiers)
+// Hue intensity presets (v1.4 — deprecated aliases, unified in v1.4)
 // ---------------------------------------------------------------------------
 
 /**
- * User-facing intensity presets for ambient Hue streaming. Each preset
- * maps to a single EWMA (exponentially-weighted moving average)
- * coefficient `alpha` applied to the per-channel RGB stream:
- *
- *   smoothed = alpha * newSample + (1 - alpha) * prevSmoothed
- *
- * Lower alpha ⇒ heavier smoothing ⇒ calmer lights. Higher alpha ⇒
- * snappier response ⇒ more intense.
- *
- * - `subtle` (0.15): slow, relaxed — ideal for bedroom / background.
- * - `moderate` (0.35): balanced — default for living rooms.
- * - `intense` (0.60): fast-reacting — gaming / action content.
- *
- * Stored under `ShellState.lightingIntensityPreset`.
+ * @deprecated Use `LightingSmoothingPreset` from `./lighting.ts`. This
+ * alias is kept so pre-v1.4 call sites keep compiling until the v1.5
+ * clean-up removes them. The two types are structurally identical.
  */
-export type HueIntensityPreset = "subtle" | "moderate" | "intense";
+export type HueIntensityPreset = LightingSmoothingPreset;
 
-export const HUE_INTENSITY_PRESET_COEFFICIENTS: Readonly<Record<HueIntensityPreset, number>> = {
-  subtle: 0.15,
-  moderate: 0.35,
-  intense: 0.6,
-};
+/**
+ * @deprecated Use `LIGHTING_SMOOTHING_PRESET_COEFFICIENTS` from
+ * `./lighting.ts`. Same coefficient table, re-exported under the old
+ * name for backward compatibility.
+ */
+export const HUE_INTENSITY_PRESET_COEFFICIENTS: Readonly<
+  Record<LightingSmoothingPreset, number>
+> = LIGHTING_SMOOTHING_PRESET_COEFFICIENTS;
 
-/** Default preset applied when `ShellState.lightingIntensityPreset` is absent. */
-export const DEFAULT_HUE_INTENSITY_PRESET: HueIntensityPreset = "moderate";
+/**
+ * @deprecated Use `DEFAULT_LIGHTING_SMOOTHING_PRESET` from `./lighting.ts`.
+ */
+export const DEFAULT_HUE_INTENSITY_PRESET: LightingSmoothingPreset =
+  DEFAULT_LIGHTING_SMOOTHING_PRESET;
 
 export type HueRuntimeTarget = "hue" | "usb";
 

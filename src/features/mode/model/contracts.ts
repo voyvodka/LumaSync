@@ -1,4 +1,5 @@
 import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { LightingSmoothingPreset } from "../../../shared/contracts/lighting";
 import type { DisplayId } from "../../../shared/contracts/display";
 import type { ColorCorrectionConfig, FirmwareProfile } from "../../../shared/contracts/device";
 
@@ -39,15 +40,26 @@ export interface SolidColorPayload {
 export interface AmbilightPayload {
   brightness: number;
   blackBorderDetection?: boolean;
-  /** EWMA alpha for color smoothing. Range [0.05, 1.0]. 1.0 = instant; lower = smoother. Default 0.35. */
+  /**
+   * @deprecated Use `lightingSmoothingPreset`. Kept so pre-v1.4 persisted
+   * payloads keep deserialising. The Rust worker reads this only as a
+   * fallback when `lightingSmoothingPreset` is absent.
+   * Range [0.05, 1.0]. 1.0 = instant; lower = smoother. Default 0.35.
+   */
   smoothingAlpha?: number;
   /** Luminance-preserving saturation factor. Range [0.5, 2.0]. 1.0 = identity. Default 1.0. */
   saturation?: number;
   /**
-   * User-facing Hue intensity preset (v1.4 G6). When present, the Rust
-   * ambilight pump uses the preset's EWMA coefficient for the Hue branch
-   * instead of `smoothingAlpha` so Hue responsiveness can be tuned
-   * independently of USB. Absent ⇒ Hue reuses `smoothingAlpha`.
+   * Unified smoothing preset (v1.4). Drives the EWMA coefficient for
+   * both the USB strip and the Hue branch of the ambilight pump in a
+   * single user-facing control. Takes priority over the deprecated
+   * `smoothingAlpha` slider and `hueIntensityPreset` on the Rust side.
+   */
+  lightingSmoothingPreset?: LightingSmoothingPreset;
+  /**
+   * @deprecated Use `lightingSmoothingPreset`. Kept so pre-v1.4 persisted
+   * payloads keep deserialising on the Rust side. Will be removed in
+   * v1.5 once the backend compat shim is retired.
    */
   hueIntensityPreset?: HueIntensityPreset;
 }
@@ -105,21 +117,27 @@ export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): 
   };
 }
 
-function normalizeHueIntensityPreset(
+function normalizeLightingSmoothingPreset(
   value: unknown,
-): HueIntensityPreset | undefined {
+): LightingSmoothingPreset | undefined {
   return value === "subtle" || value === "moderate" || value === "intense"
     ? value
     : undefined;
 }
 
 export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): AmbilightPayload {
+  // Resolve the preset from either the new or the deprecated field so
+  // legacy persisted payloads continue to survive normalization without
+  // losing the user's selection.
+  const preset =
+    normalizeLightingSmoothingPreset(input?.lightingSmoothingPreset) ??
+    normalizeLightingSmoothingPreset(input?.hueIntensityPreset);
   return {
     brightness: clampFloat(input?.brightness, 0, 1, 1),
     blackBorderDetection: input?.blackBorderDetection ?? false,
     smoothingAlpha: clampFloat(input?.smoothingAlpha, 0.05, 1, 0.35),
     saturation: clampFloat(input?.saturation, 0.5, 2, 1),
-    hueIntensityPreset: normalizeHueIntensityPreset(input?.hueIntensityPreset),
+    lightingSmoothingPreset: preset,
   };
 }
 
