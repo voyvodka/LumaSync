@@ -18,6 +18,7 @@ mod commands {
     pub mod ambilight_capture;
     pub mod calibration;
     pub mod device_connection;
+    pub mod hue_http;
     pub mod hue_onboarding;
     pub mod hue_stream_lifecycle;
     pub mod led_output;
