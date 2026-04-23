@@ -929,7 +929,7 @@ fn normalize_archetype(raw: &str) -> String {
         "pool",
         "other",
     ];
-    if ARCHETYPES.iter().any(|candidate| *candidate == raw) {
+    if ARCHETYPES.contains(&raw) {
         raw.to_string()
     } else {
         "other".to_string()
