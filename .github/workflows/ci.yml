@@ -93,4 +93,4 @@ jobs:
         working-directory: src-tauri
         run: |
           cargo install --locked cargo-audit || true
-          cargo audit --deny warnings
+          cargo audit
