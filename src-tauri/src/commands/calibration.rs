@@ -153,11 +153,12 @@ fn open_overlay_window<R: Runtime>(
         // Use the display's known scale factor for logical coordinate conversion.
         // window.scale_factor() is unreliable immediately after build() because the
         // window may not have moved to the target monitor's DPI context yet.
-        let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
-            target_display.scale_factor
-        } else {
-            1.0
-        };
+        let safe_scale =
+            if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
+                target_display.scale_factor
+            } else {
+                1.0
+            };
 
         let logical_x = f64::from(target_display.x) / safe_scale;
         let logical_y = f64::from(target_display.y) / safe_scale;
@@ -165,17 +166,23 @@ fn open_overlay_window<R: Runtime>(
         let logical_height = f64::from(target_display.height) / safe_scale;
 
         window
-            .set_position(Position::Logical(LogicalPosition::new(logical_x, logical_y)))
+            .set_position(Position::Logical(LogicalPosition::new(
+                logical_x, logical_y,
+            )))
             .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
         window
-            .set_size(Size::Logical(LogicalSize::new(logical_width, logical_height)))
+            .set_size(Size::Logical(LogicalSize::new(
+                logical_width,
+                logical_height,
+            )))
             .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
     } else {
-        let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
-            target_display.scale_factor
-        } else {
-            1.0
-        };
+        let safe_scale =
+            if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
+                target_display.scale_factor
+            } else {
+                1.0
+            };
 
         let logical_x = f64::from(target_display.x) / safe_scale;
         let logical_y = f64::from(target_display.y) / safe_scale;
@@ -183,13 +190,17 @@ fn open_overlay_window<R: Runtime>(
         let logical_height = f64::from(target_display.height) / safe_scale;
 
         window
-            .set_position(Position::Logical(LogicalPosition::new(logical_x, logical_y)))
+            .set_position(Position::Logical(LogicalPosition::new(
+                logical_x, logical_y,
+            )))
             .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
 
         window
-            .set_size(Size::Logical(LogicalSize::new(logical_width, logical_height)))
+            .set_size(Size::Logical(LogicalSize::new(
+                logical_width,
+                logical_height,
+            )))
             .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
-
     }
 
     window
@@ -230,8 +241,7 @@ fn propagate_transparent_to_children<R: Runtime>(window: &tauri::WebviewWindow<R
 
     unsafe extern "system" fn set_clickthrough(hwnd: HWND, _: LPARAM) -> i32 {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE,
-            WS_EX_LAYERED, WS_EX_TRANSPARENT,
+            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TRANSPARENT,
         };
         unsafe {
             let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);

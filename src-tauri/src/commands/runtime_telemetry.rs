@@ -91,9 +91,9 @@ pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTele
 
     let now = Instant::now();
 
-    let uptime_secs = owner.stream_started_at.map(|started| {
-        now.saturating_duration_since(started).as_secs()
-    });
+    let uptime_secs = owner
+        .stream_started_at
+        .map(|started| now.saturating_duration_since(started).as_secs());
 
     // Calculate packet rate from atomic counter.
     let current_count = owner
@@ -113,18 +113,15 @@ pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTele
         0.0
     };
 
-    let last_error_at_secs = owner.last_error_at.map(|err_at| {
-        now.saturating_duration_since(err_at).as_secs()
-    });
+    let last_error_at_secs = owner
+        .last_error_at
+        .map(|err_at| now.saturating_duration_since(err_at).as_secs());
 
-    let dtls_connected_at_secs = owner.dtls_connected_at.map(|connected| {
-        now.saturating_duration_since(connected).as_secs()
-    });
+    let dtls_connected_at_secs = owner
+        .dtls_connected_at
+        .map(|connected| now.saturating_duration_since(connected).as_secs());
 
-    let uses_dtls = owner
-        .active_stream
-        .as_ref()
-        .is_some_and(|s| s.uses_dtls);
+    let uses_dtls = owner.active_stream.as_ref().is_some_and(|s| s.uses_dtls);
 
     Some(HueTelemetrySnapshot {
         state: state_str,

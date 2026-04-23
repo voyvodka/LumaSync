@@ -53,7 +53,9 @@ use commands::hue_stream_lifecycle::{
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
-use commands::room_map::{copy_background_image, load_room_map, save_room_map, update_hue_channel_positions};
+use commands::room_map::{
+    copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
+};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -114,11 +116,26 @@ fn update_tray_labels(
     tray_state: State<'_, TrayState<tauri::Wry>>,
     labels: TrayLabels,
 ) -> Result<(), String> {
-    tray_state.open_settings.set_text(&labels.open_settings).map_err(|e| e.to_string())?;
-    tray_state.lights_off.set_text(&labels.lights_off).map_err(|e| e.to_string())?;
-    tray_state.resume_last_mode.set_text(&labels.resume_last_mode).map_err(|e| e.to_string())?;
-    tray_state.solid_color.set_text(&labels.solid_color).map_err(|e| e.to_string())?;
-    tray_state.quit.set_text(&labels.quit).map_err(|e| e.to_string())?;
+    tray_state
+        .open_settings
+        .set_text(&labels.open_settings)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .lights_off
+        .set_text(&labels.lights_off)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .resume_last_mode
+        .set_text(&labels.resume_last_mode)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .solid_color
+        .set_text(&labels.solid_color)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .quit
+        .set_text(&labels.quit)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -131,8 +148,15 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
     let status = MenuItem::with_id(app, "status-indicator", "● Idle", false, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
     let lights_off = MenuItem::with_id(app, "tray-lights-off", "Lights Off", true, None::<&str>)?;
-    let resume_last = MenuItem::with_id(app, "tray-resume-last-mode", "Resume Last Mode", true, None::<&str>)?;
-    let solid_color = MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
+    let resume_last = MenuItem::with_id(
+        app,
+        "tray-resume-last-mode",
+        "Resume Last Mode",
+        true,
+        None::<&str>,
+    )?;
+    let solid_color =
+        MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
     let separator3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
@@ -313,9 +337,15 @@ pub fn run() {
                 // Menu item actions
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
-                    "tray-lights-off" => { let _ = app.emit("tray:lights-off", ()); }
-                    "tray-resume-last-mode" => { let _ = app.emit("tray:resume-last-mode", ()); }
-                    "tray-solid-color" => { let _ = app.emit("tray:solid-color", ()); }
+                    "tray-lights-off" => {
+                        let _ = app.emit("tray:lights-off", ());
+                    }
+                    "tray-resume-last-mode" => {
+                        let _ = app.emit("tray:resume-last-mode", ());
+                    }
+                    "tray-solid-color" => {
+                        let _ = app.emit("tray:solid-color", ());
+                    }
                     "quit" => safe_quit(app),
                     _ => {}
                 })

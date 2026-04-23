@@ -199,7 +199,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     Some(error),
                 ),
                 credentials: None,
-            }
+            };
         }
     };
 

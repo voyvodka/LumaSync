@@ -454,7 +454,11 @@ mod tests {
         sender
             .send("COM42", &[1, 2, 3])
             .expect("first write should open and succeed");
-        assert_eq!(open_count.load(Ordering::SeqCst), 1, "one open after first send");
+        assert_eq!(
+            open_count.load(Ordering::SeqCst),
+            1,
+            "one open after first send"
+        );
 
         sender.disconnect_session("COM42");
 

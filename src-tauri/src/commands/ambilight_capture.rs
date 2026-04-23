@@ -244,13 +244,14 @@ mod platform {
             AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_PERMISSION_DENIED")
         })?;
 
-        let display = content
-            .displays()
-            .into_iter()
-            .next()
-            .ok_or(AmbilightCaptureError::InvalidFrame(
-                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
-            ))?;
+        let display =
+            content
+                .displays()
+                .into_iter()
+                .next()
+                .ok_or(AmbilightCaptureError::InvalidFrame(
+                    "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+                ))?;
 
         let filter = SCContentFilter::create()
             .with_display(&display)
@@ -559,7 +560,11 @@ pub fn crop_frame_to_content(frame: &CapturedFrame, insets: &BlackBorderInsets) 
             }
         }
     }
-    CapturedFrame { width: new_w as u32, height: new_h as u32, pixels_rgb }
+    CapturedFrame {
+        width: new_w as u32,
+        height: new_h as u32,
+        pixels_rgb,
+    }
 }
 
 pub fn sample_led_frame(

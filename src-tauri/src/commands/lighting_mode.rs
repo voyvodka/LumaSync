@@ -8,14 +8,13 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Runtime, State};
 
 use super::ambilight_capture::{
-    create_live_frame_source, detect_black_borders, sample_led_frame,
-    AmbilightCaptureError, AmbilightFrameSource, BlackBorderInsets, CapturedFrame,
-    SamplingCalibration, StaticFrameSource,
+    create_live_frame_source, detect_black_borders, sample_led_frame, AmbilightCaptureError,
+    AmbilightFrameSource, BlackBorderInsets, CapturedFrame, SamplingCalibration, StaticFrameSource,
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::hue_stream_lifecycle::{
     apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
-    HueActiveOutputContext, HueScreenRegion, HueRuntimeStateStore,
+    HueActiveOutputContext, HueRuntimeStateStore, HueScreenRegion,
 };
 use super::led_output::{
     apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, LedOutputBridge,
@@ -184,10 +183,16 @@ impl AmbilightLiveSettings {
         smoothing_alpha: f32,
         saturation: f32,
     ) {
-        self.brightness.store(brightness.to_bits(), Ordering::Relaxed);
-        self.black_border_detection.store(black_border_detection, Ordering::Relaxed);
-        self.smoothing_alpha.store(smoothing_alpha.clamp(0.05, 1.0).to_bits(), Ordering::Relaxed);
-        self.saturation.store(saturation.clamp(0.5, 2.0).to_bits(), Ordering::Relaxed);
+        self.brightness
+            .store(brightness.to_bits(), Ordering::Relaxed);
+        self.black_border_detection
+            .store(black_border_detection, Ordering::Relaxed);
+        self.smoothing_alpha.store(
+            smoothing_alpha.clamp(0.05, 1.0).to_bits(),
+            Ordering::Relaxed,
+        );
+        self.saturation
+            .store(saturation.clamp(0.5, 2.0).to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -329,7 +334,11 @@ impl BlackBorderCache {
         let past = Instant::now()
             .checked_sub(Self::UPDATE_INTERVAL)
             .unwrap_or_else(Instant::now);
-        Self { insets: BlackBorderInsets::default(), last_updated: past, enabled }
+        Self {
+            insets: BlackBorderInsets::default(),
+            last_updated: past,
+            enabled,
+        }
     }
 
     fn set_enabled(&mut self, enabled: bool) {
@@ -366,8 +375,7 @@ fn capture_sample_send_frame(
     let frame = source.capture_frame().map_err(|error| error.as_reason())?;
     // Crop removed: Hue path uses bounds-based sampling via insets directly.
     // USB path uses led_count=1 (placeholder), so crop was a no-op in practice.
-    let sampled = sample_led_frame(&frame, calibration)
-        .map_err(|error| error.as_reason())?;
+    let sampled = sample_led_frame(&frame, calibration).map_err(|error| error.as_reason())?;
     Ok((frame, sampled.colors))
 }
 
@@ -387,29 +395,29 @@ fn sample_screen_region_avg(
     }
 
     const STRIP: f32 = 0.20; // 20% strip depth within content area
-    const STEP: usize = 8;   // sub-sample every 8th pixel for speed
+    const STEP: usize = 8; // sub-sample every 8th pixel for speed
 
     // Derive content-area bounds from detected insets.
-    let top_border    = (h as f32 * insets.top)    as usize;
+    let top_border = (h as f32 * insets.top) as usize;
     let bottom_border = (h as f32 * insets.bottom) as usize;
-    let left_border   = (w as f32 * insets.left)   as usize;
-    let right_border  = (w as f32 * insets.right)  as usize;
+    let left_border = (w as f32 * insets.left) as usize;
+    let right_border = (w as f32 * insets.right) as usize;
 
-    let ct = top_border;                              // content top row
+    let ct = top_border; // content top row
     let cb = h.saturating_sub(bottom_border).max(ct + 1); // content bottom row
-    let cl = left_border;                             // content left col
-    let cr = w.saturating_sub(right_border).max(cl + 1);  // content right col
-    let ch = cb - ct;                                 // content height
-    let cw = cr - cl;                                 // content width
+    let cl = left_border; // content left col
+    let cr = w.saturating_sub(right_border).max(cl + 1); // content right col
+    let ch = cb - ct; // content height
+    let cw = cr - cl; // content width
 
     let strip_h = ((ch as f32 * STRIP) as usize).max(1);
     let strip_w = ((cw as f32 * STRIP) as usize).max(1);
 
     let (row_start, row_end, col_start, col_end) = match region {
-        HueScreenRegion::Top    => (ct,                    (ct + strip_h).min(cb), cl, cr),
-        HueScreenRegion::Bottom => (cb.saturating_sub(strip_h), cb,                cl, cr),
-        HueScreenRegion::Left   => (ct, cb,  cl,                    (cl + strip_w).min(cr)),
-        HueScreenRegion::Right  => (ct, cb,  cr.saturating_sub(strip_w), cr              ),
+        HueScreenRegion::Top => (ct, (ct + strip_h).min(cb), cl, cr),
+        HueScreenRegion::Bottom => (cb.saturating_sub(strip_h), cb, cl, cr),
+        HueScreenRegion::Left => (ct, cb, cl, (cl + strip_w).min(cr)),
+        HueScreenRegion::Right => (ct, cb, cr.saturating_sub(strip_w), cr),
         HueScreenRegion::Center => (h / 4, 3 * h / 4, w / 4, 3 * w / 4),
     };
 
@@ -437,7 +445,11 @@ fn sample_screen_region_avg(
     if count == 0 {
         return (0, 0, 0);
     }
-    ((sum_r / count) as u8, (sum_g / count) as u8, (sum_b / count) as u8)
+    (
+        (sum_r / count) as u8,
+        (sum_g / count) as u8,
+        (sum_b / count) as u8,
+    )
 }
 
 /// Continuous position-based colour sampling for Hue entertainment channels.
@@ -470,9 +482,13 @@ fn sample_screen_position_avg(
 
     // Content area bounds (excluding black borders).
     let ct = (h as f32 * insets.top) as usize;
-    let cb = h.saturating_sub((h as f32 * insets.bottom) as usize).max(ct + 1);
+    let cb = h
+        .saturating_sub((h as f32 * insets.bottom) as usize)
+        .max(ct + 1);
     let cl = (w as f32 * insets.left) as usize;
-    let cr = w.saturating_sub((w as f32 * insets.right) as usize).max(cl + 1);
+    let cr = w
+        .saturating_sub((w as f32 * insets.right) as usize)
+        .max(cl + 1);
     let cw = (cr - cl) as f32;
     let ch = (cb - ct) as f32;
 
@@ -480,7 +496,7 @@ fn sample_screen_position_avg(
     // x: -1 → left edge, +1 → right edge
     // y: +1 → top edge (screen row 0), -1 → bottom edge
     let norm_x = (pos_x.clamp(-1.0, 1.0) + 1.0) / 2.0; // [0, 1]
-    let norm_y = (1.0 - pos_y.clamp(-1.0, 1.0)) / 2.0;  // [0, 1], flipped for screen coords
+    let norm_y = (1.0 - pos_y.clamp(-1.0, 1.0)) / 2.0; // [0, 1], flipped for screen coords
 
     let center_col = cl as f32 + norm_x * cw;
     let center_row = ct as f32 + norm_y * ch;
@@ -513,8 +529,14 @@ fn sample_screen_position_avg(
         row += STEP;
     }
 
-    if count == 0 { return (0, 0, 0); }
-    ((sum_r / count) as u8, (sum_g / count) as u8, (sum_b / count) as u8)
+    if count == 0 {
+        return (0, 0, 0);
+    }
+    (
+        (sum_r / count) as u8,
+        (sum_g / count) as u8,
+        (sum_b / count) as u8,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -588,17 +610,18 @@ fn apply_saturation_inplace(colors: &mut [[u8; 3]], factor: f32) {
     }
 }
 
-pub fn compute_edge_signal(
-    frame: &CapturedFrame,
-    insets: &BlackBorderInsets,
-) -> EdgeSignalPayload {
+pub fn compute_edge_signal(frame: &CapturedFrame, insets: &BlackBorderInsets) -> EdgeSignalPayload {
     let samples = EDGE_SIGNAL_SAMPLES_PER_EDGE;
     let mut top = Vec::with_capacity(samples);
     let mut bottom = Vec::with_capacity(samples);
     let mut left = Vec::with_capacity(samples);
     let mut right = Vec::with_capacity(samples);
 
-    let denom = if samples > 1 { (samples - 1) as f32 } else { 1.0 };
+    let denom = if samples > 1 {
+        (samples - 1) as f32
+    } else {
+        1.0
+    };
     let span = 2.0 * EDGE_SIGNAL_AXIS_OFFSET;
 
     for i in 0..samples {
@@ -619,7 +642,12 @@ pub fn compute_edge_signal(
         right.push([r_color.0, r_color.1, r_color.2]);
     }
 
-    EdgeSignalPayload { top, bottom, left, right }
+    EdgeSignalPayload {
+        top,
+        bottom,
+        left,
+        right,
+    }
 }
 
 struct AmbilightWorkerQualityState {
@@ -694,7 +722,10 @@ struct HueChannelSmoother {
 
 impl HueChannelSmoother {
     fn new() -> Self {
-        Self { previous: Vec::new(), result: Vec::new() }
+        Self {
+            previous: Vec::new(),
+            result: Vec::new(),
+        }
     }
 
     /// Apply EWMA smoothing to incoming channel colors, returning a reference
@@ -708,7 +739,8 @@ impl HueChannelSmoother {
 
         // Channel count changed → reset state (e.g. entertainment area switched).
         if self.previous.len() != incoming.len() {
-            self.previous = incoming.iter()
+            self.previous = incoming
+                .iter()
                 .map(|&(r, g, b)| (r as f32, g as f32, b as f32))
                 .collect();
             self.result = incoming.to_vec();
@@ -717,7 +749,8 @@ impl HueChannelSmoother {
 
         // Reuse result buffer (same capacity across frames).
         self.result.resize(incoming.len(), (0, 0, 0));
-        for (i, (prev, &(tr, tg, tb))) in self.previous.iter_mut().zip(incoming.iter()).enumerate() {
+        for (i, (prev, &(tr, tg, tb))) in self.previous.iter_mut().zip(incoming.iter()).enumerate()
+        {
             prev.0 += a * (tr as f32 - prev.0);
             prev.1 += a * (tg as f32 - prev.1);
             prev.2 += a * (tb as f32 - prev.2);
@@ -750,8 +783,13 @@ fn start_ambilight_worker(
         let mut found = None;
         for _ in 0..MAX_ATTEMPTS {
             match frame_source.capture_frame() {
-                Ok(frame) => { found = Some(frame); break; }
-                Err(crate::commands::ambilight_capture::AmbilightCaptureError::FrameUnavailable) => {
+                Ok(frame) => {
+                    found = Some(frame);
+                    break;
+                }
+                Err(
+                    crate::commands::ambilight_capture::AmbilightCaptureError::FrameUnavailable,
+                ) => {
                     last_err = "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE".to_string();
                     thread::sleep(Duration::from_millis(RETRY_MS));
                 }
@@ -793,9 +831,8 @@ fn start_ambilight_worker(
     let mut frame_slot = RuntimeFrameSlot::new();
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
 
-    let mut initial_frame_source = StaticFrameSource::new(
-        Arc::try_unwrap(initial_frame).unwrap_or_else(|arc| (*arc).clone()),
-    );
+    let mut initial_frame_source =
+        StaticFrameSource::new(Arc::try_unwrap(initial_frame).unwrap_or_else(|arc| (*arc).clone()));
     // No border detection for the initial warmup frame — detection runs in the worker loop.
     let (_, initial_sampled) = capture_sample_send_frame(
         &mut initial_frame_source,
@@ -809,11 +846,17 @@ fn start_ambilight_worker(
     let send_started = Instant::now();
     if let Some(ref port) = port_name {
         let initial_brightness = live_settings.read_brightness();
-        let initial_sent = quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
-            AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-            send_ambilight_frame_hot_path_to_port(&output_bridge, port, frame, initial_brightness)
+        let initial_sent =
+            quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
+                AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
+                send_ambilight_frame_hot_path_to_port(
+                    &output_bridge,
+                    port,
+                    frame,
+                    initial_brightness,
+                )
                 .map_err(|error| error.as_reason())
-        })?;
+            })?;
         if initial_sent {
             telemetry_window.record_send();
         }
@@ -837,8 +880,16 @@ fn start_ambilight_worker(
 
     let handle = thread::spawn(move || {
         ACTIVE_AMBILIGHT_WORKERS.fetch_add(1, Ordering::SeqCst);
-        let has_hue = hue_output.as_ref().map(|c| !c.channels.is_empty()).unwrap_or(false);
-        info!("[ambilight-worker] started — port={:?} hue={} channels={}", port_name, has_hue, hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0));
+        let has_hue = hue_output
+            .as_ref()
+            .map(|c| !c.channels.is_empty())
+            .unwrap_or(false);
+        info!(
+            "[ambilight-worker] started — port={:?} hue={} channels={}",
+            port_name,
+            has_hue,
+            hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0)
+        );
         if let Some(ctx) = hue_output.as_ref() {
             for ch in &ctx.channels {
                 let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
@@ -858,11 +909,9 @@ fn start_ambilight_worker(
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
             let capture_result = match worker_source.lock() {
-                Ok(mut src) => capture_sample_send_frame(
-                    src.as_mut(),
-                    &calibration,
-                    border_cache.insets(),
-                ),
+                Ok(mut src) => {
+                    capture_sample_send_frame(src.as_mut(), &calibration, border_cache.insets())
+                }
                 Err(_) => Err("AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED".to_string()),
             };
             if let Err(ref e) = capture_result {
@@ -941,9 +990,13 @@ fn start_ambilight_worker(
 
                         hue_send_count += 1;
                         if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {
-                            info!("[ambilight-worker] hue update #{hue_send_count} — colors: {:?}", &smoothed[..smoothed.len().min(3)]);
+                            info!(
+                                "[ambilight-worker] hue update #{hue_send_count} — colors: {:?}",
+                                &smoothed[..smoothed.len().min(3)]
+                            );
                         }
-                        let _ = apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
+                        let _ =
+                            apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
                         telemetry_window.record_send();
                     }
                 }
@@ -956,7 +1009,10 @@ fn start_ambilight_worker(
                 if let Some(emitter) = edge_signal_emitter.as_ref() {
                     let now = Instant::now();
                     let due = last_edge_emit_at
-                        .map(|prev| now.duration_since(prev) >= Duration::from_millis(EDGE_SIGNAL_MIN_INTERVAL_MS))
+                        .map(|prev| {
+                            now.duration_since(prev)
+                                >= Duration::from_millis(EDGE_SIGNAL_MIN_INTERVAL_MS)
+                        })
                         .unwrap_or(true);
                     if due {
                         let mut payload = compute_edge_signal(&raw_frame, border_cache.insets());
@@ -987,7 +1043,11 @@ fn start_ambilight_worker(
         ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
     });
 
-    Ok(LightingWorkerRuntime { cancel, handle, _frame_source: frame_source_arc })
+    Ok(LightingWorkerRuntime {
+        cancel,
+        handle,
+        _frame_source: frame_source_arc,
+    })
 }
 
 // Central state machine transition. 8-arg signature is retained to avoid
@@ -1049,7 +1109,11 @@ fn apply_mode_change(
         && normalized_next.targets == owner.active_mode.targets
     {
         if let Some(live) = &owner.ambilight_live {
-            let cfg = normalized_next.ambilight.as_ref().cloned().unwrap_or_default();
+            let cfg = normalized_next
+                .ambilight
+                .as_ref()
+                .cloned()
+                .unwrap_or_default();
             live.update(
                 cfg.brightness,
                 cfg.black_border_detection,
@@ -1153,7 +1217,11 @@ fn apply_mode_change(
         LightingModeKind::Ambilight => {
             push_trace(&mut trace, "start_ambilight");
 
-            let ambilight_cfg = normalized_next.ambilight.as_ref().cloned().unwrap_or_default();
+            let ambilight_cfg = normalized_next
+                .ambilight
+                .as_ref()
+                .cloned()
+                .unwrap_or_default();
             let live_settings = AmbilightLiveSettings::new(
                 ambilight_cfg.brightness,
                 ambilight_cfg.black_border_detection,
@@ -1164,9 +1232,15 @@ fn apply_mode_change(
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
 
             let frame_source = match (owner.frame_source_factory)() {
-                Ok(source) => { info!("[apply_mode_change] frame_source created OK"); source }
+                Ok(source) => {
+                    info!("[apply_mode_change] frame_source created OK");
+                    source
+                }
                 Err(reason) => {
-                    warn!("[apply_mode_change] frame_source FAILED: {}", reason.as_reason());
+                    warn!(
+                        "[apply_mode_change] frame_source FAILED: {}",
+                        reason.as_reason()
+                    );
                     owner.active_mode = LightingModeConfig::default();
                     return make_result(
                         owner.active_mode.clone(),
@@ -1265,7 +1339,9 @@ pub fn set_lighting_mode<R: Runtime>(
         .lock()
         .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
     let lock_ms = lock_t.elapsed().as_millis();
-    if lock_ms > 10 { info!("[set_lighting_mode] runtime lock waited {lock_ms}ms"); }
+    if lock_ms > 10 {
+        info!("[set_lighting_mode] runtime lock waited {lock_ms}ms");
+    }
 
     let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
 
@@ -1286,7 +1362,10 @@ pub fn set_lighting_mode<R: Runtime>(
         edge_emitter,
         None,
     );
-    info!("[set_lighting_mode] completed in {}ms", t_cmd.elapsed().as_millis());
+    info!(
+        "[set_lighting_mode] completed in {}ms",
+        t_cmd.elapsed().as_millis()
+    );
     Ok(result)
 }
 
@@ -1427,7 +1506,10 @@ mod tests {
         LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             solid: None,
-            ambilight: Some(AmbilightPayload { brightness: 0.8, ..Default::default() }),
+            ambilight: Some(AmbilightPayload {
+                brightness: 0.8,
+                ..Default::default()
+            }),
             targets: None,
         }
     }
@@ -1804,12 +1886,7 @@ mod lighting_mode_tests {
                     frame: CapturedFrame {
                         width: 2,
                         height: 2,
-                        pixels_rgb: vec![
-                            [10, 20, 30],
-                            [40, 50, 60],
-                            [70, 80, 90],
-                            [100, 110, 120],
-                        ],
+                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
                     },
                 }))
             }),
@@ -1824,7 +1901,10 @@ mod lighting_mode_tests {
         LightingModeConfig {
             kind: LightingModeKind::Ambilight,
             solid: None,
-            ambilight: Some(AmbilightPayload { brightness: 1.0, ..Default::default() }),
+            ambilight: Some(AmbilightPayload {
+                brightness: 1.0,
+                ..Default::default()
+            }),
             targets,
         }
     }
