@@ -669,27 +669,66 @@
         "retryStreamAction": "Yeniden Dene",
         "stopStreamAction": "Durdur",
         "faults": {
-          "HUE-NET-01": { "description": "Bridge ulaşılamıyor", "hint": "Ağ bağlantınızı kontrol edin" },
-          "HUE-NET-02": { "description": "DTLS el sıkışma başarısız", "hint": "Stream'i yeniden başlatmayı deneyin" },
-          "HUE-NET-03": { "description": "DTLS gönderim zaman aşımı", "hint": "Ağ gecikmesini ve bridge yakınlığını kontrol edin" },
-          "HUE-NET-04": { "description": "DTLS bağlantısı beklenmedik şekilde kapandı", "hint": "Yeniden bağlanmayı deneyin" },
-          "HUE-AUTH-01": { "description": "Kimlik bilgileri geçersiz", "hint": "Hue bridge'inizi yeniden eşleştirin" },
-          "HUE-AUTH-02": { "description": "Bridge eşleştirmesi bozulmuş", "hint": "Bridge düğmesine basın ve tekrar eşleştirin" },
-          "HUE-AUTH-03": { "description": "Bridge isteği reddetti (403)", "hint": "Kimlik bilgilerini yenilemek için yeniden eşleştirin" },
-          "HUE-STR-01": { "description": "Entertainment alanı bulunamadı", "hint": "Cihaz ayarlarından geçerli bir alan seçin" },
-          "HUE-STR-02": { "description": "Stream kısıtlaması algılandı", "hint": "Stream frekansını azaltın veya bridge yükünü kontrol edin" },
-          "HUE-STR-03": { "description": "Paket gönderimi başarısız", "hint": "Ağ kararlılığını kontrol edin" },
-          "HUE-STR-04": { "description": "Gönderici beklenmedik şekilde sonlandı", "hint": "Stream'i yeniden deneyin" },
-          "HUE-CFG-01": { "description": "Entertainment alanı seçilmemiş", "hint": "Cihaz ayarlarından bir alan seçin" },
-          "HUE-CFG-02": { "description": "Bridge IP adresi değişmiş", "hint": "Cihaz ayarlarından bridge IP'sini güncelleyin" }
+          "HUE-NET-01": {
+            "description": "Bridge ulaşılamıyor",
+            "hint": "Ağ bağlantınızı kontrol edin"
+          },
+          "HUE-NET-02": {
+            "description": "DTLS el sıkışma başarısız",
+            "hint": "Stream'i yeniden başlatmayı deneyin"
+          },
+          "HUE-NET-03": {
+            "description": "DTLS gönderim zaman aşımı",
+            "hint": "Ağ gecikmesini ve bridge yakınlığını kontrol edin"
+          },
+          "HUE-NET-04": {
+            "description": "DTLS bağlantısı beklenmedik şekilde kapandı",
+            "hint": "Yeniden bağlanmayı deneyin"
+          },
+          "HUE-AUTH-01": {
+            "description": "Kimlik bilgileri geçersiz",
+            "hint": "Hue bridge'inizi yeniden eşleştirin"
+          },
+          "HUE-AUTH-02": {
+            "description": "Bridge eşleştirmesi bozulmuş",
+            "hint": "Bridge düğmesine basın ve tekrar eşleştirin"
+          },
+          "HUE-AUTH-03": {
+            "description": "Bridge isteği reddetti (403)",
+            "hint": "Kimlik bilgilerini yenilemek için yeniden eşleştirin"
+          },
+          "HUE-STR-01": {
+            "description": "Entertainment alanı bulunamadı",
+            "hint": "Cihaz ayarlarından geçerli bir alan seçin"
+          },
+          "HUE-STR-02": {
+            "description": "Stream kısıtlaması algılandı",
+            "hint": "Stream frekansını azaltın veya bridge yükünü kontrol edin"
+          },
+          "HUE-STR-03": {
+            "description": "Paket gönderimi başarısız",
+            "hint": "Ağ kararlılığını kontrol edin"
+          },
+          "HUE-STR-04": {
+            "description": "Gönderici beklenmedik şekilde sonlandı",
+            "hint": "Stream'i yeniden deneyin"
+          },
+          "HUE-CFG-01": {
+            "description": "Entertainment alanı seçilmemiş",
+            "hint": "Cihaz ayarlarından bir alan seçin"
+          },
+          "HUE-CFG-02": {
+            "description": "Bridge IP adresi değişmiş",
+            "hint": "Cihaz ayarlarından bridge IP'sini güncelleyin"
+          }
         },
-      "writeback": {
-        "codes": {
-          "CHAN_WB_SCHEMA_REJECTED": "Bridge konum formatini reddetti.",
-          "CHAN_WB_STREAM_ACTIVE": "Kaydetmeden once akisi durdurun.",
-          "CHAN_WB_NETWORK_ERROR": "Bridge'e ulasilamiyor."
+        "writeback": {
+          "codes": {
+            "CHAN_WB_SCHEMA_REJECTED": "Bridge konum formatini reddetti.",
+            "CHAN_WB_STREAM_ACTIVE": "Kaydetmeden once akisi durdurun.",
+            "CHAN_WB_NETWORK_ERROR": "Bridge'e ulasilamiyor."
+          }
         }
-      }
       }
     }
   },
@@ -1029,6 +1068,28 @@
       "copyError": "Hatayı kopyala",
       "showDetails": "Detayları göster",
       "hideDetails": "Detayları gizle"
+    }
+  },
+  "ledSettings": {
+    "colorCorrection": {
+      "title": "Renk Duzeltme",
+      "description": "Cikis oncesi kanal basina renk duzeltmesi.",
+      "gammaR": "Gamma Kirmizi",
+      "gammaG": "Gamma Yesil",
+      "gammaB": "Gamma Mavi",
+      "kelvin": "Beyaz Nokta (K)",
+      "saturation": "Doygunluk",
+      "reset": "Varsayilanlara sifirla",
+      "kelvinHint": "Dusuk = sicak, yuksek = soguk"
+    },
+    "firmwareProfile": {
+      "title": "Firmware Profili",
+      "description": "LED kontrolcu firmware'inizle uyumlu seri protokolu secin.",
+      "lumasyncV1Label": "LumaSync v1",
+      "lumasyncV1Description": "Saglik kontrolu ve telemetri iceren LumaSync yerel protokolu.",
+      "adalightLabel": "Adalight",
+      "adalightDescription": "Prismatik, Hyperion, Boblight ve cogu DIY Arduino sketch ile uyumlu.",
+      "brightnessDisabledTooltip": "Adalight profili: parlaklik firmware tarafindan kontrol edilir"
     }
   }
 }
