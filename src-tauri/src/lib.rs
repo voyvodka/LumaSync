@@ -18,6 +18,7 @@ mod commands {
     pub mod ambilight_capture;
     pub mod calibration;
     pub mod device_connection;
+    pub mod device_handshake;
     pub mod hue_http;
     pub mod hue_intensity;
     pub mod hue_onboarding;
