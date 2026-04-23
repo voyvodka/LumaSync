@@ -67,7 +67,7 @@ import {
 } from "./shared/contracts/shell";
 import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
 import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
-import { DEVICE_COMMANDS } from "./shared/contracts/device";
+import { DEVICE_COMMANDS, type ColorCorrectionConfig, type FirmwareProfile } from "./shared/contracts/device";
 import {
   listenTrayLightsOff,
   listenTrayResumeLastMode,
@@ -171,6 +171,13 @@ function App() {
   // it into `ambilight.hueIntensityPreset` without a synchronous shellStore
   // round-trip on the drag path.
   const hueIntensityPresetRef = useRef<HueIntensityPreset>(DEFAULT_HUE_INTENSITY_PRESET);
+  // Per-channel color correction (v1.4 G4). Cached so every set_lighting_mode
+  // call can inject it without a synchronous shellStore round-trip. Hydrated on
+  // bootstrap and updated when the settings panel signals a change.
+  const colorCorrectionRef = useRef<ColorCorrectionConfig | undefined>(undefined);
+  // Firmware encoding profile (v1.4 G11). Same caching rationale as
+  // colorCorrectionRef — injected into every outgoing LightingModeConfig.
+  const firmwareProfileRef = useRef<FirmwareProfile | undefined>(undefined);
   /**
    * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
    * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
@@ -217,14 +224,32 @@ function App() {
   );
 
   /**
-   * Compose display id + Hue intensity preset in a single helper so every
-   * call site stays short. Ordering is safe because the two helpers stamp
-   * non-overlapping fields.
+   * Stamp color correction and firmware profile onto any outgoing
+   * LightingModeConfig. Both fields are top-level (not nested inside ambilight)
+   * so they apply to all modes (ambilight, solid, off). Absent refs leave the
+   * fields undefined — the Rust backend applies its own defaults via
+   * #[serde(default)] so no runtime error occurs.
+   */
+  const withColorCorrectionAndFirmwareProfile = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig => ({
+      ...mode,
+      colorCorrection: colorCorrectionRef.current,
+      firmwareProfile: firmwareProfileRef.current,
+    }),
+    [],
+  );
+
+  /**
+   * Compose display id + Hue intensity preset + color correction + firmware profile
+   * in a single helper so every call site stays short. Ordering is safe because
+   * each helper stamps non-overlapping fields.
    */
   const hydrateModePayload = useCallback(
     (mode: LightingModeConfig): LightingModeConfig =>
-      withAmbilightHueIntensityPreset(withSelectedDisplayId(mode)),
-    [withSelectedDisplayId, withAmbilightHueIntensityPreset],
+      withColorCorrectionAndFirmwareProfile(
+        withAmbilightHueIntensityPreset(withSelectedDisplayId(mode)),
+      ),
+    [withSelectedDisplayId, withAmbilightHueIntensityPreset, withColorCorrectionAndFirmwareProfile],
   );
 
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
@@ -444,6 +469,10 @@ function App() {
         // so the ambilight worker always receives a deterministic preset.
         hueIntensityPresetRef.current =
           state.lightingIntensityPreset ?? DEFAULT_HUE_INTENSITY_PRESET;
+        // Hydrate color correction and firmware profile refs (v1.4 G4 / G11).
+        // Absent in persisted state ⇒ refs stay undefined; backend defaults apply.
+        colorCorrectionRef.current = state.colorCorrection;
+        firmwareProfileRef.current = state.firmwareProfile;
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);

@@ -1,5 +1,6 @@
 import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
 import type { DisplayId } from "../../../shared/contracts/display";
+import type { ColorCorrectionConfig, FirmwareProfile } from "../../../shared/contracts/device";
 
 export const LIGHTING_MODE_KIND = {
   OFF: "off",
@@ -64,6 +65,17 @@ export interface LightingModeConfig {
    * unplugged display id reverts to primary instead of failing the command.
    */
   displayId?: DisplayId;
+  /**
+   * Per-channel color correction (v1.4 G4). Absent ⇒ backend uses
+   * ColorCorrectionConfig defaults (gamma 2.2 / 6500 K / saturation 1.0).
+   * Applied to USB output only — Hue sink is not affected.
+   */
+  colorCorrection?: ColorCorrectionConfig;
+  /**
+   * Firmware encoding profile (v1.4 G11). Absent ⇒ backend defaults to
+   * LumaSyncV1. User-visible setting only — never switched silently.
+   */
+  firmwareProfile?: FirmwareProfile;
 }
 
 export function isLightingModeKind(value: unknown): value is LightingModeKind {
