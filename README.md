@@ -14,7 +14,12 @@ It combines a React + TypeScript frontend with a Rust/Tauri runtime to keep the 
 
 ## Screenshots
 
-> Screenshots pending refresh for the v1.4 UI. See `docs/screenshots/` once populated.
+Compact tray-sized mode (320×480) and full workspace mode (900×620) — amber Rev 07 design language, same state shared across both layouts.
+
+<p align="center">
+  <img src="docs/screenshots/compact-lights.png" alt="LumaSync compact lights view" width="300" />
+  <img src="docs/screenshots/full-lights.png" alt="LumaSync full lights view" width="520" />
+</p>
 
 ## Features
 
