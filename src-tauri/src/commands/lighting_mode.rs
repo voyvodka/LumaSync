@@ -21,7 +21,8 @@ use super::led_calibration::{
     build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
-    encode_packet_for_profile, ColorCorrectionConfig, FirmwareProfile, LedOutputBridge,
+    apply_color_correction_rgb, encode_packet_for_profile, ColorCorrectionConfig, FirmwareProfile,
+    LedOutputBridge,
 };
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
@@ -1097,7 +1098,7 @@ fn start_ambilight_worker(
                                     ch.position_y,
                                     border_cache.insets(),
                                 );
-                                apply_saturation_rgb(rgb, saturation)
+                                apply_color_correction_rgb(rgb, &color_correction)
                             })
                             .collect();
 
@@ -1322,11 +1323,17 @@ fn apply_mode_change(
             // Hue solid output (if hue target requested and context available)
             if needs_hue {
                 if let Some(context) = hue_output.as_ref() {
+                    let hue_corrections =
+                        normalized_next.color_correction.clone().unwrap_or_default();
+                    let (hr, hg, hb) = apply_color_correction_rgb(
+                        (payload.r, payload.g, payload.b),
+                        &hue_corrections,
+                    );
                     let _ = apply_hue_color_with_context(
                         context,
-                        payload.r,
-                        payload.g,
-                        payload.b,
+                        hr,
+                        hg,
+                        hb,
                         payload.brightness,
                     );
                 }
