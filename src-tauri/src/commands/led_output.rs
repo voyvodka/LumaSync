@@ -1227,4 +1227,82 @@ mod tests {
         // Adalight header: "Ada" + 0x00 + 0x00 + 0x55 for 1 LED
         assert_eq!(&pkt[..6], &[0x41, 0x64, 0x61, 0x00, 0x00, 0x55]);
     }
+
+    // ---------------------------------------------------------------------------
+    // apply_color_correction_rgb — Hue single-pixel helper
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn color_correction_rgb_identity_at_defaults() {
+        // Default config (gamma 2.2 / 6500 K / sat 1.0): saturation identity,
+        // Kelvin identity, but gamma 2.2 maps 128 → 56 and 255 → 255.
+        let cfg = ColorCorrectionConfig::default();
+        let out = apply_color_correction_rgb((255, 0, 128), &cfg);
+        // Compare with what the USB batch encoder produces for the same pixel.
+        let batch_out = encode_led_packet(1.0, &[[255, 0, 128]]);
+        // Batch packet: [0xAA 0x55 brightness(255) count_lo count_hi R G B checksum]
+        // RGB bytes are at index 5..8.
+        assert_eq!(
+            out,
+            (batch_out[5], batch_out[6], batch_out[7]),
+            "apply_color_correction_rgb must match the USB batch encoder pixel output"
+        );
+    }
+
+    #[test]
+    fn color_correction_rgb_kelvin_3200_produces_warm_tint() {
+        // At 3200 K the blue multiplier is <0.7. After gamma 2.2 the blue
+        // channel of a pure white pixel must be significantly reduced.
+        let cfg = ColorCorrectionConfig {
+            kelvin: 3200,
+            ..ColorCorrectionConfig::default()
+        };
+        let (r, _g, b) = apply_color_correction_rgb((255, 255, 255), &cfg);
+        assert_eq!(r, 255, "red must be full at 3200 K (below 6600 K threshold)");
+        assert!(
+            b < 180,
+            "blue must be substantially reduced at 3200 K, got {b}"
+        );
+    }
+
+    #[test]
+    fn color_correction_rgb_pipeline_order_matches_usb_encoder() {
+        // Non-trivial config: saturation boost + warm Kelvin + default gamma.
+        // Expected golden output is computed from the USB batch encoder so both
+        // sides are proven identical rather than just separately plausible.
+        let cfg = ColorCorrectionConfig {
+            gamma_r: 2.2,
+            gamma_g: 2.2,
+            gamma_b: 2.2,
+            kelvin: 3200,
+            saturation: 1.5,
+        };
+        let pixel = [200_u8, 100, 50];
+        let (r_out, g_out, b_out) = apply_color_correction_rgb((pixel[0], pixel[1], pixel[2]), &cfg);
+
+        // The USB encoder applies the same pipeline via encode_led_packet_with_corrections.
+        let packet = encode_led_packet_with_corrections(1.0, &[pixel], cfg.kelvin, cfg.saturation);
+        // RGB payload starts at index 5 (after 0xAA 0x55 brightness count_lo count_hi).
+        let (batch_r, batch_g, batch_b) = (packet[5], packet[6], packet[7]);
+
+        assert_eq!(
+            (r_out, g_out, b_out),
+            (batch_r, batch_g, batch_b),
+            "Hue single-pixel helper must be byte-identical with USB batch encoder"
+        );
+    }
+
+    #[test]
+    fn color_correction_rgb_saturation_zero_produces_greyscale() {
+        let cfg = ColorCorrectionConfig {
+            saturation: 0.0,
+            kelvin: 6500, // identity Kelvin so only saturation changes the result
+            gamma_r: 1.0, // linear gamma so luma is not distorted
+            gamma_g: 1.0,
+            gamma_b: 1.0,
+        };
+        let (r, g, b) = apply_color_correction_rgb((200, 100, 50), &cfg);
+        assert_eq!(r, g, "R and G must be equal at saturation 0.0");
+        assert_eq!(g, b, "G and B must be equal at saturation 0.0");
+    }
 }
