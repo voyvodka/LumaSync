@@ -21,8 +21,7 @@ use super::led_calibration::{
     build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
-    apply_solid_payload_to_port, send_ambilight_frame_hot_path_to_port, ColorCorrectionConfig,
-    FirmwareProfile, LedOutputBridge,
+    encode_packet_for_profile, ColorCorrectionConfig, FirmwareProfile, LedOutputBridge,
 };
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
@@ -853,6 +852,8 @@ fn start_ambilight_worker(
     telemetry_snapshot: SharedRuntimeTelemetry,
     hue_output: Option<HueActiveOutputContext>,
     edge_signal_emitter: Option<EdgeSignalEmitter>,
+    color_correction: ColorCorrectionConfig,
+    firmware_profile: FirmwareProfile,
 ) -> Result<LightingWorkerRuntime, String> {
     let mut frame_source = frame_source;
     // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
@@ -954,13 +955,15 @@ fn start_ambilight_worker(
         let initial_sent =
             quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                 AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                send_ambilight_frame_hot_path_to_port(
-                    &output_bridge,
-                    port,
-                    frame,
+                let packet = encode_packet_for_profile(
+                    firmware_profile,
                     initial_brightness,
-                )
-                .map_err(|error| error.as_reason())
+                    frame,
+                    &color_correction,
+                );
+                output_bridge
+                    .send_packet_to_port(port, &packet)
+                    .map_err(|error| error.as_reason())
             })?;
         if initial_sent {
             telemetry_window.record_send();
@@ -1050,16 +1053,18 @@ fn start_ambilight_worker(
 
                 let send_started = Instant::now();
                 let send_ms = if let Some(ref port) = port_name {
-                    // USB send path: send frame to serial port.
+                    // USB send path: encode via the active firmware profile and send.
                     match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                        send_ambilight_frame_hot_path_to_port(
-                            &output_bridge,
-                            port,
-                            frame,
+                        let packet = encode_packet_for_profile(
+                            firmware_profile,
                             brightness,
-                        )
-                        .map_err(|error| error.as_reason())
+                            frame,
+                            &color_correction,
+                        );
+                        output_bridge
+                            .send_packet_to_port(port, &packet)
+                            .map_err(|error| error.as_reason())
                     }) {
                         Ok(true) => {
                             telemetry_window.record_send();
@@ -1286,15 +1291,21 @@ fn apply_mode_change(
 
                 SOLID_OUTPUT_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
 
-                if let Err(reason) = apply_solid_payload_to_port(
-                    &owner.output_bridge,
-                    port_name,
-                    payload.r,
-                    payload.g,
-                    payload.b,
+                let solid_corrections = normalized_next
+                    .color_correction
+                    .clone()
+                    .unwrap_or_default();
+                let solid_profile = normalized_next.firmware_profile.unwrap_or_default();
+                let solid_packet = encode_packet_for_profile(
+                    solid_profile,
                     payload.brightness,
-                )
-                .map_err(|error| error.as_reason())
+                    &[[payload.r, payload.g, payload.b]],
+                    &solid_corrections,
+                );
+                if let Err(reason) = owner
+                    .output_bridge
+                    .send_packet_to_port(port_name, &solid_packet)
+                    .map_err(|error| error.as_reason())
                 {
                     owner.active_mode = LightingModeConfig::default();
                     return make_result(
@@ -1409,6 +1420,12 @@ fn apply_mode_change(
                 None
             };
 
+            let corrections = normalized_next
+                .color_correction
+                .clone()
+                .unwrap_or_default();
+            let profile = normalized_next.firmware_profile.unwrap_or_default();
+
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
                 port_for_worker,
@@ -1419,6 +1436,8 @@ fn apply_mode_change(
                     .unwrap_or_else(|| Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))),
                 hue_output,
                 edge_signal_emitter,
+                corrections,
+                profile,
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
@@ -1708,6 +1727,8 @@ mod tests {
                     shared_runtime_telemetry(),
                     None,
                     None,
+                    super::ColorCorrectionConfig::default(),
+                    super::FirmwareProfile::default(),
                 )
                 .expect("worker start should succeed"),
             ),
