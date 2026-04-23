@@ -1,4 +1,5 @@
 #[path = "../src/commands/hue_onboarding.rs"]
+#[allow(dead_code)]
 mod hue_onboarding;
 
 use hue_onboarding::{
