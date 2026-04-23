@@ -601,9 +601,12 @@ pub fn sample_led_frame(
 mod tests {
     use std::sync::Arc;
 
-    use super::{sample_led_frame, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame, SamplingCalibration};
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     use super::create_live_frame_source;
+    use super::{
+        sample_led_frame, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+        SamplingCalibration,
+    };
 
     struct SingleFrameSource {
         frame: Option<CapturedFrame>,
