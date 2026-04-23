@@ -112,7 +112,6 @@ pub(crate) async fn classify_hue_response(
 /// PUT path). Same semantics as [`classify_hue_response`], duplicated
 /// only because `reqwest::blocking::Response` and `reqwest::Response`
 /// do not share a trait object surface.
-#[allow(dead_code)] // Wired up in commit 4 at the HTTP-fallback PUT call site.
 pub(crate) fn classify_hue_response_blocking(
     response: reqwest::blocking::Response,
 ) -> Result<reqwest::blocking::Response, HueHttpFault> {
@@ -128,7 +127,6 @@ pub(crate) fn classify_hue_response_blocking(
 
 /// Pure status→fault mapping shared between async and blocking call
 /// sites. Kept free of I/O so it is trivially testable.
-#[allow(dead_code)] // Used by the two wrappers above; both wired in commits 2 and 4.
 fn classify_status(status: u16, body: &str) -> HueHttpFault {
     match status {
         403 if is_hue_unauthorized_body(body) => HueHttpFault::AuthInvalid,

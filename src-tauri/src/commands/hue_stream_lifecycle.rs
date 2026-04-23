@@ -9,6 +9,7 @@ use tauri::State;
 
 use log::{error, info, warn};
 
+use super::hue_http::classify_hue_response_blocking;
 use super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
 
 const DEFAULT_RETRY_MAX_ATTEMPTS: u8 = 3;
@@ -546,17 +547,9 @@ fn activate_entertainment_config(
         .send()
         .map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::FORBIDDEN {
-        return Err("AUTH_INVALID_ENTERTAINMENT_ACTIVATE: 403 Forbidden".to_string());
-    }
-    if !status.is_success() {
-        let body = response.text().unwrap_or_default();
-        return Err(format!(
-            "ENTERTAINMENT_ACTIVATE_FAILED: HTTP {status} — {body}"
-        ));
-    }
-    Ok(())
+    classify_hue_response_blocking(response)
+        .map(|_| ())
+        .map_err(|fault| format!("ENTERTAINMENT_ACTIVATE_FAILED: {fault}"))
 }
 
 /// PUT /clip/v2/resource/entertainment_configuration/{area_id}
@@ -836,9 +829,9 @@ fn send_light_put(
             "color": { "xy": { "x": x, "y": y } }
         }))
         .send()
-        .and_then(|r| r.error_for_status())
-        .map(|_| ())
         .map_err(|e| e.to_string())
+        .and_then(|r| classify_hue_response_blocking(r).map_err(|f| f.to_string()))
+        .map(|_| ())
 }
 
 #[derive(Clone, Debug)]
