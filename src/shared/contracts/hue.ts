@@ -109,6 +109,17 @@ export const HUE_RUNTIME_STATUS = {
   TRANSIENT_RETRY_SCHEDULED: "TRANSIENT_RETRY_SCHEDULED",
   TRANSIENT_RETRY_EXHAUSTED: "TRANSIENT_RETRY_EXHAUSTED",
   AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
+  /**
+   * Uniform 403 re-pair signal (v1.4 G2).
+   *
+   * Any Hue CLIP v2 endpoint that returns HTTP 403 — discovery, validate,
+   * start_stream, list_entertainment_areas — collapses onto this single
+   * runtime code so the UI offers a single "re-pair bridge" recovery
+   * action. Distinct from `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` (someone
+   * else is streaming) and `AUTH_INVALID_CREDENTIALS` (credentials null
+   * or malformed, no 403 contacted the bridge).
+   */
+  AUTH_INVALID_RE_PAIR_REQUIRED: "AUTH_INVALID_RE_PAIR_REQUIRED",
   CONFIG_NOT_READY_GATE_BLOCKED: "CONFIG_NOT_READY_GATE_BLOCKED",
   STOP_TIMEOUT_PARTIAL: "HUE_STOP_TIMEOUT_PARTIAL",
   CHANNEL_POSITIONS_UPDATED: "HUE_CHANNEL_POSITIONS_UPDATED",
