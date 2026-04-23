@@ -1,56 +1,59 @@
-//! Hue intensity preset — Rust serde mirror of `HueIntensityPreset` from
-//! `src/shared/contracts/hue.ts`.
+//! Lighting smoothing preset — controls EWMA smoothing for all lighting sinks.
 //!
-//! The preset is a user-facing dial (Subtle / Moderate / Intense) that
-//! maps to a single EWMA coefficient applied to the per-channel Hue RGB
-//! stream in the ambilight worker's Hue branch:
+//! `LightingSmoothingPreset` (v1.4 unification) is the single user-facing
+//! smoothing dial that drives both USB ambilight and Hue stream response curves
+//! through one control. The three coefficients (0.15 / 0.35 / 0.60) are
+//! contract-locked with the frontend.
 //!
-//! ```text
-//! smoothed = alpha * newSample + (1 - alpha) * prevSmoothed
-//! ```
-//!
-//! Lower alpha ⇒ heavier smoothing ⇒ calmer lights. Higher alpha ⇒
-//! snappier response ⇒ more intense. The three coefficients
-//! (0.15 / 0.35 / 0.60) must stay in sync with
-//! `HUE_INTENSITY_PRESET_COEFFICIENTS` in the frontend contract —
-//! any change that alters the numerics is observable on the wire.
-//!
-//! This module is intentionally tiny (pure enum + one function) so the
-//! v1.5 G8 refactor of `hue_stream_lifecycle.rs` can pull it in without
-//! depending on any of the runtime/DTLS plumbing.
+//! `HueIntensityPreset` is a deprecated type alias kept for backward compatibility
+//! with previously serialised payloads. It will be removed in v1.5 once the
+//! frontend has migrated to `lighting_smoothing_preset`.
 
 use serde::{Deserialize, Serialize};
 
-/// User-facing intensity tier for the ambient Hue stream.
+/// User-facing smoothing tier for all lighting sinks (USB ambilight + Hue stream).
 ///
-/// Mirrors the frontend `HueIntensityPreset` union (`"subtle" |
-/// "moderate" | "intense"`). `#[serde(rename_all = "camelCase")]` would
-/// already render the variant names as lowercase but we spell it out
-/// with `"lowercase"` so the wire format is tied to the smaller set of
-/// alphabetic-only strings the frontend contract emits.
+/// Unified from the earlier `HueIntensityPreset` (Hue-only) in v1.4 so that
+/// one control governs both output paths. The EWMA coefficient is applied to
+/// the per-frame colour stream on every active sink:
+///
+/// ```text
+/// smoothed = alpha * newSample + (1 - alpha) * prevSmoothed
+/// ```
+///
+/// Lower alpha ⇒ heavier smoothing ⇒ calmer lights.
+/// Higher alpha ⇒ snappier response ⇒ more intense.
+///
+/// Serde wire format: `"subtle" | "moderate" | "intense"` (lowercase).
+/// The three coefficients must stay in sync with `LIGHTING_SMOOTHING_PRESET_COEFFICIENTS`
+/// in the frontend contract — any numeric change is observable on the wire.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
-pub enum HueIntensityPreset {
+pub enum LightingSmoothingPreset {
     Subtle,
     #[default]
     Moderate,
     Intense,
 }
 
-impl HueIntensityPreset {
-    /// EWMA coefficient applied to the Hue per-channel stream.
+impl LightingSmoothingPreset {
+    /// EWMA coefficient applied to the lighting stream on all sinks.
     ///
-    /// Must stay in lockstep with `HUE_INTENSITY_PRESET_COEFFICIENTS`
-    /// in `src/shared/contracts/hue.ts`. A unit test in this module and
-    /// a corresponding frontend vitest lock the numerics on both sides.
+    /// Must stay in lockstep with the frontend contract constant.
     pub fn coefficient(self) -> f32 {
         match self {
-            HueIntensityPreset::Subtle => 0.15,
-            HueIntensityPreset::Moderate => 0.35,
-            HueIntensityPreset::Intense => 0.60,
+            LightingSmoothingPreset::Subtle => 0.15,
+            LightingSmoothingPreset::Moderate => 0.35,
+            LightingSmoothingPreset::Intense => 0.60,
         }
     }
 }
+
+/// Deprecated alias for `LightingSmoothingPreset`.
+///
+/// Kept for backward compatibility with payloads that still carry
+/// `hue_intensity_preset`. Will be removed in v1.5.
+pub type HueIntensityPreset = LightingSmoothingPreset;
 
 #[cfg(test)]
 mod tests {
@@ -58,44 +61,60 @@ mod tests {
 
     #[test]
     fn coefficients_mirror_frontend_contract() {
-        // The three numerics below are the contract of record — changing
-        // any of them is a breaking behaviour change visible to users
-        // through the Hue stream response curve.
-        assert_eq!(HueIntensityPreset::Subtle.coefficient(), 0.15);
-        assert_eq!(HueIntensityPreset::Moderate.coefficient(), 0.35);
-        assert_eq!(HueIntensityPreset::Intense.coefficient(), 0.60);
+        assert_eq!(LightingSmoothingPreset::Subtle.coefficient(), 0.15);
+        assert_eq!(LightingSmoothingPreset::Moderate.coefficient(), 0.35);
+        assert_eq!(LightingSmoothingPreset::Intense.coefficient(), 0.60);
     }
 
     #[test]
     fn coefficient_ordering_is_monotonic_low_to_high() {
-        // Subtle must smooth the most (lowest alpha); intense must snap
-        // the hardest (highest alpha). Preserves the intuition the
-        // frontend copy promises ("calmer" vs "fast-reacting").
         assert!(
-            HueIntensityPreset::Subtle.coefficient() < HueIntensityPreset::Moderate.coefficient()
+            LightingSmoothingPreset::Subtle.coefficient()
+                < LightingSmoothingPreset::Moderate.coefficient()
         );
         assert!(
-            HueIntensityPreset::Moderate.coefficient() < HueIntensityPreset::Intense.coefficient()
+            LightingSmoothingPreset::Moderate.coefficient()
+                < LightingSmoothingPreset::Intense.coefficient()
         );
     }
 
     #[test]
     fn default_preset_is_moderate() {
-        let preset = HueIntensityPreset::default();
-        assert_eq!(preset, HueIntensityPreset::Moderate);
+        let preset = LightingSmoothingPreset::default();
+        assert_eq!(preset, LightingSmoothingPreset::Moderate);
     }
 
     #[test]
     fn serde_round_trip_matches_lowercase_wire_format() {
-        let subtle = serde_json::to_string(&HueIntensityPreset::Subtle).expect("serialize subtle");
+        let subtle = serde_json::to_string(&LightingSmoothingPreset::Subtle)
+            .expect("serialize subtle");
         assert_eq!(subtle, "\"subtle\"");
 
-        let moderate: HueIntensityPreset =
+        let moderate: LightingSmoothingPreset =
             serde_json::from_str("\"moderate\"").expect("deserialize moderate");
-        assert_eq!(moderate, HueIntensityPreset::Moderate);
+        assert_eq!(moderate, LightingSmoothingPreset::Moderate);
 
-        let intense: HueIntensityPreset =
+        let intense: LightingSmoothingPreset =
             serde_json::from_str("\"intense\"").expect("deserialize intense");
-        assert_eq!(intense, HueIntensityPreset::Intense);
+        assert_eq!(intense, LightingSmoothingPreset::Intense);
+    }
+
+    /// Type alias backward compat: HueIntensityPreset is the same type.
+    #[test]
+    fn hue_intensity_preset_alias_is_same_type_as_lighting_smoothing_preset() {
+        let via_alias: HueIntensityPreset = LightingSmoothingPreset::Subtle;
+        assert_eq!(via_alias.coefficient(), 0.15);
+    }
+
+    #[test]
+    fn lighting_smoothing_preset_deserialises_from_legacy_hue_intensity_wire_values() {
+        // Payloads serialised as HueIntensityPreset must still deserialise correctly
+        // because both share the same lowercase wire format.
+        let legacy_subtle: LightingSmoothingPreset =
+            serde_json::from_str("\"subtle\"").expect("legacy subtle");
+        let legacy_intense: LightingSmoothingPreset =
+            serde_json::from_str("\"intense\"").expect("legacy intense");
+        assert_eq!(legacy_subtle, LightingSmoothingPreset::Subtle);
+        assert_eq!(legacy_intense, LightingSmoothingPreset::Intense);
     }
 }

@@ -12,7 +12,7 @@ use super::ambilight_capture::{
     BlackBorderInsets, CapturedFrame, StaticFrameSource,
 };
 use super::device_connection::{CommandStatus, SerialConnectionState};
-use super::hue_intensity::HueIntensityPreset;
+use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use super::hue_stream_lifecycle::{
     apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
     HueActiveOutputContext, HueRuntimeStateStore, HueScreenRegion,
@@ -87,10 +87,15 @@ pub struct AmbilightPayload {
     /// Defaults to 1.0 when absent.
     #[serde(default)]
     pub saturation: Option<f32>,
-    /// User-facing Hue intensity preset (v1.4 G6). When present, the Hue
-    /// branch of the ambilight pump uses this preset's EWMA coefficient
-    /// instead of `smoothing_alpha` so the user can dial Hue responsiveness
-    /// independently of USB. Absent ⇒ Hue reuses `smoothing_alpha`.
+    /// Unified smoothing preset (v1.4 unification). When present, governs
+    /// the EWMA coefficient for both USB and Hue output sinks. Takes
+    /// priority over the deprecated `smoothing_alpha` continuous slider
+    /// and `hue_intensity_preset`.
+    #[serde(default)]
+    pub lighting_smoothing_preset: Option<LightingSmoothingPreset>,
+    /// Deprecated — use `lighting_smoothing_preset`. Kept for backward
+    /// compatibility with pre-v1.4 payloads that still carry this field.
+    /// Will be removed in v1.5.
     #[serde(default)]
     pub hue_intensity_preset: Option<HueIntensityPreset>,
 }
@@ -191,16 +196,13 @@ struct AmbilightLiveSettings {
     /// Brightness as f32 bit pattern stored in an AtomicU32.
     brightness: AtomicU32,
     black_border_detection: AtomicBool,
-    /// EWMA smoothing alpha as f32 bit pattern. Range [0.05, 1.0].
+    /// Unified EWMA smoothing alpha as f32 bit pattern. Range [0.05, 1.0].
+    /// Drives both USB and Hue output sinks — single source of truth.
+    /// Populated from `LightingSmoothingPreset.coefficient()` when a preset
+    /// is set; falls back to the raw `smoothing_alpha` slider value.
     smoothing_alpha: AtomicU32,
     /// Saturation factor as f32 bit pattern. Range [0.5, 2.0]. 1.0 = identity.
     saturation: AtomicU32,
-    /// Hue-branch EWMA smoothing alpha as f32 bit pattern.
-    /// Mirrors `smoothing_alpha` when the user has not picked a Hue intensity
-    /// preset; when they have, this field is overridden with the preset's
-    /// coefficient (subtle=0.15, moderate=0.35, intense=0.60) so the Hue
-    /// response curve can differ from USB without restarting the worker.
-    hue_smoothing_alpha: AtomicU32,
 }
 
 impl AmbilightLiveSettings {
@@ -216,9 +218,6 @@ impl AmbilightLiveSettings {
             black_border_detection: AtomicBool::new(black_border_detection),
             smoothing_alpha: AtomicU32::new(clamped_alpha.to_bits()),
             saturation: AtomicU32::new(saturation.clamp(0.5, 2.0).to_bits()),
-            // Default Hue alpha mirrors USB alpha. Overridden via
-            // `update` when the payload carries `hue_intensity_preset`.
-            hue_smoothing_alpha: AtomicU32::new(clamped_alpha.to_bits()),
         })
     }
 
@@ -238,35 +237,28 @@ impl AmbilightLiveSettings {
         f32::from_bits(self.saturation.load(Ordering::Relaxed))
     }
 
-    /// EWMA alpha applied to the Hue branch only. Falls back to the USB
-    /// `smoothing_alpha` value when no preset is set.
-    fn read_hue_smoothing_alpha(&self) -> f32 {
-        f32::from_bits(self.hue_smoothing_alpha.load(Ordering::Relaxed))
-    }
-
     fn update(
         &self,
         brightness: f32,
         black_border_detection: bool,
         smoothing_alpha: f32,
         saturation: f32,
-        hue_intensity_preset: Option<HueIntensityPreset>,
+        smoothing_preset: Option<LightingSmoothingPreset>,
     ) {
-        let clamped_alpha = smoothing_alpha.clamp(0.05, 1.0);
+        // Resolve unified alpha: preset takes priority over raw slider value.
+        // Both USB and Hue sinks read `smoothing_alpha` — single source.
+        let resolved_alpha = match smoothing_preset {
+            Some(preset) => preset.coefficient(),
+            None => smoothing_alpha.clamp(0.05, 1.0),
+        };
         self.brightness
             .store(brightness.to_bits(), Ordering::Relaxed);
         self.black_border_detection
             .store(black_border_detection, Ordering::Relaxed);
         self.smoothing_alpha
-            .store(clamped_alpha.to_bits(), Ordering::Relaxed);
+            .store(resolved_alpha.clamp(0.05, 1.0).to_bits(), Ordering::Relaxed);
         self.saturation
             .store(saturation.clamp(0.5, 2.0).to_bits(), Ordering::Relaxed);
-        let hue_alpha = match hue_intensity_preset {
-            Some(preset) => preset.coefficient(),
-            None => clamped_alpha,
-        };
-        self.hue_smoothing_alpha
-            .store(hue_alpha.clamp(0.05, 1.0).to_bits(), Ordering::Relaxed);
     }
 }
 
@@ -352,6 +344,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                     black_border_detection: incoming.black_border_detection,
                     smoothing_alpha: incoming.smoothing_alpha,
                     saturation: incoming.saturation,
+                    lighting_smoothing_preset: incoming.lighting_smoothing_preset,
                     hue_intensity_preset: incoming.hue_intensity_preset,
                 }),
                 targets,
@@ -1102,7 +1095,7 @@ fn start_ambilight_worker(
                             })
                             .collect();
 
-                        let hue_smoothing_alpha = live_settings.read_hue_smoothing_alpha();
+                        let hue_smoothing_alpha = live_settings.read_smoothing_alpha();
                         let smoothed =
                             hue_channel_smoother.smooth(&raw_colors, hue_smoothing_alpha);
 
@@ -1243,7 +1236,7 @@ fn apply_mode_change(
                 cfg.black_border_detection,
                 cfg.smoothing_alpha.unwrap_or(0.35),
                 cfg.saturation.unwrap_or(1.0),
-                cfg.hue_intensity_preset,
+                cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
             );
             owner.active_mode = normalized_next;
             return make_result(
@@ -1372,7 +1365,7 @@ fn apply_mode_change(
                 ambilight_cfg.black_border_detection,
                 ambilight_cfg.smoothing_alpha.unwrap_or(0.35),
                 ambilight_cfg.saturation.unwrap_or(1.0),
-                ambilight_cfg.hue_intensity_preset,
+                ambilight_cfg.lighting_smoothing_preset.or(ambilight_cfg.hue_intensity_preset),
             );
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
