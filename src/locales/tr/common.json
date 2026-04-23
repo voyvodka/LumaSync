@@ -404,11 +404,34 @@
         "labels": {
           "PORT_VISIBLE": "Port görünürlüğü",
           "PORT_SUPPORTED": "Port desteği",
-          "CONNECT_AND_VERIFY": "Bağlan ve doğrula"
+          "CONNECT_AND_VERIFY": "Bağlan ve doğrula",
+          "HANDSHAKE": "Firmware el sıkışması"
         },
         "outcome": {
           "pass": "Geçti",
           "fail": "Kaldı"
+        }
+      },
+      "serialHealthCodes": {
+        "SERIAL_HEALTH_OK": {
+          "label": "El sıkışması başarılı",
+          "hint": "LumaSync firmware yanıt verdi. Gidiş-dönüş gecikmesi ve profil bilgisi alındı."
+        },
+        "SERIAL_HEALTH_HANDSHAKE_TIMEOUT": {
+          "label": "El sıkışması yanıtsız",
+          "hint": "1 s içinde yanıt gelmedi. LumaSync dışı firmware kullanıyorsanız Cihaz ayarlarından Adalight profiline geçin."
+        },
+        "SERIAL_HEALTH_VERSION_MISMATCH": {
+          "label": "Protokol sürümü uyumsuz",
+          "hint": "Firmware desteklenmeyen bir protokol sürümüyle yanıt verdi. Firmware veya uygulamayı güncelleyin."
+        },
+        "SERIAL_HEALTH_FIRMWARE_MISMATCH": {
+          "label": "Firmware profili uyumsuz",
+          "hint": "Cihaz seçilenden farklı bir profil bildirdi. Cihaz ayarlarından Firmware Profili'ni değiştirin."
+        },
+        "SERIAL_HEALTH_PROTOCOL_ERROR": {
+          "label": "Protokol hatası",
+          "hint": "El sıkışma çerçevesinde beklenmedik byte'lar. Kablo bütünlüğünü kontrol edin veya farklı USB kablosu deneyin."
         }
       }
     },
@@ -453,10 +476,18 @@
       },
       "pairing": {
         "errors": {
-          "LINK_BUTTON_NOT_PRESSED": { "description": "Köprü üzerindeki link button'a bas ve 30 saniye içinde tekrar dene." },
-          "DEVICETYPE_INVALID": { "description": "Köprü eşleştirme isteği formatını reddetti." },
-          "BRIDGE_BUSY": { "description": "Köprü şu anda meşgul, biraz sonra tekrar dene." },
-          "RATE_LIMITED": { "description": "Çok fazla istek. Tekrar denemeden önce bir dakika bekle." }
+          "LINK_BUTTON_NOT_PRESSED": {
+            "description": "Köprü üzerindeki link button'a bas ve 30 saniye içinde tekrar dene."
+          },
+          "DEVICETYPE_INVALID": {
+            "description": "Köprü eşleştirme isteği formatını reddetti."
+          },
+          "BRIDGE_BUSY": {
+            "description": "Köprü şu anda meşgul, biraz sonra tekrar dene."
+          },
+          "RATE_LIMITED": {
+            "description": "Çok fazla istek. Tekrar denemeden önce bir dakika bekle."
+          }
         }
       },
       "intensity": {
@@ -683,19 +714,58 @@
         "retryStreamAction": "Yeniden Dene",
         "stopStreamAction": "Durdur",
         "faults": {
-          "HUE-NET-01": { "description": "Bridge ulaşılamıyor", "hint": "Ağ bağlantınızı kontrol edin" },
-          "HUE-NET-02": { "description": "DTLS el sıkışma başarısız", "hint": "Stream'i yeniden başlatmayı deneyin" },
-          "HUE-NET-03": { "description": "DTLS gönderim zaman aşımı", "hint": "Ağ gecikmesini ve bridge yakınlığını kontrol edin" },
-          "HUE-NET-04": { "description": "DTLS bağlantısı beklenmedik şekilde kapandı", "hint": "Yeniden bağlanmayı deneyin" },
-          "HUE-AUTH-01": { "description": "Kimlik bilgileri geçersiz", "hint": "Hue bridge'inizi yeniden eşleştirin" },
-          "HUE-AUTH-02": { "description": "Bridge eşleştirmesi bozulmuş", "hint": "Bridge düğmesine basın ve tekrar eşleştirin" },
-          "HUE-AUTH-03": { "description": "Bridge isteği reddetti (403)", "hint": "Kimlik bilgilerini yenilemek için yeniden eşleştirin" },
-          "HUE-STR-01": { "description": "Entertainment alanı bulunamadı", "hint": "Cihaz ayarlarından geçerli bir alan seçin" },
-          "HUE-STR-02": { "description": "Stream kısıtlaması algılandı", "hint": "Stream frekansını azaltın veya bridge yükünü kontrol edin" },
-          "HUE-STR-03": { "description": "Paket gönderimi başarısız", "hint": "Ağ kararlılığını kontrol edin" },
-          "HUE-STR-04": { "description": "Gönderici beklenmedik şekilde sonlandı", "hint": "Stream'i yeniden deneyin" },
-          "HUE-CFG-01": { "description": "Entertainment alanı seçilmemiş", "hint": "Cihaz ayarlarından bir alan seçin" },
-          "HUE-CFG-02": { "description": "Bridge IP adresi değişmiş", "hint": "Cihaz ayarlarından bridge IP'sini güncelleyin" }
+          "HUE-NET-01": {
+            "description": "Bridge ulaşılamıyor",
+            "hint": "Ağ bağlantınızı kontrol edin"
+          },
+          "HUE-NET-02": {
+            "description": "DTLS el sıkışma başarısız",
+            "hint": "Stream'i yeniden başlatmayı deneyin"
+          },
+          "HUE-NET-03": {
+            "description": "DTLS gönderim zaman aşımı",
+            "hint": "Ağ gecikmesini ve bridge yakınlığını kontrol edin"
+          },
+          "HUE-NET-04": {
+            "description": "DTLS bağlantısı beklenmedik şekilde kapandı",
+            "hint": "Yeniden bağlanmayı deneyin"
+          },
+          "HUE-AUTH-01": {
+            "description": "Kimlik bilgileri geçersiz",
+            "hint": "Hue bridge'inizi yeniden eşleştirin"
+          },
+          "HUE-AUTH-02": {
+            "description": "Bridge eşleştirmesi bozulmuş",
+            "hint": "Bridge düğmesine basın ve tekrar eşleştirin"
+          },
+          "HUE-AUTH-03": {
+            "description": "Bridge isteği reddetti (403)",
+            "hint": "Kimlik bilgilerini yenilemek için yeniden eşleştirin"
+          },
+          "HUE-STR-01": {
+            "description": "Entertainment alanı bulunamadı",
+            "hint": "Cihaz ayarlarından geçerli bir alan seçin"
+          },
+          "HUE-STR-02": {
+            "description": "Stream kısıtlaması algılandı",
+            "hint": "Stream frekansını azaltın veya bridge yükünü kontrol edin"
+          },
+          "HUE-STR-03": {
+            "description": "Paket gönderimi başarısız",
+            "hint": "Ağ kararlılığını kontrol edin"
+          },
+          "HUE-STR-04": {
+            "description": "Gönderici beklenmedik şekilde sonlandı",
+            "hint": "Stream'i yeniden deneyin"
+          },
+          "HUE-CFG-01": {
+            "description": "Entertainment alanı seçilmemiş",
+            "hint": "Cihaz ayarlarından bir alan seçin"
+          },
+          "HUE-CFG-02": {
+            "description": "Bridge IP adresi değişmiş",
+            "hint": "Cihaz ayarlarından bridge IP'sini güncelleyin"
+          }
         },
         "writeback": {
           "codes": {

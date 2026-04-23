@@ -404,11 +404,34 @@
         "labels": {
           "PORT_VISIBLE": "Port visibility",
           "PORT_SUPPORTED": "Port support",
-          "CONNECT_AND_VERIFY": "Connect and verify"
+          "CONNECT_AND_VERIFY": "Connect and verify",
+          "HANDSHAKE": "Firmware handshake"
         },
         "outcome": {
           "pass": "Pass",
           "fail": "Fail"
+        }
+      },
+      "serialHealthCodes": {
+        "SERIAL_HEALTH_OK": {
+          "label": "Handshake OK",
+          "hint": "LumaSync firmware responded. Round-trip latency and profile are populated."
+        },
+        "SERIAL_HEALTH_HANDSHAKE_TIMEOUT": {
+          "label": "No handshake response",
+          "hint": "No reply within 1 s. If using non-LumaSync firmware, switch to the Adalight profile in Device settings."
+        },
+        "SERIAL_HEALTH_VERSION_MISMATCH": {
+          "label": "Protocol version mismatch",
+          "hint": "Firmware responded with an unsupported protocol version. Upgrade firmware or the app."
+        },
+        "SERIAL_HEALTH_FIRMWARE_MISMATCH": {
+          "label": "Firmware profile mismatch",
+          "hint": "Device advertised a different profile than selected. Change the Firmware Profile in Device settings."
+        },
+        "SERIAL_HEALTH_PROTOCOL_ERROR": {
+          "label": "Protocol error",
+          "hint": "Unexpected bytes in handshake frame. Check cable integrity or try a different USB cable."
         }
       }
     },
@@ -453,10 +476,18 @@
       },
       "pairing": {
         "errors": {
-          "LINK_BUTTON_NOT_PRESSED": { "description": "Press the bridge link button and retry within 30 seconds." },
-          "DEVICETYPE_INVALID": { "description": "Bridge rejected pairing request format." },
-          "BRIDGE_BUSY": { "description": "Bridge is busy. Try again in a moment." },
-          "RATE_LIMITED": { "description": "Too many requests. Wait a minute before retrying." }
+          "LINK_BUTTON_NOT_PRESSED": {
+            "description": "Press the bridge link button and retry within 30 seconds."
+          },
+          "DEVICETYPE_INVALID": {
+            "description": "Bridge rejected pairing request format."
+          },
+          "BRIDGE_BUSY": {
+            "description": "Bridge is busy. Try again in a moment."
+          },
+          "RATE_LIMITED": {
+            "description": "Too many requests. Wait a minute before retrying."
+          }
         }
       },
       "intensity": {
@@ -683,19 +714,58 @@
         "retryStreamAction": "Retry Stream",
         "stopStreamAction": "Stop Stream",
         "faults": {
-          "HUE-NET-01": { "description": "Bridge unreachable", "hint": "Check your network connection" },
-          "HUE-NET-02": { "description": "DTLS handshake failed", "hint": "Try restarting the stream" },
-          "HUE-NET-03": { "description": "DTLS send timeout", "hint": "Check network latency and bridge proximity" },
-          "HUE-NET-04": { "description": "DTLS connection dropped unexpectedly", "hint": "Retry to reconnect" },
-          "HUE-AUTH-01": { "description": "Credentials are invalid", "hint": "Re-pair your Hue bridge" },
-          "HUE-AUTH-02": { "description": "Bridge pairing is broken", "hint": "Press the bridge button and pair again" },
-          "HUE-AUTH-03": { "description": "Bridge rejected the request (403)", "hint": "Re-pair to refresh credentials" },
-          "HUE-STR-01": { "description": "Entertainment area not found", "hint": "Select a valid area in Device settings" },
-          "HUE-STR-02": { "description": "Stream throttle detected", "hint": "Reduce stream frequency or check bridge load" },
-          "HUE-STR-03": { "description": "Packet send failed", "hint": "Check network stability" },
-          "HUE-STR-04": { "description": "Sender exited unexpectedly", "hint": "Retry stream" },
-          "HUE-CFG-01": { "description": "No entertainment area selected", "hint": "Choose an area in Device settings" },
-          "HUE-CFG-02": { "description": "Bridge IP has changed", "hint": "Update bridge IP in Device settings" }
+          "HUE-NET-01": {
+            "description": "Bridge unreachable",
+            "hint": "Check your network connection"
+          },
+          "HUE-NET-02": {
+            "description": "DTLS handshake failed",
+            "hint": "Try restarting the stream"
+          },
+          "HUE-NET-03": {
+            "description": "DTLS send timeout",
+            "hint": "Check network latency and bridge proximity"
+          },
+          "HUE-NET-04": {
+            "description": "DTLS connection dropped unexpectedly",
+            "hint": "Retry to reconnect"
+          },
+          "HUE-AUTH-01": {
+            "description": "Credentials are invalid",
+            "hint": "Re-pair your Hue bridge"
+          },
+          "HUE-AUTH-02": {
+            "description": "Bridge pairing is broken",
+            "hint": "Press the bridge button and pair again"
+          },
+          "HUE-AUTH-03": {
+            "description": "Bridge rejected the request (403)",
+            "hint": "Re-pair to refresh credentials"
+          },
+          "HUE-STR-01": {
+            "description": "Entertainment area not found",
+            "hint": "Select a valid area in Device settings"
+          },
+          "HUE-STR-02": {
+            "description": "Stream throttle detected",
+            "hint": "Reduce stream frequency or check bridge load"
+          },
+          "HUE-STR-03": {
+            "description": "Packet send failed",
+            "hint": "Check network stability"
+          },
+          "HUE-STR-04": {
+            "description": "Sender exited unexpectedly",
+            "hint": "Retry stream"
+          },
+          "HUE-CFG-01": {
+            "description": "No entertainment area selected",
+            "hint": "Choose an area in Device settings"
+          },
+          "HUE-CFG-02": {
+            "description": "Bridge IP has changed",
+            "hint": "Update bridge IP in Device settings"
+          }
         },
         "writeback": {
           "codes": {
