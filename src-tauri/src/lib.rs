@@ -25,6 +25,7 @@ mod commands {
     pub mod led_output;
     pub mod led_sink;
     pub mod lighting_mode;
+    pub mod notifications;
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
@@ -59,6 +60,7 @@ use commands::lighting_mode::{
 use commands::room_map::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
+use commands::notifications::{request_notification_permission, show_notification};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -236,6 +238,16 @@ pub fn run() {
     // 6. Updater (auto-update from GitHub Releases)
     builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
+    // 6c. Notification (OS toast surface — macOS User Notifications,
+    //      Windows Toast, Linux libnotify). Permission prompt is
+    //      triggered just-in-time from commands::notifications.
+    builder = builder.plugin(tauri_plugin_notification::init());
+
+    // 6d. Process (app relaunch surface for GlobalErrorBoundary's
+    //      Restart button; also available from React via
+    //      @tauri-apps/plugin-process `relaunch()`).
+    builder = builder.plugin(tauri_plugin_process::init());
+
     // 7. Logging
     #[cfg(debug_assertions)]
     {
@@ -389,6 +401,8 @@ pub fn run() {
             stop_lighting,
             get_lighting_mode_status,
             get_runtime_telemetry,
+            show_notification,
+            request_notification_permission,
             start_calibration_test_pattern,
             stop_calibration_test_pattern,
             list_displays,
