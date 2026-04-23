@@ -6,8 +6,8 @@
  * instance bootstrapped in main.tsx.
  *
  * Note: i18next is initialised BEFORE React renders (in main.tsx bootstrap)
- * so that LanguageSection and all child components receive a ready i18n
- * instance on first render. This avoids hydration flicker.
+ * so that every component receives a ready i18n instance on first render.
+ * This avoids hydration flicker.
  */
 
 import { type ReactNode, Suspense } from "react";
