@@ -1469,6 +1469,7 @@ mod tests {
             active_mode: LightingModeConfig::default(),
             active_port: None,
             worker: None,
+            ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             frame_source_factory: Arc::new(|| {
                 Ok(Box::new(FakeFrameSource {
@@ -1488,6 +1489,7 @@ mod tests {
             active_mode: LightingModeConfig::default(),
             active_port: None,
             worker: None,
+            ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             frame_source_factory: Arc::new(|| {
                 Ok(Box::new(FakeFrameSource {
@@ -1880,6 +1882,7 @@ mod lighting_mode_tests {
             active_mode: LightingModeConfig::default(),
             active_port: None,
             worker: None,
+            ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             frame_source_factory: Arc::new(|| {
                 Ok(Box::new(FakeFrameSource {
