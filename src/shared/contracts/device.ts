@@ -70,3 +70,27 @@ export type DeviceHealthStep = (typeof DEVICE_HEALTH_STEPS)[keyof typeof DEVICE_
 export const DEVICE_STORE_KEYS = {
   LAST_SUCCESSFUL_PORT: "lastSuccessfulPort",
 } as const;
+
+// ---------------------------------------------------------------------------
+// Firmware profile (v1.4 G11 — Adalight encoder toggle)
+// ---------------------------------------------------------------------------
+
+/**
+ * Firmware profile selector for the USB `LedSink`.
+ *
+ * - `adalight`: widely used "Ada" magic-byte stream, compatible with Prismatik,
+ *   Hyperion, Boblight, and most DIY Arduino firmware sketches. This is the
+ *   interoperability fallback for users who cannot flash our own firmware.
+ * - `lumasync-v1`: LumaSync's native protocol (handshake + framed payload)
+ *   that unlocks health-check round-trip metrics and per-frame telemetry.
+ *
+ * Stored under `ShellState.firmwareProfile`. Absent ⇒ treat as
+ * `LUMASYNC_V1` when the handshake succeeds; fall back to `ADALIGHT`
+ * when the handshake fails so plain Adalight sketches still light up.
+ */
+export const FIRMWARE_PROFILE = {
+  ADALIGHT: "adalight",
+  LUMASYNC_V1: "lumasync-v1",
+} as const;
+
+export type FirmwareProfile = (typeof FIRMWARE_PROFILE)[keyof typeof FIRMWARE_PROFILE];
