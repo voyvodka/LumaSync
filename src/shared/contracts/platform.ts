@@ -29,6 +29,13 @@ export const PLATFORM_COMMANDS = {
    * should then fall back to an in-app status banner.
    */
   SHOW_NOTIFICATION: "show_notification",
+  /**
+   * Reveal the LumaSync app log directory in the host file browser.
+   * Returns a plain `Result<void, string>` (no discriminated status)
+   * because there is no actionable branching — either it succeeded
+   * or the user sees the message in a toast / boundary action row.
+   */
+  OPEN_LOG_DIR: "open_log_dir",
 } as const;
 
 export type PlatformCommandId =

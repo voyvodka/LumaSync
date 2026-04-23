@@ -19,6 +19,7 @@ mod commands {
     pub mod calibration;
     pub mod device_connection;
     pub mod hue_http;
+    pub mod hue_intensity;
     pub mod hue_onboarding;
     pub mod hue_stream_lifecycle;
     pub mod led_calibration;
@@ -26,6 +27,7 @@ mod commands {
     pub mod led_sink;
     pub mod lighting_mode;
     pub mod notifications;
+    pub mod platform;
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
@@ -61,6 +63,7 @@ use commands::room_map::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
 use commands::notifications::{request_notification_permission, show_notification};
+use commands::platform::open_log_dir;
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -403,6 +406,7 @@ pub fn run() {
             get_runtime_telemetry,
             show_notification,
             request_notification_permission,
+            open_log_dir,
             start_calibration_test_pattern,
             stop_calibration_test_pattern,
             list_displays,
