@@ -8,7 +8,10 @@
  *  - "Show details" toggle expands the stack-trace <pre>.
  *  - "Copy error" calls navigator.clipboard.writeText with a payload
  *    including the error name + stack.
- *  - "Restart" calls `window.location.reload()` (mocked to a spy).
+ *  - "Show logs" invokes the open_log_dir Tauri command.
+ *  - "Restart" calls the @tauri-apps/plugin-process relaunch() API; if
+ *    the dynamic import or the call itself rejects, the handler falls
+ *    back to `window.location.reload()`.
  *
  * The hardcoded-English fallback path is exercised implicitly: the
  * raw `GlobalErrorBoundary` class is used without the i18n wrapper so
@@ -19,6 +22,17 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GlobalErrorBoundary } from "../GlobalErrorBoundary";
+
+const relaunchMock = vi.hoisted(() => vi.fn<() => Promise<void>>(() => Promise.resolve()));
+const invokeMock = vi.hoisted(() => vi.fn<(cmd: string) => Promise<unknown>>(() => Promise.resolve()));
+
+vi.mock("@tauri-apps/plugin-process", () => ({
+  relaunch: relaunchMock,
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: invokeMock,
+}));
 
 function Boom(): null {
   throw new Error("boom from test child");
@@ -31,6 +45,10 @@ describe("GlobalErrorBoundary — fallback surface", () => {
     // Silence React's own error logs so the output stays readable;
     // we still assert against the spy below for the [LumaSync] entry.
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    relaunchMock.mockReset();
+    relaunchMock.mockImplementation(() => Promise.resolve());
+    invokeMock.mockReset();
+    invokeMock.mockImplementation(() => Promise.resolve());
   });
 
   afterEach(() => {
@@ -50,7 +68,10 @@ describe("GlobalErrorBoundary — fallback surface", () => {
     // Fallback copy is the hardcoded EN string when no `t` prop is provided.
     expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /restart/i }),
+      screen.getByRole("button", { name: /^restart$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /show logs/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /copy error/i }),
@@ -119,7 +140,43 @@ describe("GlobalErrorBoundary — fallback surface", () => {
     expect(payload).toContain("boom from test child");
   });
 
-  it("calls window.location.reload when Restart is clicked", () => {
+  it("invokes the open_log_dir Tauri command when Show logs is clicked", async () => {
+    render(
+      <GlobalErrorBoundary>
+        <Boom />
+      </GlobalErrorBoundary>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /show logs/i }));
+
+    // Handler is async; flush microtasks.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+    expect(invokeMock).toHaveBeenCalledWith("open_log_dir");
+  });
+
+  it("calls plugin-process relaunch() when Restart is clicked", async () => {
+    render(
+      <GlobalErrorBoundary>
+        <Boom />
+      </GlobalErrorBoundary>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^restart$/i }));
+
+    // Dynamic import settles asynchronously; poll until the mock
+    // resolves rather than guessing at microtask counts.
+    await vi.waitFor(() => {
+      expect(relaunchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("falls back to window.location.reload when relaunch rejects", async () => {
+    relaunchMock.mockImplementationOnce(() =>
+      Promise.reject(new Error("plugin not available")),
+    );
     const reloadSpy = vi.fn();
     // JSDOM / happy-dom guards location.reload as read-only; stub the whole
     // object so the spy records the call without touching navigation.
@@ -137,7 +194,12 @@ describe("GlobalErrorBoundary — fallback surface", () => {
       );
 
       fireEvent.click(screen.getByRole("button", { name: /^restart$/i }));
-      expect(reloadSpy).toHaveBeenCalledTimes(1);
+
+      // Dynamic import + rejection fallback is async; wait for the
+      // catch-path reload spy instead of flushing by hand.
+      await vi.waitFor(() => {
+        expect(reloadSpy).toHaveBeenCalledTimes(1);
+      });
     } finally {
       Object.defineProperty(window, "location", {
         configurable: true,

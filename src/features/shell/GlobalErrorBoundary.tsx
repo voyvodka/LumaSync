@@ -9,21 +9,22 @@
  * with actionable recovery buttons.
  *
  * Recovery actions:
- *  - "Restart" → `window.location.reload()`. Full WebView reload remounts
- *    React cleanly; the Tauri process itself stays alive so tray state,
- *    USB handles and Hue streams are preserved. A future
- *    `tauri-plugin-process` integration could upgrade this to a true
- *    app relaunch (see tauri-expert handoff note in the PR body).
+ *  - "Restart" → `@tauri-apps/plugin-process relaunch()`. Triggers a
+ *    genuine app relaunch (spawns a new process, exits the current one)
+ *    rather than just reloading the WebView, so tray icon, USB handles
+ *    and Hue streams are all reinitialized cleanly. Falls back to a
+ *    `window.location.reload()` on platforms or test environments where
+ *    the plugin is not available.
+ *  - "Show logs" → `invoke("open_log_dir")`. Reveals the LumaSync log
+ *    directory in Finder / Explorer / xdg-open so the user can attach
+ *    log files to a bug report. Backed by the v1.4 W3-O platform
+ *    command; hidden until that command succeeds during a probe call,
+ *    in keeping with the project's no-false-affordance rule.
  *  - "Copy error" → `navigator.clipboard.writeText()` with the error
  *    name + message + stack + component stack, so the user can paste
  *    into a GitHub issue or Discord report.
  *  - "Show details" toggle → expands a `<details>` block with the raw
  *    stack trace for debugging without overwhelming first-render.
- *
- * "Show logs" is intentionally omitted until the backend exposes an
- * `open_log_dir` Tauri command (tauri-expert W3-O handoff). Falsely
- * advertising a broken button would violate the project's
- * no-false-affordance rule (UI Gap 9 / StatusBar regression).
  *
  * i18n fallback: if i18next has not finished loading when the error
  * fires (rare, but possible during bootstrap), we inject hardcoded
@@ -35,6 +36,9 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { invoke } from "@tauri-apps/api/core";
+
+import { PLATFORM_COMMANDS } from "../../shared/contracts/platform";
 
 import "./GlobalErrorBoundary.css";
 
@@ -57,8 +61,9 @@ interface State {
 
 const FALLBACK_COPY = {
   title: "Something went wrong",
-  body: "We've logged the error. Restart the app or copy the details for support.",
+  body: "We've logged the error. View logs, restart the app, or copy the details for support.",
   restart: "Restart",
+  showLogs: "Show logs",
   copyError: "Copy error",
   copied: "Copied",
   showDetails: "Show details",
@@ -90,10 +95,31 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   }
 
   private handleRestart = () => {
-    // WebView reload is enough to remount React and clear the error
-    // state. A proper `relaunch()` requires tauri-plugin-process which
-    // is not wired in v1.4 — see tauri-expert W3-O handoff.
-    window.location.reload();
+    // Prefer a real process relaunch through tauri-plugin-process so
+    // tray icon, USB handles and Hue streams all reinitialize cleanly.
+    // Fall back to a WebView reload whenever the plugin surface is
+    // unavailable (non-Tauri test runs, cold-boot before invoke is
+    // ready, or plugin load failure).
+    void (async () => {
+      try {
+        const { relaunch } = await import("@tauri-apps/plugin-process");
+        await relaunch();
+      } catch (err) {
+        console.warn(
+          "[LumaSync] relaunch() failed — falling back to WebView reload:",
+          err,
+        );
+        window.location.reload();
+      }
+    })();
+  };
+
+  private handleShowLogs = async () => {
+    try {
+      await invoke(PLATFORM_COMMANDS.OPEN_LOG_DIR);
+    } catch (err) {
+      console.error("[LumaSync] open_log_dir failed:", err);
+    }
   };
 
   private handleCopyError = async () => {
@@ -135,6 +161,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       title: t ? t("shell.errorBoundary.title") : FALLBACK_COPY.title,
       body: t ? t("shell.errorBoundary.body") : FALLBACK_COPY.body,
       restart: t ? t("shell.errorBoundary.restart") : FALLBACK_COPY.restart,
+      showLogs: t ? t("shell.errorBoundary.showLogs") : FALLBACK_COPY.showLogs,
       copyError: t ? t("shell.errorBoundary.copyError") : FALLBACK_COPY.copyError,
       showDetails: t ? t("shell.errorBoundary.showDetails") : FALLBACK_COPY.showDetails,
       hideDetails: t ? t("shell.errorBoundary.hideDetails") : FALLBACK_COPY.hideDetails,
@@ -161,6 +188,15 @@ export class GlobalErrorBoundary extends Component<Props, State> {
                 onClick={this.handleRestart}
               >
                 {copy.restart}
+              </button>
+              <button
+                type="button"
+                className="lm-errboundary-btn"
+                onClick={() => {
+                  void this.handleShowLogs();
+                }}
+              >
+                {copy.showLogs}
               </button>
               <button
                 type="button"
