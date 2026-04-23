@@ -227,7 +227,7 @@ impl Default for LightingRuntimeOwner {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::default(),
-            frame_source_factory: Arc::new(|display_id| create_live_frame_source(display_id)),
+            frame_source_factory: Arc::new(create_live_frame_source),
         }
     }
 }
@@ -1245,27 +1245,28 @@ fn apply_mode_change(
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
 
-            let frame_source = match (owner.frame_source_factory)(normalized_next.display_id.as_deref()) {
-                Ok(source) => {
-                    info!("[apply_mode_change] frame_source created OK");
-                    source
-                }
-                Err(reason) => {
-                    warn!(
-                        "[apply_mode_change] frame_source FAILED: {}",
-                        reason.as_reason()
-                    );
-                    owner.active_mode = LightingModeConfig::default();
-                    return make_result(
-                        owner.active_mode.clone(),
-                        command_status(
-                            "AMBILIGHT_MODE_START_FAILED",
-                            "Ambilight runtime could not start.",
-                            Some(reason.as_reason()),
-                        ),
-                    );
-                }
-            };
+            let frame_source =
+                match (owner.frame_source_factory)(normalized_next.display_id.as_deref()) {
+                    Ok(source) => {
+                        info!("[apply_mode_change] frame_source created OK");
+                        source
+                    }
+                    Err(reason) => {
+                        warn!(
+                            "[apply_mode_change] frame_source FAILED: {}",
+                            reason.as_reason()
+                        );
+                        owner.active_mode = LightingModeConfig::default();
+                        return make_result(
+                            owner.active_mode.clone(),
+                            command_status(
+                                "AMBILIGHT_MODE_START_FAILED",
+                                "Ambilight runtime could not start.",
+                                Some(reason.as_reason()),
+                            ),
+                        );
+                    }
+                };
 
             // Resolve port for worker: only pass port if USB is a required target
             let port_for_worker: Option<String> = if needs_usb {

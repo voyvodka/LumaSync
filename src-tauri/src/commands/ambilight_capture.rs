@@ -206,9 +206,12 @@ mod platform {
             AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
         )?;
 
-        monitors.into_iter().nth(index).ok_or(
-            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
-        )
+        monitors
+            .into_iter()
+            .nth(index)
+            .ok_or(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ))
     }
 
     pub(super) fn create_live_frame_source(
