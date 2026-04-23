@@ -549,6 +549,7 @@ pub fn apply_solid_payload(
     bridge.send_packet(connection_state, &packet)
 }
 
+#[allow(dead_code)]
 pub fn apply_solid_payload_to_port(
     bridge: &LedOutputBridge,
     port_name: &str,
@@ -572,6 +573,7 @@ pub fn send_ambilight_frame(
     bridge.send_packet(connection_state, &packet)
 }
 
+#[allow(dead_code)]
 pub fn send_ambilight_frame_to_port(
     bridge: &LedOutputBridge,
     port_name: &str,
@@ -582,6 +584,7 @@ pub fn send_ambilight_frame_to_port(
     bridge.send_packet_to_port(port_name, &packet)
 }
 
+#[allow(dead_code)]
 pub fn send_ambilight_frame_hot_path_to_port(
     bridge: &LedOutputBridge,
     port_name: &str,

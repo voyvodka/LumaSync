@@ -1291,10 +1291,8 @@ fn apply_mode_change(
 
                 SOLID_OUTPUT_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
 
-                let solid_corrections = normalized_next
-                    .color_correction
-                    .clone()
-                    .unwrap_or_default();
+                let solid_corrections =
+                    normalized_next.color_correction.clone().unwrap_or_default();
                 let solid_profile = normalized_next.firmware_profile.unwrap_or_default();
                 let solid_packet = encode_packet_for_profile(
                     solid_profile,
@@ -1420,10 +1418,7 @@ fn apply_mode_change(
                 None
             };
 
-            let corrections = normalized_next
-                .color_correction
-                .clone()
-                .unwrap_or_default();
+            let corrections = normalized_next.color_correction.clone().unwrap_or_default();
             let profile = normalized_next.firmware_profile.unwrap_or_default();
 
             match start_ambilight_worker(
@@ -1581,12 +1576,11 @@ mod tests {
     use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 
     use super::{
-        apply_mode_change, normalize_mode_config, start_ambilight_worker, stop_previous,
-        AmbilightLiveSettings, AmbilightPayload, AmbilightWorkerQualityState, LightingModeConfig,
-        LightingModeKind, LightingRuntimeOwner, SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
+        apply_mode_change, start_ambilight_worker, stop_previous, AmbilightLiveSettings,
+        AmbilightPayload, AmbilightWorkerQualityState, LightingModeConfig, LightingModeKind,
+        LightingRuntimeOwner, SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
         AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
-    use crate::commands::led_output::{ColorCorrectionConfig, FirmwareProfile};
 
     #[derive(Default)]
     struct FakeLedSender {
@@ -2291,8 +2285,7 @@ mod lighting_mode_tests {
         let base_normalized = normalize_mode_config(base);
         let changed_normalized = normalize_mode_config(changed);
         assert_ne!(
-            base_normalized.color_correction,
-            changed_normalized.color_correction,
+            base_normalized.color_correction, changed_normalized.color_correction,
             "different color_correction must break fast-path equality"
         );
     }
