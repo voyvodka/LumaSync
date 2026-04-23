@@ -124,7 +124,7 @@ pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTele
     let uses_dtls = owner
         .active_stream
         .as_ref()
-        .map_or(false, |s| s.uses_dtls);
+        .is_some_and(|s| s.uses_dtls);
 
     Some(HueTelemetrySnapshot {
         state: state_str,
