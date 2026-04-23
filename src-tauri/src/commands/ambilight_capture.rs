@@ -5,11 +5,15 @@ pub struct CapturedFrame {
     pub pixels_rgb: Vec<[u8; 3]>,
 }
 
+// v1.3 single-zone sampling structs — kept for backward compat and existing tests.
+// v1.4 per-LED path uses `led_calibration::sample_frame_for_sequence` instead.
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SamplingCalibration {
     pub led_count: usize,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SampledLedFrame {
     pub colors: Vec<[u8; 3]>,
@@ -762,6 +766,8 @@ pub fn crop_frame_to_content(frame: &CapturedFrame, insets: &BlackBorderInsets) 
     }
 }
 
+// v1.3 single-zone sampler — retained for tests; v1.4 path uses build_led_sequence.
+#[allow(dead_code)]
 pub fn sample_led_frame(
     frame: &CapturedFrame,
     calibration: &SamplingCalibration,
