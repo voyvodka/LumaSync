@@ -44,6 +44,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          prefix-key: v1.4-rust-cache
+          shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri check
         if: runner.os == 'Linux'
