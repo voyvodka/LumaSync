@@ -1,4 +1,4 @@
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
 import type { DisplayId } from "../../../shared/contracts/display";
 
 export const LIGHTING_MODE_KIND = {
@@ -42,6 +42,13 @@ export interface AmbilightPayload {
   smoothingAlpha?: number;
   /** Luminance-preserving saturation factor. Range [0.5, 2.0]. 1.0 = identity. Default 1.0. */
   saturation?: number;
+  /**
+   * User-facing Hue intensity preset (v1.4 G6). When present, the Rust
+   * ambilight pump uses the preset's EWMA coefficient for the Hue branch
+   * instead of `smoothingAlpha` so Hue responsiveness can be tuned
+   * independently of USB. Absent ⇒ Hue reuses `smoothingAlpha`.
+   */
+  hueIntensityPreset?: HueIntensityPreset;
 }
 
 export interface LightingModeConfig {
@@ -86,12 +93,21 @@ export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): 
   };
 }
 
+function normalizeHueIntensityPreset(
+  value: unknown,
+): HueIntensityPreset | undefined {
+  return value === "subtle" || value === "moderate" || value === "intense"
+    ? value
+    : undefined;
+}
+
 export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): AmbilightPayload {
   return {
     brightness: clampFloat(input?.brightness, 0, 1, 1),
     blackBorderDetection: input?.blackBorderDetection ?? false,
     smoothingAlpha: clampFloat(input?.smoothingAlpha, 0.05, 1, 0.35),
     saturation: clampFloat(input?.saturation, 0.5, 2, 1),
+    hueIntensityPreset: normalizeHueIntensityPreset(input?.hueIntensityPreset),
   };
 }
 
