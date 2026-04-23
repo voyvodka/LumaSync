@@ -147,3 +147,55 @@ export const DEFAULT_COLOR_CORRECTION: ColorCorrectionConfig = {
   kelvin: 6500,
   saturation: 1.0,
 };
+
+// ---------------------------------------------------------------------------
+// Serial health check report (v1.4 G12 — real handshake round-trip)
+// ---------------------------------------------------------------------------
+
+/**
+ * Machine-readable status code returned by `run_serial_health_check`.
+ *
+ * These codes discriminate handshake outcomes so the UI can surface a
+ * localized explanation + action hint without parsing a human string:
+ *
+ * - `SERIAL_HEALTH_OK` — handshake completed; `firmwareVersion` +
+ *   `roundTripMs` are populated.
+ * - `SERIAL_HEALTH_HANDSHAKE_TIMEOUT` — no reply within the handshake
+ *   window; usually a wrong baud rate or a port that is not a LumaSync
+ *   controller at all.
+ * - `SERIAL_HEALTH_VERSION_MISMATCH` — firmware responded with a
+ *   protocol version the host does not understand. User must upgrade
+ *   one of the two sides.
+ * - `SERIAL_HEALTH_FIRMWARE_MISMATCH` — handshake replied, but the
+ *   firmware profile advertised by the device does not match the
+ *   user-selected `FirmwareProfile` (distinct from `UNSUPPORTED_PORT`).
+ * - `SERIAL_HEALTH_PROTOCOL_ERROR` — handshake parser failed mid-frame
+ *   (checksum, malformed length, unexpected byte). Usually a cable or
+ *   interference issue.
+ */
+export const SERIAL_HEALTH_CODES = {
+  OK: "SERIAL_HEALTH_OK",
+  HANDSHAKE_TIMEOUT: "SERIAL_HEALTH_HANDSHAKE_TIMEOUT",
+  VERSION_MISMATCH: "SERIAL_HEALTH_VERSION_MISMATCH",
+  FIRMWARE_MISMATCH: "SERIAL_HEALTH_FIRMWARE_MISMATCH",
+  PROTOCOL_ERROR: "SERIAL_HEALTH_PROTOCOL_ERROR",
+} as const;
+
+export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_HEALTH_CODES];
+
+/**
+ * Report returned by `run_serial_health_check`. Exactly one report per
+ * invocation; the `step` field records the last health-check stage that
+ * produced a verdict so the UI can step through the health modal.
+ */
+export interface SerialHealthReport {
+  step: DeviceHealthStep;
+  code: SerialHealthCode;
+  message: string;
+  /** Firmware self-reported semantic version, e.g. `"1.4.0"`. Populated when the handshake returned a version frame. */
+  firmwareVersion?: string;
+  /** Firmware profile advertised by the device. Populated on successful handshake. */
+  firmwareProfile?: FirmwareProfile;
+  /** Wall-clock latency of the handshake round trip. Populated on `SERIAL_HEALTH_OK`. */
+  roundTripMs?: number;
+}
