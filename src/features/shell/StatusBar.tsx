@@ -62,6 +62,16 @@ export function StatusBar({ items, uiMode }: StatusBarProps) {
   const modeDigitsBadge = "1-3";
   const settingsDefinition = getKeybindDefinition(KEYBIND_ACTIONS.OPEN_SETTINGS, platform);
 
+  // Derive aria labels from the shared namespace so they stay in sync with
+  // the handlers wired in `useGlobalKeybinds`. The mode group hint covers
+  // three distinct shortcuts (off / ambilight / solid) so we concatenate
+  // them into a single accessible summary.
+  const modeGroupAriaLabel = [
+    t("shell.keybind.modeOff"),
+    t("shell.keybind.modeAmbilight"),
+    t("shell.keybind.modeSolid"),
+  ].join(", ");
+
   return (
     <div
       className={`lm-statusbar${isCompact ? " is-compact" : ""}`}
@@ -78,18 +88,12 @@ export function StatusBar({ items, uiMode }: StatusBarProps) {
           <KbdHint
             keys={[modeModifierBadge, modeDigitsBadge]}
             label={t("statusBar.kbdMode")}
-            ariaLabel={t("shell.keybind.modeGroupAria", {
-              modifier: modeModifierBadge,
-              digits: modeDigitsBadge,
-            })}
+            ariaLabel={modeGroupAriaLabel}
           />
           <KbdHint
             keys={settingsDefinition.badge}
             label={t("statusBar.kbdSettings")}
-            ariaLabel={t("shell.keybind.openSettings", {
-              modifier: settingsDefinition.badge[0],
-              key: settingsDefinition.badge[1],
-            })}
+            ariaLabel={t("shell.keybind.openSettings")}
           />
           <span className="lm-statusbar-version">v{APP_VERSION}</span>
         </>

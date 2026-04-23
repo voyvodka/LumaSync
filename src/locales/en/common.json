@@ -1013,5 +1013,13 @@
   "statusBar": {
     "kbdMode": "mode",
     "kbdSettings": "settings"
+  },
+  "shell": {
+    "keybind": {
+      "modeOff": "Turn lights off",
+      "modeAmbilight": "Switch to ambilight mode",
+      "modeSolid": "Switch to solid color mode",
+      "openSettings": "Open settings"
+    }
   }
 }

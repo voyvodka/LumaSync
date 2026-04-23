@@ -1013,5 +1013,13 @@
   "statusBar": {
     "kbdMode": "mod",
     "kbdSettings": "ayarlar"
+  },
+  "shell": {
+    "keybind": {
+      "modeOff": "Işıkları kapat",
+      "modeAmbilight": "Ambilight moduna geç",
+      "modeSolid": "Tek renk moduna geç",
+      "openSettings": "Ayarları aç"
+    }
   }
 }
