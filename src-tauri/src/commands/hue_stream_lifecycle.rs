@@ -790,7 +790,7 @@ fn send_color_to_lights(
     }
 
     let (x, y) = rgb_to_xy(r, g, b);
-    let dimming = f64::from((brightness.clamp(0.0, 1.0) * 100.0) as f32);
+    let dimming = f64::from(brightness.clamp(0.0, 1.0) * 100.0);
 
     if light_ids.len() == 1 {
         let _ = send_light_put(client, bridge_ip, username, &light_ids[0], x, y, dimming);
