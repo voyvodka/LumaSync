@@ -990,6 +990,12 @@ fn start_ambilight_worker(
     Ok(LightingWorkerRuntime { cancel, handle, _frame_source: frame_source_arc })
 }
 
+// Central state machine transition. 8-arg signature is retained to avoid
+// disturbing the 16 existing call sites (several of which live in lib-tests
+// that carry other outstanding compilation issues). Bundling these into a
+// struct is tracked as a follow-up refactor rather than part of the clippy
+// cleanup pass.
+#[allow(clippy::too_many_arguments)]
 fn apply_mode_change(
     owner: &mut LightingRuntimeOwner,
     next_mode: LightingModeConfig,
