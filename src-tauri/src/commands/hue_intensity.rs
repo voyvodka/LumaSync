@@ -71,7 +71,9 @@ mod tests {
         // Subtle must smooth the most (lowest alpha); intense must snap
         // the hardest (highest alpha). Preserves the intuition the
         // frontend copy promises ("calmer" vs "fast-reacting").
-        assert!(HueIntensityPreset::Subtle.coefficient() < HueIntensityPreset::Moderate.coefficient());
+        assert!(
+            HueIntensityPreset::Subtle.coefficient() < HueIntensityPreset::Moderate.coefficient()
+        );
         assert!(
             HueIntensityPreset::Moderate.coefficient() < HueIntensityPreset::Intense.coefficient()
         );

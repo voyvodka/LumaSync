@@ -780,7 +780,9 @@ async fn fetch_hue_entertainment_areas(
     // Room fetch failure must not fail the whole command — archetype is
     // an enrichment signal, not a correctness signal. Missing rooms just
     // means archetype ends up `None` (UI falls back to "other").
-    let room_index = rooms_res.map(build_room_archetype_index).unwrap_or_default();
+    let room_index = rooms_res
+        .map(build_room_archetype_index)
+        .unwrap_or_default();
 
     parse_area_list_payload(&entertainment_payload, &room_index).map_err(AreaListError::Other)
 }
