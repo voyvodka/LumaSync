@@ -7,7 +7,7 @@ import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
-import type { HueRuntimeTarget } from "../../shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "../../shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import { RoomMapEditor } from "./sections/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
@@ -33,6 +33,13 @@ interface SettingsLayoutProps {
   onCheckForUpdates: () => void;
   isCheckingForUpdates: boolean;
   devSetUpdaterState?: (state: UpdaterState) => void;
+  /**
+   * v1.4 G6 — forwarded to LightsSection so the user's Hue intensity preset
+   * selection can hot-reload the running ambilight worker through the
+   * shared shell helper in App.tsx. Optional so the compact-only path can
+   * drop it without complaining.
+   */
+  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
 }
 
 export const SettingsLayout = memo(function SettingsLayout({
@@ -54,6 +61,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onCheckForUpdates,
   isCheckingForUpdates,
   devSetUpdaterState,
+  onHueIntensityPresetChange,
 }: SettingsLayoutProps) {
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
 
@@ -93,6 +101,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onModeChange={onLightingModeChange}
               onOutputTargetsChange={onOutputTargetsChange}
               onOpenCalibration={() => void onSectionChange(SECTION_IDS.LED_SETUP)}
+              onHueIntensityPresetChange={onHueIntensityPresetChange}
             />
           </div>
         )}

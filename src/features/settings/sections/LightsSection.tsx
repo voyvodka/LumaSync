@@ -19,8 +19,13 @@ import {
   findMatchingScenePreset,
   type ScenePreset,
 } from "../../mode/model/scenePresets";
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
 import type { DisplayInfo } from "../../../shared/contracts/display";
+import {
+  FIRMWARE_PROFILE,
+  type ColorCorrectionConfig,
+  type FirmwareProfile,
+} from "../../../shared/contracts/device";
 import {
   KEYBIND_ACTIONS,
   type KeybindAction,
@@ -31,8 +36,12 @@ import { listDisplays } from "../../calibration/calibrationApi";
 import type { LedCalibrationConfig } from "../../calibration/model/contracts";
 import { getFullTelemetrySnapshot } from "../../telemetry/telemetryApi";
 import type { RuntimeTelemetrySnapshot } from "../../telemetry/model/contracts";
+import { shellStore } from "../../persistence/shellStore";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
+import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
+import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
+import { HueIntensityPresetControl } from "./control/HueIntensityPresetControl";
 
 const TELEMETRY_POLL_INTERVAL_MS = 1000;
 
@@ -84,6 +93,19 @@ interface LightsSectionProps {
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onOpenCalibration: () => void;
+  /**
+   * Fired when the user picks a new Hue intensity preset. The parent
+   * persists to shellStore AND hot-reloads the running worker so the new
+   * preset takes effect without a mode toggle.
+   */
+  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
+  /**
+   * Fired when the ColorCorrectionPanel commits a new config (the panel
+   * already persists internally; this hook is reserved for future
+   * worker-hot-reload — current v1.4 Rust path reads persisted state on
+   * the next set_lighting_mode so no explicit invoke is required here).
+   */
+  onColorCorrectionChange?: (next: ColorCorrectionConfig) => void;
 }
 
 function toHexPair(value: number): string {
@@ -144,6 +166,8 @@ export function LightsSection({
   onModeChange,
   onOutputTargetsChange,
   onOpenCalibration,
+  onHueIntensityPresetChange,
+  onColorCorrectionChange,
 }: LightsSectionProps) {
   const { t } = useTranslation("common");
   const lockState = getLightsModeLockState(modeLockReason);
@@ -163,6 +187,43 @@ export function LightsSection({
   // locally — that keeps the highlight in sync with the persisted mode
   // across reloads and across the Compact/Lights views.
   const activeScenePreset = isSolid ? findMatchingScenePreset(incomingSolid) : undefined;
+
+  // ── v1.4 persisted device/runtime knobs ──────────────────────────────
+  // Hydrated once from shellStore and refreshed through the child control
+  // callbacks. Kept in state here so the LED advanced-settings panels +
+  // the SolidColorPanel brightness lock stay in sync without prop drilling
+  // through App.tsx for every knob.
+  const [initialColorCorrection, setInitialColorCorrection] =
+    useState<ColorCorrectionConfig | undefined>(undefined);
+  const [firmwareProfile, setFirmwareProfile] = useState<FirmwareProfile | undefined>(undefined);
+  const [initialHueIntensityPreset, setInitialHueIntensityPreset] =
+    useState<HueIntensityPreset | undefined>(undefined);
+  const [advancedHydrated, setAdvancedHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void shellStore
+      .load()
+      .then((state) => {
+        if (cancelled) return;
+        setInitialColorCorrection(state.colorCorrection);
+        setFirmwareProfile(state.firmwareProfile);
+        setInitialHueIntensityPreset(state.lightingIntensityPreset);
+        setAdvancedHydrated(true);
+      })
+      .catch((error) => {
+        console.error(
+          "[LumaSync] LightsSection advanced-settings hydrate failed:",
+          error,
+        );
+        if (!cancelled) setAdvancedHydrated(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
 
   const handleScenePresetClick = (preset: ScenePreset) => {
     onModeChange({
@@ -403,6 +464,12 @@ export function LightsSection({
             <SolidColorPanel
               incoming={incomingSolid}
               disabled={lockState.showReason}
+              brightnessDisabled={isAdalight}
+              brightnessDisabledReason={
+                isAdalight
+                  ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+                  : undefined
+              }
               onCommit={(draft) =>
                 onModeChange({ kind: LIGHTING_MODE_KIND.SOLID, solid: draft })
               }
@@ -569,6 +636,34 @@ export function LightsSection({
             })}
           </div>
         </div>
+
+        {/* v1.4 advanced LED / Hue controls.
+            Hydrated asynchronously so `initial*` props are defined before
+            the child components mount — a bare mount with undefined
+            initial values would cause the children to flash the DEFAULT
+            config for one frame before the async read lands. */}
+        {advancedHydrated && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <FirmwareProfilePicker
+              initialProfile={firmwareProfile}
+              onProfileChange={(next) => setFirmwareProfile(next)}
+            />
+            <ColorCorrectionPanel
+              initialConfig={initialColorCorrection}
+              onConfigChange={(next) => {
+                setInitialColorCorrection(next);
+                onColorCorrectionChange?.(next);
+              }}
+            />
+            <HueIntensityPresetControl
+              initialPreset={initialHueIntensityPreset}
+              onPresetChange={(next) => {
+                setInitialHueIntensityPreset(next);
+                onHueIntensityPresetChange?.(next);
+              }}
+            />
+          </div>
+        )}
       </div>
 
       {/* ── Right dock ────────────────────────────────────────────────── */}
