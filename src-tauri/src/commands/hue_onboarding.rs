@@ -706,7 +706,7 @@ fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, S
         })
         .collect::<Vec<_>>();
 
-    areas.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    areas.sort_by_key(|area| area.name.to_lowercase());
     Ok(areas)
 }
 
