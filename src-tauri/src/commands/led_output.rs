@@ -234,7 +234,11 @@ pub fn apply_color_correction_rgb(
     };
 
     // Step 3 — Per-channel gamma LUT.
-    let luts = build_gamma_luts(corrections.gamma_r, corrections.gamma_g, corrections.gamma_b);
+    let luts = build_gamma_luts(
+        corrections.gamma_r,
+        corrections.gamma_g,
+        corrections.gamma_b,
+    );
     (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
 }
 
@@ -743,11 +747,11 @@ mod tests {
 
     use super::{
         apply_color_correction_rgb, apply_kelvin_to_pixel, apply_saturation_to_pixel,
-        apply_solid_payload, build_gamma_luts,
-        encode_adalight_packet, encode_led_packet, encode_led_packet_with_corrections,
-        encode_led_packet_with_kelvin, encode_packet_for_profile, kelvin_to_rgb_multipliers,
-        send_ambilight_frame, ColorCorrectionConfig, FirmwareProfile, LedOutputBridge,
-        LedOutputError, LedPacketSender, SerialSink,
+        apply_solid_payload, build_gamma_luts, encode_adalight_packet, encode_led_packet,
+        encode_led_packet_with_corrections, encode_led_packet_with_kelvin,
+        encode_packet_for_profile, kelvin_to_rgb_multipliers, send_ambilight_frame,
+        ColorCorrectionConfig, FirmwareProfile, LedOutputBridge, LedOutputError, LedPacketSender,
+        SerialSink,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -1258,7 +1262,10 @@ mod tests {
             ..ColorCorrectionConfig::default()
         };
         let (r, _g, b) = apply_color_correction_rgb((255, 255, 255), &cfg);
-        assert_eq!(r, 255, "red must be full at 3200 K (below 6600 K threshold)");
+        assert_eq!(
+            r, 255,
+            "red must be full at 3200 K (below 6600 K threshold)"
+        );
         assert!(
             b < 180,
             "blue must be substantially reduced at 3200 K, got {b}"
@@ -1278,7 +1285,8 @@ mod tests {
             saturation: 1.5,
         };
         let pixel = [200_u8, 100, 50];
-        let (r_out, g_out, b_out) = apply_color_correction_rgb((pixel[0], pixel[1], pixel[2]), &cfg);
+        let (r_out, g_out, b_out) =
+            apply_color_correction_rgb((pixel[0], pixel[1], pixel[2]), &cfg);
 
         // The USB encoder applies the same pipeline via encode_led_packet_with_corrections.
         let packet = encode_led_packet_with_corrections(1.0, &[pixel], cfg.kelvin, cfg.saturation);

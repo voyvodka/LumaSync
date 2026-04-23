@@ -1322,13 +1322,7 @@ fn apply_mode_change(
                         (payload.r, payload.g, payload.b),
                         &hue_corrections,
                     );
-                    let _ = apply_hue_color_with_context(
-                        context,
-                        hr,
-                        hg,
-                        hb,
-                        payload.brightness,
-                    );
+                    let _ = apply_hue_color_with_context(context, hr, hg, hb, payload.brightness);
                 }
             }
 
@@ -1365,7 +1359,9 @@ fn apply_mode_change(
                 ambilight_cfg.black_border_detection,
                 ambilight_cfg.smoothing_alpha.unwrap_or(0.35),
                 ambilight_cfg.saturation.unwrap_or(1.0),
-                ambilight_cfg.lighting_smoothing_preset.or(ambilight_cfg.hue_intensity_preset),
+                ambilight_cfg
+                    .lighting_smoothing_preset
+                    .or(ambilight_cfg.hue_intensity_preset),
             );
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());

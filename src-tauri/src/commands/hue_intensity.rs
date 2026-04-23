@@ -86,8 +86,8 @@ mod tests {
 
     #[test]
     fn serde_round_trip_matches_lowercase_wire_format() {
-        let subtle = serde_json::to_string(&LightingSmoothingPreset::Subtle)
-            .expect("serialize subtle");
+        let subtle =
+            serde_json::to_string(&LightingSmoothingPreset::Subtle).expect("serialize subtle");
         assert_eq!(subtle, "\"subtle\"");
 
         let moderate: LightingSmoothingPreset =
