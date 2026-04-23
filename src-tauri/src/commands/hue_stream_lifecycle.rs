@@ -505,7 +505,7 @@ fn connect_dtls(
 
 /// Decode a hex string (e.g. "AABBCCDD") into raw bytes.
 fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err("Hex string has odd length".to_string());
     }
     (0..hex.len())

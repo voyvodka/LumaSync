@@ -872,7 +872,7 @@ fn start_ambilight_worker(
             };
             if let Err(ref e) = capture_result {
                 capture_fail_count += 1;
-                if capture_fail_count <= 5 || capture_fail_count % 50 == 0 {
+                if capture_fail_count <= 5 || capture_fail_count.is_multiple_of(50) {
                     warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
                 }
             }
@@ -945,7 +945,7 @@ fn start_ambilight_worker(
                         let smoothed = hue_channel_smoother.smooth(&raw_colors, smoothing_alpha);
 
                         hue_send_count += 1;
-                        if hue_send_count <= 3 || hue_send_count % 200 == 0 {
+                        if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {
                             info!("[ambilight-worker] hue update #{hue_send_count} — colors: {:?}", &smoothed[..smoothed.len().min(3)]);
                         }
                         let _ = apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
