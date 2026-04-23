@@ -248,6 +248,37 @@ export type HueRoomArchetype = (typeof HUE_ROOM_ARCHETYPES)[number];
 /** Sentinel returned when the bridge advertises an archetype the whitelist does not know. */
 export const HUE_ARCHETYPE_FALLBACK: HueRoomArchetype = "other";
 
+// ---------------------------------------------------------------------------
+// Hue intensity presets (v1.4 — EWMA smoothing tiers)
+// ---------------------------------------------------------------------------
+
+/**
+ * User-facing intensity presets for ambient Hue streaming. Each preset
+ * maps to a single EWMA (exponentially-weighted moving average)
+ * coefficient `alpha` applied to the per-channel RGB stream:
+ *
+ *   smoothed = alpha * newSample + (1 - alpha) * prevSmoothed
+ *
+ * Lower alpha ⇒ heavier smoothing ⇒ calmer lights. Higher alpha ⇒
+ * snappier response ⇒ more intense.
+ *
+ * - `subtle` (0.15): slow, relaxed — ideal for bedroom / background.
+ * - `moderate` (0.35): balanced — default for living rooms.
+ * - `intense` (0.60): fast-reacting — gaming / action content.
+ *
+ * Stored under `ShellState.lightingIntensityPreset`.
+ */
+export type HueIntensityPreset = "subtle" | "moderate" | "intense";
+
+export const HUE_INTENSITY_PRESET_COEFFICIENTS: Readonly<Record<HueIntensityPreset, number>> = {
+  subtle: 0.15,
+  moderate: 0.35,
+  intense: 0.6,
+};
+
+/** Default preset applied when `ShellState.lightingIntensityPreset` is absent. */
+export const DEFAULT_HUE_INTENSITY_PRESET: HueIntensityPreset = "moderate";
+
 export type HueRuntimeTarget = "hue" | "usb";
 
 export interface HueRuntimeTargetTelemetryRow {
