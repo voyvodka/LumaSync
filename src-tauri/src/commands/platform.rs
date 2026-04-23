@@ -40,10 +40,7 @@ pub async fn open_log_dir<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
         .app_log_dir()
         .map_err(|e| format!("Failed to resolve app log directory: {e}"))?;
 
-    log::info!(
-        "[platform] open_log_dir revealing {}",
-        log_dir.display()
-    );
+    log::info!("[platform] open_log_dir revealing {}", log_dir.display());
 
     app.opener()
         .open_path(log_dir.to_string_lossy().to_string(), None::<String>)

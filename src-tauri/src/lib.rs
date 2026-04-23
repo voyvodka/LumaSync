@@ -59,11 +59,11 @@ use commands::hue_stream_lifecycle::{
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
+use commands::notifications::{request_notification_permission, show_notification};
+use commands::platform::open_log_dir;
 use commands::room_map::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
-use commands::notifications::{request_notification_permission, show_notification};
-use commands::platform::open_log_dir;
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
