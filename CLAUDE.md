@@ -16,6 +16,45 @@ Local planning artifacts live under `.planning/` which is **gitignored and never
 
 When the user asks about a feature, milestone, or gap ID (e.g. "v1.4", "USB per-LED sampling", "G2"), read `.planning/ROADMAP.md` first; then open the referenced comparison md for full context before proposing an implementation plan. **Never propose committing `.planning/` content, removing it from `.gitignore`, or otherwise distributing it.**
 
+## Agent Routing
+
+This project uses specialist agents in `.claude/agents/`. They are the primary authority for their domains. The main assistant is an **orchestrator**, not an inline worker.
+
+### Routing rules
+
+For any non-trivial task, **spawn the relevant specialist agent(s) instead of working inline.** "Non-trivial" means anything that:
+
+- plans or designs work (roadmap, phase, feature, refactor)
+- edits code beyond a one-line fix or rename
+- touches `src-tauri/`, `src/features/`, `src/shared/contracts/`, `.github/workflows/`, `CHANGELOG.md`, `SECURITY.md`, version files
+- spans more than one domain (Hue + UI, contract + Rust, etc.)
+- proposes adding a new dependency, partnership, or integration
+- prepares a release or a PR
+
+For multi-domain work, **spawn relevant agents in parallel**, then synthesize their outputs. Never serialize what can run concurrently.
+
+### Inline work is allowed only for
+
+- One-line clarifications or factual questions answered from a single file read
+- Typo fixes, identifier renames, pure string edits
+- Conversational back-and-forth during the **design discussion phase** (user preference — see `ls-design-language` and user memory `feedback_uiux_approach.md`), before any code is written
+
+If in doubt, spawn the agent. The token cost of a redundant spawn is trivial compared to the cost of missing an expert-flagged blind spot.
+
+### Agent map
+
+| Trigger | Agent |
+|---|---|
+| Planning a phase / milestone / multi-domain feature | Spawn the relevant domain agents in parallel, then synthesize |
+| Tauri command / status-code / contract change (FIRST, before any implementation) | `contract-architect` |
+| Hue CLIP v2 / DTLS / entertainment streaming / bridge / 403 re-pair | `hue-expert` |
+| USB serial / WS2812B / Adalight / WLED / OpenRGB / firmware / `LedSink` | `device-serial-expert` |
+| Rust backend / Tauri config / capture pipeline / tray / platform / CI | `tauri-expert` |
+| React components / Tailwind / amber Rev 07 design language / compact mode / a11y / i18n | `ui-ux-expert` |
+| New tests / test strategy / coverage gaps / Vitest / cargo test | `test-expert` |
+| PR review / release readiness / CHANGELOG / Conventional Commits / license / secrets audit | `opensource-guardian` |
+| "X.Y.Z atıyorum" / "release hazırla" / "new version" | `release-manager` |
+
 ## Commands
 
 ```bash
