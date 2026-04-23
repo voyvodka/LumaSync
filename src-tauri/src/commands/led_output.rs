@@ -278,6 +278,82 @@ pub fn send_ambilight_frame_hot_path_to_port(
     send_ambilight_frame_to_port(bridge, port_name, frame, brightness)
 }
 
+// ---------------------------------------------------------------------------
+// SerialSink — `LedSink` implementation backed by `LedOutputBridge`
+//
+// Wraps the existing `LedOutputBridge` + `encode_led_packet` chain behind the
+// `LedSink` trait so the worker loop can be written against the trait and
+// future sinks (v1.5 WledUdpSink, v2.0 OpenRgbClientSink) drop in without
+// touching the worker.
+//
+// Wire format is preserved exactly:
+//   [0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]
+// Never change this silently — use a user-visible "Firmware profile" setting.
+// ---------------------------------------------------------------------------
+
+/// A `LedSink` implementation that encodes frames as LumaSync v1 packets and
+/// writes them to a serial port via `LedOutputBridge`.
+// v1.4 anchor: wired into the ambilight worker via the LedSink trait.
+// Suppressed until the worker integration commit lands.
+#[allow(dead_code)]
+pub struct SerialSink {
+    bridge: LedOutputBridge,
+    port_name: Option<String>,
+    brightness: f32,
+}
+
+impl SerialSink {
+    /// Create a sink bound to the given port (or no-op when `port_name` is `None`).
+    #[allow(dead_code)]
+    pub fn new(bridge: LedOutputBridge, port_name: Option<String>, brightness: f32) -> Self {
+        Self {
+            bridge,
+            port_name,
+            brightness,
+        }
+    }
+
+    /// Update brightness without stopping the sink. Called from the worker when
+    /// the user changes brightness while ambilight is running.
+    #[allow(dead_code)]
+    pub fn set_brightness(&mut self, brightness: f32) {
+        self.brightness = brightness.clamp(0.0, 1.0);
+    }
+}
+
+impl super::led_sink::LedSink for SerialSink {
+    fn name(&self) -> &'static str {
+        "serial"
+    }
+
+    /// No-op: the underlying `SerialLedPacketSender` opens the port lazily on
+    /// the first `send`. `start` is reserved for future sinks that need
+    /// explicit connection setup (e.g. UDP socket bind for WLED).
+    fn start(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Encode `colors` as a LumaSync v1 packet and write to the serial port.
+    /// Returns `Err` if no port is configured or the write fails.
+    fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
+        let port = match &self.port_name {
+            Some(p) => p.clone(),
+            None => return Ok(()), // Hue-only mode — no serial port configured
+        };
+        send_ambilight_frame_hot_path_to_port(&self.bridge, &port, colors, self.brightness)
+            .map_err(|e| e.as_reason())
+    }
+
+    /// Disconnect the cached serial port handle so the next `send_frame` opens
+    /// a fresh connection. This mirrors the existing `stop_previous` behaviour.
+    fn stop(&mut self) -> Result<(), String> {
+        if let Some(ref port) = self.port_name {
+            self.bridge.disconnect_session(port);
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -286,11 +362,12 @@ mod tests {
 
     use super::{
         apply_solid_payload, encode_led_packet, send_ambilight_frame, LedOutputBridge,
-        LedOutputError, LedPacketSender,
+        LedOutputError, LedPacketSender, SerialSink,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
     };
+    use crate::commands::led_sink::LedSink;
 
     #[derive(Default)]
     struct FakeSender {
@@ -484,5 +561,69 @@ mod tests {
             vec!["COM5".to_string()],
             "bridge must forward disconnect_session to inner sender"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // SerialSink tests
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn serial_sink_send_frame_writes_encoded_packet() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink = SerialSink::new(bridge, Some("COM3".to_string()), 1.0);
+
+        sink.start().expect("start should succeed");
+        let frame = [[255_u8, 0, 0], [0, 255, 0]];
+        sink.send_frame(&frame).expect("send_frame should succeed");
+
+        let writes = sender.writes();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].0, "COM3");
+
+        let expected = encode_led_packet(1.0, &frame);
+        assert_eq!(writes[0].1, expected);
+    }
+
+    #[test]
+    fn serial_sink_no_port_send_is_noop() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink = SerialSink::new(bridge, None, 1.0);
+
+        sink.start().unwrap();
+        sink.send_frame(&[[1, 2, 3]])
+            .expect("no-port send should be a no-op");
+        assert_eq!(sender.writes().len(), 0, "no writes expected without port");
+    }
+
+    #[test]
+    fn serial_sink_stop_disconnects_session() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink = SerialSink::new(bridge, Some("COM8".to_string()), 0.8);
+
+        sink.start().unwrap();
+        sink.send_frame(&[[10, 20, 30]]).unwrap();
+        sink.stop().expect("stop should succeed");
+
+        assert!(
+            sender.disconnected_ports().contains(&"COM8".to_string()),
+            "stop must disconnect the serial session"
+        );
+    }
+
+    #[test]
+    fn serial_sink_implements_led_sink_trait_object() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink: Box<dyn LedSink> =
+            Box::new(SerialSink::new(bridge, Some("COM1".to_string()), 1.0));
+
+        assert_eq!(sink.name(), "serial");
+        sink.start().unwrap();
+        sink.send_frame(&[[50, 100, 150]]).unwrap();
+        sink.stop().unwrap();
+        assert_eq!(sender.writes().len(), 1);
     }
 }
