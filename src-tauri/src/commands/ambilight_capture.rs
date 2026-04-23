@@ -262,8 +262,8 @@ mod platform {
         // Full resolution (e.g. 2560x1600) wastes CPU on BGRA→RGB conversion,
         // frame cloning, and pixel iteration. ~640x400 is more than sufficient
         // for averaging colors in screen regions.
-        let native_w = display.width() as u32;
-        let native_h = display.height() as u32;
+        let native_w = display.width();
+        let native_h = display.height();
         const MAX_CAPTURE_DIM: u32 = 640;
         let (capture_width, capture_height) = if native_w.max(native_h) > MAX_CAPTURE_DIM {
             let scale = native_w.max(native_h) / MAX_CAPTURE_DIM;
