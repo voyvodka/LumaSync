@@ -1,7 +1,15 @@
 import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
 import type { LightingSmoothingPreset } from "../../../shared/contracts/lighting";
 import type { DisplayId } from "../../../shared/contracts/display";
-import type { ColorCorrectionConfig, FirmwareProfile } from "../../../shared/contracts/device";
+import {
+  DEFAULT_COLOR_CORRECTION,
+  FIRMWARE_PROFILE,
+  GAMMA_RANGE,
+  KELVIN_RANGE_K,
+  SATURATION_RANGE,
+  type ColorCorrectionConfig,
+  type FirmwareProfile,
+} from "../../../shared/contracts/device";
 
 export const LIGHTING_MODE_KIND = {
   OFF: "off",
@@ -147,11 +155,33 @@ function normalizeDisplayId(value: unknown): DisplayId | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function normalizeColorCorrection(
+  value: unknown,
+): ColorCorrectionConfig | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const input = value as Partial<ColorCorrectionConfig>;
+  return {
+    gammaR: clampFloat(input.gammaR, GAMMA_RANGE.min, GAMMA_RANGE.max, DEFAULT_COLOR_CORRECTION.gammaR),
+    gammaG: clampFloat(input.gammaG, GAMMA_RANGE.min, GAMMA_RANGE.max, DEFAULT_COLOR_CORRECTION.gammaG),
+    gammaB: clampFloat(input.gammaB, GAMMA_RANGE.min, GAMMA_RANGE.max, DEFAULT_COLOR_CORRECTION.gammaB),
+    kelvin: clampInt(input.kelvin, KELVIN_RANGE_K.min, KELVIN_RANGE_K.max, DEFAULT_COLOR_CORRECTION.kelvin),
+    saturation: clampFloat(input.saturation, SATURATION_RANGE.min, SATURATION_RANGE.max, DEFAULT_COLOR_CORRECTION.saturation),
+  };
+}
+
+function normalizeFirmwareProfile(value: unknown): FirmwareProfile | undefined {
+  return value === FIRMWARE_PROFILE.LUMASYNC_V1 || value === FIRMWARE_PROFILE.ADALIGHT
+    ? value
+    : undefined;
+}
+
 export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>): LightingModeConfig {
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
   const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
   const normalizedAmbilight = input?.ambilight ? normalizeAmbilightPayload(input.ambilight) : undefined;
   const normalizedDisplayId = normalizeDisplayId(input?.displayId);
+  const normalizedColorCorrection = normalizeColorCorrection(input?.colorCorrection);
+  const normalizedFirmwareProfile = normalizeFirmwareProfile(input?.firmwareProfile);
 
   if (kind === LIGHTING_MODE_KIND.SOLID) {
     return {
@@ -160,6 +190,8 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       ambilight: normalizedAmbilight,
       targets: input?.targets,
       displayId: normalizedDisplayId,
+      colorCorrection: normalizedColorCorrection,
+      firmwareProfile: normalizedFirmwareProfile,
     };
   }
 
@@ -170,6 +202,8 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       solid: normalizedSolid,
       targets: input?.targets,
       displayId: normalizedDisplayId,
+      colorCorrection: normalizedColorCorrection,
+      firmwareProfile: normalizedFirmwareProfile,
     };
   }
 
@@ -179,6 +213,8 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     ambilight: normalizedAmbilight,
     targets: input?.targets,
     displayId: normalizedDisplayId,
+    colorCorrection: normalizedColorCorrection,
+    firmwareProfile: normalizedFirmwareProfile,
   };
 }
 
