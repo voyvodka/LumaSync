@@ -41,7 +41,7 @@ import { shellStore } from "../../persistence/shellStore";
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
-import { HueIntensityPresetControl } from "./control/HueIntensityPresetControl";
+import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
 
 const TELEMETRY_POLL_INTERVAL_MS = 1000;
 
@@ -665,7 +665,7 @@ export function LightsSection({
                 onColorCorrectionChange?.(next);
               }}
             />
-            <HueIntensityPresetControl
+            <LightingSmoothingPresetControl
               initialPreset={initialHueIntensityPreset}
               onPresetChange={(next) => {
                 setInitialHueIntensityPreset(next);

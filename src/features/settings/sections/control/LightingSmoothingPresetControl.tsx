@@ -1,16 +1,22 @@
 /**
- * HueIntensityPresetControl — v1.4 G6 Hue smoothing tier.
+ * LightingSmoothingPresetControl — v1.4 unified lighting responsiveness.
  *
  * Three-tile segmented control (Subtle / Moderate / Intense) that sets the
- * EWMA coefficient applied to the Hue branch of the ambilight pump. The
- * user picks the feel — bedroom-calm, balanced, or gaming-snappy — and the
- * Rust runtime reads the coefficient from `HUE_INTENSITY_PRESET_COEFFICIENTS`
- * when hydrating `AmbilightLiveSettings::hue_smoothing_alpha`.
+ * single EWMA coefficient applied to both the USB and Hue branches of the
+ * ambilight pump. Replaces the earlier pair of (a) a continuous smoothing
+ * slider on the USB side and (b) a Hue-only intensity preset — one control
+ * now drives both sinks so the user doesn't have to tune responsiveness
+ * twice.
  *
- * Persisted to `shellStore.lightingIntensityPreset`. On change the parent
+ * The Rust runtime reads the coefficient from
+ * `LIGHTING_SMOOTHING_PRESET_COEFFICIENTS` when hydrating
+ * `AmbilightLiveSettings::smoothing_alpha` + the Hue EWMA path.
+ *
+ * Persisted to `shellStore.lightingIntensityPreset` (field name kept
+ * generic — always covered both branches). On change the parent
  * hot-reloads the active ambilight worker through `set_lighting_mode` so
  * the new preset rides the next frame without a mode toggle (see
- * `withAmbilightHueIntensityPreset` in App.tsx).
+ * `withAmbilightLightingSmoothingPreset` in App.tsx).
  *
  * Accessibility:
  *   - `role="radiogroup"` and per-tile `role="radio"` semantics.
@@ -25,32 +31,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
-  DEFAULT_HUE_INTENSITY_PRESET,
-  type HueIntensityPreset,
-} from "../../../../shared/contracts/hue";
+  DEFAULT_LIGHTING_SMOOTHING_PRESET,
+  type LightingSmoothingPreset,
+} from "../../../../shared/contracts/lighting";
 import { shellStore } from "../../../persistence/shellStore";
 
-const PRESET_ORDER: HueIntensityPreset[] = ["subtle", "moderate", "intense"];
+const PRESET_ORDER: LightingSmoothingPreset[] = ["subtle", "moderate", "intense"];
 
-export interface HueIntensityPresetControlProps {
+export interface LightingSmoothingPresetControlProps {
   /** Initial preset from shellStore — parent hydrates before first paint. */
-  initialPreset?: HueIntensityPreset;
+  initialPreset?: LightingSmoothingPreset;
   /**
    * Fired after persistence completes so the parent can hot-reload the
    * running ambilight worker.
    */
-  onPresetChange?: (next: HueIntensityPreset) => void;
+  onPresetChange?: (next: LightingSmoothingPreset) => void;
 }
 
-export function HueIntensityPresetControl({
+export function LightingSmoothingPresetControl({
   initialPreset,
   onPresetChange,
-}: HueIntensityPresetControlProps) {
+}: LightingSmoothingPresetControlProps) {
   const { t } = useTranslation("common");
-  const [preset, setPreset] = useState<HueIntensityPreset>(
-    initialPreset ?? DEFAULT_HUE_INTENSITY_PRESET,
+  const [preset, setPreset] = useState<LightingSmoothingPreset>(
+    initialPreset ?? DEFAULT_LIGHTING_SMOOTHING_PRESET,
   );
-  const buttonRefs = useRef<Record<HueIntensityPreset, HTMLButtonElement | null>>({
+  const buttonRefs = useRef<Record<LightingSmoothingPreset, HTMLButtonElement | null>>({
     subtle: null,
     moderate: null,
     intense: null,
@@ -69,7 +75,7 @@ export function HueIntensityPresetControl({
       })
       .catch((error) => {
         console.error(
-          "[LumaSync] HueIntensityPresetControl hydrate failed:",
+          "[LumaSync] LightingSmoothingPresetControl hydrate failed:",
           error,
         );
       });
@@ -79,7 +85,7 @@ export function HueIntensityPresetControl({
   }, [initialPreset]);
 
   const commit = useCallback(
-    (next: HueIntensityPreset) => {
+    (next: LightingSmoothingPreset) => {
       if (next === preset) return;
       setPreset(next);
       void shellStore
@@ -96,7 +102,7 @@ export function HueIntensityPresetControl({
   );
 
   const handleKeyNavigate = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>, current: HueIntensityPreset) => {
+    (event: React.KeyboardEvent<HTMLButtonElement>, current: LightingSmoothingPreset) => {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
       event.preventDefault();
       const idx = PRESET_ORDER.indexOf(current);
@@ -109,7 +115,7 @@ export function HueIntensityPresetControl({
     [commit],
   );
 
-  const presetLabels: Record<HueIntensityPreset, string> = useMemo(
+  const presetLabels: Record<LightingSmoothingPreset, string> = useMemo(
     () => ({
       subtle: t("device.hue.intensity.subtle"),
       moderate: t("device.hue.intensity.moderate"),
@@ -127,14 +133,14 @@ export function HueIntensityPresetControl({
       <div className="lm-settings-row">
         <div className="lm-settings-row-l">
           <div className="lm-settings-row-name">
-            {t("device.hue.intensity.description")}
+            {t("device.hue.intensity.moderate")}
           </div>
         </div>
         <div className="lm-settings-row-r">
           <div
             className="lm-settings-seg"
             role="radiogroup"
-            aria-label={t("device.hue.intensity.description")}
+            aria-label={t("device.hue.intensity.moderate")}
           >
             {PRESET_ORDER.map((candidate) => {
               const isActive = candidate === preset;
