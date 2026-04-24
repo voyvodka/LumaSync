@@ -106,6 +106,12 @@ interface LightsSectionProps {
    * the next set_lighting_mode so no explicit invoke is required here).
    */
   onColorCorrectionChange?: (next: ColorCorrectionConfig) => void;
+  /**
+   * Fired when the FirmwareProfilePicker commits a new profile. Parent
+   * mirrors the ref + hot-reloads via set_lighting_mode so the Rust
+   * encoder swap takes effect on the next frame without a mode toggle.
+   */
+  onFirmwareProfileChange?: (next: FirmwareProfile) => void;
 }
 
 function toHexPair(value: number): string {
@@ -168,6 +174,7 @@ export function LightsSection({
   onOpenCalibration,
   onHueIntensityPresetChange,
   onColorCorrectionChange,
+  onFirmwareProfileChange,
 }: LightsSectionProps) {
   const { t } = useTranslation("common");
   const lockState = getLightsModeLockState(modeLockReason);
@@ -646,7 +653,10 @@ export function LightsSection({
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <FirmwareProfilePicker
               initialProfile={firmwareProfile}
-              onProfileChange={(next) => setFirmwareProfile(next)}
+              onProfileChange={(next) => {
+                setFirmwareProfile(next);
+                onFirmwareProfileChange?.(next);
+              }}
             />
             <ColorCorrectionPanel
               initialConfig={initialColorCorrection}

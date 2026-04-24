@@ -1176,6 +1176,29 @@ function App() {
         });
       }
     },
+    onColorCorrectionChange: (next: ColorCorrectionConfig) => {
+      // ColorCorrectionPanel already persisted via shellStore.save() on
+      // commit; we mirror the new config into the ref so the very next
+      // outgoing set_lighting_mode payload carries it, then hot-reload
+      // any in-flight worker so USB + Hue sinks pick up the new pipeline
+      // without a mode toggle. Solid / off modes also benefit because
+      // the Rust encoder path runs color correction before every sink.
+      colorCorrectionRef.current = next;
+      void setLightingMode(hydrateModePayload(lightingMode)).catch((error) => {
+        console.error("[LumaSync] Failed to hot-reload color correction:", error);
+      });
+    },
+    onFirmwareProfileChange: (next: FirmwareProfile) => {
+      // FirmwareProfilePicker already persisted via shellStore.save() on
+      // commit; mirror into the ref + trigger a worker restart with the
+      // new protocol. Changing firmware profile is a wire-format change
+      // on the Rust side so a silent flicker is expected — the USB
+      // encoder pipeline rebuilds before the next frame.
+      firmwareProfileRef.current = next;
+      void setLightingMode(hydrateModePayload(lightingMode)).catch((error) => {
+        console.error("[LumaSync] Failed to hot-reload firmware profile:", error);
+      });
+    },
   } as const;
 
   // Derive runtime status items for the bottom StatusBar. Order matches the

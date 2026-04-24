@@ -5,6 +5,7 @@ import { CalibrationPage } from "../calibration/ui/CalibrationPage";
 import { DeviceSection } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
+import type { ColorCorrectionConfig, FirmwareProfile } from "../../shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueIntensityPreset, HueRuntimeTarget } from "../../shared/contracts/hue";
@@ -40,6 +41,18 @@ interface SettingsLayoutProps {
    * drop it without complaining.
    */
   onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
+  /**
+   * v1.4 G4 — forwarded to LightsSection so color correction edits in the
+   * ColorCorrectionPanel can hot-reload the running worker via
+   * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
+   */
+  onColorCorrectionChange?: (next: ColorCorrectionConfig) => void;
+  /**
+   * v1.4 G11 — forwarded to LightsSection so firmware profile swaps in
+   * the FirmwareProfilePicker can hot-reload the running encoder via
+   * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
+   */
+  onFirmwareProfileChange?: (next: FirmwareProfile) => void;
 }
 
 export const SettingsLayout = memo(function SettingsLayout({
@@ -62,6 +75,8 @@ export const SettingsLayout = memo(function SettingsLayout({
   isCheckingForUpdates,
   devSetUpdaterState,
   onHueIntensityPresetChange,
+  onColorCorrectionChange,
+  onFirmwareProfileChange,
 }: SettingsLayoutProps) {
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
 
@@ -102,6 +117,8 @@ export const SettingsLayout = memo(function SettingsLayout({
               onOutputTargetsChange={onOutputTargetsChange}
               onOpenCalibration={() => void onSectionChange(SECTION_IDS.LED_SETUP)}
               onHueIntensityPresetChange={onHueIntensityPresetChange}
+              onColorCorrectionChange={onColorCorrectionChange}
+              onFirmwareProfileChange={onFirmwareProfileChange}
             />
           </div>
         )}
