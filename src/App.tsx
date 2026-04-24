@@ -257,22 +257,45 @@ function App() {
     [withSelectedDisplayId, withAmbilightLightingSmoothingPreset, withColorCorrectionAndFirmwareProfile],
   );
 
+  const lastPendingModeRef = useRef<LightingModeConfig | null>(null);
+
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
+    lastPendingModeRef.current = mode;
     if (persistLightingModeTimeoutRef.current !== null) {
       window.clearTimeout(persistLightingModeTimeoutRef.current);
       persistLightingModeTimeoutRef.current = null;
     }
     persistLightingModeTimeoutRef.current = window.setTimeout(() => {
       persistLightingModeTimeoutRef.current = null;
-      void saveShellState({ lightingMode: mode });
+      const pending = lastPendingModeRef.current;
+      lastPendingModeRef.current = null;
+      if (pending) void saveShellState({ lightingMode: pending });
     }, LIGHTING_MODE_PERSIST_DEBOUNCE_MS);
   }, []);
 
+  // Flush pending lighting-mode persist on page hide / visibility change /
+  // unmount so a Cmd+R or tray-close right after a slider move does not
+  // discard the in-flight debounced write. Mirrors the pattern used for
+  // window geometry persistence elsewhere in the shell.
   useEffect(() => {
-    return () => {
+    const flush = () => {
       if (persistLightingModeTimeoutRef.current !== null) {
         window.clearTimeout(persistLightingModeTimeoutRef.current);
+        persistLightingModeTimeoutRef.current = null;
       }
+      const pending = lastPendingModeRef.current;
+      lastPendingModeRef.current = null;
+      if (pending) void saveShellState({ lightingMode: pending });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flush();
     };
   }, []);
 
