@@ -4,8 +4,19 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
 use serialport::{available_ports, SerialPortType};
 
+use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
+use super::led_output::FirmwareProfile;
+
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 1_500;
+
+/// Per-call read timeout on the serial port during the handshake round-trip.
+/// Short enough that `TimedSerialPort` can poll tightly; the outer
+/// `HANDSHAKE_ROUND_TRIP_TIMEOUT` governs the total window.
+const HANDSHAKE_PORT_READ_TIMEOUT_MS: u64 = 50;
+
+/// Total wall-clock budget for the PING → PONG round-trip.
+const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(1_000);
 
 const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
     (0x1A86, 0x7523),
@@ -75,6 +86,15 @@ pub struct HealthCheckResult {
     pub pass: bool,
     pub steps: Vec<HealthStepResult>,
     pub checked_at_unix_ms: u128,
+    /// Round-trip latency of the handshake in milliseconds.
+    /// Populated only when the HANDSHAKE step completes successfully.
+    pub round_trip_ms: Option<u32>,
+    /// Firmware version string as reported by the device (e.g. `"1.4"`).
+    /// Populated only on a successful handshake.
+    pub firmware_version: Option<String>,
+    /// Firmware profile advertised by the device.
+    /// Populated only on a successful handshake.
+    pub firmware_profile: Option<FirmwareProfile>,
 }
 
 pub struct SerialConnectionState {
@@ -272,10 +292,25 @@ pub fn get_serial_connection_status(
         })
 }
 
+/// Run a multi-step health check on `port_name`.
+///
+/// Steps:
+/// 1. `PORT_VISIBLE`    — port appears in the OS serial inventory.
+/// 2. `PORT_SUPPORTED`  — VID:PID matches the allowlist.
+/// 3. `CONNECT_AND_VERIFY` — port can be opened at 115 200 baud.
+/// 4. `HANDSHAKE`       — LumaSync v1 PING → PONG round-trip succeeded.
+///    (v1.4: firmware companion not shipped yet — this step will report
+///    `SERIAL_HEALTH_HANDSHAKE_TIMEOUT` when pointed at non-LumaSync firmware.
+///    Real firmware integration arrives in v1.5.)
+///
+/// The command never throws; it always returns a `HealthCheckResult`.
 #[tauri::command]
 pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
     let mut steps = Vec::new();
 
+    // -----------------------------------------------------------------------
+    // Step 1: PORT_VISIBLE
+    // -----------------------------------------------------------------------
     let ports = match available_ports() {
         Ok(ports) => ports,
         Err(error) => {
@@ -291,6 +326,9 @@ pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
                 pass: false,
                 steps,
                 checked_at_unix_ms: now_unix_ms(),
+                round_trip_ms: None,
+                firmware_version: None,
+                firmware_profile: None,
             };
         }
     };
@@ -320,10 +358,16 @@ pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
                 pass: false,
                 steps,
                 checked_at_unix_ms: now_unix_ms(),
+                round_trip_ms: None,
+                firmware_version: None,
+                firmware_profile: None,
             };
         }
     };
 
+    // -----------------------------------------------------------------------
+    // Step 2: PORT_SUPPORTED
+    // -----------------------------------------------------------------------
     match selected_port.port_type {
         SerialPortType::UsbPort(usb_info) => {
             if is_supported_usb(usb_info.vid, usb_info.pid) {
@@ -353,6 +397,9 @@ pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
                     pass: false,
                     steps,
                     checked_at_unix_ms: now_unix_ms(),
+                    round_trip_ms: None,
+                    firmware_version: None,
+                    firmware_profile: None,
                 };
             }
         }
@@ -369,42 +416,118 @@ pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
                 pass: false,
                 steps,
                 checked_at_unix_ms: now_unix_ms(),
+                round_trip_ms: None,
+                firmware_version: None,
+                firmware_profile: None,
             };
         }
     }
 
-    let open_result = serialport::new(&port_name, DEFAULT_CONNECT_BAUD_RATE)
-        .timeout(Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS))
-        .open();
-
-    match open_result {
-        Ok(_port_handle) => {
+    // -----------------------------------------------------------------------
+    // Step 3: CONNECT_AND_VERIFY — open the port
+    // -----------------------------------------------------------------------
+    let port_handle = match serialport::new(&port_name, DEFAULT_CONNECT_BAUD_RATE)
+        .timeout(Duration::from_millis(HANDSHAKE_PORT_READ_TIMEOUT_MS))
+        .open()
+    {
+        Ok(handle) => {
             steps.push(HealthStepResult {
                 step: "CONNECT_AND_VERIFY".to_string(),
                 pass: true,
                 code: "CONNECT_OK".to_string(),
-                message: "Connect and immediate verification succeeded.".to_string(),
+                message: "Port opened successfully at 115200 baud.".to_string(),
                 details: None,
             });
+            handle
         }
         Err(error) => {
             steps.push(HealthStepResult {
                 step: "CONNECT_AND_VERIFY".to_string(),
                 pass: false,
                 code: connect_error_code(&error).to_string(),
-                message: "Connect and immediate verification failed.".to_string(),
+                message: "Could not open serial port for health check.".to_string(),
                 details: Some(error.to_string()),
             });
+
+            return HealthCheckResult {
+                pass: false,
+                steps,
+                checked_at_unix_ms: now_unix_ms(),
+                round_trip_ms: None,
+                firmware_version: None,
+                firmware_profile: None,
+            };
+        }
+    };
+
+    // -----------------------------------------------------------------------
+    // Step 4: HANDSHAKE — LumaSync v1 PING → PONG round-trip
+    //
+    // v1.4: firmware companion not yet shipped. Non-LumaSync firmware will
+    // not respond to the PING, producing SERIAL_HEALTH_HANDSHAKE_TIMEOUT.
+    // This is expected; the step is non-fatal (pass=false) so the UI can
+    // surface an explanation without blocking the user from using the port
+    // with the Adalight profile.
+    // -----------------------------------------------------------------------
+    let mut timed_port = TimedSerialPort::new(port_handle);
+    let handshake_result = perform_handshake(&mut timed_port, HANDSHAKE_ROUND_TRIP_TIMEOUT);
+
+    match handshake_result {
+        Ok((response, elapsed_ms)) => {
+            let version_str = response.version_string();
+            steps.push(HealthStepResult {
+                step: "HANDSHAKE".to_string(),
+                pass: true,
+                code: "SERIAL_HEALTH_OK".to_string(),
+                message: format!(
+                    "Handshake succeeded: firmware {} ({:?}), round-trip {}ms.",
+                    version_str, response.firmware_profile, elapsed_ms
+                ),
+                details: Some(format!("round_trip_ms={elapsed_ms}")),
+            });
+
+            let pass = steps.iter().all(|s| s.pass);
+            HealthCheckResult {
+                pass,
+                steps,
+                checked_at_unix_ms: now_unix_ms(),
+                round_trip_ms: Some(elapsed_ms),
+                firmware_version: Some(version_str),
+                firmware_profile: Some(response.firmware_profile),
+            }
+        }
+        Err(err) => {
+            let code = err.as_status_code();
+            let (message, hint) = handshake_error_ui_message(&err);
+
+            steps.push(HealthStepResult {
+                step: "HANDSHAKE".to_string(),
+                pass: false,
+                code: code.to_string(),
+                message,
+                details: Some(hint),
+            });
+
+            // HANDSHAKE timeout/error is non-fatal at the result level — the port
+            // is open and supported. The UI can still allow the user to proceed
+            // with the Adalight profile. `pass` reflects all steps, so it will
+            // be false here.
+            let pass = steps.iter().all(|s| s.pass);
+            HealthCheckResult {
+                pass,
+                steps,
+                checked_at_unix_ms: now_unix_ms(),
+                round_trip_ms: None,
+                firmware_version: None,
+                firmware_profile: None,
+            }
         }
     }
-
-    let pass = steps.iter().all(|step| step.pass);
-    HealthCheckResult {
-        pass,
-        steps,
-        checked_at_unix_ms: now_unix_ms(),
-    }
 }
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
 
 fn is_supported_usb(vid: u16, pid: u16) -> bool {
     SUPPORTED_USB_DEVICE_ALLOWLIST
@@ -425,7 +548,35 @@ fn connect_error_code(error: &serialport::Error) -> &'static str {
     }
 }
 
-fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
+/// Map a `HandshakeError` to a user-facing (message, hint) pair.
+fn handshake_error_ui_message(err: &HandshakeError) -> (String, String) {
+    match err {
+        HandshakeError::TooShort => (
+            "Handshake timed out: no response from firmware within 1 s.".to_string(),
+            "If using non-LumaSync firmware, switch to the Adalight profile in Device settings."
+                .to_string(),
+        ),
+        HandshakeError::BadMagic => (
+            "Handshake failed: unexpected magic bytes in response.".to_string(),
+            "Check baud rate and cable integrity. Non-LumaSync firmware will not respond to PING."
+                .to_string(),
+        ),
+        HandshakeError::WrongOpcode => (
+            "Handshake failed: wrong opcode in firmware response.".to_string(),
+            "Firmware may be running an older protocol version.".to_string(),
+        ),
+        HandshakeError::BadChecksum => (
+            "Handshake failed: checksum mismatch in PONG frame.".to_string(),
+            "Possible cable noise or a firmware bug. Try a different USB cable.".to_string(),
+        ),
+        HandshakeError::UnknownProfile => (
+            "Handshake failed: firmware advertised an unknown profile byte.".to_string(),
+            "Upgrade firmware or select a compatible profile in Device settings.".to_string(),
+        ),
+    }
+}
+
+pub fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
     CommandStatus {
         code: code.to_string(),
         message: message.to_string(),

@@ -44,7 +44,9 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
         unlistenFn = await listenStartupToggle((newState) => {
           setStartupEnabled(newState);
         });
-      } catch {}
+      } catch (err) {
+        console.error("[LumaSync] listenStartupToggle subscribe failed:", err);
+      }
     }
 
     void init();
@@ -54,7 +56,11 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
   async function handleLanguageChange(lang: I18nLanguage) {
     if (lang === currentLanguage) return;
     await changeLanguage(lang);
-    try { await shellStore.save({ language: lang }); } catch {}
+    try {
+      await shellStore.save({ language: lang });
+    } catch (err) {
+      console.error("[LumaSync] shellStore.save(language) failed:", err);
+    }
   }
 
   async function handleStartupToggle() {
@@ -62,7 +68,9 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
     try {
       const newState = await toggleStartup();
       setStartupEnabled(newState);
-    } catch {}
+    } catch (err) {
+      console.error("[LumaSync] toggleStartup failed:", err);
+    }
   }
 
   return (

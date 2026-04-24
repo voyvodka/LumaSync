@@ -9,6 +9,7 @@ use tauri::State;
 
 use log::{error, info, warn};
 
+use super::hue_http::classify_hue_response_blocking;
 use super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
 
 const DEFAULT_RETRY_MAX_ATTEMPTS: u8 = 3;
@@ -255,9 +256,7 @@ fn is_shutdown_signaled(signal: &ShutdownSignal) -> bool {
 /// thread confirmed shutdown within the deadline, `false` on timeout.
 fn wait_for_shutdown(signal: &ShutdownSignal, timeout: Duration) -> bool {
     if let Ok(guard) = signal.0.lock() {
-        let result = signal
-            .1
-            .wait_timeout_while(guard, timeout, |done| !*done);
+        let result = signal.1.wait_timeout_while(guard, timeout, |done| !*done);
         match result {
             Ok((_, timeout_result)) => !timeout_result.timed_out(),
             Err(_) => false,
@@ -322,7 +321,10 @@ impl HueColorSender {
     /// Broadcast the same colour to every channel. Used by the solid-colour path.
     pub fn try_send(&self, r: u8, g: u8, b: u8, brightness: f32) {
         let channel_colors = vec![(r, g, b); self.channel_count.max(1)];
-        let _ = self.tx.try_send(HueColorUpdate { channel_colors, brightness });
+        let _ = self.tx.try_send(HueColorUpdate {
+            channel_colors,
+            brightness,
+        });
     }
 
     /// Send individual colours per channel. `colors` must be indexed the same
@@ -331,7 +333,10 @@ impl HueColorSender {
         if colors.is_empty() {
             return;
         }
-        let _ = self.tx.try_send(HueColorUpdate { channel_colors: colors, brightness });
+        let _ = self.tx.try_send(HueColorUpdate {
+            channel_colors: colors,
+            brightness,
+        });
     }
 }
 
@@ -391,7 +396,7 @@ fn build_huestream_frame(
         frame.extend_from_slice(&id_bytes[..UUID_LEN]);
     } else {
         frame.extend_from_slice(id_bytes);
-        frame.extend(std::iter::repeat(0u8).take(UUID_LEN - id_bytes.len()));
+        frame.extend(std::iter::repeat_n(0u8, UUID_LEN - id_bytes.len()));
     }
 
     let brightness_clamped = brightness.clamp(0.0, 1.0);
@@ -453,8 +458,7 @@ fn connect_dtls(
     use std::net::UdpSocket;
 
     // Decode the 32-hex-char clientkey into 16 raw bytes for PSK.
-    let psk_bytes = hex_decode(client_key)
-        .map_err(|e| format!("DTLS_PSK_DECODE_FAILED: {e}"))?;
+    let psk_bytes = hex_decode(client_key).map_err(|e| format!("DTLS_PSK_DECODE_FAILED: {e}"))?;
 
     let psk_identity = username.to_string();
 
@@ -468,7 +472,9 @@ fn connect_dtls(
     builder.set_psk_client_callback(move |_ssl, _hint, identity_out, psk_out| {
         // Write PSK identity
         let identity_bytes = psk_identity.as_bytes();
-        let ilen = identity_bytes.len().min(identity_out.len().saturating_sub(1));
+        let ilen = identity_bytes
+            .len()
+            .min(identity_out.len().saturating_sub(1));
         identity_out[..ilen].copy_from_slice(&identity_bytes[..ilen]);
         identity_out[ilen] = 0; // null terminate
 
@@ -487,8 +493,8 @@ fn connect_dtls(
     let connector = builder.build();
 
     // Bind a UDP socket and connect to bridge:2100.
-    let socket = UdpSocket::bind("0.0.0.0:0")
-        .map_err(|e| format!("DTLS_SOCKET_BIND_FAILED: {e}"))?;
+    let socket =
+        UdpSocket::bind("0.0.0.0:0").map_err(|e| format!("DTLS_SOCKET_BIND_FAILED: {e}"))?;
     socket
         .connect(format!("{bridge_ip}:{HUE_DTLS_PORT}"))
         .map_err(|e| format!("DTLS_SOCKET_CONNECT_FAILED: {e}"))?;
@@ -505,7 +511,7 @@ fn connect_dtls(
 
 /// Decode a hex string (e.g. "AABBCCDD") into raw bytes.
 fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return Err("Hex string has odd length".to_string());
     }
     (0..hex.len())
@@ -532,9 +538,8 @@ fn activate_entertainment_config(
     username: &str,
     area_id: &str,
 ) -> Result<(), String> {
-    let endpoint = format!(
-        "https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}"
-    );
+    let endpoint =
+        format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
     let response = client
         .put(&endpoint)
         .header("hue-application-key", username)
@@ -542,17 +547,9 @@ fn activate_entertainment_config(
         .send()
         .map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
 
-    let status = response.status();
-    if status == reqwest::StatusCode::FORBIDDEN {
-        return Err("AUTH_INVALID_ENTERTAINMENT_ACTIVATE: 403 Forbidden".to_string());
-    }
-    if !status.is_success() {
-        let body = response.text().unwrap_or_default();
-        return Err(format!(
-            "ENTERTAINMENT_ACTIVATE_FAILED: HTTP {status} — {body}"
-        ));
-    }
-    Ok(())
+    classify_hue_response_blocking(response)
+        .map(|_| ())
+        .map_err(|fault| format!("ENTERTAINMENT_ACTIVATE_FAILED: {fault}"))
 }
 
 /// PUT /clip/v2/resource/entertainment_configuration/{area_id}
@@ -565,9 +562,8 @@ fn deactivate_entertainment_config(
     username: &str,
     area_id: &str,
 ) -> Result<(), String> {
-    let endpoint = format!(
-        "https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}"
-    );
+    let endpoint =
+        format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
     let response = client
         .put(&endpoint)
         .header("hue-application-key", username)
@@ -617,7 +613,9 @@ fn spawn_hue_dtls_sender(
     let mut dtls_stream = connect_dtls(&bridge_ip, &username, &client_key)?;
 
     // Extract cipher name from the established handshake.
-    let cipher_name = dtls_stream.ssl().current_cipher()
+    let cipher_name = dtls_stream
+        .ssl()
+        .current_cipher()
         .map(|c| c.name().to_string());
 
     // Spawn the sender thread.
@@ -676,7 +674,12 @@ fn spawn_hue_dtls_sender(
             }
 
             // Build and send the HueStream binary frame.
-            let frame = build_huestream_frame(&area_id, &channels, &latest.channel_colors, latest.brightness);
+            let frame = build_huestream_frame(
+                &area_id,
+                &channels,
+                &latest.channel_colors,
+                latest.brightness,
+            );
             if dtls_stream.write_all(&frame).is_err() {
                 error!("DTLS write failed, stopping entertainment stream.");
                 break;
@@ -727,12 +730,7 @@ fn spawn_hue_http_sender(
             .checked_sub(min_interval)
             .unwrap_or_else(Instant::now);
 
-        loop {
-            let update = match rx.recv() {
-                Ok(u) => u,
-                Err(_) => break,
-            };
-
+        while let Ok(update) = rx.recv() {
             // Drain stale updates: keep only the latest.
             let mut latest = update;
             while let Ok(newer) = rx.try_recv() {
@@ -746,24 +744,18 @@ fn spawn_hue_http_sender(
             }
 
             let brightness = latest.brightness;
-            let client_ref: &BlockingClient = &client;
-            let bridge_ref: &str = &bridge_ip;
-            let username_ref: &str = &username;
+            let conn = HueBridgeConnection {
+                client: &client,
+                bridge_ip: &bridge_ip,
+                username: &username,
+            };
+            let conn_ref = &conn;
             thread::scope(|s| {
                 for (channel, color) in channels.iter().zip(latest.channel_colors.iter()) {
                     let (r, g, b) = *color;
                     let light_ids: &[String] = &channel.light_ids;
                     s.spawn(move || {
-                        send_color_to_lights(
-                            client_ref,
-                            bridge_ref,
-                            username_ref,
-                            light_ids,
-                            r,
-                            g,
-                            b,
-                            brightness,
-                        );
+                        send_color_to_lights(conn_ref, light_ids, r, g, b, brightness);
                     });
                 }
             });
@@ -778,12 +770,18 @@ fn spawn_hue_http_sender(
     (HueColorSender { tx, channel_count }, shutdown)
 }
 
+/// Connection handle bundling the reqwest client with bridge IP + app key so helper
+/// fns don't need to carry three correlated arguments through every call.
+struct HueBridgeConnection<'a> {
+    client: &'a BlockingClient,
+    bridge_ip: &'a str,
+    username: &'a str,
+}
+
 /// Send to all lights via HTTP. For a single light: direct call. For multiple: parallel
 /// threads via `thread::scope` so each HTTPS round-trip happens concurrently.
 fn send_color_to_lights(
-    client: &BlockingClient,
-    bridge_ip: &str,
-    username: &str,
+    conn: &HueBridgeConnection<'_>,
     light_ids: &[String],
     r: u8,
     g: u8,
@@ -795,44 +793,45 @@ fn send_color_to_lights(
     }
 
     let (x, y) = rgb_to_xy(r, g, b);
-    let dimming = f64::from((brightness.clamp(0.0, 1.0) * 100.0) as f32);
+    let dimming = f64::from(brightness.clamp(0.0, 1.0) * 100.0);
 
     if light_ids.len() == 1 {
-        let _ = send_light_put(client, bridge_ip, username, &light_ids[0], x, y, dimming);
+        let _ = send_light_put(conn, &light_ids[0], x, y, dimming);
         return;
     }
 
     thread::scope(|s| {
         for light_id in light_ids {
             s.spawn(|| {
-                let _ = send_light_put(client, bridge_ip, username, light_id, x, y, dimming);
+                let _ = send_light_put(conn, light_id, x, y, dimming);
             });
         }
     });
 }
 
 fn send_light_put(
-    client: &BlockingClient,
-    bridge_ip: &str,
-    username: &str,
+    conn: &HueBridgeConnection<'_>,
     light_id: &str,
     x: f64,
     y: f64,
     dimming: f64,
 ) -> Result<(), String> {
-    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
-    client
+    let endpoint = format!(
+        "https://{}/clip/v2/resource/light/{light_id}",
+        conn.bridge_ip
+    );
+    conn.client
         .put(endpoint)
-        .header("hue-application-key", username)
+        .header("hue-application-key", conn.username)
         .json(&json!({
             "on": { "on": true },
             "dimming": { "brightness": dimming },
             "color": { "xy": { "x": x, "y": y } }
         }))
         .send()
-        .and_then(|r| r.error_for_status())
-        .map(|_| ())
         .map_err(|e| e.to_string())
+        .and_then(|r| classify_hue_response_blocking(r).map_err(|f| f.to_string()))
+        .map(|_| ())
 }
 
 #[derive(Clone, Debug)]
@@ -906,7 +905,6 @@ impl HueRuntimeStateStore {
     }
 }
 
-
 /// If a solid color was queued while the stream context was not ready, attempt
 /// to flush it now.  Called whenever we hold the lock and the context may have
 /// just become available (e.g. after status_refresh_with_evidence confirms the
@@ -915,9 +913,13 @@ fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) {
     if owner.last_status.code != "HUE_COLOR_QUEUED_PENDING_STREAM" {
         return;
     }
-    if let (Some(color), Some(stream)) = (owner.last_solid_color.clone(), owner.active_stream.as_ref()) {
+    if let (Some(color), Some(stream)) =
+        (owner.last_solid_color.clone(), owner.active_stream.as_ref())
+    {
         if !stream.channels.is_empty() {
-            stream.color_sender.try_send(color.r, color.g, color.b, color.brightness);
+            stream
+                .color_sender
+                .try_send(color.r, color.g, color.b, color.brightness);
             owner.last_status = status_with(
                 owner.state.clone(),
                 "HUE_COLOR_APPLIED",
@@ -932,13 +934,14 @@ fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) {
 /// Acquire the Hue runtime mutex, recovering from poison if a previous holder
 /// panicked.  This ensures a single panic inside the lock does not permanently
 /// brick the Hue subsystem for the rest of the application lifetime.
-pub(crate) fn acquire_hue_runtime(runtime: &Mutex<HueRuntimeOwner>) -> std::sync::MutexGuard<'_, HueRuntimeOwner> {
+pub(crate) fn acquire_hue_runtime(
+    runtime: &Mutex<HueRuntimeOwner>,
+) -> std::sync::MutexGuard<'_, HueRuntimeOwner> {
     runtime.lock().unwrap_or_else(|poison| {
         error!("Hue runtime mutex was poisoned — recovering from poison guard.");
         poison.into_inner()
     })
 }
-
 
 fn status_with(
     state: HueRuntimeState,
@@ -1136,7 +1139,8 @@ fn build_hue_sender(
     channels: Vec<HueAreaChannel>,
 ) -> (HueColorSender, bool, ShutdownSignal) {
     let packet_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
-    let (sender, uses_dtls, shutdown, _cipher) = build_hue_sender_with_counter(request, channels, packet_counter);
+    let (sender, uses_dtls, shutdown, _cipher) =
+        build_hue_sender_with_counter(request, channels, packet_counter);
     (sender, uses_dtls, shutdown)
 }
 
@@ -1165,7 +1169,12 @@ fn build_hue_sender_with_counter(
 
                 std::thread::spawn(move || {
                     let result = spawn_hue_dtls_sender(
-                        client_clone, bridge_ip_t, username_t, client_key_t, area_id_t, channels_t,
+                        client_clone,
+                        bridge_ip_t,
+                        username_t,
+                        client_key_t,
+                        area_id_t,
+                        channels_t,
                         counter_t,
                     );
                     let _ = tx_result.send(result);
@@ -1201,7 +1210,15 @@ fn build_hue_sender_with_counter(
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
                 let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal(), None)
+                (
+                    HueColorSender {
+                        tx: Arc::new(tx),
+                        channel_count: 0,
+                    },
+                    false,
+                    new_shutdown_signal(),
+                    None,
+                )
             }
         }
     } else {
@@ -1219,7 +1236,15 @@ fn build_hue_sender_with_counter(
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
                 let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal(), None)
+                (
+                    HueColorSender {
+                        tx: Arc::new(tx),
+                        channel_count: 0,
+                    },
+                    false,
+                    new_shutdown_signal(),
+                    None,
+                )
             }
         }
     }
@@ -1235,7 +1260,15 @@ fn store_active_stream_context(
     uses_dtls: bool,
     shutdown_signal: ShutdownSignal,
 ) {
-    store_active_stream_context_with_cipher(owner, request, channels, color_sender, uses_dtls, shutdown_signal, None);
+    store_active_stream_context_with_cipher(
+        owner,
+        request,
+        channels,
+        color_sender,
+        uses_dtls,
+        shutdown_signal,
+        None,
+    );
 }
 
 fn store_active_stream_context_with_cipher(
@@ -1269,7 +1302,9 @@ fn store_active_stream_context_with_cipher(
     // Update telemetry tracking fields.
     owner.stream_started_at = Some(Instant::now());
     owner.reconnect_attempt = 0;
-    owner.packet_send_count.store(0, std::sync::atomic::Ordering::Relaxed);
+    owner
+        .packet_send_count
+        .store(0, std::sync::atomic::Ordering::Relaxed);
     owner.packet_rate_sampled_at = Some(Instant::now());
     owner.packet_rate_last_count = 0;
     if uses_dtls {
@@ -1295,7 +1330,7 @@ fn hue_http_client_arc() -> Result<Arc<BlockingClient>, String> {
                 .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
                 .danger_accept_invalid_certs(true)
                 .build()
-                .expect("Failed to build Hue blocking HTTP client")
+                .expect("Failed to build Hue blocking HTTP client"),
         )
     })))
 }
@@ -1396,18 +1431,13 @@ async fn fetch_area_channels(
         let mut current_rtype = seed_rtype.to_string();
         let mut current_rid = seed_rid.to_string();
         for _ in 0..4 {
-            let resource = match fetch_resource(
-                client,
-                bridge_ip,
-                username,
-                &current_rtype,
-                &current_rid,
-            )
-            .await
-            {
-                Ok(value) => value,
-                Err(_) => return resolved,
-            };
+            let resource =
+                match fetch_resource(client, bridge_ip, username, &current_rtype, &current_rid)
+                    .await
+                {
+                    Ok(value) => value,
+                    Err(_) => return resolved,
+                };
             let Some(item) = resource
                 .get("data")
                 .and_then(|value| value.as_array())
@@ -1498,9 +1528,7 @@ async fn fetch_area_channels(
             let Some(rid) = service.get("rid").and_then(|value| value.as_str()) else {
                 continue;
             };
-            for light_id in
-                resolve_to_light_ids(&client, bridge_ip, username, rtype, rid).await
-            {
+            for light_id in resolve_to_light_ids(&client, bridge_ip, username, rtype, rid).await {
                 push_unique(&mut light_ids, &light_id);
             }
         }
@@ -1518,10 +1546,7 @@ async fn fetch_area_channels(
 }
 
 /// Apply user-supplied region overrides to a channel list fetched from the bridge.
-fn apply_channel_region_overrides(
-    channels: &mut Vec<HueAreaChannel>,
-    overrides: &[Option<String>],
-) {
+fn apply_channel_region_overrides(channels: &mut [HueAreaChannel], overrides: &[Option<String>]) {
     for (i, channel) in channels.iter_mut().enumerate() {
         if let Some(Some(region_str)) = overrides.get(i) {
             if let Some(region) = parse_screen_region(region_str) {
@@ -1571,7 +1596,7 @@ pub async fn get_hue_area_channels(
             }
         }
     } // lock released before any async I/O
-    // Slow path: fetch directly from bridge (no lock held).
+      // Slow path: fetch directly from bridge (no lock held).
     let channels = fetch_area_channels(&bridge_ip, &username, &area_id).await?;
     Ok(channels_to_info(&channels))
 }
@@ -1609,16 +1634,18 @@ fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
     (x / sum, y / sum)
 }
 
-
 pub fn snapshot_hue_output_context(
     runtime_state: &HueRuntimeStateStore,
 ) -> Result<Option<HueActiveOutputContext>, String> {
     let owner = acquire_hue_runtime(&runtime_state.runtime);
 
-    Ok(owner.active_stream.as_ref().map(|stream| HueActiveOutputContext {
-        channels: stream.channels.clone(),
-        color_sender: stream.color_sender.clone(),
-    }))
+    Ok(owner
+        .active_stream
+        .as_ref()
+        .map(|stream| HueActiveOutputContext {
+            channels: stream.channels.clone(),
+            color_sender: stream.color_sender.clone(),
+        }))
 }
 
 /// Broadcast one colour to every channel (solid-colour path).
@@ -1648,10 +1675,11 @@ pub fn apply_hue_channels_with_context(
     if context.channels.is_empty() {
         return Err("HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS".to_string());
     }
-    context.color_sender.try_send_channels(channel_colors, brightness);
+    context
+        .color_sender
+        .try_send_channels(channel_colors, brightness);
     Ok(())
 }
-
 
 fn next_backoff_ms(policy: &HueRetryPolicy, attempt_index: u8) -> u64 {
     let exponent = u32::from(attempt_index.saturating_sub(1));
@@ -1799,7 +1827,10 @@ struct StartAbortGuard {
 
 impl StartAbortGuard {
     fn new(runtime: Arc<Mutex<HueRuntimeOwner>>) -> Self {
-        Self { runtime, armed: true }
+        Self {
+            runtime,
+            armed: true,
+        }
     }
     fn disarm(&mut self) {
         self.armed = false;
@@ -1808,9 +1839,14 @@ impl StartAbortGuard {
 
 impl Drop for StartAbortGuard {
     fn drop(&mut self) {
-        if !self.armed { return; }
+        if !self.armed {
+            return;
+        }
         let mut owner = acquire_hue_runtime(&self.runtime);
-        if matches!(owner.state, HueRuntimeState::Starting | HueRuntimeState::Running) {
+        if matches!(
+            owner.state,
+            HueRuntimeState::Starting | HueRuntimeState::Running
+        ) {
             owner.state = HueRuntimeState::Failed;
             owner.active_stream = None;
             owner.last_status = status_with(
@@ -1885,7 +1921,10 @@ pub async fn start_hue_stream(
     let has_no_lights = result.active && channels.is_empty();
     {
         let owner = acquire_hue_runtime(&runtime_state.runtime);
-        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+        if matches!(
+            owner.state,
+            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+        ) {
             abort_guard.disarm();
             return Ok(make_result(&owner));
         }
@@ -1901,11 +1940,25 @@ pub async fn start_hue_stream(
             .unwrap_or_else(|_join_err| {
                 error!("build_hue_sender task panicked, using no-op sender.");
                 let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+                (
+                    HueColorSender {
+                        tx: Arc::new(tx),
+                        channel_count: 0,
+                    },
+                    false,
+                    new_shutdown_signal(),
+                )
             })
     } else {
         let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-        (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+        (
+            HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: 0,
+            },
+            false,
+            new_shutdown_signal(),
+        )
     };
 
     // 4c. Re-acquire lock to store the spawned sender context.
@@ -1914,12 +1967,22 @@ pub async fn start_hue_stream(
 
         // Second race-condition guard: a stop may have arrived while we were
         // spawning the sender.
-        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+        if matches!(
+            owner.state,
+            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+        ) {
             abort_guard.disarm();
             return Ok(make_result(&owner));
         }
 
-        store_active_stream_context(&mut owner, &request, channels, color_sender, uses_dtls, shutdown_signal);
+        store_active_stream_context(
+            &mut owner,
+            &request,
+            channels,
+            color_sender,
+            uses_dtls,
+            shutdown_signal,
+        );
         abort_guard.disarm();
 
         if has_no_lights {
@@ -1997,7 +2060,9 @@ pub fn stop_hue_stream(
             .map(|s| Arc::clone(&s.shutdown_signal));
 
         // Extract DTLS deactivation params before active_stream is cleared.
-        let dtls_deactivate = owner.active_stream.as_ref()
+        let dtls_deactivate = owner
+            .active_stream
+            .as_ref()
             .filter(|s| s.uses_dtls)
             .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
 
@@ -2019,10 +2084,8 @@ pub fn stop_hue_stream(
     // 2. If there was an active stream, wait for the sender thread to confirm
     //    shutdown within HUE_STOP_TIMEOUT_SECS.
     if let Some(shutdown_signal) = maybe_shutdown {
-        let shutdown_ok = wait_for_shutdown(
-            &shutdown_signal,
-            Duration::from_secs(HUE_STOP_TIMEOUT_SECS),
-        );
+        let shutdown_ok =
+            wait_for_shutdown(&shutdown_signal, Duration::from_secs(HUE_STOP_TIMEOUT_SECS));
 
         if !shutdown_ok {
             // 3. Re-lock and overwrite status to reflect the partial-stop timeout.
@@ -2058,7 +2121,9 @@ pub async fn restart_hue_stream(
     //    before the lock is released so we can deactivate outside the lock.
     let dtls_deactivate = {
         let mut owner = acquire_hue_runtime(&runtime_state.runtime);
-        let dtls_deactivate = owner.active_stream.as_ref()
+        let dtls_deactivate = owner
+            .active_stream
+            .as_ref()
             .filter(|s| s.uses_dtls)
             .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
         let _ = stop_with_timeout(&mut owner, false, trigger.clone());
@@ -2071,7 +2136,8 @@ pub async fn restart_hue_stream(
             if let Ok(client) = hue_http_client() {
                 let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
             }
-        }).await;
+        })
+        .await;
     }
 
     // 2. Async readiness check -- no lock held.
@@ -2117,7 +2183,10 @@ pub async fn restart_hue_stream(
     let has_no_lights = result.active && channels.is_empty();
     {
         let owner = acquire_hue_runtime(&runtime_state.runtime);
-        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+        if matches!(
+            owner.state,
+            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+        ) {
             abort_guard.disarm();
             return Ok(make_result(&owner));
         }
@@ -2132,23 +2201,47 @@ pub async fn restart_hue_stream(
             .unwrap_or_else(|_join_err| {
                 error!("build_hue_sender task panicked, using no-op sender.");
                 let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+                (
+                    HueColorSender {
+                        tx: Arc::new(tx),
+                        channel_count: 0,
+                    },
+                    false,
+                    new_shutdown_signal(),
+                )
             })
     } else {
         let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-        (HueColorSender { tx: Arc::new(tx), channel_count: 0 }, false, new_shutdown_signal())
+        (
+            HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: 0,
+            },
+            false,
+            new_shutdown_signal(),
+        )
     };
 
     // 5c. Re-acquire lock to store the spawned sender context.
     let final_result = {
         let mut owner = acquire_hue_runtime(&runtime_state.runtime);
 
-        if matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed) {
+        if matches!(
+            owner.state,
+            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+        ) {
             abort_guard.disarm();
             return Ok(make_result(&owner));
         }
 
-        store_active_stream_context(&mut owner, &request, channels, color_sender, uses_dtls, shutdown_signal);
+        store_active_stream_context(
+            &mut owner,
+            &request,
+            channels,
+            color_sender,
+            uses_dtls,
+            shutdown_signal,
+        );
         abort_guard.disarm();
 
         if has_no_lights {
@@ -2270,9 +2363,17 @@ pub fn set_hue_solid_color(
     }
 
     // Stream context not ready — differentiate between "starting" and truly idle.
-    if matches!(owner.state, HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting) {
+    if matches!(
+        owner.state,
+        HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+    ) {
         // Stream is starting but context not ready yet — record the color for later flush
-        owner.last_solid_color = Some(HueSolidColorSnapshot { r: request.r, g: request.g, b: request.b, brightness });
+        owner.last_solid_color = Some(HueSolidColorSnapshot {
+            r: request.r,
+            g: request.g,
+            b: request.b,
+            brightness,
+        });
         owner.last_status = status_with(
             owner.state.clone(),
             "HUE_COLOR_QUEUED_PENDING_STREAM",
@@ -2323,7 +2424,9 @@ pub async fn get_hue_stream_status(
             let mut owner = acquire_hue_runtime(&runtime_state.runtime);
             if matches!(
                 owner.state,
-                HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
+                HueRuntimeState::Starting
+                    | HueRuntimeState::Running
+                    | HueRuntimeState::Reconnecting
             ) {
                 // Clear dead stream/sender contexts so the next start can spawn fresh.
                 owner.active_stream = None;
@@ -2429,12 +2532,18 @@ fn spawn_reconnect_monitor(
         {
             let owner = acquire_hue_runtime(&runtime);
             if owner.user_override_pending
-                || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Stopping)
+                || matches!(
+                    owner.state,
+                    HueRuntimeState::Idle | HueRuntimeState::Stopping
+                )
             {
                 return;
             }
             // If already Failed or Reconnecting from another path, don't double-trigger.
-            if matches!(owner.state, HueRuntimeState::Failed | HueRuntimeState::Reconnecting) {
+            if matches!(
+                owner.state,
+                HueRuntimeState::Failed | HueRuntimeState::Reconnecting
+            ) {
                 return;
             }
         }
@@ -2459,7 +2568,10 @@ fn spawn_reconnect_monitor(
         };
 
         // Wait for backoff.
-        info!("Reconnect monitor: waiting {}ms before reconnect attempt.", backoff_ms);
+        info!(
+            "Reconnect monitor: waiting {}ms before reconnect attempt.",
+            backoff_ms
+        );
         tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
 
         // Check state again before attempting reconnect.
@@ -2561,10 +2673,9 @@ async fn internal_restart_stream(
     }
 
     // 4. Fetch channels.
-    let mut channels =
-        fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
-            .await
-            .unwrap_or_default();
+    let mut channels = fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
+        .await
+        .unwrap_or_default();
     if let Some(overrides) = &request.channel_region_overrides {
         apply_channel_region_overrides(&mut channels, overrides);
     }
@@ -2577,20 +2688,22 @@ async fn internal_restart_stream(
         Arc::clone(&owner.packet_send_count)
     };
     let (color_sender, uses_dtls, shutdown_signal, cipher_name) =
-        tokio::task::spawn_blocking(move || build_hue_sender_with_counter(&req, ch, packet_counter))
-            .await
-            .unwrap_or_else(|_| {
-                let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-                (
-                    HueColorSender {
-                        tx: Arc::new(tx),
-                        channel_count: 0,
-                    },
-                    false,
-                    new_shutdown_signal(),
-                    None,
-                )
-            });
+        tokio::task::spawn_blocking(move || {
+            build_hue_sender_with_counter(&req, ch, packet_counter)
+        })
+        .await
+        .unwrap_or_else(|_| {
+            let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+            (
+                HueColorSender {
+                    tx: Arc::new(tx),
+                    channel_count: 0,
+                },
+                false,
+                new_shutdown_signal(),
+                None,
+            )
+        });
 
     // 6. Store context and spawn new monitor.
     {
@@ -2621,7 +2734,9 @@ async fn internal_restart_stream(
         owner.state = HueRuntimeState::Running;
         owner.reconnect_attempt = 0;
         owner.stream_started_at = Some(Instant::now());
-        owner.packet_send_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        owner
+            .packet_send_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
         owner.packet_rate_sampled_at = Some(Instant::now());
         owner.packet_rate_last_count = 0;
         if uses_dtls {
@@ -2646,11 +2761,7 @@ async fn internal_restart_stream(
     }
 
     // Spawn new monitor for the new connection.
-    spawn_reconnect_monitor(
-        shutdown_signal,
-        Arc::clone(runtime),
-        request.clone(),
-    );
+    spawn_reconnect_monitor(shutdown_signal, Arc::clone(runtime), request.clone());
 
     Ok(true)
 }
@@ -2724,7 +2835,10 @@ mod tests {
                 position_x: 0.0,
                 position_y: 0.0,
             }],
-            color_sender: HueColorSender { tx: Arc::new(tx), channel_count: 1 },
+            color_sender: HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: 1,
+            },
             uses_dtls: false,
             shutdown_signal: new_shutdown_signal(),
         }
@@ -2860,13 +2974,16 @@ mod tests {
             channel_region_overrides: None,
         };
 
-        let start_result = start_with_evidence(
+        let _ = start_with_evidence(
             &mut owner,
             &strict_gate_ready(),
             HueRuntimeTriggerSource::ModeControl,
         );
         let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-        let dummy_sender = HueColorSender { tx: Arc::new(tx), channel_count: 1 };
+        let dummy_sender = HueColorSender {
+            tx: Arc::new(tx),
+            channel_count: 1,
+        };
         store_active_stream_context(
             &mut owner,
             &request,
@@ -2887,7 +3004,10 @@ mod tests {
         assert_eq!(active_stream.username, "hue-user");
         assert_eq!(active_stream.area_id, "living-room");
         assert_eq!(active_stream.channels.len(), 1);
-        assert_eq!(active_stream.channels[0].light_ids, vec!["light-1".to_string()]);
+        assert_eq!(
+            active_stream.channels[0].light_ids,
+            vec!["light-1".to_string()]
+        );
     }
 
     #[test]
@@ -3022,7 +3142,7 @@ mod tests {
 
         // Header: 9 magic + 1 major + 1 minor + 1 seq + 2 reserved + 1 color_space + 1 reserved = 16
         assert_eq!(&frame[0..9], b"HueStream");
-        assert_eq!(frame[9], 0x02);  // major
+        assert_eq!(frame[9], 0x02); // major
         assert_eq!(frame[10], 0x00); // minor
         assert_eq!(frame[11], 0x00); // sequence
         assert_eq!(frame[12], 0x00); // reserved
@@ -3034,13 +3154,13 @@ mod tests {
         assert_eq!(&frame[16..52], area_id.as_bytes());
 
         // Channel 0: id=0, R=65535, G=0, B=0  (starts at byte 52)
-        assert_eq!(frame[52], 0);       // channel_id
+        assert_eq!(frame[52], 0); // channel_id
         assert_eq!(frame[53..55], 0xFFFFu16.to_be_bytes()); // R
         assert_eq!(frame[55..57], 0x0000u16.to_be_bytes()); // G
         assert_eq!(frame[57..59], 0x0000u16.to_be_bytes()); // B
 
         // Channel 1: id=1, R=0, G=65535, B=0  (starts at byte 59)
-        assert_eq!(frame[59], 1);       // channel_id
+        assert_eq!(frame[59], 1); // channel_id
         assert_eq!(frame[60..62], 0x0000u16.to_be_bytes()); // R
         assert_eq!(frame[62..64], 0xFFFFu16.to_be_bytes()); // G
         assert_eq!(frame[64..66], 0x0000u16.to_be_bytes()); // B
@@ -3059,7 +3179,12 @@ mod tests {
             position_y: 0.0,
         }];
         let colors = vec![(255, 255, 255)];
-        let frame = build_huestream_frame("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", &channels, &colors, 0.5);
+        let frame = build_huestream_frame(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            &channels,
+            &colors,
+            0.5,
+        );
 
         // Channel starts at byte 52 (16 header + 36 UUID). At 50% brightness, 255 -> ~32767.
         let r = u16::from_be_bytes([frame[53], frame[54]]);
@@ -3073,7 +3198,10 @@ mod tests {
     #[test]
     fn hex_decode_works() {
         assert_eq!(hex_decode("AABB").unwrap(), vec![0xAA, 0xBB]);
-        assert_eq!(hex_decode("0123456789abcdef").unwrap(), vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF]);
+        assert_eq!(
+            hex_decode("0123456789abcdef").unwrap(),
+            vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF]
+        );
         assert!(hex_decode("ABC").is_err()); // odd length
         assert!(hex_decode("GG").is_err()); // invalid hex
     }

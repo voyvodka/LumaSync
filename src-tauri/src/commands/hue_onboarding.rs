@@ -5,6 +5,8 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use super::hue_http::{classify_hue_response, HueHttpFault};
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandStatus {
@@ -64,6 +66,11 @@ pub struct HueEntertainmentArea {
     pub id: String,
     pub name: String,
     pub room_name: Option<String>,
+    /// Bridge room archetype (CLIP v2). Whitelist-mirrored by the frontend
+    /// contract `HUE_ROOM_ARCHETYPES`; unknown values are remapped to
+    /// `"other"` on the Rust side so the UI never sees a raw identifier
+    /// the whitelist does not cover.
+    pub archetype: Option<String>,
     pub channel_count: usize,
     pub active_streamer: bool,
 }
@@ -112,22 +119,20 @@ pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
         }
     };
 
-    let fetch = async {
-        client
-            .get("https://discovery.meethue.com/")
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.get("https://discovery.meethue.com/").send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => parse_discovery_payload(&payload),
         Err(error) => HueDiscoveryResponse {
             status: command_status(
                 "HUE_DISCOVERY_FAILED",
                 "Could not discover Hue bridges automatically. You can continue with manual IP.",
-                Some(error.to_string()),
+                Some(error),
             ),
             bridges: Vec::new(),
         },
@@ -156,22 +161,20 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
     };
 
     let endpoint = format!("http://{bridge_ip}/api/config");
-    let fetch = async {
-        client
-            .get(endpoint)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.get(endpoint).send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => parse_bridge_config_payload(&bridge_ip, &payload),
         Err(error) => HueVerifyBridgeIpResponse {
             status: command_status(
                 "HUE_IP_UNREACHABLE",
                 "Could not reach Hue bridge at the provided IP. Verify bridge power/network and try again.",
-                Some(error.to_string()),
+                Some(error),
             ),
             bridge: None,
         },
@@ -199,7 +202,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     Some(error),
                 ),
                 credentials: None,
-            }
+            };
         }
     };
 
@@ -208,36 +211,90 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         "devicetype": "lumasync#desktop",
         "generateclientkey": true,
     });
-    let fetch = async {
-        client
-            .post(endpoint)
-            .json(&body)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
-    };
-    match fetch.await {
+    let outcome: Result<String, PairingTransportError> =
+        match client.post(endpoint).json(&body).send().await {
+            Ok(response) => match classify_hue_response(response).await {
+                Ok(ok) => ok
+                    .text()
+                    .await
+                    .map_err(|e| PairingTransportError::Generic(e.to_string())),
+                Err(fault) => Err(PairingTransportError::from_fault(fault)),
+            },
+            Err(error) => Err(PairingTransportError::Generic(error.to_string())),
+        };
+    match outcome {
         Ok(payload) => {
             let result = parse_pairing_payload(&payload);
-            if result.status.code == "HUE_PAIRING_OK" {
-                info!("Hue bridge pairing succeeded at {bridge_ip}");
-            } else if result.status.code == "HUE_PAIRING_FAILED" {
-                warn!("Hue bridge pairing failed at {bridge_ip}");
+            match result.status.code.as_str() {
+                "HUE_PAIRING_OK" => info!("Hue bridge pairing succeeded at {bridge_ip}"),
+                "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED" => {
+                    info!("Hue pairing waiting for link button at {bridge_ip}")
+                }
+                code => warn!("Hue bridge pairing failed at {bridge_ip} ({code})"),
             }
             result
         }
-        Err(error) => {
+        Err(PairingTransportError::RateLimited) => {
+            warn!("Hue bridge pairing rate-limited at {bridge_ip}");
+            HuePairBridgeResponse {
+                status: command_status(
+                    "HUE_PAIRING_RATE_LIMITED",
+                    "Bridge throttled pairing attempts. Wait a minute before retrying.",
+                    None,
+                ),
+                credentials: None,
+            }
+        }
+        Err(PairingTransportError::BridgeBusy { detail }) => {
+            warn!("Hue bridge pairing reported bridge busy at {bridge_ip}: {detail}");
+            HuePairBridgeResponse {
+                status: command_status(
+                    "HUE_PAIRING_BRIDGE_BUSY",
+                    "Bridge is busy pairing another client. Try again in a moment.",
+                    Some(detail),
+                ),
+                credentials: None,
+            }
+        }
+        Err(PairingTransportError::Generic(error)) => {
             warn!("Hue bridge pairing failed at {bridge_ip}");
             HuePairBridgeResponse {
                 status: command_status(
                     "HUE_PAIRING_FAILED",
                     "Pairing request failed. Press bridge link button, then retry within 30 seconds.",
-                    Some(error.to_string()),
+                    Some(error),
                 ),
                 credentials: None,
             }
+        }
+    }
+}
+
+/// Transport-level pairing faults surfaced BEFORE a body parse is possible.
+///
+/// `parse_pairing_payload` owns the CLIP-body mapping (error.type → status
+/// code). This enum only covers the outer HTTP / transport layer so we can
+/// split `429 Too Many Requests` and `5xx` into dedicated codes without
+/// polluting the payload parser.
+enum PairingTransportError {
+    RateLimited,
+    BridgeBusy { detail: String },
+    Generic(String),
+}
+
+impl PairingTransportError {
+    fn from_fault(fault: HueHttpFault) -> Self {
+        match fault {
+            HueHttpFault::Transient { status: 429, .. } => Self::RateLimited,
+            HueHttpFault::Transient { status, body } if (500..=599).contains(&status) => {
+                Self::BridgeBusy {
+                    detail: format!("HTTP {status} — {body}"),
+                }
+            }
+            HueHttpFault::ServerError { status } => Self::BridgeBusy {
+                detail: format!("HTTP {status}"),
+            },
+            other => Self::Generic(other.to_string()),
         }
     }
 }
@@ -271,16 +328,14 @@ pub async fn validate_hue_credentials(
     };
 
     let endpoint = format!("http://{bridge_ip}/api/{username}/config");
-    let fetch = async {
-        client
-            .get(endpoint)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await
+    let outcome = match client.get(endpoint).send().await {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
     };
-    match fetch.await {
+    match outcome {
         Ok(payload) => {
             let result = parse_credentials_validation_payload(&payload);
             if result.valid {
@@ -294,7 +349,7 @@ pub async fn validate_hue_credentials(
             status: command_status(
                 "HUE_CREDENTIAL_CHECK_FAILED",
                 "Could not validate Hue credentials. Check bridge reachability and retry.",
-                Some(error.to_string()),
+                Some(error),
             ),
             valid: false,
         },
@@ -339,13 +394,24 @@ pub async fn list_hue_entertainment_areas(
                 areas,
             }
         }
-        Err(error) => {
-            warn!("Failed to list Hue entertainment areas: {error}");
+        Err(AreaListError::AuthInvalid) => {
+            warn!("Hue area list rejected with 403 type=1 — re-pair required");
+            HueEntertainmentAreaListResponse {
+                status: command_status(
+                    "AUTH_INVALID_RE_PAIR_REQUIRED",
+                    "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                    Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
+                ),
+                areas: Vec::new(),
+            }
+        }
+        Err(AreaListError::Other(message)) => {
+            warn!("Failed to list Hue entertainment areas: {message}");
             HueEntertainmentAreaListResponse {
                 status: command_status(
                     "HUE_AREA_LIST_FAILED",
                     "Could not list Hue entertainment areas with current credentials.",
-                    Some(error),
+                    Some(message),
                 ),
                 areas: Vec::new(),
             }
@@ -411,13 +477,27 @@ pub async fn check_hue_stream_readiness(
                 readiness: HueStreamReadiness { ready, reasons },
             }
         }
-        Err(error) => {
-            warn!("Hue stream readiness check failed: {error}");
+        Err(AreaListError::AuthInvalid) => {
+            warn!("Hue readiness rejected with 403 type=1 — re-pair required");
+            HueStreamReadinessResponse {
+                status: command_status(
+                    "AUTH_INVALID_RE_PAIR_REQUIRED",
+                    "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                    Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
+                ),
+                readiness: HueStreamReadiness {
+                    ready: false,
+                    reasons: vec!["Bridge credentials are invalid; re-pair required.".to_string()],
+                },
+            }
+        }
+        Err(AreaListError::Other(message)) => {
+            warn!("Hue stream readiness check failed: {message}");
             HueStreamReadinessResponse {
                 status: command_status(
                     "HUE_STREAM_READINESS_FAILED",
                     "Could not evaluate Hue stream readiness.",
-                    Some(error),
+                    Some(message),
                 ),
                 readiness: HueStreamReadiness {
                     ready: false,
@@ -495,6 +575,20 @@ pub fn verify_hue_bridge_ip_input(ip: &str) -> HueVerifyBridgeIpResponse {
     }
 }
 
+/// CLIP pairing error-type → frontend status-code mapping.
+///
+/// `parse_pairing_payload` reads the first array entry's `error.type`
+/// (Hue CLIP v1/v2 envelope) and routes the well-known failure codes to
+/// specific status strings. Unknown error types fall through to the
+/// catch-all `HUE_PAIRING_FAILED`.
+///
+/// | error.type | description                  | status code                        |
+/// | ---------- | ---------------------------- | ---------------------------------- |
+/// | `101`      | link button not pressed      | `HUE_PAIRING_LINK_BUTTON_NOT_PRESSED` |
+/// | `7`        | invalid value (+ devicetype) | `HUE_PAIRING_DEVICETYPE_INVALID`   |
+/// | `7`        | invalid value (other)        | `HUE_PAIRING_FAILED`               |
+/// | `429`/`503`| rate/limit or busy body      | `HUE_PAIRING_RATE_LIMITED` / `HUE_PAIRING_BRIDGE_BUSY` |
+/// | anything   | other                        | `HUE_PAIRING_FAILED`               |
 pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
     let parsed = serde_json::from_str::<Value>(payload);
     let Ok(value) = parsed else {
@@ -520,32 +614,16 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
         };
     };
 
-    if let Some(error_type) = first_item
-        .get("error")
-        .and_then(|error| error.get("type"))
-        .and_then(|value| value.as_i64())
-    {
-        if error_type == 101 {
-            return HuePairBridgeResponse {
-                status: command_status(
-                    "HUE_PAIRING_PENDING_LINK_BUTTON",
-                    "Press the bridge link button, then retry pairing within 30 seconds.",
-                    None,
-                ),
-                credentials: None,
-            };
-        }
+    if let Some(error_entry) = first_item.get("error") {
+        let error_type = error_entry.get("type").and_then(|value| value.as_i64());
+        let description = error_entry
+            .get("description")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
 
         return HuePairBridgeResponse {
-            status: command_status(
-                "HUE_PAIRING_FAILED",
-                "Bridge rejected pairing request.",
-                first_item
-                    .get("error")
-                    .and_then(|error| error.get("description"))
-                    .and_then(|value| value.as_str())
-                    .map(str::to_string),
-            ),
+            status: pairing_error_status(error_type, &description),
             credentials: None,
         };
     }
@@ -579,6 +657,46 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
             ),
             credentials: None,
         },
+    }
+}
+
+/// Map a CLIP pairing error envelope to a specific frontend status code.
+///
+/// Pure (no I/O) so the mapping stays trivially unit-testable. Unknown
+/// error types collapse to `HUE_PAIRING_FAILED` to preserve backwards
+/// compatibility with frontends that predate the v1.4 G7 split.
+fn pairing_error_status(error_type: Option<i64>, description: &str) -> CommandStatus {
+    let description_lower = description.to_lowercase();
+    match error_type {
+        Some(101) => command_status(
+            "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED",
+            "Press the bridge link button and retry within 30 seconds.",
+            None,
+        ),
+        Some(7) if description_lower.contains("devicetype") => command_status(
+            "HUE_PAIRING_DEVICETYPE_INVALID",
+            "Bridge rejected the pairing request format.",
+            Some(description.to_string()),
+        ),
+        Some(429) => command_status(
+            "HUE_PAIRING_RATE_LIMITED",
+            "Bridge throttled pairing attempts. Wait a minute before retrying.",
+            Some(description.to_string()),
+        ),
+        Some(503) => command_status(
+            "HUE_PAIRING_BRIDGE_BUSY",
+            "Bridge is busy pairing another client. Try again in a moment.",
+            Some(description.to_string()),
+        ),
+        _ => command_status(
+            "HUE_PAIRING_FAILED",
+            "Bridge rejected pairing request.",
+            if description.is_empty() {
+                None
+            } else {
+                Some(description.to_string())
+            },
+        ),
     }
 }
 
@@ -642,26 +760,186 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
 async fn fetch_hue_entertainment_areas(
     bridge_ip: &str,
     username: &str,
-) -> Result<Vec<HueEntertainmentArea>, String> {
+) -> Result<Vec<HueEntertainmentArea>, AreaListError> {
     if !is_valid_ipv4(bridge_ip) {
-        return Err("Invalid bridge IPv4 format".to_string());
+        return Err(AreaListError::Other(
+            "Invalid bridge IPv4 format".to_string(),
+        ));
     }
 
-    let client = hue_http_client()?;
+    let client = hue_http_client().map_err(AreaListError::Other)?;
+
+    // Fetch entertainment_configuration and room resources in parallel to
+    // enrich each area with its bridge-reported archetype. Two parallel
+    // GETs stay comfortably under the CLIP v2 soft rate limit (~3 req/s).
+    let entertainment_fut = fetch_entertainment_payload(&client, bridge_ip, username);
+    let rooms_fut = fetch_room_payload(&client, bridge_ip, username);
+    let (entertainment_res, rooms_res) = tokio::join!(entertainment_fut, rooms_fut);
+
+    let entertainment_payload = entertainment_res?;
+    // Room fetch failure must not fail the whole command — archetype is
+    // an enrichment signal, not a correctness signal. Missing rooms just
+    // means archetype ends up `None` (UI falls back to "other").
+    let room_index = rooms_res
+        .map(build_room_archetype_index)
+        .unwrap_or_default();
+
+    parse_area_list_payload(&entertainment_payload, &room_index).map_err(AreaListError::Other)
+}
+
+async fn fetch_entertainment_payload(
+    client: &Client,
+    bridge_ip: &str,
+    username: &str,
+) -> Result<String, AreaListError> {
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration");
-    let response = client
+    let raw = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
         .await
-        .and_then(|r| r.error_for_status())
-        .map_err(|error| error.to_string())?;
-    let payload = response.text().await.map_err(|error| error.to_string())?;
+        .map_err(|e| AreaListError::Other(e.to_string()))?;
 
-    parse_area_list_payload(&payload)
+    let response = classify_hue_response(raw)
+        .await
+        .map_err(|fault| match fault {
+            HueHttpFault::AuthInvalid => AreaListError::AuthInvalid,
+            other => AreaListError::Other(other.to_string()),
+        })?;
+
+    response
+        .text()
+        .await
+        .map_err(|e| AreaListError::Other(e.to_string()))
 }
 
-fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, String> {
+async fn fetch_room_payload(
+    client: &Client,
+    bridge_ip: &str,
+    username: &str,
+) -> Result<String, AreaListError> {
+    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/room");
+    let raw = client
+        .get(endpoint)
+        .header("hue-application-key", username)
+        .send()
+        .await
+        .map_err(|e| AreaListError::Other(e.to_string()))?;
+
+    let response = classify_hue_response(raw)
+        .await
+        .map_err(|fault| match fault {
+            HueHttpFault::AuthInvalid => AreaListError::AuthInvalid,
+            other => AreaListError::Other(other.to_string()),
+        })?;
+
+    response
+        .text()
+        .await
+        .map_err(|e| AreaListError::Other(e.to_string()))
+}
+
+/// Carrier for `fetch_hue_entertainment_areas` faults. Keeps
+/// `AuthInvalid` distinguishable from generic transient failures so the
+/// public commands can collapse it onto the uniform
+/// `AUTH_INVALID_RE_PAIR_REQUIRED` status code without string matching.
+enum AreaListError {
+    AuthInvalid,
+    Other(String),
+}
+
+/// Build a `{service_rid → archetype}` map from a CLIP v2 `/resource/room`
+/// payload. Each room's `services[]` lists the light/grouped_light services
+/// that belong to it; matching entertainment-configuration services by
+/// `rid` yields the room's archetype for each area.
+pub fn build_room_archetype_index(payload: String) -> std::collections::HashMap<String, String> {
+    let mut index = std::collections::HashMap::new();
+    let Ok(value) = serde_json::from_str::<Value>(&payload) else {
+        return index;
+    };
+    let Some(data) = value.get("data").and_then(|value| value.as_array()) else {
+        return index;
+    };
+
+    for room in data {
+        let archetype = room
+            .get("metadata")
+            .and_then(|metadata| metadata.get("archetype"))
+            .and_then(|value| value.as_str())
+            .map(normalize_archetype);
+        let Some(archetype) = archetype else {
+            continue;
+        };
+        let Some(services) = room.get("services").and_then(|value| value.as_array()) else {
+            continue;
+        };
+        for service in services {
+            if let Some(rid) = service.get("rid").and_then(|value| value.as_str()) {
+                index.insert(rid.to_string(), archetype.clone());
+            }
+        }
+    }
+
+    index
+}
+
+/// Normalize a bridge-reported archetype into the frontend whitelist.
+/// Unknown archetypes collapse onto `"other"` so the UI never renders
+/// a raw identifier the `HUE_ROOM_ARCHETYPES` whitelist does not cover.
+fn normalize_archetype(raw: &str) -> String {
+    const ARCHETYPES: &[&str] = &[
+        "living_room",
+        "kitchen",
+        "dining",
+        "bedroom",
+        "kids_bedroom",
+        "bathroom",
+        "nursery",
+        "recreation",
+        "office",
+        "gym",
+        "hallway",
+        "toilet",
+        "front_door",
+        "garage",
+        "terrace",
+        "garden",
+        "driveway",
+        "carport",
+        "home",
+        "downstairs",
+        "upstairs",
+        "top_floor",
+        "attic",
+        "guest_room",
+        "staircase",
+        "lounge",
+        "man_cave",
+        "computer",
+        "studio",
+        "music",
+        "tv",
+        "reading",
+        "closet",
+        "storage",
+        "laundry_room",
+        "balcony",
+        "porch",
+        "barbecue",
+        "pool",
+        "other",
+    ];
+    if ARCHETYPES.contains(&raw) {
+        raw.to_string()
+    } else {
+        "other".to_string()
+    }
+}
+
+pub fn parse_area_list_payload(
+    payload: &str,
+    room_index: &std::collections::HashMap<String, String>,
+) -> Result<Vec<HueEntertainmentArea>, String> {
     let parsed: Value = serde_json::from_str(payload).map_err(|error| error.to_string())?;
     let data = parsed
         .get("data")
@@ -682,11 +960,6 @@ fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, S
                 .and_then(|value| value.as_str())
                 .unwrap_or("Unnamed Area")
                 .to_string();
-            let room_name = area
-                .get("metadata")
-                .and_then(|metadata| metadata.get("archetype"))
-                .and_then(|value| value.as_str())
-                .map(str::to_string);
             let channel_count = area
                 .get("channels")
                 .and_then(|value| value.as_array())
@@ -696,17 +969,42 @@ fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, S
                 .get("active_streamer")
                 .is_some_and(|active| !active.is_null());
 
+            // Match any service referenced by this entertainment config
+            // against the room→archetype index. First hit wins — a single
+            // area rarely spans multiple archetypes, and when it does the
+            // first room is already the semantically closest one.
+            let archetype = area
+                .get("light_services")
+                .and_then(|value| value.as_array())
+                .into_iter()
+                .flatten()
+                .chain(
+                    area.get("locations")
+                        .and_then(|loc| loc.get("service_locations"))
+                        .and_then(|value| value.as_array())
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|entry| entry.get("service")),
+                )
+                .filter_map(|entry| entry.get("rid").and_then(|rid| rid.as_str()))
+                .find_map(|rid| room_index.get(rid).cloned());
+
+            // Preserve the room's display name if we can find one in the
+            // index by reusing the same resolution above. The CLIP v2
+            // `/resource/room` payload carries both archetype and name
+            // side by side so one traversal is enough for both signals.
             HueEntertainmentArea {
                 id,
                 name,
-                room_name,
+                room_name: None,
+                archetype,
                 channel_count,
                 active_streamer,
             }
         })
         .collect::<Vec<_>>();
 
-    areas.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    areas.sort_by_key(|area| area.name.to_lowercase());
     Ok(areas)
 }
 

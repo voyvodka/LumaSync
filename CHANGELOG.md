@@ -7,6 +7,56 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-04-24
+
+### Added
+
+- USB per-LED sampling: each LED now samples its own edge region of the screen (anchored to the room map's edge counts, start anchor, direction, and bottom gap), replacing the single-zone hardcode shipped in v1.3; baud budget adapts dynamically so 60 LEDs run at ~60 FPS and 200 LEDs at ~19 FPS within the 115200 baud limit
+- LedSink trait: a common `start / send_frame / stop` abstraction over the serial output bridge, laying the foundation for WLED (v1.5) and OpenRGB (v2.0) sinks
+- Multi-monitor capture: stable display IDs on macOS (SCDisplay) and Windows (device_name) with automatic primary-display fallback on unplug; selected display persists across restarts
+- Per-channel color correction: independent R/G/B gamma tables, Kelvin white-balance multipliers, and BT.601-luminance saturation trim — tuned once per strip, applied on the hot path before smoothing so USB, Hue, and the edge-signal preview stay visually consistent
+- Adalight firmware profile: encoder dispatch selects between LumaSync-native framing (default) and the widely-used Adalight `"Ada"` header format; profile is persisted per device
+- Serial handshake round-trip: PING/PONG opcode protocol with `SerialHealthReport` and coded `SerialHealthCode` status; firmware implementation ships in the companion hardware repo's v1.5 update
+- Platform notifications: `tauri-plugin-notification` + `tauri-plugin-process` wired end-to-end; permission banner asks once, OS-level toasts for connection, stream, and update events; `open_log_dir` command exposes the app log directory
+- FPS/latency HUD: StatusBar fourth pill shows live frame rate and end-to-end latency with green/amber/red thresholds (45/25 FPS); always visible while Ambilight is active
+- Global ErrorBoundary: catches render faults and surfaces a localized fallback card with Show logs, Restart, and Copy error actions instead of a blank tray window
+- Keyboard shortcuts: `Alt+1/2/3` (Ctrl on Windows/Linux) to switch modes, `Alt+,` / `Cmd+,` to open Settings; TR-layout-safe key resolution with input-focus guard
+- Hue richer pairing errors: CLIP `error.type` is now split into `LINK_BUTTON_NOT_PRESSED`, `DEVICETYPE_INVALID`, `BRIDGE_BUSY`, and `RATE_LIMITED` — each surfaces a distinct localized message
+- Hue room archetype enrichment: entertainment area list fetches CLIP v2 archetype data in parallel (`tokio::join!`) and surfaces it in the area-select UI
+- Hue intensity presets: Subtle (EWMA 0.15) / Moderate (0.35) / Intense (0.60) coefficient shortcuts for fast ambience tuning
+
+### Changed
+
+- CI hardening: 3-OS matrix (ubuntu-22.04, macos-latest, windows-latest) with `cargo fmt --check`, `cargo clippy -D warnings`, `cargo check --all-targets --all-features`, `cargo test --no-run`, and `cargo audit` on Linux; CodeQL JavaScript/TypeScript scanning on push, PR, and weekly schedule; `dependency-review-action` with MIT/Apache/BSD/ISC allow-list on PRs
+- Rust toolchain pinned to stable via `rust-toolchain.toml` with `rustfmt` and `clippy` components
+- Node.js bumped from 20 to 22 across CI and release workflows
+- Log rotation set to 5 MB (KeepOne in release builds, KeepAll in debug)
+- Hue 403 re-pair contract tightened: only a 403 with CLIP `type == 1` triggers re-pair; other 403 responses are treated as transient and do not interrupt the session
+- Lighting responsiveness unified: the continuous smoothing slider and the Hue-only intensity preset merged into a single three-step control (Subtle / Moderate / Intense) that drives both USB and Hue EWMA paths at once; legacy persisted state (`smoothingAlpha`, `hueIntensityPreset`) still reads through a fallback chain so no migration is required
+- Hue pipeline now applies the full color-correction chain (gamma + Kelvin + saturation), matching the USB encoder order byte-for-byte so strip and bulbs stay visually consistent
+- Rust deps: reqwest rustls chain updated (aws-lc-sys 0.37 → 0.40, rustls-webpki 0.103.10 → 0.103.13, rustls 0.23.37 → 0.23.39)
+- Frontend deps: `@tauri-apps/plugin-notification` and `@tauri-apps/plugin-process` added; minor/patch bumps across the React/Vite/Vitest ecosystem
+- GitHub Actions: `actions/checkout` and `actions/setup-node` pinned; `pnpm/action-setup` held at v4 with pnpm 10 explicit pin
+
+### Fixed
+
+- Silent `try/catch` purge: 7 swallowed errors in `App.tsx` and `SystemSection` now route through the structured logger with contextual prefixes
+- Preexisting Rust test bitrot: `hue_onboarding_tdd` fixtures and `ambilight_capture` import blocks had drifted from the current module layout; fixed so `cargo test` compiles cleanly in CI
+- 14 clippy pedantic lint warnings resolved as a baseline cleanup pass
+- Ambilight settings persistence: pending `lightingMode` writes are now flushed on `pagehide` and `visibilitychange`, so saturation and black-border toggles survive Cmd+R / tray close / reload cycles
+- Color correction + firmware profile payload: the mode normalizer now preserves these fields end-to-end instead of stripping them before `set_lighting_mode` invoke, so slider commits actually reach the worker
+
+### Removed
+
+- 5 orphan settings components absorbed by M6: `LanguageSection`, `StartupTraySection`, `AboutLogsSection`, `CalibrationSection`, `ConfigurePage` — along with 2 orphan test files
+- `SidebarFpsWidget` retired; the StatusBar FPS/latency pill supersedes it
+
+### Security
+
+- CodeQL JavaScript/TypeScript scanning added to CI (push, PR, and weekly Monday schedule)
+- `dependency-review-action` gates PRs on license allow-list (MIT/Apache/BSD/ISC) and blocks high-severity CVEs
+- `cargo audit` runs on Linux CI step; 8 transitive RUSTSEC advisories resolved by bumping the reqwest/rustls chain
+
 ## [1.3.1] — 2026-04-23
 
 ### Fixed

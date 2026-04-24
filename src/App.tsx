@@ -9,7 +9,7 @@
 // import { HueAreaPreview } from "./dev/HueAreaPreview";
 // export { HueAreaPreview as default };
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
@@ -29,6 +29,7 @@ import {
 import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
+  type AmbilightPayload,
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import {
@@ -59,12 +60,15 @@ import {
   UI_MODE_FADE_DURATION_MS,
   UI_MODE_FADE_TIMING,
 } from "./features/shell/useUIMode";
+import { useGlobalKeybinds } from "./features/shell/useGlobalKeybinds";
 import {
+  KEYBIND_ACTIONS,
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
 import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
-import { DEVICE_COMMANDS } from "./shared/contracts/device";
+import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
+import { DEVICE_COMMANDS, type ColorCorrectionConfig, type FirmwareProfile } from "./shared/contracts/device";
 import {
   listenTrayLightsOff,
   listenTrayResumeLastMode,
@@ -158,6 +162,25 @@ function App() {
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
   const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
   const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
+  // Capture display chosen by the user (v1.4 Platform GAP 2). Cached in a
+  // ref so every set_lighting_mode call can inject it without awaiting
+  // shellStore on the hot path. Hydrated on bootstrap and refreshed when
+  // the calibration surface signals a change via onSaved.
+  const selectedDisplayIdRef = useRef<string | undefined>(undefined);
+  // Unified lighting smoothing preset (v1.4). Cached alongside the display
+  // id for the same reason — every set_lighting_mode call stamps it into
+  // `ambilight.lightingSmoothingPreset` without a synchronous shellStore
+  // round-trip on the drag path. Named `hueIntensityPresetRef` historically;
+  // kept under that name so the bootstrap + onChange wiring reads unchanged
+  // while the payload field migrates to the unified name.
+  const hueIntensityPresetRef = useRef<HueIntensityPreset>(DEFAULT_HUE_INTENSITY_PRESET);
+  // Per-channel color correction (v1.4 G4). Cached so every set_lighting_mode
+  // call can inject it without a synchronous shellStore round-trip. Hydrated on
+  // bootstrap and updated when the settings panel signals a change.
+  const colorCorrectionRef = useRef<ColorCorrectionConfig | undefined>(undefined);
+  // Firmware encoding profile (v1.4 G11). Same caching rationale as
+  // colorCorrectionRef — injected into every outgoing LightingModeConfig.
+  const firmwareProfileRef = useRef<FirmwareProfile | undefined>(undefined);
   /**
    * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
    * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
@@ -166,22 +189,113 @@ function App() {
    */
   const hueSolidSyncedRef = useRef(false);
 
+  /**
+   * Inject the persisted capture-source display id into an outgoing
+   * LightingModeConfig payload (v1.4 Platform GAP 2). The ambilight
+   * worker uses this id to bind its SCStream / windows-capture session
+   * to the selected monitor; an absent or unknown id falls back to the
+   * OS primary on the backend, so we only stamp the field when it is
+   * actually set.
+   */
+  const withSelectedDisplayId = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig => {
+      const id = selectedDisplayIdRef.current;
+      if (!id || id.length === 0) return mode;
+      return { ...mode, displayId: id };
+    },
+    [],
+  );
+
+  /**
+   * Stamp the unified lighting smoothing preset onto the ambilight payload
+   * of an outgoing LightingModeConfig (v1.4 unification). Only ambilight
+   * runs use the preset — solid / off payloads pass through untouched. The
+   * preset is a property of `AmbilightPayload` today so this helper mirrors
+   * the shape the Rust `set_lighting_mode` handler expects; it drives both
+   * the USB and the Hue EWMA coefficients on the worker.
+   */
+  const withAmbilightLightingSmoothingPreset = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig => {
+      if (mode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return mode;
+      const preset = hueIntensityPresetRef.current;
+      const base: AmbilightPayload = mode.ambilight ?? { brightness: 1 };
+      const nextAmbilight: AmbilightPayload = {
+        ...base,
+        lightingSmoothingPreset: preset,
+      };
+      return { ...mode, ambilight: nextAmbilight };
+    },
+    [],
+  );
+
+  /**
+   * Stamp color correction and firmware profile onto any outgoing
+   * LightingModeConfig. Both fields are top-level (not nested inside ambilight)
+   * so they apply to all modes (ambilight, solid, off). Absent refs leave the
+   * fields undefined — the Rust backend applies its own defaults via
+   * #[serde(default)] so no runtime error occurs.
+   */
+  const withColorCorrectionAndFirmwareProfile = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig => ({
+      ...mode,
+      colorCorrection: colorCorrectionRef.current,
+      firmwareProfile: firmwareProfileRef.current,
+    }),
+    [],
+  );
+
+  /**
+   * Compose display id + Hue intensity preset + color correction + firmware profile
+   * in a single helper so every call site stays short. Ordering is safe because
+   * each helper stamps non-overlapping fields.
+   */
+  const hydrateModePayload = useCallback(
+    (mode: LightingModeConfig): LightingModeConfig =>
+      withColorCorrectionAndFirmwareProfile(
+        withAmbilightLightingSmoothingPreset(withSelectedDisplayId(mode)),
+      ),
+    [withSelectedDisplayId, withAmbilightLightingSmoothingPreset, withColorCorrectionAndFirmwareProfile],
+  );
+
+  const lastPendingModeRef = useRef<LightingModeConfig | null>(null);
+
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
+    lastPendingModeRef.current = mode;
     if (persistLightingModeTimeoutRef.current !== null) {
       window.clearTimeout(persistLightingModeTimeoutRef.current);
       persistLightingModeTimeoutRef.current = null;
     }
     persistLightingModeTimeoutRef.current = window.setTimeout(() => {
       persistLightingModeTimeoutRef.current = null;
-      void saveShellState({ lightingMode: mode });
+      const pending = lastPendingModeRef.current;
+      lastPendingModeRef.current = null;
+      if (pending) void saveShellState({ lightingMode: pending });
     }, LIGHTING_MODE_PERSIST_DEBOUNCE_MS);
   }, []);
 
+  // Flush pending lighting-mode persist on page hide / visibility change /
+  // unmount so a Cmd+R or tray-close right after a slider move does not
+  // discard the in-flight debounced write. Mirrors the pattern used for
+  // window geometry persistence elsewhere in the shell.
   useEffect(() => {
-    return () => {
+    const flush = () => {
       if (persistLightingModeTimeoutRef.current !== null) {
         window.clearTimeout(persistLightingModeTimeoutRef.current);
+        persistLightingModeTimeoutRef.current = null;
       }
+      const pending = lastPendingModeRef.current;
+      lastPendingModeRef.current = null;
+      if (pending) void saveShellState({ lightingMode: pending });
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flush();
     };
   }, []);
 
@@ -373,6 +487,20 @@ function App() {
           setActiveSection(mappedSection);
         }
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
+        // Hydrate capture-source ref so the bootstrap set_lighting_mode
+        // call (below) honours the user's persisted display selection.
+        selectedDisplayIdRef.current =
+          typeof state.selectedDisplayId === "string" && state.selectedDisplayId.length > 0
+            ? state.selectedDisplayId
+            : undefined;
+        // Hydrate Hue intensity preset ref. Absent ⇒ DEFAULT_HUE_INTENSITY_PRESET
+        // so the ambilight worker always receives a deterministic preset.
+        hueIntensityPresetRef.current =
+          state.lightingIntensityPreset ?? DEFAULT_HUE_INTENSITY_PRESET;
+        // Hydrate color correction and firmware profile refs (v1.4 G4 / G11).
+        // Absent in persisted state ⇒ refs stay undefined; backend defaults apply.
+        colorCorrectionRef.current = state.colorCorrection;
+        firmwareProfileRef.current = state.firmwareProfile;
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         setLightingModeState(restoredMode);
@@ -435,13 +563,15 @@ function App() {
                 const bootTargets = restoredTargets.filter(
                   (t) => t !== "usb" || bootstrapUsbAvailable,
                 );
-                await setLightingMode({
+                await setLightingMode(hydrateModePayload({
                   ...restoredMode,
                   targets: bootTargets,
-                });
+                }));
               }
             }
-          } catch { }
+          } catch (err) {
+            console.error("[LumaSync] Bootstrap mode/targets restore failed:", err);
+          }
         }
 
         // Check for updates silently after startup
@@ -538,7 +668,11 @@ function App() {
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
     setActiveSection(sectionId);
-    try { await saveShellState({ lastSection: sectionId }); } catch { }
+    try {
+      await saveShellState({ lastSection: sectionId });
+    } catch (err) {
+      console.error("[LumaSync] saveShellState(lastSection) failed:", err);
+    }
   }, []);
 
   // Auto-open calibration when device connects for the first time
@@ -569,7 +703,11 @@ function App() {
     const normalizedTargets = normalizeOutputTargets(targets);
     const prevTargets = selectedOutputTargets;
     setSelectedOutputTargets(normalizedTargets);
-    try { await saveShellState({ lastOutputTargets: normalizedTargets }); } catch { }
+    try {
+      await saveShellState({ lastOutputTargets: normalizedTargets });
+    } catch (err) {
+      console.error("[LumaSync] saveShellState(lastOutputTargets) failed:", err);
+    }
 
     // Delta logic — only when a mode is actively running (not OFF)
     if (lightingMode.kind === LIGHTING_MODE_KIND.OFF) return;
@@ -582,10 +720,18 @@ function App() {
     for (const target of removedTargets) {
       if (!currentActive.includes(target)) continue;
       if (target === "usb") {
-        try { await invoke("stop_lighting"); } catch { }
+        try {
+          await invoke("stop_lighting");
+        } catch (err) {
+          console.error("[LumaSync] stop_lighting during delta-stop failed:", err);
+        }
       }
       if (target === "hue") {
-        try { await invoke("stop_hue_stream"); } catch { }
+        try {
+          await invoke("stop_hue_stream");
+        } catch (err) {
+          console.error("[LumaSync] stop_hue_stream during delta-stop failed:", err);
+        }
       }
     }
     // Update activeOutputTargets by removing stopped targets
@@ -600,12 +746,12 @@ function App() {
         // Note: was previously using invoke("set_lighting_mode", { request: {...} })
         // which is the wrong key name (Tauri expects "payload") and silently failed.
         try {
-          await setLightingMode({
+          await setLightingMode(hydrateModePayload({
             kind: lightingMode.kind,
             solid: lightingMode.solid,
             ambilight: lightingMode.ambilight,
             targets: normalizedTargets,
-          });
+          }));
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
         } catch {
           // D-06: silently skip failed target, existing targets continue
@@ -627,12 +773,12 @@ function App() {
             // Hue stream context. Without this, the running worker has hue_output=None
             // and never sends colors to Hue (solid color push handles SOLID mode too).
             try {
-              await setLightingMode({
+              await setLightingMode(hydrateModePayload({
                 kind: lightingMode.kind,
                 solid: lightingMode.solid,
                 ambilight: lightingMode.ambilight,
                 targets: normalizedTargets,
-              });
+              }));
             } catch {
               // Non-fatal for ambilight worker restart; fall through to solid push
             }
@@ -644,7 +790,9 @@ function App() {
                   b: lightingMode.solid.b,
                   brightness: lightingMode.solid.brightness,
                 });
-              } catch { /* non-fatal */ }
+              } catch (err) {
+                console.error("[LumaSync] Hue solid push on delta-start non-fatal failure:", err);
+              }
             }
           }
         } catch {
@@ -653,7 +801,7 @@ function App() {
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload]);
 
   // ---------------------------------------------------------------------------
   // Hot-plug detection: USB plug/unplug target management (D-07, D-08)
@@ -732,7 +880,7 @@ function App() {
         scheduleLightingModePersist(normalizedNextMode);
 
         if (activeOutputTargets.includes("usb")) {
-          void setLightingMode(normalizedNextMode).catch((error) => {
+          void setLightingMode(hydrateModePayload(normalizedNextMode)).catch((error) => {
             console.error("[LumaSync] Failed to push USB solid update:", error);
           });
         }
@@ -766,7 +914,7 @@ function App() {
       if (isQuickAmbilightAdjustment) {
         setLightingModeState(normalizedNextMode);
         scheduleLightingModePersist(normalizedNextMode);
-        void setLightingMode(normalizedNextMode).catch((error) => {
+        void setLightingMode(hydrateModePayload(normalizedNextMode)).catch((error) => {
           console.error("[LumaSync] Failed to push Ambilight settings update:", error);
         });
         modeTransitionLockRef.current = false;
@@ -897,7 +1045,7 @@ function App() {
 
         if (needsLightingModeApply) {
           try {
-            await setLightingMode(normalizedNextMode);
+            await setLightingMode(hydrateModePayload(normalizedNextMode));
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: true };
             }
@@ -924,7 +1072,9 @@ function App() {
               b: normalizedNextMode.solid.b,
               brightness: normalizedNextMode.solid.brightness,
             });
-          } catch { /* non-fatal: backend already applied the color */ }
+          } catch (err) {
+            console.error("[LumaSync] Hue solid push after mode change non-fatal failure:", err);
+          }
         }
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
@@ -951,6 +1101,7 @@ function App() {
       activeOutputTargets,
       handleOpenCalibration,
       hueStartConfig,
+      hydrateModePayload,
       lightingMode.ambilight,
       lightingMode.kind,
       lightingMode.solid,
@@ -962,6 +1113,58 @@ function App() {
 
   // Keep handleLightingModeChangeRef in sync so tray listeners always use latest handler
   handleLightingModeChangeRef.current = handleLightingModeChange;
+
+  // ---------------------------------------------------------------------------
+  // Global keyboard shortcuts (G9 — launch-credibility fix).
+  //
+  // Every `<kbd>` cluster rendered by StatusBar / LightsSection comes from
+  // `KEYBIND_REGISTRY`; here is where those badges become actual behaviour.
+  // `useGlobalKeybinds` owns the document-level keydown listener and routes
+  // each KeybindAction to the matching callback below. Disabling the hook
+  // while a UI-mode fade is in flight keeps `⌥1/⌥2/⌥3` from firing during
+  // the 180 ms cross-fade, where the lighting mode buttons would be invisible
+  // anyway — pressing them mid-transition was the main feedback loop that
+  // caused the "ghost mode flash" behaviour in preview builds.
+  // ---------------------------------------------------------------------------
+  const keybindHandlers = useMemo(
+    () => ({
+      [KEYBIND_ACTIONS.MODE_OFF]: () => {
+        void handleLightingModeChange({ kind: LIGHTING_MODE_KIND.OFF });
+      },
+      [KEYBIND_ACTIONS.MODE_AMBILIGHT]: () => {
+        void handleLightingModeChange({
+          kind: LIGHTING_MODE_KIND.AMBILIGHT,
+          ambilight: lightingMode.ambilight,
+        });
+      },
+      [KEYBIND_ACTIONS.MODE_SOLID]: () => {
+        void handleLightingModeChange({
+          kind: LIGHTING_MODE_KIND.SOLID,
+          solid: lightingMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 },
+        });
+      },
+      [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
+        // ⌘, / Ctrl+, is the canonical "open settings" shortcut across
+        // macOS / Linux / Windows desktop apps. Route to the System section
+        // in full mode; if the user is in compact, switch to full first so
+        // the settings surface is actually visible.
+        if (currentMode === "compact") {
+          switchUIMode("full");
+        }
+        void handleSectionChange(SECTION_IDS.SYSTEM);
+      },
+    }),
+    [
+      handleLightingModeChange,
+      handleSectionChange,
+      switchUIMode,
+      currentMode,
+      lightingMode.ambilight,
+      lightingMode.solid,
+    ],
+  );
+
+  useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
@@ -990,6 +1193,40 @@ function App() {
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
+    onHueIntensityPresetChange: (preset: HueIntensityPreset) => {
+      hueIntensityPresetRef.current = preset;
+      // Hot-reload an in-flight ambilight worker so the new preset takes
+      // effect without a mode switch. For non-ambilight modes the preset
+      // simply rides along on the next start_lighting_mode dispatch.
+      if (lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+        void setLightingMode(hydrateModePayload(lightingMode)).catch((error) => {
+          console.error("[LumaSync] Failed to hot-reload Hue intensity preset:", error);
+        });
+      }
+    },
+    onColorCorrectionChange: (next: ColorCorrectionConfig) => {
+      // ColorCorrectionPanel already persisted via shellStore.save() on
+      // commit; we mirror the new config into the ref so the very next
+      // outgoing set_lighting_mode payload carries it, then hot-reload
+      // any in-flight worker so USB + Hue sinks pick up the new pipeline
+      // without a mode toggle. Solid / off modes also benefit because
+      // the Rust encoder path runs color correction before every sink.
+      colorCorrectionRef.current = next;
+      void setLightingMode(hydrateModePayload(lightingMode)).catch((error) => {
+        console.error("[LumaSync] Failed to hot-reload color correction:", error);
+      });
+    },
+    onFirmwareProfileChange: (next: FirmwareProfile) => {
+      // FirmwareProfilePicker already persisted via shellStore.save() on
+      // commit; mirror into the ref + trigger a worker restart with the
+      // new protocol. Changing firmware profile is a wire-format change
+      // on the Rust side so a silent flicker is expected — the USB
+      // encoder pipeline rebuilds before the next frame.
+      firmwareProfileRef.current = next;
+      void setLightingMode(hydrateModePayload(lightingMode)).catch((error) => {
+        console.error("[LumaSync] Failed to hot-reload firmware profile:", error);
+      });
+    },
   } as const;
 
   // Derive runtime status items for the bottom StatusBar. Order matches the

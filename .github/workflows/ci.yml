@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - 'release/**'
   pull_request:
     branches:
       - main
@@ -13,9 +14,13 @@ permissions:
 
 jobs:
   verify:
-    name: Build and Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Build and Check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
 
     steps:
       - name: Checkout
@@ -27,18 +32,23 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          prefix-key: v1.4-rust-cache
+          shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri check
+        if: runner.os == 'Linux'
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -54,8 +64,33 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check all
+      - name: TypeScript type check and shell contracts (Linux only)
+        if: runner.os == 'Linux'
         run: pnpm check:all
 
-      - name: Run frontend tests
+      - name: Run frontend tests (Linux only)
+        if: runner.os == 'Linux'
         run: pnpm vitest run
+
+      - name: Rust fmt check
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy (deny warnings)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Rust check (all targets, all features)
+        working-directory: src-tauri
+        run: cargo check --all-targets --all-features
+
+      - name: Rust test build (no execution)
+        working-directory: src-tauri
+        run: cargo test --no-run --all-features
+
+      - name: Rust audit (Linux only)
+        if: runner.os == 'Linux'
+        working-directory: src-tauri
+        run: |
+          cargo install --locked cargo-audit || true
+          cargo audit

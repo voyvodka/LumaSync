@@ -1,0 +1,32 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Deny strong copyleft licenses — switched from allow-list because
+          # legacy Rust crates still declare "MIT/Apache-2.0" (deprecated SPDX
+          # slash syntax) which GitHub's parser flags as LicenseRef-bad-*,
+          # blocking otherwise-compatible transitive deps. Deny-list approach
+          # stays faithful to the DNA rule (MIT/Apache/BSD/ISC only — GPL/
+          # EUPL/AGPL rejected) without tripping on parser quirks.
+          deny-licenses: GPL-1.0, GPL-2.0, GPL-3.0, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-1.0, AGPL-3.0, EUPL-1.1, EUPL-1.2, SSPL-1.0
+          comment-summary-in-pr: on-failure

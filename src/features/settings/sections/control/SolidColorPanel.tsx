@@ -23,10 +23,27 @@ function parseHexColor(value: string): { r: number; g: number; b: number } {
 interface SolidColorPanelProps {
   incoming: { r: number; g: number; b: number; brightness: number };
   disabled: boolean;
+  /**
+   * When true, the brightness slider is locked with an explanatory notice.
+   * Used by the Adalight firmware profile (v1.4 G11 / D2 decision): the
+   * Adalight wire format does not carry a brightness byte, so any UI-level
+   * brightness adjustment would silently no-op. We visibly lock the slider
+   * and surface the `brightnessDisabledTooltip` copy instead so the user
+   * knows the control is firmware-gated rather than broken.
+   */
+  brightnessDisabled?: boolean;
+  /** Tooltip / notice shown next to the brightness slider when locked. */
+  brightnessDisabledReason?: string;
   onCommit: (draft: { r: number; g: number; b: number; brightness: number }) => void;
 }
 
-export function SolidColorPanel({ incoming, disabled, onCommit }: SolidColorPanelProps) {
+export function SolidColorPanel({
+  incoming,
+  disabled,
+  brightnessDisabled = false,
+  brightnessDisabledReason,
+  onCommit,
+}: SolidColorPanelProps) {
   const { t } = useTranslation("common");
   const { draft, setColor, setBrightness } = useSolidColorDraft({ incoming, onCommit });
 
@@ -35,6 +52,8 @@ export function SolidColorPanel({ incoming, disabled, onCommit }: SolidColorPane
   const solidActiveAlpha = (0.3 + draft.brightness * 0.7).toFixed(3);
   const trackColor = `rgba(${draft.r}, ${draft.g}, ${draft.b}, ${solidActiveAlpha})`;
   const trackRemainder = `rgba(${draft.r}, ${draft.g}, ${draft.b}, 0.18)`;
+
+  const brightnessLocked = brightnessDisabled || disabled;
 
   return (
     <div className="space-y-4">
@@ -84,8 +103,10 @@ export function SolidColorPanel({ incoming, disabled, onCommit }: SolidColorPane
           min={0}
           max={100}
           step={1}
-          disabled={disabled}
+          disabled={brightnessLocked}
           aria-label={t("general.mode.brightness")}
+          aria-disabled={brightnessLocked}
+          title={brightnessDisabled ? brightnessDisabledReason : undefined}
           value={brightnessPercent}
           className="h-2 w-full cursor-pointer appearance-none rounded-full disabled:cursor-not-allowed disabled:opacity-60"
           style={{
@@ -98,6 +119,14 @@ export function SolidColorPanel({ incoming, disabled, onCommit }: SolidColorPane
           <span>0%</span>
           <span>100%</span>
         </div>
+        {brightnessDisabled && brightnessDisabledReason && (
+          <div
+            className="mt-2 font-mono text-[10px] leading-snug text-amber-400/80 dark:text-amber-300/80"
+            role="note"
+          >
+            {brightnessDisabledReason}
+          </div>
+        )}
       </div>
     </div>
   );

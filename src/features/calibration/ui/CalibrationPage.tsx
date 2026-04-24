@@ -119,14 +119,18 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<string | null>(null);
 
-  // Load displays on mount
+  // Load displays on mount. Honour any persisted selection so the
+  // capture source survives app restarts (v1.4 Platform GAP 2).
   useEffect(() => {
     let cancelled = false;
-    void listDisplays()
-      .then((displays) => {
+    Promise.all([listDisplays(), shellStore.load()])
+      .then(([displays, shell]) => {
         if (cancelled) return;
         let newState = displayTargetRef.current.setDisplays(displays);
-        if (displays.length > 0 && !newState.selectedDisplayId) {
+        const persisted = shell.selectedDisplayId;
+        if (persisted && displays.some((candidate) => candidate.id === persisted)) {
+          newState = displayTargetRef.current.selectDisplay(persisted);
+        } else if (displays.length > 0 && !newState.selectedDisplayId) {
           newState = displayTargetRef.current.selectDisplay(displays[0].id);
         }
         setDisplayTarget(newState);
@@ -230,6 +234,9 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   const handleSelectDisplay = useCallback(async (display: DisplayInfo) => {
     const selected = displayTargetRef.current.selectDisplay(display.id);
     setDisplayTarget(selected);
+    // Persist so the next set_lighting_mode call binds the ambilight
+    // worker to the user's chosen capture source (v1.4 Platform GAP 2).
+    void shellStore.save({ selectedDisplayId: display.id });
 
     // Auto-derive default counts only when the user hasn't customized yet
     // (fresh manual default → totalLeds === 0).

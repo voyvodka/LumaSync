@@ -1,22 +1,33 @@
-export type LedDirection = "cw" | "ccw";
+/**
+ * Feature-level calibration module.
+ *
+ * Cross-layer calibration types now live in `src/shared/contracts/calibration.ts`
+ * so shared shell / persistence surfaces can consume them without depending on
+ * feature code. This file re-exports those types (for import-path stability)
+ * and keeps feature-local normalization helpers that are not part of the
+ * contract surface.
+ */
 
-export type CornerOwnership = "horizontal" | "vertical";
+export type {
+  LedDirection,
+  CornerOwnership,
+  LedVisualPreset,
+  LedSegmentKey,
+  LedStartAnchor,
+  LedSegmentCounts,
+  LedCalibrationConfig,
+  CalibrationTemplate,
+} from "../../../shared/contracts/calibration";
 
-export type LedVisualPreset = "subtle" | "vivid";
-
-export type LedSegmentKey = "top" | "right" | "bottom" | "left";
-
-export type LedStartAnchor =
-  | "top-start"
-  | "top-end"
-  | "right-start"
-  | "right-end"
-  | "bottom-start"
-  | "bottom-end"
-  | "bottom-gap-right"
-  | "bottom-gap-left"
-  | "left-start"
-  | "left-end";
+import type {
+  LedDirection,
+  CornerOwnership,
+  LedVisualPreset,
+  LedSegmentKey,
+  LedStartAnchor,
+  LedSegmentCounts,
+  LedCalibrationConfig,
+} from "../../../shared/contracts/calibration";
 
 type LegacyLedStartAnchor =
   | "bottom-left-start"
@@ -30,35 +41,6 @@ interface LegacyLedSegmentCounts {
   right: number;
   bottomLeft: number;
   bottomRight: number;
-}
-
-export interface LedSegmentCounts {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-export interface LedCalibrationConfig {
-  templateId?: string;
-  counts: LedSegmentCounts;
-  bottomMissing: number;
-  cornerOwnership: CornerOwnership;
-  visualPreset: LedVisualPreset;
-  startAnchor: LedStartAnchor;
-  direction: LedDirection;
-  totalLeds: number;
-}
-
-export interface CalibrationTemplate {
-  id: string;
-  label: string;
-  counts: LedSegmentCounts;
-  bottomMissing: number;
-  cornerOwnership: CornerOwnership;
-  visualPreset: LedVisualPreset;
-  startAnchor: LedStartAnchor;
-  direction: LedDirection;
 }
 
 export function sumSegmentCounts(counts: LedSegmentCounts): number {

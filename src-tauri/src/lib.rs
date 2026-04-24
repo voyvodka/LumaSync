@@ -18,10 +18,17 @@ mod commands {
     pub mod ambilight_capture;
     pub mod calibration;
     pub mod device_connection;
+    pub mod device_handshake;
+    pub mod hue_http;
+    pub mod hue_intensity;
     pub mod hue_onboarding;
     pub mod hue_stream_lifecycle;
+    pub mod led_calibration;
     pub mod led_output;
+    pub mod led_sink;
     pub mod lighting_mode;
+    pub mod notifications;
+    pub mod platform;
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
@@ -53,7 +60,11 @@ use commands::hue_stream_lifecycle::{
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
-use commands::room_map::{copy_background_image, load_room_map, save_room_map, update_hue_channel_positions};
+use commands::notifications::{request_notification_permission, show_notification};
+use commands::platform::open_log_dir;
+use commands::room_map::{
+    copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
+};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 
 const TRAY_ICON_ID: &str = "main-tray";
@@ -114,11 +125,26 @@ fn update_tray_labels(
     tray_state: State<'_, TrayState<tauri::Wry>>,
     labels: TrayLabels,
 ) -> Result<(), String> {
-    tray_state.open_settings.set_text(&labels.open_settings).map_err(|e| e.to_string())?;
-    tray_state.lights_off.set_text(&labels.lights_off).map_err(|e| e.to_string())?;
-    tray_state.resume_last_mode.set_text(&labels.resume_last_mode).map_err(|e| e.to_string())?;
-    tray_state.solid_color.set_text(&labels.solid_color).map_err(|e| e.to_string())?;
-    tray_state.quit.set_text(&labels.quit).map_err(|e| e.to_string())?;
+    tray_state
+        .open_settings
+        .set_text(&labels.open_settings)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .lights_off
+        .set_text(&labels.lights_off)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .resume_last_mode
+        .set_text(&labels.resume_last_mode)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .solid_color
+        .set_text(&labels.solid_color)
+        .map_err(|e| e.to_string())?;
+    tray_state
+        .quit
+        .set_text(&labels.quit)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -131,8 +157,15 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
     let status = MenuItem::with_id(app, "status-indicator", "● Idle", false, None::<&str>)?;
     let separator2 = PredefinedMenuItem::separator(app)?;
     let lights_off = MenuItem::with_id(app, "tray-lights-off", "Lights Off", true, None::<&str>)?;
-    let resume_last = MenuItem::with_id(app, "tray-resume-last-mode", "Resume Last Mode", true, None::<&str>)?;
-    let solid_color = MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
+    let resume_last = MenuItem::with_id(
+        app,
+        "tray-resume-last-mode",
+        "Resume Last Mode",
+        true,
+        None::<&str>,
+    )?;
+    let solid_color =
+        MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
     let separator3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
@@ -209,7 +242,26 @@ pub fn run() {
     // 6. Updater (auto-update from GitHub Releases)
     builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
+    // 6c. Notification (OS toast surface — macOS User Notifications,
+    //      Windows Toast, Linux libnotify). Permission prompt is
+    //      triggered just-in-time from commands::notifications.
+    builder = builder.plugin(tauri_plugin_notification::init());
+
+    // 6d. Process (app relaunch surface for GlobalErrorBoundary's
+    //      Restart button; also available from React via
+    //      @tauri-apps/plugin-process `relaunch()`).
+    builder = builder.plugin(tauri_plugin_process::init());
+
     // 7. Logging
+    //
+    // Rotation strategy is split per build profile:
+    //   - debug: KeepAll so developers retain the full history across
+    //     long reproduction sessions without the sink silently
+    //     discarding context.
+    //   - release: KeepOne (current + one rotated) so a busy
+    //     ambilight run cannot balloon the log directory on disk.
+    // Both profiles share the same 5 MB per-file cap.
+    const LOG_MAX_FILE_SIZE: u128 = 5 * 1024 * 1024;
     #[cfg(debug_assertions)]
     {
         builder = builder.plugin(
@@ -222,6 +274,8 @@ pub fn run() {
                 .level_for("openssl", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .max_file_size(LOG_MAX_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
                 ))
@@ -244,6 +298,8 @@ pub fn run() {
                 .level_for("openssl", log::LevelFilter::Warn)
                 .level_for("rustls", log::LevelFilter::Warn)
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .max_file_size(LOG_MAX_FILE_SIZE)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::Stdout,
                 ))
@@ -313,9 +369,15 @@ pub fn run() {
                 // Menu item actions
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
-                    "tray-lights-off" => { let _ = app.emit("tray:lights-off", ()); }
-                    "tray-resume-last-mode" => { let _ = app.emit("tray:resume-last-mode", ()); }
-                    "tray-solid-color" => { let _ = app.emit("tray:solid-color", ()); }
+                    "tray-lights-off" => {
+                        let _ = app.emit("tray:lights-off", ());
+                    }
+                    "tray-resume-last-mode" => {
+                        let _ = app.emit("tray:resume-last-mode", ());
+                    }
+                    "tray-solid-color" => {
+                        let _ = app.emit("tray:solid-color", ());
+                    }
                     "quit" => safe_quit(app),
                     _ => {}
                 })
@@ -356,6 +418,9 @@ pub fn run() {
             stop_lighting,
             get_lighting_mode_status,
             get_runtime_telemetry,
+            show_notification,
+            request_notification_permission,
+            open_log_dir,
             start_calibration_test_pattern,
             stop_calibration_test_pattern,
             list_displays,

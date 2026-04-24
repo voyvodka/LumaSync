@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::Manager;
 
-use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
 use super::hue_onboarding::CommandStatus;
+use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -52,8 +52,7 @@ pub async fn copy_background_image(
         .file_name()
         .ok_or_else(|| "Invalid source path: no filename".to_string())?;
     let dest = bg_dir.join(filename);
-    std::fs::copy(&src, &dest)
-        .map_err(|e| format!("Failed to copy background image: {}", e))?;
+    std::fs::copy(&src, &dest).map_err(|e| format!("Failed to copy background image: {}", e))?;
     Ok(dest.to_string_lossy().to_string())
 }
 
