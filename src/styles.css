@@ -2888,6 +2888,26 @@
   opacity: 0.55;
 }
 
+/* Lighting responsiveness preset — 3-way segment inside signal profile row.
+ * Overrides .lm-psl column styling so the control spans full width instead
+ * of slotting as a column sibling next to saturation / black border.
+ */
+.lm-psl.lm-psl-seg {
+  border-right: 0;
+  padding: 10px 14px;
+}
+.lm-psl.lm-psl-seg .lm-settings-seg {
+  width: 100%;
+  border-radius: 6px;
+}
+.lm-psl.lm-psl-seg .lm-settings-seg button {
+  flex: 1;
+  padding: 5px 0;
+  text-align: center;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+}
+
 /* Scene presets */
 .lm-scenes {
   display: flex;

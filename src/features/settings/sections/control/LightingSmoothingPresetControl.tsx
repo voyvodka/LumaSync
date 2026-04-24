@@ -125,41 +125,37 @@ export function LightingSmoothingPresetControl({
   );
 
   return (
-    <section className="lm-settings-group">
-      <div className="lm-settings-group-h">
-        <span className="t">{t("lightsPage.signal.smoothing.title")}</span>
-        <span className="sub">{t("lightsPage.signal.smoothing.description")}</span>
+    <div className="lm-psl lm-psl-seg">
+      <div className="row">
+        <span>{t("lightsPage.signal.smoothing.title")}</span>
+        <b>{presetLabels[preset]}</b>
       </div>
-      <div className="lm-settings-row">
-        <div className="lm-settings-row-r" style={{ width: "100%" }}>
-          <div
-            className="lm-settings-seg"
-            role="radiogroup"
-            aria-label={t("lightsPage.signal.smoothing.title")}
-          >
-            {PRESET_ORDER.map((candidate) => {
-              const isActive = candidate === preset;
-              return (
-                <button
-                  key={candidate}
-                  ref={(el) => {
-                    buttonRefs.current[candidate] = el;
-                  }}
-                  type="button"
-                  role="radio"
-                  aria-checked={isActive}
-                  tabIndex={isActive ? 0 : -1}
-                  className={isActive ? "is-on" : ""}
-                  onClick={() => commit(candidate)}
-                  onKeyDown={(e) => handleKeyNavigate(e, candidate)}
-                >
-                  {presetLabels[candidate]}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div
+        className="lm-settings-seg"
+        role="radiogroup"
+        aria-label={t("lightsPage.signal.smoothing.title")}
+      >
+        {PRESET_ORDER.map((candidate) => {
+          const isActive = candidate === preset;
+          return (
+            <button
+              key={candidate}
+              ref={(el) => {
+                buttonRefs.current[candidate] = el;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              tabIndex={isActive ? 0 : -1}
+              className={isActive ? "is-on" : ""}
+              onClick={() => commit(candidate)}
+              onKeyDown={(e) => handleKeyNavigate(e, candidate)}
+            >
+              {presetLabels[candidate]}
+            </button>
+          );
+        })}
       </div>
-    </section>
+    </div>
   );
 }
