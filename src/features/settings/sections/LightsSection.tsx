@@ -256,14 +256,6 @@ export function LightsSection({
     if (next.length > 0) onOutputTargetsChange(next);
   };
 
-  // Slider handlers.
-  const handleSmoothingChange = (value: number) => {
-    onModeChange({
-      kind: LIGHTING_MODE_KIND.AMBILIGHT,
-      ambilight: { ...incomingAmbilight, smoothingAlpha: value },
-    });
-  };
-
   const toggleBlackBorder = () => {
     onModeChange({
       kind: LIGHTING_MODE_KIND.AMBILIGHT,
@@ -367,8 +359,6 @@ export function LightsSection({
 
   const counts = calibration?.counts;
 
-  const smoothingValue = incomingAmbilight.smoothingAlpha ?? 0.35;
-  const smoothingPercent = Math.round(((smoothingValue - 0.05) / 0.95) * 100);
   const saturationValue = Math.round((incomingAmbilight.saturation ?? 1) * 100);
   const saturationFillPercent = Math.round(((saturationValue - 50) / 150) * 100);
   const blackBorderOn = incomingAmbilight.blackBorderDetection ?? false;
@@ -541,29 +531,16 @@ export function LightsSection({
                 </span>
               </div>
             </div>
+            {advancedHydrated && (
+              <LightingSmoothingPresetControl
+                initialPreset={initialHueIntensityPreset}
+                onPresetChange={(next) => {
+                  setInitialHueIntensityPreset(next);
+                  onHueIntensityPresetChange?.(next);
+                }}
+              />
+            )}
             <div className="lm-profile">
-              {/* Smoothing — wired */}
-              <div className="lm-psl">
-                <div className="row">
-                  <span>{t("lightsPage.signal.profile.smoothing")}</span>
-                  <b>{smoothingValue.toFixed(2)}</b>
-                </div>
-                <div className="tr">
-                  <div className="tr-track">
-                    <span className="tr-fill" style={{ width: `${smoothingPercent}%` }} />
-                  </div>
-                  <input
-                    type="range"
-                    min={0.05}
-                    max={1}
-                    step={0.05}
-                    value={smoothingValue}
-                    disabled={slidersDisabled}
-                    aria-label={t("lightsPage.signal.profile.smoothing")}
-                    onChange={(e) => handleSmoothingChange(parseFloat(e.target.value))}
-                  />
-                </div>
-              </div>
               {/* Saturation — wired to AmbilightPayload.saturation (0.5–2.0). */}
               <div className="lm-psl">
                 <div className="row">
@@ -663,13 +640,6 @@ export function LightsSection({
               onConfigChange={(next) => {
                 setInitialColorCorrection(next);
                 onColorCorrectionChange?.(next);
-              }}
-            />
-            <LightingSmoothingPresetControl
-              initialPreset={initialHueIntensityPreset}
-              onPresetChange={(next) => {
-                setInitialHueIntensityPreset(next);
-                onHueIntensityPresetChange?.(next);
               }}
             />
           </div>

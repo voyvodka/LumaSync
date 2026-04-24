@@ -29,6 +29,7 @@ import {
 import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
+  type AmbilightPayload,
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import {
@@ -166,10 +167,12 @@ function App() {
   // shellStore on the hot path. Hydrated on bootstrap and refreshed when
   // the calibration surface signals a change via onSaved.
   const selectedDisplayIdRef = useRef<string | undefined>(undefined);
-  // User-facing Hue intensity preset (v1.4 G6). Cached alongside the
-  // display id for the same reason — every set_lighting_mode call stamps
-  // it into `ambilight.hueIntensityPreset` without a synchronous shellStore
-  // round-trip on the drag path.
+  // Unified lighting smoothing preset (v1.4). Cached alongside the display
+  // id for the same reason — every set_lighting_mode call stamps it into
+  // `ambilight.lightingSmoothingPreset` without a synchronous shellStore
+  // round-trip on the drag path. Named `hueIntensityPresetRef` historically;
+  // kept under that name so the bootstrap + onChange wiring reads unchanged
+  // while the payload field migrates to the unified name.
   const hueIntensityPresetRef = useRef<HueIntensityPreset>(DEFAULT_HUE_INTENSITY_PRESET);
   // Per-channel color correction (v1.4 G4). Cached so every set_lighting_mode
   // call can inject it without a synchronous shellStore round-trip. Hydrated on
@@ -204,20 +207,22 @@ function App() {
   );
 
   /**
-   * Stamp the user-selected Hue intensity preset onto the ambilight payload
-   * of an outgoing LightingModeConfig (v1.4 G6). Only ambilight runs use
-   * the preset — solid / off payloads pass through untouched. The preset is
-   * a property of `AmbilightPayload` today so this helper mirrors the
-   * shape the Rust `set_lighting_mode` handler expects.
+   * Stamp the unified lighting smoothing preset onto the ambilight payload
+   * of an outgoing LightingModeConfig (v1.4 unification). Only ambilight
+   * runs use the preset — solid / off payloads pass through untouched. The
+   * preset is a property of `AmbilightPayload` today so this helper mirrors
+   * the shape the Rust `set_lighting_mode` handler expects; it drives both
+   * the USB and the Hue EWMA coefficients on the worker.
    */
-  const withAmbilightHueIntensityPreset = useCallback(
+  const withAmbilightLightingSmoothingPreset = useCallback(
     (mode: LightingModeConfig): LightingModeConfig => {
       if (mode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return mode;
       const preset = hueIntensityPresetRef.current;
-      const nextAmbilight = {
-        ...(mode.ambilight ?? {}),
-        hueIntensityPreset: preset,
-      } as LightingModeConfig["ambilight"] & { hueIntensityPreset: HueIntensityPreset };
+      const base: AmbilightPayload = mode.ambilight ?? { brightness: 1 };
+      const nextAmbilight: AmbilightPayload = {
+        ...base,
+        lightingSmoothingPreset: preset,
+      };
       return { ...mode, ambilight: nextAmbilight };
     },
     [],
@@ -247,9 +252,9 @@ function App() {
   const hydrateModePayload = useCallback(
     (mode: LightingModeConfig): LightingModeConfig =>
       withColorCorrectionAndFirmwareProfile(
-        withAmbilightHueIntensityPreset(withSelectedDisplayId(mode)),
+        withAmbilightLightingSmoothingPreset(withSelectedDisplayId(mode)),
       ),
-    [withSelectedDisplayId, withAmbilightHueIntensityPreset, withColorCorrectionAndFirmwareProfile],
+    [withSelectedDisplayId, withAmbilightLightingSmoothingPreset, withColorCorrectionAndFirmwareProfile],
   );
 
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
