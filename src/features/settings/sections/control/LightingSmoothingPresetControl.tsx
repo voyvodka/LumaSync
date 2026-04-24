@@ -117,9 +117,9 @@ export function LightingSmoothingPresetControl({
 
   const presetLabels: Record<LightingSmoothingPreset, string> = useMemo(
     () => ({
-      subtle: t("device.hue.intensity.subtle"),
-      moderate: t("device.hue.intensity.moderate"),
-      intense: t("device.hue.intensity.intense"),
+      subtle: t("lightsPage.signal.smoothing.subtle"),
+      moderate: t("lightsPage.signal.smoothing.moderate"),
+      intense: t("lightsPage.signal.smoothing.intense"),
     }),
     [t],
   );
@@ -127,20 +127,15 @@ export function LightingSmoothingPresetControl({
   return (
     <section className="lm-settings-group">
       <div className="lm-settings-group-h">
-        <span className="t">{t("device.hue.intensity.moderate")}</span>
-        <span className="sub">{t("device.hue.intensity.description")}</span>
+        <span className="t">{t("lightsPage.signal.smoothing.title")}</span>
+        <span className="sub">{t("lightsPage.signal.smoothing.description")}</span>
       </div>
       <div className="lm-settings-row">
-        <div className="lm-settings-row-l">
-          <div className="lm-settings-row-name">
-            {t("device.hue.intensity.moderate")}
-          </div>
-        </div>
-        <div className="lm-settings-row-r">
+        <div className="lm-settings-row-r" style={{ width: "100%" }}>
           <div
             className="lm-settings-seg"
             role="radiogroup"
-            aria-label={t("device.hue.intensity.moderate")}
+            aria-label={t("lightsPage.signal.smoothing.title")}
           >
             {PRESET_ORDER.map((candidate) => {
               const isActive = candidate === preset;

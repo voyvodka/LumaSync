@@ -217,11 +217,17 @@
         "sub": "—"
       },
       "profile": {
-        "smoothing": "Smoothing",
         "saturation": "Saturation",
         "blackBorder": "Black border",
         "blackBorderAuto": "auto",
         "blackBorderOff": "off"
+      },
+      "smoothing": {
+        "title": "Lighting responsiveness",
+        "description": "How quickly lights follow screen changes — applies to both LED strips and Hue lights.",
+        "subtle": "Subtle",
+        "moderate": "Moderate",
+        "intense": "Intense"
       }
     },
     "dock": {
@@ -489,12 +495,6 @@
             "description": "Too many requests. Wait a minute before retrying."
           }
         }
-      },
-      "intensity": {
-        "subtle": "Subtle",
-        "moderate": "Moderate",
-        "intense": "Intense",
-        "description": "Controls how aggressively lights follow screen changes"
       },
       "credential": {
         "valid": "Paired",

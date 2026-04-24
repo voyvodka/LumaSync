@@ -209,11 +209,17 @@
         "sub": "—"
       },
       "profile": {
-        "smoothing": "Yumuşatma",
         "saturation": "Doygunluk",
         "blackBorder": "Siyah kenar",
         "blackBorderAuto": "oto",
         "blackBorderOff": "kapalı"
+      },
+      "smoothing": {
+        "title": "Işık yanıtlama hızı",
+        "description": "Işıkların ekran değişikliklerini ne kadar hızlı takip edeceğini belirler — LED strip ve Hue ışıkları için geçerli.",
+        "subtle": "Yumuşak",
+        "moderate": "Dengeli",
+        "intense": "Yoğun"
       }
     },
     "dock": {
@@ -489,12 +495,6 @@
             "description": "Çok fazla istek. Tekrar denemeden önce bir dakika bekle."
           }
         }
-      },
-      "intensity": {
-        "subtle": "Yumuşak",
-        "moderate": "Dengeli",
-        "intense": "Yoğun",
-        "description": "Işıkların ekran değişikliklerini ne kadar agresif takip edeceğini belirler"
       },
       "credential": {
         "valid": "Eşleştirildi",
