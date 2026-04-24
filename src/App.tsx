@@ -950,17 +950,24 @@ function App() {
           });
 
           const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
-          for (const target of runtimePlan.stopTargets) {
-            if (target === "usb") { await stopLighting(); targetResults.usb = { ok: true }; }
-            if (target === "hue") {
-              const hueResult = await stopHue();
-              targetResults.hue = {
-                ok: isHueStopCodeOk(hueResult.status.code),
-                code: hueResult.status.code,
-                message: hueResult.status.message,
-              };
-            }
-          }
+          // Optimization: Execute stop commands concurrently for independent targets
+          // (USB and Hue) to minimize shutdown phase and mode transition latency.
+          await Promise.all(
+            runtimePlan.stopTargets.map(async (target) => {
+              if (target === "usb") {
+                await stopLighting();
+                targetResults.usb = { ok: true };
+              }
+              if (target === "hue") {
+                const hueResult = await stopHue();
+                targetResults.hue = {
+                  ok: isHueStopCodeOk(hueResult.status.code),
+                  code: hueResult.status.code,
+                  message: hueResult.status.message,
+                };
+              }
+            })
+          );
 
           const shouldForceHueStop =
             !targetResults.hue &&
