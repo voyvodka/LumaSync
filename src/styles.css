@@ -247,10 +247,11 @@
 
 /* Forced-colors (Windows high contrast / accessibility skins) — the amber
    palette collapses to system colors. Mirror the semantic kinds to the
-   closest CSS system color so the pill stays legible without relying on
-   our brand tokens. Narrow to the FPS pill + StatusBar chrome for now;
-   broader forced-colors coverage is tracked under UI Gap 7. */
+   closest CSS system color so chrome surfaces stay legible without
+   relying on brand tokens. Covers TitleBar, StatusBar, status chips,
+   compact mode strip, and scene tiles (UI Gap 7). */
 @media (forced-colors: active) {
+  /* StatusBar — pills, labels, version, chrome */
   .lm-statusbar-value.is-ok,
   .lm-statusbar-value.is-active,
   .lm-statusbar-value.is-idle,
@@ -264,6 +265,69 @@
   }
   .lm-statusbar {
     border-top-color: CanvasText;
+  }
+  .lm-statusbar-kbd kbd {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+
+  /* TitleBar — brand, tabs, toggle, native control replacements */
+  .lm-titlebar {
+    border-bottom-color: CanvasText;
+    color: CanvasText;
+  }
+  .lm-titlebar-brand,
+  .lm-titlebar-brand .accent {
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-titlebar-toggle,
+  .lm-titlebar-ctrl {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-titlebar-toggle:focus-visible,
+  .lm-titlebar-ctrl:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-titlebar-tab {
+    color: CanvasText;
+  }
+  .lm-titlebar-tab.is-on {
+    color: Highlight;
+  }
+  .lm-titlebar-tab.is-on::after {
+    background: Highlight;
+    box-shadow: none;
+  }
+  .lm-titlebar-mark {
+    color: Highlight;
+  }
+
+  /* Compact mode strip + scene tiles — selection state must not rely
+     on color alone. Use Highlight for the active surface, CanvasText
+     borders for everything else. */
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-compact-mbtn.is-on {
+    color: Highlight;
+    border-color: Highlight;
+  }
+  .lm-compact-mbtn:focus-visible,
+  .lm-compact-scene-tile:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
   }
 }
 
@@ -1090,11 +1154,43 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Updater (existing) */
   .lm-updater-prog-fill::after {
     animation: none;
   }
   .lm-updater-spinner::before {
     animation-duration: 2.2s;
+  }
+
+  /* Decorative infinite loops — kill outright (UI Gap 7).
+     Functional spinners (lm-spin) keep ticking but at a calmer cadence. */
+  .lm-dcard-pill.is-streaming::before,
+  .lm-hue-traffic-fill::after {
+    animation: none !important;
+  }
+
+  /* TitleBar / StatusBar / chips — collapse hover/focus transitions
+     so keyboard navigation does not animate. */
+  .lm-titlebar-toggle,
+  .lm-titlebar-ctrl,
+  .lm-titlebar-tab,
+  .lm-statusbar-value {
+    transition: none !important;
+  }
+
+  /* Compact mode — fade-in, scene-tile hover, mbtn ripple-style press */
+  .lm-compact,
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile,
+  .lm-compact-hero,
+  .lm-compact-hero-text,
+  .lm-compact-hero-eye {
+    transition: none !important;
+  }
+
+  /* Updater spinner stays animated (functional) but slower. */
+  .lm-updater-spinner::before {
+    animation-duration: 2.2s !important;
   }
 }
 
