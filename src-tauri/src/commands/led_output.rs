@@ -799,6 +799,12 @@ impl SerialSink {
 
     /// Create a sink with an explicit firmware profile, colour correction config,
     /// and chip type. (v1.5 G3)
+    ///
+    /// Forward-looking API: production hot path currently calls
+    /// `with_profile_and_corrections` (default chip = WS2812B). UI wiring of
+    /// the user-selectable chip type will graduate this constructor in the
+    /// next Wave 2 polish commit; covered by unit tests in the meantime.
+    #[allow(dead_code)]
     pub fn with_chip_type(
         bridge: LedOutputBridge,
         port_name: Option<String>,
