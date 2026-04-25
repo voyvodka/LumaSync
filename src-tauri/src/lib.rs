@@ -33,6 +33,8 @@ mod commands {
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
+    pub mod wled_discovery;
+    pub mod wled_sink;
 }
 
 #[cfg(target_os = "macos")]
@@ -68,6 +70,7 @@ use commands::room_map::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
+use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
 
 const TRAY_ICON_ID: &str = "main-tray";
 
@@ -442,6 +445,9 @@ pub fn run() {
             delete_hue_zone,
             assign_channel_to_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
+            discover_wled_devices,
+            connect_wled_sink,
+            test_wled_bridge,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
