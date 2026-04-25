@@ -130,6 +130,22 @@ export const HUE_STATUS = {
    * areas; the caller must move the channel to a zone in its own area.
    */
   ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
+  // -------------------------------------------------------------------------
+  // OS keychain credential store (v1.5 W2-A1 / W2-A2)
+  // -------------------------------------------------------------------------
+  /**
+   * Credential store call (set / get / delete) succeeded against the
+   * platform-native keychain (macOS Keychain / Windows CredMan / Linux
+   * Secret Service).
+   */
+  CREDENTIAL_STORE_OK: "HUE_CREDENTIAL_STORE_OK",
+  /**
+   * The OS keychain backend is genuinely unavailable on this platform
+   * (no D-Bus / sandbox-blocked Keychain / locked CredMan). Caller
+   * MUST fall back to the legacy plaintext shellStore fields so the
+   * app keeps running for users who paired before v1.5.
+   */
+  CREDENTIAL_STORE_UNAVAILABLE: "HUE_CREDENTIAL_STORE_UNAVAILABLE",
 } as const;
 
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
@@ -247,6 +263,32 @@ export const HUE_FAULT_CODES = {
 } as const;
 
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
+
+// ---------------------------------------------------------------------------
+// Credential storage backend (v1.5 W2-A1 / W2-A2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the Hue credentials are currently persisted. Surfaced via the
+ * optional `credentialStorageBackend` field on `ShellState` so the UI /
+ * dev tools can show a "stored in keychain" badge and so future
+ * migrations can detect the legacy fallback path.
+ *
+ * - `keychain` — OS-native keychain (macOS Keychain Services / Windows
+ *   Credential Manager / Linux Secret Service via libsecret + D-Bus).
+ *   This is the W2-A2 happy path.
+ * - `plaintext-legacy` — `shellStore.hueAppKey` / `shellStore.hueClientKey`.
+ *   Used by users who paired before v1.5 and as a downgrade-safe fallback
+ *   when the OS keychain is unavailable. Migration to `keychain` happens
+ *   silently on next successful keychain probe.
+ */
+export const HUE_CREDENTIAL_BACKENDS = {
+  KEYCHAIN: "keychain",
+  PLAINTEXT_LEGACY: "plaintext-legacy",
+} as const;
+
+export type HueCredentialBackend =
+  (typeof HUE_CREDENTIAL_BACKENDS)[keyof typeof HUE_CREDENTIAL_BACKENDS];
 
 // ---------------------------------------------------------------------------
 // Hue room archetypes (v1.4 — CLIP v2 whitelist)
