@@ -653,7 +653,7 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
         disabled={disabled}
         onClick={() => { if (!disabled) setOpen((v) => !v); }}
         style={{
-          background: hex,
+          backgroundColor: hex,
           backgroundImage:
             "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%, rgba(0,0,0,0.08) 100%)",
           boxShadow: `0 8px 24px -8px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55), inset 0 0 0 1px ${edgeColor}`,
