@@ -89,6 +89,11 @@
         "music": "Music",
         "chill": "Chill",
         "read": "Read"
+      },
+      "offline": {
+        "title": "No reachable output",
+        "body": "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
+        "action": "Open devices"
       }
     }
   },
@@ -1164,7 +1169,12 @@
   },
   "statusBar": {
     "kbdMode": "mode",
-    "kbdSettings": "settings"
+    "kbdSettings": "settings",
+    "reconnect": {
+      "usbAriaLabel": "Reconnect USB device",
+      "hueAriaLabel": "Reconnect Hue bridge",
+      "tooltip": "Open device settings"
+    }
   },
   "shell": {
     "keybind": {

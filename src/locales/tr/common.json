@@ -89,6 +89,11 @@
         "music": "Müzik",
         "chill": "Sakin",
         "read": "Okuma"
+      },
+      "offline": {
+        "title": "Ulaşılabilir çıkış yok",
+        "body": "Aydınlatma modlarını etkinleştirmek için bir USB LED şerit bağla veya Hue köprüsünü eşleştir.",
+        "action": "Cihazları aç"
       }
     }
   },
@@ -1164,7 +1169,12 @@
   },
   "statusBar": {
     "kbdMode": "mod",
-    "kbdSettings": "ayarlar"
+    "kbdSettings": "ayarlar",
+    "reconnect": {
+      "usbAriaLabel": "USB cihazını yeniden bağla",
+      "hueAriaLabel": "Hue köprüsünü yeniden bağla",
+      "tooltip": "Cihaz ayarlarını aç"
+    }
   },
   "shell": {
     "keybind": {

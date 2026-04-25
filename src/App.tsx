@@ -1234,11 +1234,21 @@ function App() {
         console.error("[LumaSync] Failed to hot-reload firmware profile:", error);
       });
     },
+    // v1.5 W2-B1 — compact-mode "no reachable output" banner deep-link.
+    // The full-mode shell already exposes DEVICES through the sidebar, so
+    // this prop is consumed exclusively by `<CompactLayout>`.
+    onOpenDevices: () => void handleSectionChange(SECTION_IDS.DEVICES),
   } as const;
 
   // Derive runtime status items for the bottom StatusBar. Order matches the
   // mockup (CAP / USB / HUE). CAP is "ok" only while ambilight is the active
   // mode — that's the only mode that actually consumes screen frames.
+  // v1.5 W2-B1 — Reconnect deep-link to the DEVICES section. Both USB and
+  // Hue chips offer the affordance whenever they are not in a healthy state:
+  // the icon button rendered inside the StatusBar pill takes the user to
+  // the place they can actually fix the issue (re-pair, replug, retry).
+  const openDevicesSection = () => void handleSectionChange(SECTION_IDS.DEVICES);
+
   const statusItems: StatusItem[] = [
     {
       label: "CAP",
@@ -1249,6 +1259,8 @@ function App() {
       label: "USB",
       state: isConnected ? "OK" : "OFF",
       kind: isConnected ? "ok" : "off",
+      onReconnect: isConnected ? undefined : openDevicesSection,
+      reconnectAriaLabel: t("statusBar.reconnect.usbAriaLabel"),
     },
     {
       label: "HUE",
@@ -1266,6 +1278,9 @@ function App() {
           : hueStartConfig
             ? "idle"
             : "off",
+      onReconnect:
+        hueStreaming || hueReachable ? undefined : openDevicesSection,
+      reconnectAriaLabel: t("statusBar.reconnect.hueAriaLabel"),
     },
   ];
   const statusBarHeight = statusBarHeightPx(currentMode);

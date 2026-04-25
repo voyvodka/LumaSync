@@ -53,6 +53,12 @@ interface SettingsLayoutProps {
    * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
    */
   onFirmwareProfileChange?: (next: FirmwareProfile) => void;
+  /**
+   * v1.5 W2-B1 — compact-mode "no reachable output" banner deep-link.
+   * Forwarded only when `uiMode === "compact"`; full mode renders its
+   * own DEVICES section navigation through the sidebar.
+   */
+  onOpenDevices?: () => void;
 }
 
 export const SettingsLayout = memo(function SettingsLayout({
@@ -77,6 +83,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onHueIntensityPresetChange,
   onColorCorrectionChange,
   onFirmwareProfileChange,
+  onOpenDevices,
 }: SettingsLayoutProps) {
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
 
@@ -92,6 +99,7 @@ export const SettingsLayout = memo(function SettingsLayout({
         isModeTransitioning={isModeTransitioning}
         modeLockReason={modeLockReason}
         onLightingModeChange={onLightingModeChange}
+        onOpenDevices={onOpenDevices}
       />
     );
   }

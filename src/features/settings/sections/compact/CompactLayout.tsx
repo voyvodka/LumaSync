@@ -42,6 +42,14 @@ interface CompactLayoutProps {
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (next: LightingModeConfig) => void;
+  /**
+   * v1.5 W2-B1 — deep-link from the compact-mode "no reachable output"
+   * banner into the DEVICES section. Optional so callers that wire the
+   * compact layout outside the main shell (test fixtures, storybook)
+   * can omit it; in production App.tsx supplies a `handleSectionChange`
+   * bound to `SECTION_IDS.DEVICES`.
+   */
+  onOpenDevices?: () => void;
 }
 
 const DEFAULT_SOLID = { r: 255, g: 220, b: 180, brightness: 1 } as const;
@@ -60,6 +68,7 @@ export function CompactLayout({
   isModeTransitioning,
   modeLockReason,
   onLightingModeChange,
+  onOpenDevices,
 }: CompactLayoutProps) {
   const { t } = useTranslation("common");
 
@@ -146,6 +155,30 @@ export function CompactLayout({
   return (
     <div className="lm-compact">
       <div className="lm-compact-body">
+        {/* ── Offline banner (v1.5 W2-B1) ───────────────────────────
+            Compact-friendly inline message + deep-link into DEVICES.
+            Shown only when neither USB nor Hue is reachable; non-Off
+            modes are already guarded by `nonOffDisabled`, so this
+            replaces the silent "buttons are dim" affordance with an
+            explicit recovery path. */}
+        {activationBlocked && (
+          <div className="lm-compact-offline" role="status" aria-live="polite">
+            <div className="lm-compact-offline-text">
+              <div className="ttl">{t("general.compact.offline.title")}</div>
+              <div className="sub">{t("general.compact.offline.body")}</div>
+            </div>
+            {onOpenDevices && (
+              <button
+                type="button"
+                className="lm-compact-offline-action"
+                onClick={onOpenDevices}
+              >
+                {t("general.compact.offline.action")}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ── Mode strip ─────────────────────────────────────────── */}
         <div>
           <div className="lm-compact-section-title">{t("general.compact.sections.mode")}</div>

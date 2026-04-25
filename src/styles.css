@@ -245,6 +245,50 @@
   color: var(--lm-red);
 }
 
+/* v1.5 W2-B1 — inline Reconnect button rendered next to an offline chip's
+   value. Uses the chip's currentColor so it inherits the offline tone
+   (idle = ink-faint, off = ink-faint), upgrades to amber on hover/focus,
+   and collapses to system colors under forced-colors. */
+.lm-statusbar-reconnect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.lm-statusbar-reconnect:hover {
+  opacity: 1;
+  background: rgba(255, 176, 32, 0.14);
+  color: var(--lm-amber);
+}
+.lm-statusbar-reconnect:focus-visible {
+  opacity: 1;
+  outline: none;
+  background: rgba(255, 176, 32, 0.18);
+  color: var(--lm-amber);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-statusbar.is-compact .lm-statusbar-reconnect {
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-statusbar-reconnect {
+    transition: none;
+  }
+}
+
 /* Forced-colors (Windows high contrast / accessibility skins) — the amber
    palette collapses to system colors. Mirror the semantic kinds to the
    closest CSS system color so chrome surfaces stay legible without
@@ -270,6 +314,12 @@
     color: CanvasText;
     border-color: CanvasText;
     background: Canvas;
+  }
+  .lm-statusbar-reconnect {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
   }
 
   /* TitleBar — brand, tabs, toggle, native control replacements */
@@ -511,6 +561,75 @@
 .lm-compact-mbtn.is-on .ico,
 .lm-compact-mbtn.is-on .tn {
   color: var(--lm-amber);
+}
+
+/* v1.5 W2-B1 — Compact-mode offline banner. Inline alternative to a
+   greyed-out hero/scene tile when no USB/Hue output is reachable. Mirrors
+   the dark amber language of `.lm-lights-cal-banner` but shrunk to fit
+   the 320 px tray window. */
+.lm-compact-offline {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--lm-ink);
+}
+.lm-compact-offline-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-compact-offline-text .ttl {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber);
+  font-weight: 500;
+}
+.lm-compact-offline-text .sub {
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.lm-compact-offline-action {
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 32px;
+}
+.lm-compact-offline-action:hover {
+  background: rgba(255, 176, 32, 0.18);
+  border-color: rgba(255, 176, 32, 0.55);
+}
+.lm-compact-offline-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+@media (forced-colors: active) {
+  .lm-compact-offline {
+    border-color: CanvasText;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-compact-offline-text .ttl,
+  .lm-compact-offline-action {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
 }
 
 /* Active mode card */

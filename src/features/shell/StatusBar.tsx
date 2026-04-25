@@ -19,6 +19,13 @@
  * value whose color tracks fixed thresholds (>=45 green, 25-44 amber, <25
  * red + "Low FPS" text — text label avoids a color-only state). While
  * Ambilight is inactive the pill shows "FPS —" as a neutral placeholder.
+ *
+ * v1.5 W2-B1: offline `StatusItem`s may opt-in to a "Reconnect" affordance
+ * via `onReconnect`. When set, the pill renders a small icon button after
+ * the value text that deep-links into the DEVICES section (or runs a
+ * caller-supplied retry). The button is keyboard-focusable, exposes an
+ * `aria-label`, and sits inside the same chip so the offline state never
+ * leaves the user on a dead-end pill.
  */
 
 import { useMemo } from "react";
@@ -49,6 +56,19 @@ export interface StatusItem {
   state: string;
   /** Drives the dot + value color. */
   kind: StatusKind;
+  /**
+   * v1.5 W2-B1 — when present, an inline "Reconnect" icon button is
+   * rendered next to the state text. Typically wired to a section
+   * deep-link (DEVICES) or a backend retry. Only meaningful for chips
+   * whose `kind` is `off` / `idle`; ignored otherwise so a healthy chip
+   * never sprouts a stray retry icon.
+   */
+  onReconnect?: () => void;
+  /**
+   * Localized aria-label for the reconnect button. Required when
+   * `onReconnect` is set so the icon-only control is always announced.
+   */
+  reconnectAriaLabel?: string;
 }
 
 interface StatusBarProps {
@@ -115,13 +135,56 @@ export function StatusBar({ items, uiMode }: StatusBarProps) {
 }
 
 function StatusPill({ item }: { item: StatusItem }) {
+  // Reconnect icon only shows when the caller actually supplied a handler
+  // AND the chip is in an offline-ish state. Healthy chips never grow a
+  // retry button — that would imply something is wrong when nothing is.
+  const showReconnect =
+    typeof item.onReconnect === "function" &&
+    (item.kind === "off" || item.kind === "idle");
+
   return (
     <div className="lm-statusbar-pair">
       <span className="lm-statusbar-label">{item.label}</span>
       <span className={`lm-statusbar-value is-${item.kind}`}>
         <span aria-hidden>●</span> {item.state}
+        {showReconnect && (
+          <button
+            type="button"
+            className="lm-statusbar-reconnect"
+            onClick={item.onReconnect}
+            aria-label={item.reconnectAriaLabel ?? ""}
+            title={item.reconnectAriaLabel}
+          >
+            <ReconnectIcon />
+          </button>
+        )}
       </span>
     </div>
+  );
+}
+
+/**
+ * Tiny circular-arrow glyph rendered next to an offline chip's value. Pure
+ * SVG — no external icon library — so the StatusBar stays self-contained
+ * and matches the rest of the chrome (TitleBar / DeviceSection follow the
+ * same inline-SVG pattern).
+ */
+function ReconnectIcon() {
+  return (
+    <svg
+      viewBox="0 0 12 12"
+      width="10"
+      height="10"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9.5 5.2A4 4 0 1 0 10 7" />
+      <path d="M9.7 2.4v2.8h-2.8" />
+    </svg>
   );
 }
 
