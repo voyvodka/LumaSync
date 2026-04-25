@@ -111,37 +111,140 @@ struct DiscoveryBridge {
 
 #[tauri::command]
 pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
-    let client = match hue_http_client() {
-        Ok(client) => client,
-        Err(error) => {
-            return HueDiscoveryResponse {
-                status: command_status(
-                    "HUE_DISCOVERY_FAILED",
-                    "Could not initialize Hue discovery client.",
-                    Some(error),
-                ),
-                bridges: Vec::new(),
-            }
+    // v1.5 W2-A3 — run cloud and mDNS discovery in parallel.
+    //
+    // Cloud (`https://discovery.meethue.com/`) returns the bridges
+    // Signify recorded against the calling NAT IP — works for users on
+    // a normal home network.
+    //
+    // mDNS (`_hue._tcp.local.`) catches LAN-segmented bridges (VLANs,
+    // captive portals, devices on guest Wi-Fi) the cloud cannot see.
+    // The two snapshots are deduped by uppercase bridge id; cloud
+    // wins on conflicts because it carries the canonical id format.
+    let cloud_future = run_cloud_discovery();
+    let mdns_future = run_mdns_discovery();
+
+    let (cloud_result, mdns_bridges) = tokio::join!(cloud_future, mdns_future);
+
+    merge_discovery_sources(cloud_result, mdns_bridges)
+}
+
+/// Run the legacy cloud discovery (`https://discovery.meethue.com/`).
+/// Returned `Result` mirrors the previous `outcome` variable so the
+/// merge step can preserve the cloud-only status code on the empty path.
+async fn run_cloud_discovery() -> Result<HueDiscoveryResponse, String> {
+    let client = hue_http_client().map_err(|e| format!("CLIENT_INIT: {e}"))?;
+    let response = client
+        .get("https://discovery.meethue.com/")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let ok_response = classify_hue_response(response)
+        .await
+        .map_err(|fault| fault.to_string())?;
+    let payload = ok_response.text().await.map_err(|e| e.to_string())?;
+    Ok(parse_discovery_payload(&payload))
+}
+
+/// Drive the shared mDNS browser for ~2 s and project the resolved
+/// bridges onto `HueBridgeSummary` so they slot into the same response.
+/// Errors degrade silently — the cloud path is always the primary
+/// source of truth.
+async fn run_mdns_discovery() -> Vec<HueBridgeSummary> {
+    use std::time::Duration;
+    // Run the blocking mDNS snapshot on a worker so it doesn't stall
+    // the cloud HTTP request when the deadline is short.
+    let bridges = tokio::task::spawn_blocking(|| {
+        crate::network::mdns::browse_hue_bridges(Duration::from_millis(2_000))
+    })
+    .await;
+
+    match bridges {
+        Ok(Ok(candidates)) => candidates
+            .into_iter()
+            .map(|c| HueBridgeSummary {
+                name: if c.name.is_empty() {
+                    format!("Hue Bridge ({})", c.ip)
+                } else {
+                    c.name
+                },
+                id: c.id,
+                ip: c.ip,
+                model_id: None,
+                software_version: None,
+            })
+            .collect(),
+        Ok(Err(err)) => {
+            warn!("[hue-discovery] mDNS browse failed: {err}");
+            Vec::new()
         }
+        Err(join_err) => {
+            warn!("[hue-discovery] mDNS task join failed: {join_err}");
+            Vec::new()
+        }
+    }
+}
+
+/// Merge cloud + mDNS results into a single response, deduplicated by
+/// uppercase bridge id. Status-code precedence:
+///
+/// 1. If cloud succeeded with bridges → `HUE_DISCOVERY_OK` (mDNS hits
+///    are merged in, deduped by id).
+/// 2. If cloud was empty but mDNS found bridges → `HUE_DISCOVERY_OK`
+///    (LAN-only success path, e.g. user on VLAN with no internet).
+/// 3. If both empty → `HUE_DISCOVERY_EMPTY`.
+/// 4. If cloud failed AND mDNS empty → `HUE_DISCOVERY_FAILED` (preserves
+///    legacy v1.4 behaviour).
+fn merge_discovery_sources(
+    cloud: Result<HueDiscoveryResponse, String>,
+    mdns_bridges: Vec<HueBridgeSummary>,
+) -> HueDiscoveryResponse {
+    let (mut bridges, cloud_status_code, cloud_error) = match cloud {
+        Ok(resp) => (resp.bridges, resp.status.code, None),
+        Err(err) => (Vec::new(), "HUE_DISCOVERY_FAILED".to_string(), Some(err)),
     };
 
-    let outcome = match client.get("https://discovery.meethue.com/").send().await {
-        Ok(response) => match classify_hue_response(response).await {
-            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
-            Err(fault) => Err(fault.to_string()),
-        },
-        Err(error) => Err(error.to_string()),
-    };
-    match outcome {
-        Ok(payload) => parse_discovery_payload(&payload),
-        Err(error) => HueDiscoveryResponse {
+    // Merge mDNS bridges, skipping ids that the cloud already returned
+    // (cloud keeps the canonical id format and the friendlier name).
+    for candidate in mdns_bridges {
+        if !bridges.iter().any(|b| b.id.eq_ignore_ascii_case(&candidate.id)) {
+            bridges.push(candidate);
+        }
+    }
+
+    // Stable order so re-issuing discovery returns the same shape.
+    bridges.sort_by(|a, b| a.id.cmp(&b.id));
+
+    if !bridges.is_empty() {
+        return HueDiscoveryResponse {
+            status: command_status(
+                "HUE_DISCOVERY_OK",
+                "Hue bridges discovered successfully.",
+                None,
+            ),
+            bridges,
+        };
+    }
+
+    // No bridges from either source.
+    if cloud_status_code == "HUE_DISCOVERY_FAILED" {
+        HueDiscoveryResponse {
             status: command_status(
                 "HUE_DISCOVERY_FAILED",
                 "Could not discover Hue bridges automatically. You can continue with manual IP.",
-                Some(error),
+                cloud_error,
             ),
             bridges: Vec::new(),
-        },
+        }
+    } else {
+        HueDiscoveryResponse {
+            status: command_status(
+                "HUE_DISCOVERY_EMPTY",
+                "No Hue bridges discovered automatically. You can continue with manual IP.",
+                None,
+            ),
+            bridges: Vec::new(),
+        }
     }
 }
 

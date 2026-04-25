@@ -44,6 +44,9 @@ mod models {
     pub mod room_map;
 }
 
+// v1.5 W2-A3 — shared LAN-discovery primitives (mDNS responder registry).
+mod network;
+
 use commands::calibration::{
     close_display_overlay, list_displays, open_display_overlay, start_calibration_test_pattern,
     stop_calibration_test_pattern, update_display_overlay_preview, OverlayState,

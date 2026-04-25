@@ -14,6 +14,72 @@
 #[allow(dead_code)]
 mod hue_http;
 
+// v1.5 W2-A2 / W2-A3 stubs — `pair_hue_bridge` and `discover_hue_bridges`
+// (which we don't exercise in this TDD harness) reach into
+// `super::hue::credential_store::*` and `crate::network::mdns::*`.
+// We mount minimal sibling stubs so `hue_onboarding.rs` keeps compiling
+// here even though the real production paths live under the library
+// crate. None of the parser tests call into these surfaces — the stubs
+// are presence-only.
+mod hue {
+    pub mod credential_store {
+        #[allow(dead_code)]
+        pub struct StubStore;
+        #[allow(dead_code)]
+        pub fn default_store() -> Box<StubStore> {
+            Box::new(StubStore)
+        }
+        #[allow(dead_code)]
+        pub enum MigrationOutcome {
+            Migrated,
+            Skipped,
+            Failed,
+        }
+        impl MigrationOutcome {
+            #[allow(dead_code)]
+            pub fn status_code(&self) -> &'static str {
+                "STUB"
+            }
+            #[allow(dead_code)]
+            pub fn backend(&self) -> Backend {
+                Backend
+            }
+        }
+        #[allow(dead_code)]
+        pub struct Backend;
+        impl Backend {
+            #[allow(dead_code)]
+            pub fn as_str(&self) -> &'static str {
+                "stub"
+            }
+        }
+        #[allow(dead_code)]
+        pub fn migrate_hue_credentials_to_keychain(
+            _store: &StubStore,
+            _username: &str,
+            _client_key: &str,
+        ) -> MigrationOutcome {
+            MigrationOutcome::Failed
+        }
+    }
+}
+
+mod network {
+    pub mod mdns {
+        use std::time::Duration;
+        #[allow(dead_code)]
+        pub struct MdnsBridgeCandidate {
+            pub id: String,
+            pub ip: String,
+            pub name: String,
+        }
+        #[allow(dead_code)]
+        pub fn browse_hue_bridges(_d: Duration) -> Result<Vec<MdnsBridgeCandidate>, String> {
+            Ok(Vec::new())
+        }
+    }
+}
+
 #[path = "../src/commands/hue_onboarding.rs"]
 #[allow(dead_code)]
 mod hue_onboarding;

@@ -164,6 +164,31 @@ export const HUE_STATUS = {
    * safe behaviour for users on platforms with broken keychain access.
    */
   CREDENTIAL_MIGRATION_FAILED: "HUE_CREDENTIAL_MIGRATION_FAILED",
+  // -------------------------------------------------------------------------
+  // mDNS LAN bridge discovery (v1.5 W2-A3)
+  // -------------------------------------------------------------------------
+  /**
+   * `_hue._tcp.local.` browse returned at least one bridge OR the
+   * cloud discovery returned bridges and the merged list is non-empty.
+   * Same code as the cloud-only happy path so existing UIs continue
+   * working without changes.
+   */
+  MDNS_DISCOVERY_OK: "HUE_MDNS_DISCOVERY_OK",
+  /**
+   * The mDNS browse window elapsed without resolving any bridges AND
+   * the cloud discovery also produced no results. Distinct from
+   * `HUE_DISCOVERY_EMPTY` because the timeout is mDNS-specific (no
+   * multicast packets observed during the bounded window).
+   */
+  MDNS_DISCOVERY_TIMEOUT: "HUE_MDNS_DISCOVERY_TIMEOUT",
+  /**
+   * The mDNS responder could not be initialised on this platform
+   * (sandbox-blocked multicast, no IPv4 stack, locked port 5353).
+   * The merged response falls back to cloud-only discovery; this code
+   * is reserved for the runtime-telemetry surface that will let users
+   * see why LAN discovery is offline on their machine.
+   */
+  MDNS_UNSUPPORTED: "HUE_MDNS_UNSUPPORTED",
 } as const;
 
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
