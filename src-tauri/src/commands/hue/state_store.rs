@@ -428,3 +428,64 @@ pub(crate) fn channels_to_info_via_owner(
     }
     None
 }
+
+#[cfg(test)]
+pub(crate) mod test_helpers {
+    //! Shared test fixtures for the v1.5 G8 split. Each submodule's
+    //! `#[cfg(test)] mod tests` block reaches in here so the fixtures live
+    //! in one place and stay in lockstep with `HueRuntimeOwner` /
+    //! `HueActiveStreamContext` field changes.
+
+    use std::sync::Arc;
+
+    use super::super::frame::{HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion};
+    use super::super::sender::new_shutdown_signal;
+    use super::{HueActiveStreamContext, HueRuntimeGateEvidence};
+
+    pub(crate) fn strict_gate_ready() -> HueRuntimeGateEvidence {
+        HueRuntimeGateEvidence {
+            bridge_configured: true,
+            credentials_valid: true,
+            area_selected: true,
+            readiness_current: true,
+            ready: true,
+            auth_invalid_evidence: false,
+        }
+    }
+
+    pub(crate) fn strict_gate_missing_readiness() -> HueRuntimeGateEvidence {
+        HueRuntimeGateEvidence {
+            bridge_configured: true,
+            credentials_valid: true,
+            area_selected: true,
+            readiness_current: false,
+            ready: false,
+            auth_invalid_evidence: false,
+        }
+    }
+
+    /// Helper: build a dummy `HueActiveStreamContext` for tests that need one
+    /// without spawning a real background thread.
+    pub(crate) fn dummy_active_stream_context() -> HueActiveStreamContext {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        HueActiveStreamContext {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "username".to_string(),
+            client_key: String::new(),
+            area_id: "area".to_string(),
+            channels: vec![HueAreaChannel {
+                channel_id: 0,
+                light_ids: vec!["light-1".to_string()],
+                screen_region: HueScreenRegion::Center,
+                position_x: 0.0,
+                position_y: 0.0,
+            }],
+            color_sender: HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: 1,
+            },
+            uses_dtls: false,
+            shutdown_signal: new_shutdown_signal(),
+        }
+    }
+}

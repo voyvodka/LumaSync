@@ -319,3 +319,217 @@ pub(crate) fn stop_with_timeout(
     }
     make_result(owner)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::super::state_store::test_helpers::{
+        dummy_active_stream_context, strict_gate_missing_readiness, strict_gate_ready,
+    };
+
+    #[test]
+    fn start_fails_with_config_not_ready_when_strict_gate_is_missing() {
+        let mut owner = HueRuntimeOwner::default();
+        let result = start_with_evidence(
+            &mut owner,
+            &strict_gate_missing_readiness(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        assert_eq!(result.status.code, "CONFIG_NOT_READY_GATE_BLOCKED");
+        assert_eq!(result.status.state, HueRuntimeState::Idle);
+        assert!(!result.active);
+    }
+
+    #[test]
+    fn start_is_idempotent_while_starting_or_running() {
+        let mut owner = HueRuntimeOwner::default();
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let second = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        assert_eq!(second.status.code, "HUE_START_NOOP_ALREADY_ACTIVE");
+        assert_eq!(second.status.state, HueRuntimeState::Running);
+        assert!(second.active);
+    }
+
+    #[test]
+    fn transient_faults_exhaust_into_failed_and_auth_invalid_sets_repair_hint() {
+        let mut owner = HueRuntimeOwner::default();
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        let first =
+            register_transient_fault(&mut owner, "udp timeout", HueRuntimeTriggerSource::System);
+        assert_eq!(first.status.code, "TRANSIENT_RETRY_SCHEDULED");
+        assert_eq!(first.status.state, HueRuntimeState::Reconnecting);
+
+        let _ =
+            register_transient_fault(&mut owner, "udp timeout", HueRuntimeTriggerSource::System);
+        let exhausted =
+            register_transient_fault(&mut owner, "udp timeout", HueRuntimeTriggerSource::System);
+
+        assert_eq!(exhausted.status.code, "TRANSIENT_RETRY_EXHAUSTED");
+        assert_eq!(exhausted.status.state, HueRuntimeState::Failed);
+        assert_eq!(
+            exhausted.status.action_hint,
+            Some(HueRuntimeActionHint::Retry)
+        );
+
+        let auth =
+            register_auth_invalid(&mut owner, "unauthorized", HueRuntimeTriggerSource::System);
+        assert_eq!(auth.status.code, "AUTH_INVALID_CREDENTIALS");
+        assert_eq!(auth.status.action_hint, Some(HueRuntimeActionHint::Repair));
+    }
+
+    #[test]
+    fn command_status_refresh_marks_running_runtime_as_reconnecting_on_transient_fault() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let result = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+
+        assert_eq!(result.status.state, HueRuntimeState::Reconnecting);
+        assert_eq!(result.status.code, "TRANSIENT_RETRY_SCHEDULED");
+        assert!(result.status.next_attempt_ms.is_some());
+        assert_eq!(result.status.remaining_attempts, Some(2));
+    }
+
+    #[test]
+    fn command_status_refresh_preserves_retry_budget_for_not_ready_area_state() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut not_ready_gate = strict_gate_ready();
+        not_ready_gate.ready = false;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        owner.reconnect_attempt = 1;
+
+        let result = status_refresh_with_evidence(
+            &mut owner,
+            &not_ready_gate,
+            Some("area readiness dropped".to_string()),
+        );
+
+        assert_eq!(result.status.state, HueRuntimeState::Running);
+        assert_eq!(result.status.code, "CONFIG_NOT_READY_GATE_BLOCKED");
+        assert_eq!(
+            result.status.action_hint,
+            Some(HueRuntimeActionHint::Revalidate)
+        );
+        assert_eq!(result.status.remaining_attempts, Some(2));
+        assert_eq!(owner.reconnect_attempt, 1);
+    }
+
+    #[test]
+    fn command_status_refresh_exhausts_retry_budget_and_marks_failed() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let _ = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+        let _ = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+        let exhausted = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+
+        assert_eq!(exhausted.status.state, HueRuntimeState::Failed);
+        assert_eq!(exhausted.status.code, "TRANSIENT_RETRY_EXHAUSTED");
+        assert_eq!(exhausted.status.remaining_attempts, Some(0));
+    }
+
+    #[test]
+    fn command_status_refresh_marks_auth_invalid_fault_as_repair_required() {
+        let mut owner = HueRuntimeOwner::default();
+        let ready_gate = strict_gate_ready();
+        let mut auth_invalid_gate = strict_gate_ready();
+        auth_invalid_gate.auth_invalid_evidence = true;
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &ready_gate,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let result = status_refresh_with_evidence(&mut owner, &auth_invalid_gate, None);
+
+        assert_eq!(result.status.state, HueRuntimeState::Failed);
+        assert_eq!(result.status.code, "AUTH_INVALID_CREDENTIALS");
+        assert_eq!(
+            result.status.action_hint,
+            Some(HueRuntimeActionHint::Repair)
+        );
+    }
+
+    #[test]
+    fn user_stop_prevents_new_reconnect_attempts_during_status_refresh() {
+        let mut owner = HueRuntimeOwner::default();
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        owner.active_stream = Some(dummy_active_stream_context());
+        let _ = stop_with_timeout(&mut owner, false, HueRuntimeTriggerSource::DeviceSurface);
+
+        let mut transient_fault_gate = strict_gate_ready();
+        transient_fault_gate.readiness_current = false;
+        transient_fault_gate.ready = false;
+
+        let result = status_refresh_with_evidence(&mut owner, &transient_fault_gate, None);
+
+        assert_eq!(result.status.state, HueRuntimeState::Idle);
+        assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
+        assert_eq!(owner.reconnect_attempt, 0);
+    }
+
+    #[test]
+    fn stop_runs_deterministic_cleanup_and_timeout_reports_partial_stop() {
+        let mut owner = HueRuntimeOwner::default();
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        let timeout = stop_with_timeout(&mut owner, true, HueRuntimeTriggerSource::DeviceSurface);
+
+        assert_eq!(timeout.status.code, "HUE_STOP_TIMEOUT_PARTIAL");
+        assert_eq!(timeout.status.state, HueRuntimeState::Idle);
+        assert_eq!(
+            timeout.status.action_hint,
+            Some(HueRuntimeActionHint::Retry)
+        );
+        assert!(!timeout.active);
+    }
+}

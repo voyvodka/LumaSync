@@ -747,3 +747,31 @@ pub(crate) fn build_hue_sender_with_counter(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::thread;
+
+    #[test]
+    fn shutdown_signal_fires_when_sender_thread_exits() {
+        let signal = new_shutdown_signal();
+        let signal_clone = Arc::clone(&signal);
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            signal_shutdown_complete(&signal_clone);
+        });
+
+        let completed = wait_for_shutdown(&signal, Duration::from_secs(2));
+        assert!(completed, "shutdown signal should have fired within 2s");
+    }
+
+    #[test]
+    fn shutdown_signal_times_out_when_thread_does_not_signal() {
+        let signal = new_shutdown_signal();
+        let completed = wait_for_shutdown(&signal, Duration::from_millis(100));
+        assert!(!completed, "should have timed out");
+    }
+}

@@ -422,3 +422,61 @@ async fn internal_restart_stream(
 fn _silence_make_result(owner: &HueRuntimeOwner) {
     let _ = make_result(owner);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::super::frame::{HueColorUpdate, HueScreenRegion};
+    use super::super::retry::start_with_evidence;
+    use super::super::sender::new_shutdown_signal;
+    use super::super::state_store::test_helpers::strict_gate_ready;
+
+    #[test]
+    fn start_success_persists_active_stream_context_for_status_refresh() {
+        let mut owner = HueRuntimeOwner::default();
+        let request = StartHueStreamRequest {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "hue-user".to_string(),
+            client_key: String::new(),
+            area_id: "living-room".to_string(),
+            trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
+            channel_region_overrides: None,
+        };
+
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        let dummy_sender = HueColorSender {
+            tx: Arc::new(tx),
+            channel_count: 1,
+        };
+        store_active_stream_context(
+            &mut owner,
+            &request,
+            vec![HueAreaChannel {
+                channel_id: 0,
+                light_ids: vec!["light-1".to_string()],
+                screen_region: HueScreenRegion::Center,
+                position_x: 0.0,
+                position_y: 0.0,
+            }],
+            dummy_sender,
+            false,
+            new_shutdown_signal(),
+        );
+
+        let active_stream = owner.active_stream.as_ref().expect("active stream context");
+        assert_eq!(active_stream.bridge_ip, "192.168.1.2");
+        assert_eq!(active_stream.username, "hue-user");
+        assert_eq!(active_stream.area_id, "living-room");
+        assert_eq!(active_stream.channels.len(), 1);
+        assert_eq!(
+            active_stream.channels[0].light_ids,
+            vec!["light-1".to_string()]
+        );
+    }
+}

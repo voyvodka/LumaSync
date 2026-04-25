@@ -115,3 +115,19 @@ pub(crate) fn hex_decode(hex: &str) -> Result<Vec<u8>, String> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hex_decode_works() {
+        assert_eq!(hex_decode("AABB").unwrap(), vec![0xAA, 0xBB]);
+        assert_eq!(
+            hex_decode("0123456789abcdef").unwrap(),
+            vec![0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF]
+        );
+        assert!(hex_decode("ABC").is_err()); // odd length
+        assert!(hex_decode("GG").is_err()); // invalid hex
+    }
+}

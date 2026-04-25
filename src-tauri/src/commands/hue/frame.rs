@@ -292,3 +292,85 @@ pub(crate) fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChanne
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_huestream_frame_produces_correct_header_and_channels() {
+        let channels = vec![
+            HueAreaChannel {
+                channel_id: 0,
+                light_ids: vec!["l1".to_string()],
+                screen_region: HueScreenRegion::Left,
+                position_x: -0.8,
+                position_y: 0.0,
+            },
+            HueAreaChannel {
+                channel_id: 1,
+                light_ids: vec!["l2".to_string()],
+                screen_region: HueScreenRegion::Right,
+                position_x: 0.8,
+                position_y: 0.0,
+            },
+        ];
+        let colors = vec![(255, 0, 0), (0, 255, 0)];
+        let area_id = "1a8d99cc-967b-44f2-9202-43f976c0fa6b";
+        let frame = build_huestream_frame(area_id, &channels, &colors, 1.0);
+
+        // Header: 9 magic + 1 major + 1 minor + 1 seq + 2 reserved + 1 color_space + 1 reserved = 16
+        assert_eq!(&frame[0..9], b"HueStream");
+        assert_eq!(frame[9], 0x02); // major
+        assert_eq!(frame[10], 0x00); // minor
+        assert_eq!(frame[11], 0x00); // sequence
+        assert_eq!(frame[12], 0x00); // reserved
+        assert_eq!(frame[13], 0x00); // reserved
+        assert_eq!(frame[14], 0x00); // color space RGB
+        assert_eq!(frame[15], 0x00); // reserved
+
+        // Entertainment configuration UUID (bytes 16..52, 36 bytes ASCII)
+        assert_eq!(&frame[16..52], area_id.as_bytes());
+
+        // Channel 0: id=0, R=65535, G=0, B=0  (starts at byte 52)
+        assert_eq!(frame[52], 0); // channel_id
+        assert_eq!(frame[53..55], 0xFFFFu16.to_be_bytes()); // R
+        assert_eq!(frame[55..57], 0x0000u16.to_be_bytes()); // G
+        assert_eq!(frame[57..59], 0x0000u16.to_be_bytes()); // B
+
+        // Channel 1: id=1, R=0, G=65535, B=0  (starts at byte 59)
+        assert_eq!(frame[59], 1); // channel_id
+        assert_eq!(frame[60..62], 0x0000u16.to_be_bytes()); // R
+        assert_eq!(frame[62..64], 0xFFFFu16.to_be_bytes()); // G
+        assert_eq!(frame[64..66], 0x0000u16.to_be_bytes()); // B
+
+        // Total: 16 header + 36 UUID + 2*7 channels = 66
+        assert_eq!(frame.len(), 66);
+    }
+
+    #[test]
+    fn build_huestream_frame_applies_brightness() {
+        let channels = vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["l1".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }];
+        let colors = vec![(255, 255, 255)];
+        let frame = build_huestream_frame(
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            &channels,
+            &colors,
+            0.5,
+        );
+
+        // Channel starts at byte 52 (16 header + 36 UUID). At 50% brightness, 255 -> ~32767.
+        let r = u16::from_be_bytes([frame[53], frame[54]]);
+        let g = u16::from_be_bytes([frame[55], frame[56]]);
+        let b = u16::from_be_bytes([frame[57], frame[58]]);
+        assert!(r > 32000 && r < 33000, "R={r} should be ~32767");
+        assert!(g > 32000 && g < 33000, "G={g} should be ~32767");
+        assert!(b > 32000 && b < 33000, "B={b} should be ~32767");
+    }
+}
