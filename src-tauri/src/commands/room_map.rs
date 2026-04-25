@@ -2,6 +2,7 @@ use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::Manager;
+use tauri_plugin_fs::FsExt;
 
 use super::hue_onboarding::CommandStatus;
 use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
@@ -40,6 +41,14 @@ pub async fn copy_background_image(
     src_path: String,
 ) -> Result<String, String> {
     use std::path::PathBuf;
+    let src = PathBuf::from(&src_path);
+
+    // SECURITY: Validate that the frontend is actually allowed to read this file
+    // according to the tauri-plugin-fs scope configurations.
+    if !app_handle.fs_scope().is_allowed(&src) {
+        return Err("File path is not within the allowed filesystem scope".to_string());
+    }
+
     let app_data_dir = app_handle
         .path()
         .app_data_dir()
@@ -47,7 +56,6 @@ pub async fn copy_background_image(
     let bg_dir = app_data_dir.join("room-map-backgrounds");
     std::fs::create_dir_all(&bg_dir)
         .map_err(|e| format!("Failed to create background dir: {}", e))?;
-    let src = PathBuf::from(&src_path);
     let filename = src
         .file_name()
         .ok_or_else(|| "Invalid source path: no filename".to_string())?;
