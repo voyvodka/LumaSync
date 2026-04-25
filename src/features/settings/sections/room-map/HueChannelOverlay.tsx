@@ -50,6 +50,40 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+/**
+ * Project a world-space Hue coordinate into the active zone's bounds.
+ *
+ * Bug #52(a) — channel drag must never escape the parent zone box.
+ * Pipeline:
+ *   1. Clamp world to `[-1, 1]` (Hue cube, the bridge cap).
+ *   2. Invert through the zone transform → relative space.
+ *   3. Clamp relative to `[-1, 1]` (zone box).
+ *   4. Re-project to world via `center + scale * relative`.
+ *
+ * Returns both the bounded world tuple and the matching zone-relative
+ * coordinates so the drag handler can persist them in one shot. When
+ * `scale*` is 0 the zone is degenerate; we fall back to the world-clamped
+ * value with `rel = 0` to avoid a divide-by-zero.
+ */
+function clampWithinZone(
+  worldX: number,
+  worldY: number,
+  zone: HueZone,
+): { worldX: number; worldY: number; relX: number; relY: number } {
+  const wx = clamp(worldX, -1, 1);
+  const wy = clamp(worldY, -1, 1);
+  const sx = zone.scaleX === 0 ? 1 : zone.scaleX;
+  const sy = zone.scaleY === 0 ? 1 : zone.scaleY;
+  const relX = clamp((wx - zone.centerX) / sx, -1, 1);
+  const relY = clamp((wy - zone.centerY) / sy, -1, 1);
+  return {
+    worldX: clamp(zone.centerX + sx * relX, -1, 1),
+    worldY: clamp(zone.centerY + sy * relY, -1, 1),
+    relX,
+    relY,
+  };
+}
+
 interface DragState {
   active: boolean;
   channelIndex: number;
@@ -59,6 +93,8 @@ interface DragState {
   startY: number;
   currentX: number;
   currentY: number;
+  currentRelX: number | null;
+  currentRelY: number | null;
   element: HTMLDivElement | null;
 }
 
@@ -71,6 +107,8 @@ const EMPTY_DRAG: DragState = {
   startY: 0,
   currentX: 0,
   currentY: 0,
+  currentRelX: null,
+  currentRelY: null,
   element: null,
 };
 
@@ -120,6 +158,9 @@ export function HueChannelOverlay({
   const onChannelZoneToggleRef = useRef(onChannelZoneToggle);
   onChannelZoneToggleRef.current = onChannelZoneToggle;
 
+  const activeHueZoneRef = useRef(activeHueZone);
+  activeHueZoneRef.current = activeHueZone;
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
       if (panMode) return;
@@ -138,10 +179,12 @@ export function HueChannelOverlay({
         startY: ch.y,
         currentX: ch.x,
         currentY: ch.y,
+        currentRelX: ch.zoneRelativePosition?.x ?? null,
+        currentRelY: ch.zoneRelativePosition?.y ?? null,
         element: el,
       };
     },
-    [onSelect],
+    [onSelect, panMode],
   );
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -157,11 +200,28 @@ export function HueChannelOverlay({
     // Y inverted: CSS down = Hue y decrease
     const dyHue = -(dyPx / effectivePpm) / depthRef.current * 2;
 
-    const newX = clamp(dr.startX + dxHue, -1, 1);
-    const newY = clamp(dr.startY + dyHue, -1, 1);
+    let newX = clamp(dr.startX + dxHue, -1, 1);
+    let newY = clamp(dr.startY + dyHue, -1, 1);
+    let relX: number | null = null;
+    let relY: number | null = null;
+
+    // Bug #52(a) — when this channel is bound to the active zone, clamp
+    // the world coords through the zone box so the dot can never visually
+    // leave the zone bounds.
+    const zone = activeHueZoneRef.current;
+    const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
+    if (zone && ch && ch.zoneId === zone.id) {
+      const bounded = clampWithinZone(newX, newY, zone);
+      newX = bounded.worldX;
+      newY = bounded.worldY;
+      relX = bounded.relX;
+      relY = bounded.relY;
+    }
 
     dr.currentX = newX;
     dr.currentY = newY;
+    dr.currentRelX = relX;
+    dr.currentRelY = relY;
 
     // Imperative DOM update for smooth drag — avoids re-render
     const wrapper = dr.element?.parentElement;
@@ -173,9 +233,6 @@ export function HueChannelOverlay({
     }
   }, []);
 
-  const activeHueZoneRef = useRef(activeHueZone);
-  activeHueZoneRef.current = activeHueZone;
-
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const dr = dragRef.current;
     if (!dr.active) return;
@@ -186,23 +243,18 @@ export function HueChannelOverlay({
     if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
       const zone = activeHueZoneRef.current;
       // When the channel is bound to the active Hue zone, the absolute
-      // x/y we computed during the drag are world-space; we invert the
-      // zone transform so the persisted authoritative field stays the
-      // zone-relative position. Out-of-bounds drags are clamped to
-      // [-1, 1] on both axes so HUE_ZONE_CHANNEL_OUT_OF_BOUNDS never
-      // round-trips to the bridge.
-      if (zone && ch.zoneId === zone.id) {
-        const safeScaleX = zone.scaleX === 0 ? 1 : zone.scaleX;
-        const safeScaleY = zone.scaleY === 0 ? 1 : zone.scaleY;
-        const relX = clamp((dr.currentX - zone.centerX) / safeScaleX, -1, 1);
-        const relY = clamp((dr.currentY - zone.centerY) / safeScaleY, -1, 1);
+      // x/y we computed during the drag are world-space; we persist the
+      // already-clamped zone-relative pair captured in the move handler
+      // so HUE_ZONE_CHANNEL_OUT_OF_BOUNDS never round-trips to the
+      // bridge.
+      if (zone && ch.zoneId === zone.id && dr.currentRelX !== null && dr.currentRelY !== null) {
         onChangeRef.current({
           ...ch,
           x: dr.currentX,
           y: dr.currentY,
           zoneRelativePosition: {
-            x: relX,
-            y: relY,
+            x: dr.currentRelX,
+            y: dr.currentRelY,
             z: ch.zoneRelativePosition?.z ?? 0,
           },
         });
@@ -240,6 +292,7 @@ export function HueChannelOverlay({
       {activeHueZone && zoneBoundsBox && (
         <>
           <div
+            data-zone-bounds-id={activeHueZone.id}
             className="pointer-events-none absolute rounded"
             style={{
               left: zoneBoundsBox.leftPx,
@@ -277,17 +330,80 @@ export function HueChannelOverlay({
               const startClientX = e.clientX;
               const startClientY = e.clientY;
               const effectivePpm = ppmRef.current * zoomRef.current;
+              const zoneId = activeHueZone.id;
+              const halfScaleX = Math.abs(activeHueZone.scaleX);
+              const halfScaleY = Math.abs(activeHueZone.scaleY);
+
+              // Bug #50/#52(b) — collect every DOM node that must follow
+              // the center: the dashed bounds box AND each channel dot
+              // bound to this zone. Cache their start positions so we can
+              // apply the delta imperatively during pointermove without
+              // a React re-render per move event.
+              const overlayRoot = target.parentElement;
+              const boundsEl = overlayRoot?.querySelector<HTMLDivElement>(
+                `[data-zone-bounds-id="${zoneId}"]`,
+              );
+              const boundsStart = boundsEl
+                ? {
+                    left: parseFloat(boundsEl.style.left || "0"),
+                    top: parseFloat(boundsEl.style.top || "0"),
+                  }
+                : null;
+              const boundChannelEls = overlayRoot
+                ? Array.from(
+                    overlayRoot.querySelectorAll<HTMLDivElement>(
+                      `[data-zone-channel-id="${zoneId}"]`,
+                    ),
+                  )
+                : [];
+              const channelStarts = boundChannelEls.map((el) => ({
+                el,
+                left: parseFloat(el.style.left || "0"),
+                top: parseFloat(el.style.top || "0"),
+              }));
+
               const moveHandler = (mv: PointerEvent) => {
                 const dxPx = mv.clientX - startClientX;
                 const dyPx = mv.clientY - startClientY;
                 const dxHue = (dxPx / effectivePpm) / widthRef.current * 2;
                 const dyHue = -(dyPx / effectivePpm) / depthRef.current * 2;
-                const newCx = clamp(startCx + dxHue, -1, 1);
-                const newCy = clamp(startCy + dyHue, -1, 1);
+
+                // Bug #53 / #50 — keep the entire zone box (center ±
+                // half-scale) inside the Hue cube while dragging. Without
+                // this, the bounds box visually overflows the room map.
+                const minCx = -1 + halfScaleX;
+                const maxCx = 1 - halfScaleX;
+                const minCy = -1 + halfScaleY;
+                const maxCy = 1 - halfScaleY;
+                // halfScaleX/Y can exceed 1 for degenerate zones; fall back
+                // to plain world clamp so the marker still follows the cursor.
+                const newCx = halfScaleX > 1 ? clamp(startCx + dxHue, -1, 1) : clamp(startCx + dxHue, minCx, maxCx);
+                const newCy = halfScaleY > 1 ? clamp(startCy + dyHue, -1, 1) : clamp(startCy + dyHue, minCy, maxCy);
+
+                // Pixel delta from start, used to imperatively translate
+                // the bounds box and bound channels.
+                const deltaLeftPx = (hueToMetres(newCx, widthRef.current) - hueToMetres(startCx, widthRef.current)) * ppmRef.current;
+                const deltaTopPx = (hueToMetres(-newCy, depthRef.current) - hueToMetres(-startCy, depthRef.current)) * ppmRef.current;
+
+                // Center marker
                 target.style.left = `${hueToMetres(newCx, widthRef.current) * ppmRef.current}px`;
                 target.style.top = `${hueToMetres(-newCy, depthRef.current) * ppmRef.current}px`;
                 target.dataset.cx = String(newCx);
                 target.dataset.cy = String(newCy);
+
+                // Bug #50 — dashed bounds box follows the center delta.
+                if (boundsEl && boundsStart) {
+                  boundsEl.style.left = `${boundsStart.left + deltaLeftPx}px`;
+                  boundsEl.style.top = `${boundsStart.top + deltaTopPx}px`;
+                }
+                // Bug #52(b) — every bound channel dot follows by the
+                // same delta. Their persisted zoneRelativePosition is
+                // unchanged; only the world position they project to
+                // moves with the zone.
+                for (const c of channelStarts) {
+                  c.el.style.left = `${c.left + deltaLeftPx}px`;
+                  c.el.style.top = `${c.top + deltaTopPx}px`;
+                }
               };
               const upHandler = (uv: PointerEvent) => {
                 target.releasePointerCapture(uv.pointerId);
@@ -297,7 +413,7 @@ export function HueChannelOverlay({
                 const finalCx = parseFloat(target.dataset.cx ?? String(startCx));
                 const finalCy = parseFloat(target.dataset.cy ?? String(startCy));
                 if (finalCx !== startCx || finalCy !== startCy) {
-                  onHueZoneCenterChange?.(activeHueZone.id, finalCx, finalCy);
+                  onHueZoneCenterChange?.(zoneId, finalCx, finalCy);
                 }
               };
               target.addEventListener("pointermove", moveHandler);
@@ -356,6 +472,10 @@ export function HueChannelOverlay({
         return (
           <div
             key={ch.channelIndex}
+            // Bug #50 — tag bound channels so the zone-center drag
+            // handler can imperatively translate them by the same delta
+            // as the dashed bounds box.
+            data-zone-channel-id={isInActiveHueZone ? activeHueZone?.id : undefined}
             className="absolute"
             style={{
               left: leftPx,
