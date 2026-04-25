@@ -39,6 +39,23 @@
     },
     "onboardingBanner": {
       "dismissAriaLabel": "İpucunu kapat"
+    },
+    "onboarding": {
+      "step1": {
+        "title": "LumaSync'e hoş geldin",
+        "body": "Başlamak için bir aydınlatma modu seç — Kapalı, Ambilight ya da tek bir sabit renk.",
+        "action": "Işıkları aç"
+      },
+      "step2": {
+        "title": "Işıklarını bağla",
+        "body": "Modların kareleri gönderebilmesi için bir USB LED denetleyicisi, WLED ESP ya da Hue köprüsü bağla.",
+        "action": "Cihazları aç"
+      },
+      "step3": {
+        "title": "Şeridini kalibre et",
+        "body": "Ambilight'ın renkleri doğru köşelere eşlemesi için her ekran kenarında kaç LED olduğunu LumaSync'e bildir.",
+        "action": "Kalibrasyonu aç"
+      }
     }
   },
   "general": {

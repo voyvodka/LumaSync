@@ -39,6 +39,23 @@
     },
     "onboardingBanner": {
       "dismissAriaLabel": "Dismiss hint"
+    },
+    "onboarding": {
+      "step1": {
+        "title": "Welcome to LumaSync",
+        "body": "Pick a lighting mode to get started — Off, Ambilight, or a single solid color.",
+        "action": "Open lights"
+      },
+      "step2": {
+        "title": "Connect your lights",
+        "body": "Connect a USB LED controller, a WLED ESP, or pair a Hue bridge so the modes have somewhere to send frames.",
+        "action": "Open devices"
+      },
+      "step3": {
+        "title": "Calibrate your strip",
+        "body": "Tell LumaSync how many LEDs sit on each screen edge so Ambilight maps colors to the right corners.",
+        "action": "Open calibration"
+      }
     }
   },
   "general": {

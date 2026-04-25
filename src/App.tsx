@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx, type StatusItem } from "./features/shell/StatusBar";
+import { OnboardingFlow } from "./features/onboarding/ui/OnboardingFlow";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
 import {
@@ -152,6 +153,14 @@ function App() {
   const [bootstrapDone, setBootstrapDone] = useState(false);
   const [showUsbSuggest, setShowUsbSuggest] = useState(false);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
+
+  // v1.5 W2-B4 — first-run onboarding state. The flag is hydrated from
+  // shellStore on bootstrap; a fresh user (`undefined` / `false`) sees
+  // the inline 3-step banner. \`hasInteractedWithMode\` flips true on
+  // the first deliberate mode click after bootstrap so step 1 only
+  // advances when the user actively engages.
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
+  const [hasInteractedWithMode, setHasInteractedWithMode] = useState(false);
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
   const modeTransitionLockRef = useRef(false);
   const bootstrapRanRef = useRef(false);
@@ -487,6 +496,11 @@ function App() {
           setActiveSection(mappedSection);
         }
         setSavedCalibration(normalizeLedCalibrationConfig(state.ledCalibration));
+        // v1.5 W2-B4 — fresh installs land on \`undefined\`; treat that as
+        // "never completed" so the onboarding banner mounts. Existing
+        // v1.4 users upgrading without the flag also see it once and
+        // can dismiss with one click — no destructive migration.
+        setHasCompletedOnboarding(state.hasCompletedOnboarding === true);
         // Hydrate capture-source ref so the bootstrap set_lighting_mode
         // call (below) honours the user's persisted display selection.
         selectedDisplayIdRef.current =
@@ -1192,7 +1206,12 @@ function App() {
         ? modeGuard.reason
         : null,
     isModeTransitioning,
-    onLightingModeChange: handleLightingModeChange,
+    onLightingModeChange: (next: LightingModeConfig) => {
+      // v1.5 W2-B4 — first deliberate mode click satisfies the LIGHTS
+      // step guard. Subsequent clicks are no-ops on the flag.
+      if (!hasInteractedWithMode) setHasInteractedWithMode(true);
+      handleLightingModeChange(next);
+    },
     onOutputTargetsChange: handleOutputTargetsChange,
     onCalibrationSaved: (config: LedCalibrationConfig) => {
       setSavedCalibration(config);
@@ -1239,6 +1258,16 @@ function App() {
     // this prop is consumed exclusively by `<CompactLayout>`.
     onOpenDevices: () => void handleSectionChange(SECTION_IDS.DEVICES),
   } as const;
+
+  // v1.5 W2-B4 — onboarding completion handler. Persists the flag and
+  // unmounts the flow on the next render. Called on either a successful
+  // step 3 (calibration saved) or a deliberate dismiss.
+  const handleOnboardingComplete = useCallback(() => {
+    setHasCompletedOnboarding(true);
+    void saveShellState({ hasCompletedOnboarding: true }).catch((err) => {
+      console.error("[LumaSync] saveShellState(hasCompletedOnboarding) failed:", err);
+    });
+  }, []);
 
   // Derive runtime status items for the bottom StatusBar. Order matches the
   // mockup (CAP / USB / HUE). CAP is "ok" only while ambilight is the active
@@ -1339,6 +1368,18 @@ function App() {
             transitionTimingFunction: UI_MODE_FADE_TIMING,
           }}
         >
+          <OnboardingFlow
+            hasCompleted={hasCompletedOnboarding}
+            guards={{
+              hasInteractedWithMode,
+              hasReachableOutput: isConnected || hueReachable || hueStreaming,
+              hasSavedCalibration: savedCalibration !== undefined,
+            }}
+            onOpenLights={() => void handleSectionChange(SECTION_IDS.LIGHTS)}
+            onOpenDevices={() => void handleSectionChange(SECTION_IDS.DEVICES)}
+            onOpenCalibration={() => void handleSectionChange(SECTION_IDS.LED_SETUP)}
+            onComplete={handleOnboardingComplete}
+          />
           <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
         </div>
       </div>

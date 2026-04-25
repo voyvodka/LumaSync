@@ -86,6 +86,24 @@ const REQUIRED_V14_STATE_FIELDS = [
   "notificationsEnabled",
 ];
 
+/**
+ * v1.5 ShellState additions. All optional / additive — the absence of
+ * each field naturally degrades to a v1.4-compatible default
+ * (`hasCompletedOnboarding=false` shows onboarding once, `updateChannel`
+ * absent ⇒ stable channel). Strict optional-`?:` presence check, no
+ * default-value check.
+ */
+const REQUIRED_V15_STATE_FIELDS = [
+  "hasCompletedOnboarding",
+  "updateChannel",
+];
+
+/** v1.5 contract surface that must be exported alongside the new fields. */
+const REQUIRED_V15_EXPORTS = [
+  "UpdateChannel",
+  "DEFAULT_UPDATE_CHANNEL",
+];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -186,6 +204,24 @@ for (const field of REQUIRED_V14_STATE_FIELDS) {
     `MISSING optional ShellState v1.4 field "${field}"`
   );
 }
+
+// Check v1.5 optional additions (W2-C6 update channel etc.)
+console.log("\n[ ShellState v1.5 additions ]");
+for (const field of REQUIRED_V15_STATE_FIELDS) {
+  check(
+    source.includes(field + "?:"),
+    `ShellState v1.5 field "${field}" declared optional`,
+    `MISSING optional ShellState v1.5 field "${field}"`
+  );
+}
+for (const name of REQUIRED_V15_EXPORTS) {
+  check(
+    source.includes(name),
+    `v1.5 export "${name}" present`,
+    `MISSING v1.5 export "${name}"`
+  );
+}
+
 
 // Check SECTION_ORDER completeness
 console.log("\n[ SECTION_ORDER completeness ]");

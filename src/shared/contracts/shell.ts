@@ -1,5 +1,5 @@
 import type { LedCalibrationConfig } from "./calibration";
-import type { ColorCorrectionConfig, FirmwareProfile } from "./device";
+import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./device";
 import type { DisplayId } from "./display";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
 import type {
@@ -214,6 +214,25 @@ export interface ShellState {
    * GAP). Absent ⇒ notifications disabled until the user opts in.
    */
   notificationsEnabled?: boolean;
+  /**
+   * v1.5 W2-B4 — first-run onboarding completion flag. When `true`,
+   * `OnboardingFlow` skips render entirely; when `undefined` / `false`,
+   * the 3-step inline progressive banner walks the user through
+   * picking a mode → connecting devices → calibrating LEDs. Set to
+   * `true` once the user finishes (or explicitly skips) the final step.
+   *
+   * Additive — no schemaVersion bump because the absence of the field
+   * naturally degrades to "show onboarding for first-launch users",
+   * which is exactly the legacy default for everyone upgrading from
+   * v1.4 (they will see the banner once and dismiss it).
+   */
+  hasCompletedOnboarding?: boolean;
+  /**
+   * LED chip type for the USB serial sink (v1.5 G3). Controls the per-pixel
+   * byte layout: `ws2812b-grb` (3 bytes, default) or `sk6812-rgbw` (4 bytes
+   * with host-side W = min(R,G,B) extraction). Absent ⇒ `WS2812B_GRB`.
+   */
+  selectedChipType?: LedChipType;
 }
 
 /** Default shell state for first launch */
