@@ -5,7 +5,10 @@ use serde::Serialize;
 use serialport::{available_ports, SerialPortType};
 
 use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
-use super::led_output::FirmwareProfile;
+use super::led_output::{
+    ColorCorrectionConfig, FirmwareProfile, LedOutputBridge, SerialSink,
+};
+use super::led_sink::LedSink;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 1_500;
@@ -114,6 +117,66 @@ impl Default for SerialConnectionState {
     }
 }
 
+// ---------------------------------------------------------------------------
+// ActiveSinkRegistry — persists the active `LedSink` handle across commands
+//
+// Populated by `connect_serial_port` on success. Cleared on disconnect or
+// when a connection attempt fails. The ambilight worker (v1.4) creates its
+// own `SerialSink` independently; this registry is the foundation for the
+// v1.5 path where `start_ambilight_worker` will `take()` the pre-built sink
+// from the registry instead of constructing one from scratch.
+//
+// Design:
+//   - `Box<dyn LedSink>` keeps the registry type-erased so v1.5+ sinks
+//     (WledUdpSink, OpenRgbClientSink) can be stored without changing the
+//     registry type or any callers.
+//   - `Mutex<Option<...>>` allows safe access from the Tauri command threads
+//     without an async runtime.
+//   - One active sink per registry instance (per output channel). Hue and
+//     USB run as separate channels with separate state.
+// ---------------------------------------------------------------------------
+
+/// Tauri app state that holds the currently active `LedSink` handle.
+///
+/// `None` when no port is connected. Replaced on every successful
+/// `connect_serial_port` call. The sink is stopped and cleared on
+/// disconnect or failed connect.
+pub struct ActiveSinkRegistry {
+    pub sink: Mutex<Option<Box<dyn LedSink>>>,
+}
+
+impl Default for ActiveSinkRegistry {
+    fn default() -> Self {
+        Self {
+            sink: Mutex::new(None),
+        }
+    }
+}
+
+impl ActiveSinkRegistry {
+    /// Replace the stored sink with a new one.
+    ///
+    /// Stops the previous sink (if any) before replacing it, so the serial
+    /// session is always released cleanly.
+    pub fn replace(&self, new_sink: Box<dyn LedSink>) {
+        if let Ok(mut guard) = self.sink.lock() {
+            if let Some(mut old) = guard.take() {
+                let _ = old.stop();
+            }
+            *guard = Some(new_sink);
+        }
+    }
+
+    /// Remove and stop the stored sink.
+    pub fn clear(&self) {
+        if let Ok(mut guard) = self.sink.lock() {
+            if let Some(mut old) = guard.take() {
+                let _ = old.stop();
+            }
+        }
+    }
+}
+
 #[tauri::command]
 pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
     let ports = available_ports().map_err(|error| {
@@ -187,10 +250,12 @@ pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
 pub fn connect_serial_port(
     port_name: String,
     connection_state: tauri::State<'_, SerialConnectionState>,
+    sink_registry: tauri::State<'_, ActiveSinkRegistry>,
 ) -> SerialConnectionStatus {
     let known_ports = match available_ports() {
         Ok(ports) => ports,
         Err(error) => {
+            sink_registry.clear();
             let result = SerialConnectionStatus {
                 port_name: Some(port_name),
                 connected: false,
@@ -213,6 +278,7 @@ pub fn connect_serial_port(
     let selected_port = match selected_port {
         Some(port) => port,
         None => {
+            sink_registry.clear();
             let result = SerialConnectionStatus {
                 port_name: Some(port_name),
                 connected: false,
@@ -230,6 +296,7 @@ pub fn connect_serial_port(
 
     if let SerialPortType::UsbPort(usb_info) = selected_port.port_type {
         if !is_supported_usb(usb_info.vid, usb_info.pid) {
+            sink_registry.clear();
             let result = SerialConnectionStatus {
                 port_name: Some(port_name),
                 connected: false,
@@ -253,26 +320,48 @@ pub fn connect_serial_port(
         .open();
 
     let result = match open_result {
-        Ok(_port_handle) => SerialConnectionStatus {
-            port_name: Some(port_name),
-            connected: true,
-            status: command_status(
-                "CONNECT_OK",
-                "Serial port connection attempt succeeded.",
-                None,
-            ),
-            updated_at_unix_ms: now_unix_ms(),
-        },
-        Err(error) => SerialConnectionStatus {
-            port_name: Some(port_name),
-            connected: false,
-            status: command_status(
-                connect_error_code(&error),
-                "Serial port connection attempt failed.",
-                Some(error.to_string()),
-            ),
-            updated_at_unix_ms: now_unix_ms(),
-        },
+        Ok(_port_handle) => {
+            // Connection verified — build and register a SerialSink for this port.
+            // The sink uses default profile (LumaSyncV1) and default corrections;
+            // the user can change these via the Firmware Profile setting (v1.4 G11)
+            // and color correction settings (v1.4 G4), which will replace the sink.
+            //
+            // The ambilight worker (v1.4, W0-B1) creates its own SerialSink
+            // independently. This registry entry is the hook for the v1.5 path
+            // where the worker will take() the pre-built sink from here.
+            let new_sink = SerialSink::with_profile_and_corrections(
+                LedOutputBridge::new(),
+                Some(port_name.clone()),
+                1.0,
+                FirmwareProfile::default(),
+                ColorCorrectionConfig::default(),
+            );
+            sink_registry.replace(Box::new(new_sink));
+
+            SerialConnectionStatus {
+                port_name: Some(port_name),
+                connected: true,
+                status: command_status(
+                    "CONNECT_OK",
+                    "Serial port connection attempt succeeded.",
+                    None,
+                ),
+                updated_at_unix_ms: now_unix_ms(),
+            }
+        }
+        Err(error) => {
+            sink_registry.clear();
+            SerialConnectionStatus {
+                port_name: Some(port_name),
+                connected: false,
+                status: command_status(
+                    connect_error_code(&error),
+                    "Serial port connection attempt failed.",
+                    Some(error.to_string()),
+                ),
+                updated_at_unix_ms: now_unix_ms(),
+            }
+        }
     };
 
     set_last_status(&connection_state, result.clone());

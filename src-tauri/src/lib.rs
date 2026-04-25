@@ -47,7 +47,7 @@ use commands::calibration::{
 };
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
-    SerialConnectionState,
+    ActiveSinkRegistry, SerialConnectionState,
 };
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
@@ -111,6 +111,9 @@ fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
     // 2. Deactivate Hue entertainment area so the bridge turns lights off.
     //    stop_hue_stream is synchronous (waits up to HUE_STOP_TIMEOUT_SECS=3s).
     let _ = stop_hue_stream(None, app.state::<HueRuntimeStateStore>());
+
+    // 3. Stop and release the active sink (serial port session).
+    app.state::<ActiveSinkRegistry>().clear();
 
     app.exit(0);
 }
@@ -345,6 +348,7 @@ pub fn run() {
 
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());
+            app.manage(ActiveSinkRegistry::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
             app.manage(HueRuntimeStateStore::default());
