@@ -473,10 +473,25 @@
   display: flex;
   flex-direction: column;
   gap: 11px;
-  flex: 1;
+  /* flex-basis: 0 forces the body to size from its overflow rather than its
+     intrinsic content height — without it, flex children with `min-height:
+     auto` push the body past its share of the column and the `overflow-y`
+     never engages because the body itself stretches the parent. */
+  flex: 1 1 0;
   min-height: 0;
   padding: 12px 12px 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Keep flex children from claiming `min-content` space, which would
+   otherwise let intrinsic widths leak past the 320 px frame and starve
+   `lm-compact-body` of its scrollable region. */
+.lm-compact-body > * {
+  min-height: 0;
+  min-width: 0;
 }
 
 /* Section title — uppercase mono small + flexed gradient line */
