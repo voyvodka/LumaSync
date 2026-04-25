@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
@@ -416,6 +417,12 @@ function perceivedLuminance({ r, g, b }: { r: number; g: number; b: number }): n
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }
 
+/** Estimated popover dimensions used to clamp the position into the viewport.
+ *  Matches the rendered HsvColorPicker(compact) + 12px wrapper padding. */
+const POPOVER_WIDTH_PX = 200;
+const POPOVER_EST_HEIGHT_PX = 270;
+const POPOVER_VIEWPORT_MARGIN_PX = 8;
+
 function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps) {
   const { t } = useTranslation("common");
   const hex = rgbToHex(rgb);
@@ -428,12 +435,54 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
   // v1.5 W1-A7 — open the SVG-native HSV picker in a small popover
   // anchored to the hero card. The native <input type="color"> is gone;
   // see HsvColorPicker for the replacement (keyboard nav + recent colors).
+  //
+  // v1.5 W2 fix #42 — popover is rendered through React.createPortal into
+  // document.body so the surrounding `.lm-compact-body { overflow: auto }`
+  // and `.lm-compact { overflow: hidden }` chain can no longer clip it.
+  // Position is computed from the trigger's getBoundingClientRect() and
+  // refreshed on resize / scroll so the popover tracks the hero tile while
+  // the user adjusts the brightness slider underneath.
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null);
+
+  const recomputePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    // Anchor below the trigger by default; flip above if there is no room
+    // (compact tray can land near the bottom edge of the screen).
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove =
+      spaceBelow < POPOVER_EST_HEIGHT_PX + POPOVER_VIEWPORT_MARGIN_PX &&
+      rect.top > POPOVER_EST_HEIGHT_PX + POPOVER_VIEWPORT_MARGIN_PX;
+    const top = placeAbove
+      ? rect.top - POPOVER_EST_HEIGHT_PX - POPOVER_VIEWPORT_MARGIN_PX
+      : rect.bottom + 6;
+    let left = rect.left + rect.width / 2 - POPOVER_WIDTH_PX / 2;
+    // Clamp horizontally so the popover does not leak off-window. The
+    // 320 px compact frame is narrow enough that center-anchoring rarely
+    // overflows, but resizing the window mid-open made the picker flush
+    // against the right edge of the viewport without this clamp.
+    const maxLeft = window.innerWidth - POPOVER_WIDTH_PX - POPOVER_VIEWPORT_MARGIN_PX;
+    if (left < POPOVER_VIEWPORT_MARGIN_PX) left = POPOVER_VIEWPORT_MARGIN_PX;
+    if (left > maxLeft) left = Math.max(POPOVER_VIEWPORT_MARGIN_PX, maxLeft);
+    setPopoverPos({ left, top });
+  }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPopoverPos(null);
+      return;
+    }
+    recomputePosition();
+    const onResize = () => recomputePosition();
+    const onScroll = () => recomputePosition();
+    window.addEventListener("resize", onResize);
+    // Capture-phase scroll listener catches scrolls inside compact-body
+    // (which is the actual scroller — the window itself does not scroll).
+    window.addEventListener("scroll", onScroll, true);
     const onDoc = (e: MouseEvent) => {
       if (popoverRef.current?.contains(e.target as Node)) return;
       if (triggerRef.current?.contains(e.target as Node)) return;
@@ -445,10 +494,37 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, recomputePosition]);
+
+  const popover = open && popoverPos ? (
+    <div
+      ref={popoverRef}
+      role="dialog"
+      aria-modal="false"
+      aria-label={t("general.mode.solidColor")}
+      className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-xl"
+      style={{
+        position: "fixed",
+        left: popoverPos.left,
+        top: popoverPos.top,
+        width: POPOVER_WIDTH_PX,
+        zIndex: 1000,
+      }}
+    >
+      <HsvColorPicker
+        value={hex}
+        onChange={onChange}
+        disabled={disabled}
+        ariaLabel={t("general.mode.solidColor")}
+        compact
+      />
+    </div>
+  ) : null;
 
   return (
     <div className="relative">
@@ -484,23 +560,7 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
           <EyedropperIcon />
         </span>
       </button>
-      {open && (
-        <div
-          ref={popoverRef}
-          role="dialog"
-          aria-modal="false"
-          aria-label={t("general.mode.solidColor")}
-          className="absolute left-1/2 z-50 mt-2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-xl"
-        >
-          <HsvColorPicker
-            value={hex}
-            onChange={onChange}
-            disabled={disabled}
-            ariaLabel={t("general.mode.solidColor")}
-            compact
-          />
-        </div>
-      )}
+      {popover && createPortal(popover, document.body)}
     </div>
   );
 }
