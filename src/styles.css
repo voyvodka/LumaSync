@@ -827,6 +827,18 @@
   cursor: not-allowed;
 }
 
+/* v1.5 W2 fix #41 — Adalight brightness-locked notice. Mono mini-text
+   slotted under the slider when the firmware profile owns brightness;
+   matches the amber tone SolidColorPanel uses in the full Lights view. */
+.lm-compact-brightness-note {
+  margin-top: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: rgba(255, 176, 32, 0.78);
+}
+
 /* v1.5 W2 fix #40 — compact ambilight smoothing preset.
    The shared LightingSmoothingPresetControl ships with `.lm-psl.lm-psl-seg`
    styles tuned for the full Lights view; in the compact card we wrap it so

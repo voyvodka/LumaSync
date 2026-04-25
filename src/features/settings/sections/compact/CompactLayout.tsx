@@ -32,8 +32,10 @@ import {
   type ModeGuardReason,
 } from "../../../mode/state/modeGuard";
 import type { HueIntensityPreset, HueRuntimeTarget } from "../../../../shared/contracts/hue";
+import { FIRMWARE_PROFILE, type FirmwareProfile } from "../../../../shared/contracts/device";
 import { SCENE_PRESETS, type ScenePreset } from "../../../mode/model/scenePresets";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
+import { shellStore } from "../../../persistence/shellStore";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
@@ -82,6 +84,34 @@ export function CompactLayout({
   onHueIntensityPresetChange,
 }: CompactLayoutProps) {
   const { t } = useTranslation("common");
+
+  // v1.5 W2 fix #41 — Adalight brightness lock parity with full settings.
+  // Hydrate the persisted firmware profile so the compact Solid card can
+  // disable the brightness slider exactly like SolidColorPanel does in
+  // full mode. Without this, the user could nudge brightness in compact
+  // and the firmware would silently swallow the byte (Adalight wire
+  // format has no brightness field) — divergent UX between the two
+  // surfaces of the same runtime.
+  const [firmwareProfile, setFirmwareProfile] = useState<FirmwareProfile | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    void shellStore
+      .load()
+      .then((state) => {
+        if (cancelled) return;
+        setFirmwareProfile(state.firmwareProfile);
+      })
+      .catch((error) => {
+        console.error("[LumaSync] CompactLayout firmwareProfile hydrate failed:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
+  const adalightLockReason = isAdalight
+    ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+    : undefined;
 
   const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID;
   const ambilightConfig = lightingMode.ambilight ?? DEFAULT_AMBILIGHT;
@@ -229,7 +259,8 @@ export function CompactLayout({
             </div>
             <SelfContainedBrightnessRow
               initialPercent={ambilightBrightnessPct}
-              disabled={nonOffDisabled}
+              disabled={nonOffDisabled || isAdalight}
+              brightnessDisabledReason={adalightLockReason}
               onCommit={handleAmbilightBrightnessCommit}
             />
             {/* v1.5 W2 fix #40 — smoothing preset parity with full mode.
@@ -251,6 +282,8 @@ export function CompactLayout({
             onCommit={handleSolidCommit}
             label={t("general.mode.options.solid")}
             sublabel={t("general.mode.solidColor")}
+            brightnessDisabled={isAdalight}
+            brightnessDisabledReason={adalightLockReason}
           />
         )}
 
@@ -358,6 +391,10 @@ const BRIGHTNESS_COMMIT_MIN_INTERVAL_MS = 50;
 interface CompactSolidSectionProps {
   incoming: { r: number; g: number; b: number; brightness: number };
   disabled: boolean;
+  /** v1.5 W2 fix #41 — Adalight firmware lock parity with full Lights view. */
+  brightnessDisabled?: boolean;
+  /** Tooltip / mono notice surfaced when `brightnessDisabled` is true. */
+  brightnessDisabledReason?: string;
   label: string;
   sublabel: string;
   onCommit: (payload: { r: number; g: number; b: number; brightness: number }) => void;
@@ -366,6 +403,8 @@ interface CompactSolidSectionProps {
 function CompactSolidSection({
   incoming,
   disabled,
+  brightnessDisabled = false,
+  brightnessDisabledReason,
   label,
   sublabel,
   onCommit,
@@ -409,7 +448,8 @@ function CompactSolidSection({
       />
       <SelfContainedBrightnessRow
         initialPercent={brightnessPct}
-        disabled={disabled}
+        disabled={disabled || brightnessDisabled}
+        brightnessDisabledReason={brightnessDisabled ? brightnessDisabledReason : undefined}
         onCommit={handleBrightnessCommit}
       />
     </div>
@@ -616,12 +656,20 @@ function EyedropperIcon() {
 interface SelfContainedBrightnessRowProps {
   initialPercent: number;
   disabled: boolean;
+  /**
+   * Mono mini-notice rendered under the slider when the row is disabled
+   * for a firmware-level reason (Adalight, primarily). Mirrors the
+   * SolidColorPanel surface in full mode so users see the same copy
+   * regardless of which window they're in.
+   */
+  brightnessDisabledReason?: string;
   onCommit: (next: number) => void;
 }
 
 function SelfContainedBrightnessRow({
   initialPercent,
   disabled,
+  brightnessDisabledReason,
   onCommit,
 }: SelfContainedBrightnessRowProps) {
   const { t } = useTranslation("common");
@@ -705,6 +753,8 @@ function SelfContainedBrightnessRow({
         step={1}
         value={localPercent}
         disabled={disabled}
+        aria-disabled={disabled}
+        title={brightnessDisabledReason}
         className="lm-compact-slider"
         style={sliderStyle}
         onPointerDown={() => {
@@ -718,6 +768,11 @@ function SelfContainedBrightnessRow({
           scheduleCommit(next);
         }}
       />
+      {brightnessDisabledReason && (
+        <div className="lm-compact-brightness-note" role="note">
+          {brightnessDisabledReason}
+        </div>
+      )}
     </div>
   );
 }
