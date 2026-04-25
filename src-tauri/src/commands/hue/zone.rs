@@ -192,7 +192,10 @@ pub fn world_pos_from_zone_relative(
 /// to the `HueZone` struct. Kept here as a thin authoring-side wrapper
 /// + a self-test of the formula equivalence.
 #[cfg(test)]
-pub fn world_pos_clamped(zone: &HueZone, relative: &ZoneRelativePosition) -> ((f64, f64, f64), bool) {
+pub fn world_pos_clamped(
+    zone: &HueZone,
+    relative: &ZoneRelativePosition,
+) -> ((f64, f64, f64), bool) {
     let (x, y, z) = world_pos_from_zone_relative(zone, relative);
     let cx = x.clamp(-1.0, 1.0);
     let cy = y.clamp(-1.0, 1.0);
@@ -432,8 +435,7 @@ pub fn assign_channel_to_zone(req: AssignChannelRequest) -> ZoneCommandResult {
         return ZoneCommandResult {
             status: CommandStatus {
                 code: STATUS_ZONE_OUT_OF_BOUNDS.to_string(),
-                message: "Zone-relative position is required when attaching a channel."
-                    .to_string(),
+                message: "Zone-relative position is required when attaching a channel.".to_string(),
                 details: None,
             },
             zones: existing_zones,
@@ -512,9 +514,7 @@ pub fn assign_channel_to_zone(req: AssignChannelRequest) -> ZoneCommandResult {
     ZoneCommandResult {
         status: CommandStatus {
             code: STATUS_ZONE_UPDATED.to_string(),
-            message: format!(
-                "Channel {channel_index} attached to zone `{target_zone_id}`."
-            ),
+            message: format!("Channel {channel_index} attached to zone `{target_zone_id}`."),
             details: Some(target_zone_id),
         },
         zones: existing_zones,
@@ -602,7 +602,11 @@ mod tests {
 
     #[test]
     fn create_zone_rejects_when_channel_count_exceeds_area_cap() {
-        let zone = make_zone("z1", "area-1", (0..(HUE_AREA_CHANNEL_LIMIT as u8 + 1)).collect());
+        let zone = make_zone(
+            "z1",
+            "area-1",
+            (0..(HUE_AREA_CHANNEL_LIMIT as u8 + 1)).collect(),
+        );
         let result = create_zone(CreateZoneRequest {
             zone,
             existing_zones: Vec::new(),

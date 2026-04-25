@@ -13,35 +13,31 @@
 //! `super::hue_stream_lifecycle::*` re-export shim — that path remains
 //! stable so the Tauri `invoke_handler!` registration list is unchanged.
 
-
 use std::sync::Arc;
 use std::time::Duration;
 
 use log::{error, info};
 use tauri::State;
 
-use super::reconnect::{
-    spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard,
-};
+use super::super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
+use super::frame::HueAreaChannelInfo;
+use super::reconnect::{spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard};
 use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
 };
 use super::sender::{
-    build_hue_sender, deactivate_entertainment_config, fetch_area_channels,
-    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, new_shutdown_signal,
-    signal_shutdown_complete, wait_for_shutdown, apply_channel_region_overrides, no_op_sender,
+    apply_channel_region_overrides, build_hue_sender, deactivate_entertainment_config,
+    fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled,
+    new_shutdown_signal, no_op_sender, signal_shutdown_complete, wait_for_shutdown,
 };
-use super::frame::HueAreaChannelInfo;
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, flush_pending_solid_color, make_result,
     status_with, HueRuntimeActionHint, HueRuntimeCommandResult, HueRuntimeGateEvidence,
-    HueRuntimeState, HueRuntimeStateStore, HueRuntimeTriggerSource, HueRuntimeStatus,
+    HueRuntimeState, HueRuntimeStateStore, HueRuntimeStatus, HueRuntimeTriggerSource,
     HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
 };
-use super::super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
 
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Tauri-command-only constants
@@ -736,7 +732,6 @@ pub fn simulate_hue_fault() -> Result<String, String> {
     Err("SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string())
 }
 
-
 // ---------------------------------------------------------------------------
 // Hue zone authoring commands (v1.5 W1-A3 — logical-grouping zones)
 // ---------------------------------------------------------------------------
@@ -749,23 +744,17 @@ pub fn simulate_hue_fault() -> Result<String, String> {
 // `save_room_map`.
 
 #[tauri::command]
-pub fn create_hue_zone(
-    request: super::zone::CreateZoneRequest,
-) -> super::zone::ZoneCommandResult {
+pub fn create_hue_zone(request: super::zone::CreateZoneRequest) -> super::zone::ZoneCommandResult {
     super::zone::create_zone(request)
 }
 
 #[tauri::command]
-pub fn update_hue_zone(
-    request: super::zone::UpdateZoneRequest,
-) -> super::zone::ZoneCommandResult {
+pub fn update_hue_zone(request: super::zone::UpdateZoneRequest) -> super::zone::ZoneCommandResult {
     super::zone::update_zone(request)
 }
 
 #[tauri::command]
-pub fn delete_hue_zone(
-    request: super::zone::DeleteZoneRequest,
-) -> super::zone::ZoneCommandResult {
+pub fn delete_hue_zone(request: super::zone::DeleteZoneRequest) -> super::zone::ZoneCommandResult {
     super::zone::delete_zone(request)
 }
 

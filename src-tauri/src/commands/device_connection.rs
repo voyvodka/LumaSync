@@ -5,7 +5,9 @@ use serde::Serialize;
 use serialport::{available_ports, SerialPortType};
 
 use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
-use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink};
+use super::led_output::{
+    ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
+};
 use super::led_sink::LedSink;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;

@@ -367,21 +367,9 @@ pub(crate) fn xy_to_rgb(x: f64, y: f64) -> (u8, u8, u8) {
 pub use super::sender::HueGamutType;
 
 /// CIE xy gamut triangle as `[red, green, blue]` vertices.
-pub(super) const GAMUT_A: [(f64, f64); 3] = [
-    (0.704, 0.296),
-    (0.2151, 0.7106),
-    (0.138, 0.080),
-];
-pub(super) const GAMUT_B: [(f64, f64); 3] = [
-    (0.675, 0.322),
-    (0.4091, 0.518),
-    (0.167, 0.040),
-];
-pub(super) const GAMUT_C: [(f64, f64); 3] = [
-    (0.692, 0.308),
-    (0.170, 0.700),
-    (0.153, 0.048),
-];
+pub(super) const GAMUT_A: [(f64, f64); 3] = [(0.704, 0.296), (0.2151, 0.7106), (0.138, 0.080)];
+pub(super) const GAMUT_B: [(f64, f64); 3] = [(0.675, 0.322), (0.4091, 0.518), (0.167, 0.040)];
+pub(super) const GAMUT_C: [(f64, f64); 3] = [(0.692, 0.308), (0.170, 0.700), (0.153, 0.048)];
 
 fn gamut_vertices(gamut: HueGamutType) -> Option<[(f64, f64); 3]> {
     match gamut {
@@ -416,11 +404,7 @@ fn point_in_triangle(p: (f64, f64), a: (f64, f64), b: (f64, f64), c: (f64, f64))
 
 /// Project the point `p` onto the line segment `a → b` and return the
 /// closest point that still lies on the segment.
-fn closest_point_on_segment(
-    p: (f64, f64),
-    a: (f64, f64),
-    b: (f64, f64),
-) -> (f64, f64) {
+fn closest_point_on_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
     let ab = (b.0 - a.0, b.1 - a.1);
     let ap = (p.0 - a.0, p.1 - a.1);
     let denom = ab.0 * ab.0 + ab.1 * ab.1;
@@ -699,8 +683,16 @@ mod tests {
         // = world (0.8, 0.8, 0).
         let world = resolve_zone_relative((0.5, 0.5, 0.0), (0.3, 0.3, 1.0), (1.0, 1.0, 0.0))
             .expect("expected in-cube world position");
-        assert!((world.0 - 0.8).abs() < 1e-9, "expected x≈0.8, got {}", world.0);
-        assert!((world.1 - 0.8).abs() < 1e-9, "expected y≈0.8, got {}", world.1);
+        assert!(
+            (world.0 - 0.8).abs() < 1e-9,
+            "expected x≈0.8, got {}",
+            world.0
+        );
+        assert!(
+            (world.1 - 0.8).abs() < 1e-9,
+            "expected y≈0.8, got {}",
+            world.1
+        );
         assert!(world.2.abs() < 1e-9, "expected z≈0, got {}", world.2);
     }
 
@@ -708,7 +700,10 @@ mod tests {
     fn resolve_zone_relative_rejects_out_of_cube_position() {
         // (0.9, 0, 0) + (0.5, 0, 0) * (1, 0, 0) = 1.4 → out of bounds.
         let result = resolve_zone_relative((0.9, 0.0, 0.0), (0.5, 0.0, 0.0), (1.0, 0.0, 0.0));
-        assert!(result.is_err(), "expected out-of-bounds Err, got {result:?}");
+        assert!(
+            result.is_err(),
+            "expected out-of-bounds Err, got {result:?}"
+        );
     }
 
     #[test]
@@ -900,8 +895,7 @@ mod tests {
         let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
         // Reference path: empty metadata cache → no clip, pristine RGB.
-        let frame_unclipped =
-            build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
+        let frame_unclipped = build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
 
         // Gamut B path: metadata cache pins the bulb to gamut B → clip
         // engaged.
@@ -989,8 +983,7 @@ mod tests {
             },
         );
         let frame_other = build_huestream_frame(area, &channels, &colors, 1.0, &meta);
-        let frame_empty =
-            build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
+        let frame_empty = build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
         // Identical: Other gamut → pass-through, same as cache miss.
         assert_eq!(frame_other, frame_empty);
     }

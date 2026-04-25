@@ -108,7 +108,10 @@ impl MdnsRegistry {
             return Err(MdnsBrowserError::Unsupported);
         };
 
-        let mut guard = self.browsers.lock().map_err(|_| MdnsBrowserError::Poisoned)?;
+        let mut guard = self
+            .browsers
+            .lock()
+            .map_err(|_| MdnsBrowserError::Poisoned)?;
 
         if let Some(existing) = guard.get(service_type) {
             return Ok(MdnsBrowseHandle {
@@ -222,7 +225,9 @@ pub const HUE_SERVICE_TYPE: &str = "_hue._tcp.local.";
 /// against cloud discovery and decides whether to surface the empty
 /// state. Only true backend errors (`Unsupported`, `BrowseFailed`)
 /// propagate as `Err`.
-pub fn browse_hue_bridges(deadline: Duration) -> Result<Vec<MdnsBridgeCandidate>, MdnsBrowserError> {
+pub fn browse_hue_bridges(
+    deadline: Duration,
+) -> Result<Vec<MdnsBridgeCandidate>, MdnsBrowserError> {
     let registry = MdnsRegistry::global();
     let handle = registry.browse(HUE_SERVICE_TYPE)?;
     let infos = handle.snapshot(deadline);
@@ -251,7 +256,10 @@ pub(crate) fn parse_hue_service_info(info: ServiceInfo) -> Option<MdnsBridgeCand
             // Fallback: if Service has no resolved IPv4 yet, try parsing
             // the hostname into an Ipv4Addr (defensive — shouldn't normally
             // happen because mdns-sd emits ServiceResolved only after A-record).
-            info.get_hostname().parse::<Ipv4Addr>().ok().map(|v| v.to_string())
+            info.get_hostname()
+                .parse::<Ipv4Addr>()
+                .ok()
+                .map(|v| v.to_string())
         })?;
 
     // TXT record key. Hue v2 bridges advertise `bridgeid=<UPPER_HEX>`.
@@ -259,24 +267,19 @@ pub(crate) fn parse_hue_service_info(info: ServiceInfo) -> Option<MdnsBridgeCand
         .get_property("bridgeid")
         .and_then(|p| p.val_str().to_string().into())
         .filter(|s: &String| !s.is_empty());
-    let id = txt_id
-        .map(|s: String| s.to_uppercase())
-        .or_else(|| {
-            // Fallback: derive an id from the instance name, e.g.
-            // "Hue Bridge - ABCDEF._hue._tcp.local." → "ABCDEF".
-            let full = info.get_fullname();
-            full.split('-')
-                .next_back()
-                .map(|s| s.trim_end_matches("._hue._tcp.local.").to_uppercase())
-                .filter(|s| !s.is_empty())
-        })?;
+    let id = txt_id.map(|s: String| s.to_uppercase()).or_else(|| {
+        // Fallback: derive an id from the instance name, e.g.
+        // "Hue Bridge - ABCDEF._hue._tcp.local." → "ABCDEF".
+        let full = info.get_fullname();
+        full.split('-')
+            .next_back()
+            .map(|s| s.trim_end_matches("._hue._tcp.local.").to_uppercase())
+            .filter(|s| !s.is_empty())
+    })?;
 
     let name = {
         let raw = info.get_fullname();
-        let trimmed = raw
-            .strip_suffix("._hue._tcp.local.")
-            .unwrap_or(raw)
-            .trim();
+        let trimmed = raw.strip_suffix("._hue._tcp.local.").unwrap_or(raw).trim();
         if trimmed.is_empty() {
             "Hue Bridge".to_string()
         } else {

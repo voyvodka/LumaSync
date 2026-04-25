@@ -19,10 +19,10 @@ mod commands {
     pub mod calibration;
     pub mod device_connection;
     pub mod device_handshake;
+    pub mod hue;
     pub mod hue_http;
     pub mod hue_intensity;
     pub mod hue_onboarding;
-    pub mod hue;
     pub mod hue_stream_lifecycle;
     pub mod led_calibration;
     pub mod led_output;

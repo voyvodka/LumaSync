@@ -225,9 +225,7 @@ pub fn default_store() -> Box<dyn SecretStore> {
     match probe {
         Ok(_) => Box::new(KeychainStore::new()),
         Err(err) => {
-            warn!(
-                "[hue-cred] keychain unavailable on this platform — falling back to noop: {err}"
-            );
+            warn!("[hue-cred] keychain unavailable on this platform — falling back to noop: {err}");
             Box::new(NoopStore::new())
         }
     }
@@ -466,9 +464,15 @@ pub(crate) mod tests {
     #[test]
     fn status_codes_are_stable() {
         assert_eq!(status::STORE_OK, "HUE_CREDENTIAL_STORE_OK");
-        assert_eq!(status::STORE_UNAVAILABLE, "HUE_CREDENTIAL_STORE_UNAVAILABLE");
+        assert_eq!(
+            status::STORE_UNAVAILABLE,
+            "HUE_CREDENTIAL_STORE_UNAVAILABLE"
+        );
         assert_eq!(status::MIGRATION_OK, "HUE_CREDENTIAL_MIGRATION_OK");
-        assert_eq!(status::MIGRATION_SKIPPED, "HUE_CREDENTIAL_MIGRATION_SKIPPED");
+        assert_eq!(
+            status::MIGRATION_SKIPPED,
+            "HUE_CREDENTIAL_MIGRATION_SKIPPED"
+        );
         assert_eq!(status::MIGRATION_FAILED, "HUE_CREDENTIAL_MIGRATION_FAILED");
     }
 

@@ -207,7 +207,10 @@ fn merge_discovery_sources(
     // Merge mDNS bridges, skipping ids that the cloud already returned
     // (cloud keeps the canonical id format and the friendlier name).
     for candidate in mdns_bridges {
-        if !bridges.iter().any(|b| b.id.eq_ignore_ascii_case(&candidate.id)) {
+        if !bridges
+            .iter()
+            .any(|b| b.id.eq_ignore_ascii_case(&candidate.id))
+        {
             bridges.push(candidate);
         }
     }
@@ -361,8 +364,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     outcome.status_code(),
                     outcome.backend().as_str()
                 );
-                result.credential_storage_backend =
-                    Some(outcome.backend().as_str().to_string());
+                result.credential_storage_backend = Some(outcome.backend().as_str().to_string());
             }
             result
         }

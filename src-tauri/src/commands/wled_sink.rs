@@ -62,9 +62,8 @@ impl LedSink for WledUdpSink {
         if self.socket.is_some() {
             return Ok(());
         }
-        let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| {
-            format!("WLED_SOCKET_BIND_FAILED: could not bind UDP socket -- {e}")
-        })?;
+        let socket = UdpSocket::bind("0.0.0.0:0")
+            .map_err(|e| format!("WLED_SOCKET_BIND_FAILED: could not bind UDP socket -- {e}"))?;
         let endpoint = SocketAddrV4::new(self.ip, self.port);
         self.socket = Some(socket);
         self.endpoint = Some(endpoint);

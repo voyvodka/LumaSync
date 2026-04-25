@@ -26,20 +26,20 @@ use std::time::{Duration, Instant};
 
 use log::info;
 
+use super::super::hue_onboarding::check_hue_stream_readiness;
 use super::frame::HueAreaChannel;
+use super::frame::HueColorSender;
+use super::retry::register_transient_fault;
 use super::sender::{
     apply_channel_region_overrides, build_hue_sender_with_counter, deactivate_entertainment_config,
     fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled,
     new_shutdown_signal, no_op_sender, HueLightMetadata, ShutdownSignal,
 };
-use super::frame::HueColorSender;
 use super::state_store::{
-    acquire_hue_runtime, make_result, status_with, HueActiveStreamContext,
-    HuePersistentSender, HueRuntimeActionHint, HueRuntimeOwner, HueRuntimeState,
-    HueRuntimeTriggerSource, StartHueStreamRequest,
+    acquire_hue_runtime, make_result, status_with, HueActiveStreamContext, HuePersistentSender,
+    HueRuntimeActionHint, HueRuntimeOwner, HueRuntimeState, HueRuntimeTriggerSource,
+    StartHueStreamRequest,
 };
-use super::super::hue_onboarding::check_hue_stream_readiness;
-use super::retry::register_transient_fault;
 
 // ---------------------------------------------------------------------------
 // Active-stream-context store

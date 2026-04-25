@@ -719,9 +719,9 @@ pub(crate) fn build_hue_sender_with_counter(
                     let _ = tx_result.send(result);
                 });
 
-                match rx_result.recv_timeout(Duration::from_secs(
-                    super::dtls::DTLS_CONNECT_TIMEOUT_SECS,
-                )) {
+                match rx_result
+                    .recv_timeout(Duration::from_secs(super::dtls::DTLS_CONNECT_TIMEOUT_SECS))
+                {
                     Ok(Ok((sender, shutdown, cipher_name))) => {
                         info!("DTLS entertainment stream established successfully.");
                         (sender, true, shutdown, cipher_name)
@@ -936,8 +936,8 @@ pub async fn fetch_light_metadata_for_channels(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::frame::HueScreenRegion;
+    use super::*;
 
     use std::thread;
 

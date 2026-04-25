@@ -201,10 +201,22 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
 fn info_to_device(ip: &str, info: WledInfoResponse) -> WledDeviceInfo {
     WledDeviceInfo {
         ip: ip.to_string(),
-        mac: if info.mac.is_empty() { None } else { Some(info.mac) },
+        mac: if info.mac.is_empty() {
+            None
+        } else {
+            Some(info.mac)
+        },
         led_count: info.leds.count,
-        name: if info.name.is_empty() { None } else { Some(info.name) },
-        version: if info.ver.is_empty() { None } else { Some(info.ver) },
+        name: if info.name.is_empty() {
+            None
+        } else {
+            Some(info.name)
+        },
+        version: if info.ver.is_empty() {
+            None
+        } else {
+            Some(info.ver)
+        },
     }
 }
 
@@ -268,7 +280,12 @@ pub fn connect_wled_sink(
 pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
     let info = match fetch_wled_info(&request.ip) {
         Ok(info) => info,
-        Err(status) => return WledTestResponse { status, device: None },
+        Err(status) => {
+            return WledTestResponse {
+                status,
+                device: None,
+            }
+        }
     };
 
     if info.leds.count != request.led_count {
@@ -324,11 +341,18 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
 
     match send_result {
         Ok(()) => WledTestResponse {
-            status: WledCommandStatus::ok("WLED_TEST_OK", "Test frame (red ramp) sent successfully."),
+            status: WledCommandStatus::ok(
+                "WLED_TEST_OK",
+                "Test frame (red ramp) sent successfully.",
+            ),
             device: Some(device),
         },
         Err(e) => WledTestResponse {
-            status: WledCommandStatus::err("WLED_TEST_SEND_FAILED", "Test frame send failed.", Some(e)),
+            status: WledCommandStatus::err(
+                "WLED_TEST_SEND_FAILED",
+                "Test frame send failed.",
+                Some(e),
+            ),
             device: Some(device),
         },
     }
@@ -376,7 +400,7 @@ mod tests {
 
     #[test]
     fn info_to_device_maps_fields_correctly() {
-        use super::{WledInfoResponse, WledLedsInfo, info_to_device};
+        use super::{info_to_device, WledInfoResponse, WledLedsInfo};
         let info = WledInfoResponse {
             leds: WledLedsInfo { count: 60 },
             mac: "AA:BB:CC:DD:EE:FF".to_string(),
@@ -393,7 +417,7 @@ mod tests {
 
     #[test]
     fn info_to_device_empty_strings_become_none() {
-        use super::{WledInfoResponse, WledLedsInfo, info_to_device};
+        use super::{info_to_device, WledInfoResponse, WledLedsInfo};
         let info = WledInfoResponse {
             leds: WledLedsInfo { count: 30 },
             mac: String::new(),
