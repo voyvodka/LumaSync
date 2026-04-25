@@ -578,7 +578,7 @@ export function DeviceSection() {
                 /* State J: Discovering ghost card */
                 <div className="lm-hue-scan-card">
                   <span className="lm-hue-wait-sp" />
-                  <span style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "#4d5564", letterSpacing: "0.04em" }}>
+                  <span style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", letterSpacing: "0.04em" }}>
                     {t("devicesPage.hue.scanningDetail")}
                   </span>
                 </div>
@@ -928,7 +928,7 @@ export function DeviceSection() {
                     <div className="lm-hue-areas">
                       <div className="lm-hue-areas-label">{t("device.hue.areas.selectLabel")}</div>
                       {areaGroups.length === 0 ? (
-                        <p style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "#4d5564", padding: "4px 0" }}>
+                        <p style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", padding: "4px 0" }}>
                           {t("device.hue.areas.empty")}
                         </p>
                       ) : (

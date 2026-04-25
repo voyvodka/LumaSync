@@ -37,8 +37,17 @@ interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
 }
 
-// Hex colors matching ZONE_COLORS Tailwind classes (for inline boxShadow ring)
-const ZONE_COLOR_HEX = ["#3b82f6", "#10b981", "#a855f7", "#f59e0b", "#f43f5e", "#06b6d4"];
+// CSS custom property references matching ZONE_COLORS Tailwind classes
+// (for inline boxShadow ring). Hex values are defined in src/styles.css
+// under --lm-zone-{1..6} so JS and CSS share a single source of truth.
+const ZONE_COLOR_HEX = [
+  "var(--lm-zone-1)",
+  "var(--lm-zone-2)",
+  "var(--lm-zone-3)",
+  "var(--lm-zone-4)",
+  "var(--lm-zone-5)",
+  "var(--lm-zone-6)",
+];
 
 const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
   canvasContainerRef,
@@ -767,7 +776,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="text-sm text-slate-400 dark:text-zinc-500">Loading...</span>
+        <span className="text-sm text-zinc-500">Loading...</span>
       </div>
     );
   }
@@ -1085,10 +1094,10 @@ function RenameDialog({
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={onCancel}>
       <div
-        className="rounded-lg border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl p-4 w-64"
+        className="rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl p-4 w-64"
         onClick={(e) => e.stopPropagation()}
       >
-        <label className="block text-[11px] font-semibold text-slate-700 dark:text-zinc-300 mb-2">
+        <label className="block text-[11px] font-semibold text-zinc-300 mb-2">
           {promptText}
         </label>
         <input
@@ -1101,18 +1110,18 @@ function RenameDialog({
             if (e.key === "Enter") handleSubmit();
             if (e.key === "Escape") onCancel();
           }}
-          className="w-full rounded border border-slate-200 dark:border-zinc-700 bg-transparent px-2 py-1 text-sm text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-cyan-400/60"
+          className="w-full rounded border border-zinc-700 bg-transparent px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-400/60"
           autoFocus
         />
         <div className="mt-3 flex justify-end gap-2">
           <button
-            className="px-2.5 py-1 text-[11px] rounded text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800"
+            className="px-2.5 py-1 text-[11px] rounded text-zinc-400 hover:bg-zinc-800"
             onClick={onCancel}
           >
             {t("roomMap.contextMenu.renameCancel")}
           </button>
           <button
-            className="px-2.5 py-1 text-[11px] rounded bg-cyan-500 text-white hover:bg-cyan-600"
+            className="px-2.5 py-1 text-[11px] rounded bg-amber-500 text-zinc-950 hover:bg-amber-400 font-semibold"
             onClick={handleSubmit}
           >
             {t("roomMap.contextMenu.renameOk")}

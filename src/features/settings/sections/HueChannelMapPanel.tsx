@@ -94,7 +94,7 @@ const REGION_COLORS: Record<Region, string> = {
   right: "bg-purple-500",
   top: "bg-emerald-500",
   bottom: "bg-amber-500",
-  center: "bg-slate-500",
+  center: "bg-zinc-500",
 };
 
 const REGION_COLORS_ACTIVE: Record<Region, string> = {
@@ -102,7 +102,7 @@ const REGION_COLORS_ACTIVE: Record<Region, string> = {
   right: "bg-purple-600 text-white",
   top: "bg-emerald-600 text-white",
   bottom: "bg-amber-600 text-white",
-  center: "bg-slate-600 text-white",
+  center: "bg-zinc-600 text-white",
 };
 
 const SAVED_FLASH_MS = 2000;
@@ -121,15 +121,15 @@ function ModePillToggle({
   t: (key: string) => string;
 }) {
   return (
-    <div className="flex rounded-lg bg-slate-50 p-0.5 dark:bg-zinc-900/60">
+    <div className="flex rounded-lg bg-zinc-900/60 p-0.5">
       <button
         type="button"
         onClick={() => { onModeChange("position"); }}
         aria-pressed={mode === "position"}
         className={`rounded-md px-2.5 py-1 text-[10px] transition-colors ${
           mode === "position"
-            ? "bg-slate-100 font-semibold text-slate-700 dark:bg-zinc-800 dark:text-zinc-200"
-            : "font-normal text-slate-400 hover:text-slate-600 dark:text-zinc-500"
+            ? "bg-zinc-800 font-semibold text-zinc-200"
+            : "font-normal text-zinc-500 hover:text-zinc-300"
         }`}
       >
         {t("device.hue.channelMap.modPosition")}
@@ -140,8 +140,8 @@ function ModePillToggle({
         aria-pressed={mode === "assign-zone"}
         className={`rounded-md px-2.5 py-1 text-[10px] transition-colors ${
           mode === "assign-zone"
-            ? "bg-slate-100 font-semibold text-slate-700 dark:bg-zinc-800 dark:text-zinc-200"
-            : "font-normal text-slate-400 hover:text-slate-600 dark:text-zinc-500"
+            ? "bg-zinc-800 font-semibold text-zinc-200"
+            : "font-normal text-zinc-500 hover:text-zinc-300"
         }`}
       >
         {t("device.hue.channelMap.modAssignZone")}
@@ -213,21 +213,21 @@ function ChannelDetailStrip({
     <div
       role="region"
       aria-label="Channel detail"
-      className="mt-2 flex items-center gap-4 rounded-lg border border-slate-200/40 bg-slate-50/40 px-4 py-2 transition-all duration-150 dark:border-zinc-700/40 dark:bg-zinc-800/20"
+      className="mt-2 flex items-center gap-4 rounded-lg border border-zinc-700/40 bg-zinc-800/20 px-4 py-2 transition-all duration-150"
     >
       {/* Channel name */}
-      <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-200 shrink-0">
+      <span className="text-[11px] font-semibold text-zinc-200 shrink-0">
         {channelLabel}
       </span>
 
       {/* Read-only x/y */}
-      <span className="text-[10px] text-slate-400 dark:text-zinc-500 shrink-0">
+      <span className="text-[10px] text-zinc-500 shrink-0">
         {t("device.hue.channelMap.detailStripPosition")}: x: {placement?.x.toFixed(2) ?? "0.00"}  y: {placement?.y.toFixed(2) ?? "0.00"}
       </span>
 
       {/* Z-axis slider */}
       <label className="flex items-center gap-2 ml-auto shrink-0">
-        <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+        <span className="text-[10px] text-zinc-500">
           {t("device.hue.channelMap.detailStripHeight")}
         </span>
         <input
@@ -237,13 +237,13 @@ function ChannelDetailStrip({
           step={0.01}
           value={placement?.z ?? 0}
           onChange={(e) => { onZChange(parseFloat(e.target.value)); }}
-          className="w-24 accent-slate-500 dark:accent-zinc-400"
+          className="w-24 accent-amber-500"
           aria-label={`Height (z) for channel ${lastSelected + 1}`}
           aria-valuemin={-1}
           aria-valuemax={1}
           aria-valuenow={placement?.z ?? 0}
         />
-        <span className="w-10 text-right text-[10px] font-semibold tabular-nums text-slate-700 dark:text-zinc-200">
+        <span className="w-10 text-right text-[10px] font-semibold tabular-nums text-zinc-200">
           {(placement?.z ?? 0).toFixed(2)}
         </span>
       </label>
@@ -533,11 +533,11 @@ export function HueChannelMapPanel({
 
   if (isLoading) {
     return (
-      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+      <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
           {t("device.hue.channelMap.title")}
         </p>
-        <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">{t("device.hue.channelMap.loading")}</p>
+        <p className="mt-1 text-xs text-zinc-400">{t("device.hue.channelMap.loading")}</p>
       </div>
     );
   }
@@ -557,21 +557,21 @@ export function HueChannelMapPanel({
         : t("device.hue.channelMap.hintPositionMode");
 
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-zinc-700 dark:bg-zinc-800/50">
+    <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3">
       {/* Header: title + mode toggle */}
       <div className="flex items-center justify-between">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
           {t("device.hue.channelMap.title")}
         </p>
         <ModePillToggle mode={mode} onModeChange={setMode} t={t} />
       </div>
       <div className="mt-0.5 flex items-center">
-        <p className="text-[11px] text-slate-500 dark:text-zinc-400">
+        <p className="text-[11px] text-zinc-400">
           {hintText}
         </p>
         {/* Multi-select count badge (D-03a) */}
         {mode === "position" && selectedChannels.size > 1 && (
-          <span className="ml-2 inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-zinc-800 dark:text-zinc-300">
+          <span className="ml-2 inline-flex items-center rounded-md bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-300">
             {t("device.hue.channelMap.multiSelectCount", { count: String(selectedChannels.size) })}
           </span>
         )}
@@ -580,19 +580,19 @@ export function HueChannelMapPanel({
       {/* Position grid / spatial canvas */}
       <div
         ref={canvasRef}
-        className="relative mt-2 h-28 overflow-hidden rounded-md border border-slate-200 bg-white dark:border-zinc-600 dark:bg-zinc-900"
+        className="relative mt-2 h-28 overflow-hidden rounded-md border border-zinc-600 bg-zinc-900"
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       >
         {/* Axis lines */}
-        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-slate-100 dark:bg-zinc-700" />
-        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-slate-100 dark:bg-zinc-700" />
+        <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-zinc-700" />
+        <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-zinc-700" />
 
         {/* Region labels */}
-        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase text-slate-300 dark:text-zinc-600">L</span>
-        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase text-slate-300 dark:text-zinc-600">R</span>
-        <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] font-semibold uppercase text-slate-300 dark:text-zinc-600">T</span>
-        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[9px] font-semibold uppercase text-slate-300 dark:text-zinc-600">B</span>
+        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase text-zinc-600">L</span>
+        <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[9px] font-semibold uppercase text-zinc-600">R</span>
+        <span className="absolute left-1/2 top-0.5 -translate-x-1/2 text-[9px] font-semibold uppercase text-zinc-600">T</span>
+        <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[9px] font-semibold uppercase text-zinc-600">B</span>
 
         {/* Channel dots */}
         {channels.map((ch) => {
@@ -601,7 +601,7 @@ export function HueChannelMapPanel({
           const py = placement?.y ?? ch.positionY;
           const { left, top } = posToPercent(px, py);
           const effectiveRegion = (overrides[ch.index] ?? ch.autoRegion) as Region;
-          const colorClass = REGION_COLORS[effectiveRegion] ?? "bg-slate-500";
+          const colorClass = REGION_COLORS[effectiveRegion] ?? "bg-zinc-500";
           const isOverridden = Boolean(overrides[ch.index]);
           const isSelected = selectedChannels.has(ch.index);
           const isSingleSelected = isSelected && selectedChannels.size === 1;
@@ -627,13 +627,13 @@ export function HueChannelMapPanel({
                     // Size: selected channels appear larger
                     isSingleSelected ? "h-8 w-8" : isMultiSelected ? "h-8 w-8" : "h-5 w-5",
                     colorClass,
-                    isOverridden ? "ring-2 ring-white ring-offset-1 dark:ring-zinc-900" : "",
+                    isOverridden ? "ring-2 ring-white ring-offset-1 ring-offset-zinc-900" : "",
                     // Multi-select visual: ring-2 ring-white/50, no glow
                     isMultiSelected ? "ring-2 ring-white/50" : "",
                     // Single-select visual: ring-2 ring-white/70 with glow
                     isSingleSelected ? "ring-2 ring-white/70" : "",
                     mode === "position" ? (isDragging ? "cursor-grabbing" : "cursor-grab") : "cursor-pointer",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-1",
                   ].join(" ")}
                   onClick={(e) => {
                     if (mode === "position") {
@@ -703,8 +703,8 @@ export function HueChannelMapPanel({
               disabled={isStreaming || isSaving}
               title={isStreaming ? t("device.hue.channelMap.saveToBridgeTooltip") : undefined}
               onClick={() => { void handleSaveToBridge(); }}
-              className={`rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-800
-                hover:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-500
+              className={`rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-2 text-xs font-medium text-zinc-100
+                hover:border-zinc-500
                 transition-colors duration-150
                 ${(isStreaming || isSaving) ? "opacity-50 cursor-not-allowed" : ""}`}
             >
@@ -767,14 +767,14 @@ export function HueChannelMapPanel({
                   }}
                   className={[
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white",
-                    REGION_COLORS[effectiveRegion] ?? "bg-slate-500",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1",
+                    REGION_COLORS[effectiveRegion] ?? "bg-zinc-500",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-1",
                   ].join(" ")}
                   aria-pressed={selectedChannels.has(ch.index)}
                 >
                   {ch.index + 1}
                 </button>
-                <span className="text-[11px] text-slate-600 dark:text-zinc-400">
+                <span className="text-[11px] text-zinc-400">
                   {ch.lightCount === 1 ? t("device.hue.channelMap.oneLight") : t("device.hue.channelMap.lights", { count: ch.lightCount })}
                 </span>
               </div>
@@ -794,10 +794,10 @@ export function HueChannelMapPanel({
                           handleSetRegion(ch.index, region === ch.autoRegion ? null : region);
                         }
                       }}
-                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 ${
                         isActive
                           ? REGION_COLORS_ACTIVE[region]
-                          : "bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-600"
+                          : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
                       }`}
                     >
                       {regionLabel(region)}
@@ -817,7 +817,7 @@ export function HueChannelMapPanel({
                   onClick={() => {
                     handleSetRegion(ch.index, null);
                   }}
-                  className="ml-auto shrink-0 text-[10px] text-slate-400 underline hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  className="ml-auto shrink-0 text-[10px] text-zinc-500 underline hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
                   title={t("device.hue.channelMap.resetToAuto")}
                 >
                   {t("device.hue.channelMap.auto")}
@@ -857,20 +857,20 @@ export function MiniSpatialPreview({
     right: "bg-purple-400",
     top: "bg-emerald-400",
     bottom: "bg-amber-400",
-    center: "bg-slate-400",
+    center: "bg-zinc-400",
   };
 
   const placeholderCount = channelCount ?? 0;
 
   return (
-    <div className="relative h-12 w-full overflow-hidden rounded-md border border-slate-200 bg-white dark:border-zinc-600 dark:bg-zinc-900">
+    <div className="relative h-12 w-full overflow-hidden rounded-md border border-zinc-600 bg-zinc-900">
       {/* Axis lines */}
-      <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-slate-100 dark:bg-zinc-700" />
-      <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-slate-100 dark:bg-zinc-700" />
+      <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-zinc-700" />
+      <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-zinc-700" />
       {channels
         ? channels.map((ch, i) => {
             const { left, top } = posToPercent(ch.positionX, ch.positionY);
-            const colorClass = MINI_REGION_COLORS[(ch.autoRegion as Region)] ?? "bg-slate-400";
+            const colorClass = MINI_REGION_COLORS[(ch.autoRegion as Region)] ?? "bg-zinc-400";
             return (
               <div
                 key={ch.index ?? i}
@@ -886,7 +886,7 @@ export function MiniSpatialPreview({
             return (
               <div
                 key={i}
-                className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-400"
+                className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-400"
                 style={{ left, top }}
                 aria-hidden="true"
               />

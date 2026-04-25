@@ -41,6 +41,17 @@
   --lm-mono:      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --lm-sans:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
+  /* Room-map zone identity palette. Six perceptually-separated hues used
+     for zone badges (Tailwind .bg-{blue,emerald,purple,amber,rose,cyan}-500
+     in ZoneListPanel.ZONE_COLORS). Mirrored here so JS can read the same
+     hex via CSS custom properties for inline boxShadow rings on Hue dots. */
+  --lm-zone-1: #3b82f6; /* blue-500   */
+  --lm-zone-2: #10b981; /* emerald-500 */
+  --lm-zone-3: #a855f7; /* purple-500 */
+  --lm-zone-4: #f59e0b; /* amber-500  */
+  --lm-zone-5: #f43f5e; /* rose-500   */
+  --lm-zone-6: #06b6d4; /* cyan-500   */
+
   /* Lighting accent — driven by useAccentTheme. Fallbacks below match
      AMBILIGHT_ACCENT so the UI has a sensible default before the hook mounts. */
   --accent-color: rgb(20, 184, 166);
