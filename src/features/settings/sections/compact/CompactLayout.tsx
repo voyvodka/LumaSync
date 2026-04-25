@@ -31,8 +31,9 @@ import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
 } from "../../../mode/state/modeGuard";
-import type { HueRuntimeTarget } from "../../../../shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "../../../../shared/contracts/hue";
 import { SCENE_PRESETS, type ScenePreset } from "../../../mode/model/scenePresets";
+import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
@@ -51,6 +52,14 @@ interface CompactLayoutProps {
    * bound to `SECTION_IDS.DEVICES`.
    */
   onOpenDevices?: () => void;
+  /**
+   * v1.5 W2 fix #40 — Compact ↔ Full feature parity for the lighting
+   * smoothing preset. The compact ambilight card mounts the same
+   * `LightingSmoothingPresetControl` the Lights section uses, and forwards
+   * a chosen preset back to the parent so the running worker hot-reloads.
+   * Optional so test fixtures can mount the layout without wiring it.
+   */
+  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
 }
 
 const DEFAULT_SOLID = { r: 255, g: 220, b: 180, brightness: 1 } as const;
@@ -70,6 +79,7 @@ export function CompactLayout({
   modeLockReason,
   onLightingModeChange,
   onOpenDevices,
+  onHueIntensityPresetChange,
 }: CompactLayoutProps) {
   const { t } = useTranslation("common");
 
@@ -222,6 +232,15 @@ export function CompactLayout({
               disabled={nonOffDisabled}
               onCommit={handleAmbilightBrightnessCommit}
             />
+            {/* v1.5 W2 fix #40 — smoothing preset parity with full mode.
+                Reuses the same control + persistence path so the chosen
+                preset hot-reloads the worker through App.tsx without a
+                mode toggle. */}
+            <div className="lm-compact-smoothing">
+              <LightingSmoothingPresetControl
+                onPresetChange={(next) => onHueIntensityPresetChange?.(next)}
+              />
+            </div>
           </div>
         )}
 

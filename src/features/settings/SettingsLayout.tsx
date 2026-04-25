@@ -100,6 +100,7 @@ export const SettingsLayout = memo(function SettingsLayout({
         modeLockReason={modeLockReason}
         onLightingModeChange={onLightingModeChange}
         onOpenDevices={onOpenDevices}
+        onHueIntensityPresetChange={onHueIntensityPresetChange}
       />
     );
   }

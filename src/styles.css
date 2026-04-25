@@ -827,6 +827,29 @@
   cursor: not-allowed;
 }
 
+/* v1.5 W2 fix #40 — compact ambilight smoothing preset.
+   The shared LightingSmoothingPresetControl ships with `.lm-psl.lm-psl-seg`
+   styles tuned for the full Lights view; in the compact card we wrap it so
+   the segmented chip strip slots flush under the brightness slider with a
+   matching divider and slimmer padding. */
+.lm-compact-smoothing {
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-smoothing .lm-psl {
+  padding: 8px 12px 10px;
+  border-right: 0;
+}
+.lm-compact-smoothing .lm-psl .row {
+  margin-bottom: 6px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-smoothing .lm-psl .row b {
+  font-size: 10px;
+  color: var(--lm-ink);
+}
+
 /* Scene tile row — 5-flex with gradient backgrounds */
 .lm-compact-scenes {
   display: flex;

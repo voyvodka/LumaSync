@@ -338,6 +338,18 @@ export function LightsSection({
     });
   };
 
+  // v1.5 W2 fix #40 — Ambilight brightness used to live only in the
+  // CompactLayout. Mirrored here so the full-mode Lights view exposes
+  // the same control set; payload field is `ambilight.brightness`
+  // (0..1 unit), surfaced as a 0..100% dial.
+  const handleAmbilightBrightnessChange = (percent: number) => {
+    onModeChange({
+      kind: LIGHTING_MODE_KIND.AMBILIGHT,
+      ambilight: { ...incomingAmbilight, brightness: percent / 100 },
+    });
+  };
+  const ambilightBrightnessPct = Math.round((incomingAmbilight.brightness ?? 1) * 100);
+
   const totalLeds = calibration?.totalLeds;
 
   // Poll runtime telemetry while Ambilight is active so the meta pill
@@ -428,6 +440,11 @@ export function LightsSection({
   const blackBorderOn = incomingAmbilight.blackBorderDetection ?? false;
 
   const slidersDisabled = !isAmbilight || modeSelectorDisabled;
+  // Adalight (firmware-fixed brightness) gets the same lock parity as
+  // SolidColorPanel. Locking is OR-ed with the standard slider disable
+  // so the slider tooltip surfaces the firmware reason while transient
+  // mode-transition disables stay generic.
+  const ambilightBrightnessLocked = isAdalight || slidersDisabled;
 
   return (
     <div className="lm-lights-page">
@@ -604,6 +621,38 @@ export function LightsSection({
               />
             )}
             <div className="lm-profile">
+              {/* Brightness — wired to AmbilightPayload.brightness (0..1).
+                  Adalight firmware does not carry a brightness byte, so the
+                  control falls into a visible-but-disabled state with the
+                  shared firmware-profile tooltip — same parity logic as
+                  the SolidColorPanel brightness slider. */}
+              <div className="lm-psl">
+                <div className="row">
+                  <span>{t("lightsPage.signal.profile.brightness")}</span>
+                  <b>{ambilightBrightnessPct}%</b>
+                </div>
+                <div className="tr">
+                  <div className="tr-track">
+                    <span className="tr-fill" style={{ width: `${ambilightBrightnessPct}%` }} />
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={ambilightBrightnessPct}
+                    disabled={ambilightBrightnessLocked}
+                    aria-disabled={ambilightBrightnessLocked}
+                    aria-label={t("lightsPage.signal.profile.brightness")}
+                    title={
+                      isAdalight
+                        ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+                        : undefined
+                    }
+                    onChange={(e) => handleAmbilightBrightnessChange(parseInt(e.target.value, 10))}
+                  />
+                </div>
+              </div>
               {/* Saturation — wired to AmbilightPayload.saturation (0.5–2.0). */}
               <div className="lm-psl">
                 <div className="row">

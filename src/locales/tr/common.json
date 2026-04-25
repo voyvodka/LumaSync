@@ -279,6 +279,7 @@
         "sub": "—"
       },
       "profile": {
+        "brightness": "Parlaklık",
         "saturation": "Doygunluk",
         "blackBorder": "Siyah kenar",
         "blackBorderAuto": "oto",
