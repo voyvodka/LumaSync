@@ -52,6 +52,13 @@
   --lm-zone-5: #f43f5e; /* rose-500   */
   --lm-zone-6: #06b6d4; /* cyan-500   */
 
+  /* Focus ring tokens — every interactive surface uses one of these so the
+     ring color stays in lockstep across the app. `box-shadow` is the
+     preferred carrier (no layout shift). UI Gap 7 a11y consistency.       */
+  --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
+  --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+
   /* Lighting accent — driven by useAccentTheme. Fallbacks below match
      AMBILIGHT_ACCENT so the UI has a sensible default before the hook mounts. */
   --accent-color: rgb(20, 184, 166);
@@ -86,8 +93,8 @@
 }
 
 .lm-titlebar-toggle {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: 1px solid rgba(255, 176, 32, 0.22);
   background: rgba(255, 176, 32, 0.06);
@@ -108,7 +115,7 @@
 }
 .lm-titlebar-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-titlebar-toggle svg {
   width: 13px;
@@ -309,7 +316,7 @@
 }
 .lm-titlebar-ctrl:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring-inset);
 }
 
 /* Small leading brand mark on Win/Linux (where mac traffic-lights live
@@ -409,7 +416,7 @@
 }
 .lm-compact-mbtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-compact-mbtn .ico {
   display: grid;
@@ -662,7 +669,7 @@
 }
 .lm-compact-scene-tile:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-compact-scene-tile::after {
   content: "";
@@ -1079,9 +1086,7 @@
 .lm-updater-btn-primary:focus-visible,
 .lm-updater-btn-retry:focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 2px rgba(255, 176, 32, 0.35),
-    0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1226,7 +1231,7 @@
 }
 .lm-settings-tg:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 .lm-settings-tg:disabled {
   opacity: 0.5;
@@ -1292,7 +1297,7 @@
 }
 .lm-settings-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 
 /* About block */
@@ -1510,7 +1515,7 @@
 }
 .lm-device-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 
 /* Category body — each rail category has its own content column */
@@ -1569,7 +1574,7 @@
 }
 .lm-dcard[role="button"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-dcard::after {
   content: "";
@@ -2494,7 +2499,7 @@
 }
 .lm-mbtn:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring-inset);
 }
 .lm-mbtn .ico {
   width: 30px;
