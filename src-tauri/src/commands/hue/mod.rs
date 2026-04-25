@@ -8,4 +8,7 @@
 
 pub mod dtls;
 pub mod frame;
+pub mod reconnect;
+pub mod retry;
 pub mod sender;
+pub mod state_store;

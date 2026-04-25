@@ -11,16 +11,12 @@
 //! The 50 ms (20 Hz) minimum interval and the keep-alive cadence are
 //! protocol-critical (`ls-hue-protocol §2.1` and §2.3) and must not drift.
 //!
-//! `build_hue_sender*` (the DTLS-with-HTTP-fallback orchestrator that ties
-//! these primitives to a `StartHueStreamRequest`) lives in the parent file
-//! during the v1.5 G8 split because it depends on the runtime owner module
-//! that is being introduced in a later refactor commit.
 
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use log::error;
+use log::{error, info, warn};
 use reqwest::blocking::Client as BlockingClient;
 use serde_json::{json, Value};
 
@@ -625,6 +621,128 @@ pub(crate) fn apply_channel_region_overrides(
         if let Some(Some(region_str)) = overrides.get(i) {
             if let Some(region) = super::frame::parse_screen_region(region_str) {
                 channel.screen_region = region;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sender builder: DTLS-with-HTTP-fallback orchestrator
+// ---------------------------------------------------------------------------
+
+/// No-op sender used when the HTTP client cannot be built. Centralised so we
+/// avoid scattering the `tx`/`channel_count` initialiser across the failure
+/// paths of `build_hue_sender_with_counter`.
+pub(crate) fn no_op_sender() -> HueColorSender {
+    let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+    HueColorSender {
+        tx: Arc::new(tx),
+        channel_count: 0,
+    }
+}
+
+/// Spawn the Hue color sender (DTLS or HTTP fallback) **outside** any mutex
+/// lock.  This function performs blocking network I/O (DTLS handshake, HTTP
+/// activate) and must never be called while the `HueRuntimeOwner` lock is held.
+/// Returns (sender, uses_dtls, shutdown_signal).
+pub(crate) fn build_hue_sender(
+    request: &super::state_store::StartHueStreamRequest,
+    channels: Vec<HueAreaChannel>,
+) -> (HueColorSender, bool, ShutdownSignal) {
+    let packet_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let (sender, uses_dtls, shutdown, _cipher) =
+        build_hue_sender_with_counter(request, channels, packet_counter);
+    (sender, uses_dtls, shutdown)
+}
+
+/// Variant of `build_hue_sender` that takes an external packet counter and returns cipher.
+pub(crate) fn build_hue_sender_with_counter(
+    request: &super::state_store::StartHueStreamRequest,
+    channels: Vec<HueAreaChannel>,
+    packet_counter: Arc<std::sync::atomic::AtomicU32>,
+) -> (HueColorSender, bool, ShutdownSignal, Option<String>) {
+    let has_client_key = !request.client_key.trim().is_empty();
+
+    if has_client_key {
+        match hue_http_client_arc() {
+            Ok(client) => {
+                // Spawn DTLS attempt on a dedicated OS thread with a hard deadline.
+                // DTLS handshake can block indefinitely if the bridge ignores UDP:2100 —
+                // the socket-level read timeout is not honored by OpenSSL's retransmit loop.
+                let (tx_result, rx_result) = std::sync::mpsc::channel();
+                let client_clone = client.clone();
+                let bridge_ip_t = request.bridge_ip.clone();
+                let username_t = request.username.clone();
+                let client_key_t = request.client_key.clone();
+                let area_id_t = request.area_id.clone();
+                let channels_t = channels.clone();
+                let counter_t = Arc::clone(&packet_counter);
+
+                std::thread::spawn(move || {
+                    let result = spawn_hue_dtls_sender(
+                        client_clone,
+                        bridge_ip_t,
+                        username_t,
+                        client_key_t,
+                        area_id_t,
+                        channels_t,
+                        counter_t,
+                    );
+                    let _ = tx_result.send(result);
+                });
+
+                match rx_result.recv_timeout(Duration::from_secs(
+                    super::dtls::DTLS_CONNECT_TIMEOUT_SECS,
+                )) {
+                    Ok(Ok((sender, shutdown, cipher_name))) => {
+                        info!("DTLS entertainment stream established successfully.");
+                        (sender, true, shutdown, cipher_name)
+                    }
+                    Ok(Err(err)) => {
+                        warn!("DTLS connection failed ({err}), falling back to HTTP.");
+                        let (sender, shutdown) = spawn_hue_http_sender(
+                            client,
+                            request.bridge_ip.clone(),
+                            request.username.clone(),
+                            channels.clone(),
+                        );
+                        (sender, false, shutdown, None)
+                    }
+                    Err(_timeout) => {
+                        warn!(
+                            "DTLS handshake timed out after {}s, falling back to HTTP.",
+                            super::dtls::DTLS_CONNECT_TIMEOUT_SECS
+                        );
+                        let (sender, shutdown) = spawn_hue_http_sender(
+                            client,
+                            request.bridge_ip.clone(),
+                            request.username.clone(),
+                            channels.clone(),
+                        );
+                        (sender, false, shutdown, None)
+                    }
+                }
+            }
+            Err(err) => {
+                error!("HUE_SENDER_INIT_FAILED: {err}");
+                (no_op_sender(), false, new_shutdown_signal(), None)
+            }
+        }
+    } else {
+        info!("No clientKey provided, using HTTP fallback sender.");
+        match hue_http_client_arc() {
+            Ok(client) => {
+                let (sender, shutdown) = spawn_hue_http_sender(
+                    client,
+                    request.bridge_ip.clone(),
+                    request.username.clone(),
+                    channels.clone(),
+                );
+                (sender, false, shutdown, None)
+            }
+            Err(err) => {
+                error!("HUE_SENDER_INIT_FAILED: {err}");
+                (no_op_sender(), false, new_shutdown_signal(), None)
             }
         }
     }
