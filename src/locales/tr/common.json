@@ -904,6 +904,12 @@
       "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin.",
       "centerMarkerAriaLabel": "{{name}} bölgesinin merkezini sürükleyin"
     },
+    "zoneProperties": {
+      "title": "Bölge özellikleri",
+      "borderColor": "Kenar",
+      "centerColor": "Merkez",
+      "swatchAriaLabel": "{{name}} rengini kullan"
+    },
     "objectPanel": {
       "objectsTab": "Nesneler",
       "zonesTab": "Zone'lar",

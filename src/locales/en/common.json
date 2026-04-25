@@ -904,6 +904,12 @@
       "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones.",
       "centerMarkerAriaLabel": "Drag to move the {{name}} zone center"
     },
+    "zoneProperties": {
+      "title": "Zone properties",
+      "borderColor": "Border",
+      "centerColor": "Center",
+      "swatchAriaLabel": "Use {{name}} swatch"
+    },
     "objectPanel": {
       "objectsTab": "Objects",
       "zonesTab": "Zones",

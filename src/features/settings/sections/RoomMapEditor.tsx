@@ -12,6 +12,7 @@ import { TvAnchorObject } from "./room-map/TvAnchorObject";
 import { UsbStripObject } from "./room-map/UsbStripObject";
 import { HueChannelOverlay } from "./room-map/HueChannelOverlay";
 import { ObjectListPanel } from "./room-map/ObjectListPanel";
+import { HueZonePropertiesPanel } from "./room-map/HueZonePropertiesPanel";
 import { deriveZones, type ZoneDeriveResult } from "./room-map/deriveZones";
 import { useSnapGuides } from "./room-map/useSnapGuides";
 import { SnapGuideOverlay } from "./room-map/SnapGuideOverlay";
@@ -890,6 +891,27 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
     [config.hueZones, updateConfig],
   );
 
+  // ── v1.5 W1-A8: Generic Hue zone patch handler ───────────────────────
+  // Used by HueZonePropertiesPanel to update borderColor / centerColor
+  // (and reserved for future zone-level fields). Same optimistic pattern
+  // as the create / delete / center handlers — local config first, then
+  // mirror via update_hue_zone with silent-catch logging.
+  const handleHueZoneUpdate = useCallback(
+    (zoneId: string, patch: Partial<HueZone>) => {
+      const next = (config.hueZones ?? []).map((z) =>
+        z.id === zoneId ? { ...z, ...patch } : z,
+      );
+      void updateConfig({ hueZones: next });
+      const updated = next.find((z) => z.id === zoneId);
+      if (updated) {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, { zone: updated }).catch((e) => {
+          console.error("[LumaSync] update_hue_zone (props) failed", e);
+        });
+      }
+    },
+    [config.hueZones, updateConfig],
+  );
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -1141,6 +1163,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
             addHueZoneDisabled={!hueAreaId}
             addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
           />
+        )}
+        {objectPanelOpen && activeHueZone && (
+          <div className="border-l border-zinc-800 bg-zinc-900/90 w-[180px] shrink-0 overflow-y-auto">
+            <HueZonePropertiesPanel
+              zone={activeHueZone}
+              onUpdate={handleHueZoneUpdate}
+            />
+          </div>
         )}
       </div>
 
