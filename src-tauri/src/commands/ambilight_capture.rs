@@ -324,12 +324,18 @@ mod platform {
         ) -> Result<(), Self::Error> {
             let width = frame.width();
             let height = frame.height();
-            let mut frame_buffer = frame
+            let frame_buffer = frame
                 .buffer()
                 .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")?;
-            let raw_pixels = frame_buffer
-                .as_nopadding_buffer()
-                .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")?;
+            // windows-capture 2.0: `as_nopadding_buffer` now takes a scratch
+            // `&mut Vec<u8>` the crate may resize+copy into when the source
+            // frame has row padding (and returns the inner slice unchanged
+            // when it does not). The previous 1.5 API returned
+            // `Result<&[u8], _>`; we adopt the new shape with a stack-local
+            // scratch buffer because the no-padding hot path is the common
+            // case and the allocation only happens on padded frames.
+            let mut nopad_scratch: Vec<u8> = Vec::new();
+            let raw_pixels = frame_buffer.as_nopadding_buffer(&mut nopad_scratch);
             let expected_len = (width as usize)
                 .saturating_mul(height as usize)
                 .saturating_mul(4);

@@ -43,9 +43,12 @@ serialport = "4"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1.52.1", features = ["rt"] }
+# v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
+# Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-capture = "1.5.0"
+windows-capture = "2.0.0"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 raw-window-handle = "0.6"
 
