@@ -27,6 +27,7 @@ const REQUIRED_EXPORTS = [
   "SectionId",
   "SECTION_ORDER",
   "ShellState",
+  "SHELL_STATE_SCHEMA_VERSION",
   "DEFAULT_SHELL_STATE",
   "SHELL_STORE_KEY",
   "UI_MODE_SIZES",
@@ -60,6 +61,7 @@ const REQUIRED_SECTION_IDS = [
 // Required ShellState fields
 // ---------------------------------------------------------------------------
 const REQUIRED_STATE_FIELDS = [
+  "schemaVersion",
   "windowWidth",
   "windowHeight",
   "windowX",
