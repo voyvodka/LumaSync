@@ -26,6 +26,33 @@ export const HUE_COMMANDS = {
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
 
+// ---------------------------------------------------------------------------
+// Hue Zone commands (v1.5 W1-A2 — logical-grouping zone authoring)
+// ---------------------------------------------------------------------------
+
+/**
+ * Authoring commands for Hue zones (see `roomMap.ts > HueZone`).
+ *
+ * Scope (v1.5 D2 — locked, scope (a) "logical grouping"): zones are a
+ * UI subset of an entertainment area. The bridge state machine is not
+ * touched and there is no multi-stream mux. These commands persist /
+ * mutate `RoomMapConfig.hueZones` plus the optional `zoneId` /
+ * `zoneRelativePosition` fields on `HueChannelPlacement`.
+ *
+ * Kept in a separate map so a future caller can iterate "zone-only"
+ * commands without touching `HUE_COMMANDS`. Both sets stay valid Tauri
+ * command strings.
+ */
+export const HUE_ZONE_COMMANDS = {
+  CREATE_ZONE: "create_hue_zone",
+  UPDATE_ZONE: "update_hue_zone",
+  DELETE_ZONE: "delete_hue_zone",
+  ASSIGN_CHANNEL_TO_ZONE: "assign_channel_to_zone",
+} as const;
+
+export type HueZoneCommandId =
+  (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
+
 export const HUE_STATUS = {
   DISCOVERY_OK: "HUE_DISCOVERY_OK",
   DISCOVERY_EMPTY: "HUE_DISCOVERY_EMPTY",
@@ -73,6 +100,36 @@ export const HUE_STATUS = {
   STREAM_READY: "HUE_STREAM_READY",
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
+  // -------------------------------------------------------------------------
+  // Hue Zone authoring (v1.5 W1-A2)
+  // -------------------------------------------------------------------------
+  /** `create_hue_zone` succeeded; the new zone id is in the payload. */
+  ZONE_CREATED: "HUE_ZONE_CREATED",
+  /** `update_hue_zone` succeeded; the mutated zone is in the payload. */
+  ZONE_UPDATED: "HUE_ZONE_UPDATED",
+  /** `delete_hue_zone` succeeded; channels formerly in the zone fall back to legacy absolute placement. */
+  ZONE_DELETED: "HUE_ZONE_DELETED",
+  /** Referenced zone id does not exist in the active room map. */
+  ZONE_NOT_FOUND: "HUE_ZONE_NOT_FOUND",
+  /**
+   * A zone-relative position is outside the [-1, 1] cube on at least one
+   * axis. Surfaces the offending axis in the error message so the editor
+   * can clamp the slider before retrying.
+   */
+  ZONE_CHANNEL_OUT_OF_BOUNDS: "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS",
+  /**
+   * The entertainment area's per-bridge channel cap (Hue: 10 per area)
+   * has been reached, so no further channel can be assigned. Distinct
+   * from `ZONE_CHANNEL_OUT_OF_BOUNDS` because it is a bridge-side limit
+   * the user cannot override by clamping.
+   */
+  ZONE_LIMIT_REACHED: "HUE_ZONE_LIMIT_REACHED",
+  /**
+   * Tried to assign a channel that lives in a different entertainment
+   * area than the zone's `entertainmentAreaId`. Zones never span two
+   * areas; the caller must move the channel to a zone in its own area.
+   */
+  ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
 } as const;
 
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
