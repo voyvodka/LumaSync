@@ -89,9 +89,9 @@ jobs:
         working-directory: src-tauri
         run: cargo check --all-targets --all-features
 
-      - name: Rust test build (no execution)
+      - name: Rust tests
         working-directory: src-tauri
-        run: cargo test --no-run --all-features
+        run: cargo test --all-features
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'
