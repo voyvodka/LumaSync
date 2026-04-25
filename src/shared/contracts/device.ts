@@ -63,6 +63,10 @@ export const SUPPORTED_CONTROLLER_IDS = [
   "10C4:EA60", // CP2102 (Silicon Labs)
   "2341:0043", // Arduino Uno R3
   "2341:0001", // Arduino Uno (original USB ID)
+  "067B:2303", // PL2303 (Prolific)
+  "1A86:5523", // CH341 (WinChipHead)
+  "10C4:EA70", // CP2104 (Silicon Labs)
+  "0403:6014", // FT232H (FTDI Hi-Speed)
 ] as const;
 
 export type SupportedControllerId = (typeof SUPPORTED_CONTROLLER_IDS)[number];
@@ -121,6 +125,35 @@ export const FIRMWARE_PROFILE = {
 } as const;
 
 export type FirmwareProfile = (typeof FIRMWARE_PROFILE)[keyof typeof FIRMWARE_PROFILE];
+
+// ---------------------------------------------------------------------------
+// LED chip type (v1.5 G3 — SK6812 RGBW host-side encoder)
+// ---------------------------------------------------------------------------
+
+/**
+ * LED chip type — controls the per-pixel byte layout in the encoded payload.
+ *
+ * This is an orthogonal axis to `FirmwareProfile`: the profile selects the
+ * wire framing family (LumaSync v1 vs Adalight); the chip type selects the
+ * per-pixel byte width within the payload.
+ *
+ * - `ws2812b-grb`: 3-byte RGB pixels (default). Backward-compatible with all
+ *   v1.x firmware.
+ * - `sk6812-rgbw`: 4-byte RGBW pixels. White channel `W = min(R, G, B)` is
+ *   extracted on the host after colour corrections are applied to R/G/B; the
+ *   W channel bypasses the LUT so that the firmware's native white
+ *   temperature is preserved.
+ *
+ * APA102 is deferred to v2.0 (firmware companion repo decision pending).
+ *
+ * Stored under `ShellState.selectedChipType`. Absent ⇒ `WS2812B_GRB`.
+ */
+export const LED_CHIP_TYPE = {
+  WS2812B_GRB: "ws2812b-grb",
+  SK6812_RGBW: "sk6812-rgbw",
+} as const;
+
+export type LedChipType = (typeof LED_CHIP_TYPE)[keyof typeof LED_CHIP_TYPE];
 
 // ---------------------------------------------------------------------------
 // Color correction (v1.4 G4 — per-channel gamma, Kelvin, saturation)

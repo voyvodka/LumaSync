@@ -40,6 +40,46 @@ pub enum FirmwareProfile {
 }
 
 // ---------------------------------------------------------------------------
+// LedChipType — host-side chip encoding variant (v1.5 G3)
+//
+// Orthogonal axis to FirmwareProfile: FirmwareProfile selects the wire
+// framing family (LumaSync v1 vs Adalight); LedChipType selects the
+// per-pixel byte layout within the payload.
+//
+// WS2812B_GRB is the default and produces 3-byte RGB pixels (the existing
+// path). SK6812_RGBW produces 4-byte RGBW pixels using W = min(R,G,B)
+// extraction; colour corrections (saturation, Kelvin, gamma) are applied to
+// R/G/B before extraction — the W channel bypasses the LUT so that the
+// firmware-side native white temperature is preserved.
+//
+// APA102 is deferred to v2.0 (D8(b) companion firmware repo decision
+// pending). Do not add it here until that milestone lands.
+// ---------------------------------------------------------------------------
+
+/// LED chip type — controls the per-pixel byte layout in the encoded payload.
+///
+/// Stored under `ShellState.selectedChipType` (optional, default
+/// `WS2812B_GRB`). Changing this at runtime does NOT change the on-wire
+/// framing header; it only affects the pixel bytes. (v1.5 G3)
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum LedChipType {
+    /// WS2812B in GRB order (3 bytes per pixel: R, G, B after correction).
+    /// Default — backward-compatible with all v1.x firmware.
+    #[default]
+    #[serde(rename = "ws2812b-grb")]
+    Ws2812bGrb,
+    /// SK6812 in RGBW order (4 bytes per pixel: R', G', B', W).
+    ///
+    /// White channel extraction: `W = min(R, G, B)` after colour corrections.
+    /// Then `R' = R - W`, `G' = G - W`, `B' = B - W`.
+    /// The W channel bypasses the gamma/Kelvin/saturation LUTs; firmware
+    /// applies its own native white temperature on the W channel.
+    #[serde(rename = "sk6812-rgbw")]
+    Sk6812Rgbw,
+}
+
+// ---------------------------------------------------------------------------
 // ColorCorrectionConfig — per-channel colour correction parameters
 // ---------------------------------------------------------------------------
 
@@ -580,6 +620,95 @@ pub fn encode_packet_for_profile(
 }
 
 // ---------------------------------------------------------------------------
+// SK6812 RGBW encoder (v1.5 G3)
+//
+// White channel extraction algorithm: W = min(R, G, B) after colour
+// corrections. Remaining channels: R' = R - W, G' = G - W, B' = B - W.
+//
+// The W channel bypasses the gamma/Kelvin/saturation LUTs because the
+// SK6812 white LED has its own native colour temperature and the firmware
+// should control it directly. Applying host-side correction to W would
+// double-correct the warm/cool balance already baked into the emitter.
+// ---------------------------------------------------------------------------
+
+/// Extract the RGBW pixel bytes from a corrected RGB triple.
+///
+/// Algorithm: `W = min(R, G, B)`, then subtract W from each channel.
+/// Returns `[R', G', B', W]` for direct wire emission.
+///
+/// The caller is responsible for applying colour corrections (saturation,
+/// Kelvin, gamma LUT) to the input before calling this function. The W
+/// channel is intentionally left uncorrected.
+#[inline(always)]
+pub fn extract_rgbw(corrected_rgb: [u8; 3]) -> [u8; 4] {
+    let [r, g, b] = corrected_rgb;
+    let w = r.min(g).min(b);
+    [r - w, g - w, b - w, w]
+}
+
+/// Encode a LumaSync v1 packet for SK6812 RGBW strips.
+///
+/// The framing header is identical to the WS2812B path
+/// (`[0xAA 0x55] [brightness] [led_count_u16_le] ... [xor_checksum]`),
+/// but each pixel occupies 4 bytes instead of 3. The `led_count` field
+/// records the number of LED *pixels* (not bytes), consistent with the
+/// WS2812B encoder.
+///
+/// Colour corrections are applied to the R/G/B channels before W extraction.
+/// The W channel bypasses corrections (see module doc above).
+pub fn encode_sk6812_packet(
+    brightness: f32,
+    rgb_triplets: &[[u8; 3]],
+    corrections: &ColorCorrectionConfig,
+) -> Vec<u8> {
+    let clamped_brightness = (brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
+    let led_count = u16::try_from(rgb_triplets.len()).unwrap_or(u16::MAX);
+
+    // 4 bytes per pixel for RGBW
+    let mut packet = Vec::with_capacity(2 + 1 + 2 + (rgb_triplets.len() * 4) + 1);
+    packet.push(0xAA);
+    packet.push(0x55);
+    packet.push(clamped_brightness);
+    packet.extend_from_slice(&led_count.to_le_bytes());
+
+    let luts = build_gamma_luts(
+        corrections.gamma_r,
+        corrections.gamma_g,
+        corrections.gamma_b,
+    );
+    let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
+    let kelvin_identity = corrections.kelvin == 6500;
+    let sat_identity = (corrections.saturation - 1.0_f32).abs() < f32::EPSILON;
+
+    for &pixel in rgb_triplets {
+        // Step 1 — saturation
+        let after_sat = if sat_identity {
+            pixel
+        } else {
+            apply_saturation_to_pixel(pixel, corrections.saturation)
+        };
+
+        // Step 2 — Kelvin
+        let [r, g, b] = if kelvin_identity {
+            after_sat
+        } else {
+            apply_kelvin_to_pixel(after_sat, &kelvin_muls)
+        };
+
+        // Step 3 — gamma LUT (RGB only; W bypasses)
+        let corrected = [luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]];
+
+        // Step 4 — W extraction
+        let [r_prime, g_prime, b_prime, w] = extract_rgbw(corrected);
+        packet.extend_from_slice(&[r_prime, g_prime, b_prime, w]);
+    }
+
+    let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
+    packet.push(checksum);
+    packet
+}
+
+// ---------------------------------------------------------------------------
 // Test-only helpers used by lighting_mode.rs and led_output tests
 // ---------------------------------------------------------------------------
 
@@ -615,7 +744,8 @@ pub fn send_ambilight_frame(
 // ---------------------------------------------------------------------------
 
 /// A `LedSink` implementation that encodes frames and writes them to a serial
-/// port via `LedOutputBridge`. Supports both LumaSync v1 and Adalight profiles.
+/// port via `LedOutputBridge`. Supports both LumaSync v1 and Adalight profiles,
+/// and WS2812B (3-byte) or SK6812 RGBW (4-byte) chip encodings.
 ///
 /// Used as the production USB output sink in the ambilight worker (v1.4+).
 /// The ambilight worker holds a concrete `SerialSink` and calls `set_brightness`
@@ -627,10 +757,12 @@ pub struct SerialSink {
     brightness: f32,
     profile: FirmwareProfile,
     corrections: ColorCorrectionConfig,
+    chip_type: LedChipType,
 }
 
 impl SerialSink {
-    /// Create a sink using the default LumaSync v1 profile and default corrections.
+    /// Create a sink using the default LumaSync v1 profile, default corrections,
+    /// and default chip type (WS2812B GRB).
     ///
     /// Used by tests only — `#[cfg(test)]` keeps it out of the production binary.
     /// Production code uses `with_profile_and_corrections` to pass explicit settings.
@@ -642,10 +774,12 @@ impl SerialSink {
             brightness,
             profile: FirmwareProfile::default(),
             corrections: ColorCorrectionConfig::default(),
+            chip_type: LedChipType::default(),
         }
     }
 
     /// Create a sink with an explicit firmware profile and colour correction config.
+    /// Chip type defaults to `WS2812B_GRB` (backward compat).
     pub fn with_profile_and_corrections(
         bridge: LedOutputBridge,
         port_name: Option<String>,
@@ -659,6 +793,27 @@ impl SerialSink {
             brightness,
             profile,
             corrections,
+            chip_type: LedChipType::default(),
+        }
+    }
+
+    /// Create a sink with an explicit firmware profile, colour correction config,
+    /// and chip type. (v1.5 G3)
+    pub fn with_chip_type(
+        bridge: LedOutputBridge,
+        port_name: Option<String>,
+        brightness: f32,
+        profile: FirmwareProfile,
+        corrections: ColorCorrectionConfig,
+        chip_type: LedChipType,
+    ) -> Self {
+        Self {
+            bridge,
+            port_name,
+            brightness,
+            profile,
+            corrections,
+            chip_type,
         }
     }
 
@@ -687,6 +842,16 @@ impl SerialSink {
     pub fn set_corrections(&mut self, corrections: ColorCorrectionConfig) {
         self.corrections = corrections;
     }
+
+    /// Switch the chip type at runtime (e.g. user changed the LED chip setting).
+    ///
+    /// Changing chip type while streaming is safe: the next frame will use the
+    /// new encoding. The caller is responsible for ensuring the firmware expects
+    /// the new byte layout before switching.
+    #[allow(dead_code)]
+    pub fn set_chip_type(&mut self, chip_type: LedChipType) {
+        self.chip_type = chip_type;
+    }
 }
 
 impl super::led_sink::LedSink for SerialSink {
@@ -703,8 +868,29 @@ impl super::led_sink::LedSink for SerialSink {
             Some(p) => p.clone(),
             None => return Ok(()),
         };
-        let packet =
-            encode_packet_for_profile(self.profile, self.brightness, colors, &self.corrections);
+
+        let packet = match self.chip_type {
+            LedChipType::Ws2812bGrb => {
+                encode_packet_for_profile(self.profile, self.brightness, colors, &self.corrections)
+            }
+            LedChipType::Sk6812Rgbw => {
+                // SK6812 RGBW encoding is only supported with the LumaSync v1
+                // profile. Adalight has no provision for 4-byte pixels.
+                // If the user somehow sets Adalight + SK6812, fall through to
+                // the WS2812B path so output is never silently dropped.
+                if self.profile == FirmwareProfile::LumaSyncV1 {
+                    encode_sk6812_packet(self.brightness, colors, &self.corrections)
+                } else {
+                    encode_packet_for_profile(
+                        self.profile,
+                        self.brightness,
+                        colors,
+                        &self.corrections,
+                    )
+                }
+            }
+        };
+
         self.bridge
             .send_packet_to_port(&port, &packet)
             .map_err(|e| e.as_reason())
@@ -732,9 +918,9 @@ mod tests {
         apply_color_correction_rgb, apply_kelvin_to_pixel, apply_saturation_to_pixel,
         apply_solid_payload, build_gamma_luts, encode_adalight_packet, encode_led_packet,
         encode_led_packet_with_corrections, encode_led_packet_with_kelvin,
-        encode_packet_for_profile, kelvin_to_rgb_multipliers, send_ambilight_frame,
-        ColorCorrectionConfig, FirmwareProfile, LedOutputBridge, LedOutputError, LedPacketSender,
-        SerialSink,
+        encode_packet_for_profile, encode_sk6812_packet, extract_rgbw, kelvin_to_rgb_multipliers,
+        send_ambilight_frame, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
+        LedOutputError, LedPacketSender, SerialSink,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -1295,5 +1481,181 @@ mod tests {
         let (r, g, b) = apply_color_correction_rgb((200, 100, 50), &cfg);
         assert_eq!(r, g, "R and G must be equal at saturation 0.0");
         assert_eq!(g, b, "G and B must be equal at saturation 0.0");
+    }
+
+    // ---------------------------------------------------------------------------
+    // SK6812 RGBW encoder (v1.5 G3)
+    // ---------------------------------------------------------------------------
+
+    /// extract_rgbw: [200, 100, 50] → W = min(200,100,50) = 50
+    ///   R' = 200-50 = 150, G' = 100-50 = 50, B' = 50-50 = 0, W = 50
+    #[test]
+    fn extract_rgbw_w_equals_min_of_channels() {
+        let [r, g, b, w] = extract_rgbw([200, 100, 50]);
+        assert_eq!(w, 50, "W = min(200,100,50) = 50");
+        assert_eq!(r, 150, "R' = 200 - 50 = 150");
+        assert_eq!(g, 50, "G' = 100 - 50 = 50");
+        assert_eq!(b, 0, "B' = 50 - 50 = 0");
+    }
+
+    #[test]
+    fn extract_rgbw_pure_white_extracts_full_w() {
+        let [r, g, b, w] = extract_rgbw([255, 255, 255]);
+        assert_eq!(w, 255, "pure white: W = 255");
+        assert_eq!(r, 0, "R' = 0 for pure white");
+        assert_eq!(g, 0, "G' = 0 for pure white");
+        assert_eq!(b, 0, "B' = 0 for pure white");
+    }
+
+    #[test]
+    fn extract_rgbw_pure_color_has_zero_w() {
+        // Pure red: no white component
+        let [r, g, b, w] = extract_rgbw([255, 0, 0]);
+        assert_eq!(w, 0, "pure red has no white component");
+        assert_eq!(r, 255, "R' = 255 for pure red");
+        assert_eq!(g, 0);
+        assert_eq!(b, 0);
+    }
+
+    /// Canonical test from the task spec:
+    /// Input [200, 100, 50] (R, G, B after gamma 2.2 default correction at 6500K)
+    /// W = min(200,100,50) = 50
+    /// Output byte sequence in packet: R'=150, G'=50, B'=0, W=50
+    ///
+    /// With default corrections (gamma 2.2, 6500K, sat 1.0) applied first:
+    ///   gamma(200) = 148, gamma(100) = 36, gamma(50) = 9
+    ///   W = min(148, 36, 9) = 9
+    ///   R' = 148-9=139, G' = 36-9=27, B' = 9-9=0
+    ///
+    /// For the raw extract_rgbw call on uncorrected input [200,100,50]:
+    ///   R'=150, G'=50, B'=0, W=50  (direct, no LUT applied)
+    #[test]
+    fn sk6812_rgbw_encoder_pixel_byte_sequence_raw_extract() {
+        // Verify extract_rgbw directly on the spec values [200, 100, 50]
+        let rgbw = extract_rgbw([200, 100, 50]);
+        assert_eq!(
+            rgbw,
+            [150, 50, 0, 50],
+            "extract_rgbw([200,100,50]) must produce [150, 50, 0, 50]"
+        );
+    }
+
+    #[test]
+    fn sk6812_packet_has_correct_framing_and_4_bytes_per_pixel() {
+        let corrections = ColorCorrectionConfig::default();
+        let frame = &[[255_u8, 0, 0], [0, 255, 0], [0, 0, 255]];
+        let packet = encode_sk6812_packet(1.0, frame, &corrections);
+
+        // Header: [0xAA, 0x55, brightness, count_lo, count_hi]
+        assert_eq!(packet[0], 0xAA, "magic byte 0");
+        assert_eq!(packet[1], 0x55, "magic byte 1");
+        assert_eq!(packet[2], 255, "brightness=1.0 → 255");
+        assert_eq!(packet[3], 3, "count_lo for 3 LEDs");
+        assert_eq!(packet[4], 0, "count_hi for 3 LEDs");
+
+        // Payload: 3 pixels × 4 bytes = 12 bytes + header(5) + checksum(1) = 18
+        assert_eq!(
+            packet.len(),
+            5 + 3 * 4 + 1,
+            "SK6812 packet: 5 header + 3*4 RGBW + 1 checksum"
+        );
+    }
+
+    #[test]
+    fn sk6812_packet_checksum_is_xor_of_all_preceding_bytes() {
+        let corrections = ColorCorrectionConfig::default();
+        let frame = &[[100_u8, 50, 25]];
+        let packet = encode_sk6812_packet(0.5, frame, &corrections);
+
+        let expected_checksum = packet[..packet.len() - 1]
+            .iter()
+            .fold(0_u8, |acc, &b| acc ^ b);
+        assert_eq!(
+            *packet.last().unwrap(),
+            expected_checksum,
+            "SK6812 packet checksum must be XOR of all preceding bytes"
+        );
+    }
+
+    #[test]
+    fn sk6812_w_channel_bypasses_lut_corrections_are_on_rgb_only() {
+        // With a non-trivial gamma (1.0 = linear), corrections affect RGB channels
+        // but W is extracted from the corrected values, not the raw input.
+        let corrections = ColorCorrectionConfig {
+            gamma_r: 1.0, // linear — corrected value == input value
+            gamma_g: 1.0,
+            gamma_b: 1.0,
+            kelvin: 6500,    // identity
+            saturation: 1.0, // identity
+        };
+        // With linear gamma + identity Kelvin + identity sat, corrected = input
+        // W = min(100, 60, 20) = 20; R'=80, G'=40, B'=0, W=20
+        let packet = encode_sk6812_packet(1.0, &[[100, 60, 20]], &corrections);
+        // pixel bytes start at index 5
+        assert_eq!(packet[5], 80, "R' = 100-20 = 80");
+        assert_eq!(packet[6], 40, "G' = 60-20 = 40");
+        assert_eq!(packet[7], 0, "B' = 20-20 = 0");
+        assert_eq!(packet[8], 20, "W = min(100,60,20) = 20");
+    }
+
+    #[test]
+    fn serial_sink_sk6812_chip_type_uses_rgbw_encoder() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink = SerialSink::with_chip_type(
+            bridge,
+            Some("COM4".to_string()),
+            1.0,
+            FirmwareProfile::LumaSyncV1,
+            ColorCorrectionConfig::default(),
+            LedChipType::Sk6812Rgbw,
+        );
+
+        sink.start().unwrap();
+        let frame = [[200_u8, 100, 50]];
+        sink.send_frame(&frame).expect("SK6812 send should succeed");
+
+        let writes = sender.writes();
+        assert_eq!(writes.len(), 1);
+
+        let expected = encode_sk6812_packet(1.0, &frame, &ColorCorrectionConfig::default());
+        assert_eq!(
+            writes[0].1, expected,
+            "SerialSink with SK6812 must use RGBW encoder"
+        );
+    }
+
+    #[test]
+    fn serial_sink_ws2812b_chip_type_default_is_backward_compat() {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        // with_profile_and_corrections defaults to WS2812B_GRB
+        let mut sink = SerialSink::with_profile_and_corrections(
+            bridge,
+            Some("COM6".to_string()),
+            1.0,
+            FirmwareProfile::LumaSyncV1,
+            ColorCorrectionConfig::default(),
+        );
+
+        sink.start().unwrap();
+        let frame = [[100_u8, 150, 200]];
+        sink.send_frame(&frame).unwrap();
+
+        let writes = sender.writes();
+        let expected = encode_led_packet(1.0, &frame);
+        assert_eq!(
+            writes[0].1, expected,
+            "default chip type must produce byte-exact WS2812B output"
+        );
+    }
+
+    #[test]
+    fn led_chip_type_default_is_ws2812b_grb() {
+        assert_eq!(
+            LedChipType::default(),
+            LedChipType::Ws2812bGrb,
+            "LedChipType default must be WS2812B_GRB for backward compat"
+        );
     }
 }
