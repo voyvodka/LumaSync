@@ -55,8 +55,9 @@ use commands::hue_onboarding::{
     pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
 use commands::hue_stream_lifecycle::{
-    get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
-    simulate_hue_fault, start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
+    assign_channel_to_zone, create_hue_zone, delete_hue_zone, get_hue_area_channels,
+    get_hue_stream_status, restart_hue_stream, set_hue_solid_color, simulate_hue_fault,
+    start_hue_stream, stop_hue_stream, update_hue_zone, HueRuntimeStateStore,
 };
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
@@ -436,6 +437,10 @@ pub fn run() {
             load_room_map,
             copy_background_image,
             update_hue_channel_positions,
+            create_hue_zone,
+            update_hue_zone,
+            delete_hue_zone,
+            assign_channel_to_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
         ])
         .run(tauri::generate_context!())

@@ -49,3 +49,11 @@ pub use super::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
     simulate_hue_fault, start_hue_stream, stop_hue_stream,
 };
+
+// ---------------------------------------------------------------------------
+// Zone authoring commands (v1.5 W1-A3 — logical-grouping zones)
+// ---------------------------------------------------------------------------
+
+pub use super::hue::commands::{
+    assign_channel_to_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
+};
