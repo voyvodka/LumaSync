@@ -432,7 +432,15 @@ export function HsvColorPicker({
     [],
   );
 
+  // v1.5 W2-B2 — compact-mode geometry for the 320 px tray window.
+  // The ring shrinks 200→160, the wrapper caps its own width so the
+  // hosting popover hugs the picker (no orphan whitespace), and the
+  // recent-colors strip switches to a single-row horizontal scroller
+  // because vertical space is the scarce dimension inside compact.
   const sizePx = compact ? 160 : 200;
+  const wrapperStyle = compact
+    ? { width: sizePx }
+    : undefined;
 
   return (
     <div
@@ -441,12 +449,14 @@ export function HsvColorPicker({
       aria-label={ariaLabel ?? t("ui.colorPicker.rootAriaLabel")}
       aria-disabled={disabled}
       className={[
-        "flex flex-col gap-2",
+        "flex flex-col",
+        compact ? "gap-1.5" : "gap-2",
         disabled ? "pointer-events-none opacity-60" : "",
         className ?? "",
       ]
         .filter(Boolean)
         .join(" ")}
+      style={wrapperStyle}
     >
       <svg
         viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
@@ -551,7 +561,8 @@ export function HsvColorPicker({
         </g>
       </svg>
 
-      {/* Hex input */}
+      {/* Hex input — single line, tighter in compact so the row fits
+          the 160 px picker frame without wrapping the label. */}
       {!hideHex && (
         <label className="flex items-center gap-2">
           <span className="text-[10px] uppercase tracking-wide text-zinc-500">
@@ -562,7 +573,10 @@ export function HsvColorPicker({
             value={hexDraft}
             disabled={disabled}
             spellCheck={false}
-            className="w-full max-w-[120px] rounded border border-zinc-700 bg-transparent px-2 py-1 text-[11px] [font-family:var(--lm-mono)] text-zinc-100 focus:border-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+            className={[
+              "flex-1 rounded border border-zinc-700 bg-transparent [font-family:var(--lm-mono)] text-zinc-100 focus:border-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
+              compact ? "min-w-0 px-1.5 py-0.5 text-[10.5px]" : "max-w-[120px] px-2 py-1 text-[11px]",
+            ].join(" ")}
             onChange={(e) => setHexDraft(e.target.value)}
             onBlur={commitHexDraft}
             onKeyDown={(e) => {
@@ -578,13 +592,21 @@ export function HsvColorPicker({
         </label>
       )}
 
-      {/* Recent colors */}
+      {/* Recent colors — horizontal scroll in compact (single row, no
+          vertical bloat), free-wrap in full mode where space is plenty. */}
       {!hideRecent && recent.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-[10px] uppercase tracking-wide text-zinc-500">
             {t("ui.colorPicker.recentColors")}
           </span>
-          <div className="flex flex-wrap gap-1.5" role="list">
+          <div
+            className={
+              compact
+                ? "flex flex-nowrap gap-1.5 overflow-x-auto pb-0.5"
+                : "flex flex-wrap gap-1.5"
+            }
+            role="list"
+          >
             {recent.map((hex, i) => (
               <button
                 key={`${hex}-${i}`}
@@ -593,7 +615,10 @@ export function HsvColorPicker({
                 disabled={disabled}
                 aria-label={t("ui.colorPicker.recentItemAriaLabel", { hex })}
                 title={hex.toUpperCase()}
-                className="h-6 w-6 rounded border border-zinc-700 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                className={[
+                  "shrink-0 rounded border border-zinc-700 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
+                  compact ? "h-5 w-5" : "h-6 w-6",
+                ].join(" ")}
                 style={{ background: hex }}
                 onClick={() => {
                   const rgb = parseHex(hex);
