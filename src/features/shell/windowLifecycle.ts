@@ -12,6 +12,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { load } from "@tauri-apps/plugin-store";
 import {
   SHELL_STORE_KEY,
+  SHELL_STATE_SCHEMA_VERSION,
   DEFAULT_SHELL_STATE,
   UI_MODE_SIZES,
   UI_MODE_MIN_SIZES,
@@ -34,11 +35,24 @@ async function getStore() {
 
 export async function loadShellState(): Promise<ShellState> {
   const store = await getStore();
-  const saved = await store.get<ShellState>(SHELL_STORE_KEY);
+  const saved = await store.get<Partial<ShellState>>(SHELL_STORE_KEY);
   if (!saved) return { ...DEFAULT_SHELL_STATE };
 
-  // Merge with defaults to handle new fields added in future phases
-  return { ...DEFAULT_SHELL_STATE, ...saved };
+  // Merge with defaults to handle new fields added in future phases.
+  const merged: ShellState = {
+    ...DEFAULT_SHELL_STATE,
+    ...saved,
+    schemaVersion: saved.schemaVersion ?? SHELL_STATE_SCHEMA_VERSION,
+  };
+
+  // Legacy state (pre-v1.5) had no `schemaVersion`. Write the migrated shape
+  // back once so subsequent reads skip this branch — idempotent because the
+  // second load sees `saved.schemaVersion === 1` and returns early.
+  if (saved.schemaVersion === undefined) {
+    await store.set(SHELL_STORE_KEY, merged);
+  }
+
+  return merged;
 }
 
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {

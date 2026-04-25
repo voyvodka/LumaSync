@@ -75,8 +75,29 @@ export const SECTION_ORDER: SectionId[] = [
 // Persisted Shell State Contract
 // ---------------------------------------------------------------------------
 
+/**
+ * Current persisted state schema version.
+ *
+ * Bumped whenever a non-additive change to `ShellState` requires a migration
+ * step on load (renamed/removed fields, semantic changes to existing data).
+ * Pure additive changes (new optional fields with backend-provided defaults)
+ * do NOT bump the version — the legacy spread-merge in `loadShellState` keeps
+ * existing user data compatible.
+ *
+ * v1.5 introduces this field at value `1`; absent on disk ⇒ treat as legacy
+ * pre-versioning state (also `1`, since v1.4 and earlier match the same
+ * additive shape).
+ */
+export const SHELL_STATE_SCHEMA_VERSION = 1 as const;
+
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {
+  /**
+   * Persisted-state schema version (v1.5+). Defaults to
+   * `SHELL_STATE_SCHEMA_VERSION` for fresh state and during legacy migration
+   * write-back. Future bumps run a one-shot upgrade in `loadShellState`.
+   */
+  schemaVersion: number;
   /** Window geometry (pixels) */
   windowWidth: number | null;
   windowHeight: number | null;
@@ -197,6 +218,7 @@ export interface ShellState {
 
 /** Default shell state for first launch */
 export const DEFAULT_SHELL_STATE: ShellState = {
+  schemaVersion: SHELL_STATE_SCHEMA_VERSION,
   windowWidth: null,
   windowHeight: null,
   windowX: null,
