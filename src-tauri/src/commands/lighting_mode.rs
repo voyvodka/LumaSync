@@ -1816,6 +1816,77 @@ mod tests {
     }
 
     #[test]
+    fn solid_to_ambilight_to_solid_keeps_runtime_exclusive() {
+        // Manual-test repro for v1.5 #44: user enters Solid mode, frontend
+        // race fires a stale Ambilight push, then user pushes Solid again.
+        // The runtime owner must end on Solid with zero active workers and
+        // the LED bridge must NOT be holding a stale ambilight worker.
+        let mut owner = owner_with_fake_sender();
+
+        // Solid #1
+        let s1 = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM-EX"),
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(s1.status.code, "SOLID_MODE_APPLIED");
+        wait_for_worker_count(0);
+        assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 0);
+
+        // Stale Ambilight push (simulates the frontend race that the manual
+        // tester reproduced — a brightness/preset effect re-sending Ambilight
+        // immediately after the user picked Solid).
+        let amb = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            true,
+            Some("COM-EX"),
+            None,
+            Some(shared_runtime_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(amb.status.code, "AMBILIGHT_MODE_STARTED");
+        wait_for_worker_count(1);
+        assert_eq!(ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst), 1);
+
+        // Solid #2 — final user intent. Must stop the ambilight worker
+        // synchronously and leave zero active workers so the next packet
+        // written to the LED bridge is the solid colour, not a stale frame.
+        let s2 = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM-EX"),
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(s2.status.code, "SOLID_MODE_APPLIED");
+        assert_eq!(s2.mode.kind, LightingModeKind::Solid);
+        wait_for_worker_count(0);
+        assert_eq!(
+            ACTIVE_AMBILIGHT_WORKERS.load(Ordering::SeqCst),
+            0,
+            "after final Solid, ambilight workers must be fully drained",
+        );
+        assert!(
+            owner.worker.is_none(),
+            "owner.worker must be None after Solid takes over",
+        );
+        assert!(
+            owner.ambilight_live.is_none(),
+            "owner.ambilight_live must be None after Solid takes over",
+        );
+    }
+
+    #[test]
     fn disconnected_mode_change_keeps_existing_runtime_state() {
         let mut owner = owner_with_fake_sender();
         let _ = apply_mode_change(
