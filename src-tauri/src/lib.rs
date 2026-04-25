@@ -22,6 +22,7 @@ mod commands {
     pub mod hue_http;
     pub mod hue_intensity;
     pub mod hue_onboarding;
+    pub mod hue;
     pub mod hue_stream_lifecycle;
     pub mod led_calibration;
     pub mod led_output;
