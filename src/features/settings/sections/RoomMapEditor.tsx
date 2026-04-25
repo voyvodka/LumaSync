@@ -1064,8 +1064,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
               />
             )}
 
-            {/* Hue channel dots */}
-            {config.hueChannels.length > 0 && (
+            {/* Hue channel dots + zone bounds — bug #53: bounds box must render even when no channels exist yet so the user can author a zone before the area is paired. */}
+            {(config.hueChannels.length > 0 || activeHueZone !== null) && (
               <HueChannelOverlay
                 channels={config.hueChannels}
                 pxPerMeter={pxPerMeter}

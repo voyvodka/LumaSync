@@ -300,7 +300,11 @@ export function HueChannelOverlay({
               width: zoneBoundsBox.rightPx - zoneBoundsBox.leftPx,
               height: zoneBoundsBox.bottomPx - zoneBoundsBox.topPx,
               border: `1.5px dashed ${zoneBoundsBox.color}`,
-              background: `color-mix(in srgb, ${zoneBoundsBox.color} 8%, transparent)`,
+              // Bug #53 — halve the fill opacity so the room map underneath
+              // (floor plan / furniture / TV anchor) stays readable while a
+              // zone is selected. Dashed border alone carries the zone
+              // identity signal.
+              background: `color-mix(in srgb, ${zoneBoundsBox.color} 4%, transparent)`,
               zIndex: 18,
             }}
             aria-hidden
