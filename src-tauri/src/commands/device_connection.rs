@@ -5,9 +5,7 @@ use serde::Serialize;
 use serialport::{available_ports, SerialPortType};
 
 use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
-use super::led_output::{
-    ColorCorrectionConfig, FirmwareProfile, LedOutputBridge, SerialSink,
-};
+use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedOutputBridge, SerialSink};
 use super::led_sink::LedSink;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
@@ -21,12 +19,27 @@ const HANDSHAKE_PORT_READ_TIMEOUT_MS: u64 = 50;
 /// Total wall-clock budget for the PING → PONG round-trip.
 const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(1_000);
 
+/// Supported USB serial adapter VID:PID allowlist.
+///
+/// Two-stage gate: all ports are enumerated with `isSupported: bool` so the
+/// UI can show unsupported devices; connect is blocked with `PORT_UNSUPPORTED`
+/// for entries not in this list.
+///
+/// v1.5 G5 additions: PL2303 (Prolific), CH341 (WinChipHead), CP2104 (Silicon
+/// Labs), FT232H (FTDI Hi-Speed). Same array-addition pattern as the original
+/// 5-entry list; no other changes required.
 const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
-    (0x1A86, 0x7523),
-    (0x0403, 0x6001),
-    (0x10C4, 0xEA60),
-    (0x2341, 0x0043),
-    (0x2341, 0x0001),
+    // --- original v1.x entries ---
+    (0x1A86, 0x7523), // CH340 (WinChipHead)
+    (0x0403, 0x6001), // FTDI FT232R
+    (0x10C4, 0xEA60), // CP2102 (Silicon Labs)
+    (0x2341, 0x0043), // Arduino Uno R3+
+    (0x2341, 0x0001), // Arduino Uno (earlier USB ID)
+    // --- v1.5 G5 additions ---
+    (0x067B, 0x2303), // PL2303 (Prolific Technology)
+    (0x1A86, 0x5523), // CH341 (WinChipHead)
+    (0x10C4, 0xEA70), // CP2104 (Silicon Labs)
+    (0x0403, 0x6014), // FT232H (FTDI Hi-Speed Single-Channel)
 ];
 
 #[derive(Clone, Serialize)]
@@ -684,4 +697,114 @@ fn now_unix_ms() -> u128 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::{is_supported_usb, SUPPORTED_USB_DEVICE_ALLOWLIST};
+
+    // ---------------------------------------------------------------------------
+    // Original v1.x allowlist entries (regression)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn ch340_is_supported() {
+        assert!(
+            is_supported_usb(0x1A86, 0x7523),
+            "CH340 must be in allowlist"
+        );
+    }
+
+    #[test]
+    fn ftdi_ft232r_is_supported() {
+        assert!(
+            is_supported_usb(0x0403, 0x6001),
+            "FTDI FT232R must be in allowlist"
+        );
+    }
+
+    #[test]
+    fn cp2102_is_supported() {
+        assert!(
+            is_supported_usb(0x10C4, 0xEA60),
+            "CP2102 must be in allowlist"
+        );
+    }
+
+    #[test]
+    fn arduino_uno_r3_is_supported() {
+        assert!(
+            is_supported_usb(0x2341, 0x0043),
+            "Arduino Uno R3+ must be in allowlist"
+        );
+    }
+
+    #[test]
+    fn arduino_uno_earlier_is_supported() {
+        assert!(
+            is_supported_usb(0x2341, 0x0001),
+            "Arduino Uno (earlier) must be in allowlist"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // v1.5 G5 new entries
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn pl2303_is_supported() {
+        assert!(
+            is_supported_usb(0x067B, 0x2303),
+            "PL2303 (Prolific) must be in v1.5 G5 allowlist"
+        );
+    }
+
+    #[test]
+    fn ch341_is_supported() {
+        assert!(
+            is_supported_usb(0x1A86, 0x5523),
+            "CH341 (WinChipHead) must be in v1.5 G5 allowlist"
+        );
+    }
+
+    #[test]
+    fn cp2104_is_supported() {
+        assert!(
+            is_supported_usb(0x10C4, 0xEA70),
+            "CP2104 (Silicon Labs) must be in v1.5 G5 allowlist"
+        );
+    }
+
+    #[test]
+    fn ft232h_is_supported() {
+        assert!(
+            is_supported_usb(0x0403, 0x6014),
+            "FT232H (FTDI Hi-Speed) must be in v1.5 G5 allowlist"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Non-allowlist device is rejected
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn unknown_vid_pid_is_not_supported() {
+        assert!(
+            !is_supported_usb(0xDEAD, 0xBEEF),
+            "Unknown VID:PID must not be in allowlist"
+        );
+    }
+
+    #[test]
+    fn allowlist_has_nine_entries() {
+        assert_eq!(
+            SUPPORTED_USB_DEVICE_ALLOWLIST.len(),
+            9,
+            "Allowlist must contain exactly 9 entries (5 original + 4 v1.5 G5)"
+        );
+    }
 }
