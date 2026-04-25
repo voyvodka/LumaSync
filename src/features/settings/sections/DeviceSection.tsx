@@ -14,6 +14,7 @@ import { useHueOnboarding } from "../../device/useHueOnboarding";
 import { stopHue } from "../../mode/modeApi";
 import { HueChannelMapPanel } from "./HueChannelMapPanel";
 import { WledDevicePicker } from "./WledDevicePicker";
+import { LedChipTypePicker } from "./control/LedChipTypePicker";
 
 type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
 
@@ -543,6 +544,9 @@ export function DeviceSection() {
               </p>
             ) : null}
           </div>
+
+          {/* Chip type selector — USB sink strip config (v1.5 G3) */}
+          <LedChipTypePicker />
 
         </div>
 

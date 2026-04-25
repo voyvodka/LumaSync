@@ -1232,6 +1232,15 @@
       "reset": "Varsayilanlara sifirla",
       "kelvinHint": "Dusuk = sicak, yuksek = soguk"
     },
+    "chipType": {
+      "label": "LED Chip Tipi",
+      "description": "SK6812 RGBW seritler daha temiz beyazlar icin ayri bir beyaz LED icerir.",
+      "options": {
+        "ws2812b": "WS2812B (3 bayt RGB)",
+        "sk6812rgbw": "SK6812 RGBW (4 bayt)"
+      },
+      "sk6812AdalightWarning": "SK6812 RGBW, Adalight profili ile desteklenmez. WS2812B kodlamasina donuluyor."
+    },
     "firmwareProfile": {
       "title": "Firmware Profili",
       "description": "LED kontrolcu firmware'inizle uyumlu seri protokolu secin.",

@@ -1232,6 +1232,15 @@
       "reset": "Reset to defaults",
       "kelvinHint": "Lower = warmer, higher = cooler"
     },
+    "chipType": {
+      "label": "LED Chip Type",
+      "description": "SK6812 RGBW strips include a dedicated white LED for cleaner whites.",
+      "options": {
+        "ws2812b": "WS2812B (3-byte RGB)",
+        "sk6812rgbw": "SK6812 RGBW (4-byte)"
+      },
+      "sk6812AdalightWarning": "SK6812 RGBW is not supported with the Adalight profile. Falling back to WS2812B encoding."
+    },
     "firmwareProfile": {
       "title": "Firmware Profile",
       "description": "Choose the serial protocol that matches your LED controller firmware.",
