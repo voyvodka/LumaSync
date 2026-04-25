@@ -438,6 +438,10 @@ impl Default for LedOutputBridge {
 /// Encode using the default profile (LumaSync v1) and default corrections.
 /// This is the backward-compat entry point — its output is byte-exact with
 /// every previous version of `encode_led_packet`.
+///
+/// Used by test helpers only — `#[cfg(test)]` keeps it out of the production
+/// binary while retaining full regression coverage in the test suite.
+#[cfg(test)]
 pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
     encode_led_packet_with_corrections(brightness, rgb_triplets, 6500, 1.0)
 }
@@ -489,8 +493,9 @@ pub fn encode_led_packet_with_corrections(
 }
 
 /// Backward-compat wrapper: Kelvin only, saturation defaults to 1.0.
-/// Used by tests and kept for future worker integration.
-#[allow(dead_code)]
+/// Used by tests only — kept test-gated to avoid a dead_code warning in
+/// non-test builds while retaining the regression coverage.
+#[cfg(test)]
 pub fn encode_led_packet_with_kelvin(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
@@ -575,7 +580,7 @@ pub fn encode_packet_for_profile(
 }
 
 // ---------------------------------------------------------------------------
-// Public helper functions (called by lighting_mode.rs worker)
+// Test-only helpers used by lighting_mode.rs and led_output tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -591,19 +596,6 @@ pub fn apply_solid_payload(
     bridge.send_packet(connection_state, &packet)
 }
 
-#[allow(dead_code)]
-pub fn apply_solid_payload_to_port(
-    bridge: &LedOutputBridge,
-    port_name: &str,
-    r: u8,
-    g: u8,
-    b: u8,
-    brightness: f32,
-) -> Result<(), LedOutputError> {
-    let packet = encode_led_packet(brightness, &[[r, g, b]]);
-    bridge.send_packet_to_port(port_name, &packet)
-}
-
 #[cfg(test)]
 pub fn send_ambilight_frame(
     bridge: &LedOutputBridge,
@@ -615,27 +607,6 @@ pub fn send_ambilight_frame(
     bridge.send_packet(connection_state, &packet)
 }
 
-#[allow(dead_code)]
-pub fn send_ambilight_frame_to_port(
-    bridge: &LedOutputBridge,
-    port_name: &str,
-    frame: &[[u8; 3]],
-    brightness: f32,
-) -> Result<(), LedOutputError> {
-    let packet = encode_led_packet(brightness, frame);
-    bridge.send_packet_to_port(port_name, &packet)
-}
-
-#[allow(dead_code)]
-pub fn send_ambilight_frame_hot_path_to_port(
-    bridge: &LedOutputBridge,
-    port_name: &str,
-    frame: &[[u8; 3]],
-    brightness: f32,
-) -> Result<(), LedOutputError> {
-    send_ambilight_frame_to_port(bridge, port_name, frame, brightness)
-}
-
 // ---------------------------------------------------------------------------
 // SerialSink — `LedSink` implementation backed by `LedOutputBridge`
 //
@@ -645,9 +616,11 @@ pub fn send_ambilight_frame_hot_path_to_port(
 
 /// A `LedSink` implementation that encodes frames and writes them to a serial
 /// port via `LedOutputBridge`. Supports both LumaSync v1 and Adalight profiles.
-// v1.4 anchor: wired into the ambilight worker via the LedSink trait.
-// Suppressed until the worker integration commit lands.
-#[allow(dead_code)]
+///
+/// Used as the production USB output sink in the ambilight worker (v1.4+).
+/// The ambilight worker holds a concrete `SerialSink` and calls `set_brightness`
+/// each iteration so the live-brightness atomic stays in sync without circular
+/// module dependencies.
 pub struct SerialSink {
     bridge: LedOutputBridge,
     port_name: Option<String>,
@@ -658,7 +631,10 @@ pub struct SerialSink {
 
 impl SerialSink {
     /// Create a sink using the default LumaSync v1 profile and default corrections.
-    #[allow(dead_code)]
+    ///
+    /// Used by tests only — `#[cfg(test)]` keeps it out of the production binary.
+    /// Production code uses `with_profile_and_corrections` to pass explicit settings.
+    #[cfg(test)]
     pub fn new(bridge: LedOutputBridge, port_name: Option<String>, brightness: f32) -> Self {
         Self {
             bridge,
@@ -670,7 +646,6 @@ impl SerialSink {
     }
 
     /// Create a sink with an explicit firmware profile and colour correction config.
-    #[allow(dead_code)]
     pub fn with_profile_and_corrections(
         bridge: LedOutputBridge,
         port_name: Option<String>,
@@ -688,18 +663,26 @@ impl SerialSink {
     }
 
     /// Update brightness without stopping the sink.
-    #[allow(dead_code)]
+    ///
+    /// Called by the ambilight worker each iteration to keep the sink in sync
+    /// with the live `AmbilightLiveSettings` atomic.
     pub fn set_brightness(&mut self, brightness: f32) {
         self.brightness = brightness.clamp(0.0, 1.0);
     }
 
     /// Switch the firmware profile at runtime (e.g. user changed the setting).
+    ///
+    /// Not yet wired to the UI settings toggle (v1.4 G11); kept for the
+    /// profile-switching path that will land in the same milestone.
     #[allow(dead_code)]
     pub fn set_profile(&mut self, profile: FirmwareProfile) {
         self.profile = profile;
     }
 
     /// Replace the colour correction config at runtime.
+    ///
+    /// Will be called from the settings save path once the per-channel
+    /// correction UI lands (v1.4 G4).
     #[allow(dead_code)]
     pub fn set_corrections(&mut self, corrections: ColorCorrectionConfig) {
         self.corrections = corrections;

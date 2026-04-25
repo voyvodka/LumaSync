@@ -14,10 +14,14 @@
 /// live on a dedicated worker thread and can use `std::thread::spawn` +
 /// `std::sync::mpsc` if a sink needs to offload I/O; the trait itself stays
 /// sync to avoid pulling in `tokio` into the serialport layer.
-// Suppressed until the worker integration commit wires this into the hot path.
-#[allow(dead_code)]
 pub trait LedSink: Send + Sync {
     /// Human-readable sink name, e.g. `"serial"`, `"wled-udp"`.
+    ///
+    /// Used for logging and diagnostics. Future sinks (WLED, OpenRGB) will
+    /// surface this in the UI. `#[allow(dead_code)]` because `SerialSink` is
+    /// the only impl today and its `name()` is only exercised by tests; the
+    /// trait method must remain in the surface for v1.5+ impls.
+    #[allow(dead_code)]
     fn name(&self) -> &'static str;
 
     /// Prepare the sink for streaming. Called once before the first

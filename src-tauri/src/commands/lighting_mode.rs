@@ -15,15 +15,16 @@ use super::device_connection::{CommandStatus, SerialConnectionState};
 use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use super::hue_stream_lifecycle::{
     apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
-    HueActiveOutputContext, HueRuntimeStateStore, HueScreenRegion,
+    HueActiveOutputContext, HueRuntimeStateStore,
 };
 use super::led_calibration::{
     build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
     apply_color_correction_rgb, encode_packet_for_profile, ColorCorrectionConfig, FirmwareProfile,
-    LedOutputBridge,
+    LedOutputBridge, SerialSink,
 };
+use super::led_sink::LedSink;
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
@@ -451,79 +452,6 @@ impl BlackBorderCache {
     }
 }
 
-/// Average the colour of the pixels in the screen strip corresponding to
-/// `region`, respecting black-border `insets` so letterbox / pillarbox areas
-/// are excluded. Uses a step of 8 pixels in both axes for fast sub-sampling.
-#[allow(dead_code)]
-fn sample_screen_region_avg(
-    frame: &CapturedFrame,
-    region: &HueScreenRegion,
-    insets: &BlackBorderInsets,
-) -> (u8, u8, u8) {
-    let w = frame.width as usize;
-    let h = frame.height as usize;
-    if w == 0 || h == 0 || frame.pixels_rgb.is_empty() {
-        return (0, 0, 0);
-    }
-
-    const STRIP: f32 = 0.20; // 20% strip depth within content area
-    const STEP: usize = 8; // sub-sample every 8th pixel for speed
-
-    // Derive content-area bounds from detected insets.
-    let top_border = (h as f32 * insets.top) as usize;
-    let bottom_border = (h as f32 * insets.bottom) as usize;
-    let left_border = (w as f32 * insets.left) as usize;
-    let right_border = (w as f32 * insets.right) as usize;
-
-    let ct = top_border; // content top row
-    let cb = h.saturating_sub(bottom_border).max(ct + 1); // content bottom row
-    let cl = left_border; // content left col
-    let cr = w.saturating_sub(right_border).max(cl + 1); // content right col
-    let ch = cb - ct; // content height
-    let cw = cr - cl; // content width
-
-    let strip_h = ((ch as f32 * STRIP) as usize).max(1);
-    let strip_w = ((cw as f32 * STRIP) as usize).max(1);
-
-    let (row_start, row_end, col_start, col_end) = match region {
-        HueScreenRegion::Top => (ct, (ct + strip_h).min(cb), cl, cr),
-        HueScreenRegion::Bottom => (cb.saturating_sub(strip_h), cb, cl, cr),
-        HueScreenRegion::Left => (ct, cb, cl, (cl + strip_w).min(cr)),
-        HueScreenRegion::Right => (ct, cb, cr.saturating_sub(strip_w), cr),
-        HueScreenRegion::Center => (h / 4, 3 * h / 4, w / 4, 3 * w / 4),
-    };
-
-    let mut sum_r = 0u32;
-    let mut sum_g = 0u32;
-    let mut sum_b = 0u32;
-    let mut count = 0u32;
-
-    let mut row = row_start;
-    while row < row_end {
-        let mut col = col_start;
-        while col < col_end {
-            let idx = row * w + col;
-            if let Some(pixel) = frame.pixels_rgb.get(idx) {
-                sum_r += u32::from(pixel[0]);
-                sum_g += u32::from(pixel[1]);
-                sum_b += u32::from(pixel[2]);
-                count += 1;
-            }
-            col += STEP;
-        }
-        row += STEP;
-    }
-
-    if count == 0 {
-        return (0, 0, 0);
-    }
-    (
-        (sum_r / count) as u8,
-        (sum_g / count) as u8,
-        (sum_b / count) as u8,
-    )
-}
-
 /// Continuous position-based colour sampling for Hue entertainment channels.
 ///
 /// Instead of mapping to 5 discrete regions (Top/Bottom/Left/Right/Center),
@@ -943,21 +871,39 @@ fn start_ambilight_worker(
     if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
         telemetry_window.record_slot_overwrite();
     }
+
+    // Build the USB sink once at worker start. The sink holds the LedOutputBridge
+    // and encodes frames via the active FirmwareProfile + ColorCorrectionConfig.
+    // Brightness is synced each iteration via SerialSink::set_brightness before
+    // calling send_frame — this avoids circular module dependencies while keeping
+    // the hot path allocation-free.
+    let mut usb_sink: Option<SerialSink> = port_name.as_ref().map(|p| {
+        SerialSink::with_profile_and_corrections(
+            output_bridge.clone(),
+            Some(p.clone()),
+            live_settings.read_brightness(),
+            firmware_profile,
+            color_correction.clone(),
+        )
+    });
+    if let Some(ref mut sink) = usb_sink {
+        sink.start()?;
+    }
+
     let send_started = Instant::now();
-    if let Some(ref port) = port_name {
+    if usb_sink.is_some() {
         let initial_brightness = live_settings.read_brightness();
+        if let Some(ref mut sink) = usb_sink {
+            sink.set_brightness(initial_brightness);
+        }
         let initial_sent =
             quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                 AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                let packet = encode_packet_for_profile(
-                    firmware_profile,
-                    initial_brightness,
-                    frame,
-                    &color_correction,
-                );
-                output_bridge
-                    .send_packet_to_port(port, &packet)
-                    .map_err(|error| error.as_reason())
+                if let Some(ref mut s) = usb_sink {
+                    s.send_frame(frame)
+                } else {
+                    Ok(())
+                }
             })?;
         if initial_sent {
             telemetry_window.record_send();
@@ -1046,19 +992,18 @@ fn start_ambilight_worker(
                 }
 
                 let send_started = Instant::now();
-                let send_ms = if let Some(ref port) = port_name {
-                    // USB send path: encode via the active firmware profile and send.
+                let send_ms = if usb_sink.is_some() {
+                    // USB send path: sync brightness then dispatch via LedSink trait.
+                    if let Some(ref mut sink) = usb_sink {
+                        sink.set_brightness(brightness);
+                    }
                     match quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
                         AMBILIGHT_FRAME_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-                        let packet = encode_packet_for_profile(
-                            firmware_profile,
-                            brightness,
-                            frame,
-                            &color_correction,
-                        );
-                        output_bridge
-                            .send_packet_to_port(port, &packet)
-                            .map_err(|error| error.as_reason())
+                        if let Some(ref mut s) = usb_sink {
+                            s.send_frame(frame)
+                        } else {
+                            Ok(())
+                        }
                     }) {
                         Ok(true) => {
                             telemetry_window.record_send();
@@ -1149,6 +1094,11 @@ fn start_ambilight_worker(
                 (interval_ms / 2).clamp(5, 50)
             };
             thread::sleep(Duration::from_millis(sleep_ms));
+        }
+
+        // Stop the USB sink cleanly before the worker thread exits.
+        if let Some(mut sink) = usb_sink {
+            let _ = sink.stop();
         }
 
         ACTIVE_AMBILIGHT_WORKERS.fetch_sub(1, Ordering::SeqCst);
