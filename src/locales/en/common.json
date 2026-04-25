@@ -632,7 +632,12 @@
           "center": "C"
         },
         "selectZoneHint": "Click a zone on the map to assign the selected channel.",
-        "chipLabel": "Ch {{index}}"
+        "chipLabel": "Ch {{index}}",
+        "detailStripChannel": "Channel {{index}}",
+        "detailStripCoords": "x: {{x}}  ·  y: {{y}}",
+        "canvasAriaLabel": "Channel position canvas",
+        "regionRowAriaLabel": "Region for channel {{index}}",
+        "rowDotAriaLabel": "Select channel {{index}}"
       },
       "targetFailed": "Could not add {{target}} to active output.",
       "readiness": {

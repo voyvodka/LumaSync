@@ -632,7 +632,12 @@
           "center": "O"
         },
         "selectZoneHint": "Seçili kanalı atamak için haritada bir bölgeye tıkla.",
-        "chipLabel": "Kn {{index}}"
+        "chipLabel": "Kn {{index}}",
+        "detailStripChannel": "Kanal {{index}}",
+        "detailStripCoords": "x: {{x}}  ·  y: {{y}}",
+        "canvasAriaLabel": "Kanal konum tuvali",
+        "regionRowAriaLabel": "{{index}}. kanalin bolgesi",
+        "rowDotAriaLabel": "{{index}}. kanali sec"
       },
       "targetFailed": "{{target}} hedefi baslatılamadı, mevcut çıkış devam ediyor.",
       "readiness": {

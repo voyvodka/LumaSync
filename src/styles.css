@@ -3761,3 +3761,603 @@ body {
     background-color: rgba(113, 113, 122, 0.75);
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Hue Channel Map (Channel Screen Regions panel) — v1.5 Rev 07 rework
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the legacy zinc/Tailwind-default surface that used to ship
+   inside `HueChannelMapPanel.tsx`. Aligned with `lm-settings-group` and
+   `lm-device-btn` so the panel stops looking like a foreign island
+   underneath the amber-tokenized DeviceSection cards.
+
+   Tokens consumed:
+   - `--lm-panel`, `--lm-panel-2`, `--lm-line`, `--lm-line-2`
+   - `--lm-ink`, `--lm-ink-dim`, `--lm-ink-faint`
+   - `--lm-amber`, `--lm-zone-1..4`, `--lm-ink-faint` (region dot ramp)
+   - `--lm-mono`, `--lm-focus-ring-soft`
+
+   A11y guarantees:
+   - `:focus-visible` everywhere via amber soft ring.
+   - All interactive controls clear the 28-32px tap-area floor.
+   - `prefers-reduced-motion` disables the selected-dot pulse.
+   - `forced-colors: active` mirrors selection chrome to system colors.
+   ────────────────────────────────────────────────────────────────── */
+
+/* Outer card sits in the same DeviceSection column as `.lm-settings-group`
+   and adopts the same shell so they read as one continuous surface. */
+.lm-chmap {
+  margin-top: 12px;
+}
+.lm-chmap-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+/* Hint row + multi-select badge */
+.lm-chmap-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--lm-ink-dim, #8a94a3);
+  line-height: 1.5;
+}
+.lm-chmap-hint-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-chmap-multi {
+  flex-shrink: 0;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Position canvas — primary spatial control */
+.lm-chmap-canvas {
+  position: relative;
+  width: 100%;
+  height: 152px;
+  border: 1px solid var(--lm-line-2, #252b34);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 176, 32, 0.04), transparent 60%),
+    var(--lm-panel-2, #14171d);
+  overflow: hidden;
+  touch-action: none;
+}
+.lm-chmap-canvas-axis {
+  position: absolute;
+  background: var(--lm-line, #1a1e25);
+  pointer-events: none;
+}
+.lm-chmap-canvas-axis.is-v {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+}
+.lm-chmap-canvas-axis.is-h {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
+.lm-chmap-canvas-edge {
+  position: absolute;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--lm-ink-faint, #4d5564);
+  pointer-events: none;
+  user-select: none;
+}
+.lm-chmap-canvas-edge.is-l {
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lm-chmap-canvas-edge.is-r {
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lm-chmap-canvas-edge.is-t {
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+}
+.lm-chmap-canvas-edge.is-b {
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+}
+
+/* Soft scrim shown in assign-zone mode while a single dot is selected
+   so the user sees the zone-pill row downstream as the next action. */
+.lm-chmap-canvas-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 8, 10, 0.35);
+  pointer-events: none;
+}
+
+/* Channel dot — anchor for hit area + visual disc.
+   The button itself is a 32px square hit area (a11y tap floor); the
+   visible coloured disc is rendered via ::before so we can scale it
+   without clipping the focus ring. */
+.lm-chmap-dot {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #07080a;
+  border-radius: 50%;
+}
+.lm-chmap-dot::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
+  transition: inset 140ms cubic-bezier(0.33, 1, 0.68, 1),
+    box-shadow 140ms ease;
+  z-index: 0;
+}
+.lm-chmap-dot > * {
+  position: relative;
+  z-index: 1;
+}
+.lm-chmap-dot.is-selected::before {
+  inset: 4px;
+  box-shadow:
+    0 0 0 2px var(--lm-bg, #07080a),
+    0 0 0 4px rgba(255, 176, 32, 0.55);
+}
+.lm-chmap-dot.is-multi::before {
+  inset: 6px;
+  box-shadow:
+    0 0 0 2px var(--lm-bg, #07080a),
+    0 0 0 3px rgba(255, 176, 32, 0.4);
+}
+.lm-chmap-dot.is-overridden::before {
+  outline: 1.5px solid #fff;
+  outline-offset: -1px;
+}
+.lm-chmap-dot.is-position {
+  cursor: grab;
+}
+.lm-chmap-dot.is-position.is-dragging {
+  cursor: grabbing;
+}
+.lm-chmap-dot:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Pulse ring — only on single-selection. Reduced-motion strips it. */
+.lm-chmap-dot-pulse {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
+  opacity: 0.18;
+  pointer-events: none;
+  animation: lm-chmap-pulse 1.6s ease-out infinite;
+}
+@keyframes lm-chmap-pulse {
+  0% { transform: scale(0.85); opacity: 0.25; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-chmap-dot-pulse {
+    animation: none;
+    opacity: 0;
+  }
+  .lm-chmap-dot::before {
+    transition: none;
+  }
+}
+
+/* Drag-time coordinate tooltip */
+.lm-chmap-tooltip {
+  position: absolute;
+  z-index: 30;
+  transform: translate(14px, -34px);
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(7, 8, 10, 0.92);
+  border: 1px solid var(--lm-line-2, #252b34);
+  color: var(--lm-ink, #eaeef4);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Detail strip — appears under the canvas while a channel is selected.
+   Z-axis slider lives here. */
+.lm-chmap-detail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--lm-line, #1a1e25);
+  border-radius: 8px;
+  background: var(--lm-panel-2, #14171d);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+}
+.lm-chmap-detail-name {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink, #eaeef4);
+  flex-shrink: 0;
+}
+.lm-chmap-detail-pos {
+  font-size: 10px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.lm-chmap-detail-pos b {
+  color: var(--lm-ink, #eaeef4);
+  font-weight: 500;
+}
+.lm-chmap-detail-z {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.lm-chmap-detail-z-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint, #4d5564);
+}
+.lm-chmap-detail-z input[type="range"] {
+  width: 110px;
+  accent-color: var(--lm-amber, #ffb020);
+  cursor: pointer;
+}
+.lm-chmap-detail-z input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 4px;
+}
+.lm-chmap-detail-z-val {
+  width: 38px;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--lm-ink, #eaeef4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Region rows — per-channel override list */
+.lm-chmap-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--lm-line, #1a1e25);
+}
+.lm-chmap-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--lm-line, #1a1e25);
+}
+.lm-chmap-row:last-child {
+  border-bottom: 0;
+}
+.lm-chmap-row-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 96px;
+}
+.lm-chmap-row-dot {
+  all: unset;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lm-chmap-row-dot::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
+  transition: width 120ms ease, height 120ms ease;
+}
+.lm-chmap-row-dot.is-selected::before {
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.5);
+}
+.lm-chmap-row-dot:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 50%;
+}
+.lm-chmap-row-num {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lm-ink, #eaeef4);
+  letter-spacing: 0.04em;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.lm-chmap-row-lights {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+}
+
+/* Region pill row — same family as `.lm-settings-seg button` */
+.lm-chmap-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.lm-chmap-pill {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 5px 10px;
+  min-height: 26px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim, #8a94a3);
+  background: var(--lm-panel-2, #14171d);
+  border: 1px solid var(--lm-line-2, #252b34);
+  border-radius: 6px;
+  font-weight: 500;
+  text-align: center;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.lm-chmap-pill:hover:not(:disabled) {
+  color: var(--lm-ink, #eaeef4);
+  border-color: #3a4250;
+}
+.lm-chmap-pill.is-active {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.12);
+  border-color: rgba(255, 176, 32, 0.4);
+}
+.lm-chmap-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Trailing slot for "Reset" / "Saved" indicator */
+.lm-chmap-row-trail {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+}
+.lm-chmap-row-saved {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-green, #4ade80);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-chmap-row-saved::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lm-green, #4ade80);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+}
+.lm-chmap-row-reset {
+  all: unset;
+  cursor: pointer;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint, #4d5564);
+  padding: 4px 8px;
+  border-radius: 5px;
+  transition: color 120ms ease, background 120ms ease;
+}
+.lm-chmap-row-reset:hover {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-chmap-row-reset:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Footer — Save to bridge action + status feedback */
+.lm-chmap-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--lm-line, #1a1e25);
+  background: rgba(255, 255, 255, 0.01);
+}
+.lm-chmap-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lm-chmap-beta {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.lm-chmap-footer-spacer {
+  flex: 1;
+}
+/* Inline status panel — error / success for save and persist */
+.lm-chmap-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.lm-chmap-feedback::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 5px;
+}
+.lm-chmap-feedback.is-ok {
+  color: var(--lm-green, #4ade80);
+  background: rgba(74, 222, 128, 0.06);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.lm-chmap-feedback.is-ok::before {
+  background: var(--lm-green, #4ade80);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+.lm-chmap-feedback.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.07);
+  border-color: rgba(255, 176, 32, 0.3);
+}
+.lm-chmap-feedback.is-warn::before {
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+}
+.lm-chmap-feedback.is-err {
+  color: var(--lm-red, #ef5b5b);
+  background: rgba(239, 91, 91, 0.07);
+  border-color: rgba(239, 91, 91, 0.3);
+}
+.lm-chmap-feedback.is-err::before {
+  background: var(--lm-red, #ef5b5b);
+  box-shadow: 0 0 6px rgba(239, 91, 91, 0.5);
+}
+.lm-chmap-feedback-retry {
+  all: unset;
+  cursor: pointer;
+  margin-left: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+}
+.lm-chmap-feedback-retry:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 3px;
+}
+
+/* Forced-colors fallback — selection chrome must collapse to system
+   colors so users on Windows high-contrast skins still get an
+   unambiguous selection signal. */
+@media (forced-colors: active) {
+  .lm-chmap-canvas {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-chmap-canvas-axis,
+  .lm-chmap-canvas-edge {
+    color: CanvasText;
+    background: CanvasText;
+  }
+  .lm-chmap-dot::before {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-dot.is-selected::before,
+  .lm-chmap-dot.is-multi::before {
+    background: Highlight;
+    box-shadow: 0 0 0 2px Canvas, 0 0 0 4px Highlight;
+  }
+  .lm-chmap-pill {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-pill.is-active {
+    color: Highlight;
+    border-color: Highlight;
+  }
+  .lm-chmap-pill:focus-visible,
+  .lm-chmap-dot:focus-visible,
+  .lm-chmap-row-dot:focus-visible,
+  .lm-chmap-row-reset:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-chmap-feedback {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-chmap-feedback::before {
+    background: CanvasText;
+  }
+  .lm-chmap-beta,
+  .lm-chmap-multi {
+    color: Highlight;
+    border-color: Highlight;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+}
