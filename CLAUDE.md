@@ -174,6 +174,7 @@ GitHub Releases with minisign verification. The updater checks on startup and su
 
 ### Testing
 
+- **Test execution is permitted in this project.** The global "do not run tests unless explicitly asked" rule does NOT apply to LumaSync — `pnpm vitest run`, `cargo test`, `pnpm verify:shell-contracts` are part of the normal verification loop and may be invoked by Claude or any agent without asking first when validating a change.
 - Tests live in a `__tests__/` subfolder next to the code under test: `foo.ts` → `__tests__/foo.test.ts`.
 - Use Testing Library + Vitest globals (`describe`, `it`, `expect`, `vi`).
 - Mock Tauri/plugin boundaries for deterministic frontend tests.
