@@ -34,7 +34,7 @@ const TYPE_COLORS: Record<ObjectEntry["type"], string> = {
   furniture: "bg-amber-500",
   usb: "bg-cyan-500",
   hue: "bg-white border border-zinc-400",
-  image: "bg-slate-500",
+  image: "bg-zinc-9000",
 };
 
 function buildObjectList(config: RoomMapConfig, t: (key: string, opts?: Record<string, string>) => string): ObjectEntry[] {
@@ -125,8 +125,8 @@ function ObjectRow({
       className={[
         "flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[11px] group",
         selected
-          ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-          : "text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50",
+          ? "bg-zinc-800 text-zinc-100"
+          : "text-zinc-300 hover:bg-zinc-800/50",
       ].join(" ")}
       onClick={onSelect}
     >
@@ -134,7 +134,7 @@ function ObjectRow({
       {editing ? (
         <input
           autoFocus
-          className="bg-transparent border-b border-slate-300 dark:border-zinc-600 text-[11px] focus:outline-none focus:border-cyan-400 flex-1 min-w-0"
+          className="bg-transparent border-b border-zinc-600 text-[11px] focus:outline-none focus:border-amber-400 flex-1 min-w-0"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCommit}
@@ -151,7 +151,7 @@ function ObjectRow({
       )}
       {onToggleLock && (
         <button
-          className="text-slate-400 dark:text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded transition-opacity hover:text-slate-700 dark:hover:text-zinc-200"
+          className="text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded transition-opacity hover:text-zinc-200"
           aria-label={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
           title={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
           onClick={(e) => { e.stopPropagation(); onToggleLock(); }}
@@ -171,7 +171,7 @@ function ObjectRow({
       )}
       {!entry.locked && (
         <button
-          className="text-slate-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 rounded transition-opacity"
+          className="text-zinc-500 text-zinc-500 hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 rounded transition-opacity"
           aria-label={t("roomMap.objectPanel.delete")}
           onClick={(e) => {
             e.stopPropagation();
@@ -211,7 +211,7 @@ function ZoneTab({
   return (
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {zones.length === 0 ? (
-        <p className="text-[10px] text-slate-400 dark:text-zinc-500 py-3 text-center">
+        <p className="text-[10px] text-zinc-500 py-3 text-center">
           {t("roomMap.zones.emptyPanel")}
         </p>
       ) : (
@@ -225,8 +225,8 @@ function ZoneTab({
                 className={[
                   "flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[11px] group",
                   isActive
-                    ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                    : "text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50",
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-300 hover:bg-zinc-800/50",
                 ].join(" ")}
                 onClick={() => onSelectZone(isActive ? null : zone.id)}
               >
@@ -234,7 +234,7 @@ function ZoneTab({
                 {isEditing ? (
                   <input
                     autoFocus
-                    className="bg-transparent border-b border-slate-300 dark:border-zinc-600 text-[11px] focus:outline-none focus:border-cyan-400 flex-1 min-w-0"
+                    className="bg-transparent border-b border-zinc-600 text-[11px] focus:outline-none focus:border-amber-400 flex-1 min-w-0"
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={() => handleCommitEdit(zone, zoneIndex)}
@@ -252,11 +252,11 @@ function ZoneTab({
                     {zone.name}
                   </span>
                 )}
-                <span className="text-[9px] text-slate-400 dark:text-zinc-500 shrink-0">
+                <span className="text-[9px] text-zinc-500 shrink-0">
                   {zone.channelIndices.length}
                 </span>
                 <button
-                  className="text-slate-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded"
+                  className="text-zinc-500 text-zinc-500 hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded"
                   onClick={(e) => { e.stopPropagation(); onDeleteZone(zone.id); }}
                 >
                   x
@@ -267,7 +267,7 @@ function ZoneTab({
         </ul>
       )}
       <button
-        className="mt-1 w-full text-[10px] text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 py-1 transition-colors"
+        className="mt-1 w-full text-[10px] text-zinc-400 hover:text-zinc-200 py-1 transition-colors"
         onClick={onAddZone}
       >
         + {t("roomMap.zones.addZoneButton")}
@@ -295,11 +295,11 @@ export function ObjectListPanel({
   const objects = buildObjectList(config, t);
 
   const tabBase = "flex-1 text-center py-1.5 text-[10px] font-semibold transition-colors cursor-pointer";
-  const tabActive = "text-slate-900 dark:text-zinc-100 border-b-2 border-cyan-500";
-  const tabInactive = "text-slate-500 dark:text-zinc-400 border-b border-slate-200 dark:border-zinc-700 hover:text-slate-700 dark:hover:text-zinc-200";
+  const tabActive = "text-zinc-100 border-b-2 border-amber-500";
+  const tabInactive = "text-zinc-400 border-b border-zinc-700 hover:text-zinc-200";
 
   return (
-    <div className="flex flex-col h-full border-l border-slate-200/70 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 w-[180px] shrink-0">
+    <div className="flex flex-col h-full border-l border-zinc-800 bg-zinc-900/90 w-[180px] shrink-0">
       {/* Tab bar */}
       <div className="flex shrink-0">
         <button
@@ -320,7 +320,7 @@ export function ObjectListPanel({
       {activeTab === "objects" ? (
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {objects.length === 0 ? (
-            <p className="text-[10px] text-slate-400 dark:text-zinc-500 py-3 text-center">
+            <p className="text-[10px] text-zinc-500 py-3 text-center">
               {t("roomMap.objectPanel.empty")}
             </p>
           ) : (

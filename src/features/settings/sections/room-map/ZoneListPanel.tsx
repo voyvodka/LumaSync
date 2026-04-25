@@ -37,9 +37,9 @@ export function ZoneListPanel({
   const [editValue, setEditValue] = useState("");
 
   const btnBase =
-    "px-2 py-0.5 text-[11px] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60";
+    "px-2 py-0.5 text-[11px] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60";
   const btnActive =
-    "text-slate-700 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-800";
+    "text-zinc-300 hover:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800";
 
   function handleStartEdit(zone: ZoneDefinition) {
     setEditingZoneId(zone.id);
@@ -62,10 +62,10 @@ export function ZoneListPanel({
   }
 
   return (
-    <div className="border-t border-slate-200/70 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 max-h-[160px] overflow-y-auto px-4 py-3">
+    <div className="border-t border-zinc-800 bg-zinc-900/90 max-h-[160px] overflow-y-auto px-4 py-3">
       {/* Header row */}
       <div className="flex items-center mb-1">
-        <span className="text-[11px] font-semibold text-slate-600 dark:text-zinc-400">
+        <span className="text-[11px] font-semibold text-zinc-400">
           {t("roomMap.zones.panelTitle")}
         </span>
         <button
@@ -78,7 +78,7 @@ export function ZoneListPanel({
 
       {/* Zone list */}
       {zones.length === 0 ? (
-        <p className="text-[11px] text-slate-400 dark:text-zinc-500 py-2 text-center">
+        <p className="text-[11px] text-zinc-500 py-2 text-center">
           {t("roomMap.zones.emptyPanel")}
         </p>
       ) : (
@@ -93,7 +93,7 @@ export function ZoneListPanel({
                 key={zone.id}
                 className={[
                   "py-1 flex items-center gap-2 cursor-pointer rounded",
-                  isActive ? "bg-slate-100 dark:bg-zinc-800" : "",
+                  isActive ? "bg-zinc-800" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -108,7 +108,7 @@ export function ZoneListPanel({
                 {isEditing ? (
                   <input
                     autoFocus
-                    className="bg-transparent border-b border-slate-300 dark:border-zinc-600 text-[11px] text-slate-800 dark:text-zinc-200 focus:outline-none focus:border-cyan-400 flex-1"
+                    className="bg-transparent border-b border-zinc-600 text-[11px] text-zinc-100 focus:outline-none focus:border-amber-400 flex-1"
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={() => handleCommitEdit(zone, zoneIndex)}
@@ -122,7 +122,7 @@ export function ZoneListPanel({
                   />
                 ) : (
                   <span
-                    className="text-[11px] text-slate-800 dark:text-zinc-200 flex-1 truncate"
+                    className="text-[11px] text-zinc-100 flex-1 truncate"
                     onDoubleClick={(e) => {
                       e.stopPropagation();
                       handleStartEdit(zone);
@@ -133,7 +133,7 @@ export function ZoneListPanel({
                 )}
 
                 {/* Light count badge */}
-                <span className="text-[10px] text-slate-400 dark:text-zinc-500 shrink-0">
+                <span className="text-[10px] text-zinc-500 shrink-0">
                   {lightCount === 1
                     ? t("roomMap.zones.lightCountOne")
                     : t("roomMap.zones.lightCount", { N: String(lightCount) })}
@@ -141,7 +141,7 @@ export function ZoneListPanel({
 
                 {/* Delete button */}
                 <button
-                  className="text-slate-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 text-[11px] shrink-0 leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 rounded"
+                  className="text-zinc-500 text-zinc-500 hover:text-red-400 text-[11px] shrink-0 leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 rounded"
                   aria-label={t("roomMap.zones.deleteAriaLabel", { name: zone.name })}
                   onClick={(e) => {
                     e.stopPropagation();

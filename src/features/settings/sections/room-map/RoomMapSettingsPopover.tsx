@@ -124,13 +124,13 @@ export function RoomMapSettingsPopover({
   };
 
   const inputClass =
-    "w-full rounded-md border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2 py-1 text-sm text-slate-900 dark:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60";
-  const labelClass = "block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1";
+    "w-full rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-sm text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60";
+  const labelClass = "block text-[11px] font-semibold text-zinc-400 mb-1";
 
   return (
     <div
       ref={popoverRef}
-      className="absolute top-10 left-0 z-50 w-[280px] rounded-lg border border-slate-200/70 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/95 shadow-lg p-4"
+      className="absolute top-10 left-0 z-50 w-[280px] rounded-lg border border-zinc-800 bg-zinc-900/95 shadow-lg p-4"
       role="dialog"
       aria-label={t("roomMap.toolbar.settingsAriaLabel")}
     >
@@ -167,12 +167,12 @@ export function RoomMapSettingsPopover({
 
         {/* Grid toggle */}
         <div>
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-700 dark:text-zinc-300">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-zinc-300">
             <input
               type="checkbox"
               checked={showGrid}
               onChange={() => onGridToggle(!showGrid)}
-              className="rounded accent-slate-700 dark:accent-zinc-300"
+              className="rounded accent-zinc-300"
             />
             {t("roomMap.settings.showGrid")}
           </label>
@@ -193,22 +193,22 @@ export function RoomMapSettingsPopover({
                   const raw = parseFloat((e.target as HTMLInputElement).value);
                   onGridStrokeWidthChange(Math.round(raw * 10) / 10);
                 }}
-                className="w-full accent-slate-700 dark:accent-zinc-300"
+                className="w-full accent-zinc-300"
               />
             </div>
           )}
         </div>
 
         {/* Divider */}
-        <div className="border-t border-slate-200/70 dark:border-zinc-800" />
+        <div className="border-t border-zinc-800" />
 
         {/* Reset map */}
         <div>
           <button
             className={`w-full rounded-md border px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60 ${
               resetConfirming
-                ? "border-red-400 bg-red-50 text-red-600 dark:bg-red-950/30 dark:border-red-700 dark:text-red-400"
-                : "border-red-300 dark:border-red-800 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/20"
+                ? "border-red-700 bg-red-950/30 text-red-400"
+                : "border-red-800 text-red-400 hover:bg-red-950/20"
             }`}
             onClick={handleResetClick}
           >

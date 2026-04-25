@@ -207,7 +207,7 @@ function ImageLayerView({
       {selected && canDrag && naturalSize && cornerKeys.map((key) => (
         <div
           key={key}
-          className={`absolute h-2 w-2 rounded-sm border border-slate-900 bg-white dark:border-zinc-100 dark:bg-zinc-950 ${CORNER_CLASSES[key]}`}
+          className={`absolute h-2 w-2 rounded-sm border border-zinc-100 bg-zinc-950 ${CORNER_CLASSES[key]}`}
           onPointerDown={(e) => handleResizePointerDown(key, e)}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
@@ -450,7 +450,7 @@ export function RoomMapCanvas({
     <RoomMapContext.Provider value={{ pxPerMeter, canvasSize }}>
       <div
         ref={canvasRef}
-        className={`relative w-full h-full overflow-hidden bg-slate-100/60 dark:bg-zinc-950 ${spaceHeld ? "cursor-grab" : ""}`}
+        className={`relative w-full h-full overflow-hidden bg-zinc-950 ${spaceHeld ? "cursor-grab" : ""}`}
         onClick={handleBackgroundClick}
         onWheel={handleCanvasWheel}
         onPointerDown={handleCanvasPointerDown}
@@ -473,7 +473,7 @@ export function RoomMapCanvas({
           {/* Grid SVG — inside object layer so it moves with zoom/pan */}
           {showGrid && canvasSize.w > 0 && (
             <svg
-              className="absolute text-slate-300 dark:text-zinc-800 pointer-events-none"
+              className="absolute text-zinc-700 pointer-events-none"
               style={{ zIndex: 1, left: 0, top: 0, overflow: "visible" }}
               width={1}
               height={1}

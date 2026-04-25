@@ -58,7 +58,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   return (
     <div
       ref={ref}
-      className="fixed z-[100] min-w-[140px] rounded-md border border-slate-200/70 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-lg py-1"
+      className="fixed z-[100] min-w-[140px] rounded-md border border-zinc-700 bg-zinc-900 shadow-lg py-1"
       style={{ left: pos.left, top: pos.top }}
     >
       {actions.map((action, i) => (
@@ -67,11 +67,11 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           className={[
             "w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-4",
             action.disabled
-              ? "text-slate-400 dark:text-zinc-600 cursor-not-allowed"
+              ? "text-zinc-600 cursor-not-allowed"
               : action.danger
-                ? "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                : "text-slate-700 dark:text-zinc-300 hover:bg-slate-100 dark:hover:bg-zinc-800",
-            "focus-visible:outline-none focus-visible:bg-slate-100 dark:focus-visible:bg-zinc-800",
+                ? "text-red-400 hover:bg-red-900/20"
+                : "text-zinc-300 hover:bg-zinc-800",
+            "focus-visible:outline-none focus-visible:bg-zinc-800",
           ].join(" ")}
           onClick={() => {
             if (action.disabled) return;
@@ -82,7 +82,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
         >
           <span>{action.label}</span>
           {action.shortcut && (
-            <span className="text-[9px] text-slate-400 dark:text-zinc-500">{action.shortcut}</span>
+            <span className="text-[9px] text-zinc-500">{action.shortcut}</span>
           )}
         </button>
       ))}

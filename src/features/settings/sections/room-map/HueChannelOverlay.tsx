@@ -219,7 +219,7 @@ export function HueChannelOverlay({
                 isSelected ? "bg-white border-white text-zinc-900" : "bg-white/80 border-zinc-400 text-zinc-900",
                 zoneAssignMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
                 isUnassignedInZoneMode ? "opacity-50" : "",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
               ]
                 .filter(Boolean)
                 .join(" ")}

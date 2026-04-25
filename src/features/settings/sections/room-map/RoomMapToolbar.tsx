@@ -97,12 +97,12 @@ export function RoomMapToolbar({
   const { t } = useTranslation("common");
 
   const btnBase =
-    "px-2 py-1 text-[11px] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60";
+    "px-2 py-1 text-[11px] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60";
   const btnActive =
-    "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
+    "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100";
 
   return (
-    <div className="relative h-10 flex items-center gap-2 px-3 border-b border-slate-200/70 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 shrink-0">
+    <div className="relative h-10 flex items-center gap-2 px-3 border-b border-zinc-800 bg-zinc-900/80 shrink-0">
       {/* Derive Zones */}
       {(() => {
         const deriveDisabled = !hasUsb || !hasTv;
@@ -110,9 +110,9 @@ export function RoomMapToolbar({
           <button
             className={`${btnBase} flex items-center gap-1 ${
               deriveDisabled
-                ? "opacity-40 cursor-not-allowed text-slate-500 dark:text-zinc-500"
+                ? "opacity-40 cursor-not-allowed text-zinc-500"
                 : derivePreviewActive
-                  ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
+                  ? "bg-zinc-800 text-zinc-100"
                   : btnActive
             }`}
             onClick={deriveDisabled ? undefined : onDeriveZones}
@@ -133,16 +133,16 @@ export function RoomMapToolbar({
       >
         {t("roomMap.zones.addZoneButton")}
         {zoneCount > 0 && (
-          <span className="ml-1 rounded-full bg-slate-200 dark:bg-zinc-700 px-1 text-[9px]">
+          <span className="ml-1 rounded-full bg-zinc-700 px-1 text-[9px]">
             {zoneCount}
           </span>
         )}
       </button>
 
       {/* Separator + Undo/Redo */}
-      <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-zinc-700" />
+      <div className="mx-1 h-5 w-px bg-zinc-700" />
       <button
-        className={`${btnBase} ${canUndo ? btnActive : "opacity-30 cursor-not-allowed text-slate-500 dark:text-zinc-500"} flex items-center min-w-[28px] min-h-[28px] justify-center`}
+        className={`${btnBase} ${canUndo ? btnActive : "opacity-30 cursor-not-allowed text-zinc-500"} flex items-center min-w-[28px] min-h-[28px] justify-center`}
         onClick={canUndo ? onUndo : undefined}
         disabled={!canUndo}
         aria-label={t("roomMap.toolbar.undo")}
@@ -151,7 +151,7 @@ export function RoomMapToolbar({
         <IconUndo />
       </button>
       <button
-        className={`${btnBase} ${canRedo ? btnActive : "opacity-30 cursor-not-allowed text-slate-500 dark:text-zinc-500"} flex items-center min-w-[28px] min-h-[28px] justify-center`}
+        className={`${btnBase} ${canRedo ? btnActive : "opacity-30 cursor-not-allowed text-zinc-500"} flex items-center min-w-[28px] min-h-[28px] justify-center`}
         onClick={canRedo ? onRedo : undefined}
         disabled={!canRedo}
         aria-label={t("roomMap.toolbar.redo")}
@@ -170,7 +170,7 @@ export function RoomMapToolbar({
       <button
         className={`${btnBase} ${
           settingsOpen
-            ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
+            ? "bg-zinc-800 text-zinc-100"
             : btnActive
         } flex items-center gap-1 min-w-[32px] min-h-[32px] justify-center`}
         onClick={onToggleSettings}
@@ -234,7 +234,7 @@ function ShortcutsHelpButton({ btnBase, btnActive }: { btnBase: string; btnActiv
     <div className="relative">
       <button
         ref={btnRef}
-        className={`${btnBase} ${open ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" : btnActive} flex items-center min-w-[28px] min-h-[28px] justify-center`}
+        className={`${btnBase} ${open ? "bg-zinc-800 text-zinc-100" : btnActive} flex items-center min-w-[28px] min-h-[28px] justify-center`}
         onClick={() => setOpen((v) => !v)}
         aria-label={t("roomMap.shortcuts.title")}
         title={t("roomMap.shortcuts.title")}
@@ -244,16 +244,16 @@ function ShortcutsHelpButton({ btnBase, btnActive }: { btnBase: string; btnActiv
       {open && (
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-slate-200/70 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl z-50 py-2 px-3"
+          className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl z-50 py-2 px-3"
         >
-          <h3 className="text-[11px] font-bold text-slate-700 dark:text-zinc-200 mb-1.5">
+          <h3 className="text-[11px] font-bold text-zinc-200 mb-1.5">
             {t("roomMap.shortcuts.title")}
           </h3>
           <div className="space-y-1">
             {shortcuts.map((s) => (
               <div key={s.key} className="flex items-center justify-between text-[10px]">
-                <span className="text-slate-500 dark:text-zinc-400">{s.desc}</span>
-                <kbd className="ml-2 rounded bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 text-[9px] font-mono text-slate-600 dark:text-zinc-300 whitespace-nowrap">
+                <span className="text-zinc-400">{s.desc}</span>
+                <kbd className="ml-2 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-mono text-zinc-300 whitespace-nowrap">
                   {s.key}
                 </kbd>
               </div>

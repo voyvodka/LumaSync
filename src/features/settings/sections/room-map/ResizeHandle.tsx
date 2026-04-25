@@ -41,7 +41,7 @@ export function ResizeHandle({ corner, onDragStart, onDragMove, onDragEnd }: Res
 
   return (
     <div
-      className={`absolute h-2 w-2 rounded-sm border border-slate-900 bg-white dark:border-zinc-100 dark:bg-zinc-950 ${CORNER_CLASSES[corner]}`}
+      className={`absolute h-2 w-2 rounded-sm border border-zinc-100 bg-zinc-950 ${CORNER_CLASSES[corner]}`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

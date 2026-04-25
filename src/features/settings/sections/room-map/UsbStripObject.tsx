@@ -278,7 +278,7 @@ export function UsbStripObject({
         className={`absolute rounded-full cursor-grab active:cursor-grabbing ${
           selected
             ? "bg-white ring-2 ring-white/50"
-            : "bg-cyan-500 ring-2 ring-white dark:ring-zinc-950"
+            : "bg-cyan-500 ring-2 ring-zinc-950"
         }`}
         style={{
           width: 12,
@@ -298,7 +298,7 @@ export function UsbStripObject({
         className={`absolute rounded-full cursor-grab active:cursor-grabbing ${
           selected
             ? "bg-white ring-2 ring-white/50"
-            : "bg-cyan-500 ring-2 ring-white dark:ring-zinc-950"
+            : "bg-cyan-500 ring-2 ring-zinc-950"
         }`}
         style={{
           width: 12,
@@ -316,14 +316,14 @@ export function UsbStripObject({
       {/* LED count input shown when selected */}
       {selected && (
         <div
-          className="absolute z-30 flex items-center gap-1 rounded border border-cyan-500 bg-white px-1.5 py-0.5 shadow dark:bg-zinc-900"
+          className="absolute z-30 flex items-center gap-1 rounded border border-amber-500 bg-zinc-900 px-1.5 py-0.5 shadow dark:bg-zinc-900"
           style={{
             left: midX - 48,
             top: midY - 20,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <label className="text-[10px] text-slate-600 dark:text-zinc-400 whitespace-nowrap">
+          <label className="text-[10px] text-zinc-400 whitespace-nowrap">
             {t("roomMap.usbStrip.ledCount")}
           </label>
           <input
@@ -332,7 +332,7 @@ export function UsbStripObject({
             max={1000}
             value={localLedCount}
             onChange={handleLedCountChange}
-            className="w-14 rounded border border-slate-200 bg-transparent px-1 text-[10px] text-slate-900 dark:border-zinc-700 dark:text-zinc-100 focus:outline-none"
+            className="w-14 rounded border border-zinc-700 bg-transparent px-1 text-[10px] text-zinc-100 focus:outline-none"
             onClick={(e) => e.stopPropagation()}
           />
         </div>
