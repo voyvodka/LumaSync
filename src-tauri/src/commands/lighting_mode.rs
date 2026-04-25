@@ -1858,7 +1858,14 @@ mod tests {
         assert_eq!(failed.mode.kind, LightingModeKind::Off);
     }
 
-    #[cfg(not(target_os = "windows"))]
+    // Originally guarded only against `target_os = "windows"`, but v1.4 added
+    // macOS SCDisplay capture and v1.5 W1-D added Linux X11 capture via xcap —
+    // so all three first-class targets now build a live source successfully.
+    // Restrict the contract assertion to the truly-unsupported platforms (BSDs
+    // / illumos) where the factory is still expected to surface the
+    // `AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM` reason instead of silently
+    // falling back to a static source.
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
     #[test]
     fn default_runtime_owner_uses_live_source_factory_contract() {
         let owner = LightingRuntimeOwner::default();
