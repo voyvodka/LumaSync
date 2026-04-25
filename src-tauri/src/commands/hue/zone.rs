@@ -185,9 +185,13 @@ pub fn world_pos_from_zone_relative(
 
 /// Same as [`world_pos_from_zone_relative`] but clamps the resolved world
 /// position into the `[-1, 1]` cube. Returns the clamped tuple plus
-/// whether any axis was actually clamped — callers that want to surface
-/// `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS` can use the bool to decide.
-#[allow(dead_code)] // consumed by W1-A4 frame builder in Commit 2
+/// whether any axis was actually clamped — production callers should
+/// prefer the `(center, scale, relative)`-based helpers in
+/// `super::frame::resolve_zone_relative` /
+/// `super::frame::resolve_zone_relative_clamped` which avoid coupling
+/// to the `HueZone` struct. Kept here as a thin authoring-side wrapper
+/// + a self-test of the formula equivalence.
+#[cfg(test)]
 pub fn world_pos_clamped(zone: &HueZone, relative: &ZoneRelativePosition) -> ((f64, f64, f64), bool) {
     let (x, y, z) = world_pos_from_zone_relative(zone, relative);
     let cx = x.clamp(-1.0, 1.0);
