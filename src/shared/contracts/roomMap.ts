@@ -29,6 +29,13 @@ export const ROOM_MAP_COMMANDS = {
 /**
  * Persisted position of a Hue Entertainment Area channel in room space.
  * Replaces or supplements the bridge-reported positionX/Y.
+ *
+ * v1.5 W1-A1: an optional `zoneId` + `zoneRelativePosition` pair is layered
+ * on top of the legacy absolute coordinates. When `zoneId` is set, the
+ * `zoneRelativePosition` is the authoritative source of truth and the
+ * absolute `x/y/z` are derived from `HueZone.center{X,Y,Z}` plus
+ * `HueZone.scale{X,Y,Z}` at runtime. Existing call sites that only know
+ * about `x/y/z` keep working unchanged (legacy flat mode).
  */
 export interface HueChannelPlacement {
   /** Channel index within the entertainment area (0-based) */
@@ -42,6 +49,22 @@ export interface HueChannelPlacement {
   /** Optional user-assigned label */
   label?: string;
   locked?: boolean;
+  /**
+   * v1.5 W1-A1 — when present, this channel is logically grouped under the
+   * referenced `HueZone`. Absent ⇒ legacy absolute placement.
+   */
+  zoneId?: string;
+  /**
+   * v1.5 W1-A1 — zone-relative position in [-1, 1] × [-1, 1] × [-1, 1]
+   * coordinates. Authoritative when `zoneId` is set; ignored otherwise.
+   * The world-space `x/y/z` above are derived from this via
+   * `HueZone.center + HueZone.scale * zoneRelativePosition`.
+   */
+  zoneRelativePosition?: {
+    x: number;
+    y: number;
+    z: number;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +143,62 @@ export interface ZoneDefinition {
 }
 
 // ---------------------------------------------------------------------------
+// Hue Zone (v1.5 W1-A1 — logical subset of an entertainment area)
+// ---------------------------------------------------------------------------
+
+/**
+ * Logical grouping of channels inside a single Hue entertainment area.
+ *
+ * Scope decision (v1.5 D2 — locked, scope (a) "logical grouping"):
+ * - A zone is purely a UI / authoring concept: one entertainment area
+ *   stream is still negotiated with the bridge, no multi-stream mux,
+ *   no bridge state-machine changes.
+ * - Channels inside the zone keep their bridge-assigned `channelIndex`
+ *   inside the parent entertainment area.
+ * - The zone provides a center-relative coordinate space so the user
+ *   can manipulate a small subset of bulbs (e.g. a sofa back-light pair)
+ *   as a unit without re-typing world coordinates.
+ *
+ * Coordinate system: same Hue native space as `HueChannelPlacement` —
+ * `centerX/Y/Z` and `scaleX/Y/Z` are in [-1, 1]. The world-space position
+ * of a zone-bound channel resolves to:
+ *
+ *   world = center + scale * zoneRelativePosition
+ *
+ * `borderColor` / `centerColor` are pure UI hints used by the room-map
+ * editor; they have no streaming side effect.
+ *
+ * This is the foundation for v2.0 G3 (in-app Entertainment-area editor)
+ * and `project_hue_zone_plan.md`'s multi-zone authoring story.
+ */
+export interface HueZone {
+  /** Stable id used by `HueChannelPlacement.zoneId`. */
+  id: string;
+  /** Human-readable label shown in the zone editor. */
+  name: string;
+  /** Parent entertainment area id (one zone never spans two areas). */
+  entertainmentAreaId: string;
+  /** Zone center in Hue native space ([-1, 1]). */
+  centerX: number;
+  centerY: number;
+  centerZ: number;
+  /**
+   * Zone-to-world scale per axis. `1.0` ⇒ zone-relative `[-1, 1]` covers
+   * the full Hue space; `0.25` ⇒ zone occupies a tight cluster around
+   * the center.
+   */
+  scaleX: number;
+  scaleY: number;
+  scaleZ: number;
+  /** Channel indices (within the parent area) that belong to this zone. */
+  channelIndices: number[];
+  /** Optional UI hint for the zone outline color. */
+  borderColor?: string;
+  /** Optional UI hint for the zone center marker color. */
+  centerColor?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Image Layer
 // ---------------------------------------------------------------------------
 
@@ -162,6 +241,13 @@ export interface RoomMapConfig {
   furniture: FurniturePlacement[];
   tvAnchor?: TvAnchorPlacement;
   zones: ZoneDefinition[];
+  /**
+   * v1.5 W1-A1 — logical Hue zones (subsets of entertainment areas).
+   * Absent ⇒ legacy flat mode (channels use absolute Hue coordinates
+   * directly). Distinct from `zones` above, which are USB-side region
+   * groupings.
+   */
+  hueZones?: HueZone[];
   /** Image layers (floor plans, reference images, etc.) */
   imageLayers: ImageLayer[];
   /** @deprecated Use imageLayers instead — kept for migration */
