@@ -115,7 +115,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
   return (
     <div
       ref={displayRef}
-      className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-mono text-white/80 tabular-nums"
+      className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] [font-family:var(--lm-mono)] text-white/80 tabular-nums"
       style={{ display: "none" }}
     />
   );

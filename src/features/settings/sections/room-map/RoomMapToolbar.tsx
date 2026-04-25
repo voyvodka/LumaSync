@@ -253,7 +253,7 @@ function ShortcutsHelpButton({ btnBase, btnActive }: { btnBase: string; btnActiv
             {shortcuts.map((s) => (
               <div key={s.key} className="flex items-center justify-between text-[10px]">
                 <span className="text-zinc-400">{s.desc}</span>
-                <kbd className="ml-2 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-mono text-zinc-300 whitespace-nowrap">
+                <kbd className="ml-2 rounded bg-zinc-800 px-1 py-0.5 text-[9px] [font-family:var(--lm-mono)] text-zinc-300 whitespace-nowrap">
                   {s.key}
                 </kbd>
               </div>
