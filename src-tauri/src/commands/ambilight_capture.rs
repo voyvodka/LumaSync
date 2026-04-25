@@ -344,19 +344,83 @@ mod platform {
                 return Err("AMBILIGHT_CAPTURE_PIXEL_BUFFER_INVALID");
             }
 
-            let mut pixels_rgb =
-                Vec::with_capacity((width as usize).saturating_mul(height as usize));
-            for pixel in raw_pixels[..expected_len].chunks_exact(4) {
-                pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+            // 4K downscale scaffold (v1.5 W2-C2 / Platform GAP 3).
+            //
+            // windows-capture 2.0 does not expose a GPU-side `output_size`
+            // hint the way macOS ScreenCaptureKit does, so a 4K capture
+            // path delivers ~33 MB per frame at 60 Hz — turning the
+            // RGBA→RGB conversion + per-pixel iteration into the 4K CPU
+            // hot spot. Until v2.0 ships a hardware downscale (Platform
+            // GAP 3 follow-up), we shoulder the cost CPU-side with a
+            // nearest-neighbor stride so the downstream sampler still
+            // sees a manageable grid.
+            //
+            // Heuristic mirrors the macOS branch: cap the longer axis at
+            // ~640 px. The integer stride keeps row/column iteration
+            // index-aligned and avoids interpolation cost — colour
+            // averaging in the sampler tolerates aliasing because each
+            // LED region already covers many output pixels. Native
+            // 1080p stays 1:1 (stride 1) so this is a no-op on common
+            // monitors.
+            const MAX_CAPTURE_DIM: u32 = 640;
+            let stride = (width.max(height) / MAX_CAPTURE_DIM).max(1) as usize;
+            let stride_active = stride > 1;
+            if stride_active {
+                log::debug!(
+                    "[ambilight-capture/windows] 4K downscale active: src={}x{} stride={} → ~{}x{}",
+                    width,
+                    height,
+                    stride,
+                    width as usize / stride,
+                    height as usize / stride,
+                );
             }
+
+            let src_w = width as usize;
+            let src_h = height as usize;
+            let dst_w = (src_w + stride - 1) / stride;
+            let dst_h = (src_h + stride - 1) / stride;
+            let mut pixels_rgb = Vec::with_capacity(dst_w.saturating_mul(dst_h));
+
+            // Stride-1 keeps the original tight loop (one allocation, one
+            // BGRA-vs-RGBA-agnostic copy). Stride-N walks rows + cols by
+            // `stride` so a 3840×2160 frame collapses to ~640×360 on the
+            // host CPU — the smallest impact we can land before a real
+            // hardware downscale path goes in.
+            if !stride_active {
+                for pixel in raw_pixels[..expected_len].chunks_exact(4) {
+                    pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+                }
+            } else {
+                let row_bytes = src_w.saturating_mul(4);
+                for y in (0..src_h).step_by(stride) {
+                    let row_start = y.saturating_mul(row_bytes);
+                    for x in (0..src_w).step_by(stride) {
+                        let offset = row_start + x.saturating_mul(4);
+                        if offset + 3 < raw_pixels.len() {
+                            pixels_rgb.push([
+                                raw_pixels[offset],
+                                raw_pixels[offset + 1],
+                                raw_pixels[offset + 2],
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            let (out_w, out_h) = if stride_active {
+                (dst_w as u32, dst_h as u32)
+            } else {
+                (width, height)
+            };
 
             let mut frame_guard = self
                 .latest_frame
                 .lock()
                 .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")?;
             *frame_guard = Some(Arc::new(CapturedFrame {
-                width,
-                height,
+                width: out_w,
+                height: out_h,
                 pixels_rgb,
             }));
 
