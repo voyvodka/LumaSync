@@ -106,6 +106,7 @@
       "other": "Other",
       "usbStrips": "USB Strips",
       "hueBridges": "Hue Bridges",
+      "wled": "WLED",
       "displays": "Displays",
       "manualEntry": "Manual Entry"
     },
@@ -184,6 +185,40 @@
         "reconnecting": "RECONNECTING",
         "failed": "FAILED",
         "discovered": "DISCOVERED"
+      }
+    },
+    "wled": {
+      "title": "WLED Devices",
+      "subtitle": "Network LED panels reachable on the local network",
+      "manualIp": "WLED IP",
+      "manualIpHint": "Leave blank to scan via mDNS, or paste a known address.",
+      "manualIpPlaceholder": "192.168.1.42",
+      "discoverAction": "Discover",
+      "discovering": "Discovering...",
+      "connectAction": "Connect",
+      "reconnectAction": "Reconnect",
+      "connecting": "Connecting...",
+      "testAction": "Test",
+      "testing": "Testing...",
+      "invalidIp": "Enter a valid IPv4 or IPv6 address.",
+      "cellLedCount": "LEDs",
+      "cellVersion": "Version",
+      "cellMac": "MAC",
+      "empty": {
+        "title": "No WLED devices yet",
+        "body": "Run discovery, or paste a known IP and press Discover."
+      },
+      "pill": {
+        "discovered": "DISCOVERED",
+        "connected": "ACTIVE"
+      },
+      "status": {
+        "discoveryOk": "Discovery completed.",
+        "discoveryEmpty": "No WLED devices were found on the network.",
+        "discoveryTimeout": "Discovery timed out before any device responded.",
+        "bridgeUnreachable": "WLED device is not reachable.",
+        "protocolMismatch": "Device rejected the wire protocol — try the alternate.",
+        "ledCountMismatch": "Device reports a different LED count than expected."
       }
     }
   },

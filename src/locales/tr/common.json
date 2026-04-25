@@ -98,6 +98,7 @@
       "other": "Diğer",
       "usbStrips": "USB Şeritleri",
       "hueBridges": "Hue Köprüleri",
+      "wled": "WLED",
       "displays": "Ekranlar",
       "manualEntry": "Manuel Giriş"
     },
@@ -176,6 +177,40 @@
         "reconnecting": "YEN. BAĞLANIYOR",
         "failed": "BAŞARISIZ",
         "discovered": "KEŞFEDİLDİ"
+      }
+    },
+    "wled": {
+      "title": "WLED Cihazları",
+      "subtitle": "Yerel ağda erişilebilen ağ LED panelleri",
+      "manualIp": "WLED IP",
+      "manualIpHint": "mDNS ile taramak için boş bırakın veya bilinen bir adres yapıştırın.",
+      "manualIpPlaceholder": "192.168.1.42",
+      "discoverAction": "Tara",
+      "discovering": "Taranıyor...",
+      "connectAction": "Bağlan",
+      "reconnectAction": "Yeniden bağlan",
+      "connecting": "Bağlanılıyor...",
+      "testAction": "Test",
+      "testing": "Test ediliyor...",
+      "invalidIp": "Geçerli bir IPv4 veya IPv6 adresi girin.",
+      "cellLedCount": "LED",
+      "cellVersion": "Sürüm",
+      "cellMac": "MAC",
+      "empty": {
+        "title": "Henüz WLED cihazı yok",
+        "body": "Tarama başlatın veya bilinen bir IP yapıştırıp Tara'ya basın."
+      },
+      "pill": {
+        "discovered": "BULUNDU",
+        "connected": "AKTIF"
+      },
+      "status": {
+        "discoveryOk": "Tarama tamamlandı.",
+        "discoveryEmpty": "Ağda hiç WLED cihazı bulunamadı.",
+        "discoveryTimeout": "Tarama süresi içinde hiçbir cihaz yanıt vermedi.",
+        "bridgeUnreachable": "WLED cihazına erişilemiyor.",
+        "protocolMismatch": "Cihaz protokolü reddetti — diğer protokolü deneyin.",
+        "ledCountMismatch": "Cihaz farklı bir LED sayısı bildiriyor."
       }
     }
   },

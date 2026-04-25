@@ -13,8 +13,9 @@ import { useDeviceConnection } from "../../device/useDeviceConnection";
 import { useHueOnboarding } from "../../device/useHueOnboarding";
 import { stopHue } from "../../mode/modeApi";
 import { HueChannelMapPanel } from "./HueChannelMapPanel";
+import { WledDevicePicker } from "./WledDevicePicker";
 
-type DeviceCategory = "usb" | "hue" | "displays" | "manual";
+type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
 
 function portDisplayName(portName: string, product?: string, manufacturer?: string): string {
   if (product && manufacturer) {
@@ -97,6 +98,17 @@ function IconDisplayGlyph() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5" width="18" height="13" rx="1.5" />
       <path d="M8 21h8M12 18v3" />
+    </svg>
+  );
+}
+
+function IconWledGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 8c5 5 15 5 20 0" />
+      <path d="M5 12c3.5 3.5 10.5 3.5 14 0" />
+      <path d="M8 16c2 2 6 2 8 0" />
+      <circle cx="12" cy="20" r="1" fill="currentColor" />
     </svg>
   );
 }
@@ -322,6 +334,14 @@ export function DeviceSection() {
           <span className="lm-device-cat-ic"><IconHueBridgeGlyph /></span>
           <span className="lm-device-cat-tx">{t("devicesPage.rail.hueBridges")}</span>
           {selectedBridge ? <span className="lm-device-cat-cnt">1</span> : null}
+        </button>
+        <button
+          type="button"
+          className={`lm-device-cat ${activeCategory === "wled" ? "is-on" : ""}`}
+          onClick={() => setActiveCategory("wled")}
+        >
+          <span className="lm-device-cat-ic"><IconWledGlyph /></span>
+          <span className="lm-device-cat-tx">{t("devicesPage.rail.wled")}</span>
         </button>
         <button
           type="button"
@@ -1200,6 +1220,11 @@ export function DeviceSection() {
           </div>
         </div>
 
+
+        {/* ── WLED category (v1.5 W1-B4) ───────────────────── */}
+        <div className={activeCategory === "wled" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "wled"}>
+          <WledDevicePicker />
+        </div>
 
         {/* ── Displays category ──────────────────────────────── */}
         <div className={activeCategory === "displays" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "displays"}>
