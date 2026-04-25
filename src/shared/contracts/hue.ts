@@ -146,6 +146,24 @@ export const HUE_STATUS = {
    * app keeps running for users who paired before v1.5.
    */
   CREDENTIAL_STORE_UNAVAILABLE: "HUE_CREDENTIAL_STORE_UNAVAILABLE",
+  /**
+   * Pairing succeeded AND the new credentials were written into the
+   * OS keychain. Frontend can clear `shellStore.hueAppKey` /
+   * `shellStore.hueClientKey` (the keychain is now source of truth).
+   */
+  CREDENTIAL_MIGRATION_OK: "HUE_CREDENTIAL_MIGRATION_OK",
+  /**
+   * Credentials already lived in the keychain and matched the values
+   * we just received from the bridge — no write performed. Idempotent
+   * happy path for re-pair flows.
+   */
+  CREDENTIAL_MIGRATION_SKIPPED: "HUE_CREDENTIAL_MIGRATION_SKIPPED",
+  /**
+   * Keychain write failed (or backend was unavailable). Frontend MUST
+   * keep the plaintext fallback so the bridge stays usable; downgrade-
+   * safe behaviour for users on platforms with broken keychain access.
+   */
+  CREDENTIAL_MIGRATION_FAILED: "HUE_CREDENTIAL_MIGRATION_FAILED",
 } as const;
 
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];

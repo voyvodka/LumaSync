@@ -661,7 +661,23 @@ pub(crate) fn build_hue_sender_with_counter(
     channels: Vec<HueAreaChannel>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
 ) -> (HueColorSender, bool, ShutdownSignal, Option<String>) {
-    let has_client_key = !request.client_key.trim().is_empty();
+    // v1.5 W2-A2 — keychain-first credential resolution. The request
+    // values from the Tauri command are treated as a downgrade-safe
+    // fallback for legacy v1.4 users whose credentials still live in
+    // the plaintext shellStore fields. When the keychain holds both
+    // halves we use those over the request values; this is the path
+    // every v1.5+ user takes after the first successful pairing.
+    let store = super::credential_store::default_store();
+    let resolved = super::credential_store::resolve_hue_credentials(
+        store.as_ref(),
+        &request.username,
+        &request.client_key,
+    );
+    let (resolved_username, resolved_client_key) = match resolved {
+        Some(r) => (r.username, r.client_key),
+        None => (request.username.clone(), request.client_key.clone()),
+    };
+    let has_client_key = !resolved_client_key.trim().is_empty();
 
     if has_client_key {
         match hue_http_client_arc() {
@@ -672,8 +688,8 @@ pub(crate) fn build_hue_sender_with_counter(
                 let (tx_result, rx_result) = std::sync::mpsc::channel();
                 let client_clone = client.clone();
                 let bridge_ip_t = request.bridge_ip.clone();
-                let username_t = request.username.clone();
-                let client_key_t = request.client_key.clone();
+                let username_t = resolved_username.clone();
+                let client_key_t = resolved_client_key.clone();
                 let area_id_t = request.area_id.clone();
                 let channels_t = channels.clone();
                 let counter_t = Arc::clone(&packet_counter);
@@ -703,7 +719,7 @@ pub(crate) fn build_hue_sender_with_counter(
                         let (sender, shutdown) = spawn_hue_http_sender(
                             client,
                             request.bridge_ip.clone(),
-                            request.username.clone(),
+                            resolved_username.clone(),
                             channels.clone(),
                         );
                         (sender, false, shutdown, None)
@@ -716,7 +732,7 @@ pub(crate) fn build_hue_sender_with_counter(
                         let (sender, shutdown) = spawn_hue_http_sender(
                             client,
                             request.bridge_ip.clone(),
-                            request.username.clone(),
+                            resolved_username.clone(),
                             channels.clone(),
                         );
                         (sender, false, shutdown, None)
@@ -735,7 +751,7 @@ pub(crate) fn build_hue_sender_with_counter(
                 let (sender, shutdown) = spawn_hue_http_sender(
                     client,
                     request.bridge_ip.clone(),
-                    request.username.clone(),
+                    resolved_username.clone(),
                     channels.clone(),
                 );
                 (sender, false, shutdown, None)

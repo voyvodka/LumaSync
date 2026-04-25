@@ -51,6 +51,12 @@ pub struct HuePairingCredentials {
 pub struct HuePairBridgeResponse {
     pub status: CommandStatus,
     pub credentials: Option<HuePairingCredentials>,
+    /// v1.5 W2-A2 — backend used to persist the new credentials.
+    /// Absent on legacy paths (rate-limited, bridge-busy, link-button-not-pressed).
+    /// `"keychain"` ⇒ frontend SHOULD clear the legacy plaintext shellStore fields.
+    /// `"plaintext-legacy"` ⇒ keychain unavailable, frontend keeps plaintext fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_storage_backend: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -188,6 +194,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         return HuePairBridgeResponse {
             status: ip_check.status,
             credentials: None,
+            credential_storage_backend: None,
         };
     }
 
@@ -202,6 +209,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     Some(error),
                 ),
                 credentials: None,
+                credential_storage_backend: None,
             };
         }
     };
@@ -224,13 +232,34 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         };
     match outcome {
         Ok(payload) => {
-            let result = parse_pairing_payload(&payload);
+            let mut result = parse_pairing_payload(&payload);
             match result.status.code.as_str() {
                 "HUE_PAIRING_OK" => info!("Hue bridge pairing succeeded at {bridge_ip}"),
                 "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED" => {
                     info!("Hue pairing waiting for link button at {bridge_ip}")
                 }
                 code => warn!("Hue bridge pairing failed at {bridge_ip} ({code})"),
+            }
+            // v1.5 W2-A2 — opportunistically migrate the fresh credentials
+            // into the OS keychain. If the keychain is unavailable we keep
+            // the plaintext fallback path; the frontend uses the
+            // `credentialStorageBackend` field on the response to decide
+            // whether it can safely clear `shellStore.hueAppKey` /
+            // `shellStore.hueClientKey` after a successful pairing.
+            if let Some(creds) = result.credentials.as_ref() {
+                let store = super::hue::credential_store::default_store();
+                let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
+                    store.as_ref(),
+                    &creds.username,
+                    &creds.client_key,
+                );
+                info!(
+                    "[hue-cred] pairing migration {}: backend={}",
+                    outcome.status_code(),
+                    outcome.backend().as_str()
+                );
+                result.credential_storage_backend =
+                    Some(outcome.backend().as_str().to_string());
             }
             result
         }
@@ -243,6 +272,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     None,
                 ),
                 credentials: None,
+                credential_storage_backend: None,
             }
         }
         Err(PairingTransportError::BridgeBusy { detail }) => {
@@ -254,6 +284,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     Some(detail),
                 ),
                 credentials: None,
+                credential_storage_backend: None,
             }
         }
         Err(PairingTransportError::Generic(error)) => {
@@ -265,6 +296,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     Some(error),
                 ),
                 credentials: None,
+                credential_storage_backend: None,
             }
         }
     }
@@ -599,6 +631,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
                 parsed.err().map(|e| e.to_string()),
             ),
             credentials: None,
+            credential_storage_backend: None,
         };
     };
 
@@ -611,6 +644,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
                 Some("Bridge did not return success/error payload.".to_string()),
             ),
             credentials: None,
+            credential_storage_backend: None,
         };
     };
 
@@ -625,6 +659,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
         return HuePairBridgeResponse {
             status: pairing_error_status(error_type, &description),
             credentials: None,
+            credential_storage_backend: None,
         };
     }
 
@@ -648,6 +683,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
                 username: username.to_string(),
                 client_key: client_key.to_string(),
             }),
+            credential_storage_backend: None,
         },
         _ => HuePairBridgeResponse {
             status: command_status(
@@ -656,6 +692,7 @@ pub fn parse_pairing_payload(payload: &str) -> HuePairBridgeResponse {
                 Some("Missing username/clientkey in bridge success payload.".to_string()),
             ),
             credentials: None,
+            credential_storage_backend: None,
         },
     }
 }

@@ -4,6 +4,7 @@ import type { DisplayId } from "./display";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
 import type {
   HueBridgeSummary,
+  HueCredentialBackend,
   HueCredentialStatus,
   HueIntensityPreset,
   HueOnboardingStep,
@@ -164,6 +165,19 @@ export interface ShellState {
    * Cached credential health line shown in Hue settings.
    */
   hueCredentialStatus?: HueCredentialStatus;
+  /**
+   * v1.5 W2-A2 — where the Hue credentials currently live.
+   *
+   * `keychain` ⇒ `hueAppKey` / `hueClientKey` MUST be cleared on the
+   *   shellStore (the OS keychain is the source of truth).
+   * `plaintext-legacy` ⇒ keychain is unavailable on this platform OR
+   *   migration failed; `hueAppKey` / `hueClientKey` remain populated
+   *   so the bridge stays usable.
+   *
+   * Absent ⇒ no pairing has happened on v1.5 yet (treat as legacy
+   * shape; the next successful pair will set this field).
+   */
+  credentialStorageBackend?: HueCredentialBackend;
   /**
    * Persisted room map configuration.
    * Absent until the user first opens the room map editor.
