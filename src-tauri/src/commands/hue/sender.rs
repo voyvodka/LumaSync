@@ -748,9 +748,134 @@ pub(crate) fn build_hue_sender_with_counter(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Per-light archetype + gamut metadata (v1.5 W1-C1)
+// ---------------------------------------------------------------------------
+//
+// CLIP v2 `/resource/light/{id}` exposes a `color.gamut_type` field
+// (`"A"`, `"B"`, `"C"`, or `"other"`) that we need before applying the
+// per-bulb gamut triangle clip in W1-C2. The archetype string (e.g.
+// `"hue_go"`, `"sultan_bulb"`) is also surfaced for telemetry and for
+// future bulb-specific dimming curves.
+//
+// The fetch helper is `async` (uses the same `reqwest::Client` pool as
+// `fetch_area_channels`) and must run **outside** the streaming hot
+// path: callers should populate the cache once at runtime activation
+// and then read it under the runtime lock during frame build. The cache
+// itself is a plain `HashMap<lightId, HueLightMetadata>` so it can be
+// embedded inside `HueActiveStreamContext` without extra synchronisation
+// (the lock that protects the active stream context already covers it).
+
+/// Hue per-bulb gamut type as advertised by the bridge under
+/// `color.gamut_type` in the `/resource/light/{id}` payload. The four
+/// canonical Hue gamuts are A (early bulbs), B (Hue v1 bulbs from
+/// 2012-2016), C (modern Hue Color White & Ambiance), and `Other`
+/// (unknown / fallback).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // consumed by W1-C2 frame builder gamut clip in Commit 4
+pub enum HueGamutType {
+    A,
+    B,
+    C,
+    Other,
+}
+
+impl HueGamutType {
+    #[allow(dead_code)] // consumed by W1-C2 frame builder gamut clip in Commit 4
+    pub fn from_clip_str(value: &str) -> Self {
+        match value.trim() {
+            "A" | "a" => HueGamutType::A,
+            "B" | "b" => HueGamutType::B,
+            "C" | "c" => HueGamutType::C,
+            _ => HueGamutType::Other,
+        }
+    }
+}
+
+/// Per-bulb metadata fetched from `/clip/v2/resource/light/{id}`. The
+/// runtime keeps a `light_id → HueLightMetadata` cache so the streaming
+/// hot path never hits the bridge to look up gamut info.
+#[derive(Clone, Debug)]
+#[allow(dead_code)] // consumed by W1-C2 frame builder gamut clip in Commit 4
+pub struct HueLightMetadata {
+    pub light_id: String,
+    pub archetype: Option<String>,
+    pub gamut_type: HueGamutType,
+}
+
+/// Parse a single CLIP v2 `/resource/light/{id}` response payload and
+/// extract the archetype + gamut type. Public so the unit tests in
+/// `sender::tests` can exercise the parser without a live bridge.
+#[allow(dead_code)] // production cache wiring lands in the W1-C2 follow-up
+pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightMetadata> {
+    let item = payload
+        .get("data")
+        .and_then(|v| v.as_array())
+        .and_then(|items| items.first())?;
+    let archetype = item
+        .get("metadata")
+        .and_then(|m| m.get("archetype"))
+        .and_then(|a| a.as_str())
+        .map(|s| s.to_string());
+    let gamut_type = item
+        .get("color")
+        .and_then(|c| c.get("gamut_type"))
+        .and_then(|g| g.as_str())
+        .map(HueGamutType::from_clip_str)
+        .unwrap_or(HueGamutType::Other);
+    Some(HueLightMetadata {
+        light_id: light_id.to_string(),
+        archetype,
+        gamut_type,
+    })
+}
+
+/// Fetch `/clip/v2/resource/light/{light_id}` and return the parsed
+/// metadata. Errors propagate as a string so the caller can decide
+/// whether to fall back to `HueGamutType::Other` (loud) or skip the
+/// clipping step (silent).
+#[allow(dead_code)] // production cache wiring lands in the W1-C2 follow-up
+pub async fn fetch_light_metadata(
+    bridge_ip: &str,
+    username: &str,
+    light_id: &str,
+) -> Result<HueLightMetadata, String> {
+    let client = async_hue_http_client()?;
+    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
+    let response = client
+        .get(endpoint)
+        .header("hue-application-key", username)
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|error| error.to_string())?;
+    let body = response.text().await.map_err(|error| error.to_string())?;
+    let value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
+    parse_light_metadata(light_id, &value).ok_or_else(|| {
+        format!("Bridge response for light `{light_id}` did not include a data array")
+    })
+}
+
+/// Convenience: drain a slice of resolved channels into a flat list of
+/// unique light ids. Used by the runtime to populate the metadata cache
+/// in a single batch (one `fetch_light_metadata` call per light id).
+#[allow(dead_code)] // production cache wiring lands in the W1-C2 follow-up
+pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
+    let mut out = Vec::new();
+    for ch in channels {
+        for id in &ch.light_ids {
+            if !out.iter().any(|existing: &String| existing == id) {
+                out.push(id.clone());
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::frame::HueScreenRegion;
 
     use std::thread;
 
@@ -773,5 +898,75 @@ mod tests {
         let signal = new_shutdown_signal();
         let completed = wait_for_shutdown(&signal, Duration::from_millis(100));
         assert!(!completed, "should have timed out");
+    }
+
+    // -----------------------------------------------------------------------
+    // Per-light metadata parser (v1.5 W1-C1)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn from_clip_str_maps_canonical_gamut_letters() {
+        assert_eq!(HueGamutType::from_clip_str("A"), HueGamutType::A);
+        assert_eq!(HueGamutType::from_clip_str("B"), HueGamutType::B);
+        assert_eq!(HueGamutType::from_clip_str("C"), HueGamutType::C);
+        assert_eq!(HueGamutType::from_clip_str("other"), HueGamutType::Other);
+        assert_eq!(HueGamutType::from_clip_str(""), HueGamutType::Other);
+        assert_eq!(HueGamutType::from_clip_str("Z"), HueGamutType::Other);
+    }
+
+    #[test]
+    fn parse_light_metadata_extracts_archetype_and_gamut() {
+        let payload = serde_json::json!({
+            "data": [{
+                "id": "abc-123",
+                "metadata": { "archetype": "sultan_bulb", "name": "Sofa back" },
+                "color": { "gamut_type": "C" }
+            }]
+        });
+        let meta = parse_light_metadata("abc-123", &payload).expect("metadata parsed");
+        assert_eq!(meta.light_id, "abc-123");
+        assert_eq!(meta.archetype.as_deref(), Some("sultan_bulb"));
+        assert_eq!(meta.gamut_type, HueGamutType::C);
+    }
+
+    #[test]
+    fn parse_light_metadata_falls_back_to_other_when_gamut_missing() {
+        let payload = serde_json::json!({
+            "data": [{
+                "id": "abc-123",
+                "metadata": { "archetype": "hue_go" }
+            }]
+        });
+        let meta = parse_light_metadata("abc-123", &payload).expect("metadata parsed");
+        assert_eq!(meta.gamut_type, HueGamutType::Other);
+        assert_eq!(meta.archetype.as_deref(), Some("hue_go"));
+    }
+
+    #[test]
+    fn parse_light_metadata_returns_none_on_empty_payload() {
+        let payload = serde_json::json!({ "data": [] });
+        assert!(parse_light_metadata("nope", &payload).is_none());
+    }
+
+    #[test]
+    fn unique_light_ids_dedupes_across_channels() {
+        let channels = vec![
+            HueAreaChannel {
+                channel_id: 0,
+                light_ids: vec!["a".to_string(), "b".to_string()],
+                screen_region: HueScreenRegion::Center,
+                position_x: 0.0,
+                position_y: 0.0,
+            },
+            HueAreaChannel {
+                channel_id: 1,
+                light_ids: vec!["b".to_string(), "c".to_string()],
+                screen_region: HueScreenRegion::Center,
+                position_x: 0.0,
+                position_y: 0.0,
+            },
+        ];
+        let ids = unique_light_ids(&channels);
+        assert_eq!(ids, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
     }
 }
