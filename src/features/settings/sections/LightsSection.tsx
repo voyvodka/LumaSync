@@ -40,6 +40,7 @@ import type { LedCalibrationConfig } from "../../calibration/model/contracts";
 import { getFullTelemetrySnapshot } from "../../telemetry/telemetryApi";
 import type { RuntimeTelemetrySnapshot } from "../../telemetry/model/contracts";
 import { shellStore } from "../../persistence/shellStore";
+import { OnboardingBanner } from "../../../shared/ui/OnboardingBanner";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
@@ -433,15 +434,14 @@ export function LightsSection({
       {/* ── Center column ─────────────────────────────────────────────── */}
       <div className="lm-lights-center">
         {lockState.showReason && (
-          <div className="lm-lights-cal-banner">
-            <div>
-              <div className="ttl">{t("lightsPage.calibrationBanner.title")}</div>
-              <div className="sub">{t("lightsPage.calibrationBanner.sub")}</div>
-            </div>
-            <button type="button" className="act" onClick={onOpenCalibration}>
-              {t("lightsPage.calibrationBanner.action")}
-            </button>
-          </div>
+          <OnboardingBanner
+            title={t("lightsPage.calibrationBanner.title")}
+            body={t("lightsPage.calibrationBanner.sub")}
+            primaryAction={{
+              label: t("lightsPage.calibrationBanner.action"),
+              onClick: onOpenCalibration,
+            }}
+          />
         )}
 
         {/* Mode strip */}

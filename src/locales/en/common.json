@@ -36,6 +36,9 @@
       "hexLabel": "HEX",
       "recentColors": "Recent",
       "recentItemAriaLabel": "Use {{hex}}"
+    },
+    "onboardingBanner": {
+      "dismissAriaLabel": "Dismiss hint"
     }
   },
   "general": {

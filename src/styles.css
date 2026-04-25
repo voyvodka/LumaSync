@@ -3375,6 +3375,152 @@
   text-transform: uppercase;
 }
 
+/* v1.5 W2-B3 — generic OnboardingBanner. Generalised from the
+   `.lm-lights-cal-banner` pattern so every progressive hint (calibration
+   required, first-run flow, future stale-state warnings) renders with
+   the same dark amber language. */
+.lm-onboarding-banner {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--lm-ink);
+}
+.lm-onboarding-banner-step {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-amber);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.lm-onboarding-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-onboarding-banner-text .ttl {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber);
+  font-weight: 500;
+}
+.lm-onboarding-banner-text .sub {
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.lm-onboarding-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.lm-onboarding-banner-primary {
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 32px;
+}
+.lm-onboarding-banner-primary:hover {
+  background: rgba(255, 176, 32, 0.18);
+  border-color: rgba(255, 176, 32, 0.55);
+}
+.lm-onboarding-banner-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-onboarding-banner-secondary {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--lm-ink-dim);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 32px;
+}
+.lm-onboarding-banner-secondary:hover {
+  color: var(--lm-ink);
+}
+.lm-onboarding-banner-secondary:focus-visible {
+  outline: none;
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-onboarding-banner-dismiss {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--lm-ink-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.lm-onboarding-banner-dismiss:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-onboarding-banner-dismiss:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-onboarding-banner-dismiss {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-onboarding-banner {
+    border-color: CanvasText;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-onboarding-banner-step,
+  .lm-onboarding-banner-text .ttl,
+  .lm-onboarding-banner-primary,
+  .lm-onboarding-banner-secondary,
+  .lm-onboarding-banner-dismiss {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+}
+
 /* Calibration required banner (Phase 9 — amber dark variant) */
 .lm-lights-cal-banner {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));

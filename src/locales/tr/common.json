@@ -36,6 +36,9 @@
       "hexLabel": "HEX",
       "recentColors": "Son kullanılanlar",
       "recentItemAriaLabel": "{{hex}} rengini kullan"
+    },
+    "onboardingBanner": {
+      "dismissAriaLabel": "İpucunu kapat"
     }
   },
   "general": {
