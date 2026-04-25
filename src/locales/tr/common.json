@@ -968,7 +968,8 @@
       "groupEmpty": "Henüz kanal atanmadı",
       "unassignedTitle": "Atanmamış",
       "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin.",
-      "centerMarkerAriaLabel": "{{name}} bölgesinin merkezini sürükleyin"
+      "centerMarkerAriaLabel": "{{name}} bölgesinin merkezini sürükleyin",
+      "activeChipTip": "aktif"
     },
     "zoneProperties": {
       "title": "Bölge özellikleri",
@@ -987,7 +988,26 @@
       "hueLabel": "Hue {{index}}",
       "lock": "Kilitle",
       "unlock": "Kilidi Aç",
-      "delete": "Sil"
+      "delete": "Sil",
+      "propertiesTab": "Özellikler",
+      "dockAriaLabel": "Oda haritası paneli — Nesneler, Zone'lar, Hue Bölgeleri ve Özellikler sekmeleri"
+    },
+    "inspector": {
+      "regionAriaLabel": "Seçili öğe özellikleri",
+      "empty": "Özelliklerini düzenlemek için bir nesne veya bölge seçin.",
+      "tabHint": "Sekme içeriği aşağıda — kontrolleri görmek için nesne veya bölge seçin.",
+      "objectHint": "Konum, boyut veya rotasyon için alttaki özellik çubuğunu kullanın.",
+      "zoneTitle": "Zone",
+      "channelsLabel": "Kanallar",
+      "legacyZoneHint": "Bu zone'a kanal eklemek/çıkarmak için tuvaldeki LED noktalarına tıklayın.",
+      "typeTv": "TV",
+      "typeFurniture": "Mobilya",
+      "typeUsb": "USB şerit",
+      "typeHue": "Hue ışık",
+      "typeImage": "Görsel",
+      "typeHueZone": "Hue bölgesi",
+      "scaleX": "Genişlik",
+      "scaleY": "Derinlik"
     },
     "propertyBar": {
       "aspectLocked": "En boy oranı kilitli",

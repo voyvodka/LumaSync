@@ -291,6 +291,26 @@ export function HueChannelOverlay({
       {/* Zone bounds box + center marker — only when a Hue zone is active */}
       {activeHueZone && zoneBoundsBox && (
         <>
+          {/* Zone label chip — pinned at bounds top-left so the user can
+              read the active zone name at a glance even when the dashed
+              border is faint or partially off-screen. */}
+          <div
+            className="lm-room-zone-chip"
+            style={{
+              left: Math.max(8, zoneBoundsBox.leftPx + 6),
+              top: Math.max(8, zoneBoundsBox.topPx - 22),
+            }}
+            aria-hidden
+          >
+            <span
+              className="lm-room-zone-chip-dot"
+              style={{ background: zoneBoundsBox.color }}
+            />
+            <span>{activeHueZone.name}</span>
+            <span className="lm-room-zone-chip-tip">
+              {t("roomMap.hueZones.activeChipTip")}
+            </span>
+          </div>
           <div
             data-zone-bounds-id={activeHueZone.id}
             className="pointer-events-none absolute rounded"
@@ -299,12 +319,12 @@ export function HueChannelOverlay({
               top: zoneBoundsBox.topPx,
               width: zoneBoundsBox.rightPx - zoneBoundsBox.leftPx,
               height: zoneBoundsBox.bottomPx - zoneBoundsBox.topPx,
-              border: `1.5px dashed ${zoneBoundsBox.color}`,
-              // Bug #53 — halve the fill opacity so the room map underneath
-              // (floor plan / furniture / TV anchor) stays readable while a
-              // zone is selected. Dashed border alone carries the zone
-              // identity signal.
-              background: `color-mix(in srgb, ${zoneBoundsBox.color} 4%, transparent)`,
+              border: `1px dashed ${zoneBoundsBox.color}`,
+              // Bug #53 / v1.5 dock rework — light tint + 1px dashed
+              // border so the floor plan / furniture stay legible. The
+              // pinned zone label chip below carries the identity signal
+              // alongside the dashed outline.
+              background: `color-mix(in srgb, ${zoneBoundsBox.color} 3%, transparent)`,
               zIndex: 18,
             }}
             aria-hidden

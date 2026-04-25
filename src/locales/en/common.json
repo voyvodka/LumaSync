@@ -968,7 +968,8 @@
       "groupEmpty": "No channels assigned yet",
       "unassignedTitle": "Unassigned",
       "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones.",
-      "centerMarkerAriaLabel": "Drag to move the {{name}} zone center"
+      "centerMarkerAriaLabel": "Drag to move the {{name}} zone center",
+      "activeChipTip": "active"
     },
     "zoneProperties": {
       "title": "Zone properties",
@@ -987,7 +988,26 @@
       "hueLabel": "Hue {{index}}",
       "lock": "Lock",
       "unlock": "Unlock",
-      "delete": "Delete"
+      "delete": "Delete",
+      "propertiesTab": "Properties",
+      "dockAriaLabel": "Room map dock — switch between Objects, Zones, Hue Zones, and Properties tabs"
+    },
+    "inspector": {
+      "regionAriaLabel": "Selected item properties",
+      "empty": "Select an object or zone to edit its properties.",
+      "tabHint": "Tab content lives below — pick an object or zone to fill the inspector.",
+      "objectHint": "Use the property bar at the bottom to edit position, size, or rotation.",
+      "zoneTitle": "Zone",
+      "channelsLabel": "Channels",
+      "legacyZoneHint": "Click LED dots on the canvas to add or remove channels from this zone.",
+      "typeTv": "TV",
+      "typeFurniture": "Furniture",
+      "typeUsb": "USB strip",
+      "typeHue": "Hue light",
+      "typeImage": "Image",
+      "typeHueZone": "Hue zone",
+      "scaleX": "Width",
+      "scaleY": "Depth"
     },
     "propertyBar": {
       "aspectLocked": "Aspect ratio locked",

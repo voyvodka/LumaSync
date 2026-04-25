@@ -4361,3 +4361,795 @@ body {
     forced-color-adjust: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Room map editor — right dock + zone bounds + zone label chip
+   v1.5 surface rework (replaces zinc/Tailwind ad-hoc panel chrome)
+   ─────────────────────────────────────────────────────────────────────
+   Consolidates the previous `ObjectListPanel` + `HueZonePropertiesPanel`
+   side-by-side layout (two 180px columns that broke on narrow windows)
+   into a single 260-300px tabbed dock that always shows the active
+   selection's properties below the list.
+
+   Tokens consumed:
+   - `--lm-panel`, `--lm-panel-2`, `--lm-line`, `--lm-line-2`
+   - `--lm-ink`, `--lm-ink-dim`, `--lm-ink-faint`
+   - `--lm-amber`, `--lm-zone-1..6`
+   - `--lm-mono`, `--lm-focus-ring-soft`
+
+   A11y guarantees:
+   - Tab buttons + chips clear the 32px tap floor.
+   - `:focus-visible` ⇒ amber soft ring (no plain `:focus`).
+   - `prefers-reduced-motion` disables the underline slide.
+   - `forced-colors: active` mirrors active tab + chip chrome.
+   ────────────────────────────────────────────────────────────────── */
+
+.lm-room-dock {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  font-family: var(--lm-sans);
+  color: var(--lm-ink);
+  min-height: 0;
+}
+@media (max-width: 1100px) {
+  .lm-room-dock {
+    width: 240px;
+  }
+}
+
+/* Tab bar — sits directly under the canvas toolbar; uses mono caps */
+.lm-room-dock-tabs {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+  flex-shrink: 0;
+}
+.lm-room-dock-tab {
+  all: unset;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  cursor: pointer;
+  position: relative;
+  transition: color 120ms ease;
+}
+.lm-room-dock-tab:hover {
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-tab:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-tab.is-on {
+  color: var(--lm-ink);
+}
+.lm-room-dock-tab.is-on::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  background: var(--lm-amber);
+  border-radius: 1px 1px 0 0;
+}
+.lm-room-dock-tab-count {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--lm-ink-faint);
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lm-line-2);
+  text-transform: none;
+}
+.lm-room-dock-tab.is-on .lm-room-dock-tab-count {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.32);
+}
+
+/* Split body — list (auto) + inspector (auto, capped) */
+.lm-room-dock-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.lm-room-dock-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px 8px;
+}
+.lm-room-dock-empty {
+  padding: 14px 12px;
+  text-align: center;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+.lm-room-dock-empty .lm-room-dock-empty-cta {
+  margin-top: 8px;
+}
+
+/* Section header inside list (zone group, unassigned bucket) */
+.lm-room-dock-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 4px 2px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-room-dock-h-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lm-room-dock-h-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-h-count {
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--lm-ink-faint);
+  text-transform: none;
+}
+.lm-room-dock-h-add {
+  all: unset;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-dim);
+  border-radius: 4px;
+  text-transform: none;
+}
+.lm-room-dock-h-add:hover {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-room-dock-h-add:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  color: var(--lm-amber);
+}
+.lm-room-dock-h-add[aria-disabled="true"] {
+  color: var(--lm-ink-faint);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* List rows */
+.lm-room-dock-row {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  position: relative;
+  transition: background 100ms ease, color 100ms ease;
+}
+.lm-room-dock-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--lm-ink);
+}
+.lm-room-dock-row:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-row.is-on {
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink);
+}
+.lm-room-dock-row.is-on::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lm-amber);
+}
+.lm-room-dock-row.is-nested {
+  margin-left: 12px;
+  padding-left: 8px;
+  border-left: 1px solid var(--lm-line);
+  border-radius: 0 5px 5px 0;
+  min-height: 24px;
+  font-size: 10.5px;
+  color: var(--lm-ink-faint);
+}
+.lm-room-dock-row.is-nested:hover {
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.lm-room-dock-row.is-nested .lm-room-dock-row-dot {
+  width: 6px;
+  height: 6px;
+}
+.lm-room-dock-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-row-meta {
+  flex-shrink: 0;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+}
+.lm-room-dock-row-edit {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--lm-line-2);
+  color: var(--lm-ink);
+  font-size: 11px;
+  padding: 2px 0;
+}
+.lm-room-dock-row-edit:focus {
+  outline: none;
+  border-bottom-color: var(--lm-amber);
+}
+.lm-room-dock-row-action {
+  all: unset;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  color: var(--lm-ink-faint);
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.lm-room-dock-row:hover .lm-room-dock-row-action,
+.lm-room-dock-row:focus-within .lm-room-dock-row-action {
+  opacity: 1;
+}
+.lm-room-dock-row-action:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-room-dock-row-action.is-danger:hover {
+  color: var(--lm-red);
+  background: rgba(239, 91, 91, 0.08);
+}
+.lm-room-dock-row-action:focus-visible {
+  outline: none;
+  opacity: 1;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* CTA buttons (Add zone, retry) */
+.lm-room-dock-cta {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.32);
+  color: var(--lm-amber);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.lm-room-dock-cta:hover {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-room-dock-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-cta[aria-disabled="true"],
+.lm-room-dock-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Inspector panel — sits below the list */
+.lm-room-dock-inspect {
+  flex-shrink: 0;
+  max-height: 50%;
+  overflow-y: auto;
+  border-top: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lm-room-dock-inspect-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+}
+.lm-room-dock-inspect-h .sub {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--lm-ink-dim);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-inspect-h-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lm-ink-dim);
+  font-size: 8.5px;
+}
+.lm-room-dock-inspect-h-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.lm-room-dock-inspect-empty {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  padding: 6px 0;
+}
+
+/* Inspector field rows (label + control) */
+.lm-room-dock-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+.lm-room-dock-field-label {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-dim);
+  flex-shrink: 0;
+  width: 56px;
+  text-transform: uppercase;
+}
+.lm-room-dock-field-value {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink);
+  letter-spacing: 0.02em;
+  flex: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-room-dock-slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lm-line-2);
+  cursor: pointer;
+}
+.lm-room-dock-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  border: 2px solid var(--lm-bg);
+  cursor: pointer;
+}
+.lm-room-dock-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  border: 2px solid var(--lm-bg);
+  cursor: pointer;
+}
+.lm-room-dock-slider:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Zone label chip — pinned to canvas top-left when a Hue zone is active */
+.lm-room-zone-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(7, 8, 10, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--lm-line-2);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink);
+  pointer-events: none;
+  z-index: 22;
+}
+.lm-room-zone-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.lm-room-zone-chip-tip {
+  color: var(--lm-ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Reduced motion + forced colors */
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-dock-tab,
+  .lm-room-dock-row,
+  .lm-room-dock-cta {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-dock {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-room-dock-tab.is-on {
+    color: Highlight;
+  }
+  .lm-room-dock-tab.is-on::after {
+    background: Highlight;
+  }
+  .lm-room-dock-row.is-on {
+    background: SelectedItem;
+    color: SelectedItemText;
+    forced-color-adjust: none;
+  }
+  .lm-room-dock-cta {
+    color: ButtonText;
+    border-color: ButtonText;
+    background: ButtonFace;
+    forced-color-adjust: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Room map editor — toolbar (top bar) tokens
+   ─────────────────────────────────────────────────────────────────────
+   Migrates `RoomMapToolbar.tsx` off the legacy `bg-zinc-900/80` +
+   `border-zinc-800` Tailwind utilities onto amber Rev 07 tokens so the
+   editor's chrome reads as one continuous surface with the rest of the
+   app. Mirrors the `.lm-titlebar-tab` shape language (mono caps, amber
+   underline on the active state) for visual continuity.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-toolbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+}
+.lm-room-toolbar-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  min-width: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.lm-room-toolbar-btn.is-icon {
+  padding: 0 6px;
+}
+.lm-room-toolbar-btn:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-room-toolbar-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  color: var(--lm-amber);
+}
+.lm-room-toolbar-btn.is-on {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.1);
+}
+.lm-room-toolbar-btn.is-disabled,
+.lm-room-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--lm-ink-faint);
+}
+.lm-room-toolbar-badge {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lm-line-2);
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--lm-ink);
+}
+.lm-room-toolbar-btn.is-on .lm-room-toolbar-badge {
+  background: rgba(255, 176, 32, 0.16);
+  border-color: rgba(255, 176, 32, 0.4);
+  color: var(--lm-amber);
+}
+.lm-room-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--lm-line-2);
+  display: inline-block;
+}
+
+/* Shortcut help popover */
+.lm-room-toolbar-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  width: 224px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+  z-index: 50;
+}
+.lm-room-toolbar-popover-h {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lm-room-toolbar-popover-h::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  box-shadow: 0 0 6px var(--lm-amber);
+}
+.lm-room-toolbar-popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lm-room-toolbar-popover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--lm-ink-dim);
+}
+.lm-room-toolbar-popover-row kbd {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  color: var(--lm-ink);
+  background: var(--lm-panel-2);
+  border: 1px solid var(--lm-line-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-toolbar-btn {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-toolbar {
+    border-color: CanvasText;
+  }
+  .lm-room-toolbar-btn.is-on {
+    color: Highlight;
+    border: 1px solid Highlight;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+}
+
+/* Room map editor — bottom property bar (X/Y/W/H/R numeric edit row) */
+.lm-room-propbar {
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-top: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+}
+.lm-room-propbar--empty {
+  justify-content: flex-start;
+}
+.lm-room-propbar-empty {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.04em;
+}
+.lm-room-propbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--lm-line-2);
+  display: inline-block;
+}
+.lm-room-propbar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  letter-spacing: 0.04em;
+}
+.lm-room-propbar-field.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.lm-room-propbar-field-label {
+  font-weight: 600;
+  width: 12px;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+}
+.lm-room-propbar-input {
+  width: 52px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--lm-line-2);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  outline: none;
+  padding: 1px 0;
+}
+.lm-room-propbar-input::-webkit-outer-spin-button,
+.lm-room-propbar-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-room-propbar-input:focus {
+  border-bottom-color: var(--lm-amber);
+}
+.lm-room-propbar-input:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-propbar-input:disabled {
+  cursor: not-allowed;
+}
+@media (forced-colors: active) {
+  .lm-room-propbar {
+    border-color: CanvasText;
+  }
+}
+
+/* Room map editor — left tool chip dropdown menu */
+.lm-room-toolchip-menu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 6px;
+  min-width: 120px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px 0;
+  z-index: 50;
+}
+.lm-room-toolchip-menu-item {
+  all: unset;
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  font-family: var(--lm-sans);
+}
+.lm-room-toolchip-menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lm-ink);
+}
+.lm-room-toolchip-menu-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  color: var(--lm-amber);
+}
+@media (forced-colors: active) {
+  .lm-room-toolchip-menu {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+}

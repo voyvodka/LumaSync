@@ -11,8 +11,7 @@ import { FurnitureObject } from "./room-map/FurnitureObject";
 import { TvAnchorObject } from "./room-map/TvAnchorObject";
 import { UsbStripObject } from "./room-map/UsbStripObject";
 import { HueChannelOverlay } from "./room-map/HueChannelOverlay";
-import { ObjectListPanel } from "./room-map/ObjectListPanel";
-import { HueZonePropertiesPanel } from "./room-map/HueZonePropertiesPanel";
+import { RoomDockPanel } from "./room-map/RoomDockPanel";
 import { deriveZones, type ZoneDeriveResult } from "./room-map/deriveZones";
 import { useSnapGuides } from "./room-map/useSnapGuides";
 import { SnapGuideOverlay } from "./room-map/SnapGuideOverlay";
@@ -1123,9 +1122,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
           />
         </div>
 
-        {/* Object list panel — right sidebar, collapsible with F key */}
+        {/* Right dock — consolidated tabbed Objects / Zones / Hue Zones / Properties */}
         {objectPanelOpen && (
-          <ObjectListPanel
+          <RoomDockPanel
             config={config}
             selectedId={selectedId}
             onSelect={setSelectedId}
@@ -1160,17 +1159,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
             onAddHueZone={handleAddHueZone}
             onDeleteHueZone={handleDeleteHueZone}
             onRenameHueZone={handleRenameHueZone}
+            onUpdateHueZone={handleHueZoneUpdate}
             addHueZoneDisabled={!hueAreaId}
             addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
           />
-        )}
-        {objectPanelOpen && activeHueZone && (
-          <div className="border-l border-zinc-800 bg-zinc-900/90 w-[180px] shrink-0 overflow-y-auto">
-            <HueZonePropertiesPanel
-              zone={activeHueZone}
-              onUpdate={handleHueZoneUpdate}
-            />
-          </div>
         )}
       </div>
 
@@ -1249,12 +1241,23 @@ function RenameDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/30" onClick={onCancel}>
+    <div
+      className="fixed inset-0 z-[200] flex items-center justify-center"
+      style={{ background: "rgba(7, 8, 10, 0.55)" }}
+      onClick={onCancel}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="rename-dialog-label"
+    >
       <div
-        className="rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl p-4 w-64"
+        className="lm-settings-group p-4 w-64 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <label className="block text-[11px] font-semibold text-zinc-300 mb-2">
+        <label
+          id="rename-dialog-label"
+          className="block text-[11px] font-semibold mb-2"
+          style={{ color: "var(--lm-ink)", fontFamily: "var(--lm-mono)", letterSpacing: "0.04em" }}
+        >
           {promptText}
         </label>
         <input
@@ -1267,18 +1270,48 @@ function RenameDialog({
             if (e.key === "Enter") handleSubmit();
             if (e.key === "Escape") onCancel();
           }}
-          className="w-full rounded border border-zinc-700 bg-transparent px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-400/60"
+          className="w-full rounded px-2 py-1.5 text-sm focus:outline-none"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-line-2)",
+            color: "var(--lm-ink)",
+            boxShadow: "var(--lm-focus-ring-soft)",
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "rgba(255, 176, 32, 0.45)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--lm-line-2)";
+          }}
           autoFocus
         />
         <div className="mt-3 flex justify-end gap-2">
           <button
-            className="px-2.5 py-1 text-[11px] rounded text-zinc-400 hover:bg-zinc-800"
+            type="button"
+            className="rounded text-[11px]"
+            style={{
+              minHeight: 28,
+              padding: "4px 10px",
+              color: "var(--lm-ink-dim)",
+              background: "transparent",
+              fontFamily: "var(--lm-mono)",
+              letterSpacing: "0.04em",
+            }}
             onClick={onCancel}
           >
             {t("roomMap.contextMenu.renameCancel")}
           </button>
           <button
-            className="px-2.5 py-1 text-[11px] rounded bg-amber-500 text-zinc-950 hover:bg-amber-400 font-semibold"
+            type="button"
+            className="rounded text-[11px] font-semibold"
+            style={{
+              minHeight: 28,
+              padding: "4px 12px",
+              background: "var(--lm-amber)",
+              color: "var(--lm-bg)",
+              fontFamily: "var(--lm-mono)",
+              letterSpacing: "0.04em",
+            }}
             onClick={handleSubmit}
           >
             {t("roomMap.contextMenu.renameOk")}

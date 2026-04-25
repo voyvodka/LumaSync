@@ -106,13 +106,13 @@ function NumberInput({
   if (value === "") return null;
 
   return (
-    <label className={`flex items-center gap-1 text-[10px] ${disabled ? "opacity-40 pointer-events-none" : "text-zinc-400"}`}>
-      <span className="font-semibold w-3">{label}</span>
+    <label className={`lm-room-propbar-field ${disabled ? "is-disabled" : ""}`}>
+      <span className="lm-room-propbar-field-label">{label}</span>
       <input
         type="number"
         step="any"
         disabled={disabled}
-        className="w-[52px] bg-transparent border-b border-zinc-600 text-[10px] text-zinc-100 text-center focus:outline-none focus:border-amber-400 tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:cursor-not-allowed"
+        className="lm-room-propbar-input"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
         onBlur={commit}
@@ -166,8 +166,8 @@ export function PropertyBar({
 
   if (!fields || !selectedId) {
     return (
-      <div className="h-8 shrink-0 flex items-center px-3 border-t border-zinc-800 bg-zinc-900/80">
-        <span className="text-[10px] text-zinc-500">—</span>
+      <div className="lm-room-propbar lm-room-propbar--empty">
+        <span className="lm-room-propbar-empty">—</span>
       </div>
     );
   }
@@ -177,7 +177,7 @@ export function PropertyBar({
 
   if (fields.isImage && imgId) {
     return (
-      <div className="h-8 shrink-0 flex items-center gap-3 px-3 border-t border-zinc-800 bg-zinc-900/80">
+      <div className="lm-room-propbar">
         <NumberInput
           label="X"
           value={fields.x}
@@ -191,7 +191,7 @@ export function PropertyBar({
           disabled={locked}
         />
 
-        <div className="h-4 w-px bg-zinc-700" />
+        <span className="lm-room-propbar-sep" aria-hidden />
 
         {/* Aspect lock toggle */}
         <button
@@ -260,7 +260,7 @@ export function PropertyBar({
           </svg>
         </button>
 
-        <div className="h-4 w-px bg-zinc-700" />
+        <span className="lm-room-propbar-sep" aria-hidden />
 
         {/* Opacity — compact inline */}
         <div className={`flex items-center gap-1.5 ${locked ? "opacity-40 pointer-events-none" : ""}`}>
@@ -282,7 +282,7 @@ export function PropertyBar({
   }
 
   return (
-    <div className="h-8 shrink-0 flex items-center gap-3 px-3 border-t border-zinc-800 bg-zinc-900/80">
+    <div className="lm-room-propbar">
       <NumberInput
         label="X"
         value={fields.x}
