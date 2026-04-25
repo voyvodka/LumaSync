@@ -55,7 +55,8 @@ jobs:
             libxcb-randr0-dev \
             libxrandr-dev \
             libpipewire-0.3-dev \
-            libdbus-1-dev
+            libdbus-1-dev \
+            libgbm-dev
 
       - name: Install macOS universal targets
         if: matrix.os == 'macos-latest'
