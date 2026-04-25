@@ -45,6 +45,13 @@ const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(2_000);
 /// (`port.write_data_terminal_ready(false)` before any other byte), but that
 /// path requires testing across all five supported chip families and is
 /// deferred to a dedicated v1.5 follow-up item.
+///
+/// IMPORTANT: this delay is performed inside `tokio::task::spawn_blocking` so
+/// the Tauri IPC dispatcher thread remains responsive while the serial port
+/// settles. Running the sleep on the main IPC thread blocks every other
+/// command (UI, telemetry, settings reads) for the full ~4 s window — a UX
+/// regression observed on v1.5.0-rc where the entire app appeared frozen
+/// during Run Health Check.
 const BOOTLOADER_SETTLE_DELAY_MS: u64 = 2_000;
 
 /// Supported USB serial adapter VID:PID allowlist.
@@ -287,29 +294,110 @@ pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// connect_serial_port
+//
+// IMPORTANT: this command is `async fn` and routes the heavy serial I/O —
+// `available_ports()`, `serialport::open()`, the AVR bootloader settle sleep
+// (`BOOTLOADER_SETTLE_DELAY_MS`, ~2 s) — through `tokio::task::spawn_blocking`
+// so it runs on the blocking pool. If those steps execute on the Tauri IPC
+// dispatcher thread the entire app stalls for ~2 s on every connect attempt
+// (every other command, every emit, every UI re-render queues behind the
+// blocking sleep). This regression was reported by users on v1.5.0-rc as
+// "Run Health Check freezes the app and the network panel for 4 seconds".
+// ---------------------------------------------------------------------------
+
+/// Internal outcome of the blocking portion of `connect_serial_port`.
+///
+/// Carried back from the worker thread to the async front so state mutation
+/// (sink registry replace/clear, last-status update) happens on the runtime
+/// side, keeping `Send` requirements clean.
+enum ConnectOutcome {
+    Connected {
+        status: SerialConnectionStatus,
+        sink: Box<dyn LedSink>,
+    },
+    Failed {
+        status: SerialConnectionStatus,
+        clear_sink: bool,
+    },
+}
+
 #[tauri::command]
-pub fn connect_serial_port(
+pub async fn connect_serial_port(
     port_name: String,
     chip_type: Option<LedChipType>,
     connection_state: tauri::State<'_, SerialConnectionState>,
     sink_registry: tauri::State<'_, ActiveSinkRegistry>,
-) -> SerialConnectionStatus {
+) -> Result<SerialConnectionStatus, String> {
+    let port_name_for_blocking = port_name.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        connect_serial_port_blocking(port_name_for_blocking, chip_type)
+    })
+    .await
+    .unwrap_or_else(|join_error| ConnectOutcome::Failed {
+        status: SerialConnectionStatus {
+            port_name: Some(port_name.clone()),
+            connected: false,
+            status: command_status(
+                "CONNECT_FAILED",
+                "Serial connect worker terminated unexpectedly.",
+                Some(join_error.to_string()),
+            ),
+            updated_at_unix_ms: now_unix_ms(),
+        },
+        clear_sink: true,
+    });
+
+    let status = match outcome {
+        ConnectOutcome::Connected { status, sink } => {
+            sink_registry.replace(sink);
+            status
+        }
+        ConnectOutcome::Failed { status, clear_sink } => {
+            if clear_sink {
+                sink_registry.clear();
+            }
+            status
+        }
+    };
+
+    set_last_status(&connection_state, status.clone());
+    // Always Ok — every failure path returns a populated `SerialConnectionStatus`
+    // with `connected: false` and a coded `status.code`. The Result wrapper is
+    // mandated by Tauri's async command + tauri::State lifetime constraint.
+    Ok(status)
+}
+
+/// Synchronous core of `connect_serial_port`, run on the blocking pool.
+///
+/// Performs every operation that may block for a non-trivial amount of time:
+///   - `available_ports()` (USB enumeration; up to ~50 ms on Windows).
+///   - `serialport::new(...).open()` (driver call; can stall on permission).
+///   - `BOOTLOADER_SETTLE_DELAY_MS` (~2 s std::thread::sleep).
+///   - `SerialSink::with_chip_type(...)` (constant-time, but kept here for
+///     locality so the returned `Box<dyn LedSink>` is built once and handed
+///     back as a `Send` value).
+fn connect_serial_port_blocking(
+    port_name: String,
+    chip_type: Option<LedChipType>,
+) -> ConnectOutcome {
     let known_ports = match available_ports() {
         Ok(ports) => ports,
         Err(error) => {
-            sink_registry.clear();
-            let result = SerialConnectionStatus {
-                port_name: Some(port_name),
-                connected: false,
-                status: command_status(
-                    "LIST_PORTS_FAILED",
-                    "Connection check failed while reading available serial ports.",
-                    Some(error.to_string()),
-                ),
-                updated_at_unix_ms: now_unix_ms(),
+            return ConnectOutcome::Failed {
+                status: SerialConnectionStatus {
+                    port_name: Some(port_name),
+                    connected: false,
+                    status: command_status(
+                        "LIST_PORTS_FAILED",
+                        "Connection check failed while reading available serial ports.",
+                        Some(error.to_string()),
+                    ),
+                    updated_at_unix_ms: now_unix_ms(),
+                },
+                clear_sink: true,
             };
-            set_last_status(&connection_state, result.clone());
-            return result;
         }
     };
 
@@ -320,40 +408,40 @@ pub fn connect_serial_port(
     let selected_port = match selected_port {
         Some(port) => port,
         None => {
-            sink_registry.clear();
-            let result = SerialConnectionStatus {
-                port_name: Some(port_name),
-                connected: false,
-                status: command_status(
-                    "PORT_NOT_FOUND",
-                    "Selected serial port is not available.",
-                    None,
-                ),
-                updated_at_unix_ms: now_unix_ms(),
+            return ConnectOutcome::Failed {
+                status: SerialConnectionStatus {
+                    port_name: Some(port_name),
+                    connected: false,
+                    status: command_status(
+                        "PORT_NOT_FOUND",
+                        "Selected serial port is not available.",
+                        None,
+                    ),
+                    updated_at_unix_ms: now_unix_ms(),
+                },
+                clear_sink: true,
             };
-            set_last_status(&connection_state, result.clone());
-            return result;
         }
     };
 
     if let SerialPortType::UsbPort(usb_info) = selected_port.port_type {
         if !is_supported_usb(usb_info.vid, usb_info.pid) {
-            sink_registry.clear();
-            let result = SerialConnectionStatus {
-                port_name: Some(port_name),
-                connected: false,
-                status: command_status(
-                    "PORT_UNSUPPORTED",
-                    "Selected USB serial adapter is not in the supported allowlist.",
-                    Some(format!(
-                        "VID={:04X}, PID={:04X}",
-                        usb_info.vid, usb_info.pid
-                    )),
-                ),
-                updated_at_unix_ms: now_unix_ms(),
+            return ConnectOutcome::Failed {
+                status: SerialConnectionStatus {
+                    port_name: Some(port_name),
+                    connected: false,
+                    status: command_status(
+                        "PORT_UNSUPPORTED",
+                        "Selected USB serial adapter is not in the supported allowlist.",
+                        Some(format!(
+                            "VID={:04X}, PID={:04X}",
+                            usb_info.vid, usb_info.pid
+                        )),
+                    ),
+                    updated_at_unix_ms: now_unix_ms(),
+                },
+                clear_sink: true,
             };
-            set_last_status(&connection_state, result.clone());
-            return result;
         }
     }
 
@@ -361,22 +449,27 @@ pub fn connect_serial_port(
         .timeout(Duration::from_millis(DEFAULT_CONNECT_TIMEOUT_MS))
         .open();
 
-    let result = match open_result {
+    match open_result {
         Ok(_port_handle) => {
             // Wait for the AVR bootloader to finish before writing any bytes.
             // Opening the port asserts DTR which triggers auto-reset on
             // Arduino-class boards; the bootloader occupies the bus for
             // ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS` for full rationale.
+            //
+            // SAFE: this runs on the tokio blocking pool, never on the IPC
+            // dispatcher thread.
             std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
 
-            // Connection verified — build and register a SerialSink for this port.
-            // The sink uses default profile (LumaSyncV1) and default corrections;
-            // the user can change these via the Firmware Profile setting (v1.4 G11)
-            // and color correction settings (v1.4 G4), which will replace the sink.
+            // Connection verified — build a SerialSink for this port and
+            // hand it back to the async caller, which owns the registry.
+            // The sink uses default profile (LumaSyncV1) and default
+            // corrections; the user can change these via the Firmware Profile
+            // setting (v1.4 G11) and color correction settings (v1.4 G4),
+            // which will replace the sink.
             //
             // The ambilight worker (v1.4, W0-B1) creates its own SerialSink
-            // independently. This registry entry is the hook for the v1.5 path
-            // where the worker will take() the pre-built sink from here.
+            // independently. This registry entry is the hook for the v1.5
+            // path where the worker will take() the pre-built sink from here.
             // Resolve chip type from caller (ShellState.selectedChipType).
             // Absent or None => WS2812B GRB (backward-compat default).
             let resolved_chip_type = chip_type.unwrap_or_default();
@@ -388,22 +481,23 @@ pub fn connect_serial_port(
                 ColorCorrectionConfig::default(),
                 resolved_chip_type,
             );
-            sink_registry.replace(Box::new(new_sink));
 
-            SerialConnectionStatus {
-                port_name: Some(port_name),
-                connected: true,
-                status: command_status(
-                    "CONNECT_OK",
-                    "Serial port connection attempt succeeded.",
-                    None,
-                ),
-                updated_at_unix_ms: now_unix_ms(),
+            ConnectOutcome::Connected {
+                status: SerialConnectionStatus {
+                    port_name: Some(port_name),
+                    connected: true,
+                    status: command_status(
+                        "CONNECT_OK",
+                        "Serial port connection attempt succeeded.",
+                        None,
+                    ),
+                    updated_at_unix_ms: now_unix_ms(),
+                },
+                sink: Box::new(new_sink),
             }
         }
-        Err(error) => {
-            sink_registry.clear();
-            SerialConnectionStatus {
+        Err(error) => ConnectOutcome::Failed {
+            status: SerialConnectionStatus {
                 port_name: Some(port_name),
                 connected: false,
                 status: command_status(
@@ -412,12 +506,10 @@ pub fn connect_serial_port(
                     Some(error.to_string()),
                 ),
                 updated_at_unix_ms: now_unix_ms(),
-            }
-        }
-    };
-
-    set_last_status(&connection_state, result.clone());
-    result
+            },
+            clear_sink: true,
+        },
+    }
 }
 
 #[tauri::command]
@@ -445,8 +537,40 @@ pub fn get_serial_connection_status(
 ///    Real firmware integration arrives in v1.5.)
 ///
 /// The command never throws; it always returns a `HealthCheckResult`.
+///
+/// IMPORTANT: this command is `async fn` and routes every blocking step
+/// (`available_ports()`, `open()`, `BOOTLOADER_SETTLE_DELAY_MS` sleep, the
+/// PING/PONG round-trip read) through `tokio::task::spawn_blocking` so the
+/// Tauri IPC dispatcher stays free to service UI events, telemetry, and
+/// other commands while the health check runs (~4 s end-to-end).
 #[tauri::command]
-pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
+pub async fn run_serial_health_check(port_name: String) -> HealthCheckResult {
+    let result = tokio::task::spawn_blocking(move || run_serial_health_check_blocking(port_name))
+        .await
+        .unwrap_or_else(|join_error| HealthCheckResult {
+            pass: false,
+            steps: vec![HealthStepResult {
+                step: "HEALTH_CHECK_WORKER".to_string(),
+                pass: false,
+                code: "SERIAL_HEALTH_WORKER_PANIC".to_string(),
+                message: "Health check worker terminated unexpectedly.".to_string(),
+                details: Some(join_error.to_string()),
+            }],
+            checked_at_unix_ms: now_unix_ms(),
+            round_trip_ms: None,
+            firmware_version: None,
+            firmware_profile: None,
+        });
+
+    result
+}
+
+/// Synchronous core of `run_serial_health_check`, run on the blocking pool.
+///
+/// Performs the full 4-step probe (port enum → support gate → open + settle
+/// → PING/PONG). Total wall time on a healthy Arduino-class link is
+/// ~`BOOTLOADER_SETTLE_DELAY_MS` (~2 s) plus the round-trip read window.
+fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
     let mut steps = Vec::new();
 
     // -----------------------------------------------------------------------
@@ -583,6 +707,10 @@ pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
             // Opening the port asserts DTR which triggers auto-reset on
             // Arduino-class boards; the bootloader occupies the bus for
             // ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS` for full rationale.
+            //
+            // SAFE: this runs on the tokio blocking pool (see the wrapping
+            // `run_serial_health_check` async command), never on the IPC
+            // dispatcher thread.
             std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
             handle
         }
