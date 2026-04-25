@@ -90,12 +90,13 @@ const REQUIRED_V14_STATE_FIELDS = [
  * v1.5 ShellState additions. All optional / additive — the absence of
  * each field naturally degrades to a v1.4-compatible default
  * (`hasCompletedOnboarding=false` shows onboarding once, `updateChannel`
- * absent ⇒ stable channel). Strict optional-`?:` presence check, no
- * default-value check.
+ * absent ⇒ stable channel, `selectedChipType` absent ⇒ WS2812B GRB).
+ * Strict optional-`?:` presence check, no default-value check.
  */
 const REQUIRED_V15_STATE_FIELDS = [
   "hasCompletedOnboarding",
   "updateChannel",
+  "selectedChipType",
 ];
 
 /** v1.5 contract surface that must be exported alongside the new fields. */
@@ -205,7 +206,7 @@ for (const field of REQUIRED_V14_STATE_FIELDS) {
   );
 }
 
-// Check v1.5 optional additions (W2-C6 update channel etc.)
+// Check v1.5 optional additions (chip type, update channel, onboarding)
 console.log("\n[ ShellState v1.5 additions ]");
 for (const field of REQUIRED_V15_STATE_FIELDS) {
   check(
@@ -393,6 +394,29 @@ for (const name of REQUIRED_COLOR_CORRECTION_EXPORTS) {
     `MISSING color correction export "${name}"`
   );
 }
+
+console.log("\n[ Device LED chip type (v1.5 G3) ]");
+const REQUIRED_LED_CHIP_TYPE_VALUES = [
+  "ws2812b-grb",
+  "sk6812-rgbw",
+];
+for (const value of REQUIRED_LED_CHIP_TYPE_VALUES) {
+  check(
+    deviceSource.includes(`"${value}"`),
+    `LED chip type value "${value}" defined`,
+    `MISSING LED chip type value "${value}"`
+  );
+}
+check(
+  deviceSource.includes("LED_CHIP_TYPE"),
+  "LED_CHIP_TYPE enum exported",
+  "MISSING LED_CHIP_TYPE enum"
+);
+check(
+  deviceSource.includes("LedChipType"),
+  "LedChipType type exported",
+  "MISSING LedChipType type"
+);
 
 console.log("\n[ Device sample-LED-frame command ]");
 check(

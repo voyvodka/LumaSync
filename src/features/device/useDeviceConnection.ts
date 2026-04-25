@@ -4,6 +4,7 @@ import {
   DEVICE_STATUS,
   type DeviceOperation,
   type DeviceStatus,
+  type LedChipType,
 } from "../../shared/contracts/device";
 import { shellStore } from "../persistence/shellStore";
 import {
@@ -712,7 +713,19 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
     () =>
       createDeviceConnectionController({
         listSerialPorts,
-        connectSerialPort,
+        // Wrap connectSerialPort to inject the persisted chip type (v1.5 G3 Wire-A).
+        // shellStore.load() is cheap (cached after first read); reading it here keeps
+        // the controller interface stable so existing tests need no changes.
+        connectSerialPort: async (portName: string) => {
+          let chipType: LedChipType | undefined;
+          try {
+            const stored = await shellStore.load();
+            chipType = stored.selectedChipType;
+          } catch {
+            chipType = undefined;
+          }
+          return connectSerialPort(portName, chipType);
+        },
         getSerialConnectionStatus,
         runSerialHealthCheck,
         persistLastSuccessfulPort: async (portName: string) => {

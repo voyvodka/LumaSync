@@ -5,7 +5,7 @@ use serde::Serialize;
 use serialport::{available_ports, SerialPortType};
 
 use super::device_handshake::{perform_handshake, HandshakeError, TimedSerialPort};
-use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedOutputBridge, SerialSink};
+use super::led_output::{ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink};
 use super::led_sink::LedSink;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
@@ -262,6 +262,7 @@ pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
 #[tauri::command]
 pub fn connect_serial_port(
     port_name: String,
+    chip_type: Option<LedChipType>,
     connection_state: tauri::State<'_, SerialConnectionState>,
     sink_registry: tauri::State<'_, ActiveSinkRegistry>,
 ) -> SerialConnectionStatus {
@@ -342,12 +343,16 @@ pub fn connect_serial_port(
             // The ambilight worker (v1.4, W0-B1) creates its own SerialSink
             // independently. This registry entry is the hook for the v1.5 path
             // where the worker will take() the pre-built sink from here.
-            let new_sink = SerialSink::with_profile_and_corrections(
+            // Resolve chip type from caller (ShellState.selectedChipType).
+            // Absent or None => WS2812B GRB (backward-compat default).
+            let resolved_chip_type = chip_type.unwrap_or_default();
+            let new_sink = SerialSink::with_chip_type(
                 LedOutputBridge::new(),
                 Some(port_name.clone()),
                 1.0,
                 FirmwareProfile::default(),
                 ColorCorrectionConfig::default(),
+                resolved_chip_type,
             );
             sink_registry.replace(Box::new(new_sink));
 

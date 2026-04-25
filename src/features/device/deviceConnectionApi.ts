@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { DEVICE_COMMANDS, type DeviceHealthStep } from "../../shared/contracts/device";
+import { DEVICE_COMMANDS, type DeviceHealthStep, type LedChipType } from "../../shared/contracts/device";
 
 export interface CommandStatus {
   code: string;
@@ -53,8 +53,14 @@ export async function listSerialPorts(): Promise<SerialPortListResponse> {
   return invoke<SerialPortListResponse>(DEVICE_COMMANDS.LIST_PORTS);
 }
 
-export async function connectSerialPort(portName: string): Promise<SerialConnectionStatus> {
-  return invoke<SerialConnectionStatus>(DEVICE_COMMANDS.CONNECT_PORT, { portName });
+export async function connectSerialPort(
+  portName: string,
+  chipType?: LedChipType,
+): Promise<SerialConnectionStatus> {
+  return invoke<SerialConnectionStatus>(DEVICE_COMMANDS.CONNECT_PORT, {
+    portName,
+    chipType: chipType ?? null,
+  });
 }
 
 export async function getSerialConnectionStatus(): Promise<SerialConnectionStatus> {

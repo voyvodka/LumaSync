@@ -804,7 +804,6 @@ impl SerialSink {
     /// `with_profile_and_corrections` (default chip = WS2812B). UI wiring of
     /// the user-selectable chip type will graduate this constructor in the
     /// next Wave 2 polish commit; covered by unit tests in the meantime.
-    #[allow(dead_code)]
     pub fn with_chip_type(
         bridge: LedOutputBridge,
         port_name: Option<String>,
