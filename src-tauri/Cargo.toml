@@ -53,3 +53,6 @@ raw-window-handle = "0.6"
 screencapturekit = "1.5.4"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow", "NSControl", "NSButton", "NSView"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+xcap = "0.9.4"
