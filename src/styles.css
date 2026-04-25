@@ -862,6 +862,61 @@
   color: var(--lm-ink);
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   Compact-mode color picker popover (v1.5 W2 fix #43).
+
+   Rendered through React.createPortal into document.body so the
+   surrounding `.lm-compact-body { overflow: auto }` chain cannot clip
+   it. Position + maxHeight are computed in CompactLayout.tsx; this rule
+   only owns the visual chrome (panel surface, amber-themed scrollbar,
+   forced-colors fallback, reduced-motion respect).
+
+   The internal `overflow-y: auto` is the load-bearing piece for short
+   windows: when the picker (hue ring + S/V square + hex + recent strip)
+   is taller than the available viewport side, the popover scrolls
+   inside its own clamp instead of overflowing off-screen — the original
+   bug pre-fix #43.                                                       */
+.lm-compact-color-popover {
+  background-color: var(--lm-panel);
+  border: 1px solid var(--lm-line-2);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow:
+    0 12px 32px -8px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 176, 32, 0.04);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Honor the maxHeight set inline by CompactLayout, but never spill
+     below the viewport even if positioning math drifts. */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.28) transparent;
+}
+.lm-compact-color-popover::-webkit-scrollbar {
+  width: 6px;
+}
+.lm-compact-color-popover::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lm-compact-color-popover::-webkit-scrollbar-thumb {
+  background: rgba(255, 176, 32, 0.28);
+  border-radius: 3px;
+}
+.lm-compact-color-popover::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 176, 32, 0.45);
+}
+
+/* Forced-colors fallback — Windows High Contrast collapses our amber
+   tokens to system colors so the popover stays distinguishable from
+   the underlying surface. */
+@media (forced-colors: active) {
+  .lm-compact-color-popover {
+    border: 1px solid CanvasText;
+    background-color: Canvas;
+    box-shadow: none;
+  }
+}
+
 /* Scene tile row — 5-flex with gradient backgrounds */
 .lm-compact-scenes {
   display: flex;

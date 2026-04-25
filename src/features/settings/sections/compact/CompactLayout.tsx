@@ -17,7 +17,7 @@
  * cascading reconciliations during a drag.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
@@ -476,10 +476,14 @@ function perceivedLuminance({ r, g, b }: { r: number; g: number; b: number }): n
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }
 
-/** Estimated popover dimensions used to clamp the position into the viewport.
- *  Matches the rendered HsvColorPicker(compact) + 12px wrapper padding. */
+/** Popover sizing constants used to clamp the position into the viewport.
+ *  Width matches the rendered HsvColorPicker(compact) + 12 px wrapper padding.
+ *  The height is now dynamically measured (see `useLayoutEffect` below) so
+ *  that variable-height surfaces — recent-colors strip in particular —
+ *  position correctly. The fallback estimate is only used during the very
+ *  first render before the popover commits to the DOM. */
 const POPOVER_WIDTH_PX = 200;
-const POPOVER_EST_HEIGHT_PX = 270;
+const POPOVER_FALLBACK_HEIGHT_PX = 270;
 const POPOVER_VIEWPORT_MARGIN_PX = 8;
 
 function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps) {
@@ -501,24 +505,59 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
   // Position is computed from the trigger's getBoundingClientRect() and
   // refreshed on resize / scroll so the popover tracks the hero tile while
   // the user adjusts the brightness slider underneath.
+  //
+  // v1.5 W2 fix #43 — when the window is too short to fit the popover at
+  // either anchor (compact 320×480 with the 8-swatch RECENT row pushes
+  // ~290 px tall), the popover now clamps its own height to the viewport
+  // and scrolls internally instead of overflowing off-screen. The position
+  // is computed from a *measured* popover height rather than the
+  // POPOVER_FALLBACK_HEIGHT_PX constant — important because the recent
+  // strip mounts lazily and the picker grows after first paint. A
+  // useLayoutEffect re-measure follows the initial paint so the second
+  // commit lands at the final, post-measurement coordinates.
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{
+    left: number;
+    top: number;
+    maxHeight: number;
+  } | null>(null);
 
   const recomputePosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
-    // Anchor below the trigger by default; flip above if there is no room
-    // (compact tray can land near the bottom edge of the screen).
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const placeAbove =
-      spaceBelow < POPOVER_EST_HEIGHT_PX + POPOVER_VIEWPORT_MARGIN_PX &&
-      rect.top > POPOVER_EST_HEIGHT_PX + POPOVER_VIEWPORT_MARGIN_PX;
+    // Prefer the live measurement of the rendered popover; fall back to the
+    // estimate only on the very first pass before the DOM has the node.
+    const measuredHeight = popoverRef.current?.offsetHeight;
+    const desiredHeight = measuredHeight && measuredHeight > 0
+      ? measuredHeight
+      : POPOVER_FALLBACK_HEIGHT_PX;
+
+    // Available space below the trigger and above it, both already
+    // accounting for the 8 px viewport margin.
+    const spaceBelow =
+      window.innerHeight - rect.bottom - POPOVER_VIEWPORT_MARGIN_PX - 6;
+    const spaceAbove = rect.top - POPOVER_VIEWPORT_MARGIN_PX - 6;
+    // Pick the side with more room. If neither side fits the popover in
+    // full, the larger side hosts the popover with internal scroll.
+    const placeAbove = spaceAbove > spaceBelow && desiredHeight > spaceBelow;
+    const availableSpace = placeAbove ? spaceAbove : spaceBelow;
+    // The popover is allowed to consume the entire available side, capped
+    // by the viewport. The CSS rule `overflow-y: auto` inside the popover
+    // wrapper does the actual scrolling once the picker exceeds maxHeight.
+    const viewportCap =
+      window.innerHeight - POPOVER_VIEWPORT_MARGIN_PX * 2;
+    const maxHeight = Math.max(120, Math.min(availableSpace, viewportCap));
+    const renderHeight = Math.min(desiredHeight, maxHeight);
+
     const top = placeAbove
-      ? rect.top - POPOVER_EST_HEIGHT_PX - POPOVER_VIEWPORT_MARGIN_PX
-      : rect.bottom + 6;
+      ? Math.max(POPOVER_VIEWPORT_MARGIN_PX, rect.top - renderHeight - 6)
+      : Math.min(
+          rect.bottom + 6,
+          window.innerHeight - renderHeight - POPOVER_VIEWPORT_MARGIN_PX,
+        );
     let left = rect.left + rect.width / 2 - POPOVER_WIDTH_PX / 2;
     // Clamp horizontally so the popover does not leak off-window. The
     // 320 px compact frame is narrow enough that center-anchoring rarely
@@ -527,7 +566,7 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
     const maxLeft = window.innerWidth - POPOVER_WIDTH_PX - POPOVER_VIEWPORT_MARGIN_PX;
     if (left < POPOVER_VIEWPORT_MARGIN_PX) left = POPOVER_VIEWPORT_MARGIN_PX;
     if (left > maxLeft) left = Math.max(POPOVER_VIEWPORT_MARGIN_PX, maxLeft);
-    setPopoverPos({ left, top });
+    setPopoverPos({ left, top, maxHeight });
   }, []);
 
   useEffect(() => {
@@ -560,18 +599,35 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
     };
   }, [open, recomputePosition]);
 
+  // Two-pass positioning: the first render uses the fallback estimate, then
+  // useLayoutEffect re-runs synchronously after the popover has been laid
+  // out so the second pass uses the *measured* height. This is what fixes
+  // the off-by-N gap when the recent-colors strip pushes the picker past
+  // the estimate. Plus a ResizeObserver re-measures if the picker grows
+  // mid-open (e.g. the first time a swatch lands in the recent row).
+  useLayoutEffect(() => {
+    if (!open) return;
+    recomputePosition();
+    const node = popoverRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => recomputePosition());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [open, recomputePosition]);
+
   const popover = open && popoverPos ? (
     <div
       ref={popoverRef}
       role="dialog"
       aria-modal="false"
       aria-label={t("general.mode.solidColor")}
-      className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-xl"
+      className="lm-compact-color-popover"
       style={{
         position: "fixed",
         left: popoverPos.left,
         top: popoverPos.top,
         width: POPOVER_WIDTH_PX,
+        maxHeight: popoverPos.maxHeight,
         zIndex: 1000,
       }}
     >
