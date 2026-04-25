@@ -423,7 +423,13 @@ function App() {
       void getHueStreamStatus()
         .then((result) => {
           const snap = result.lastSolidColor;
-          if (snap) {
+          // Guard: only adopt the bridge's lastSolidColor when the UI is
+          // (still) in SOLID mode. Without this check, a persisted Ambilight
+          // session bootstrapping with hue_targets included would have the
+          // UI silently flipped to Solid the moment the stream came up —
+          // surfacing as bug #43 (LEDs animate, UI shows Solid) and
+          // racing the active ambilight worker (bug #44).
+          if (snap && lightingModeRef.current.kind === LIGHTING_MODE_KIND.SOLID) {
             setLightingModeState({
               kind: LIGHTING_MODE_KIND.SOLID,
               solid: {
@@ -557,34 +563,81 @@ function App() {
           }
         }
 
-        if (isActive && restoredTargets.includes("hue") && hueBootstrapConfig) {
-          try {
-            const startResult = await startHue(hueBootstrapConfig);
-            if (isHueStartCodeOk(startResult.status.code)) {
-              if (
-                restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
-                restoredMode.solid
-              ) {
-                await setHueSolidColor({
-                  r: restoredMode.solid.r,
-                  g: restoredMode.solid.g,
-                  b: restoredMode.solid.b,
-                  brightness: restoredMode.solid.brightness,
-                });
-              } else if (restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
-                // Use filtered targets (USB removed if not connected) so the
-                // backend USB gate doesn't block Hue-only ambilight at startup.
-                const bootTargets = restoredTargets.filter(
-                  (t) => t !== "usb" || bootstrapUsbAvailable,
-                );
-                await setLightingMode(hydrateModePayload({
-                  ...restoredMode,
-                  targets: bootTargets,
-                }));
+        // Bootstrap path is split in two stages so the persisted Ambilight
+        // payload (saturation / blackBorderDetection / smoothing preset) gets
+        // pushed to Rust on every boot — not only when Hue happens to be one
+        // of the targets. Bug #39: previously the entire restore block was
+        // gated on `targets.includes("hue") && hueBootstrapConfig`, so a
+        // USB-only Ambilight session never re-applied its persisted knobs and
+        // the worker came up with backend defaults (saturation 1.0 / black
+        // borders off). The Hue branch still owns its own `startHue` +
+        // `setHueSolidColor` orchestration; the new outer branch covers any
+        // active mode regardless of the target mix.
+        if (isActive) {
+          // Filter targets against live USB availability so the Rust USB gate
+          // doesn't reject the bootstrap apply on a Hue-only session that
+          // happens to have "usb" persisted from a previous run.
+          const bootTargets = restoredTargets.filter(
+            (t) => t !== "usb" || bootstrapUsbAvailable,
+          );
+
+          if (restoredTargets.includes("hue") && hueBootstrapConfig) {
+            try {
+              const startResult = await startHue(hueBootstrapConfig);
+              if (isHueStartCodeOk(startResult.status.code)) {
+                if (
+                  restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
+                  restoredMode.solid
+                ) {
+                  await setHueSolidColor({
+                    r: restoredMode.solid.r,
+                    g: restoredMode.solid.g,
+                    b: restoredMode.solid.b,
+                    brightness: restoredMode.solid.brightness,
+                  });
+                } else if (restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+                  await setLightingMode(hydrateModePayload({
+                    ...restoredMode,
+                    targets: bootTargets,
+                  }));
+                }
               }
+            } catch (err) {
+              console.error("[LumaSync] Bootstrap Hue start/restore failed:", err);
             }
-          } catch (err) {
-            console.error("[LumaSync] Bootstrap mode/targets restore failed:", err);
+          } else if (
+            restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
+            bootTargets.length > 0
+          ) {
+            // USB-only (or Hue-not-configured) Ambilight bootstrap: push the
+            // persisted payload to Rust so saturation / blackBorderDetection /
+            // smoothing preset survive a restart. Without this branch the
+            // worker uses backend defaults until the next manual mode toggle.
+            try {
+              await setLightingMode(hydrateModePayload({
+                ...restoredMode,
+                targets: bootTargets,
+              }));
+            } catch (err) {
+              console.error("[LumaSync] Bootstrap USB-only Ambilight restore failed:", err);
+            }
+          } else if (
+            restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
+            restoredMode.solid &&
+            bootTargets.includes("usb")
+          ) {
+            // USB-only Solid bootstrap: same rationale as above. The Solid
+            // payload itself is small (RGB + brightness) but going through
+            // setLightingMode keeps the backend's mode state machine aligned
+            // with what the UI is showing on first paint.
+            try {
+              await setLightingMode(hydrateModePayload({
+                ...restoredMode,
+                targets: bootTargets,
+              }));
+            } catch (err) {
+              console.error("[LumaSync] Bootstrap USB-only Solid restore failed:", err);
+            }
           }
         }
 
