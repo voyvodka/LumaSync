@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { HueChannelPlacement } from "../../../../shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZone } from "../../../../shared/contracts/roomMap";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
@@ -23,6 +23,18 @@ interface HueChannelOverlayProps {
   onChannelZoneToggle?: (channelIndex: number) => void;
   /** When true, space is held — don't start drag */
   panMode?: boolean;
+  /**
+   * v1.5 W1-A6 — when set, the overlay enters "Hue zone scope" mode:
+   * - Channels bound to this zone render at zone-relative coordinates
+   *   resolved against the zone's center+scale.
+   * - Channels NOT in the zone render greyed out and pointer-disabled.
+   * - The zone center marker + bounds box are drawn behind the channels.
+   * - Drag updates emit `zoneRelativePosition` (and the absolute fields
+   *   are kept consistent so legacy consumers still work).
+   */
+  activeHueZone?: HueZone | null;
+  /** Called when the user drags the zone center marker. */
+  onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
 }
 
 /**
@@ -83,6 +95,8 @@ export function HueChannelOverlay({
   activeZoneChannels,
   onChannelZoneToggle,
   panMode = false,
+  activeHueZone = null,
+  onHueZoneCenterChange,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation("common");
 
@@ -159,6 +173,9 @@ export function HueChannelOverlay({
     }
   }, []);
 
+  const activeHueZoneRef = useRef(activeHueZone);
+  activeHueZoneRef.current = activeHueZone;
+
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const dr = dragRef.current;
     if (!dr.active) return;
@@ -167,18 +184,151 @@ export function HueChannelOverlay({
 
     const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
     if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
-      onChangeRef.current({ ...ch, x: dr.currentX, y: dr.currentY });
+      const zone = activeHueZoneRef.current;
+      // When the channel is bound to the active Hue zone, the absolute
+      // x/y we computed during the drag are world-space; we invert the
+      // zone transform so the persisted authoritative field stays the
+      // zone-relative position. Out-of-bounds drags are clamped to
+      // [-1, 1] on both axes so HUE_ZONE_CHANNEL_OUT_OF_BOUNDS never
+      // round-trips to the bridge.
+      if (zone && ch.zoneId === zone.id) {
+        const safeScaleX = zone.scaleX === 0 ? 1 : zone.scaleX;
+        const safeScaleY = zone.scaleY === 0 ? 1 : zone.scaleY;
+        const relX = clamp((dr.currentX - zone.centerX) / safeScaleX, -1, 1);
+        const relY = clamp((dr.currentY - zone.centerY) / safeScaleY, -1, 1);
+        onChangeRef.current({
+          ...ch,
+          x: dr.currentX,
+          y: dr.currentY,
+          zoneRelativePosition: {
+            x: relX,
+            y: relY,
+            z: ch.zoneRelativePosition?.z ?? 0,
+          },
+        });
+      } else {
+        onChangeRef.current({ ...ch, x: dr.currentX, y: dr.currentY });
+      }
     }
 
     dragRef.current = { ...EMPTY_DRAG };
   }, []);
 
+  // ── v1.5 W1-A6: zone bounds + center marker (rendered behind channels) ──
+  const zoneBoundsBox = activeHueZone
+    ? (() => {
+        const zone = activeHueZone;
+        const minX = clamp(zone.centerX - Math.abs(zone.scaleX), -1, 1);
+        const maxX = clamp(zone.centerX + Math.abs(zone.scaleX), -1, 1);
+        const minY = clamp(zone.centerY - Math.abs(zone.scaleY), -1, 1);
+        const maxY = clamp(zone.centerY + Math.abs(zone.scaleY), -1, 1);
+        const leftPx = hueToMetres(minX, roomWidthM) * pxPerMeter;
+        const rightPx = hueToMetres(maxX, roomWidthM) * pxPerMeter;
+        // Y flip: Hue +y is front wall (canvas bottom)
+        const topPx = hueToMetres(-maxY, roomDepthM) * pxPerMeter;
+        const bottomPx = hueToMetres(-minY, roomDepthM) * pxPerMeter;
+        const centerLeftPx = hueToMetres(zone.centerX, roomWidthM) * pxPerMeter;
+        const centerTopPx = hueToMetres(-zone.centerY, roomDepthM) * pxPerMeter;
+        const color = zone.borderColor ?? "var(--lm-zone-1)";
+        return { leftPx, rightPx, topPx, bottomPx, centerLeftPx, centerTopPx, color };
+      })()
+    : null;
+
   return (
     <>
+      {/* Zone bounds box + center marker — only when a Hue zone is active */}
+      {activeHueZone && zoneBoundsBox && (
+        <>
+          <div
+            className="pointer-events-none absolute rounded"
+            style={{
+              left: zoneBoundsBox.leftPx,
+              top: zoneBoundsBox.topPx,
+              width: zoneBoundsBox.rightPx - zoneBoundsBox.leftPx,
+              height: zoneBoundsBox.bottomPx - zoneBoundsBox.topPx,
+              border: `1.5px dashed ${zoneBoundsBox.color}`,
+              background: `color-mix(in srgb, ${zoneBoundsBox.color} 8%, transparent)`,
+              zIndex: 18,
+            }}
+            aria-hidden
+          />
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={t("roomMap.hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
+            title={t("roomMap.hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
+            className="absolute flex h-3 w-3 cursor-grab items-center justify-center rounded-full ring-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+            style={{
+              left: zoneBoundsBox.centerLeftPx,
+              top: zoneBoundsBox.centerTopPx,
+              transform: "translate(-50%, -50%)",
+              background: zoneBoundsBox.color,
+              boxShadow: `0 0 0 2px rgba(0,0,0,0.4), 0 0 0 4px ${zoneBoundsBox.color}`,
+              zIndex: 19,
+              touchAction: "none",
+            }}
+            onPointerDown={(e) => {
+              if (panMode || !onHueZoneCenterChange) return;
+              e.stopPropagation();
+              const target = e.currentTarget;
+              target.setPointerCapture(e.pointerId);
+              const startCx = activeHueZone.centerX;
+              const startCy = activeHueZone.centerY;
+              const startClientX = e.clientX;
+              const startClientY = e.clientY;
+              const effectivePpm = ppmRef.current * zoomRef.current;
+              const moveHandler = (mv: PointerEvent) => {
+                const dxPx = mv.clientX - startClientX;
+                const dyPx = mv.clientY - startClientY;
+                const dxHue = (dxPx / effectivePpm) / widthRef.current * 2;
+                const dyHue = -(dyPx / effectivePpm) / depthRef.current * 2;
+                const newCx = clamp(startCx + dxHue, -1, 1);
+                const newCy = clamp(startCy + dyHue, -1, 1);
+                target.style.left = `${hueToMetres(newCx, widthRef.current) * ppmRef.current}px`;
+                target.style.top = `${hueToMetres(-newCy, depthRef.current) * ppmRef.current}px`;
+                target.dataset.cx = String(newCx);
+                target.dataset.cy = String(newCy);
+              };
+              const upHandler = (uv: PointerEvent) => {
+                target.releasePointerCapture(uv.pointerId);
+                target.removeEventListener("pointermove", moveHandler);
+                target.removeEventListener("pointerup", upHandler);
+                target.removeEventListener("pointercancel", upHandler);
+                const finalCx = parseFloat(target.dataset.cx ?? String(startCx));
+                const finalCy = parseFloat(target.dataset.cy ?? String(startCy));
+                if (finalCx !== startCx || finalCy !== startCy) {
+                  onHueZoneCenterChange?.(activeHueZone.id, finalCx, finalCy);
+                }
+              };
+              target.addEventListener("pointermove", moveHandler);
+              target.addEventListener("pointerup", upHandler);
+              target.addEventListener("pointercancel", upHandler);
+            }}
+          />
+        </>
+      )}
+
       {channels.map((ch) => {
-        const leftPx = hueToMetres(ch.x, roomWidthM) * pxPerMeter;
+        // ── v1.5 W1-A6: when in Hue zone scope, derive world position
+        // from the zone-relative coordinates so dragging the zone center
+        // moves all bound channels together without a per-channel update.
+        let worldX = ch.x;
+        let worldY = ch.y;
+        if (activeHueZone && ch.zoneId === activeHueZone.id && ch.zoneRelativePosition) {
+          worldX = clamp(
+            activeHueZone.centerX + activeHueZone.scaleX * ch.zoneRelativePosition.x,
+            -1,
+            1,
+          );
+          worldY = clamp(
+            activeHueZone.centerY + activeHueZone.scaleY * ch.zoneRelativePosition.y,
+            -1,
+            1,
+          );
+        }
+        const leftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
         // Invert Y: Hue +y = front wall (bottom of canvas)
-        const topPx = hueToMetres(-ch.y, roomDepthM) * pxPerMeter;
+        const topPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
 
         const isSelected = selectedId === `hue-${ch.channelIndex}`;
         const isInActiveZone = activeZoneChannels?.has(ch.channelIndex) ?? false;
@@ -186,10 +336,18 @@ export function HueChannelOverlay({
 
         const isUnassignedInZoneMode = zoneAssignMode && !isAssignedToAnyZone;
 
+        // v1.5 W1-A6 — when a Hue zone is active, channels NOT bound to it
+        // are visually de-emphasised and pointer-disabled so the editor
+        // becomes focused on the zone subset.
+        const isInActiveHueZone = activeHueZone !== null && ch.zoneId === activeHueZone.id;
+        const dimmedByHueZone = activeHueZone !== null && !isInActiveHueZone;
+
         const ringStyle: React.CSSProperties =
           zoneAssignMode && isInActiveZone && activeZoneColor
             ? { boxShadow: `0 0 0 2px ${activeZoneColor}` }
-            : {};
+            : isInActiveHueZone && activeHueZone?.borderColor
+              ? { boxShadow: `0 0 0 2px ${activeHueZone.borderColor}` }
+              : {};
 
         const dotLabel =
           ch.label ??
@@ -219,12 +377,14 @@ export function HueChannelOverlay({
                 isSelected ? "bg-white border-white text-zinc-900" : "bg-white/80 border-zinc-400 text-zinc-900",
                 zoneAssignMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
                 isUnassignedInZoneMode ? "opacity-50" : "",
+                dimmedByHueZone ? "opacity-30 cursor-not-allowed pointer-events-none" : "",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
               ]
                 .filter(Boolean)
                 .join(" ")}
               style={{ touchAction: "none", ...ringStyle }}
               onPointerDown={(e) => {
+                if (dimmedByHueZone) return;
                 handlePointerDown(e, ch);
               }}
               onPointerMove={handlePointerMove}

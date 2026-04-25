@@ -891,7 +891,8 @@
       "lightCountOne": "1 light",
       "groupEmpty": "No channels assigned yet",
       "unassignedTitle": "Unassigned",
-      "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones."
+      "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones.",
+      "centerMarkerAriaLabel": "Drag to move the {{name}} zone center"
     },
     "objectPanel": {
       "objectsTab": "Objects",

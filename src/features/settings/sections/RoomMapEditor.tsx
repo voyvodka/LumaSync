@@ -869,6 +869,27 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
   const assignedChannels = new Set(config.zones.flatMap((z) => z.channelIndices));
   const activeZoneChannels = new Set(activeZone?.channelIndices ?? []);
 
+  // ── v1.5 W1-A6: derive active Hue zone ──────────────────────────────
+  const activeHueZone = activeHueZoneId
+    ? hueZones.find((z) => z.id === activeHueZoneId) ?? null
+    : null;
+
+  const handleHueZoneCenterChange = useCallback(
+    (zoneId: string, centerX: number, centerY: number) => {
+      const next = (config.hueZones ?? []).map((z) =>
+        z.id === zoneId ? { ...z, centerX, centerY } : z,
+      );
+      void updateConfig({ hueZones: next });
+      const updated = next.find((z) => z.id === zoneId);
+      if (updated) {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, { zone: updated }).catch((e) => {
+          console.error("[LumaSync] update_hue_zone (center) failed", e);
+        });
+      }
+    },
+    [config.hueZones, updateConfig],
+  );
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -1043,6 +1064,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
                 activeZoneChannels={activeZoneChannels}
                 onChannelZoneToggle={handleChannelZoneToggle}
                 panMode={spaceHeld}
+                activeHueZone={activeHueZone}
+                onHueZoneCenterChange={handleHueZoneCenterChange}
               />
             )}
 

@@ -891,7 +891,8 @@
       "lightCountOne": "1 ışık",
       "groupEmpty": "Henüz kanal atanmadı",
       "unassignedTitle": "Atanmamış",
-      "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin."
+      "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin.",
+      "centerMarkerAriaLabel": "{{name}} bölgesinin merkezini sürükleyin"
     },
     "objectPanel": {
       "objectsTab": "Nesneler",
