@@ -71,6 +71,25 @@ jobs:
       - name: Run frontend tests
         run: pnpm vitest run
 
+      - name: Detect release channel from tag
+        id: channel
+        shell: bash
+        run: |
+          # v1.5 W2-C6 — derive the release channel from the tag suffix so
+          # `vX.Y.Z` lands as a stable GitHub Release while `vX.Y.Z-beta.N`,
+          # `vX.Y.Z-rc.N`, etc. land flagged as prerelease. Tauri updater on
+          # the user side keeps reading `latest.json` (stable) until a
+          # follow-up Rust-side dynamic-endpoint commit teaches it to fan
+          # out to `latest-beta.json` for opted-in installs.
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "channel=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "channel=stable" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract release notes from CHANGELOG
         id: changelog
         shell: bash
@@ -97,5 +116,5 @@ jobs:
           releaseName: "LumaSync ${{ github.ref_name }}"
           releaseBody: ${{ steps.changelog.outputs.notes }}
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ steps.channel.outputs.is_prerelease }}
           args: ${{ matrix.os == 'macos-latest' && '--target universal-apple-darwin' || '' }}

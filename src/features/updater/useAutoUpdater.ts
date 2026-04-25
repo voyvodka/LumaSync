@@ -1,6 +1,9 @@
 import { useState, useCallback, useRef } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
+import { shellStore } from "../persistence/shellStore";
+import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "../../shared/contracts/shell";
+
 export type UpdaterState =
   | { status: "idle" }
   | { status: "checking" }
@@ -17,12 +20,41 @@ export type UpdaterState =
   | { status: "installing"; update: Update }
   | { status: "error"; message: string };
 
+/**
+ * v1.5 W2-C6 — beta channel scaffold.
+ *
+ * Resolved at the start of every `checkForUpdates` call so users that toggle
+ * channels in Settings see the new badge on the next refresh without a
+ * relaunch. Tauri updater currently walks a static endpoint list defined in
+ * `tauri.conf.json`; runtime endpoint substitution lands in a follow-up
+ * (Rust-side `app.updater_builder().endpoints(...)`) — until then this hook
+ * surfaces the user-selected channel for the UI badge so the modal copy can
+ * tell beta and stable installs apart.
+ */
+async function readUpdateChannel(): Promise<UpdateChannel> {
+  try {
+    const state = await shellStore.load();
+    return state.updateChannel ?? DEFAULT_UPDATE_CHANNEL;
+  } catch {
+    return DEFAULT_UPDATE_CHANNEL;
+  }
+}
+
 export function useAutoUpdater() {
   const [state, setState] = useState<UpdaterState>({ status: "idle" });
+  const [channel, setChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
   const lastStartRef = useRef<number>(0);
   const lastBytesRef = useRef<number>(0);
 
   const checkForUpdates = useCallback(async () => {
+    // Refresh the cached channel before every check so a Settings toggle
+    // picks up on the next user-initiated check without app relaunch.
+    const activeChannel = await readUpdateChannel();
+    setChannel(activeChannel);
+    if (activeChannel === "beta") {
+      console.info("[LumaSync] updater check running on beta channel");
+    }
+
     setState({ status: "checking" });
     try {
       const update = await check();
@@ -99,5 +131,5 @@ export function useAutoUpdater() {
     setState(next);
   }, []);
 
-  return { state, checkForUpdates, downloadAndInstall, dismiss, devSetState };
+  return { state, channel, checkForUpdates, downloadAndInstall, dismiss, devSetState };
 }

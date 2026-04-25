@@ -233,6 +233,22 @@ export interface ShellState {
    * with host-side W = min(R,G,B) extraction). Absent ⇒ `WS2812B_GRB`.
    */
   selectedChipType?: LedChipType;
+  /**
+   * Update channel preference (v1.5 W2-C6). Defaults to `"stable"` when
+   * absent — `"beta"` opts the user into the prerelease feed served from
+   * `latest-beta.json` alongside the canonical `latest.json`.
+   *
+   * The channel is read at startup by `useAutoUpdater` so it can render the
+   * active channel badge inside `<UpdateModal />`. Endpoint selection is a
+   * fallback list today (Tauri updater walks both endpoints in order); a
+   * future Rust-side dynamic `app.updater_builder().endpoints(...)` rewrite
+   * is tracked behind Platform GAP 16 — the contract field lands first so
+   * the toggle UI and persisted state ship without blocking on it.
+   *
+   * Additive — `schemaVersion` is not bumped because absence naturally
+   * degrades to `"stable"` which matches v1.4 behaviour exactly.
+   */
+  updateChannel?: UpdateChannel;
 }
 
 /** Default shell state for first launch */
@@ -260,6 +276,25 @@ export const SHELL_STORE_KEY = "shell-state";
 
 /** Window layout mode — compact for tray-first quick controls, full for settings */
 export type UIMode = "compact" | "full";
+
+/**
+ * Auto-update release channel (v1.5 W2-C6).
+ *
+ * - `"stable"` — production releases tagged `vX.Y.Z` (no suffix). Served
+ *   from `latest.json`. Default for fresh installs and upgrades from
+ *   v1.4 where the field is absent.
+ * - `"beta"` — prereleases tagged `vX.Y.Z-beta.N`. Served from
+ *   `latest-beta.json`. Opt-in via the Settings → System pane.
+ *
+ * Endpoint mapping today is a single canonical `latest.json` inside
+ * `tauri.conf.json`; a follow-up Rust-side dynamic
+ * `app.updater_builder().endpoints(...)` will route opted-in installs to
+ * `latest-beta.json` once the prerelease publishing flow is exercised.
+ */
+export type UpdateChannel = "stable" | "beta";
+
+/** Default update channel for fresh installs / unset state. */
+export const DEFAULT_UPDATE_CHANNEL: UpdateChannel = "stable";
 
 /** Logical pixel dimensions for each UI mode */
 export const UI_MODE_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {
