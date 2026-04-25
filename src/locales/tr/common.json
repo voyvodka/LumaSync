@@ -28,6 +28,16 @@
       "tr": "Türkçe"
     }
   },
+  "ui": {
+    "colorPicker": {
+      "rootAriaLabel": "Renk seçici",
+      "hueLabel": "Renk tonu",
+      "svLabel": "Doygunluk ve parlaklık",
+      "hexLabel": "HEX",
+      "recentColors": "Son kullanılanlar",
+      "recentItemAriaLabel": "{{hex}} rengini kullan"
+    }
+  },
   "general": {
     "title": "Genel",
     "description": "Genel uygulama ayarları.",

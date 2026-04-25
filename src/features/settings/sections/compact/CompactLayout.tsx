@@ -19,6 +19,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+
+import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
@@ -390,41 +392,83 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
   const edgeColor = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.18)";
   const eyeBg = isLight ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.28)";
 
+  // v1.5 W1-A7 — open the SVG-native HSV picker in a small popover
+  // anchored to the hero card. The native <input type="color"> is gone;
+  // see HsvColorPicker for the replacement (keyboard nav + recent colors).
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (popoverRef.current?.contains(e.target as Node)) return;
+      if (triggerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
   return (
-    <label
-      className={`lm-compact-hero ${disabled ? "is-disabled" : ""}`}
-      aria-label={t("general.mode.solidColor")}
-      style={{
-        background: hex,
-        backgroundImage:
-          "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%, rgba(0,0,0,0.08) 100%)",
-        boxShadow: `0 8px 24px -8px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55), inset 0 0 0 1px ${edgeColor}`,
-      }}
-    >
-      <span className="lm-compact-hero-text">
-        <span className="lm-compact-hero-hex" style={{ color: textColor }}>
-          {hex.toUpperCase()}
-        </span>
-        <span className="lm-compact-hero-sub" style={{ color: subTextColor }}>
-          {sublabel}
-        </span>
-      </span>
-      <span
-        aria-hidden
-        className="lm-compact-hero-eye"
-        style={{ background: eyeBg, color: textColor }}
-      >
-        <EyedropperIcon />
-      </span>
-      <input
-        type="color"
-        value={hex}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`lm-compact-hero ${disabled ? "is-disabled" : ""}`}
         aria-label={t("general.mode.solidColor")}
-        className="lm-compact-hero-input"
-      />
-    </label>
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
+        style={{
+          background: hex,
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%, rgba(0,0,0,0.08) 100%)",
+          boxShadow: `0 8px 24px -8px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55), inset 0 0 0 1px ${edgeColor}`,
+        }}
+      >
+        <span className="lm-compact-hero-text">
+          <span className="lm-compact-hero-hex" style={{ color: textColor }}>
+            {hex.toUpperCase()}
+          </span>
+          <span className="lm-compact-hero-sub" style={{ color: subTextColor }}>
+            {sublabel}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="lm-compact-hero-eye"
+          style={{ background: eyeBg, color: textColor }}
+        >
+          <EyedropperIcon />
+        </span>
+      </button>
+      {open && (
+        <div
+          ref={popoverRef}
+          role="dialog"
+          aria-modal="false"
+          aria-label={t("general.mode.solidColor")}
+          className="absolute left-1/2 z-50 mt-2 -translate-x-1/2 rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-xl"
+        >
+          <HsvColorPicker
+            value={hex}
+            onChange={onChange}
+            disabled={disabled}
+            ariaLabel={t("general.mode.solidColor")}
+            compact
+          />
+        </div>
+      )}
+    </div>
   );
 }
 

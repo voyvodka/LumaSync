@@ -28,6 +28,16 @@
       "tr": "Türkçe"
     }
   },
+  "ui": {
+    "colorPicker": {
+      "rootAriaLabel": "Color picker",
+      "hueLabel": "Hue",
+      "svLabel": "Saturation and brightness",
+      "hexLabel": "HEX",
+      "recentColors": "Recent",
+      "recentItemAriaLabel": "Use {{hex}}"
+    }
+  },
   "general": {
     "title": "General",
     "description": "General application settings.",

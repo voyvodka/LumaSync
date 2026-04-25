@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
 import { useSolidColorDraft } from "./useSolidColorDraft";
 
 function toHexPair(value: number): string {
@@ -71,13 +72,11 @@ export function SolidColorPanel({
             background: `linear-gradient(135deg, rgba(${draft.r}, ${draft.g}, ${draft.b}, 0.18) 0%, transparent 100%)`,
           }}
         >
-          <input
-            type="color"
-            aria-label={t("general.mode.solidColor")}
-            disabled={disabled}
+          <HsvColorPicker
             value={hexColor}
-            className="h-9 w-14 cursor-pointer rounded border border-slate-300 bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600"
-            onChange={(e) => setColor(parseHexColor(e.currentTarget.value))}
+            onChange={(hex) => setColor(parseHexColor(hex))}
+            disabled={disabled}
+            ariaLabel={t("general.mode.solidColor")}
           />
           <div className="min-w-0">
             <p className="text-xs font-medium text-slate-800 dark:text-zinc-100">
