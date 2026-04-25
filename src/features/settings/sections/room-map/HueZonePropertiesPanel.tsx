@@ -2,16 +2,22 @@
  * HueZonePropertiesPanel — v1.5 W1-A8
  *
  * Inspector panel for the currently selected `HueZone`. Lets the user
- * customise the two UI hint colors carried by the zone:
+ * customise the zone's UI hint color carried by `HueZone.borderColor`,
+ * which the room-map editor uses to render:
  *
- *   - `borderColor` — outline of the zone bounds box rendered by
- *     `HueChannelOverlay` while the zone is in scope.
- *   - `centerColor` — fill of the draggable center marker.
+ *   - the dashed bounds box outline,
+ *   - the draggable center marker fill,
+ *   - the ring around channels bound to the zone, and
+ *   - the chip in `HueZoneListPanel`.
  *
- * The colors have NO streaming side effect — they are pure room-map
- * authoring affordances (per `roomMap.ts > HueZone` contract). Persisting
- * them lets the user tell zones apart at a glance even when several
- * overlap on the canvas.
+ * Bug #51 — earlier revisions exposed a separate `centerColor` swatch
+ * alongside `borderColor`. Manual testing showed the second color was
+ * confusing (UI authors expect one identity color per zone) AND its
+ * value never propagated to the overlay (the bounds box always read
+ * `borderColor`). We collapsed the panel onto a single "Color" picker
+ * driven by `borderColor`. `HueZone.centerColor` is kept on the
+ * contract for backward compatibility (existing persisted configs still
+ * deserialise) but is no longer authored or read by the editor.
  *
  * The panel mounts the SVG-native `HsvColorPicker` from W1-A7 and a
  * 6-slot quick palette derived from the `--lm-zone-1..6` CSS tokens so
@@ -21,7 +27,7 @@
  * responsible for committing to `RoomMapConfig.hueZones` AND mirroring
  * via the `update_hue_zone` Tauri command. The panel itself stays pure.
  */
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueZone } from "../../../../shared/contracts/roomMap";
@@ -60,17 +66,11 @@ function resolveDisplayHex(value: string | undefined, fallback: string): string 
 
 export function HueZonePropertiesPanel({ zone, onUpdate }: HueZonePropertiesPanelProps) {
   const { t } = useTranslation("common");
-  const [section, setSection] = useState<"border" | "center">("border");
 
   const borderHex = resolveDisplayHex(zone.borderColor, "#3b82f6");
-  const centerHex = resolveDisplayHex(zone.centerColor, "#3b82f6");
 
   const setBorder = useCallback(
     (hex: string) => onUpdate(zone.id, { borderColor: hex }),
-    [zone.id, onUpdate],
-  );
-  const setCenter = useCallback(
-    (hex: string) => onUpdate(zone.id, { centerColor: hex }),
     [zone.id, onUpdate],
   );
 
@@ -87,35 +87,9 @@ export function HueZonePropertiesPanel({ zone, onUpdate }: HueZonePropertiesPane
         <span className="truncate text-[10px] text-zinc-400">{zone.name}</span>
       </div>
 
-      {/* Tab switcher: border vs center */}
-      <div className="flex gap-1 text-[10px]">
-        <button
-          type="button"
-          className={[
-            "flex-1 rounded px-1.5 py-0.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
-            section === "border"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200",
-          ].join(" ")}
-          aria-pressed={section === "border"}
-          onClick={() => setSection("border")}
-        >
-          {t("roomMap.zoneProperties.borderColor")}
-        </button>
-        <button
-          type="button"
-          className={[
-            "flex-1 rounded px-1.5 py-0.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
-            section === "center"
-              ? "bg-zinc-800 text-zinc-100"
-              : "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200",
-          ].join(" ")}
-          aria-pressed={section === "center"}
-          onClick={() => setSection("center")}
-        >
-          {t("roomMap.zoneProperties.centerColor")}
-        </button>
-      </div>
+      <span className="text-[10px] font-semibold text-zinc-300">
+        {t("roomMap.zoneProperties.color")}
+      </span>
 
       {/* Quick palette */}
       <div className="flex flex-wrap gap-1.5" role="list">
@@ -128,22 +102,16 @@ export function HueZonePropertiesPanel({ zone, onUpdate }: HueZonePropertiesPane
             aria-label={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
             className="h-5 w-5 rounded border border-zinc-700 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
             style={{ background: swatch.cssVar }}
-            onClick={() =>
-              section === "border" ? setBorder(swatch.hex) : setCenter(swatch.hex)
-            }
+            onClick={() => setBorder(swatch.hex)}
           />
         ))}
       </div>
 
       {/* Picker */}
       <HsvColorPicker
-        value={section === "border" ? borderHex : centerHex}
-        onChange={section === "border" ? setBorder : setCenter}
-        ariaLabel={
-          section === "border"
-            ? t("roomMap.zoneProperties.borderColor")
-            : t("roomMap.zoneProperties.centerColor")
-        }
+        value={borderHex}
+        onChange={setBorder}
+        ariaLabel={t("roomMap.zoneProperties.color")}
         compact
       />
     </div>

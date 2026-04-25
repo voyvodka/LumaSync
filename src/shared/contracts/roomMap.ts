@@ -192,9 +192,19 @@ export interface HueZone {
   scaleZ: number;
   /** Channel indices (within the parent area) that belong to this zone. */
   channelIndices: number[];
-  /** Optional UI hint for the zone outline color. */
+  /**
+   * Optional UI hint for the zone outline color. Drives the dashed
+   * bounds box, the center-marker fill, and the channel ring rendered
+   * by `HueChannelOverlay`. The single zone identity color since v1.5.
+   */
   borderColor?: string;
-  /** Optional UI hint for the zone center marker color. */
+  /**
+   * @deprecated v1.5 — collapsed onto `borderColor` after manual
+   * testing showed the dual-color affordance was confusing AND the
+   * value never propagated to the overlay (bug #51). Kept on the
+   * contract so previously persisted configs deserialise without loss;
+   * new authoring flows must NOT write this field.
+   */
   centerColor?: string;
 }
 

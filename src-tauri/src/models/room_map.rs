@@ -97,8 +97,14 @@ pub struct HueZone {
     pub scale_y: f64,
     pub scale_z: f64,
     pub channel_indices: Vec<u8>,
+    /// Optional UI hint for the zone outline. Drives the dashed bounds
+    /// box, the center marker, and channel rings in the room-map editor.
+    /// Single zone identity color since v1.5.
     #[serde(default)]
     pub border_color: Option<String>,
+    /// Deprecated — collapsed onto `border_color` (bug #51). Retained on
+    /// the model so pre-v1.5 persisted configs deserialise without loss;
+    /// the editor never writes this field anymore.
     #[serde(default)]
     pub center_color: Option<String>,
 }

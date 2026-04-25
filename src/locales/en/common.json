@@ -972,6 +972,7 @@
     },
     "zoneProperties": {
       "title": "Zone properties",
+      "color": "Color",
       "borderColor": "Border",
       "centerColor": "Center",
       "swatchAriaLabel": "Use {{name}} swatch"

@@ -972,6 +972,7 @@
     },
     "zoneProperties": {
       "title": "Bölge özellikleri",
+      "color": "Renk",
       "borderColor": "Kenar",
       "centerColor": "Merkez",
       "swatchAriaLabel": "{{name}} rengini kullan"

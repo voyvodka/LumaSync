@@ -626,7 +626,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
       scaleZ: 0.5,
       channelIndices: [],
       borderColor: colorVar,
-      centerColor: colorVar,
+      // Bug #51 — centerColor deprecated; do not author new values.
     };
     void updateConfig({ hueZones: [...hueZones, newZone] });
     setActiveHueZoneId(id);
