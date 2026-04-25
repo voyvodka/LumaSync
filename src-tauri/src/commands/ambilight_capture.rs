@@ -52,7 +52,10 @@ pub trait AmbilightFrameSource: Send {
 /// [`select_display_index`] when the requested id is missing (display
 /// unplugged / replugged with a different native handle, first launch
 /// before the user has picked one, etc).
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows", target_os = "linux")), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayCandidate {
     pub id: String,
@@ -68,7 +71,10 @@ pub struct DisplayCandidate {
 /// (macOS `SCDisplay` ordering can change on replug, Windows `HMONITOR`
 /// is recycled) — the worker must not fail hard when a persisted id no
 /// longer resolves.
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows", target_os = "linux")), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
 pub fn select_display_index(
     id_hint: Option<&str>,
     candidates: &[DisplayCandidate],
