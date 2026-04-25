@@ -20,6 +20,7 @@
 //! retry-budget exhaustion → `Failed`, user-override veto) is preserved
 //! exactly.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -28,8 +29,8 @@ use log::info;
 use super::frame::HueAreaChannel;
 use super::sender::{
     apply_channel_region_overrides, build_hue_sender_with_counter, deactivate_entertainment_config,
-    fetch_area_channels, hue_http_client, is_shutdown_signaled, new_shutdown_signal, no_op_sender,
-    ShutdownSignal,
+    fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled,
+    new_shutdown_signal, no_op_sender, HueLightMetadata, ShutdownSignal,
 };
 use super::frame::HueColorSender;
 use super::state_store::{
@@ -53,6 +54,7 @@ pub(crate) fn store_active_stream_context(
     color_sender: HueColorSender,
     uses_dtls: bool,
     shutdown_signal: ShutdownSignal,
+    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
 ) {
     store_active_stream_context_with_cipher(
         owner,
@@ -62,9 +64,11 @@ pub(crate) fn store_active_stream_context(
         uses_dtls,
         shutdown_signal,
         None,
+        light_metadata,
     );
 }
 
+#[allow(clippy::too_many_arguments)] // adding light_metadata to the active-stream-context store crosses the 7-arg threshold; collapsing into a struct here would split the mutation boundary (HueRuntimeOwner) from the fresh-spawn payload and obscure which fields each caller controls
 pub(crate) fn store_active_stream_context_with_cipher(
     owner: &mut HueRuntimeOwner,
     request: &StartHueStreamRequest,
@@ -73,6 +77,7 @@ pub(crate) fn store_active_stream_context_with_cipher(
     uses_dtls: bool,
     shutdown_signal: ShutdownSignal,
     cipher_name: Option<String>,
+    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
 ) {
     // Keep a persistent clone that survives stream stop/start cycles.
     if !channels.is_empty() {
@@ -91,6 +96,7 @@ pub(crate) fn store_active_stream_context_with_cipher(
         color_sender,
         uses_dtls,
         shutdown_signal,
+        light_metadata,
     });
 
     // Update telemetry tracking fields.
@@ -335,16 +341,24 @@ async fn internal_restart_stream(
         apply_channel_region_overrides(&mut channels, overrides);
     }
 
+    // 4b. Pre-fetch per-light archetype + gamut metadata (W1-C3a). Graceful:
+    //     any per-light fetch failure simply omits that light from the cache
+    //     so the frame builder treats it as `HueGamutType::Other` (no clip).
+    let light_metadata = Arc::new(
+        fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels).await,
+    );
+
     // 5. Spawn sender (blocking), passing the owner's packet counter.
     let req = request.clone();
     let ch = channels.clone();
+    let meta_for_sender = Arc::clone(&light_metadata);
     let packet_counter = {
         let owner = acquire_hue_runtime(runtime);
         Arc::clone(&owner.packet_send_count)
     };
     let (color_sender, uses_dtls, shutdown_signal, cipher_name) =
         tokio::task::spawn_blocking(move || {
-            build_hue_sender_with_counter(&req, ch, packet_counter)
+            build_hue_sender_with_counter(&req, ch, meta_for_sender, packet_counter)
         })
         .await
         .unwrap_or_else(|_| (no_op_sender(), false, new_shutdown_signal(), None));
@@ -371,6 +385,7 @@ async fn internal_restart_stream(
             color_sender: color_sender.clone(),
             uses_dtls,
             shutdown_signal: Arc::clone(&shutdown_signal),
+            light_metadata: Arc::clone(&light_metadata),
         };
         if !channels.is_empty() {
             owner.persistent_sender = Some(HuePersistentSender {
@@ -467,6 +482,7 @@ mod tests {
             dummy_sender,
             false,
             new_shutdown_signal(),
+            Arc::new(std::collections::HashMap::new()),
         );
 
         let active_stream = owner.active_stream.as_ref().expect("active stream context");

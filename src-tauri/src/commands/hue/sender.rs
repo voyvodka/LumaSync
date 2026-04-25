@@ -12,6 +12,7 @@
 //! protocol-critical (`ls-hue-protocol §2.1` and §2.3) and must not drift.
 //!
 
+use std::collections::HashMap;
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -217,6 +218,7 @@ fn send_light_put(
 ///
 /// Returns the color sender handle, a shutdown signal that fires when the
 /// thread exits, and the DTLS cipher name used during the handshake.
+#[allow(clippy::too_many_arguments)] // bridge ip + username + client_key + area_id + channels + light_metadata + packet_counter is the minimal DTLS sender contract; collapsing into a struct would cost ergonomic clarity at the call sites in commands.rs / reconnect.rs
 pub(crate) fn spawn_hue_dtls_sender(
     client: Arc<BlockingClient>,
     bridge_ip: String,
@@ -224,6 +226,7 @@ pub(crate) fn spawn_hue_dtls_sender(
     client_key: String,
     area_id: String,
     channels: Vec<HueAreaChannel>,
+    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
 ) -> Result<(HueColorSender, ShutdownSignal, Option<String>), String> {
     let channel_count = channels.len();
@@ -253,6 +256,10 @@ pub(crate) fn spawn_hue_dtls_sender(
 
     thread::spawn(move || {
         use std::io::Write;
+
+        // Per-light metadata cache (gamut_type / archetype). Wired in W1-C3a;
+        // consumed by the frame builder hot path in W1-C3b.
+        let _light_metadata = Arc::clone(&light_metadata);
 
         let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
         let mut last_sent_at = Instant::now()
@@ -648,10 +655,11 @@ pub(crate) fn no_op_sender() -> HueColorSender {
 pub(crate) fn build_hue_sender(
     request: &super::state_store::StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
+    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
 ) -> (HueColorSender, bool, ShutdownSignal) {
     let packet_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
     let (sender, uses_dtls, shutdown, _cipher) =
-        build_hue_sender_with_counter(request, channels, packet_counter);
+        build_hue_sender_with_counter(request, channels, light_metadata, packet_counter);
     (sender, uses_dtls, shutdown)
 }
 
@@ -659,6 +667,7 @@ pub(crate) fn build_hue_sender(
 pub(crate) fn build_hue_sender_with_counter(
     request: &super::state_store::StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
+    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
 ) -> (HueColorSender, bool, ShutdownSignal, Option<String>) {
     // v1.5 W2-A2 — keychain-first credential resolution. The request
@@ -692,6 +701,7 @@ pub(crate) fn build_hue_sender_with_counter(
                 let client_key_t = resolved_client_key.clone();
                 let area_id_t = request.area_id.clone();
                 let channels_t = channels.clone();
+                let light_metadata_t = Arc::clone(&light_metadata);
                 let counter_t = Arc::clone(&packet_counter);
 
                 std::thread::spawn(move || {
@@ -702,6 +712,7 @@ pub(crate) fn build_hue_sender_with_counter(
                         client_key_t,
                         area_id_t,
                         channels_t,
+                        light_metadata_t,
                         counter_t,
                     );
                     let _ = tx_result.send(result);
@@ -788,7 +799,6 @@ pub(crate) fn build_hue_sender_with_counter(
 /// 2012-2016), C (modern Hue Color White & Ambiance), and `Other`
 /// (unknown / fallback).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[allow(dead_code)] // consumed by W1-C2 frame builder gamut clip in Commit 4
 pub enum HueGamutType {
     A,
     B,
@@ -797,7 +807,6 @@ pub enum HueGamutType {
 }
 
 impl HueGamutType {
-    #[allow(dead_code)] // consumed by W1-C2 frame builder gamut clip in Commit 4
     pub fn from_clip_str(value: &str) -> Self {
         match value.trim() {
             "A" | "a" => HueGamutType::A,
@@ -812,17 +821,21 @@ impl HueGamutType {
 /// runtime keeps a `light_id → HueLightMetadata` cache so the streaming
 /// hot path never hits the bridge to look up gamut info.
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // consumed by W1-C2 frame builder gamut clip in Commit 4
 pub struct HueLightMetadata {
     pub light_id: String,
+    /// Bulb archetype (e.g. `"sultan_bulb"`, `"hue_go"`) reported by CLIP v2.
+    /// Surfaced for telemetry; consumed by future bulb-specific dimming curves.
+    #[allow(dead_code)] // read-by-W1-C3b frame builder + future telemetry
     pub archetype: Option<String>,
+    /// Gamut triangle this bulb supports — read by the frame builder hot
+    /// path in W1-C3b for per-bulb CIE xy clipping.
+    #[allow(dead_code)] // read-by-W1-C3b frame builder hot path
     pub gamut_type: HueGamutType,
 }
 
 /// Parse a single CLIP v2 `/resource/light/{id}` response payload and
 /// extract the archetype + gamut type. Public so the unit tests in
 /// `sender::tests` can exercise the parser without a live bridge.
-#[allow(dead_code)] // production cache wiring lands in the W1-C2 follow-up
 pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightMetadata> {
     let item = payload
         .get("data")
@@ -850,7 +863,6 @@ pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightM
 /// metadata. Errors propagate as a string so the caller can decide
 /// whether to fall back to `HueGamutType::Other` (loud) or skip the
 /// clipping step (silent).
-#[allow(dead_code)] // production cache wiring lands in the W1-C2 follow-up
 pub async fn fetch_light_metadata(
     bridge_ip: &str,
     username: &str,
@@ -875,13 +887,47 @@ pub async fn fetch_light_metadata(
 /// Convenience: drain a slice of resolved channels into a flat list of
 /// unique light ids. Used by the runtime to populate the metadata cache
 /// in a single batch (one `fetch_light_metadata` call per light id).
-#[allow(dead_code)] // production cache wiring lands in the W1-C2 follow-up
 pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
     let mut out = Vec::new();
     for ch in channels {
         for id in &ch.light_ids {
             if !out.iter().any(|existing: &String| existing == id) {
                 out.push(id.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Pre-fetch per-light metadata for every unique light id referenced by the
+/// provided channels and return it as a ready-to-share `Arc<HashMap>`.
+///
+/// Failure mode is **graceful**: any single `fetch_light_metadata` error is
+/// swallowed (the bridge response shape can vary across firmware versions
+/// and we never want a metadata fetch to abort entertainment-area
+/// activation). The returned map omits the failing light ids; the frame
+/// builder treats absent entries as `HueGamutType::Other` and skips the
+/// per-bulb gamut clip — i.e. the bulb keeps the v1.4 behaviour while the
+/// rest of the area benefits from the per-bulb projection.
+///
+/// Bridge fan-out is sequential: a typical Hue entertainment area has
+/// 1-10 lights and CLIP v2 light fetches each return in <50 ms on a LAN,
+/// well below the activation budget. If a future area type pushes that
+/// envelope this helper can be parallelised with `futures::future::join_all`
+/// without changing the public signature.
+pub async fn fetch_light_metadata_for_channels(
+    bridge_ip: &str,
+    username: &str,
+    channels: &[HueAreaChannel],
+) -> HashMap<String, HueLightMetadata> {
+    let mut out = HashMap::new();
+    for light_id in unique_light_ids(channels) {
+        match fetch_light_metadata(bridge_ip, username, &light_id).await {
+            Ok(meta) => {
+                out.insert(meta.light_id.clone(), meta);
+            }
+            Err(err) => {
+                warn!("light metadata fetch failed for `{light_id}`: {err}; falling back to HueGamutType::Other");
             }
         }
     }

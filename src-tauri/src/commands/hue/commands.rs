@@ -27,9 +27,9 @@ use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
 };
 use super::sender::{
-    build_hue_sender, deactivate_entertainment_config, fetch_area_channels, hue_http_client,
-    is_shutdown_signaled, new_shutdown_signal, signal_shutdown_complete,
-    wait_for_shutdown, apply_channel_region_overrides, no_op_sender,
+    build_hue_sender, deactivate_entertainment_config, fetch_area_channels,
+    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, new_shutdown_signal,
+    signal_shutdown_complete, wait_for_shutdown, apply_channel_region_overrides, no_op_sender,
 };
 use super::frame::HueAreaChannelInfo;
 use super::state_store::{
@@ -144,12 +144,24 @@ pub async fn start_hue_stream(
         }
     } // lock released before blocking I/O
 
+    // 4a-bis. Pre-fetch per-light archetype + gamut metadata (W1-C3a).
+    //         Graceful: failures fall back to `HueGamutType::Other` (no clip).
+    let light_metadata = if result.active {
+        Arc::new(
+            fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels)
+                .await,
+        )
+    } else {
+        Arc::new(std::collections::HashMap::new())
+    };
+
     // 4b. Spawn sender on a blocking thread — DTLS handshake / HTTP activate
     //     create/drop a reqwest::blocking::Client which panics on Tokio workers.
     let (color_sender, uses_dtls, shutdown_signal) = if result.active {
         let req = request.clone();
         let ch = channels.clone();
-        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch))
+        let meta_for_sender = Arc::clone(&light_metadata);
+        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch, meta_for_sender))
             .await
             .unwrap_or_else(|_join_err| {
                 error!("build_hue_sender task panicked, using no-op sender.");
@@ -180,6 +192,7 @@ pub async fn start_hue_stream(
             color_sender,
             uses_dtls,
             shutdown_signal,
+            Arc::clone(&light_metadata),
         );
         abort_guard.disarm();
 
@@ -390,11 +403,22 @@ pub async fn restart_hue_stream(
         }
     } // lock released before blocking I/O
 
+    // 5a-bis. Pre-fetch per-light archetype + gamut metadata (W1-C3a).
+    let light_metadata = if result.active {
+        Arc::new(
+            fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels)
+                .await,
+        )
+    } else {
+        Arc::new(std::collections::HashMap::new())
+    };
+
     // 5b. Spawn sender on a blocking thread — same rationale as start_hue_stream 4b.
     let (color_sender, uses_dtls, shutdown_signal) = if result.active {
         let req = request.clone();
         let ch = channels.clone();
-        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch))
+        let meta_for_sender = Arc::clone(&light_metadata);
+        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch, meta_for_sender))
             .await
             .unwrap_or_else(|_join_err| {
                 error!("build_hue_sender task panicked, using no-op sender.");
@@ -423,6 +447,7 @@ pub async fn restart_hue_stream(
             color_sender,
             uses_dtls,
             shutdown_signal,
+            Arc::clone(&light_metadata),
         );
         abort_guard.disarm();
 

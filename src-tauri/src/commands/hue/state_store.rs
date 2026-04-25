@@ -23,6 +23,7 @@
 //! packet counters, cipher, error codes, and reconnect tallies without a
 //! getter API surface — same crate-wide access as before the split.
 
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -225,6 +226,12 @@ pub(crate) struct HueActiveStreamContext {
     /// Fires when the background sender thread exits. Used by `stop_hue_stream`
     /// to wait for graceful shutdown before reporting success or timeout.
     pub(crate) shutdown_signal: ShutdownSignal,
+    /// Per-light archetype + gamut_type cache keyed by CLIP v2 light id.
+    /// Pre-fetched at activation time (W1-C3a) and read lock-free by the
+    /// DTLS frame builder hot path (W1-C3b) for per-bulb gamut clipping.
+    /// Missing entries fall back to `HueGamutType::Other` (no clipping).
+    #[allow(dead_code)] // read by the sender thread + frame builder, not the runtime owner
+    pub(crate) light_metadata: Arc<HashMap<String, super::sender::HueLightMetadata>>,
 }
 
 #[derive(Clone, Debug)]
@@ -486,6 +493,7 @@ pub(crate) mod test_helpers {
             },
             uses_dtls: false,
             shutdown_signal: new_shutdown_signal(),
+            light_metadata: Arc::new(std::collections::HashMap::new()),
         }
     }
 }
