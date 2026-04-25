@@ -21,10 +21,13 @@ pub struct SampledLedFrame {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AmbilightCaptureError {
-    #[cfg_attr(
-        not(any(test, target_os = "windows", target_os = "macos", target_os = "linux")),
-        allow(dead_code)
-    )]
+    /// Surfaced when a platform's capture pipeline reports a missing frame
+    /// (e.g. macOS SCDisplay drop, Windows DXGI desktop switch). Linux's
+    /// xcap branch currently constructs only `InvalidFrame`, so the
+    /// variant is forward-looking there — keep allow(dead_code)
+    /// unconditional rather than a per-platform cfg matrix that drifts
+    /// every time a backend lands.
+    #[allow(dead_code)]
     FrameUnavailable,
     InvalidFrame(&'static str),
 }
@@ -378,8 +381,8 @@ mod platform {
 
             let src_w = width as usize;
             let src_h = height as usize;
-            let dst_w = (src_w + stride - 1) / stride;
-            let dst_h = (src_h + stride - 1) / stride;
+            let dst_w = src_w.div_ceil(stride);
+            let dst_h = src_h.div_ceil(stride);
             let mut pixels_rgb = Vec::with_capacity(dst_w.saturating_mul(dst_h));
 
             // Stride-1 keeps the original tight loop (one allocation, one
