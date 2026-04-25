@@ -1181,11 +1181,20 @@ fn apply_mode_change(
                 .as_ref()
                 .cloned()
                 .unwrap_or_default();
+            // None-preservation: when the incoming payload omits saturation
+            // or smoothing_alpha (e.g. brightness-only slider tweak from the
+            // frontend), keep the currently running atomic value instead of
+            // resetting to defaults. The previous unwrap_or(1.0)/(0.35) path
+            // silently clobbered user-tuned values on every brightness move.
+            let next_smoothing_alpha = cfg
+                .smoothing_alpha
+                .unwrap_or_else(|| live.read_smoothing_alpha());
+            let next_saturation = cfg.saturation.unwrap_or_else(|| live.read_saturation());
             live.update(
                 cfg.brightness,
                 cfg.black_border_detection,
-                cfg.smoothing_alpha.unwrap_or(0.35),
-                cfg.saturation.unwrap_or(1.0),
+                next_smoothing_alpha,
+                next_saturation,
                 cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
             );
             owner.active_mode = normalized_next;
@@ -2320,5 +2329,186 @@ mod lighting_mode_tests {
             Some(LightingSmoothingPreset::Intense),
             "lighting_smoothing_preset must survive normalize_mode_config"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Fast-path None preservation — saturation / smoothing_alpha must NOT
+    // collapse to defaults when an incoming payload omits them.
+    //
+    // Repro for the v1.5 manual-test regression "ambilight saturation /
+    // smoothing reset on every brightness slider tweak": frontend pushed
+    // brightness-only payloads with `saturation: None` and `smoothing_alpha:
+    // None`, and the fast path's old `unwrap_or(1.0)` / `unwrap_or(0.35)`
+    // silently clobbered the user's tuned values. The new behaviour reads
+    // the live atomic on None so the running worker keeps its current state.
+    // ---------------------------------------------------------------------------
+
+    fn ambilight_with_payload(payload: AmbilightPayload) -> LightingModeConfig {
+        LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            solid: None,
+            ambilight: Some(payload),
+            targets: None,
+            display_id: None,
+            led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
+        }
+    }
+
+    #[test]
+    fn fast_path_preserves_saturation_when_payload_omits_it() {
+        let mut owner = owner_with_fake_sender();
+
+        // First call: bring up ambilight with explicit saturation = 1.5
+        let bring_up = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 0.8,
+                saturation: Some(1.5),
+                ..Default::default()
+            }),
+            true,
+            Some("COM-FP1"),
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(bring_up.status.code, "AMBILIGHT_MODE_STARTED");
+        let live_after_start = owner
+            .ambilight_live
+            .as_ref()
+            .expect("ambilight_live must be present after start")
+            .clone();
+        assert!((live_after_start.read_saturation() - 1.5).abs() < 1e-5);
+
+        // Second call: brightness-only tweak with saturation = None.
+        // Must hit the fast path and KEEP the running 1.5 saturation.
+        let tweak = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 0.42,
+                saturation: None,
+                ..Default::default()
+            }),
+            true,
+            Some("COM-FP1"),
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(
+            tweak.status.code, "AMBILIGHT_MODE_UPDATED",
+            "brightness-only retune must take the in-place fast path",
+        );
+        let live = owner.ambilight_live.as_ref().expect("live present");
+        assert!(
+            (live.read_saturation() - 1.5).abs() < 1e-5,
+            "fast path must preserve saturation when payload omits it; got {}",
+            live.read_saturation()
+        );
+        assert!(
+            (live.read_brightness() - 0.42).abs() < 1e-5,
+            "fast path must apply the new brightness",
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+    }
+
+    #[test]
+    fn fast_path_preserves_smoothing_alpha_when_payload_omits_it() {
+        let mut owner = owner_with_fake_sender();
+
+        let bring_up = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 1.0,
+                smoothing_alpha: Some(0.20),
+                ..Default::default()
+            }),
+            true,
+            Some("COM-FP2"),
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(bring_up.status.code, "AMBILIGHT_MODE_STARTED");
+
+        let tweak = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 0.5,
+                smoothing_alpha: None,
+                ..Default::default()
+            }),
+            true,
+            Some("COM-FP2"),
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(tweak.status.code, "AMBILIGHT_MODE_UPDATED");
+        let live = owner.ambilight_live.as_ref().expect("live present");
+        assert!(
+            (live.read_smoothing_alpha() - 0.20).abs() < 1e-5,
+            "fast path must preserve smoothing_alpha when payload omits it; got {}",
+            live.read_smoothing_alpha()
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+    }
+
+    #[test]
+    fn fast_path_explicit_saturation_overrides_running_atomic() {
+        // Sanity check: an explicit Some(value) STILL overrides the live atomic.
+        // This guards against an over-eager None-preservation that would also
+        // ignore explicit values.
+        let mut owner = owner_with_fake_sender();
+
+        let _ = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 1.0,
+                saturation: Some(1.0),
+                ..Default::default()
+            }),
+            true,
+            Some("COM-FP3"),
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+
+        let tweak = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 1.0,
+                saturation: Some(1.8),
+                ..Default::default()
+            }),
+            true,
+            Some("COM-FP3"),
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(tweak.status.code, "AMBILIGHT_MODE_UPDATED");
+        let live = owner.ambilight_live.as_ref().expect("live present");
+        assert!(
+            (live.read_saturation() - 1.8).abs() < 1e-5,
+            "explicit Some(value) must override the running atomic; got {}",
+            live.read_saturation()
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
     }
 }
