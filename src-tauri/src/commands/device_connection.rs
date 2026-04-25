@@ -19,7 +19,33 @@ const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 1_500;
 const HANDSHAKE_PORT_READ_TIMEOUT_MS: u64 = 50;
 
 /// Total wall-clock budget for the PING → PONG round-trip.
-const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(1_000);
+///
+/// Bumped from 1 000 ms to 2 000 ms to accommodate slower bootloaders and
+/// older Nano variants. The post-open settle delay (`BOOTLOADER_SETTLE_DELAY_MS`)
+/// consumes most of this window; the remaining budget covers the actual
+/// round-trip which is typically < 5 ms on a healthy link.
+const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(2_000);
+
+/// Post-open settle delay before sending any bytes to the device.
+///
+/// Opening a serial port asserts DTR, which triggers the AVR auto-reset
+/// circuit on Arduino-style boards (CH340, FTDI, CP2102, etc.). The
+/// bootloader occupies the bus for ~1.5–2 s before jumping to the user
+/// sketch. If LumaSync sends the PING handshake during this window the
+/// bootloader ignores it and the sketch never sees it, causing a guaranteed
+/// `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`.
+///
+/// Fix: sleep this long after `open()` and before writing any frame bytes.
+/// Both `connect_serial_port` and `run_serial_health_check` apply this delay.
+///
+/// Trade-off: every connect / health-check call now takes +2 s wall time.
+/// This is acceptable — the alternative is a guaranteed handshake failure on
+/// all Arduino-class hardware. A future improvement could suppress the reset
+/// entirely by driving DTR low immediately after open
+/// (`port.write_data_terminal_ready(false)` before any other byte), but that
+/// path requires testing across all five supported chip families and is
+/// deferred to a dedicated v1.5 follow-up item.
+const BOOTLOADER_SETTLE_DELAY_MS: u64 = 2_000;
 
 /// Supported USB serial adapter VID:PID allowlist.
 ///
@@ -337,6 +363,12 @@ pub fn connect_serial_port(
 
     let result = match open_result {
         Ok(_port_handle) => {
+            // Wait for the AVR bootloader to finish before writing any bytes.
+            // Opening the port asserts DTR which triggers auto-reset on
+            // Arduino-class boards; the bootloader occupies the bus for
+            // ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS` for full rationale.
+            std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
+
             // Connection verified — build and register a SerialSink for this port.
             // The sink uses default profile (LumaSyncV1) and default corrections;
             // the user can change these via the Firmware Profile setting (v1.4 G11)
@@ -547,6 +579,11 @@ pub fn run_serial_health_check(port_name: String) -> HealthCheckResult {
                 message: "Port opened successfully at 115200 baud.".to_string(),
                 details: None,
             });
+            // Wait for the AVR bootloader to finish before sending PING.
+            // Opening the port asserts DTR which triggers auto-reset on
+            // Arduino-class boards; the bootloader occupies the bus for
+            // ~1.5–2 s. See `BOOTLOADER_SETTLE_DELAY_MS` for full rationale.
+            std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
             handle
         }
         Err(error) => {
@@ -661,7 +698,7 @@ fn connect_error_code(error: &serialport::Error) -> &'static str {
 fn handshake_error_ui_message(err: &HandshakeError) -> (String, String) {
     match err {
         HandshakeError::TooShort => (
-            "Handshake timed out: no response from firmware within 1 s.".to_string(),
+            "Handshake timed out: no response from firmware within 2 s.".to_string(),
             "If using non-LumaSync firmware, switch to the Adalight profile in Device settings."
                 .to_string(),
         ),
