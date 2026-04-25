@@ -257,9 +257,9 @@ pub(crate) fn spawn_hue_dtls_sender(
     thread::spawn(move || {
         use std::io::Write;
 
-        // Per-light metadata cache (gamut_type / archetype). Wired in W1-C3a;
-        // consumed by the frame builder hot path in W1-C3b.
-        let _light_metadata = Arc::clone(&light_metadata);
+        // Per-light metadata cache (gamut_type / archetype). Read by the
+        // frame builder on every send for per-bulb gamut clipping (W1-C3b).
+        let light_metadata = Arc::clone(&light_metadata);
 
         let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
         let mut last_sent_at = Instant::now()
@@ -310,6 +310,7 @@ pub(crate) fn spawn_hue_dtls_sender(
                 &channels,
                 &latest.channel_colors,
                 latest.brightness,
+                &light_metadata,
             );
             if dtls_stream.write_all(&frame).is_err() {
                 error!("DTLS write failed, stopping entertainment stream.");
@@ -828,8 +829,7 @@ pub struct HueLightMetadata {
     #[allow(dead_code)] // read-by-W1-C3b frame builder + future telemetry
     pub archetype: Option<String>,
     /// Gamut triangle this bulb supports — read by the frame builder hot
-    /// path in W1-C3b for per-bulb CIE xy clipping.
-    #[allow(dead_code)] // read-by-W1-C3b frame builder hot path
+    /// path for per-bulb CIE xy clipping.
     pub gamut_type: HueGamutType,
 }
 

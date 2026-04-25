@@ -5,9 +5,12 @@
 //! exactly — every constant, frame layout, and rgb→xy coefficient matches the
 //! pre-refactor implementation byte-for-byte.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+
+use super::sender::HueLightMetadata;
 
 // ---------------------------------------------------------------------------
 // HueStream binary protocol constants (v2.0, API version 1.0)
@@ -168,6 +171,7 @@ pub(crate) fn build_huestream_frame(
     channels: &[HueAreaChannel],
     channel_colors: &[(u8, u8, u8)],
     brightness: f32,
+    light_metadata: &HashMap<String, HueLightMetadata>,
 ) -> Vec<u8> {
     const UUID_LEN: usize = 36;
     let header_len = 16;
@@ -197,7 +201,32 @@ pub(crate) fn build_huestream_frame(
     let brightness_clamped = brightness.clamp(0.0, 1.0);
 
     for (i, channel) in channels.iter().enumerate() {
-        let (r, g, b) = channel_colors.get(i).copied().unwrap_or((0, 0, 0));
+        let (mut r, mut g, mut b) = channel_colors.get(i).copied().unwrap_or((0, 0, 0));
+
+        // Per-bulb gamut triangle clip (W1-C3b — Hyperion-lead quality gap G1).
+        //
+        // We resolve the channel's gamut from the first bulb in `light_ids`
+        // (a Hue entertainment channel's bulbs are typically the same
+        // archetype; mixed-gamut zones are rare and a per-channel min-gamut
+        // strategy is deferred to v2 alongside the zone authoring surface).
+        // Cache misses + `HueGamutType::Other` are pass-through, preserving
+        // v1.4 behaviour for unknown bulbs.
+        let gamut = channel
+            .light_ids
+            .first()
+            .and_then(|id| light_metadata.get(id))
+            .map(|meta| meta.gamut_type)
+            .unwrap_or(HueGamutType::Other);
+        if !matches!(gamut, HueGamutType::Other) && (r, g, b) != (0, 0, 0) {
+            let xy = rgb_to_xy(r, g, b);
+            let clipped = clip_xy_to_gamut(xy, gamut);
+            if (clipped.0 - xy.0).abs() > 1e-9 || (clipped.1 - xy.1).abs() > 1e-9 {
+                let (cr, cg, cb) = xy_to_rgb(clipped.0, clipped.1);
+                r = cr;
+                g = cg;
+                b = cb;
+            }
+        }
 
         // Scale 8-bit to 16-bit and apply brightness
         let r16 = ((f32::from(r) / 255.0) * brightness_clamped * 65535.0) as u16;
@@ -253,6 +282,62 @@ pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
     (x / sum, y / sum)
 }
 
+/// Inverse of [`rgb_to_xy`]: recover an sRGB triplet (8-bit per channel)
+/// from a CIE 1931 chromaticity `(x, y)` using the Hue-style
+/// XYZ → linear-RGB matrix and gamma encode. Y is fixed at 1.0 because
+/// brightness is carried separately in the HueStream frame header byte
+/// — i.e. this is a chromaticity-only round-trip used after gamut
+/// clipping (W1-C3b). The output is intentionally clamped to `[0, 255]`
+/// because some chromaticities outside any Hue gamut land outside the
+/// sRGB cube even after projection.
+pub(crate) fn xy_to_rgb(x: f64, y: f64) -> (u8, u8, u8) {
+    if y <= f64::EPSILON {
+        return (0, 0, 0);
+    }
+    // Y is set to 1.0 — brightness is applied later via the frame
+    // header byte, not in the chromaticity round-trip.
+    let big_y: f64 = 1.0;
+    let big_x = (big_y / y) * x;
+    let big_z = (big_y / y) * (1.0 - x - y);
+
+    // Hue-published inverse of the linear-RGB → XYZ matrix used by
+    // `rgb_to_xy`. Coefficients sourced from the same Philips developer
+    // documentation, accurate to 6 decimals.
+    let mut r = big_x * 1.656_492 + big_y * -0.354_851 + big_z * -0.255_038;
+    let mut g = big_x * -0.707_196 + big_y * 1.655_397 + big_z * 0.036_152;
+    let mut b = big_x * 0.051_713 + big_y * -0.121_364 + big_z * 1.011_530;
+
+    // Apply sRGB gamma encode (inverse of the linearisation in rgb_to_xy).
+    let encode = |c: f64| -> f64 {
+        let c = c.max(0.0);
+        if c <= 0.003_130_8 {
+            12.92 * c
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    };
+    r = encode(r);
+    g = encode(g);
+    b = encode(b);
+
+    // Normalise so the largest channel saturates — keeps hue stable
+    // when a gamut-clipped colour would otherwise overshoot one channel
+    // and be silently darkened by clamping. This matches Philips' own
+    // reference implementation.
+    let max = r.max(g).max(b);
+    if max > 1.0 {
+        r /= max;
+        g /= max;
+        b /= max;
+    }
+
+    (
+        (r.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (g.clamp(0.0, 1.0) * 255.0).round() as u8,
+        (b.clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Per-bulb gamut triangle clipping (v1.5 W1-C2 — Hyperion-lead quality gap G1)
 // ---------------------------------------------------------------------------
@@ -282,26 +367,22 @@ pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
 pub use super::sender::HueGamutType;
 
 /// CIE xy gamut triangle as `[red, green, blue]` vertices.
-#[allow(dead_code)] // sender hot-path wiring lands in the W1-C2 follow-up
 pub(super) const GAMUT_A: [(f64, f64); 3] = [
     (0.704, 0.296),
     (0.2151, 0.7106),
     (0.138, 0.080),
 ];
-#[allow(dead_code)]
 pub(super) const GAMUT_B: [(f64, f64); 3] = [
     (0.675, 0.322),
     (0.4091, 0.518),
     (0.167, 0.040),
 ];
-#[allow(dead_code)]
 pub(super) const GAMUT_C: [(f64, f64); 3] = [
     (0.692, 0.308),
     (0.170, 0.700),
     (0.153, 0.048),
 ];
 
-#[allow(dead_code)] // sender hot-path wiring lands in the W1-C2 follow-up
 fn gamut_vertices(gamut: HueGamutType) -> Option<[(f64, f64); 3]> {
     match gamut {
         HueGamutType::A => Some(GAMUT_A),
@@ -366,7 +447,6 @@ fn distance_squared(p: (f64, f64), q: (f64, f64)) -> f64 {
 /// `HueGamutType::Other` (unknown / fallback) returns the input
 /// unchanged so that bulbs we cannot identify do not get colours
 /// silently distorted.
-#[allow(dead_code)] // sender hot-path wiring lands in the W1-C2 follow-up
 pub fn clip_xy_to_gamut(xy: (f64, f64), gamut: HueGamutType) -> (f64, f64) {
     let Some(vertices) = gamut_vertices(gamut) else {
         return xy;
@@ -551,7 +631,7 @@ mod tests {
         ];
         let colors = vec![(255, 0, 0), (0, 255, 0)];
         let area_id = "1a8d99cc-967b-44f2-9202-43f976c0fa6b";
-        let frame = build_huestream_frame(area_id, &channels, &colors, 1.0);
+        let frame = build_huestream_frame(area_id, &channels, &colors, 1.0, &HashMap::new());
 
         // Header: 9 magic + 1 major + 1 minor + 1 seq + 2 reserved + 1 color_space + 1 reserved = 16
         assert_eq!(&frame[0..9], b"HueStream");
@@ -597,6 +677,7 @@ mod tests {
             &channels,
             &colors,
             0.5,
+            &HashMap::new(),
         );
 
         // Channel starts at byte 52 (16 header + 36 UUID). At 50% brightness, 255 -> ~32767.
@@ -792,5 +873,136 @@ mod tests {
         // Far before `a` — must clamp to `a`.
         let r = closest_point_on_segment((-5.0, 0.0), a, b);
         assert!(r.0.abs() < 1e-9 && r.1.abs() < 1e-9);
+    }
+
+    // -----------------------------------------------------------------------
+    // Hot-path per-bulb gamut clip (v1.5 W1-C3b)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_huestream_frame_clips_per_light_to_gamut_b() {
+        // A single channel with one light id; metadata cache marks it as
+        // gamut B. We send saturated cyan (0, 255, 255) — its CIE xy
+        // (≈ 0.151, 0.343) sits outside gamut B's green-blue edge
+        // (gamut B vertices: R(0.675,0.322), G(0.4091,0.518),
+        // B(0.167,0.040)). The frame builder must project that
+        // chromaticity onto gamut B and the resulting RGB triplet must
+        // therefore differ from the pristine path that bypasses the
+        // clip.
+        let channels = vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["light-cyan".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }];
+        let colors = vec![(0u8, 255u8, 255u8)];
+        let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+        // Reference path: empty metadata cache → no clip, pristine RGB.
+        let frame_unclipped =
+            build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
+
+        // Gamut B path: metadata cache pins the bulb to gamut B → clip
+        // engaged.
+        let mut meta = HashMap::new();
+        meta.insert(
+            "light-cyan".to_string(),
+            HueLightMetadata {
+                light_id: "light-cyan".to_string(),
+                archetype: Some("hue_v1".to_string()),
+                gamut_type: HueGamutType::B,
+            },
+        );
+        let frame_clipped = build_huestream_frame(area, &channels, &colors, 1.0, &meta);
+
+        // Channel data starts at byte 52 (16 header + 36 UUID). Each
+        // channel entry is 7 bytes: id + RR + GG + BB.
+        let entry_offset = 52;
+        let unclipped_r = u16::from_be_bytes([
+            frame_unclipped[entry_offset + 1],
+            frame_unclipped[entry_offset + 2],
+        ]);
+        let unclipped_g = u16::from_be_bytes([
+            frame_unclipped[entry_offset + 3],
+            frame_unclipped[entry_offset + 4],
+        ]);
+        let unclipped_b = u16::from_be_bytes([
+            frame_unclipped[entry_offset + 5],
+            frame_unclipped[entry_offset + 6],
+        ]);
+        let clipped_r = u16::from_be_bytes([
+            frame_clipped[entry_offset + 1],
+            frame_clipped[entry_offset + 2],
+        ]);
+        let clipped_g = u16::from_be_bytes([
+            frame_clipped[entry_offset + 3],
+            frame_clipped[entry_offset + 4],
+        ]);
+        let clipped_b = u16::from_be_bytes([
+            frame_clipped[entry_offset + 5],
+            frame_clipped[entry_offset + 6],
+        ]);
+
+        // Pristine cyan: zero red, max green, max blue.
+        assert_eq!(unclipped_r, 0x0000, "unclipped red must be zero");
+        assert_eq!(unclipped_g, 0xFFFF, "unclipped green must be max");
+        assert_eq!(unclipped_b, 0xFFFF, "unclipped blue must be max");
+
+        // Clipped frame must differ from the pristine path. Specifically
+        // gamut B's edge is reached by *adding* red (the only direction
+        // back into the triangle from cyan's chromaticity); the clip
+        // must therefore raise red above zero.
+        assert!(
+            clipped_r > 0,
+            "clip onto gamut B edge must introduce some red (got {clipped_r})"
+        );
+        assert_ne!(
+            (clipped_r, clipped_g, clipped_b),
+            (unclipped_r, unclipped_g, unclipped_b),
+            "clipped frame must differ from pristine pass-through"
+        );
+    }
+
+    #[test]
+    fn build_huestream_frame_skips_clip_for_other_gamut() {
+        // A bulb with gamut_type = Other must be passed through verbatim
+        // — graceful degradation for bridges that don't expose the gamut
+        // field or unknown future archetypes.
+        let channels = vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["light-other".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }];
+        let colors = vec![(0u8, 0u8, 255u8)];
+        let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+        let mut meta = HashMap::new();
+        meta.insert(
+            "light-other".to_string(),
+            HueLightMetadata {
+                light_id: "light-other".to_string(),
+                archetype: None,
+                gamut_type: HueGamutType::Other,
+            },
+        );
+        let frame_other = build_huestream_frame(area, &channels, &colors, 1.0, &meta);
+        let frame_empty =
+            build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
+        // Identical: Other gamut → pass-through, same as cache miss.
+        assert_eq!(frame_other, frame_empty);
+    }
+
+    #[test]
+    fn xy_to_rgb_round_trip_on_gamut_c_red_corner_recovers_red_dominant_triplet() {
+        // Gamut C red corner (0.692, 0.308) must round-trip to a clearly
+        // red-dominant sRGB triplet — sanity check that the inverse
+        // matrix matches the forward `rgb_to_xy` and the gamma encode
+        // does not drown the chromaticity in green/blue.
+        let (r, g, b) = xy_to_rgb(0.692, 0.308);
+        assert!(r > g && r > b, "expected red-dominant, got ({r}, {g}, {b})");
+        assert!(r >= 200, "expected near-saturated red, got r={r}");
     }
 }
