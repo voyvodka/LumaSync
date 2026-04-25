@@ -26,12 +26,14 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
   HueChannelPlacement,
+  HueZone,
   RoomDimensions,
   ZoneDefinition,
 } from "../../../shared/contracts/roomMap";
 import type { LedSegmentCounts } from "../../calibration/model/contracts";
 import React from "react";
 import { shellStore } from "../../persistence/shellStore";
+import { HUE_ZONE_COMMANDS } from "../../../shared/contracts/hue";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
@@ -171,7 +173,22 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
 
   // Zone management state
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+  const [activeHueZoneId, setActiveHueZoneId] = useState<string | null>(null);
+  /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
+  const [hueAreaId, setHueAreaId] = useState<string | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
+
+  // Load the persisted last-selected entertainment area id once. We do not
+  // mount useHueOnboarding here to keep the editor decoupled from the
+  // onboarding state machine; the area id alone is enough to author zones.
+  useEffect(() => {
+    let cancelled = false;
+    void shellStore.load().then((state) => {
+      if (cancelled) return;
+      setHueAreaId(state.lastHueAreaId ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Snap guides
   const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
@@ -577,6 +594,85 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
     },
     [config.zones, updateConfig],
   );
+
+  // ---------------------------------------------------------------------------
+  // Hue Zone CRUD handlers (v1.5 W1-A5)
+  // ---------------------------------------------------------------------------
+  // Each handler optimistically mutates config.hueZones then fires the
+  // matching Tauri command. The local config is the persistence source of
+  // truth; the Tauri side mirrors the change for the runtime sampler. If
+  // the invoke fails we surface the error via console (silent-catch ban)
+  // but keep the local edit so the UI does not flicker — the next save
+  // round will reconcile.
+
+  const hueZones = config.hueZones ?? [];
+
+  const handleAddHueZone = useCallback(() => {
+    if (!hueAreaId) return;
+    const id = `hue-zone-${crypto.randomUUID()}`;
+    const name = t("roomMap.hueZones.defaultName", { N: String(hueZones.length + 1) });
+    const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
+    const colorVar = `var(${palette[hueZones.length % palette.length]})`;
+    const newZone: HueZone = {
+      id,
+      name,
+      entertainmentAreaId: hueAreaId,
+      centerX: 0,
+      centerY: 0,
+      centerZ: 0,
+      scaleX: 0.5,
+      scaleY: 0.5,
+      scaleZ: 0.5,
+      channelIndices: [],
+      borderColor: colorVar,
+      centerColor: colorVar,
+    };
+    void updateConfig({ hueZones: [...hueZones, newZone] });
+    setActiveHueZoneId(id);
+    setObjectPanelOpen(true);
+
+    // Mirror to backend; never throw — silent-catch ban → log only.
+    void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, { zone: newZone }).catch((e) => {
+      console.error("[LumaSync] create_hue_zone failed", e);
+    });
+  }, [hueAreaId, hueZones, updateConfig, t]);
+
+  const handleDeleteHueZone = useCallback(
+    (zoneId: string) => {
+      const nextZones = hueZones.filter((z) => z.id !== zoneId);
+      // Detach channels that pointed at this zone — they fall back to legacy absolute placement.
+      const nextChannels = config.hueChannels.map((ch) =>
+        ch.zoneId === zoneId
+          ? { ...ch, zoneId: undefined, zoneRelativePosition: undefined }
+          : ch,
+      );
+      void updateConfig({ hueZones: nextZones, hueChannels: nextChannels });
+      if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
+
+      void invoke(HUE_ZONE_COMMANDS.DELETE_ZONE, { zoneId }).catch((e) => {
+        console.error("[LumaSync] delete_hue_zone failed", e);
+      });
+    },
+    [hueZones, config.hueChannels, activeHueZoneId, updateConfig],
+  );
+
+  const handleRenameHueZone = useCallback(
+    (zoneId: string, name: string) => {
+      const next = hueZones.map((z) => (z.id === zoneId ? { ...z, name } : z));
+      void updateConfig({ hueZones: next });
+      const renamed = next.find((z) => z.id === zoneId);
+      if (renamed) {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, { zone: renamed }).catch((e) => {
+          console.error("[LumaSync] update_hue_zone (rename) failed", e);
+        });
+      }
+    },
+    [hueZones, updateConfig],
+  );
+
+  const handleSelectHueZone = useCallback((zoneId: string | null) => {
+    setActiveHueZoneId(zoneId);
+  }, []);
 
   // Property bar handlers
   const handleUpdatePosition = useCallback(
@@ -1013,6 +1109,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
             onAddZone={handleAddZone}
             onDeleteZone={handleDeleteZone}
             onRenameZone={handleRenameZone}
+            hueZones={hueZones}
+            activeHueZoneId={activeHueZoneId}
+            onSelectHueZone={handleSelectHueZone}
+            onAddHueZone={handleAddHueZone}
+            onDeleteHueZone={handleDeleteHueZone}
+            onRenameHueZone={handleRenameHueZone}
+            addHueZoneDisabled={!hueAreaId}
+            addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
           />
         )}
       </div>

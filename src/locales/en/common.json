@@ -234,6 +234,8 @@
       "outputs": "Outputs",
       "addAria": "Add output",
       "addTooltip": "Coming soon — multi Hue zone",
+      "addHueZoneTooltip": "Add a new Hue zone",
+      "addDisabledTooltip": "Pair a Hue bridge to add zones",
       "hintTitle": "Room space",
       "hintBody": "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
       "rows": {
@@ -878,9 +880,23 @@
       "lightCount": "{{N}} lights",
       "lightCountOne": "1 light"
     },
+    "hueZones": {
+      "title": "Hue Zones",
+      "addAction": "+ Zone",
+      "empty": "No Hue zones yet.",
+      "emptyCta": "Add your first Hue zone",
+      "defaultName": "Hue Zone {{N}}",
+      "deleteAriaLabel": "Delete zone {{name}}",
+      "lightCount": "{{N}} lights",
+      "lightCountOne": "1 light",
+      "groupEmpty": "No channels assigned yet",
+      "unassignedTitle": "Unassigned",
+      "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones."
+    },
     "objectPanel": {
       "objectsTab": "Objects",
       "zonesTab": "Zones",
+      "hueZonesTab": "Hue Zones",
       "empty": "No objects placed yet.",
       "tvLabel": "TV",
       "ledLabel": "LED {{count}}",

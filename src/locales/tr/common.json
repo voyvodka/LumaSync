@@ -226,6 +226,8 @@
       "outputs": "Çıkışlar",
       "addAria": "Çıkış ekle",
       "addTooltip": "Yakında — çoklu Hue alanı",
+      "addHueZoneTooltip": "Yeni bir Hue bölgesi ekle",
+      "addDisabledTooltip": "Bölge eklemek için bir Hue köprüsü eşleyin",
       "hintTitle": "Oda alanı",
       "hintBody": "Telemetri / mini oda\nönizlemesi / kısayollar\niçin yer tutucu",
       "rows": {
@@ -878,9 +880,23 @@
       "lightCount": "{{N}} ışık",
       "lightCountOne": "1 ışık"
     },
+    "hueZones": {
+      "title": "Hue Bölgeleri",
+      "addAction": "+ Bölge",
+      "empty": "Henüz Hue bölgesi yok.",
+      "emptyCta": "İlk Hue bölgenizi ekleyin",
+      "defaultName": "Hue Bölgesi {{N}}",
+      "deleteAriaLabel": "{{name}} bölgesini sil",
+      "lightCount": "{{N}} ışık",
+      "lightCountOne": "1 ışık",
+      "groupEmpty": "Henüz kanal atanmadı",
+      "unassignedTitle": "Atanmamış",
+      "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin."
+    },
     "objectPanel": {
       "objectsTab": "Nesneler",
       "zonesTab": "Zone'lar",
+      "hueZonesTab": "Hue Bölgeleri",
       "empty": "Henüz nesne eklenmedi.",
       "tvLabel": "TV",
       "ledLabel": "LED {{count}}",

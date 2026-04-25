@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 
 import {
   MODE_GUARD_REASONS,
@@ -19,7 +20,9 @@ import {
   findMatchingScenePreset,
   type ScenePreset,
 } from "../../mode/model/scenePresets";
-import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
+import { HUE_ZONE_COMMANDS, type HueIntensityPreset, type HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { HueZone, RoomMapConfig } from "../../../shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
 import type { DisplayInfo } from "../../../shared/contracts/display";
 import {
   FIRMWARE_PROFILE,
@@ -229,6 +232,66 @@ export function LightsSection({
       cancelled = true;
     };
   }, []);
+
+  // ── Hue zone authoring (v1.5 W1-A5) ──────────────────────────────
+  // Track the persisted entertainment area so the dock "+" CTA is only
+  // enabled when the user has finished Hue onboarding. We do not mount
+  // the full useHueOnboarding state machine here; the area id alone is
+  // enough to author a logical zone.
+  const [lastHueAreaId, setLastHueAreaId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void shellStore.load().then((state) => {
+      if (cancelled) return;
+      setLastHueAreaId(state.lastHueAreaId ?? null);
+    }).catch((error) => {
+      console.error("[LumaSync] LightsSection hueAreaId hydrate failed:", error);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const canAddHueZone = hueConfigured && hueReachable && lastHueAreaId !== null;
+
+  const handleAddHueZone = useCallback(async () => {
+    if (!canAddHueZone || !lastHueAreaId) return;
+    try {
+      const state = await shellStore.load();
+      const currentMap: RoomMapConfig = state.roomMap ?? DEFAULT_ROOM_MAP;
+      const existing = currentMap.hueZones ?? [];
+      const id = `hue-zone-${crypto.randomUUID()}`;
+      const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
+      const colorVar = `var(${palette[existing.length % palette.length]})`;
+      const newZone: HueZone = {
+        id,
+        name: t("roomMap.hueZones.defaultName", { N: String(existing.length + 1) }),
+        entertainmentAreaId: lastHueAreaId,
+        centerX: 0,
+        centerY: 0,
+        centerZ: 0,
+        scaleX: 0.5,
+        scaleY: 0.5,
+        scaleZ: 0.5,
+        channelIndices: [],
+        borderColor: colorVar,
+        centerColor: colorVar,
+      };
+      const nextMap: RoomMapConfig = {
+        ...currentMap,
+        hueZones: [...existing, newZone],
+      };
+      await shellStore.save({
+        roomMap: nextMap,
+        roomMapVersion: (state.roomMapVersion ?? 0) + 1,
+      });
+      try {
+        await invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, { zone: newZone });
+      } catch (invokeErr) {
+        console.error("[LumaSync] create_hue_zone failed", invokeErr);
+      }
+    } catch (error) {
+      console.error("[LumaSync] handleAddHueZone failed:", error);
+    }
+  }, [canAddHueZone, lastHueAreaId, t]);
 
   const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
 
@@ -654,10 +717,15 @@ export function LightsSection({
             <button
               type="button"
               className="add"
-              disabled
-              aria-disabled="true"
+              disabled={!canAddHueZone}
+              aria-disabled={!canAddHueZone}
               aria-label={t("lightsPage.dock.addAria")}
-              title={t("lightsPage.dock.addTooltip")}
+              title={
+                canAddHueZone
+                  ? t("lightsPage.dock.addHueZoneTooltip")
+                  : t("lightsPage.dock.addDisabledTooltip")
+              }
+              onClick={canAddHueZone ? () => { void handleAddHueZone(); } : undefined}
             >
               +
             </button>
