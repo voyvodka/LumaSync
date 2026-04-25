@@ -393,15 +393,18 @@ export function HueChannelMapPanel({
   // Z-axis change handler (D-02a, D-02b)
   // -------------------------------------------------------------------------
 
+  // Latest channelPlacements snapshot for handlers that fire after a drag
+  // ends — drag handlers update state via functional updaters, so this ref
+  // captures the post-update value without forcing handler rebinds.
+  const channelPlacementsRef = useRef(channelPlacements);
+  channelPlacementsRef.current = channelPlacements;
+
   const handleZChange = useCallback((z: number) => {
-    setChannelPlacements((prev) => {
-      const next = prev.map((p) =>
-        selectedChannels.has(p.channelIndex) ? { ...p, z } : p
-      );
-      // Persist immediately for z changes
-      onPositionChange?.(next);
-      return next;
-    });
+    const next = channelPlacementsRef.current.map((p) =>
+      selectedChannels.has(p.channelIndex) ? { ...p, z } : p
+    );
+    setChannelPlacements(next);
+    onPositionChange?.(next);
   }, [selectedChannels, onPositionChange]);
 
   // -------------------------------------------------------------------------
@@ -486,11 +489,9 @@ export function HueChannelMapPanel({
       groupStartPositions: new Map(),
     };
     setDragPosition(null);
-    // Functional update pattern — avoids stale closure over channelPlacements
-    setChannelPlacements((current) => {
-      onPositionChange?.(current);
-      return current;
-    });
+    // Read latest placements via ref so React 19 strict updaters stay pure
+    // (no prop callbacks fired from inside setState updaters).
+    onPositionChange?.(channelPlacementsRef.current);
   }, [onPositionChange]);
 
   // -------------------------------------------------------------------------
@@ -514,15 +515,13 @@ export function HueChannelMapPanel({
       const selectedPlacements = channelPlacements.filter((p) => selectedChannels.has(p.channelIndex));
       const { dx, dy } = clampGroupDelta(selectedPlacements, selectedChannels, rawDx, rawDy);
 
-      setChannelPlacements((prev) => {
-        const next = prev.map((p) =>
-          selectedChannels.has(p.channelIndex)
-            ? { ...p, x: Math.max(-1, Math.min(1, p.x + dx)), y: Math.max(-1, Math.min(1, p.y + dy)) }
-            : p
-        );
-        onPositionChange?.(next);
-        return next;
-      });
+      const next = channelPlacementsRef.current.map((p) =>
+        selectedChannels.has(p.channelIndex)
+          ? { ...p, x: Math.max(-1, Math.min(1, p.x + dx)), y: Math.max(-1, Math.min(1, p.y + dy)) }
+          : p
+      );
+      setChannelPlacements(next);
+      onPositionChange?.(next);
     },
     [mode, selectedChannels, channelPlacements, onPositionChange],
   );
