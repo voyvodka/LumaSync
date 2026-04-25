@@ -254,6 +254,146 @@ pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
 }
 
 // ---------------------------------------------------------------------------
+// Per-bulb gamut triangle clipping (v1.5 W1-C2 — Hyperion-lead quality gap G1)
+// ---------------------------------------------------------------------------
+//
+// Hue bulbs only emit colours inside their gamut triangle in CIE xy. A
+// computed `(x, y)` outside that triangle is silently clipped by the
+// bridge to the **nearest vertex**, producing a visible hue shift on
+// saturated colours. The proper fix is to project to the **closest
+// point on the triangle's edges** before sending — this is the
+// algorithm Philips publishes for gamut handling and is what Hyperion
+// implements today.
+//
+// Three canonical Hue gamuts (A/B/C) plus an `Other` fallback that
+// passes the input through unchanged. Vertices in CIE xy:
+//
+// - **Gamut A** (early bulbs): R(0.704, 0.296), G(0.2151, 0.7106),
+//   B(0.138, 0.080)
+// - **Gamut B** (Hue v1, 2012-2016): R(0.675, 0.322), G(0.4091, 0.518),
+//   B(0.167, 0.040)
+// - **Gamut C** (modern Color/Ambiance): R(0.692, 0.308), G(0.170, 0.700),
+//   B(0.153, 0.048)
+//
+// `HueGamutType` is re-exported from `super::sender` so the frame
+// builder, the metadata cache, and the sender hot path all share a
+// single enum.
+
+pub use super::sender::HueGamutType;
+
+/// CIE xy gamut triangle as `[red, green, blue]` vertices.
+#[allow(dead_code)] // sender hot-path wiring lands in the W1-C2 follow-up
+pub(super) const GAMUT_A: [(f64, f64); 3] = [
+    (0.704, 0.296),
+    (0.2151, 0.7106),
+    (0.138, 0.080),
+];
+#[allow(dead_code)]
+pub(super) const GAMUT_B: [(f64, f64); 3] = [
+    (0.675, 0.322),
+    (0.4091, 0.518),
+    (0.167, 0.040),
+];
+#[allow(dead_code)]
+pub(super) const GAMUT_C: [(f64, f64); 3] = [
+    (0.692, 0.308),
+    (0.170, 0.700),
+    (0.153, 0.048),
+];
+
+#[allow(dead_code)] // sender hot-path wiring lands in the W1-C2 follow-up
+fn gamut_vertices(gamut: HueGamutType) -> Option<[(f64, f64); 3]> {
+    match gamut {
+        HueGamutType::A => Some(GAMUT_A),
+        HueGamutType::B => Some(GAMUT_B),
+        HueGamutType::C => Some(GAMUT_C),
+        HueGamutType::Other => None,
+    }
+}
+
+/// Cross-product sign for the 2D point `p` against the directed edge
+/// `a → b`. Strictly positive ⇒ left of edge, strictly negative ⇒
+/// right of edge, exact zero ⇒ on the line.
+fn cross_sign(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    (b.0 - a.0) * (p.1 - a.1) - (b.1 - a.1) * (p.0 - a.0)
+}
+
+/// Test whether `p` lies inside (or on) the triangle `abc`.
+fn point_in_triangle(p: (f64, f64), a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> bool {
+    // Use a small epsilon so points on the triangle's edges (within
+    // floating-point rounding) are treated as inside. Without this the
+    // post-projection clamp can produce a point that fails the
+    // strictly-greater check on its own boundary.
+    const EPS: f64 = 1e-9;
+    let d1 = cross_sign(p, a, b);
+    let d2 = cross_sign(p, b, c);
+    let d3 = cross_sign(p, c, a);
+    let has_neg = d1 < -EPS || d2 < -EPS || d3 < -EPS;
+    let has_pos = d1 > EPS || d2 > EPS || d3 > EPS;
+    !(has_neg && has_pos)
+}
+
+/// Project the point `p` onto the line segment `a → b` and return the
+/// closest point that still lies on the segment.
+fn closest_point_on_segment(
+    p: (f64, f64),
+    a: (f64, f64),
+    b: (f64, f64),
+) -> (f64, f64) {
+    let ab = (b.0 - a.0, b.1 - a.1);
+    let ap = (p.0 - a.0, p.1 - a.1);
+    let denom = ab.0 * ab.0 + ab.1 * ab.1;
+    if denom <= f64::EPSILON {
+        return a;
+    }
+    let t = ((ap.0 * ab.0 + ap.1 * ab.1) / denom).clamp(0.0, 1.0);
+    (a.0 + t * ab.0, a.1 + t * ab.1)
+}
+
+fn distance_squared(p: (f64, f64), q: (f64, f64)) -> f64 {
+    let dx = p.0 - q.0;
+    let dy = p.1 - q.1;
+    dx * dx + dy * dy
+}
+
+/// Clip a CIE xy chromaticity into the gamut triangle of the supplied
+/// bulb gamut. If the point is already inside (or on an edge of) the
+/// triangle it is returned unchanged. Otherwise the closest point on
+/// any of the three edges is selected — this is the projection rule
+/// Hue's official documentation prescribes and the same one Hyperion
+/// uses today.
+///
+/// `HueGamutType::Other` (unknown / fallback) returns the input
+/// unchanged so that bulbs we cannot identify do not get colours
+/// silently distorted.
+#[allow(dead_code)] // sender hot-path wiring lands in the W1-C2 follow-up
+pub fn clip_xy_to_gamut(xy: (f64, f64), gamut: HueGamutType) -> (f64, f64) {
+    let Some(vertices) = gamut_vertices(gamut) else {
+        return xy;
+    };
+    let [r, g, b] = vertices;
+    if point_in_triangle(xy, r, g, b) {
+        return xy;
+    }
+    // Project onto each edge and pick whichever projection is closest.
+    let candidates = [
+        closest_point_on_segment(xy, r, g),
+        closest_point_on_segment(xy, g, b),
+        closest_point_on_segment(xy, b, r),
+    ];
+    let mut best = candidates[0];
+    let mut best_dist = distance_squared(xy, best);
+    for cand in &candidates[1..] {
+        let d = distance_squared(xy, *cand);
+        if d < best_dist {
+            best = *cand;
+            best_dist = d;
+        }
+    }
+    best
+}
+
+// ---------------------------------------------------------------------------
 // Channel position → screen region mapping + UI projection helpers
 // ---------------------------------------------------------------------------
 
@@ -554,5 +694,103 @@ mod tests {
         // Channel 1 moved to (-0.5, 0.0) → screen_region "left"
         assert!((channels[1].position_x + 0.5).abs() < 1e-6);
         assert_eq!(channels[1].screen_region, HueScreenRegion::Left);
+    }
+
+    // -----------------------------------------------------------------------
+    // Per-bulb gamut triangle clipping (v1.5 W1-C2)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn clip_xy_to_gamut_passes_through_when_point_is_inside_triangle() {
+        // For each gamut take the centroid of its triangle — guaranteed
+        // interior — and verify clip is a no-op. (D65 sits outside Hue
+        // gamut B, so a per-gamut interior probe is the correct target.)
+        for (gamut, vertices) in [
+            (HueGamutType::A, GAMUT_A),
+            (HueGamutType::B, GAMUT_B),
+            (HueGamutType::C, GAMUT_C),
+        ] {
+            let inside = (
+                (vertices[0].0 + vertices[1].0 + vertices[2].0) / 3.0,
+                (vertices[0].1 + vertices[1].1 + vertices[2].1) / 3.0,
+            );
+            assert!(
+                point_in_triangle(inside, vertices[0], vertices[1], vertices[2]),
+                "centroid must be inside its own triangle"
+            );
+            let clipped = clip_xy_to_gamut(inside, gamut);
+            assert!(
+                (clipped.0 - inside.0).abs() < 1e-9,
+                "gamut {:?}: expected x pass-through, got {:?}",
+                gamut,
+                clipped
+            );
+            assert!(
+                (clipped.1 - inside.1).abs() < 1e-9,
+                "gamut {:?}: expected y pass-through, got {:?}",
+                gamut,
+                clipped
+            );
+        }
+    }
+
+    #[test]
+    fn clip_xy_to_gamut_other_is_identity() {
+        let xy = (0.0, 0.0); // far outside any triangle
+        let out = clip_xy_to_gamut(xy, HueGamutType::Other);
+        assert_eq!(out, xy);
+    }
+
+    #[test]
+    fn clip_xy_to_gamut_projects_out_of_triangle_blue_onto_gamut_b_edge() {
+        // CIE xy ≈ (0.10, 0.02) — outside gamut B (whose blue corner is
+        // 0.167, 0.040). Expect the result to land near gamut B's blue
+        // corner / blue-red edge, not at the center.
+        let xy = (0.10, 0.02);
+        let clipped = clip_xy_to_gamut(xy, HueGamutType::B);
+        assert_ne!(clipped, xy, "out-of-gamut point must be projected");
+        let dist_to_blue = distance_squared(clipped, GAMUT_B[2]).sqrt();
+        assert!(
+            dist_to_blue < 0.10,
+            "clipped point {:?} should be close to gamut B blue corner {:?}; dist={dist_to_blue}",
+            clipped,
+            GAMUT_B[2]
+        );
+        // And the clipped point must lie inside the gamut B triangle.
+        assert!(
+            point_in_triangle(clipped, GAMUT_B[0], GAMUT_B[1], GAMUT_B[2]),
+            "clipped {:?} should be inside gamut B",
+            clipped
+        );
+    }
+
+    #[test]
+    fn clip_xy_to_gamut_returns_distinct_results_for_a_b_c_on_extreme_point() {
+        // A point well outside every gamut should land on a different
+        // edge for each gamut (their triangles differ).
+        let xy = (1.0, 1.0);
+        let on_a = clip_xy_to_gamut(xy, HueGamutType::A);
+        let on_b = clip_xy_to_gamut(xy, HueGamutType::B);
+        let on_c = clip_xy_to_gamut(xy, HueGamutType::C);
+        assert!(
+            on_a != on_b || on_b != on_c,
+            "expected at least one differing projection across A/B/C, got A={on_a:?} B={on_b:?} C={on_c:?}"
+        );
+        assert!(point_in_triangle(on_a, GAMUT_A[0], GAMUT_A[1], GAMUT_A[2]));
+        assert!(point_in_triangle(on_b, GAMUT_B[0], GAMUT_B[1], GAMUT_B[2]));
+        assert!(point_in_triangle(on_c, GAMUT_C[0], GAMUT_C[1], GAMUT_C[2]));
+    }
+
+    #[test]
+    fn closest_point_on_segment_clamps_outside_projections_to_endpoints() {
+        let a = (0.0, 0.0);
+        let b = (1.0, 0.0);
+        // Far past `b` along the segment direction — must clamp to `b`.
+        let p = (5.0, 0.0);
+        let q = closest_point_on_segment(p, a, b);
+        assert!((q.0 - 1.0).abs() < 1e-9 && q.1.abs() < 1e-9);
+        // Far before `a` — must clamp to `a`.
+        let r = closest_point_on_segment((-5.0, 0.0), a, b);
+        assert!(r.0.abs() < 1e-9 && r.1.abs() < 1e-9);
     }
 }
