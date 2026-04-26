@@ -57,6 +57,12 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 }) {
   const displayRef = useRef<HTMLDivElement>(null);
 
+  // Store latest props in refs to avoid thrashing event listeners
+  const stateRef = useRef({ panOffset, pxPerMeter, zoom, widthMeters, depthMeters });
+  useEffect(() => {
+    stateRef.current = { panOffset, pxPerMeter, zoom, widthMeters, depthMeters };
+  }, [panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
@@ -66,6 +72,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 
     const updateCoord = () => {
       if (!latestEvent || !displayRef.current) return;
+      const { panOffset, pxPerMeter, zoom, widthMeters, depthMeters } = stateRef.current;
       const rect = el.getBoundingClientRect();
       const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
       const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
@@ -101,7 +108,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [canvasContainerRef, panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+  }, [canvasContainerRef]); // Only re-bind if the container ref itself changes
 
   return (
     <div
