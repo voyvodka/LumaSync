@@ -84,7 +84,10 @@ pub fn update_hue_channel_positions(
     }
 
     // SECURITY: Validate area ID to prevent path traversal in the REST endpoint
-    if !area_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+    if !area_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return CommandStatus {
             code: "HUE_AREA_INVALID".to_string(),
             message: "Invalid area ID format.".to_string(),
