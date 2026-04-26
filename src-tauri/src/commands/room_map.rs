@@ -1,3 +1,6 @@
+use std::net::Ipv4Addr;
+use std::str::FromStr;
+
 use reqwest::blocking::Client as BlockingClient;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -71,6 +74,24 @@ pub fn update_hue_channel_positions(
     username: String,
     area_id: String,
 ) -> CommandStatus {
+    // SECURITY: Validate bridge IP to prevent SSRF
+    if Ipv4Addr::from_str(&bridge_ip).is_err() {
+        return CommandStatus {
+            code: "HUE_IP_INVALID".to_string(),
+            message: "Invalid bridge IP address format.".to_string(),
+            details: None,
+        };
+    }
+
+    // SECURITY: Validate area ID to prevent path traversal in the REST endpoint
+    if !area_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return CommandStatus {
+            code: "HUE_AREA_INVALID".to_string(),
+            message: "Invalid area ID format.".to_string(),
+            details: None,
+        };
+    }
+
     // Build TLS-skip HTTP client (Hue bridges use self-signed certificates)
     let client = match BlockingClient::builder()
         .danger_accept_invalid_certs(true)
