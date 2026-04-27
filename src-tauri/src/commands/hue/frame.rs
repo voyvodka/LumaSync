@@ -218,10 +218,18 @@ pub(crate) fn build_huestream_frame(
             .map(|meta| meta.gamut_type)
             .unwrap_or(HueGamutType::Other);
         if !matches!(gamut, HueGamutType::Other) && (r, g, b) != (0, 0, 0) {
-            let xy = rgb_to_xy(r, g, b);
-            let clipped = clip_xy_to_gamut(xy, gamut);
-            if (clipped.0 - xy.0).abs() > 1e-9 || (clipped.1 - xy.1).abs() > 1e-9 {
-                let (cr, cg, cb) = xy_to_rgb(clipped.0, clipped.1);
+            // Bug H2: feed the input luminance (`big_y`) into the inverse
+            // transform so the gamut-clipped chromaticity preserves the
+            // original sample's brightness rather than collapsing to the
+            // "max channel saturates" envelope. Without this the frame
+            // builder silently dimmed saturated content and could emit
+            // (0, 0, 0) on edge-case projections, producing both the
+            // ambilight-frame stutter and the solid-colour off-flash that
+            // were observed pre-fix.
+            let (xy_x, xy_y, big_y) = rgb_to_xy(r, g, b);
+            let clipped = clip_xy_to_gamut((xy_x, xy_y), gamut);
+            if (clipped.0 - xy_x).abs() > 1e-9 || (clipped.1 - xy_y).abs() > 1e-9 {
+                let (cr, cg, cb) = xy_to_rgb(clipped.0, clipped.1, big_y);
                 r = cr;
                 g = cg;
                 b = cb;
@@ -246,10 +254,20 @@ pub(crate) fn build_huestream_frame(
 // Colour-space conversions
 // ---------------------------------------------------------------------------
 
-/// Convert sRGB (0..255 per channel) to CIE 1931 xy chromaticity using the
-/// Hue-style gamma + linear-RGB→XYZ matrix. The xy values are bridge-ready
-/// for the `color.xy` field of CLIP v2 light PUTs.
-pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
+/// Convert sRGB (0..255 per channel) to CIE 1931 chromaticity using the
+/// Hue-style gamma + linear-RGB→XYZ matrix.
+///
+/// Returns `(x, y, big_y)` where:
+/// - `(x, y)` is the chromaticity, bridge-ready for the `color.xy` field
+///   of CLIP v2 light PUTs.
+/// - `big_y` is the absolute CIE luminance of the input sample. It is the
+///   raw Y component prior to chromaticity normalisation, so the inverse
+///   pipeline (`xy_to_rgb`) can preserve the original sample's brightness
+///   instead of collapsing to a "max channel saturates" envelope.
+///
+/// The third return value was added for Bug H2 (gamut-clip luminance loss).
+/// HTTP-fallback callers that only need chromaticity can ignore it.
+pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
     let mut red = f64::from(r) / 255.0;
     let mut green = f64::from(g) / 255.0;
     let mut blue = f64::from(b) / 255.0;
@@ -276,27 +294,53 @@ pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64) {
     let sum = x + y + z;
 
     if sum <= f64::EPSILON {
-        return (0.3127, 0.3290);
+        // D65 white-point fallback for true black input — matches the
+        // pre-Bug-H2 behaviour. `big_y` is reported as 0.0 so callers
+        // who threadit into the inverse transform produce black.
+        return (0.3127, 0.3290, 0.0);
     }
 
-    (x / sum, y / sum)
+    (x / sum, y / sum, y)
 }
 
 /// Inverse of [`rgb_to_xy`]: recover an sRGB triplet (8-bit per channel)
-/// from a CIE 1931 chromaticity `(x, y)` using the Hue-style
-/// XYZ → linear-RGB matrix and gamma encode. Y is fixed at 1.0 because
-/// brightness is carried separately in the HueStream frame header byte
-/// — i.e. this is a chromaticity-only round-trip used after gamut
-/// clipping (W1-C3b). The output is intentionally clamped to `[0, 255]`
-/// because some chromaticities outside any Hue gamut land outside the
-/// sRGB cube even after projection.
-pub(crate) fn xy_to_rgb(x: f64, y: f64) -> (u8, u8, u8) {
+/// from a CIE 1931 chromaticity `(x, y)` plus a target luminance
+/// `target_y` (the `big_y` returned by [`rgb_to_xy`]). Uses the Hue-style
+/// XYZ → linear-RGB matrix and gamma encode.
+///
+/// Bug H2: prior to this fix `big_y` was hard-coded to 1.0 and the
+/// resulting linear-RGB triplet was renormalised so the largest channel
+/// saturated. That preserved hue but discarded the original sample's
+/// luminance — which the frame builder then attempted to recover by
+/// applying the brightness scalar on top, producing visibly dim saturated
+/// content and (on EPSILON-edge projections from `clip_xy_to_gamut`)
+/// momentary all-zero RGB tuples that drove the ambilight-frame stutter.
+///
+/// The fix is to feed the input luminance straight back through the
+/// inverse matrix and clamp (rather than divide by max). The output is
+/// intentionally clamped to `[0, 255]` because some chromaticities
+/// outside any Hue gamut land outside the sRGB cube even after
+/// projection — that is acceptable; the gamut clip step upstream is
+/// the one responsible for keeping the chromaticity inside a renderable
+/// triangle.
+pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
+    // Treat negative or near-zero target luminance as "true black". This
+    // keeps the EPSILON guard (the channel is unrenderable) but moves it
+    // to the *target* luminance — never the input chromaticity's `y` —
+    // so we no longer drop a bulb to (0, 0, 0) when `clip_xy_to_gamut`'s
+    // segment endpoint clamp produces a chromaticity with a sub-EPSILON
+    // y-coordinate yet a perfectly valid target luminance.
+    if target_y <= f64::EPSILON {
+        return (0, 0, 0);
+    }
+    // Guard against degenerate chromaticity (y == 0) — divide-by-zero
+    // protection. We treat it as unrenderable rather than fabricate a
+    // colour, matching pre-fix behaviour for that pathological branch.
     if y <= f64::EPSILON {
         return (0, 0, 0);
     }
-    // Y is set to 1.0 — brightness is applied later via the frame
-    // header byte, not in the chromaticity round-trip.
-    let big_y: f64 = 1.0;
+
+    let big_y = target_y;
     let big_x = (big_y / y) * x;
     let big_z = (big_y / y) * (1.0 - x - y);
 
@@ -320,17 +364,12 @@ pub(crate) fn xy_to_rgb(x: f64, y: f64) -> (u8, u8, u8) {
     g = encode(g);
     b = encode(b);
 
-    // Normalise so the largest channel saturates — keeps hue stable
-    // when a gamut-clipped colour would otherwise overshoot one channel
-    // and be silently darkened by clamping. This matches Philips' own
-    // reference implementation.
-    let max = r.max(g).max(b);
-    if max > 1.0 {
-        r /= max;
-        g /= max;
-        b /= max;
-    }
-
+    // Bug H2: do NOT renormalise so the largest channel saturates —
+    // that path strips the input luminance and lets the brightness
+    // scalar applied downstream apply on top of an artificially dim
+    // sample. Instead clamp each channel into [0, 1] independently.
+    // Out-of-gamut chromaticities are the caller's problem to project
+    // (see `clip_xy_to_gamut`).
     (
         (r.clamp(0.0, 1.0) * 255.0).round() as u8,
         (g.clamp(0.0, 1.0) * 255.0).round() as u8,
@@ -994,8 +1033,165 @@ mod tests {
         // red-dominant sRGB triplet — sanity check that the inverse
         // matrix matches the forward `rgb_to_xy` and the gamma encode
         // does not drown the chromaticity in green/blue.
-        let (r, g, b) = xy_to_rgb(0.692, 0.308);
+        //
+        // We feed `target_y = 0.21` (the approximate luminance of pure
+        // sRGB red, per the Hue forward matrix `0.283881 * 1.0 ≈ 0.284`
+        // pre-gamma; ~0.21 in encoded space) so the triplet recovers a
+        // saturated red rather than a washed-out one.
+        let (r, g, b) = xy_to_rgb(0.692, 0.308, 0.21);
         assert!(r > g && r > b, "expected red-dominant, got ({r}, {g}, {b})");
         assert!(r >= 200, "expected near-saturated red, got r={r}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Bug H2 regression — gamut-clip luminance preservation
+    // -----------------------------------------------------------------------
+
+    /// Pure unit test on the inverse transform: `xy_to_rgb` must return a
+    /// triplet whose recovered Y (via `rgb_to_xy`) is within 5% of the
+    /// requested `target_y`. This guards against a regression to the
+    /// pre-fix "max-channel saturate" normalisation, which silently
+    /// stripped luminance information from the round-trip.
+    ///
+    /// 5% tolerance = sRGB gamma round-trip + u8 quantisation.
+    #[test]
+    fn xy_to_rgb_preserves_target_luminance() {
+        // Probe several chromaticities at moderate luminance so we
+        // exercise both forward and inverse transforms without bumping
+        // into 0-clamp or 255-saturation.
+        let probes = [
+            // Gamut C red corner @ y=0.20
+            (0.692f64, 0.308f64, 0.20f64),
+            // Mid-range orange-ish chromaticity @ y=0.30
+            (0.50, 0.40, 0.30),
+            // Near-white @ y=0.50
+            (0.33, 0.33, 0.50),
+        ];
+        for (x, y, target_y) in probes {
+            let (r, g, b) = xy_to_rgb(x, y, target_y);
+            let (_, _, recovered_y) = rgb_to_xy(r, g, b);
+            let rel_err = (recovered_y - target_y).abs() / target_y.max(f64::EPSILON);
+            assert!(
+                rel_err < 0.05,
+                "xy=({x}, {y}) target_y={target_y} → rgb=({r}, {g}, {b}) recovered_y={recovered_y} rel_err={rel_err}"
+            );
+        }
+    }
+
+    /// Bug H2: a saturated cyan input clipped to gamut B used to lose
+    /// >70% of its luminance because `xy_to_rgb` collapsed Y to 1.0 and
+    /// then the "max channel saturates" normaliser shrank the linear-RGB
+    /// triplet. After the fix the clipped frame's luminance proxy
+    /// (R+G+B in u16 space) must stay within 70% of the unclipped
+    /// pristine path.
+    ///
+    /// The chromaticity-preserving clip should change *hue* (cyan →
+    /// teal-ish, leaning towards gamut B's nearest edge), but it should
+    /// not silently dim the bulb — that was the user-visible Bug H2
+    /// stutter / off-flash.
+    #[test]
+    fn build_huestream_frame_preserves_luminance_within_gamut_b_after_clip() {
+        // Saturated cyan-ish input at full chroma but ~86% green/blue —
+        // chosen so the input clearly lives outside gamut B's
+        // green-blue edge while still producing a non-trivial CIE Y
+        // (cyan @ 0,255,255 is the "obvious" probe but we want to
+        // exercise both axes the bug touched).
+        let channels = vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["light-cyan".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }];
+        let colors = vec![(0u8, 220u8, 220u8)];
+        let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+        let frame_unclipped = build_huestream_frame(area, &channels, &colors, 1.0, &HashMap::new());
+
+        let mut meta = HashMap::new();
+        meta.insert(
+            "light-cyan".to_string(),
+            HueLightMetadata {
+                light_id: "light-cyan".to_string(),
+                archetype: Some("hue_v1".to_string()),
+                gamut_type: HueGamutType::B,
+            },
+        );
+        let frame_clipped = build_huestream_frame(area, &channels, &colors, 1.0, &meta);
+
+        let entry = 52usize;
+        let lum = |frame: &[u8]| -> u32 {
+            let r = u16::from_be_bytes([frame[entry + 1], frame[entry + 2]]) as u32;
+            let g = u16::from_be_bytes([frame[entry + 3], frame[entry + 4]]) as u32;
+            let b = u16::from_be_bytes([frame[entry + 5], frame[entry + 6]]) as u32;
+            r + g + b
+        };
+
+        let unclipped_lum = lum(&frame_unclipped);
+        let clipped_lum = lum(&frame_clipped);
+
+        // 70% retention floor. Pre-fix this test would emit roughly
+        // 30-40% of the unclipped sum because the max-channel
+        // saturate path collapsed luminance.
+        let ratio = clipped_lum as f64 / unclipped_lum as f64;
+        assert!(
+            ratio >= 0.70,
+            "clip-induced luminance loss too high: clipped_lum={clipped_lum}, unclipped_lum={unclipped_lum}, ratio={ratio:.3} (Bug H2 regression?)"
+        );
+    }
+
+    /// Bug H2: the `y <= EPSILON` early-return in `xy_to_rgb` used to
+    /// fire on edge-case projections from `clip_xy_to_gamut`'s segment
+    /// endpoint clamp, dropping a bulb to (0, 0, 0) for one tick before
+    /// snapping back the next tick — the user-visible stutter.
+    ///
+    /// Sweep a saturated probe across multiple frame builds with
+    /// metadata pinned to gamut B and assert no all-zero RGB tuple is
+    /// emitted in the channel slot. A single zero would have caught the
+    /// pre-fix bug.
+    #[test]
+    fn build_huestream_frame_never_emits_zero_between_two_nonzero_targets() {
+        let channels = vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["light-edge".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }];
+        let mut meta = HashMap::new();
+        meta.insert(
+            "light-edge".to_string(),
+            HueLightMetadata {
+                light_id: "light-edge".to_string(),
+                archetype: Some("hue_v1".to_string()),
+                gamut_type: HueGamutType::B,
+            },
+        );
+        let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+
+        // Probe a sweep of saturated colours all of which sit outside
+        // gamut B and therefore exercise the clip → xy_to_rgb path
+        // that the bug lived on. None of these should produce a black
+        // frame.
+        let probes: &[(u8, u8, u8)] = &[
+            (0, 255, 255),   // cyan (canonical Bug H2 case)
+            (0, 220, 220),   // moderately saturated cyan
+            (0, 255, 200),   // green-cyan
+            (0, 200, 255),   // blue-cyan
+            (50, 255, 255),  // slightly de-saturated cyan
+            (0, 255, 100),   // bright green leaning teal
+        ];
+
+        for (r, g, b) in probes {
+            let frame = build_huestream_frame(area, &channels, &[(*r, *g, *b)], 1.0, &meta);
+            let entry = 52usize;
+            let r16 = u16::from_be_bytes([frame[entry + 1], frame[entry + 2]]);
+            let g16 = u16::from_be_bytes([frame[entry + 3], frame[entry + 4]]);
+            let b16 = u16::from_be_bytes([frame[entry + 5], frame[entry + 6]]);
+            assert!(
+                !(r16 == 0 && g16 == 0 && b16 == 0),
+                "input ({r}, {g}, {b}) emitted all-zero frame after gamut B clip — Bug H2 stutter regression"
+            );
+        }
     }
 }

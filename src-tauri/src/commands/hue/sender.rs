@@ -164,7 +164,7 @@ fn send_color_to_lights(
         return;
     }
 
-    let (x, y) = super::frame::rgb_to_xy(r, g, b);
+    let (x, y, _big_y) = super::frame::rgb_to_xy(r, g, b);
     let dimming = f64::from(brightness.clamp(0.0, 1.0) * 100.0);
 
     if light_ids.len() == 1 {
