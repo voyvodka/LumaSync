@@ -2,34 +2,39 @@
  * HueZoneInspector — properties surface rendered inside `RoomDockPanel`
  * when a Hue zone is the active selection.
  *
- * v1.5 W4-I — physical 1:1 metric square authoring
+ * v1.5 W4-K — single-row header refactor
  * --------------------------------------------------
- * Successor to the W4-C "room-relative AR-locked" surface. The user
- * feedback (post-W4-G manual test) was that an AR-locked zone in a
- * non-square room renders as a rectangle on the metric canvas — the
- * Hue native cube is symmetric (`±1` per axis), but the canvas paints
- * `scaleX * roomWidthM` wide and `scaleY * roomDepthM` deep, so cube-
- * space squares stretch with the room. The W4-I revision drops the
- * uniform AR lock and authors zones as **physical 1:1 metric squares**:
+ * The W4-I version stacked three field rows below the HSV picker (EDGE
+ * slider, EDGE metre input, "{edge}m × {edge}m" metric reader) plus an
+ * AR hint paragraph and the picker's own hex input + recent strip. On
+ * a 320 px dock that stack overflowed: the EDGE-length value collided
+ * with the metric reader, the hex input collided with the recent
+ * swatches, and the hint wrapped onto the swatches.
  *
- *   - Single user input: edge length in metres (the long-edge metre
- *     control from W4-G, repurposed without "long" framing).
- *   - Maximum edge: `min(roomWidthM, roomDepthM)` — the largest square
- *     that still fits inside the room footprint.
- *   - Per-axis cube-space scale derived from the edge:
- *       scaleX = edge_m / roomWidthM
- *       scaleY = edge_m / roomDepthM
- *     so the zone bounds box paints as a true square in metres.
- *   - The Hue ±1 zone-relative cube is unchanged. Channels keep
- *     positioning relative to the zone center via
- *     `world = center + scale * relative`.
+ * The fix is structural, not cosmetic: drop the redundant metric
+ * reader (the zone is already a square — `{edge}m × {edge}m` adds
+ * zero information beyond the EDGE field), suppress HsvColorPicker's
+ * built-in hex input, and render a single side-by-side `EDGE … HEX`
+ * row. The HSV picker centres in its own block; the recent strip
+ * (still owned by HsvColorPicker) trails it; the AR hint is a single
+ * muted line at the very bottom.
  *
- * Backend (Rust `commands/hue/zone.rs`) validates each axis
- * independently against `[0.05, 1.0]` plus the cube-overflow
- * invariant — the AR lock is gone there too.
+ * Resulting visual stack inside `.lm-room-dock-inspect`:
  *
- * Other dock surfaces (color picker, swatches, channel list) are
- * unchanged from W4-C / W4-G.
+ *   1. Header chip — type + zone name + (optional) channel count
+ *   2. Range slider — single row, full width
+ *   3. EDGE  [n.nn] m   |   HEX  [#XXXXXX]            (single-row pair)
+ *   4. Color preset swatches  ──── single row, 6 buttons 22 px
+ *   5. HSV picker (compact, centred)
+ *   6. RECENT swatches (rendered by HsvColorPicker)
+ *   7. Hint paragraph — single line, muted
+ *
+ * The size authoring contract is unchanged from W4-I: a single edge
+ * length in metres → per-axis cube-space scales `scaleX = edge /
+ * roomWidthM`, `scaleY = edge / roomDepthM`. The `metric reader`
+ * locale keys (`zoneEdgeMetric*`) are dropped — they were the source
+ * of the visual collision and carried no information the EDGE field
+ * did not already surface.
  *
  *  `scaleZ` is reserved for a future depth UI; we keep the persisted
  *  value untouched.
@@ -52,10 +57,10 @@ interface HueZoneInspectorProps {
   /**
    * Room dimensions are required to translate the user's edge-length
    * (metres) into the per-axis Hue cube-space scales the bridge
-   * persists. They also drive the metric read-out and the maximum
-   * allowed edge (the room's *short* side). May briefly be `0` during
-   * initial mount before the room map loads — the component falls back
-   * to safe defaults so nothing renders as NaN.
+   * persists. They also drive the maximum allowed edge (the room's
+   * *short* side). May briefly be `0` during initial mount before the
+   * room map loads — the component falls back to safe defaults so
+   * nothing renders as NaN.
    */
   roomWidthM: number;
   roomDepthM: number;
@@ -76,6 +81,13 @@ function resolveDisplayHex(value: string | undefined, fallback: string): string 
   const palette = ZONE_PALETTE.find((p) => p.cssVar === value);
   if (palette) return palette.hex;
   return fallback;
+}
+
+function normaliseHexDraft(raw: string): string | null {
+  const trimmed = raw.trim();
+  const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) return null;
+  return `#${withHash.slice(1).toLowerCase()}`;
 }
 
 // W4-I — per-axis cube-space scale band. Mirrors `commands/hue/zone.rs`
@@ -180,9 +192,41 @@ export function HueZoneInspector({
     setEdgeM(clampedM);
   }, [edgeDraft, maxEdgeM, minEdgeM, currentEdgeM, setEdgeM]);
 
+  // ── W4-K hex input — Inspector-owned ──────────────────────────────
+  // HsvColorPicker still ships its own hex input by default, but we
+  // pass `hideHex` so we can render it inline next to the EDGE field
+  // and avoid the W4-I overlap. The picker's `recent` strip stays
+  // (we render a uniform RECENT row below the SV ring, same as
+  // before).
+  const [hexDraft, setHexDraft] = useState<string>(borderHex.toUpperCase());
+  const [editingHex, setEditingHex] = useState(false);
+
+  // Sync external border changes (preset swatch, picker drag, recent
+  // click) into the draft when the input is not focused.
+  useEffect(() => {
+    if (!editingHex) {
+      setHexDraft(borderHex.toUpperCase());
+    }
+  }, [borderHex, editingHex]);
+
+  const commitHex = useCallback(() => {
+    setEditingHex(false);
+    const normalised = normaliseHexDraft(hexDraft);
+    if (!normalised) {
+      setHexDraft(borderHex.toUpperCase());
+      return;
+    }
+    setHexDraft(normalised.toUpperCase());
+    if (normalised.toLowerCase() !== borderHex.toLowerCase()) {
+      setBorder(normalised);
+    }
+  }, [hexDraft, borderHex, setBorder]);
+
+  const channelCount = zone.channelIndices?.length ?? 0;
+
   return (
-    <>
-      <div className="lm-room-dock-inspect-h">
+    <div className="lm-zone-inspector">
+      <div className="lm-zone-inspector-h">
         <span className="lm-room-dock-inspect-h-chip">
           <span
             className="lm-room-dock-inspect-h-chip-dot"
@@ -191,53 +235,18 @@ export function HueZoneInspector({
           />
           <span>{t("roomMap.inspector.typeHueZone")}</span>
         </span>
-        <span className="sub" title={zone.name}>
+        <span className="lm-zone-inspector-h-name" title={zone.name}>
           {zone.name}
         </span>
-      </div>
-
-      {/* Color block */}
-      <div className="lm-room-dock-field" style={{ alignItems: "flex-start" }}>
-        <span className="lm-room-dock-field-label" style={{ paddingTop: 2 }}>
-          {t("roomMap.zoneProperties.color")}
+        <span className="lm-zone-inspector-h-meta" aria-hidden>
+          {t("roomMap.inspector.zoneChannelCount", { count: channelCount })}
         </span>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }} role="list">
-            {ZONE_PALETTE.map((swatch) => (
-              <button
-                key={swatch.name}
-                type="button"
-                role="listitem"
-                title={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
-                aria-label={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
-                className="lm-room-dock-row-action"
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: 4,
-                  background: swatch.cssVar,
-                  border: "1px solid var(--lm-line-2)",
-                  opacity: 1,
-                }}
-                onClick={() => setBorder(swatch.hex)}
-              />
-            ))}
-          </div>
-          <HsvColorPicker
-            value={borderHex}
-            onChange={setBorder}
-            ariaLabel={t("roomMap.zoneProperties.color")}
-            compact
-          />
-        </div>
       </div>
 
-      {/* Size — W4-I single edge length (metres). Drives both axes so
-          the zone paints as a physical 1:1 square on the canvas. */}
-      <div className="lm-room-dock-field">
-        <label className="lm-room-dock-field-label" htmlFor={`zone-size-${zone.id}`}>
-          {t("roomMap.inspector.zoneSize")}
-        </label>
+      {/* Range slider — single full-width row above the EDGE/HEX pair.
+          aria-label is verbose because the slider value is in metres
+          but the visual label "EDGE" sits two rows above. */}
+      <div className="lm-zone-inspector-slider-row">
         <input
           id={`zone-size-${zone.id}`}
           type="range"
@@ -251,16 +260,20 @@ export function HueZoneInspector({
           aria-valuemin={minEdgeM}
           aria-valuemax={maxEdgeM}
           aria-valuenow={currentEdgeM}
-          aria-label={t("roomMap.inspector.zoneSize")}
+          aria-label={t("roomMap.inspector.zoneEdgeAriaLabel")}
           data-testid="hue-zone-size-slider"
         />
       </div>
-      <div className="lm-room-dock-field">
+
+      {/* EDGE  [n.nn] M   |   HEX  [#XXXXXX]
+          Single row; both groups are flex children so the row stays
+          one line down to ~280 px before either group wraps. */}
+      <div className="lm-zone-inspector-pair">
         <label
-          className="lm-room-dock-field-label"
+          className="lm-zone-inspector-pair-label"
           htmlFor={`zone-size-m-${zone.id}`}
         >
-          {t("roomMap.inspector.zoneEdgeLabel")}
+          {t("roomMap.inspector.zoneEdgeShort")}
         </label>
         <input
           id={`zone-size-m-${zone.id}`}
@@ -269,7 +282,7 @@ export function HueZoneInspector({
           min={Number(minEdgeM.toFixed(2))}
           max={Number(maxEdgeM.toFixed(2))}
           inputMode="decimal"
-          className="lm-room-dock-input"
+          className="lm-zone-inspector-num"
           value={edgeDraft}
           aria-label={t("roomMap.inspector.zoneEdgeAriaLabel")}
           disabled={maxEdgeM <= 0}
@@ -288,29 +301,79 @@ export function HueZoneInspector({
             }
           }}
         />
-        <span className="lm-room-dock-field-unit">m</span>
-      </div>
-      <div className="lm-room-dock-field">
-        <span className="lm-room-dock-field-label" aria-hidden>
-          {/* spacer keeps the metric read-out aligned with the inputs */}
+        <span className="lm-zone-inspector-pair-unit" aria-hidden>
+          m
         </span>
-        <span
-          className="lm-room-dock-field-value"
-          aria-label={t("roomMap.inspector.zoneEdgeMetricAriaLabel", {
-            edge: currentEdgeM.toFixed(2),
-          })}
-          title={t("roomMap.inspector.zoneEdgeMetricAriaLabel", {
-            edge: currentEdgeM.toFixed(2),
-          })}
+
+        <label
+          className="lm-zone-inspector-pair-label lm-zone-inspector-pair-label--hex"
+          htmlFor={`zone-hex-${zone.id}`}
         >
-          {t("roomMap.inspector.zoneEdgeMetric", {
-            edge: currentEdgeM.toFixed(2),
-          })}
-        </span>
+          {t("roomMap.inspector.zoneHexShort")}
+        </label>
+        <input
+          id={`zone-hex-${zone.id}`}
+          type="text"
+          spellCheck={false}
+          className="lm-zone-inspector-hex"
+          value={hexDraft}
+          aria-label={t("roomMap.inspector.zoneHexAriaLabel")}
+          data-testid="hue-zone-hex-input"
+          onFocus={() => setEditingHex(true)}
+          onChange={(e) => setHexDraft(e.target.value.toUpperCase())}
+          onBlur={commitHex}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitHex();
+            } else if (e.key === "Escape") {
+              setHexDraft(borderHex.toUpperCase());
+              setEditingHex(false);
+            }
+          }}
+        />
       </div>
-      <p className="lm-room-dock-field-hint">
+
+      {/* Color preset swatches — single row, 6 buttons. Tap target is
+          22 × 22 px (the dock honours min-height through the row, but
+          we still keep the floor so iPad-style touch input remains
+          usable when the editor lands on tablet form factors). */}
+      <div className="lm-zone-inspector-swatches" role="list">
+        {ZONE_PALETTE.map((swatch) => {
+          const active = borderHex.toLowerCase() === swatch.hex.toLowerCase();
+          return (
+            <button
+              key={swatch.name}
+              type="button"
+              role="listitem"
+              title={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
+              aria-label={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
+              aria-pressed={active}
+              className={`lm-zone-inspector-swatch${active ? " is-active" : ""}`}
+              style={{ background: swatch.cssVar }}
+              onClick={() => setBorder(swatch.hex)}
+            />
+          );
+        })}
+      </div>
+
+      {/* HSV picker — centred in its own block. `hideHex` so the
+          Inspector owns the hex input above; the picker still emits
+          its RECENT strip below (no need to duplicate it here). */}
+      <div className="lm-zone-inspector-picker">
+        <HsvColorPicker
+          value={borderHex}
+          onChange={setBorder}
+          ariaLabel={t("roomMap.zoneProperties.color")}
+          hideHex
+          compact
+        />
+      </div>
+
+      <p className="lm-zone-inspector-hint">
         {t("roomMap.inspector.zoneSizeHint")}
       </p>
-    </>
+    </div>
   );
 }

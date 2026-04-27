@@ -5525,6 +5525,195 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   Wave 4-K — HueZoneInspector single-row refactor
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the W4-I four-row size cluster + AR-hint paragraph that
+   collided with the HSV picker's own hex input + recent swatches on
+   the 320 px dock. The new layout:
+
+     1. Compact header (chip + name + channel-count meta)
+     2. Slider row, full width
+     3. EDGE [n.nn] m   |   HEX [#XXXXXX]   single side-by-side row
+     4. Preset swatches, single row
+     5. HSV picker, centred
+     6. RECENT swatches (rendered by HsvColorPicker)
+     7. One-line hint paragraph
+
+   Tokens:
+   - `lm-zone-inspector-pair` is the EDGE/HEX row. Group order is
+     LABEL → NUM → UNIT → LABEL → HEX so the layout reads left-to-
+     right under both LTR and forced-colors.
+   - `lm-zone-inspector-num` is a 64 px-cap mono number input; the
+     hex input mirrors it at 96 px. Both inherit the focus ring and
+     forced-colors fallback from the existing `.lm-room-dock-input`
+     pattern.
+   - The picker block is a flex column centred on the dock width so
+     the 160 px compact ring sits visually middle-aligned. No
+     transitions > 120 ms here so the dock-wide reduced-motion rule
+     covers this surface unchanged.
+   - 32 px tap-target floor preserved on every interactive control.
+   ────────────────────────────────────────────────────────────────── */
+.lm-zone-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.lm-zone-inspector-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.lm-zone-inspector-h-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--lm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-zone-inspector-h-meta {
+  flex-shrink: 0;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+}
+.lm-zone-inspector-slider-row {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+.lm-zone-inspector-slider-row .lm-room-dock-slider {
+  flex: 1;
+  min-width: 0;
+}
+.lm-zone-inspector-pair {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+.lm-zone-inspector-pair-label {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  flex-shrink: 0;
+}
+.lm-zone-inspector-pair-label--hex {
+  margin-left: 4px;
+}
+.lm-zone-inspector-pair-unit {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.lm-zone-inspector-num,
+.lm-zone-inspector-hex {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  outline: none;
+  appearance: none;
+}
+.lm-zone-inspector-num {
+  width: 64px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-zone-inspector-num::-webkit-outer-spin-button,
+.lm-zone-inspector-num::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-zone-inspector-hex {
+  flex: 1 1 96px;
+  min-width: 0;
+  text-transform: uppercase;
+}
+.lm-zone-inspector-num:focus,
+.lm-zone-inspector-hex:focus {
+  border-color: rgba(255, 176, 32, 0.45);
+}
+.lm-zone-inspector-num:focus-visible,
+.lm-zone-inspector-hex:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-zone-inspector-num:disabled,
+.lm-zone-inspector-hex:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-zone-inspector-swatches {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+}
+.lm-zone-inspector-swatch {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+}
+.lm-zone-inspector-swatch:hover {
+  border-color: rgba(255, 176, 32, 0.45);
+}
+.lm-zone-inspector-swatch:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-zone-inspector-swatch.is-active {
+  border-color: var(--lm-amber);
+  box-shadow: 0 0 0 1px var(--lm-amber);
+}
+.lm-zone-inspector-picker {
+  display: flex;
+  justify-content: center;
+}
+.lm-zone-inspector-hint {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.01em;
+}
+@media (forced-colors: active) {
+  .lm-zone-inspector-num,
+  .lm-zone-inspector-hex,
+  .lm-zone-inspector-swatch {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-zone-inspector-swatch.is-active {
+    border-color: Highlight;
+    box-shadow: 0 0 0 1px Highlight;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    Wave 4-E — USB strip connection status chip
    ─────────────────────────────────────────────────────────────────────
    A small live-status badge embedded in the UsbStripInspector and the

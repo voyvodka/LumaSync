@@ -1,19 +1,20 @@
 /**
  * HueZoneInspector regression tests.
  *
- * Bug-driven coverage for v1.5 W4-I "physical 1:1 metric square":
- *  - The size slider edits a metre value; we derive per-axis cube-space
- *    scales as `edge_m / room{Width,Depth}M` so the zone paints as a
- *    true physical square on the canvas (the W4-C uniform AR lock was
- *    dropped — it caused a visual stretch in non-square rooms).
- *  - The metric read-out shows `{edge}m × {edge}m` (always equal — it's
- *    a square) regardless of the underlying cube-space scales.
+ * Coverage for v1.5 W4-I "physical 1:1 metric square" + W4-K
+ * single-row layout refactor:
+ *  - The size slider edits a metre value; we derive per-axis cube-
+ *    space scales as `edge_m / room{Width,Depth}M` so the zone paints
+ *    as a true physical square on the canvas.
  *  - Maximum edge equals `min(roomWidthM, roomDepthM)` so the zone
  *    never spills outside the room footprint.
- *  - Legacy zones with asymmetric scales (pre-W4-I writes) resolve onto
- *    the smaller of `scaleX*roomW` / `scaleY*roomD` so the slider value
- *    is well-defined and the rendered square fits inside the persisted
- *    bounds.
+ *  - Legacy zones with asymmetric scales (pre-W4-I writes) resolve
+ *    onto the smaller of `scaleX*roomW` / `scaleY*roomD` so the slider
+ *    value is well-defined and the rendered square fits inside the
+ *    persisted bounds.
+ *  - W4-K — the redundant `{edge}m × {edge}m` metric reader is gone;
+ *    the EDGE field and HEX field share a single side-by-side row,
+ *    and the hex input commits to `borderColor`.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, cleanup, screen } from "@testing-library/react";
@@ -26,13 +27,12 @@ import type { HueZone } from "../../../../../shared/contracts/roomMap";
 // listed here returns the bare key (fine for non-visual labels).
 const FIXTURE_LOCALES: Record<string, string> = {
   "roomMap.inspector.zoneSize": "Size",
-  "roomMap.inspector.zoneEdgeLabel": "Edge length",
+  "roomMap.inspector.zoneEdgeShort": "Edge",
   "roomMap.inspector.zoneEdgeAriaLabel": "Zone edge length in metres",
-  "roomMap.inspector.zoneEdgeMetric": "{{edge}}m × {{edge}}m",
-  "roomMap.inspector.zoneEdgeMetricAriaLabel":
-    "Zone edge length: {{edge}} metres",
+  "roomMap.inspector.zoneHexShort": "Hex",
+  "roomMap.inspector.zoneHexAriaLabel": "Zone color hex value",
   "roomMap.inspector.zoneSizeHint":
-    "Zone is square (1:1). Edge length in metres; maximum equals the shorter room side.",
+    "Zone is a 1:1 square; max equals the shorter room side.",
   "roomMap.inspector.typeHueZone": "Hue zone",
   "roomMap.zoneProperties.color": "Color",
   "roomMap.zoneProperties.swatchAriaLabel": "Use {{name}} swatch",
@@ -126,19 +126,6 @@ describe("HueZoneInspector — W4-I physical metric square", () => {
     expect(patch.scaleX).toBeCloseTo(0.8, 5); // 4m / 5m
   });
 
-  it("renders the metric read-out as edge × edge (always square)", () => {
-    const { container } = render(
-      <HueZoneInspector
-        // 0.4 × 5m = 2.00m on X, 0.5 × 4m = 2.00m on Y → 2.00m square
-        zone={{ ...BASE_ZONE, scaleX: 0.4, scaleY: 0.5 }}
-        onUpdate={() => {}}
-        roomWidthM={5}
-        roomDepthM={4}
-      />,
-    );
-    expect(container.textContent).toContain("2.00m × 2.00m");
-  });
-
   it("resolves legacy asymmetric zones onto the smaller physical edge", () => {
     // Legacy persisted zone written before W4-I — scaleX/scaleY do not
     // necessarily resolve to a square in metres. The Inspector takes
@@ -174,5 +161,69 @@ describe("HueZoneInspector — W4-I physical metric square", () => {
     const input = screen.getByTestId("hue-zone-size-edge-input") as HTMLInputElement;
     expect(slider.disabled).toBe(true);
     expect(input.disabled).toBe(true);
+  });
+});
+
+describe("HueZoneInspector — W4-K single-row layout", () => {
+  it("does not render the redundant {edge}m × {edge}m metric reader", () => {
+    // The W4-I metric reader collided with the HSV recent strip on
+    // narrow docks; W4-K drops it because the EDGE field above already
+    // shows the same number.
+    const { container } = render(
+      <HueZoneInspector
+        zone={{ ...BASE_ZONE, scaleX: 0.4, scaleY: 0.5 }}
+        onUpdate={() => {}}
+        roomWidthM={5}
+        roomDepthM={4}
+      />,
+    );
+    expect(container.textContent).not.toMatch(/\d\.\d{2}m × \d\.\d{2}m/);
+  });
+
+  it("renders an inline hex input that commits a normalised borderColor on blur", () => {
+    const onUpdate = vi.fn();
+    render(
+      <HueZoneInspector
+        zone={BASE_ZONE}
+        onUpdate={onUpdate}
+        roomWidthM={5}
+        roomDepthM={4}
+      />,
+    );
+
+    const hexInput = screen.getByTestId("hue-zone-hex-input") as HTMLInputElement;
+    expect(hexInput).toBeTruthy();
+
+    // User types a different valid hex (uppercase, with hash) and
+    // blurs — Inspector commits a lowercased canonical value to the
+    // borderColor patch so persistence stays case-stable.
+    fireEvent.focus(hexInput);
+    fireEvent.change(hexInput, { target: { value: "#0BD1F5" } });
+    fireEvent.blur(hexInput);
+
+    expect(onUpdate).toHaveBeenCalledTimes(1);
+    expect(onUpdate.mock.calls[0][0]).toEqual({ borderColor: "#0bd1f5" });
+  });
+
+  it("rejects invalid hex on blur and reverts the draft to the persisted value", () => {
+    const onUpdate = vi.fn();
+    render(
+      <HueZoneInspector
+        zone={BASE_ZONE}
+        onUpdate={onUpdate}
+        roomWidthM={5}
+        roomDepthM={4}
+      />,
+    );
+    const hexInput = screen.getByTestId("hue-zone-hex-input") as HTMLInputElement;
+
+    fireEvent.focus(hexInput);
+    fireEvent.change(hexInput, { target: { value: "not-a-hex" } });
+    fireEvent.blur(hexInput);
+
+    // Invalid hex never reaches the parent.
+    expect(onUpdate).not.toHaveBeenCalled();
+    // And the draft snaps back to the canonical persisted value.
+    expect(hexInput.value).toBe("#3B82F6");
   });
 });
