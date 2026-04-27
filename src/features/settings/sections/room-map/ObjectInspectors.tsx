@@ -48,13 +48,13 @@ import { useTranslation } from "react-i18next";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
-  HueZone,
   ImageLayer,
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-  ZoneDefinition,
+  Zone,
 } from "../../../../shared/contracts/roomMap";
+import { ZONE_TYPES } from "../../../../shared/contracts/roomMap";
 
 /* ── shared helpers ─────────────────────────────────────────────── */
 
@@ -691,9 +691,20 @@ export function ImageLayerInspector({
   );
 }
 
-/* ── LegacyZoneInspector ────────────────────────────────────────── */
+/* ── LogicalZoneInspector ───────────────────────────────────────── */
 
-export function LegacyZoneInspector({ zone }: { zone: ZoneDefinition }) {
+/**
+ * Inspector for `Zone` records with `zoneType === "logical"` (W4-F).
+ * Logical zones are USB-side region grouping; they carry no center /
+ * scale / entertainment-area metadata. The inspector therefore shows
+ * only the channel-count summary and the assignment hint.
+ *
+ * `LegacyZoneInspector` was the W4-D name for the same surface back when
+ * `Zone` and `HueZone` were two parallel structs. The component is
+ * re-exported under the legacy name below so older imports keep
+ * compiling during the W4-F2 sweep.
+ */
+export function LogicalZoneInspector({ zone }: { zone: Zone }) {
   const { t } = useTranslation("common");
   return (
     <>
@@ -712,33 +723,41 @@ export function LegacyZoneInspector({ zone }: { zone: ZoneDefinition }) {
   );
 }
 
+/** @deprecated v1.5 W4-F — re-exported under the W4-D name. Use `LogicalZoneInspector`. */
+export const LegacyZoneInspector = LogicalZoneInspector;
+
 /* ── dispatcher helper used by RoomDockPanel ────────────────────── */
 
 /**
  * Resolve the active selection from the dock's `selectedId` shape and
- * the active legacy/Hue-zone ids. Hue zone wins (W4-C surface), then
- * the selected object, then the active legacy zone, then empty.
+ * the active zone id. Hue zone wins (W4-C surface), then the selected
+ * object, then the active logical zone, then empty.
+ *
+ * v1.5 W4-F: both Hue and logical zones live in the unified
+ * `config.zones[]` array, disambiguated by `zone.zoneType`. The legacy
+ * `config.hueZones[]` field is migrated away by the F6 shim before this
+ * dispatcher ever sees the state, so we read exclusively from `zones`.
  */
 export type InspectorTarget =
-  | { kind: "hueZone"; zone: HueZone }
+  | { kind: "zone"; zone: Zone }
   | { kind: "tv"; tv: TvAnchorPlacement }
   | { kind: "furniture"; item: FurniturePlacement }
   | { kind: "usb"; strip: UsbStripPlacement }
   | { kind: "hueChannel"; channel: HueChannelPlacement; zoneName: string | null }
   | { kind: "image"; layer: ImageLayer }
-  | { kind: "legacyZone"; zone: ZoneDefinition }
   | { kind: "empty" };
 
 export function resolveInspectorTarget(
   config: RoomMapConfig,
   selectedId: string | null,
   activeHueZoneId: string | null,
-  activeLegacyZoneId: string | null,
+  activeLogicalZoneId: string | null,
 ): InspectorTarget {
-  const hueZones = config.hueZones ?? [];
   if (activeHueZoneId) {
-    const zone = hueZones.find((z) => z.id === activeHueZoneId);
-    if (zone) return { kind: "hueZone", zone };
+    const zone = config.zones.find(
+      (z) => z.id === activeHueZoneId && z.zoneType === ZONE_TYPES.HUE,
+    );
+    if (zone) return { kind: "zone", zone };
   }
   if (selectedId) {
     if (selectedId === "tv" && config.tvAnchor) {
@@ -759,7 +778,9 @@ export function resolveInspectorTarget(
       const channel = config.hueChannels.find((c) => c.channelIndex === idx);
       if (channel) {
         const zoneName = channel.zoneId
-          ? hueZones.find((z) => z.id === channel.zoneId)?.name ?? null
+          ? config.zones.find(
+              (z) => z.id === channel.zoneId && z.zoneType === ZONE_TYPES.HUE,
+            )?.name ?? null
           : null;
         return { kind: "hueChannel", channel, zoneName };
       }
@@ -770,9 +791,11 @@ export function resolveInspectorTarget(
       if (layer) return { kind: "image", layer };
     }
   }
-  if (activeLegacyZoneId) {
-    const zone = config.zones.find((z) => z.id === activeLegacyZoneId);
-    if (zone) return { kind: "legacyZone", zone };
+  if (activeLogicalZoneId) {
+    const zone = config.zones.find(
+      (z) => z.id === activeLogicalZoneId && z.zoneType === ZONE_TYPES.LOGICAL,
+    );
+    if (zone) return { kind: "zone", zone };
   }
   return { kind: "empty" };
 }

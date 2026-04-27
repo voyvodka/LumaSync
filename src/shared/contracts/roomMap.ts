@@ -452,6 +452,53 @@ export function toHueZone(legacy: HueZone): Zone | null {
   };
 }
 
+/**
+ * Project a unified `Zone` back to the legacy `HueZone` shape (Hue-only
+ * fields required, no discriminator). Returns `null` when the input is
+ * not a Hue zone or when one of the Hue-only fields is missing.
+ *
+ * Why this exists (v1.5 W4-F transition): a number of downstream UI
+ * components — `RoomDockPanel`, `HueChannelOverlay`, `RoomMapCanvas` —
+ * still consume the legacy `HueZone` interface. Migrating each of them
+ * to read `Zone` directly is a large blast-radius sweep; the legacy
+ * projection lets the new `config.zones[]` source-of-truth coexist with
+ * the old prop signatures during the W4-F2/F3/F4 UX rollout. The
+ * migration shim guarantees every `zoneType: "hue"` record has the
+ * required fields populated, so the null returns here are a defensive
+ * guard against contract drift in caller code rather than a normal
+ * branch.
+ *
+ * Future work (v1.6+): once every consumer accepts `Zone` directly the
+ * helper can be deleted along with the legacy `HueZone` interface.
+ */
+export function asHueZoneLegacy(zone: Zone): HueZone | null {
+  if (zone.zoneType !== ZONE_TYPES.HUE) return null;
+  if (
+    zone.entertainmentAreaId === undefined ||
+    zone.centerX === undefined ||
+    zone.centerY === undefined ||
+    zone.centerZ === undefined ||
+    zone.scaleX === undefined ||
+    zone.scaleY === undefined ||
+    zone.scaleZ === undefined
+  ) {
+    return null;
+  }
+  return {
+    id: zone.id,
+    name: zone.name,
+    entertainmentAreaId: zone.entertainmentAreaId,
+    centerX: zone.centerX,
+    centerY: zone.centerY,
+    centerZ: zone.centerZ,
+    scaleX: zone.scaleX,
+    scaleY: zone.scaleY,
+    scaleZ: zone.scaleZ,
+    channelIndices: zone.channelIndices,
+    borderColor: zone.borderColor,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Zone command surface (v1.5 W4-F — moved out of `hue.ts > HUE_ZONE_COMMANDS`)
 // ---------------------------------------------------------------------------

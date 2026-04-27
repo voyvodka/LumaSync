@@ -49,14 +49,15 @@ import type {
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-  ZoneDefinition,
+  Zone,
 } from "../../../../shared/contracts/roomMap";
+import { ZONE_TYPES, asHueZoneLegacy } from "../../../../shared/contracts/roomMap";
 import { HueZoneInspector } from "./HueZoneInspector";
 import {
   FurnitureInspector,
   HueChannelInspector,
   ImageLayerInspector,
-  LegacyZoneInspector,
+  LogicalZoneInspector,
   TvAnchorInspector,
   UsbStripInspector,
   resolveInspectorTarget,
@@ -75,8 +76,10 @@ interface RoomDockPanelProps {
   onRenameFurniture: (id: string, label: string) => void;
   onToggleLock: (id: string) => void;
 
-  // Legacy USB-side zones
-  zones: ZoneDefinition[];
+  // Logical zones (W4-F: unified `Zone` type with `zoneType: "logical"`).
+  // Hue zones live in the same `config.zones[]` array but are passed
+  // separately as `hueZones` (legacy projection) for the W4-F transition.
+  zones: Zone[];
   activeZoneId: string | null;
   onSelectZone: (zoneId: string | null) => void;
   onAddZone: () => void;
@@ -484,7 +487,7 @@ function ObjectsTab(props: {
 }
 
 function ZonesTab(props: {
-  zones: ZoneDefinition[];
+  zones: Zone[];
   activeZoneId: string | null;
   onSelectZone: (id: string | null) => void;
   onAddZone: () => void;
@@ -1307,16 +1310,35 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
   // object, even when the kind is unchanged.
   const renderInspector = () => {
     switch (inspectorTarget.kind) {
-      case "hueZone":
-        return (
-          <HueZoneInspector
-            key={`hueZone:${inspectorTarget.zone.id}`}
-            zone={inspectorTarget.zone}
-            onUpdate={(patch) => onUpdateHueZone?.(inspectorTarget.zone.id, patch)}
-            roomWidthM={config.dimensions.widthMeters}
-            roomDepthM={config.dimensions.depthMeters}
-          />
-        );
+      case "zone": {
+        // v1.5 W4-F: a single dispatcher arm covers both Hue and logical
+        // zones — branch on `zoneType` here so the inspector picks the
+        // right view. Hue zones run through `asHueZoneLegacy` to bridge
+        // the unified `Zone` source-of-truth to `HueZoneInspector`'s
+        // legacy prop signature (W4-F transition; the helper has a doc
+        // comment in `roomMap.ts` explaining the eventual cleanup).
+        const zone = inspectorTarget.zone;
+        if (zone.zoneType === ZONE_TYPES.HUE) {
+          const legacy = asHueZoneLegacy(zone);
+          if (!legacy) {
+            return (
+              <p className="lm-room-dock-inspect-empty">
+                {t("roomMap.inspector.empty")}
+              </p>
+            );
+          }
+          return (
+            <HueZoneInspector
+              key={`zone:${zone.id}`}
+              zone={legacy}
+              onUpdate={(patch) => onUpdateHueZone?.(zone.id, patch)}
+              roomWidthM={config.dimensions.widthMeters}
+              roomDepthM={config.dimensions.depthMeters}
+            />
+          );
+        }
+        return <LogicalZoneInspector key={`zone:${zone.id}`} zone={zone} />;
+      }
       case "tv":
         return (
           <TvAnchorInspector
@@ -1379,13 +1401,6 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           />
         );
       }
-      case "legacyZone":
-        return (
-          <LegacyZoneInspector
-            key={`legacyZone:${inspectorTarget.zone.id}`}
-            zone={inspectorTarget.zone}
-          />
-        );
       default:
         return (
           <p className="lm-room-dock-inspect-empty">{t("roomMap.inspector.empty")}</p>
