@@ -37,6 +37,21 @@
  * hex input value re-render on input. Drag is handled with pointer
  * events + `setPointerCapture` so an off-canvas drag still tracks
  * smoothly, the same pattern the room-map dots use.
+ *
+ * v1.5 fix #45 — drag-throttled `onChange`:
+ * Pointer-move events fire at 60–240 Hz on modern displays, so an
+ * unthrottled drag was firing the parent `onChange` (and therefore the
+ * `set_lighting_mode` Tauri invoke when wired to compact Solid mode)
+ * 50–200 times per second. The local HSV state still updates
+ * synchronously so the handles track the cursor smoothly, but the
+ * `onChange` callback is rate-limited to one fire per
+ * `DRAG_COMMIT_MIN_INTERVAL_MS` while a pointer drag is active. The
+ * pending commit is always flushed on pointer up so the released
+ * position is committed exactly once. Single-tap / keyboard / hex
+ * input / recent-color paths fire `onChange` immediately because they
+ * are inherently low-frequency. The throttle interval matches the
+ * Hue bridge floor (50 ms / 20 Hz) and the brightness slider in
+ * `useSolidColorDraft` and `SelfContainedBrightnessRow`.
  */
 import {
   useCallback,
@@ -171,6 +186,16 @@ const SQUARE_X0 = CENTER - SQUARE_HALF;
 const SQUARE_Y0 = CENTER - SQUARE_HALF;
 
 // ---------------------------------------------------------------------------
+// Drag throttle
+// ---------------------------------------------------------------------------
+//
+// 50 ms = 20 Hz, matching the Hue bridge minimum streaming interval and
+// the brightness sliders elsewhere in the codebase. Tested empirically
+// to feel "instant" while keeping the Tauri invoke rate sane.
+
+export const DRAG_COMMIT_MIN_INTERVAL_MS = 50;
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -231,18 +256,94 @@ export function HsvColorPicker({
 
   const [recent, setRecent] = useState<string[]>(() => loadRecent());
 
-  // ── Commit helpers ────────────────────────────────────────────────────
-  const commit = useCallback(
-    (next: Hsv) => {
-      const rgb = hsvToRgb(next);
-      const hex = rgbToHex(rgb);
-      lastParsedHex.current = hex.toLowerCase();
-      setHsv(next);
-      setHexDraft(hex.toUpperCase());
-      onChange(hex);
-    },
-    [onChange],
-  );
+  // ── Drag-throttled onChange dispatch ──────────────────────────────────
+  // The pointer-move handlers below call `commitDrag(next)` on every
+  // frame; we update the local HSV state synchronously so the UI keeps
+  // tracking the cursor at full refresh rate, but defer the parent
+  // `onChange` to a 50 ms-throttled "send latest" tick. Pointer-up always
+  // flushes the most recent payload so the released position is the one
+  // that actually reaches the backend. Non-drag paths (single tap on the
+  // square, keyboard arrow nudges, hex commit, recent-swatch click) call
+  // `commitImmediate` directly so they remain responsive to the first
+  // input.
+  //
+  // `onChangeRef` is a ref so the throttle helpers below do not need
+  // `onChange` in their dep arrays — preventing every parent rerender
+  // from cancelling a pending tick.
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  const pendingCommitRef = useRef<{ hex: string; hsv: Hsv } | null>(null);
+  const lastDispatchAtRef = useRef(0);
+  const dispatchTimerRef = useRef<number | null>(null);
+
+  const flushPendingDispatch = useCallback(() => {
+    if (dispatchTimerRef.current !== null) {
+      window.clearTimeout(dispatchTimerRef.current);
+      dispatchTimerRef.current = null;
+    }
+    const pending = pendingCommitRef.current;
+    if (!pending) return;
+    pendingCommitRef.current = null;
+    lastDispatchAtRef.current = Date.now();
+    onChangeRef.current(pending.hex);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dispatchTimerRef.current !== null) {
+        window.clearTimeout(dispatchTimerRef.current);
+        dispatchTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  /**
+   * Update local visual state from a drag tick and queue a throttled
+   * dispatch to the parent. Safe to call at full pointer-move rate.
+   */
+  const commitDrag = useCallback((next: Hsv) => {
+    const rgb = hsvToRgb(next);
+    const hex = rgbToHex(rgb);
+    lastParsedHex.current = hex.toLowerCase();
+    setHsv(next);
+    setHexDraft(hex.toUpperCase());
+    pendingCommitRef.current = { hex, hsv: next };
+
+    const now = Date.now();
+    const elapsed = now - lastDispatchAtRef.current;
+    const waitMs = Math.max(0, DRAG_COMMIT_MIN_INTERVAL_MS - elapsed);
+
+    if (waitMs === 0) {
+      flushPendingDispatch();
+      return;
+    }
+    if (dispatchTimerRef.current !== null) return; // tick already scheduled
+    dispatchTimerRef.current = window.setTimeout(flushPendingDispatch, waitMs);
+  }, [flushPendingDispatch]);
+
+  /**
+   * Update local state and dispatch immediately. Used by single-tap /
+   * keyboard / hex / recent-swatch paths where each commit is a deliberate
+   * user action with low rate.
+   */
+  const commitImmediate = useCallback((next: Hsv) => {
+    const rgb = hsvToRgb(next);
+    const hex = rgbToHex(rgb);
+    lastParsedHex.current = hex.toLowerCase();
+    setHsv(next);
+    setHexDraft(hex.toUpperCase());
+
+    if (dispatchTimerRef.current !== null) {
+      window.clearTimeout(dispatchTimerRef.current);
+      dispatchTimerRef.current = null;
+    }
+    pendingCommitRef.current = null;
+    lastDispatchAtRef.current = Date.now();
+    onChangeRef.current(hex);
+  }, []);
 
   const pushRecent = useCallback((hex: string) => {
     const normalised = hex.toLowerCase();
@@ -277,9 +378,9 @@ export function HsvColorPicker({
       let deg = (Math.atan2(dy, dx) * 180) / Math.PI;
       // Convert math angle → 0..360 with 0° at the top (12 o'clock).
       deg = (deg + 360) % 360;
-      commit({ ...hsv, h: deg });
+      commitDrag({ ...hsv, h: deg });
     },
-    [draggingHue, hsv, commit],
+    [draggingHue, hsv, commitDrag],
   );
 
   const handleHuePointerUp = useCallback(
@@ -289,10 +390,14 @@ export function HsvColorPicker({
           console.error("[LumaSync] HsvColorPicker hue release failed", err);
         }
         setDraggingHue(false);
+        // Always flush the final drag tick so the released position is
+        // delivered exactly once (in addition to whatever the throttle
+        // already sent during the drag).
+        flushPendingDispatch();
         pushRecent(rgbToHex(hsvToRgb(hsv)));
       }
     },
-    [draggingHue, hsv, pushRecent],
+    [draggingHue, hsv, pushRecent, flushPendingDispatch],
   );
 
   // ── Saturation/Value square drag ──────────────────────────────────────
@@ -305,16 +410,17 @@ export function HsvColorPicker({
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       setDraggingSv(true);
-      // Also commit the click position so single-tap works.
+      // Single-tap commit — fire immediately so the user sees the new
+      // value land without waiting for the drag throttle.
       const rect = (squareRef.current?.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
       const scale = rect.width / VIEW_SIZE;
       const localX = (e.clientX - rect.left) / scale;
       const localY = (e.clientY - rect.top) / scale;
       const s = clamp((localX - SQUARE_X0) / (SQUARE_HALF * 2), 0, 1);
       const v = clamp(1 - (localY - SQUARE_Y0) / (SQUARE_HALF * 2), 0, 1);
-      commit({ ...hsv, s, v });
+      commitImmediate({ ...hsv, s, v });
     },
-    [disabled, hsv, commit],
+    [disabled, hsv, commitImmediate],
   );
 
   const handleSvPointerMove = useCallback(
@@ -326,9 +432,9 @@ export function HsvColorPicker({
       const localY = (e.clientY - rect.top) / scale;
       const s = clamp((localX - SQUARE_X0) / (SQUARE_HALF * 2), 0, 1);
       const v = clamp(1 - (localY - SQUARE_Y0) / (SQUARE_HALF * 2), 0, 1);
-      commit({ ...hsv, s, v });
+      commitDrag({ ...hsv, s, v });
     },
-    [draggingSv, hsv, commit],
+    [draggingSv, hsv, commitDrag],
   );
 
   const handleSvPointerUp = useCallback(
@@ -338,10 +444,11 @@ export function HsvColorPicker({
           console.error("[LumaSync] HsvColorPicker SV release failed", err);
         }
         setDraggingSv(false);
+        flushPendingDispatch();
         pushRecent(rgbToHex(hsvToRgb(hsv)));
       }
     },
-    [draggingSv, hsv, pushRecent],
+    [draggingSv, hsv, pushRecent, flushPendingDispatch],
   );
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -354,10 +461,10 @@ export function HsvColorPicker({
       if (e.key === "ArrowRight" || e.key === "ArrowUp") next = (hsv.h + step) % 360;
       if (next !== null) {
         e.preventDefault();
-        commit({ ...hsv, h: next });
+        commitImmediate({ ...hsv, h: next });
       }
     },
-    [disabled, hsv, commit],
+    [disabled, hsv, commitImmediate],
   );
 
   const handleSvKeyDown = useCallback(
@@ -372,9 +479,9 @@ export function HsvColorPicker({
       else if (e.key === "ArrowDown") nextV = clamp(hsv.v - step, 0, 1);
       else return;
       e.preventDefault();
-      commit({ ...hsv, s: nextS, v: nextV });
+      commitImmediate({ ...hsv, s: nextS, v: nextV });
     },
-    [disabled, hsv, commit],
+    [disabled, hsv, commitImmediate],
   );
 
   // ── Hex input handlers ────────────────────────────────────────────────
@@ -390,8 +497,14 @@ export function HsvColorPicker({
     setHsv(rgbToHsv(rgb));
     setHexDraft(hex.toUpperCase());
     pushRecent(hex);
-    onChange(hex);
-  }, [hexDraft, value, onChange, pushRecent]);
+    if (dispatchTimerRef.current !== null) {
+      window.clearTimeout(dispatchTimerRef.current);
+      dispatchTimerRef.current = null;
+    }
+    pendingCommitRef.current = null;
+    lastDispatchAtRef.current = Date.now();
+    onChangeRef.current(hex);
+  }, [hexDraft, value, pushRecent]);
 
   // ── Compute handle positions ──────────────────────────────────────────
   const ringHandleAngleRad = (hsv.h * Math.PI) / 180;
@@ -625,7 +738,13 @@ export function HsvColorPicker({
                   if (rgb) {
                     setHsv(rgbToHsv(rgb));
                     setHexDraft(hex.toUpperCase());
-                    onChange(hex);
+                    if (dispatchTimerRef.current !== null) {
+                      window.clearTimeout(dispatchTimerRef.current);
+                      dispatchTimerRef.current = null;
+                    }
+                    pendingCommitRef.current = null;
+                    lastDispatchAtRef.current = Date.now();
+                    onChangeRef.current(hex);
                   }
                 }}
               />
