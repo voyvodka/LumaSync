@@ -1060,6 +1060,55 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [config.zones, updateConfig],
   );
 
+  // ── v1.5 W4-F4 — duplicate Hue zone as logical ─────────────────────
+  // Creates a new `zoneType: "logical"` zone that mirrors a Hue zone's
+  // user-visible content (name + channelIndices + borderColor) but
+  // strips every Hue-only field. The original Hue zone is left
+  // untouched — this is a duplicate, not a convert. The new logical
+  // zone becomes the active selection so the user can immediately edit
+  // its name or assign it to a USB region.
+  //
+  // Backend mirror dispatches `create_zone`; the Rust handler validates
+  // the type-shape contract (logical zones MUST NOT carry Hue-only
+  // fields populated) and returns either `ZONE_CREATED` or
+  // `ZONE_CONVERSION_OK` — the UI accepts both during the W4-F PR2
+  // window because the Rust placeholder for `ZONE_CONVERSION_OK` is
+  // still `#[allow(dead_code)]`.
+  const handleConvertHueZoneToLogical = useCallback(
+    (zoneId: string) => {
+      const source = config.zones.find(
+        (z) => z.id === zoneId && z.zoneType === ZONE_TYPES.HUE,
+      );
+      if (!source) return;
+      const newId = `zone-${crypto.randomUUID()}`;
+      const newZone: Zone = {
+        id: newId,
+        name: t("zone.toast.convertedToLogicalName", {
+          source: source.name,
+        }),
+        zoneType: ZONE_TYPES.LOGICAL,
+        channelIndices: [...source.channelIndices],
+        borderColor: source.borderColor,
+      };
+      void updateConfig({ zones: [...config.zones, newZone] });
+
+      void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, {
+        request: {
+          zone: newZone,
+          existingZones: hueZones
+            .map(asHueZoneLegacy)
+            .filter((z): z is HueZone => z !== null),
+        },
+      }).catch((e) => {
+        console.error(
+          "[LumaSync] convert hue→logical create_zone failed",
+          e,
+        );
+      });
+    },
+    [config.zones, hueZones, updateConfig, t],
+  );
+
   // ── v1.5 W1-A8 (W4-F unified): Generic Hue zone patch handler ──────
   // Used by HueZoneInspector to update borderColor + per-axis room-
   // relative scale. Same optimistic pattern as the create / delete /
@@ -1376,6 +1425,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             onDeleteHueZone={handleDeleteHueZone}
             onRenameHueZone={handleRenameHueZone}
             onUpdateHueZone={handleHueZoneUpdate}
+            onConvertHueZoneToLogical={handleConvertHueZoneToLogical}
             addHueZoneDisabled={!hueAreaId}
             addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
             hueBridgeConfigured={hueBridgeConfigured}

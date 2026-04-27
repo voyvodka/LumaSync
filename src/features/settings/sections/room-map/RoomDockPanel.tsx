@@ -94,6 +94,13 @@ interface RoomDockPanelProps {
   onDeleteHueZone?: (zoneId: string) => void;
   onRenameHueZone?: (zoneId: string, name: string) => void;
   onUpdateHueZone?: (zoneId: string, patch: Partial<HueZone>) => void;
+  /**
+   * v1.5 W4-F4 — duplicate the active Hue zone as a logical (USB-side
+   * region) zone. Wired to the inspector header's "Duplicate as logical"
+   * action; inert when omitted, so embeds without zone authoring fall
+   * back to a read-only inspector.
+   */
+  onConvertHueZoneToLogical?: (zoneId: string) => void;
   /** When true, "+ Hue zone" CTA is disabled (no entertainment area paired). */
   addHueZoneDisabled?: boolean;
   addHueZoneDisabledTooltip?: string;
@@ -1248,6 +1255,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onDeleteHueZone,
     onRenameHueZone,
     onUpdateHueZone,
+    onConvertHueZoneToLogical,
     addHueZoneDisabled = false,
     addHueZoneDisabledTooltip,
     hueBridgeConfigured = false,
@@ -1332,6 +1340,11 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               key={`zone:${zone.id}`}
               zone={legacy}
               onUpdate={(patch) => onUpdateHueZone?.(zone.id, patch)}
+              onConvertToLogical={
+                onConvertHueZoneToLogical
+                  ? () => onConvertHueZoneToLogical(zone.id)
+                  : undefined
+              }
               roomWidthM={config.dimensions.widthMeters}
               roomDepthM={config.dimensions.depthMeters}
             />

@@ -1377,6 +1377,12 @@
       "oversized": "Bölge boyutu izinli aralığın dışında.",
       "typeInvalid": "Bölge alanları seçilen türle eşleşmiyor (mantıksal/Hue).",
       "conversionOk": "Bölge mantıksal kopya olarak çoğaltıldı."
+    },
+    "action": {
+      "convertToLogical": "Mantıksal bölge olarak çoğalt"
+    },
+    "toast": {
+      "convertedToLogicalName": "{{source}} (mantıksal kopya)"
     }
   },
   "notifications": {

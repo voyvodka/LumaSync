@@ -55,6 +55,15 @@ interface HueZoneInspectorProps {
   zone: HueZone;
   onUpdate: (patch: Partial<HueZone>) => void;
   /**
+   * v1.5 W4-F4 — duplicate this Hue zone as a logical (USB-side region)
+   * zone. The handler creates a new `zoneType: "logical"` zone with a
+   * fresh id, the same name (suffixed) + channelIndices + borderColor,
+   * but with every Hue-only field stripped. The original Hue zone is
+   * left untouched. Inert when omitted, so the inspector renders the
+   * action only in editing contexts.
+   */
+  onConvertToLogical?: () => void;
+  /**
    * Room dimensions are required to translate the user's edge-length
    * (metres) into the per-axis Hue cube-space scales the bridge
    * persists. They also drive the maximum allowed edge (the room's
@@ -123,6 +132,7 @@ function resolvePhysicalEdgeM(zone: HueZone, roomWidthM: number, roomDepthM: num
 export function HueZoneInspector({
   zone,
   onUpdate,
+  onConvertToLogical,
   roomWidthM,
   roomDepthM,
 }: HueZoneInspectorProps) {
@@ -241,6 +251,34 @@ export function HueZoneInspector({
         <span className="lm-zone-inspector-h-meta" aria-hidden>
           {t("roomMap.inspector.zoneChannelCount", { count: channelCount })}
         </span>
+        {onConvertToLogical && (
+          <button
+            type="button"
+            className="lm-zone-inspector-h-action"
+            onClick={onConvertToLogical}
+            aria-label={t("zone.action.convertToLogical")}
+            title={t("zone.action.convertToLogical")}
+          >
+            {/* W4-F4 — duplicate icon (16×16 inline SVG, no asset
+                dependency). Two stacked rounded rects evoking a
+                clipboard-copy glyph; the lower rect is the "logical
+                duplicate" sitting beside the original. */}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <rect x="5" y="5" width="9" height="9" rx="1.5" />
+              <path d="M3 11V3.5A1.5 1.5 0 0 1 4.5 2H11" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Range slider — single full-width row above the EDGE/HEX pair.

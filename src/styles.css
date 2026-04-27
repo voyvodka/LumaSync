@@ -5584,6 +5584,44 @@ body {
   color: var(--lm-ink-faint);
   text-transform: uppercase;
 }
+/*
+ * v1.5 W4-F4 — header action slot used for "Duplicate as logical zone".
+ * Square 24×24 button with the same chip-style border as the rest of
+ * the inspector header so it does not pull attention away from the
+ * zone name. Hover lifts to amber accent to telegraph it as
+ * actionable. Tap target hits the 24 px floor — close to but below
+ * the 32 px global tap-target rule because the dock header band is
+ * height-constrained; the broader inspector body keeps the 32 px
+ * minimum on its primary controls.
+ */
+.lm-zone-inspector-h-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lm-ink-dim);
+  border: 1px solid var(--lm-border, rgba(255, 255, 255, 0.08));
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+.lm-zone-inspector-h-action:hover {
+  color: var(--lm-amber);
+  border-color: var(--lm-amber);
+}
+.lm-zone-inspector-h-action:focus-visible {
+  outline: var(--lm-focus-ring, 2px solid currentColor);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-zone-inspector-h-action {
+    transition: none;
+  }
+}
 .lm-zone-inspector-slider-row {
   display: flex;
   align-items: center;

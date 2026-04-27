@@ -1377,6 +1377,12 @@
       "oversized": "Zone size is outside the allowed range.",
       "typeInvalid": "Zone fields do not match the selected type (logical/Hue).",
       "conversionOk": "Zone duplicated as a logical copy."
+    },
+    "action": {
+      "convertToLogical": "Duplicate as logical zone"
+    },
+    "toast": {
+      "convertedToLogicalName": "{{source}} (logical copy)"
     }
   },
   "notifications": {
