@@ -85,11 +85,17 @@ export const SECTION_ORDER: SectionId[] = [
  * do NOT bump the version — the legacy spread-merge in `loadShellState` keeps
  * existing user data compatible.
  *
- * v1.5 introduces this field at value `1`; absent on disk ⇒ treat as legacy
+ * v1.5 introduced this field at value `1`; absent on disk ⇒ treat as legacy
  * pre-versioning state (also `1`, since v1.4 and earlier match the same
  * additive shape).
+ *
+ * v1.5 W4-F bumps to `2` because the unified `Zone` shape is a non-additive
+ * change to `RoomMapConfig`: `zones` was widened from `ZoneDefinition[]` to
+ * `Zone[]` and the deprecated `hueZones?` array must be folded into the new
+ * unified list. The F6 migration shim converts both legacy arrays into the
+ * new `zones[]` on load and writes back at the new schema version.
  */
-export const SHELL_STATE_SCHEMA_VERSION = 1 as const;
+export const SHELL_STATE_SCHEMA_VERSION = 2 as const;
 
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {

@@ -7,6 +7,7 @@ import {
   LIGHTING_SMOOTHING_PRESET_COEFFICIENTS,
   type LightingSmoothingPreset,
 } from "./lighting";
+import { ZONE_COMMANDS, type Zone } from "./roomMap";
 
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
@@ -27,31 +28,33 @@ export const HUE_COMMANDS = {
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
 
 // ---------------------------------------------------------------------------
-// Hue Zone commands (v1.5 W1-A2 — logical-grouping zone authoring)
+// Hue zone authoring — moved to roomMap.ts (v1.5 W4-F)
 // ---------------------------------------------------------------------------
 
 /**
- * Authoring commands for Hue zones (see `roomMap.ts > HueZone`).
- *
- * Scope (v1.5 D2 — locked, scope (a) "logical grouping"): zones are a
- * UI subset of an entertainment area. The bridge state machine is not
- * touched and there is no multi-stream mux. These commands persist /
- * mutate `RoomMapConfig.hueZones` plus the optional `zoneId` /
- * `zoneRelativePosition` fields on `HueChannelPlacement`.
- *
- * Kept in a separate map so a future caller can iterate "zone-only"
- * commands without touching `HUE_COMMANDS`. Both sets stay valid Tauri
- * command strings.
+ * @deprecated v1.5 W4-F — zone authoring moved to
+ * `roomMap.ts > ZONE_COMMANDS` because zones are no longer Hue-exclusive
+ * (a unified `Zone` covers both `zoneType: "hue"` and `zoneType: "logical"`).
+ * The legacy export points at the new command map so existing call sites
+ * (`RoomMapEditor.tsx`, `LightsSection.tsx`) keep compiling until the F2
+ * sweep replaces them with `ZONE_COMMANDS`. Note that the dispatched
+ * command strings now resolve to `create_zone` / `update_zone` /
+ * `delete_zone` / `assign_channel_to_zone` — Rust handlers catch up in F5.
  */
-export const HUE_ZONE_COMMANDS = {
-  CREATE_ZONE: "create_hue_zone",
-  UPDATE_ZONE: "update_hue_zone",
-  DELETE_ZONE: "delete_hue_zone",
-  ASSIGN_CHANNEL_TO_ZONE: "assign_channel_to_zone",
-} as const;
+export const HUE_ZONE_COMMANDS = ZONE_COMMANDS;
 
+/**
+ * @deprecated v1.5 W4-F — use `ZoneCommandId` from `./roomMap` instead.
+ */
 export type HueZoneCommandId =
   (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
+
+/**
+ * @deprecated v1.5 W4-F — re-exported from `./roomMap`. Hue zone is now a
+ * `Zone & { zoneType: "hue" }` view of the unified `Zone` struct. New
+ * call sites should import `Zone` directly.
+ */
+export type HueZone = Zone;
 
 export const HUE_STATUS = {
   DISCOVERY_OK: "HUE_DISCOVERY_OK",
@@ -101,52 +104,19 @@ export const HUE_STATUS = {
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
   // -------------------------------------------------------------------------
-  // Hue Zone authoring (v1.5 W1-A2)
+  // Hue zone authoring codes — REMOVED in v1.5 W4-F
   // -------------------------------------------------------------------------
-  /** `create_hue_zone` succeeded; the new zone id is in the payload. */
-  ZONE_CREATED: "HUE_ZONE_CREATED",
-  /** `update_hue_zone` succeeded; the mutated zone is in the payload. */
-  ZONE_UPDATED: "HUE_ZONE_UPDATED",
-  /** `delete_hue_zone` succeeded; channels formerly in the zone fall back to legacy absolute placement. */
-  ZONE_DELETED: "HUE_ZONE_DELETED",
-  /** Referenced zone id does not exist in the active room map. */
-  ZONE_NOT_FOUND: "HUE_ZONE_NOT_FOUND",
-  /**
-   * A zone-relative position is outside the [-1, 1] cube on at least one
-   * axis. Surfaces the offending axis in the error message so the editor
-   * can clamp the slider before retrying.
-   */
-  ZONE_CHANNEL_OUT_OF_BOUNDS: "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS",
-  /**
-   * The entertainment area's per-bridge channel cap (Hue: 10 per area)
-   * has been reached, so no further channel can be assigned. Distinct
-   * from `ZONE_CHANNEL_OUT_OF_BOUNDS` because it is a bridge-side limit
-   * the user cannot override by clamping.
-   */
-  ZONE_LIMIT_REACHED: "HUE_ZONE_LIMIT_REACHED",
-  /**
-   * Tried to assign a channel that lives in a different entertainment
-   * area than the zone's `entertainmentAreaId`. Zones never span two
-   * areas; the caller must move the channel to a zone in its own area.
-   */
-  ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
-  /**
-   * v1.5 W4-I — zone scale exceeds the room (or undershoots the slider
-   * floor / is non-finite). Zone size is room-relative per axis: each of
-   * `scaleX` / `scaleY` is independently clamped to `[0.05, 1.0]`. A
-   * `scale` of `1.0` means "zone equals the room on that axis"; values
-   * above 1.0 are rejected because the zone bounds box would visually
-   * overflow the room map AND the Hue cube. Distinct from
-   * `ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel relative drift) —
-   * recovery here is "shrink the zone", not "drag the channel back".
-   *
-   * Note: the previous W4-C uniform aspect-ratio lock ("scaleX must
-   * equal scaleY") was dropped in W4-I. Zones are now authored as
-   * physical 1:1 metric squares — in a non-square room the frontend
-   * deliberately writes asymmetric `scaleX` / `scaleY` so the zone
-   * renders as a true square in metres on the canvas.
-   */
-  ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
+  // The previous `ZONE_*` family (`HUE_ZONE_CREATED`, `HUE_ZONE_UPDATED`,
+  // `HUE_ZONE_DELETED`, `HUE_ZONE_NOT_FOUND`, `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`,
+  // `HUE_ZONE_LIMIT_REACHED`, `HUE_ZONE_CHANNEL_NOT_IN_AREA`,
+  // `HUE_ZONE_OVERSIZED`) was dropped from `HUE_STATUS`. Zone codes now
+  // live in `roomMap.ts > ZONE_STATUS_CODES` under the renamed `ZONE_*`
+  // prefix because zones are no longer Hue-exclusive. Two new codes
+  // (`ZONE_TYPE_INVALID`, `ZONE_CONVERSION_OK`) accompany the move.
+  //
+  // Per RFC §2.2 there is no published frontend that depends on the old
+  // strings (W1-A2 shipped only on dev branches), so no backwards-compat
+  // alias is exported. The Rust constants will be renamed in F5.
   // -------------------------------------------------------------------------
   // OS keychain credential store (v1.5 W2-A1 / W2-A2)
   // -------------------------------------------------------------------------

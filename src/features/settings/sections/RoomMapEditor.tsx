@@ -28,8 +28,9 @@ import type {
   HueChannelPlacement,
   HueZone,
   RoomDimensions,
-  ZoneDefinition,
+  Zone,
 } from "../../../shared/contracts/roomMap";
+import { ZONE_TYPES } from "../../../shared/contracts/roomMap";
 import type { LedSegmentCounts } from "../../calibration/model/contracts";
 import React from "react";
 import { shellStore } from "../../persistence/shellStore";
@@ -633,7 +634,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const handleAddZone = useCallback(() => {
     const id = `zone-${crypto.randomUUID()}`;
     const name = t("roomMap.zones.defaultName", { N: String(config.zones.length + 1) });
-    const newZone: ZoneDefinition = { id, name, channelIndices: [] };
+    const newZone: Zone = { id, name, zoneType: ZONE_TYPES.LOGICAL, channelIndices: [] };
     void updateConfig({ zones: [...config.zones, newZone] });
     setActiveZoneId(id);
     setObjectPanelOpen(true);

@@ -254,6 +254,16 @@ if (orderMatch) {
 }
 
 // ---------------------------------------------------------------------------
+// Schema version bump (v1.5 W4-F — must be 2 to gate the zone migration shim)
+// ---------------------------------------------------------------------------
+console.log("\n[ Shell state schema version (v1.5 W4-F) ]");
+check(
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*2\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 2 (W4-F zone migration gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 2 — F6 migration shim has no trigger"
+);
+
+// ---------------------------------------------------------------------------
 // Hue contract
 // ---------------------------------------------------------------------------
 const HUE_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/hue.ts");
@@ -339,6 +349,31 @@ check(
   hueSource.includes("DEFAULT_HUE_INTENSITY_PRESET"),
   "DEFAULT_HUE_INTENSITY_PRESET exported",
   "MISSING DEFAULT_HUE_INTENSITY_PRESET"
+);
+
+console.log("\n[ Hue zone surface moved out (v1.5 W4-F) ]");
+// HUE_ZONE_COMMANDS is preserved as a @deprecated re-export pointing at
+// roomMap.ts > ZONE_COMMANDS so existing call sites compile until F2 sweep.
+// The legacy HUE_ZONE_* status codes MUST be gone from HUE_STATUS now —
+// they live under ZONE_STATUS_CODES in roomMap.ts.
+check(
+  !hueSource.includes(`"HUE_ZONE_CREATED"`)
+    && !hueSource.includes(`"HUE_ZONE_UPDATED"`)
+    && !hueSource.includes(`"HUE_ZONE_DELETED"`)
+    && !hueSource.includes(`"HUE_ZONE_NOT_FOUND"`)
+    && !hueSource.includes(`"HUE_ZONE_CHANNEL_OUT_OF_BOUNDS"`)
+    && !hueSource.includes(`"HUE_ZONE_LIMIT_REACHED"`)
+    && !hueSource.includes(`"HUE_ZONE_CHANNEL_NOT_IN_AREA"`)
+    && !hueSource.includes(`"HUE_ZONE_OVERSIZED"`),
+  "legacy HUE_ZONE_* status code strings removed from hue.ts",
+  "STILL PRESENT: legacy HUE_ZONE_* status code strings in hue.ts (move them to roomMap.ts > ZONE_STATUS_CODES)"
+);
+check(
+  !hueSource.includes(`"create_hue_zone"`)
+    && !hueSource.includes(`"update_hue_zone"`)
+    && !hueSource.includes(`"delete_hue_zone"`),
+  "legacy hue zone command strings removed from hue.ts",
+  "STILL PRESENT: legacy hue zone command strings in hue.ts (commands now live in roomMap.ts > ZONE_COMMANDS)"
 );
 
 // ---------------------------------------------------------------------------
@@ -492,7 +527,7 @@ for (const cmd of REQUIRED_PLATFORM_COMMANDS) {
   check(
     platformSource.includes(`"${cmd}"`),
     `platform command "${cmd}" defined`,
-    `MISSING platform command "${cmd}"`
+    `MISSING platform command "${cmd}" in platform.ts`
   );
 }
 
@@ -527,6 +562,9 @@ const ROOM_MAP_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/roomMap.ts");
 const roomMapSource = readOrEmpty(ROOM_MAP_CONTRACT_FILE, "room map");
 
 console.log("\n[ Room map contract types ]");
+// `ZoneDefinition` and `HueZone` survive as @deprecated migration-shim
+// types (consumed by `toLogicalZone` / `toHueZone`); the unified `Zone`
+// is the new authoring shape and MUST be present alongside them.
 const REQUIRED_ROOM_MAP_TYPES = [
   "RoomDimensions",
   "HueChannelPlacement",
@@ -534,6 +572,8 @@ const REQUIRED_ROOM_MAP_TYPES = [
   "FurniturePlacement",
   "TvAnchorPlacement",
   "ZoneDefinition",
+  "HueZone",
+  "Zone",
   "RoomMapConfig",
 ];
 for (const typeName of REQUIRED_ROOM_MAP_TYPES) {
@@ -556,6 +596,123 @@ for (const cmd of REQUIRED_ROOM_MAP_COMMANDS) {
     `MISSING room map command "${cmd}" in roomMap.ts`
   );
 }
+
+// ---------------------------------------------------------------------------
+// Zone unification (v1.5 W4-F)
+// ---------------------------------------------------------------------------
+console.log("\n[ Zone unification — types (v1.5 W4-F) ]");
+check(
+  /export\s+const\s+ZONE_TYPES\s*=\s*\{/.test(roomMapSource),
+  "ZONE_TYPES const exported",
+  "MISSING ZONE_TYPES const in roomMap.ts"
+);
+check(
+  roomMapSource.includes(`LOGICAL: "logical"`),
+  `ZONE_TYPES.LOGICAL = "logical" defined`,
+  `MISSING ZONE_TYPES.LOGICAL = "logical"`
+);
+check(
+  roomMapSource.includes(`HUE: "hue"`),
+  `ZONE_TYPES.HUE = "hue" defined`,
+  `MISSING ZONE_TYPES.HUE = "hue"`
+);
+check(
+  /export\s+type\s+ZoneType\s*=/.test(roomMapSource),
+  "ZoneType type exported",
+  "MISSING ZoneType type export in roomMap.ts"
+);
+check(
+  /zoneType:\s*ZoneType/.test(roomMapSource),
+  "Zone.zoneType discriminator field declared",
+  "MISSING Zone.zoneType discriminator field"
+);
+
+console.log("\n[ Zone unification — RoomMapConfig fields (v1.5 W4-F) ]");
+check(
+  /zones:\s*Zone\[\]/.test(roomMapSource),
+  "RoomMapConfig.zones widened to Zone[]",
+  "RoomMapConfig.zones is not typed Zone[] (W4-F unification)"
+);
+check(
+  /hueZones\?:\s*HueZone\[\]/.test(roomMapSource),
+  "RoomMapConfig.hueZones kept as @deprecated read-only fallback",
+  "MISSING @deprecated RoomMapConfig.hueZones field — F6 migration shim has no fallback to read"
+);
+
+console.log("\n[ Zone unification — migration helpers (v1.5 W4-F) ]");
+check(
+  /export\s+function\s+toLogicalZone\s*\(/.test(roomMapSource),
+  "toLogicalZone migration helper exported",
+  "MISSING toLogicalZone migration helper in roomMap.ts"
+);
+check(
+  /export\s+function\s+toHueZone\s*\(/.test(roomMapSource),
+  "toHueZone migration helper exported",
+  "MISSING toHueZone migration helper in roomMap.ts"
+);
+
+console.log("\n[ Zone unification — command surface (v1.5 W4-F) ]");
+const REQUIRED_ZONE_COMMANDS = [
+  "create_zone",
+  "update_zone",
+  "delete_zone",
+  "assign_channel_to_zone",
+];
+for (const cmd of REQUIRED_ZONE_COMMANDS) {
+  check(
+    roomMapSource.includes(`"${cmd}"`),
+    `zone command "${cmd}" defined in roomMap.ts`,
+    `MISSING zone command "${cmd}" in roomMap.ts > ZONE_COMMANDS`
+  );
+}
+check(
+  /export\s+const\s+ZONE_COMMANDS\s*=\s*\{/.test(roomMapSource),
+  "ZONE_COMMANDS const exported",
+  "MISSING ZONE_COMMANDS const in roomMap.ts"
+);
+
+console.log("\n[ Zone unification — status codes (v1.5 W4-F) ]");
+const REQUIRED_ZONE_STATUS_CODES = [
+  "ZONE_CREATED",
+  "ZONE_UPDATED",
+  "ZONE_DELETED",
+  "ZONE_NOT_FOUND",
+  "ZONE_CHANNEL_OUT_OF_BOUNDS",
+  "ZONE_LIMIT_REACHED",
+  "ZONE_CHANNEL_NOT_IN_AREA",
+  "ZONE_OVERSIZED",
+  "ZONE_TYPE_INVALID",
+  "ZONE_CONVERSION_OK",
+];
+for (const code of REQUIRED_ZONE_STATUS_CODES) {
+  check(
+    roomMapSource.includes(`"${code}"`),
+    `zone status code "${code}" defined`,
+    `MISSING zone status code "${code}" in roomMap.ts > ZONE_STATUS_CODES`
+  );
+}
+check(
+  /export\s+const\s+ZONE_STATUS_CODES\s*=\s*\{/.test(roomMapSource),
+  "ZONE_STATUS_CODES const exported",
+  "MISSING ZONE_STATUS_CODES const in roomMap.ts"
+);
+
+// ---------------------------------------------------------------------------
+// Rust handler parity for the renamed zone commands.
+//
+// TODO(W4-F5): re-enable these after the Rust side renames in F5. Today
+// the Rust handler list still carries `create_hue_zone` etc. — `pnpm
+// check:rust` is expected to be RED until F5 lands. Skipping these checks
+// here so PR #1 (F1) can be reviewed against TS-only diff. The PR squash
+// MUST flip these back on at the same time as F5 ships, otherwise the
+// drift guard becomes a no-op for the renamed commands.
+// ---------------------------------------------------------------------------
+console.log("\n[ Zone unification — Rust handler parity (DEFERRED to W4-F5) ]");
+console.log(
+  "  ⏭  Rust handler parity for create_zone/update_zone/delete_zone/assign_channel_to_zone\n" +
+  "      is deferred until F5 renames the Rust commands. PR #1 ships TS-only;\n" +
+  "      PR squash re-enables the assertion."
+);
 
 // ---------------------------------------------------------------------------
 // Summary

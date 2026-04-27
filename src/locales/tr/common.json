@@ -1365,6 +1365,20 @@
       "overrideWarningDontAskAgain": "Bir daha sorma"
     }
   },
+  "zone": {
+    "statusCode": {
+      "created": "Bölge oluşturuldu.",
+      "updated": "Bölge güncellendi.",
+      "deleted": "Bölge silindi.",
+      "notFound": "Bölge bulunamadı.",
+      "channelOutOfBounds": "Kanal pozisyonu izinli aralığın dışında.",
+      "limitReached": "Bridge bu Hue eğlence alanı için kanal sınırına ulaşıldı.",
+      "channelNotInArea": "Kanal bu bölgenin eğlence alanına ait değil.",
+      "oversized": "Bölge boyutu izinli aralığın dışında.",
+      "typeInvalid": "Bölge alanları seçilen türle eşleşmiyor (mantıksal/Hue).",
+      "conversionOk": "Bölge mantıksal kopya olarak çoğaltıldı."
+    }
+  },
   "notifications": {
     "permission": {
       "denied": {

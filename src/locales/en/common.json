@@ -1365,6 +1365,20 @@
       "overrideWarningDontAskAgain": "Don't ask me again"
     }
   },
+  "zone": {
+    "statusCode": {
+      "created": "Zone created.",
+      "updated": "Zone updated.",
+      "deleted": "Zone deleted.",
+      "notFound": "Zone not found.",
+      "channelOutOfBounds": "Channel position is outside the allowed range.",
+      "limitReached": "Bridge channel cap reached for this Hue entertainment area.",
+      "channelNotInArea": "Channel does not belong to this zone’s entertainment area.",
+      "oversized": "Zone size is outside the allowed range.",
+      "typeInvalid": "Zone fields do not match the selected type (logical/Hue).",
+      "conversionOk": "Zone duplicated as a logical copy."
+    }
+  },
   "notifications": {
     "permission": {
       "denied": {
