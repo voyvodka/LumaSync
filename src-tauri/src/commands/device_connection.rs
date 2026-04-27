@@ -143,9 +143,13 @@ pub struct HealthCheckResult {
     /// Firmware version string as reported by the device (e.g. `"1.4"`).
     /// Populated only on a successful handshake.
     pub firmware_version: Option<String>,
-    /// Firmware profile advertised by the device.
+    /// Firmware profile **advertised by the device** in the PONG profile byte.
+    ///
+    /// Distinct from `ShellState.firmwareProfile` (user-selected encoder).
+    /// The Settings UI compares the two so the dropdown can disable the
+    /// incompatible option (Bug H4 — v1.5).
     /// Populated only on a successful handshake.
-    pub firmware_profile: Option<FirmwareProfile>,
+    pub advertised_firmware_profile: Option<FirmwareProfile>,
 }
 
 pub struct SerialConnectionState {
@@ -233,6 +237,15 @@ pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
 
     let mapped_ports = ports
         .into_iter()
+        // macOS exposes every USB serial device under both /dev/cu.* (call-out,
+        // non-blocking, correct for data) and /dev/tty.* (blocking, requires DCD
+        // signal that CH340/FTDI/CP2102 don't assert). The tty.* sibling is
+        // meaningless for LumaSync — exposing it leads to false-positive pairing
+        // where port open() succeeds but data flow silently fails (real incident
+        // on 2026-04-26 where tty.* pairing produced "Connect and verify Pass"
+        // followed by handshake timeout). Filter tty.* siblings out of
+        // enumeration on macOS only; Linux and Windows are not affected.
+        .filter(|p| !is_macos_tty_path(&p.port_name))
         .map(|port| {
             let name = port.port_name;
 
@@ -559,7 +572,7 @@ pub async fn run_serial_health_check(port_name: String) -> HealthCheckResult {
             checked_at_unix_ms: now_unix_ms(),
             round_trip_ms: None,
             firmware_version: None,
-            firmware_profile: None,
+            advertised_firmware_profile: None,
         });
 
     result
@@ -593,7 +606,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 checked_at_unix_ms: now_unix_ms(),
                 round_trip_ms: None,
                 firmware_version: None,
-                firmware_profile: None,
+                advertised_firmware_profile: None,
             };
         }
     };
@@ -625,7 +638,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 checked_at_unix_ms: now_unix_ms(),
                 round_trip_ms: None,
                 firmware_version: None,
-                firmware_profile: None,
+                advertised_firmware_profile: None,
             };
         }
     };
@@ -664,7 +677,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                     checked_at_unix_ms: now_unix_ms(),
                     round_trip_ms: None,
                     firmware_version: None,
-                    firmware_profile: None,
+                    advertised_firmware_profile: None,
                 };
             }
         }
@@ -683,7 +696,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 checked_at_unix_ms: now_unix_ms(),
                 round_trip_ms: None,
                 firmware_version: None,
-                firmware_profile: None,
+                advertised_firmware_profile: None,
             };
         }
     }
@@ -729,7 +742,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 checked_at_unix_ms: now_unix_ms(),
                 round_trip_ms: None,
                 firmware_version: None,
-                firmware_profile: None,
+                advertised_firmware_profile: None,
             };
         }
     };
@@ -767,7 +780,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 checked_at_unix_ms: now_unix_ms(),
                 round_trip_ms: Some(elapsed_ms),
                 firmware_version: Some(version_str),
-                firmware_profile: Some(response.firmware_profile),
+                advertised_firmware_profile: Some(response.firmware_profile),
             }
         }
         Err(err) => {
@@ -793,7 +806,7 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
                 checked_at_unix_ms: now_unix_ms(),
                 round_trip_ms: None,
                 firmware_version: None,
-                firmware_profile: None,
+                advertised_firmware_profile: None,
             }
         }
     }
@@ -807,6 +820,34 @@ fn is_supported_usb(vid: u16, pid: u16) -> bool {
     SUPPORTED_USB_DEVICE_ALLOWLIST
         .iter()
         .any(|(allowed_vid, allowed_pid)| *allowed_vid == vid && *allowed_pid == pid)
+}
+
+/// Returns `true` for paths that should be suppressed from enumeration on macOS.
+///
+/// macOS exposes every USB serial adapter under two POSIX paths:
+///   - `/dev/cu.*`  — call-out device, non-blocking, correct for outgoing data.
+///   - `/dev/tty.*` — terminal device, blocking, requires DCD assertion.
+///
+/// CH340, FTDI FT232R, CP2102, and Arduino-class boards never assert DCD, so
+/// the tty.* sibling opens at the file-descriptor level but silently stalls on
+/// read/write once the kernel waits for the carrier-detect signal. This caused
+/// a real incident on 2026-04-26 where pairing with `/dev/tty.usbserial-10`
+/// produced "Connect and verify Pass" followed by a handshake timeout.
+///
+/// The filter covers ALL `/dev/tty.*` paths — including `/dev/tty.usbmodem*`
+/// for genuine Arduinos — because the cu.* sibling is always present and is
+/// the correct path. On Linux and Windows this function always returns `false`
+/// (compile-time no-op), so their enumerators are unaffected.
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+fn is_macos_tty_path(name: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        name.starts_with("/dev/tty.")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 
 fn connect_error_code(error: &serialport::Error) -> &'static str {
@@ -877,7 +918,14 @@ fn now_unix_ms() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_supported_usb, SUPPORTED_USB_DEVICE_ALLOWLIST};
+    use std::collections::VecDeque;
+    use std::time::Duration;
+
+    use super::{is_macos_tty_path, is_supported_usb, HealthCheckResult, SUPPORTED_USB_DEVICE_ALLOWLIST};
+    use super::super::device_handshake::{
+        perform_handshake, SerialRoundTrip, FRAME_MAGIC, HANDSHAKE_OPCODE_PONG,
+    };
+    use super::super::led_output::FirmwareProfile;
 
     // ---------------------------------------------------------------------------
     // Original v1.x allowlist entries (regression)
@@ -978,5 +1026,281 @@ mod tests {
             9,
             "Allowlist must contain exactly 9 entries (5 original + 4 v1.5 G5)"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // macOS tty.* filter — is_macos_tty_path
+    //
+    // On macOS the filter must suppress /dev/tty.* siblings while leaving
+    // /dev/cu.* call-out paths, non-serial paths, and Windows/Linux COM paths
+    // untouched. On non-macOS targets the function is a compile-time false
+    // and all paths pass through unchanged.
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn macos_tty_usbserial_is_filtered() {
+        // The exact path from the real incident on 2026-04-26.
+        assert!(
+            is_macos_tty_path("/dev/tty.usbserial-10"),
+            "/dev/tty.usbserial-10 must be filtered on macOS"
+        );
+    }
+
+    #[test]
+    fn macos_tty_usbmodem_is_filtered() {
+        // Arduino Uno via ATmega16U2 — tty.* sibling must also be suppressed.
+        assert!(
+            is_macos_tty_path("/dev/tty.usbmodem14201"),
+            "/dev/tty.usbmodem* must be filtered on macOS"
+        );
+    }
+
+    #[test]
+    fn macos_cu_usbserial_passes_through() {
+        assert!(
+            !is_macos_tty_path("/dev/cu.usbserial-10"),
+            "/dev/cu.usbserial-10 must NOT be filtered — it is the correct call-out path"
+        );
+    }
+
+    #[test]
+    fn macos_cu_usbmodem_passes_through() {
+        assert!(
+            !is_macos_tty_path("/dev/cu.usbmodem14201"),
+            "/dev/cu.usbmodem* must NOT be filtered"
+        );
+    }
+
+    #[test]
+    fn macos_bluetooth_incoming_passes_through() {
+        // Bluetooth virtual port — already gated by no VID/PID, but must not
+        // be incorrectly caught by the tty filter either.
+        assert!(
+            !is_macos_tty_path("/dev/cu.Bluetooth-Incoming-Port"),
+            "Bluetooth cu.* port must not be filtered"
+        );
+    }
+
+    #[test]
+    fn windows_com_port_passes_through() {
+        // On non-macOS the function always returns false.
+        assert!(
+            !is_macos_tty_path("COM3"),
+            "Windows COM3 must not be filtered on any platform"
+        );
+    }
+
+    #[test]
+    fn linux_ttyusb_passes_through() {
+        // Linux uses /dev/ttyUSB0 — uppercase, no dot separator. Must not be
+        // filtered even on macOS because it won't appear in macOS enumeration,
+        // and on Linux the cfg guard ensures false.
+        assert!(
+            !is_macos_tty_path("/dev/ttyUSB0"),
+            "/dev/ttyUSB0 must not be filtered — Linux path, no dot after tty"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // H4 — advertised_firmware_profile propagation from PONG into HealthCheckResult
+    //
+    // These tests verify that the Step 4 HANDSHAKE success arm correctly
+    // propagates  into
+    // , and that every error arm
+    // (timeout and protocol error) leaves the field as .
+    //
+    //  is a local in-memory implementation of  that
+    // mirrors the one in . Duplicated here to keep the
+    // two test modules independently runnable without exposing test helpers as
+    // .
+    // ---------------------------------------------------------------------------
+
+    /// Minimal in-memory serial port for handshake unit tests.
+    struct MockPort {
+        read_queue: VecDeque<u8>,
+        written: Vec<u8>,
+        silent: bool,
+    }
+
+    impl MockPort {
+        fn with_response(response: Vec<u8>) -> Self {
+            Self {
+                read_queue: VecDeque::from(response),
+                written: Vec::new(),
+                silent: false,
+            }
+        }
+
+        fn silent() -> Self {
+            Self {
+                read_queue: VecDeque::new(),
+                written: Vec::new(),
+                silent: true,
+            }
+        }
+    }
+
+    impl SerialRoundTrip for MockPort {
+        fn write_all(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+            self.written.extend_from_slice(bytes);
+            Ok(())
+        }
+
+        fn read_with_timeout(
+            &mut self,
+            buf: &mut [u8],
+            _timeout: Duration,
+        ) -> std::io::Result<usize> {
+            if self.silent {
+                return Ok(0);
+            }
+            let mut count = 0usize;
+            for slot in buf.iter_mut() {
+                match self.read_queue.pop_front() {
+                    Some(b) => {
+                        *slot = b;
+                        count += 1;
+                    }
+                    None => break,
+                }
+            }
+            Ok(count)
+        }
+    }
+
+    /// Build a correctly checksummed 7-byte PONG frame.
+    fn build_pong(fw_version: u16, profile_byte: u8) -> Vec<u8> {
+        let ver = fw_version.to_le_bytes();
+        let mut frame = vec![
+            FRAME_MAGIC[0],
+            FRAME_MAGIC[1],
+            HANDSHAKE_OPCODE_PONG,
+            ver[0],
+            ver[1],
+            profile_byte,
+        ];
+        let checksum = frame.iter().fold(0_u8, |acc, b| acc ^ b);
+        frame.push(checksum);
+        frame
+    }
+
+    /// Helper: build the  that the Step 4 success arm would
+    /// produce, given the output of .
+    fn make_health_result_from_pong(profile_byte: u8) -> HealthCheckResult {
+        // 0x01 = LumaSyncV1, 0x02 = Adalight (wire constants from device_handshake)
+        let pong = build_pong(0x0105, profile_byte);
+        let mut port = MockPort::with_response(pong);
+
+        match perform_handshake(&mut port, Duration::from_millis(1_000)) {
+            Ok((response, elapsed_ms)) => HealthCheckResult {
+                pass: true,
+                steps: vec![],
+                checked_at_unix_ms: 0,
+                round_trip_ms: Some(elapsed_ms),
+                firmware_version: Some(response.version_string()),
+                advertised_firmware_profile: Some(response.firmware_profile),
+            },
+            Err(_) => HealthCheckResult {
+                pass: false,
+                steps: vec![],
+                checked_at_unix_ms: 0,
+                round_trip_ms: None,
+                firmware_version: None,
+                advertised_firmware_profile: None,
+            },
+        }
+    }
+
+    #[test]
+    fn health_check_round_trips_advertised_lumasync_v1_profile_from_pong() {
+        // profile byte 0x01 = LumaSyncV1
+        let result = make_health_result_from_pong(0x01);
+        assert_eq!(
+            result.advertised_firmware_profile,
+            Some(FirmwareProfile::LumaSyncV1),
+            "PONG with profile byte 0x01 must propagate as LumaSyncV1"
+        );
+        assert!(result.pass, "success arm must set pass = true");
+        assert!(result.firmware_version.is_some(), "firmware_version must be populated on success");
+    }
+
+    #[test]
+    fn health_check_round_trips_advertised_adalight_profile_from_pong() {
+        // profile byte 0x02 = Adalight
+        let result = make_health_result_from_pong(0x02);
+        assert_eq!(
+            result.advertised_firmware_profile,
+            Some(FirmwareProfile::Adalight),
+            "PONG with profile byte 0x02 must propagate as Adalight"
+        );
+        assert!(result.pass, "success arm must set pass = true");
+    }
+
+    #[test]
+    fn health_check_returns_none_advertised_profile_on_handshake_timeout() {
+        // Silent port — simulates a device that never answers the PING
+        // (non-LumaSync firmware, or unpowered strip).
+        let mut port = MockPort::silent();
+        let err_result = match perform_handshake(&mut port, Duration::from_millis(100)) {
+            Ok((response, elapsed_ms)) => HealthCheckResult {
+                pass: true,
+                steps: vec![],
+                checked_at_unix_ms: 0,
+                round_trip_ms: Some(elapsed_ms),
+                firmware_version: Some(response.version_string()),
+                advertised_firmware_profile: Some(response.firmware_profile),
+            },
+            Err(_) => HealthCheckResult {
+                pass: false,
+                steps: vec![],
+                checked_at_unix_ms: 0,
+                round_trip_ms: None,
+                firmware_version: None,
+                advertised_firmware_profile: None,
+            },
+        };
+
+        assert_eq!(
+            err_result.advertised_firmware_profile,
+            None,
+            "handshake timeout must leave advertised_firmware_profile as None"
+        );
+        assert_eq!(err_result.round_trip_ms, None);
+        assert!(!err_result.pass);
+    }
+
+    #[test]
+    fn health_check_returns_none_advertised_profile_on_protocol_error() {
+        // Garbled bytes — simulates a device that returns garbage on the bus
+        // (e.g. non-LumaSync firmware echoing its own protocol).
+        let garbled = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33];
+        let mut port = MockPort::with_response(garbled);
+
+        let err_result = match perform_handshake(&mut port, Duration::from_millis(1_000)) {
+            Ok((response, elapsed_ms)) => HealthCheckResult {
+                pass: true,
+                steps: vec![],
+                checked_at_unix_ms: 0,
+                round_trip_ms: Some(elapsed_ms),
+                firmware_version: Some(response.version_string()),
+                advertised_firmware_profile: Some(response.firmware_profile),
+            },
+            Err(_) => HealthCheckResult {
+                pass: false,
+                steps: vec![],
+                checked_at_unix_ms: 0,
+                round_trip_ms: None,
+                firmware_version: None,
+                advertised_firmware_profile: None,
+            },
+        };
+
+        assert_eq!(
+            err_result.advertised_firmware_profile,
+            None,
+            "protocol error must leave advertised_firmware_profile as None"
+        );
+        assert_eq!(err_result.round_trip_ms, None);
+        assert!(!err_result.pass);
     }
 }

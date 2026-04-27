@@ -247,6 +247,11 @@ export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_
  * Report returned by `run_serial_health_check`. Exactly one report per
  * invocation; the `step` field records the last health-check stage that
  * produced a verdict so the UI can step through the health modal.
+ *
+ * NOTE: the live runtime surface is `HealthCheckResult` in
+ * `src/features/device/deviceConnectionApi.ts` — this declaration is the
+ * forward-looking shape kept in sync with the same Rust struct so that
+ * future re-platforming onto a single per-step report is non-breaking.
  */
 export interface SerialHealthReport {
   step: DeviceHealthStep;
@@ -254,8 +259,21 @@ export interface SerialHealthReport {
   message: string;
   /** Firmware self-reported semantic version, e.g. `"1.4.0"`. Populated when the handshake returned a version frame. */
   firmwareVersion?: string;
-  /** Firmware profile advertised by the device. Populated on successful handshake. */
-  firmwareProfile?: FirmwareProfile;
+  /**
+   * Firmware profile **advertised by the device** in the PONG profile byte.
+   *
+   * Distinct from `ShellState.firmwareProfile`, which is the user-selected
+   * encoder. The UI compares the two to detect Bug H4 — the user chose
+   * Adalight in Settings but the connected firmware advertised LumaSyncV1
+   * (or vice versa), causing the USB sink to silently no-op while Hue
+   * keeps streaming. (v1.5 H4)
+   *
+   * Absence semantics: undefined whenever Step 4 (HANDSHAKE) did not
+   * complete with `SERIAL_HEALTH_OK`, including timeout, protocol error,
+   * unknown profile byte, or legacy firmware that ships no profile byte.
+   * The UI MUST treat undefined as "unknown — do not gate the dropdown".
+   */
+  advertisedFirmwareProfile?: FirmwareProfile;
   /** Wall-clock latency of the handshake round trip. Populated on `SERIAL_HEALTH_OK`. */
   roundTripMs?: number;
 }

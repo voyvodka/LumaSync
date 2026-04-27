@@ -97,6 +97,7 @@ const REQUIRED_V15_STATE_FIELDS = [
   "hasCompletedOnboarding",
   "updateChannel",
   "selectedChipType",
+  "dontWarnFirmwareProfileMismatch",
 ];
 
 /** v1.5 contract surface that must be exported alongside the new fields. */
@@ -416,6 +417,33 @@ check(
   deviceSource.includes("LedChipType"),
   "LedChipType type exported",
   "MISSING LedChipType type"
+);
+
+console.log("\n[ Device advertised firmware profile (v1.5 H4) ]");
+const RUST_HEALTH_CHECK_RESULT_FILE = resolve(
+  ROOT,
+  "src-tauri/src/commands/device_connection.rs"
+);
+const RUST_HEALTH_CHECK_API_FILE = resolve(
+  ROOT,
+  "src/features/device/deviceConnectionApi.ts"
+);
+const rustHealthSource = readOrEmpty(RUST_HEALTH_CHECK_RESULT_FILE, "rust device_connection");
+const tsHealthApiSource = readOrEmpty(RUST_HEALTH_CHECK_API_FILE, "ts deviceConnectionApi");
+check(
+  deviceSource.includes("advertisedFirmwareProfile?: FirmwareProfile"),
+  "device.ts SerialHealthReport.advertisedFirmwareProfile field declared",
+  "MISSING device.ts SerialHealthReport.advertisedFirmwareProfile field"
+);
+check(
+  tsHealthApiSource.includes("advertisedFirmwareProfile?: FirmwareProfile"),
+  "deviceConnectionApi HealthCheckResult.advertisedFirmwareProfile field declared",
+  "MISSING deviceConnectionApi HealthCheckResult.advertisedFirmwareProfile field"
+);
+check(
+  rustHealthSource.includes("pub advertised_firmware_profile: Option<FirmwareProfile>"),
+  "Rust HealthCheckResult.advertised_firmware_profile field declared",
+  "MISSING Rust HealthCheckResult.advertised_firmware_profile field"
 );
 
 console.log("\n[ Device sample-LED-frame command ]");

@@ -23,6 +23,10 @@ import {
   type SerialConnectionStatus,
   type SerialPortListResponse,
 } from "./deviceConnectionApi";
+import {
+  connectionEvents as defaultConnectionEvents,
+  type ConnectionEventBus,
+} from "./connectionEvents";
 
 type Listener = (state: DeviceConnectionControllerState) => void;
 
@@ -64,6 +68,26 @@ export interface DeviceConnectionControllerDeps {
   recoveryRetryDelayMs?: number;
   recoveryMaxAttempts?: number;
   refreshVisibleWaitMs?: number;
+  /**
+   * Bug 10A — when `true`, `initialize()` will attempt a one-shot
+   * `connectSerialPort(initialLastSuccessfulPort)` if Rust reports
+   * `connected: false` AND the persisted port is currently visible. A
+   * failure (port missing, connect rejected) is swallowed so the user
+   * still lands on the manual-pair screen rather than an error toast.
+   *
+   * Defaults to `true` from the live `useDeviceConnection()` hook so
+   * day-to-day app launches auto-restore the previously paired strip.
+   * Tests opt in explicitly when they want to exercise the path.
+   */
+  autoReconnectOnInit?: boolean;
+  /**
+   * Bug 10B — pub-sub bridge between sibling `useDeviceConnection`
+   * instances (App-level vs DEVICES section). The controller emits on
+   * a successful pair AND listens for emits coming from siblings, so a
+   * pair done inside DEVICES propagates to LIGHTS without a WebView
+   * reload. Tests provide a scoped bus to keep cross-test state clean.
+   */
+  connectionEvents?: ConnectionEventBus;
 }
 
 export interface DeviceConnectionController {
@@ -74,6 +98,12 @@ export interface DeviceConnectionController {
   selectPort: (portName: string | null) => void;
   connectSelectedPort: () => Promise<void>;
   runHealthCheck: () => Promise<void>;
+  /**
+   * Detach from the connection-event bus. Called by the React hook
+   * cleanup so dismounted controllers don't keep responding to
+   * sibling-emitted events. Tests may call it manually for tear-down.
+   */
+  dispose: () => void;
 }
 
 const DEFAULT_STATE: DeviceConnectionControllerState = {
@@ -152,6 +182,8 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
   const recoveryRetryDelayMs = deps.recoveryRetryDelayMs ?? 600;
   const recoveryMaxAttempts = deps.recoveryMaxAttempts ?? 4;
   const refreshVisibleWaitMs = deps.refreshVisibleWaitMs ?? REFRESH_MIN_VISIBLE_MS;
+  const autoReconnectOnInit = deps.autoReconnectOnInit ?? false;
+  const connectionEventsBus = deps.connectionEvents ?? null;
   const runHealthCheckRequest =
     deps.runSerialHealthCheck ??
     (async () => ({
@@ -178,6 +210,8 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
   let operationToken = 0;
   let lastRefreshAt = 0;
   let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  let unsubscribeFromEvents: (() => void) | null = null;
+  let disposed = false;
 
   const notify = () => {
     const snapshot = withDerivedFlags(state);
@@ -219,8 +253,10 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
   const persistSuccessfulPort = async (portName: string) => {
     try {
       await deps.persistLastSuccessfulPort(portName);
-    } catch {
-      // Persistence failures should not break an active connection.
+    } catch (err) {
+      // Persistence failures should not break an active connection, but we
+      // still log so the silent-catch ban is honoured (project CLAUDE.md).
+      console.error("[LumaSync] persistLastSuccessfulPort failed:", err);
     }
   };
 
@@ -355,6 +391,9 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
             },
           }));
           await persistSuccessfulPort(connectedPortName);
+          if (connectionEventsBus) {
+            connectionEventsBus.emit({ portName: connectedPortName, connected: true });
+          }
           return;
         }
 
@@ -499,23 +538,138 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
     await runRefresh(false);
   };
 
-  const initialize = async () => {
-    await runRefresh(true);
-
+  /**
+   * Bug 10B helper — pull the latest connection status from Rust and fold it
+   * into local state without performing any Rust-side mutation. Used both at
+   * the tail end of `initialize()` (warm-boot hydration) and as the listener
+   * body for sibling-emitted connection events. Failures are logged but
+   * never throw — connection-state hydration is best effort.
+   */
+  const hydrateFromRustStatus = async () => {
+    if (disposed) return;
     try {
       const status = await deps.getSerialConnectionStatus();
+      if (disposed) return;
+
       if (status.connected && status.portName) {
+        const connectedPortName = status.portName;
         setState((prev) => ({
           ...prev,
           status: DEVICE_STATUS.CONNECTED,
-          connectedPort: status.portName,
-          selectedPort: prev.selectedPort ?? status.portName,
+          connectedPort: connectedPortName,
+          selectedPort: prev.selectedPort ?? connectedPortName,
           statusCard: toConnectionCard(status),
-          lastSuccessfulPort: status.portName ?? undefined,
+          lastSuccessfulPort: connectedPortName,
+        }));
+      } else if (state.connectedPort !== null) {
+        // Sibling emitted "disconnected" (or Rust dropped the session). Mirror
+        // that by clearing our connected port. Avoids a stale "ON" badge in
+        // LIGHTS after the user unpaired from DEVICES.
+        setState((prev) => ({
+          ...prev,
+          status: nextStatusForReadyState(prev.ports),
+          connectedPort: null,
+          statusCard: toConnectionCard(status),
         }));
       }
-    } catch {
-      // Connection status hydration is best-effort only.
+    } catch (err) {
+      console.error("[LumaSync] getSerialConnectionStatus hydration failed:", err);
+    }
+  };
+
+  /**
+   * Bug 10A — auto-reconnect on app launch when the persisted port is
+   * available but Rust hasn't restored the session (fresh process, empty
+   * Mutex). Runs at most once per `initialize()` call. Quietly noops when
+   * the port is gone or the connect rejects so the user lands on a clean
+   * manual-pair screen instead of an error toast.
+   */
+  const tryAutoReconnect = async (targetPort: string) => {
+    if (disposed) return;
+    // Don't fight an active operation (manual connect, recovery, health
+    // check). The auto-reconnect call is best-effort housekeeping.
+    if (state.activeOperation !== DEVICE_OPERATION.IDLE) return;
+
+    // Make sure the port is actually present right now. We already ran
+    // the initial scan inside `initialize()`, so `state.ports` is fresh.
+    const portStillVisible = state.ports.some((port) => port.portName === targetPort);
+    if (!portStillVisible) return;
+
+    const token = beginOperation(DEVICE_OPERATION.MANUAL_CONNECT);
+    if (!token) return;
+
+    try {
+      const connection = await deps.connectSerialPort(targetPort);
+      if (token !== operationToken || disposed) return;
+
+      if (connection.connected && connection.portName) {
+        const connectedPortName = connection.portName;
+        finishOperation(token);
+        setState((prev) => ({
+          ...prev,
+          status: DEVICE_STATUS.CONNECTED,
+          connectedPort: connectedPortName,
+          selectedPort: connectedPortName,
+          lastSuccessfulPort: connectedPortName,
+          statusCard: toConnectionCard(connection),
+        }));
+        await persistSuccessfulPort(connectedPortName);
+        if (connectionEventsBus) {
+          connectionEventsBus.emit({ portName: connectedPortName, connected: true });
+        }
+        return;
+      }
+
+      // Connect rejected (port busy, handshake failed, etc.). Roll the
+      // operation flag back but DON'T surface an error card — the user
+      // didn't ask for this attempt and a noisy toast on every cold
+      // launch would be worse than a silent fall-through to manual
+      // pair. We do log so production debugging stays possible.
+      finishOperation(token);
+      console.warn(
+        "[LumaSync] auto-reconnect on init rejected:",
+        connection.status?.code ?? "UNKNOWN",
+        connection.status?.message ?? "",
+      );
+    } catch (err) {
+      if (token !== operationToken || disposed) return;
+      finishOperation(token);
+      console.error("[LumaSync] auto-reconnect on init threw:", err);
+    }
+  };
+
+  const initialize = async () => {
+    await runRefresh(true);
+
+    await hydrateFromRustStatus();
+
+    // Bug 10A — if Rust still reports disconnected after hydration AND we
+    // have a remembered port, try once to bring the session back. Has to
+    // run after `runRefresh` so the visibility check has a fresh ports
+    // list to consult.
+    if (
+      autoReconnectOnInit &&
+      state.connectedPort === null &&
+      typeof state.lastSuccessfulPort === "string" &&
+      state.lastSuccessfulPort.length > 0
+    ) {
+      await tryAutoReconnect(state.lastSuccessfulPort);
+    }
+
+    // Bug 10B — subscribe to sibling controllers' connection events. The
+    // emit happens in the controller that *did* the pair (typically the
+    // DEVICES section). Other live controllers (App-level, drives the
+    // Lights/StatusBar surface) re-pull Rust status so their UI mirrors
+    // the real session state without waiting for a WebView reload.
+    if (connectionEventsBus && !unsubscribeFromEvents) {
+      unsubscribeFromEvents = connectionEventsBus.subscribe(() => {
+        // Defer to the microtask queue so the emitting controller's own
+        // `setState` has fully flushed before we re-poll. Without this
+        // a synchronous emit during a React render boundary would race
+        // against the setState batch that put the emitter into the
+        // CONNECTED state.
+        void hydrateFromRustStatus();
+      });
     }
   };
 
@@ -579,6 +733,13 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
       }));
 
       await persistSuccessfulPort(connectedPortName);
+
+      // Bug 10B — broadcast to sibling controllers so the App-level
+      // hook (LIGHTS / StatusBar) refreshes its `isConnected` flag
+      // immediately without a WebView reload.
+      if (connectionEventsBus) {
+        connectionEventsBus.emit({ portName: connectedPortName, connected: true });
+      }
       return;
     }
 
@@ -657,6 +818,16 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
     }
   };
 
+  const dispose = () => {
+    disposed = true;
+    if (unsubscribeFromEvents) {
+      unsubscribeFromEvents();
+      unsubscribeFromEvents = null;
+    }
+    clearRecoveryTimer();
+    listeners.clear();
+  };
+
   return {
     getState: () => state,
     subscribe: (listener) => {
@@ -670,6 +841,7 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
     selectPort,
     connectSelectedPort,
     runHealthCheck,
+    dispose,
   };
 }
 
@@ -695,7 +867,11 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
         if (!cancelled) {
           setInitialLastSuccessfulPort(stored.lastSuccessfulPort);
         }
-      } catch {
+      } catch (err) {
+        // Persistence load failure shouldn't block the controller from
+        // initialising; we just lose the auto-reconnect hint for this
+        // session. Silent-catch ban: log the error explicitly.
+        console.error("[LumaSync] shellStore.load() in useDeviceConnection failed:", err);
         if (!cancelled) {
           setInitialLastSuccessfulPort(undefined);
         }
@@ -721,7 +897,11 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
           try {
             const stored = await shellStore.load();
             chipType = stored.selectedChipType;
-          } catch {
+          } catch (err) {
+            console.error(
+              "[LumaSync] shellStore.load() during connectSerialPort failed:",
+              err,
+            );
             chipType = undefined;
           }
           return connectSerialPort(portName, chipType);
@@ -732,6 +912,13 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
           await shellStore.save({ lastSuccessfulPort: portName });
         },
         initialLastSuccessfulPort,
+        // Bug 10A — opt the live React hook into auto-reconnect so the user
+        // doesn't have to re-pair on every launch. Tests building their own
+        // controller stay opt-out by default to keep their fixtures terse.
+        autoReconnectOnInit: true,
+        // Bug 10B — share the process-wide event bus so sibling
+        // useDeviceConnection() instances (App / DEVICES) stay in sync.
+        connectionEvents: defaultConnectionEvents,
       }),
     [initialLastSuccessfulPort],
   );
@@ -747,6 +934,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
 
     return () => {
       unsubscribe();
+      controller.dispose();
     };
   }, [controller]);
 
