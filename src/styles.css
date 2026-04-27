@@ -5714,6 +5714,21 @@ body {
   letter-spacing: 0.04em;
   color: var(--lm-ink-faint);
 }
+/* W4-J #2 — inline port editor inside a paired-strip card. Replaces
+   the read-only `.lm-paired-strip-sub` line with a dropdown when the
+   user clicks Change port. The select sits flush with the strip name
+   above it; Save / Cancel buttons reuse the action-button row that
+   normally renders the connection chip and Open-in-map link. */
+.lm-paired-strip-port-editor {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+.lm-paired-strip-port-editor .lm-paired-strip-form-select {
+  flex: 1 1 auto;
+  min-height: 26px;
+  font-size: 10.5px;
+}
 .lm-paired-strip-action {
   all: unset;
   cursor: pointer;

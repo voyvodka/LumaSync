@@ -284,6 +284,13 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
   const [stripDraftLedCount, setStripDraftLedCount] = useState("60");
   const [stripDraftPortName, setStripDraftPortName] = useState<string | null>(null);
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
+  // W4-J #2 — paired-strip port editing state. At most one strip card
+  // can be in edit mode at a time; the dropdown reuses the same port-
+  // filtering rules as the add-strip form (any discovered port that
+  // is unpaired, plus the strip's *own* current port so the user can
+  // safely cancel without flipping the slot off the dropdown).
+  const [portEditStripId, setPortEditStripId] = useState<string | null>(null);
+  const [portEditDraft, setPortEditDraft] = useState<string | null>(null);
 
   // Load placements from shellStore on mount and when selectedAreaId changes
   useEffect(() => {
@@ -395,6 +402,75 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     setStripDraftPortName(fallback);
     void refreshPorts();
   }, [connectedPort, availablePortsForPairing, pairedPortNames, refreshPorts]);
+
+  // W4-J #2 — open the port editor for a single strip card. The
+  // dropdown is initialised to the strip's current port so the user
+  // can cancel without losing context; we also fire a fresh
+  // `list_serial_ports` invoke so newly plugged devices show up.
+  const handleOpenPortEditor = useCallback(
+    (stripId: string, currentPort: string | null) => {
+      setPortEditStripId(stripId);
+      setPortEditDraft(currentPort);
+      void refreshPorts();
+    },
+    [refreshPorts],
+  );
+
+  const handleClosePortEditor = useCallback(() => {
+    setPortEditStripId(null);
+    setPortEditDraft(null);
+  }, []);
+
+  // Apply a new portName to a single strip slot. Same shellStore.save
+  // path as `handleAddStrip`; we mutate one element and bump the
+  // version so downstream consumers re-read. Duplicate-port guard is
+  // mandatory — the dropdown filters paired ports out, but a stale
+  // selection (concurrent edit on another tab) still reaches here.
+  const handleSaveStripPort = useCallback(async () => {
+    const targetId = portEditStripId;
+    const nextPort = portEditDraft;
+    if (!targetId || !nextPort) return;
+    // Allow re-selecting the same port (no-op save).
+    const target = pairedStrips.find((s) => s.stripId === targetId);
+    if (!target) {
+      handleClosePortEditor();
+      return;
+    }
+    if (target.portName !== nextPort && pairedPortNames.has(nextPort)) {
+      console.error("[LumaSync] handleSaveStripPort: port already paired", nextPort);
+      setPersistError(true);
+      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
+      persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
+      return;
+    }
+    if (target.portName === nextPort) {
+      handleClosePortEditor();
+      return;
+    }
+    try {
+      const current = await shellStore.load();
+      const currentRoomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
+      const updatedStrips = currentRoomMap.usbStrips.map((s) =>
+        s.stripId === targetId ? { ...s, portName: nextPort } : s,
+      );
+      const updatedRoomMap: RoomMapConfig = {
+        ...currentRoomMap,
+        usbStrips: updatedStrips,
+      };
+      await shellStore.save({
+        roomMap: updatedRoomMap,
+        roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+      });
+      setPairedStrips(updatedStrips);
+      handleClosePortEditor();
+      setPersistError(false);
+    } catch (e) {
+      console.error("[LumaSync] handleSaveStripPort failed", e);
+      setPersistError(true);
+      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
+      persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
+    }
+  }, [portEditStripId, portEditDraft, pairedStrips, pairedPortNames, handleClosePortEditor]);
 
   const handleAddStrip = useCallback(async () => {
     const portName = stripDraftPortName;
@@ -741,6 +817,17 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       ? "connected"
                       : "disconnected";
                 const portLabel = strip.portName ?? connectedPort ?? t("devicesPage.usb.paired.noPort");
+                const isEditingPort = portEditStripId === strip.stripId;
+                // Eligible ports for this strip's editor: every unpaired
+                // discovered port PLUS the strip's own current port (so
+                // re-selecting same is a no-op save and cancel keeps a
+                // valid value in the dropdown).
+                const portEditOptions = isEditingPort
+                  ? Array.from(new Set([
+                      ...(strip.portName ? [strip.portName] : []),
+                      ...availablePortsForPairing,
+                    ]))
+                  : [];
                 return (
                   <div key={strip.stripId} className="lm-paired-strip">
                     <div className="lm-paired-strip-ic"><IconUsb /></div>
@@ -748,31 +835,102 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       <div className="lm-paired-strip-name">
                         {t("devicesPage.usb.paired.stripName", { count: strip.ledCount })}
                       </div>
-                      <div className="lm-paired-strip-sub">
-                        {portLabel}
-                      </div>
+                      {isEditingPort ? (
+                        <div className="lm-paired-strip-port-editor">
+                          <select
+                            className="lm-paired-strip-form-select"
+                            value={portEditDraft ?? ""}
+                            onChange={(e) => setPortEditDraft(e.target.value || null)}
+                            aria-label={t("devicesPage.usb.paired.portLabel")}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                void handleSaveStripPort();
+                              } else if (e.key === "Escape") {
+                                handleClosePortEditor();
+                              }
+                            }}
+                          >
+                            {portEditOptions.length === 0 ? (
+                              <option value="" disabled>
+                                {t("devicesPage.usb.paired.formEmptyAllPaired")}
+                              </option>
+                            ) : (
+                              portEditOptions.map((portName) => {
+                                const port = ports.find((p) => p.portName === portName);
+                                const display = port
+                                  ? portDisplayName(port.portName, port.product, port.manufacturer)
+                                  : portName;
+                                return (
+                                  <option key={portName} value={portName}>
+                                    {display === portName ? portName : `${display} (${portName})`}
+                                  </option>
+                                );
+                              })
+                            )}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="lm-paired-strip-sub">
+                          {portLabel}
+                        </div>
+                      )}
                     </div>
-                    <span
-                      className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${stripStatus}`}
-                      role="status"
-                      aria-live="polite"
-                    >
-                      <span className="lm-room-dock-conn-chip-dot" aria-hidden />
-                      <span className="lm-room-dock-conn-chip-tx">
-                        {stripStatus === "connected"
-                          ? t("devicesPage.usb.pill.online")
-                          : t("devicesPage.usb.paired.offline")}
-                      </span>
-                    </span>
-                    {onNavigateToRoomMap ? (
-                      <button
-                        type="button"
-                        className="lm-paired-strip-action"
-                        onClick={onNavigateToRoomMap}
+                    {!isEditingPort ? (
+                      <span
+                        className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${stripStatus}`}
+                        role="status"
+                        aria-live="polite"
                       >
-                        {t("devicesPage.usb.paired.openInMap")}
-                      </button>
+                        <span className="lm-room-dock-conn-chip-dot" aria-hidden />
+                        <span className="lm-room-dock-conn-chip-tx">
+                          {stripStatus === "connected"
+                            ? t("devicesPage.usb.pill.online")
+                            : t("devicesPage.usb.paired.offline")}
+                        </span>
+                      </span>
                     ) : null}
+                    {isEditingPort ? (
+                      <>
+                        <button
+                          type="button"
+                          className="lm-paired-strip-action"
+                          onClick={handleClosePortEditor}
+                        >
+                          {t("devicesPage.usb.paired.changePortCancel")}
+                        </button>
+                        <button
+                          type="button"
+                          className="lm-paired-strip-action is-primary"
+                          onClick={() => { void handleSaveStripPort(); }}
+                          disabled={!portEditDraft}
+                        >
+                          {t("devicesPage.usb.paired.changePortConfirm")}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="lm-paired-strip-action"
+                          onClick={() => handleOpenPortEditor(strip.stripId, strip.portName ?? null)}
+                          aria-label={t("devicesPage.usb.paired.changePortAriaLabel")}
+                          title={t("devicesPage.usb.paired.changePortAriaLabel")}
+                        >
+                          {t("devicesPage.usb.paired.changePort")}
+                        </button>
+                        {onNavigateToRoomMap ? (
+                          <button
+                            type="button"
+                            className="lm-paired-strip-action"
+                            onClick={onNavigateToRoomMap}
+                          >
+                            {t("devicesPage.usb.paired.openInMap")}
+                          </button>
+                        ) : null}
+                      </>
+                    )}
                   </div>
                 );
               })
