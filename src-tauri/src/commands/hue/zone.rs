@@ -36,6 +36,29 @@ use crate::models::room_map::{HueChannelPlacement, HueZone, ZoneRelativePosition
 /// what the area itself can accept.
 pub(crate) const HUE_AREA_CHANNEL_LIMIT: usize = 10;
 
+/// Lower clamp for zone scale on the X/Y axes. Matches the Inspector
+/// slider floor — anything smaller and the zone bounds box collapses to a
+/// degenerate point, and the per-channel relative coordinates lose
+/// authoring resolution. Z is intentionally exempt (out of authoring
+/// scope until the height-axis UI lands).
+pub(crate) const HUE_ZONE_SCALE_MIN: f64 = 0.05;
+
+/// Upper clamp for zone scale on the X/Y axes. `1.0` ⇒ zone half-axis
+/// covers the full Hue cube (i.e. zone is the whole room). Beyond this
+/// the bounds box would overflow the room map AND the bridge cube — both
+/// invalid. The user spec allows zone-size == room-size, but never
+/// strictly larger.
+pub(crate) const HUE_ZONE_SCALE_MAX: f64 = 1.0;
+
+/// Maximum allowed difference between `scale_x` and `scale_y` after the
+/// uniform aspect-ratio lock (v1.5 W4-C). Floating-point round-trips
+/// through the Tauri JSON bridge can introduce ~1e-12 jitter on values
+/// that the frontend authored as exactly equal — so we tolerate a tiny
+/// sliver before reporting a violation. Anything wider than this is a
+/// genuine asymmetry (legacy persisted data or a third-party writer)
+/// and gets normalised to the larger of the two axes.
+const HUE_ZONE_SCALE_AR_TOLERANCE: f64 = 1e-6;
+
 const STATUS_ZONE_CREATED: &str = "HUE_ZONE_CREATED";
 const STATUS_ZONE_UPDATED: &str = "HUE_ZONE_UPDATED";
 const STATUS_ZONE_DELETED: &str = "HUE_ZONE_DELETED";
@@ -43,6 +66,12 @@ const STATUS_ZONE_NOT_FOUND: &str = "HUE_ZONE_NOT_FOUND";
 const STATUS_ZONE_OUT_OF_BOUNDS: &str = "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS";
 const STATUS_ZONE_LIMIT_REACHED: &str = "HUE_ZONE_LIMIT_REACHED";
 const STATUS_ZONE_CHANNEL_NOT_IN_AREA: &str = "HUE_ZONE_CHANNEL_NOT_IN_AREA";
+/// New in W4-C: zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]`
+/// on at least one axis. Distinct from `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`
+/// (which is per-channel relative drift) because the cause is a slider
+/// the user pulled past the room-equals-zone ceiling — the recovery is
+/// "shrink the zone", not "drag the channel back inside".
+const STATUS_ZONE_OVERSIZED: &str = "HUE_ZONE_OVERSIZED";
 
 // ---------------------------------------------------------------------------
 // Request / response payloads
@@ -157,6 +186,64 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
         return Err(CommandStatus {
             code: STATUS_ZONE_OUT_OF_BOUNDS.to_string(),
             message: "Zone center must lie within the [-1, 1] cube.".to_string(),
+            details: None,
+        });
+    }
+    // ── v1.5 W4-C: room-relative scale ceiling + uniform aspect-ratio lock ──
+    //
+    // The Inspector now treats zone size as a single room-relative scalar
+    // ("zone == X% of the room") with `scaleX === scaleY` enforced so that
+    // the zone bounds box always mirrors the room aspect ratio. Zone size
+    // can equal the room (`scale == 1.0`) but never exceed it. NaN /
+    // Infinity / negative / sub-floor / above-ceiling values are flagged
+    // here so the UI can surface a clamp hint instead of letting them
+    // round-trip into the runtime sampler.
+    let sx = zone.scale_x;
+    let sy = zone.scale_y;
+    if !sx.is_finite() || !sy.is_finite() {
+        return Err(CommandStatus {
+            code: STATUS_ZONE_OVERSIZED.to_string(),
+            message: "Zone scale must be a finite number.".to_string(),
+            details: None,
+        });
+    }
+    if !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sx)
+        || !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sy)
+    {
+        let axis = if !(HUE_ZONE_SCALE_MIN..=HUE_ZONE_SCALE_MAX).contains(&sx) {
+            "x"
+        } else {
+            "y"
+        };
+        return Err(CommandStatus {
+            code: STATUS_ZONE_OVERSIZED.to_string(),
+            message: format!(
+                "Zone `{axis}` scale must be in [{HUE_ZONE_SCALE_MIN:.2}, {HUE_ZONE_SCALE_MAX:.2}]; \
+                 zone cannot be larger than the room."
+            ),
+            details: None,
+        });
+    }
+    if (sx - sy).abs() > HUE_ZONE_SCALE_AR_TOLERANCE {
+        return Err(CommandStatus {
+            code: STATUS_ZONE_OVERSIZED.to_string(),
+            message: "Zone scaleX and scaleY must match (zone aspect ratio mirrors the room)."
+                .to_string(),
+            details: None,
+        });
+    }
+    // Bug #50/#53 invariant — `|center| + halfScale <= 1.0` so the zone
+    // bounds box never overflows the Hue cube. Center drag enforces this
+    // imperatively; create/update enforce it declaratively here.
+    let half_x = sx;
+    let half_y = sy;
+    if zone.center_x.abs() + half_x > 1.0 + HUE_ZONE_SCALE_AR_TOLERANCE
+        || zone.center_y.abs() + half_y > 1.0 + HUE_ZONE_SCALE_AR_TOLERANCE
+    {
+        return Err(CommandStatus {
+            code: STATUS_ZONE_OUT_OF_BOUNDS.to_string(),
+            message: "Zone bounds escape the room cube; shrink the zone or recenter it."
+                .to_string(),
             details: None,
         });
     }
@@ -579,7 +666,11 @@ mod tests {
 
     #[test]
     fn create_zone_pushes_a_new_zone_and_returns_created_status() {
-        let zone = make_zone("z1", "area-1", vec![0, 1]);
+        let mut zone = make_zone("z1", "area-1", vec![0, 1]);
+        // Recenter so |center| + scale stays inside the cube under the
+        // new W4-C bounds invariant (0.5 + 0.3 = 0.8 ✓).
+        zone.center_x = 0.5;
+        zone.center_y = 0.5;
         let result = create_zone(CreateZoneRequest {
             zone: zone.clone(),
             existing_zones: Vec::new(),
@@ -751,5 +842,124 @@ mod tests {
         assert_eq!(result.status.code, STATUS_ZONE_UPDATED);
         assert!(result.zones[0].channel_indices.is_empty());
         assert!(result.channels[0].zone_id.is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // v1.5 W4-C — room-relative scale validation (uniform AR + ceiling)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn create_zone_rejects_oversized_scale_above_room_size() {
+        // scale > 1.0 ⇒ zone bigger than the room. User spec: zone may
+        // equal the room (`1.0`), never exceed it.
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.center_x = 0.0;
+        zone.center_y = 0.0;
+        zone.scale_x = 1.5;
+        zone.scale_y = 1.5;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_OVERSIZED);
+        assert!(result.zones.is_empty());
+    }
+
+    #[test]
+    fn create_zone_accepts_scale_equal_to_one_for_room_sized_zone() {
+        // Exact equality `1.0` is the "zone == room" sweet spot the user
+        // explicitly called out as legal. Centred at origin so
+        // |center| + half-scale == 1.0 (boundary tolerated by tolerance).
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.center_x = 0.0;
+        zone.center_y = 0.0;
+        zone.scale_x = 1.0;
+        zone.scale_y = 1.0;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_CREATED);
+        assert_eq!(result.zones.len(), 1);
+    }
+
+    #[test]
+    fn create_zone_rejects_below_floor_scale() {
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.center_x = 0.0;
+        zone.center_y = 0.0;
+        zone.scale_x = 0.01; // below HUE_ZONE_SCALE_MIN
+        zone.scale_y = 0.01;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_OVERSIZED);
+    }
+
+    #[test]
+    fn create_zone_rejects_non_uniform_scale_aspect_ratio() {
+        // scaleX != scaleY ⇒ zone aspect ratio drifts from the room's.
+        // User spec: "en boy oranı değişemez" — uniform scale enforced.
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.center_x = 0.0;
+        zone.center_y = 0.0;
+        zone.scale_x = 0.4;
+        zone.scale_y = 0.6;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_OVERSIZED);
+    }
+
+    #[test]
+    fn create_zone_rejects_when_center_plus_half_scale_overflows_cube() {
+        // center 0.7 + scale 0.5 = 1.2 ⇒ bounds escape the room.
+        // Distinct from oversized (scale itself is in range) — caller
+        // must shrink the zone OR drag the center back.
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.center_x = 0.7;
+        zone.center_y = 0.0;
+        zone.scale_x = 0.5;
+        zone.scale_y = 0.5;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_OUT_OF_BOUNDS);
+    }
+
+    #[test]
+    fn create_zone_rejects_non_finite_scale() {
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.scale_x = f64::NAN;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_OVERSIZED);
+    }
+
+    #[test]
+    fn update_zone_rejects_oversized_scale() {
+        // Pre-existing zone is valid; the update tries to grow scale
+        // past 1.0. Must reject so the runtime sampler never sees a
+        // bounds box that overflows the cube.
+        let mut existing = make_zone("z1", "area-1", vec![]);
+        existing.center_x = 0.0;
+        existing.center_y = 0.0;
+        existing.scale_x = 0.5;
+        existing.scale_y = 0.5;
+        let mut updated = existing.clone();
+        updated.scale_x = 1.2;
+        updated.scale_y = 1.2;
+        let result = update_zone(UpdateZoneRequest {
+            zone: updated,
+            existing_zones: vec![existing.clone()],
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_OVERSIZED);
+        // Existing zone preserved unchanged on rejection.
+        assert!((result.zones[0].scale_x - 0.5).abs() < 1e-9);
     }
 }

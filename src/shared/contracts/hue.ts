@@ -130,6 +130,17 @@ export const HUE_STATUS = {
    * areas; the caller must move the channel to a zone in its own area.
    */
   ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
+  /**
+   * v1.5 W4-C — zone scale exceeds the room (or undershoots the slider
+   * floor / is non-finite). Zone size is room-relative: a `scale` of
+   * `1.0` means "zone == room"; values above 1.0 are rejected because
+   * the zone bounds box would visually overflow the room map AND the
+   * Hue cube. Distinct from `ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel
+   * relative drift) — recovery here is "shrink the zone", not "drag
+   * the channel back". Also raised when `scaleX !== scaleY` so the
+   * zone aspect ratio always mirrors the room.
+   */
+  ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
   // -------------------------------------------------------------------------
   // OS keychain credential store (v1.5 W2-A1 / W2-A2)
   // -------------------------------------------------------------------------
