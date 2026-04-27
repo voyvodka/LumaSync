@@ -793,6 +793,25 @@ function HueZonesTab(props: {
 
   const dragSupported = !!onAssignChannelToZone;
 
+  // ── Wave 4-G #3 — DnD MIME fallback + onDragEnter ───────────────
+  // Manual test on macOS WebKit (Tauri WKWebView) showed the channel
+  // never landed on the drop target. Two issues piled up:
+  //   1. Custom MIME types (`application/x-lumasync-channel`) are
+  //      stripped from the drag dataTransfer payload by WKWebView's
+  //      security model on cross-element drops, so `getData()`
+  //      returned an empty string and the drop fell through.
+  //   2. Chrome / WebKit both require `preventDefault()` inside
+  //      `onDragEnter` for the drop target to register; otherwise the
+  //      browser cancels the drop with a "no" cursor before
+  //      `onDragOver` ever fires.
+  // The fix mirrors the channel index in BOTH the custom MIME (so a
+  // future agent can sniff for our payload) and `text/plain` (so
+  // WebKit always has a readable string), and wires `onDragEnter` to
+  // call `preventDefault()` in addition to `onDragOver`. Falls back to
+  // the in-memory `dragChannelIndex` if the dataTransfer is empty for
+  // any reason.
+  const CHANNEL_MIME = "application/x-lumasync-channel";
+
   const channelDragProps = (ch: HueChannelPlacement) => {
     if (!dragSupported) return {} as Record<string, never>;
     return {
@@ -800,7 +819,16 @@ function HueZonesTab(props: {
       onDragStart: (e: React.DragEvent<HTMLLIElement>) => {
         e.stopPropagation();
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("application/x-lumasync-channel", String(ch.channelIndex));
+        const payload = String(ch.channelIndex);
+        // Best-effort write under both MIME types so WKWebView always
+        // has a `text/plain` reader path. Some browsers throw on
+        // unknown MIME — guard so we never abort the drag.
+        try {
+          e.dataTransfer.setData(CHANNEL_MIME, payload);
+        } catch (err) {
+          console.error("[LumaSync] DnD setData(custom MIME) failed", err);
+        }
+        e.dataTransfer.setData("text/plain", payload);
         setDragChannelIndex(ch.channelIndex);
       },
       onDragEnd: () => {
@@ -813,6 +841,11 @@ function HueZonesTab(props: {
   const dropTargetProps = (targetZoneId: string | null) => {
     if (!dragSupported) return {} as Record<string, never>;
     return {
+      onDragEnter: (e: React.DragEvent) => {
+        if (dragChannelIndex === null) return;
+        e.preventDefault();
+        if (dropTargetZoneId !== targetZoneId) setDropTargetZoneId(targetZoneId);
+      },
       onDragOver: (e: React.DragEvent) => {
         if (dragChannelIndex === null) return;
         e.preventDefault();
@@ -824,8 +857,13 @@ function HueZonesTab(props: {
       },
       onDrop: (e: React.DragEvent) => {
         e.preventDefault();
-        const raw = e.dataTransfer.getData("application/x-lumasync-channel");
-        const idx = raw ? parseInt(raw, 10) : dragChannelIndex;
+        // Try the custom MIME first (preserves intent) then fall back
+        // to text/plain. If both come back empty, use the in-memory
+        // index so a WebKit-stripped payload still resolves.
+        let raw = e.dataTransfer.getData(CHANNEL_MIME);
+        if (!raw) raw = e.dataTransfer.getData("text/plain");
+        const parsed = raw ? parseInt(raw, 10) : NaN;
+        const idx = Number.isFinite(parsed) ? parsed : dragChannelIndex;
         if (idx === null || Number.isNaN(idx)) return;
         onAssignChannelToZone?.(idx, targetZoneId);
         setDragChannelIndex(null);
