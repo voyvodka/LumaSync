@@ -698,21 +698,49 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-// Rust handler parity for the renamed zone commands.
+// Rust handler parity for the renamed zone commands (v1.5 W4-F5).
 //
-// TODO(W4-F5): re-enable these after the Rust side renames in F5. Today
-// the Rust handler list still carries `create_hue_zone` etc. — `pnpm
-// check:rust` is expected to be RED until F5 lands. Skipping these checks
-// here so PR #1 (F1) can be reviewed against TS-only diff. The PR squash
-// MUST flip these back on at the same time as F5 ships, otherwise the
-// drift guard becomes a no-op for the renamed commands.
+// `lib.rs` registers Tauri commands through `generate_handler!` — the
+// renamed verbs (`create_zone`, `update_zone`, `delete_zone`,
+// `assign_channel_to_zone`) MUST appear in that list, otherwise the
+// frontend's `invoke(ZONE_COMMANDS.X)` call resolves to nothing.
 // ---------------------------------------------------------------------------
-console.log("\n[ Zone unification — Rust handler parity (DEFERRED to W4-F5) ]");
-console.log(
-  "  ⏭  Rust handler parity for create_zone/update_zone/delete_zone/assign_channel_to_zone\n" +
-  "      is deferred until F5 renames the Rust commands. PR #1 ships TS-only;\n" +
-  "      PR squash re-enables the assertion."
-);
+const RUST_LIB_FILE = resolve(ROOT, "src-tauri/src/lib.rs");
+const rustLibSource = readOrEmpty(RUST_LIB_FILE, "rust lib.rs");
+
+console.log("\n[ Zone unification — Rust handler parity (v1.5 W4-F5) ]");
+const REQUIRED_RUST_ZONE_HANDLERS = [
+  "create_zone",
+  "update_zone",
+  "delete_zone",
+  "assign_channel_to_zone",
+];
+// Match the handler list portion only (between `generate_handler![` and
+// the closing `]`) so we do not false-positive on a stray identifier
+// elsewhere in the file (e.g. an import alias or doc comment).
+const handlerListMatch = rustLibSource.match(/generate_handler!\[([\s\S]*?)\]/);
+const handlerListBlock = handlerListMatch ? handlerListMatch[1] : "";
+for (const fn of REQUIRED_RUST_ZONE_HANDLERS) {
+  // Match the bare identifier on its own line (with optional comma + ws).
+  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
+  check(
+    re.test(handlerListBlock),
+    `Rust generate_handler! list registers "${fn}"`,
+    `MISSING Rust generate_handler! entry for "${fn}" — `
+      + `frontend invoke(ZONE_COMMANDS.X) will resolve to nothing`
+  );
+}
+// Legacy handler names MUST be gone — defends against a partial rename
+// where lib.rs still keeps the old `create_hue_zone` next to the new
+// `create_zone` and silently double-registers.
+const LEGACY_RUST_HANDLERS = ["create_hue_zone", "update_hue_zone", "delete_hue_zone"];
+for (const fn of LEGACY_RUST_HANDLERS) {
+  check(
+    !handlerListBlock.includes(fn),
+    `legacy Rust handler "${fn}" removed from generate_handler! list`,
+    `STILL PRESENT: legacy Rust handler "${fn}" — partial rename detected`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Summary

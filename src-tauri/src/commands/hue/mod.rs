@@ -14,12 +14,13 @@
 //! - `reconnect` — StartAbortGuard, store_active_stream_context,
 //!   spawn_reconnect_monitor + internal_restart_stream
 //! - `commands` — the seven `#[tauri::command]` entry points
-//! - `zone` — v1.5 W1-A3 logical-grouping zone authoring commands
-//!   (create/update/delete/assign_channel) + zone-relative coordinate
-//!   transform consumed by `frame.rs`.
 //! - `credential_store` — v1.5 W2-A1 OS-keychain abstraction (macOS
 //!   Keychain / Windows CredMan / Linux Secret Service) used by W2-A2
 //!   to migrate Hue credentials off the plaintext shellStore fields.
+//!
+//! v1.5 W4-F: the previous `zone` submodule moved to
+//! `commands::room_map::zone` because zones are no longer Hue-exclusive
+//! (a unified `Zone` covers both `ZoneType::Logical` and `ZoneType::Hue`).
 //!
 //! The parent `commands::hue_stream_lifecycle` module is kept as a thin
 //! re-export shim so external callers (`lib.rs`, `lighting_mode.rs`,
@@ -34,4 +35,3 @@ pub mod reconnect;
 pub mod retry;
 pub mod sender;
 pub mod state_store;
-pub mod zone;

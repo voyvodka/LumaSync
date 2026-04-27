@@ -697,7 +697,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, {
       request: { zone: newZone, existingZones: hueZones },
     }).catch((e) => {
-      console.error("[LumaSync] create_hue_zone failed", e);
+      console.error("[LumaSync] create_zone failed", e);
     });
   }, [hueAreaId, hueZones, updateConfig, t]);
 
@@ -716,7 +716,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       void invoke(HUE_ZONE_COMMANDS.DELETE_ZONE, {
         request: { zoneId, existingZones: hueZones, channels: config.hueChannels },
       }).catch((e) => {
-        console.error("[LumaSync] delete_hue_zone failed", e);
+        console.error("[LumaSync] delete_zone failed", e);
       });
     },
     [hueZones, config.hueChannels, activeHueZoneId, updateConfig],
@@ -731,7 +731,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
           request: { zone: renamed, existingZones: next },
         }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (rename) failed", e);
+          console.error("[LumaSync] update_zone (rename) failed", e);
         });
       }
     },
@@ -1027,7 +1027,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
           request: { zone: updated, existingZones: next },
         }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (center) failed", e);
+          console.error("[LumaSync] update_zone (center) failed", e);
         });
       }
     },
@@ -1037,7 +1037,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   // ── v1.5 W1-A8: Generic Hue zone patch handler ───────────────────────
   // Used by HueZoneInspector to update borderColor + per-axis room-
   // relative scale. Same optimistic pattern as the create / delete /
-  // center handlers — local config first, then mirror via update_hue_zone
+  // center handlers — local config first, then mirror via update_zone
   // with silent-catch logging.
   //
   // W4-I revision — the W4-C uniform aspect-ratio lock is gone. Zones
@@ -1058,7 +1058,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
           request: { zone: updated, existingZones: next },
         }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (props) failed", e);
+          console.error("[LumaSync] update_zone (props) failed", e);
         });
       }
     },

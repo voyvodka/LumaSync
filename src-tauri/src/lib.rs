@@ -60,18 +60,18 @@ use commands::hue_onboarding::{
     pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
 use commands::hue_stream_lifecycle::{
-    assign_channel_to_zone, create_hue_zone, delete_hue_zone, get_hue_area_channels,
-    get_hue_stream_status, restart_hue_stream, set_hue_solid_color, simulate_hue_fault,
-    start_hue_stream, stop_hue_stream, update_hue_zone, HueRuntimeStateStore,
+    get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
+    simulate_hue_fault, start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
 };
 use commands::lighting_mode::{
     get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
 };
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
-use commands::room_map::{
+use commands::room_map::save_load::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
+use commands::room_map::zone::{assign_channel_to_zone, create_zone, delete_zone, update_zone};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
 
@@ -443,9 +443,9 @@ pub fn run() {
             load_room_map,
             copy_background_image,
             update_hue_channel_positions,
-            create_hue_zone,
-            update_hue_zone,
-            delete_hue_zone,
+            create_zone,
+            update_zone,
+            delete_zone,
             assign_channel_to_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
             discover_wled_devices,

@@ -731,36 +731,3 @@ pub fn simulate_hue_fault(
 pub fn simulate_hue_fault() -> Result<String, String> {
     Err("SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string())
 }
-
-// ---------------------------------------------------------------------------
-// Hue zone authoring commands (v1.5 W1-A3 — logical-grouping zones)
-// ---------------------------------------------------------------------------
-//
-// Pure-data commands: they validate the supplied draft against the
-// caller-supplied current state (`existing_zones` / `channels`) and
-// return the mutated arrays plus a `CommandStatus` carrying a stable
-// `HUE_ZONE_*` code from `src/shared/contracts/hue.ts`. Persistence is
-// the frontend's responsibility — it round-trips the result back through
-// `save_room_map`.
-
-#[tauri::command]
-pub fn create_hue_zone(request: super::zone::CreateZoneRequest) -> super::zone::ZoneCommandResult {
-    super::zone::create_zone(request)
-}
-
-#[tauri::command]
-pub fn update_hue_zone(request: super::zone::UpdateZoneRequest) -> super::zone::ZoneCommandResult {
-    super::zone::update_zone(request)
-}
-
-#[tauri::command]
-pub fn delete_hue_zone(request: super::zone::DeleteZoneRequest) -> super::zone::ZoneCommandResult {
-    super::zone::delete_zone(request)
-}
-
-#[tauri::command]
-pub fn assign_channel_to_zone(
-    request: super::zone::AssignChannelRequest,
-) -> super::zone::ZoneCommandResult {
-    super::zone::assign_channel_to_zone(request)
-}

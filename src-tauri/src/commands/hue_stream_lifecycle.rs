@@ -16,6 +16,13 @@
 //!   points (`start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
 //!   `set_hue_solid_color`, `get_hue_stream_status`,
 //!   `get_hue_area_channels`, `simulate_hue_fault`)
+//!
+//! v1.5 W4-F: zone authoring commands (`create_zone`, `update_zone`,
+//! `delete_zone`, `assign_channel_to_zone`) used to live under
+//! `commands::hue::zone`; they have moved to `commands::room_map::zone`
+//! because zones are no longer Hue-exclusive (a unified `Zone` covers
+//! both `ZoneType::Logical` and `ZoneType::Hue`). `lib.rs` registers
+//! them through the new path.
 
 // ---------------------------------------------------------------------------
 // Frame & state-store types — used by lighting_mode.rs / runtime_telemetry.rs
@@ -48,12 +55,4 @@ pub(crate) use super::hue::state_store::{
 pub use super::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
     simulate_hue_fault, start_hue_stream, stop_hue_stream,
-};
-
-// ---------------------------------------------------------------------------
-// Zone authoring commands (v1.5 W1-A3 — logical-grouping zones)
-// ---------------------------------------------------------------------------
-
-pub use super::hue::commands::{
-    assign_channel_to_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
 };
