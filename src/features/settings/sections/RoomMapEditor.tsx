@@ -56,6 +56,12 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
   depthMeters: number;
 }) {
   const displayRef = useRef<HTMLDivElement>(null);
+  const stateRef = useRef({ panOffset, pxPerMeter, zoom, widthMeters, depthMeters });
+
+  // Update ref state without triggering effect rebuild
+  useEffect(() => {
+    stateRef.current = { panOffset, pxPerMeter, zoom, widthMeters, depthMeters };
+  }, [panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
 
   useEffect(() => {
     const el = canvasContainerRef.current;
@@ -66,12 +72,13 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 
     const updateCoord = () => {
       if (!latestEvent || !displayRef.current) return;
+      const { panOffset: currentPan, pxPerMeter: currentPpm, zoom: currentZoom, widthMeters: currentW, depthMeters: currentD } = stateRef.current;
       const rect = el.getBoundingClientRect();
-      const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
-      const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
+      const mx = (latestEvent.clientX - rect.left - currentPan.x) / (currentPpm * currentZoom);
+      const my = (latestEvent.clientY - rect.top - currentPan.y) / (currentPpm * currentZoom);
 
-      const worldX = mx - widthMeters / 2;
-      const worldY = my - depthMeters / 2;
+      const worldX = mx - currentW / 2;
+      const worldY = my - currentD / 2;
 
       displayRef.current.textContent = `x: ${worldX >= 0 ? "+" : ""}${worldX.toFixed(1)}m, y: ${worldY >= 0 ? "+" : ""}${worldY.toFixed(1)}m`;
       displayRef.current.style.display = "block";
@@ -94,6 +101,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
       }
     };
 
+    // Attach listeners once, relying on stateRef for latest values
     el.addEventListener("mousemove", handleMouseMove);
     el.addEventListener("mouseleave", handleMouseLeave);
 
@@ -101,7 +109,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [canvasContainerRef, panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+  }, [canvasContainerRef]);
 
   return (
     <div
