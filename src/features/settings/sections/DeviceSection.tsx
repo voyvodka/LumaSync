@@ -271,13 +271,19 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
   const [persistError, setPersistError] = useState(false);
   const persistErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Wave 4-G #6 — inline "Add LED strip" form state. Open one form at
-  // a time and remember the LED count between adds (most users author
-  // identical-length segments back to back). The form is gated on a
-  // live `connectedPort` so the strip we author is always linked to a
-  // real serial connection.
+  // Wave 4-I #2 — inline "Add LED strip" form state. Open one form at
+  // a time and remember the last LED count between adds (most users
+  // author identical-length segments back to back). The dropdown lets
+  // the user pick *any* discovered port (not just `connectedPort`), so
+  // the same surface drives single-port pairing AND multi-port multi-
+  // strip authoring. Duplicate `portName` writes are blocked: each
+  // strip slot owns its own port, and the legacy ambiguity between the
+  // top discovered-ports panel and the bottom paired-strips CTA goes
+  // away.
   const [stripFormOpen, setStripFormOpen] = useState(false);
   const [stripDraftLedCount, setStripDraftLedCount] = useState("60");
+  const [stripDraftPortName, setStripDraftPortName] = useState<string | null>(null);
+  const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
 
   // Load placements from shellStore on mount and when selectedAreaId changes
   useEffect(() => {
@@ -357,8 +363,42 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
   // The default geometry drops the strip at the room centre so the
   // user can immediately drag the endpoints in the canvas; LED count
   // comes from the inline form draft.
+  // W4-I #2 — set of port names that already host a paired strip; the
+  // "Add LED strip" dropdown filters these out so the user cannot
+  // author two slots against the same controller. Legacy strips with
+  // no `portName` (pre-W4-G writes) do not occupy a port — they are
+  // fixed up via the canvas when the user assigns a real port.
+  const pairedPortNames = new Set(
+    pairedStrips.map((s) => s.portName).filter((name): name is string => !!name),
+  );
+  const availablePortsForPairing = ports
+    .map((p) => p.portName)
+    .filter((name) => !pairedPortNames.has(name));
+
+  const handleOpenStripForm = useCallback(() => {
+    setStripFormOpen(true);
+    // Default the dropdown to the live connected port when it is still
+    // available; otherwise fall back to the first unpaired discovery.
+    const fallback =
+      connectedPort && !pairedPortNames.has(connectedPort)
+        ? connectedPort
+        : availablePortsForPairing[0] ?? null;
+    setStripDraftPortName(fallback);
+  }, [connectedPort, availablePortsForPairing, pairedPortNames]);
+
   const handleAddStrip = useCallback(async () => {
-    if (!connectedPort) return;
+    const portName = stripDraftPortName;
+    if (!portName) return;
+    if (pairedPortNames.has(portName)) {
+      // Defensive — the dropdown filters paired ports out, but a stale
+      // selection (e.g. another tab paired the port concurrently) must
+      // still be rejected so we never write a duplicate slot.
+      console.error("[LumaSync] handleAddStrip: port already paired", portName);
+      setPersistError(true);
+      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
+      persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
+      return;
+    }
     const parsedCount = parseInt(stripDraftLedCount, 10);
     const ledCount = Number.isFinite(parsedCount)
       ? Math.max(1, Math.min(1000, parsedCount))
@@ -374,7 +414,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         endX: Math.max(2, widthM - 1),
         endY: 1,
         ledCount,
-        portName: connectedPort,
+        portName,
       };
       const updatedRoomMap: RoomMapConfig = {
         ...currentRoomMap,
@@ -386,6 +426,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
       });
       setPairedStrips(updatedRoomMap.usbStrips);
       setStripFormOpen(false);
+      setStripDraftPortName(null);
       setPersistError(false);
     } catch (e) {
       console.error("[LumaSync] handleAddStrip failed", e);
@@ -393,7 +434,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
       if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
       persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
     }
-  }, [connectedPort, stripDraftLedCount]);
+  }, [stripDraftPortName, stripDraftLedCount, pairedPortNames]);
 
   return (
     <div className="lm-device-page">
@@ -477,6 +518,29 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
             <p className="text-[11px] text-zinc-500">{t("device.usbDisconnected")}</p>
           )}
 
+          {/* W4-I #2 — "Discover ports" is now a collapsible utility,
+              not the primary surface. The primary surface is the
+              "Paired strips" list below; this section just lets the
+              user inspect/connect a raw serial port when something is
+              wrong. Default-closed so the page opens on the strip
+              roster, not on a discovery list users would otherwise
+              parse twice. */}
+          <details
+            className="lm-device-discover"
+            open={discoverPanelOpen}
+            onToggle={(e) => setDiscoverPanelOpen((e.currentTarget as HTMLDetailsElement).open)}
+          >
+            <summary className="lm-device-discover-h">
+              <span>{t("devicesPage.usb.discover.title")}</span>
+              <span className="lm-device-discover-h-count">
+                {ports.length === 1
+                  ? t("devicesPage.usb.discover.countOne")
+                  : t("devicesPage.usb.discover.count", { count: ports.length })}
+              </span>
+            </summary>
+            <p className="lm-device-discover-hint">
+              {t("devicesPage.usb.discover.hint")}
+            </p>
           <div className="lm-device-grid">
             {ports.length === 0 ? (
               <div className="lm-device-empty">
@@ -580,6 +644,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               })
             )}
           </div>
+          </details>
 
           {/* Status card — preserved for diagnostics & test compatibility */}
           <div
@@ -703,11 +768,38 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               })
             )}
 
-            {/* W4-G #6 — "+ Add LED strip" CTA. Disabled until a port
-                is connected (we will not author orphan strips); when
-                already open, swaps to an inline LED-count form. */}
-            {stripFormOpen && connectedPort ? (
+            {/* W4-I #2 — "+ Add LED strip" CTA. Now drives a port
+                dropdown (any unpaired discovered port is eligible) +
+                LED count input. Disabled when no unpaired port exists;
+                tooltip directs the user back to the discovery panel
+                above so the next step is obvious. */}
+            {stripFormOpen && availablePortsForPairing.length > 0 ? (
               <div className="lm-paired-strip-form">
+                <label
+                  className="lm-paired-strip-form-label"
+                  htmlFor="paired-strip-port-select"
+                >
+                  {t("devicesPage.usb.paired.portLabel")}
+                </label>
+                <select
+                  id="paired-strip-port-select"
+                  className="lm-paired-strip-form-select"
+                  value={stripDraftPortName ?? ""}
+                  onChange={(e) => setStripDraftPortName(e.target.value || null)}
+                  aria-label={t("devicesPage.usb.paired.portLabel")}
+                >
+                  {availablePortsForPairing.map((portName) => {
+                    const port = ports.find((p) => p.portName === portName);
+                    const display = port
+                      ? portDisplayName(port.portName, port.product, port.manufacturer)
+                      : portName;
+                    return (
+                      <option key={portName} value={portName}>
+                        {display === portName ? portName : `${display} (${portName})`}
+                      </option>
+                    );
+                  })}
+                </select>
                 <label
                   className="lm-paired-strip-form-label"
                   htmlFor="paired-strip-led-count"
@@ -734,9 +826,6 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   }}
                   autoFocus
                 />
-                <span className="lm-paired-strip-form-port">
-                  {connectedPort}
-                </span>
                 <div className="lm-paired-strip-form-actions">
                   <button
                     type="button"
@@ -749,6 +838,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     type="button"
                     className="lm-paired-strip-action is-primary"
                     onClick={() => { void handleAddStrip(); }}
+                    disabled={!stripDraftPortName}
                   >
                     {t("devicesPage.usb.paired.confirmAdd")}
                   </button>
@@ -758,12 +848,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               <button
                 type="button"
                 className="lm-paired-strip-add"
-                onClick={() => setStripFormOpen(true)}
-                disabled={!connectedPort}
+                onClick={handleOpenStripForm}
+                disabled={availablePortsForPairing.length === 0}
                 title={
-                  connectedPort
-                    ? undefined
-                    : t("devicesPage.usb.paired.addDisabledTooltip")
+                  availablePortsForPairing.length === 0
+                    ? ports.length === 0
+                      ? t("devicesPage.usb.paired.addDisabledNoPortsTooltip")
+                      : t("devicesPage.usb.paired.addDisabledAllPairedTooltip")
+                    : undefined
                 }
               >
                 {pairedStrips.length === 0

@@ -168,18 +168,26 @@
         "title": "No USB ports found",
         "body": "Plug in your controller and click Rescan."
       },
+      "discover": {
+        "title": "Discover ports",
+        "count": "{{count}} ports",
+        "countOne": "1 port",
+        "hint": "Detected serial ports. The list below is the full strip roster — use this section only when you need to inspect or connect a raw port directly."
+      },
       "paired": {
         "title": "Paired strips",
         "count": "{{count}} strips",
         "countOne": "1 strip",
-        "empty": "No strips paired yet — pair a port above to add it to the room map.",
+        "empty": "No strips paired yet — add one to start building the room map.",
         "stripName": "{{count}}-LED strip",
         "noPort": "No port linked",
         "offline": "OFFLINE",
         "ledCountLabel": "LEDs",
+        "portLabel": "Port",
         "addFirst": "+ Add LED strip",
         "addAnother": "+ Add another strip",
-        "addDisabledTooltip": "Pair a USB port first to author a strip.",
+        "addDisabledNoPortsTooltip": "No serial ports detected. Plug in your controller and rescan.",
+        "addDisabledAllPairedTooltip": "All discovered ports are already paired.",
         "cancel": "Cancel",
         "confirmAdd": "Add",
         "persistError": "Could not save the strip. Try again.",

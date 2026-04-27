@@ -5949,6 +5949,30 @@ body {
   gap: 6px;
   flex-shrink: 0;
 }
+/* W4-I #2 — port dropdown shares the form-input visual rhythm but
+   stretches to fit the (port name + product) label so the user can
+   read the full controller identity before committing. */
+.lm-paired-strip-form-select {
+  flex: 1 1 140px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  outline: none;
+}
+.lm-paired-strip-form-select:focus,
+.lm-paired-strip-form-select:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strip-form {
+  flex-wrap: wrap;
+}
 .lm-paired-strip-action.is-primary {
   color: var(--lm-amber);
   border-color: rgba(255, 176, 32, 0.45);
@@ -5957,9 +5981,73 @@ body {
 .lm-paired-strip-action.is-primary:hover {
   background: rgba(255, 176, 32, 0.18);
 }
+.lm-paired-strip-action.is-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* W4-I #2 — collapsible "Discover ports" utility. Sits above the
+   primary paired-strips list and stays closed by default so the page
+   opens on the strip roster, not the legacy discovery grid. */
+.lm-device-discover {
+  margin-bottom: 12px;
+  border: 1px solid var(--lm-line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.lm-device-discover[open] {
+  background: rgba(255, 255, 255, 0.025);
+}
+.lm-device-discover-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  list-style: none;
+  user-select: none;
+}
+.lm-device-discover-h::-webkit-details-marker {
+  display: none;
+}
+.lm-device-discover-h::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 120ms ease-out;
+  color: var(--lm-ink-faint);
+}
+.lm-device-discover[open] > .lm-device-discover-h::before {
+  transform: rotate(90deg);
+}
+.lm-device-discover-h:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-device-discover-h-count {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: none;
+}
+.lm-device-discover-hint {
+  margin: 0 12px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--lm-ink-faint);
+}
 @media (prefers-reduced-motion: reduce) {
   .lm-paired-strip-add,
   .lm-paired-strip-action.is-primary {
+    transition: none;
+  }
+  .lm-device-discover-h::before {
     transition: none;
   }
 }
@@ -5967,8 +6055,10 @@ body {
   .lm-paired-strip-add,
   .lm-paired-strip-form,
   .lm-paired-strip-form-input,
+  .lm-paired-strip-form-select,
   .lm-paired-strip-form-port,
-  .lm-paired-strip-action.is-primary {
+  .lm-paired-strip-action.is-primary,
+  .lm-device-discover {
     border-color: CanvasText;
     background: Canvas;
     color: CanvasText;

@@ -160,18 +160,26 @@
         "title": "USB portu bulunamadı",
         "body": "Denetleyiciyi bağlayıp Yeniden Tara'ya basın."
       },
+      "discover": {
+        "title": "Portları keşfet",
+        "count": "{{count}} port",
+        "countOne": "1 port",
+        "hint": "Algılanan seri portlar. Aşağıdaki liste asıl şerit kaydıdır — bu bölümü sadece bir portu doğrudan incelemek veya bağlamak istediğinde kullan."
+      },
       "paired": {
         "title": "Eşleşen şeritler",
         "count": "{{count}} şerit",
         "countOne": "1 şerit",
-        "empty": "Henüz şerit eşleşmedi — yukarıdaki bir portu eşleyerek oda haritasına ekleyin.",
+        "empty": "Henüz şerit eşleşmedi — oda haritasını oluşturmak için bir tane ekle.",
         "stripName": "{{count}} LED'lik şerit",
         "noPort": "Port bağlı değil",
         "offline": "OFFLINE",
         "ledCountLabel": "LED",
+        "portLabel": "Port",
         "addFirst": "+ LED şerit ekle",
         "addAnother": "+ Başka şerit ekle",
-        "addDisabledTooltip": "Şerit eklemek için önce bir USB portu bağlayın.",
+        "addDisabledNoPortsTooltip": "Seri port algılanmadı. Denetleyiciyi bağlayıp yeniden tarayın.",
+        "addDisabledAllPairedTooltip": "Tüm keşfedilen portlar zaten eşleşmiş.",
         "cancel": "İptal",
         "confirmAdd": "Ekle",
         "persistError": "Şerit kaydedilemedi. Tekrar deneyin.",
