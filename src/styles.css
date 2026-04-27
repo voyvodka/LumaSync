@@ -4825,7 +4825,7 @@ body {
   gap: 6px;
   padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(7, 8, 10, 0.85);
+  background: rgba(7, 8, 10, 0.78);
   backdrop-filter: blur(4px);
   border: 1px solid var(--lm-line-2);
   font-family: var(--lm-mono);

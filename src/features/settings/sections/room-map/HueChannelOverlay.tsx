@@ -319,12 +319,12 @@ export function HueChannelOverlay({
               top: zoneBoundsBox.topPx,
               width: zoneBoundsBox.rightPx - zoneBoundsBox.leftPx,
               height: zoneBoundsBox.bottomPx - zoneBoundsBox.topPx,
-              border: `1px dashed ${zoneBoundsBox.color}`,
-              // Bug #53 / v1.5 dock rework — light tint + 1px dashed
-              // border so the floor plan / furniture stay legible. The
-              // pinned zone label chip below carries the identity signal
-              // alongside the dashed outline.
-              background: `color-mix(in srgb, ${zoneBoundsBox.color} 3%, transparent)`,
+              // Wave 4-B (B4) — softer border + lighter fill so the
+              // dashed outline reads as a hint, not a frame. The pinned
+              // zone label chip carries the identity signal; the canvas
+              // tint just nudges the eye towards the bounds.
+              border: `1px dashed color-mix(in srgb, ${zoneBoundsBox.color} 60%, transparent)`,
+              background: `color-mix(in srgb, ${zoneBoundsBox.color} 2%, transparent)`,
               zIndex: 18,
             }}
             aria-hidden
