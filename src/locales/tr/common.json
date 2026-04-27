@@ -958,6 +958,8 @@
       "opacity": "Şeffaflık",
       "showGrid": "Izgarayı göster",
       "gridStrokeWidth": "Izgara kalınlığı",
+      "showHueZones": "Hue bölgelerini göster",
+      "showHueZonesHint": "Her Hue bölgesinin sınırını her zaman çiz; kapatınca yalnızca seçili bölge görünür.",
       "roomWidth": "Genişlik (m)",
       "roomDepth": "Derinlik (m)",
       "resetMap": "Haritayı sıfırla",

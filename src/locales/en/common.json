@@ -958,6 +958,8 @@
       "opacity": "Opacity",
       "showGrid": "Show grid",
       "gridStrokeWidth": "Grid thickness",
+      "showHueZones": "Show Hue zones",
+      "showHueZonesHint": "Always render every Hue zone's bounds; turn off to hide non-selected zones.",
       "roomWidth": "Width (m)",
       "roomDepth": "Depth (m)",
       "resetMap": "Reset map",

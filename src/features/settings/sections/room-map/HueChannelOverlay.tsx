@@ -35,6 +35,17 @@ interface HueChannelOverlayProps {
   activeHueZone?: HueZone | null;
   /** Called when the user drags the zone center marker. */
   onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
+  /**
+   * v1.5 W4-J #3 — when supplied, every zone in the array renders its
+   * dashed bounds box on the canvas (not just the active one). Passive
+   * zones render dimmer and without the center-drag handle so they
+   * cannot be accidentally moved while selecting elsewhere; the active
+   * zone (if any) keeps its full chrome and is matched by id so the
+   * drag-time DOM lookup (`data-zone-bounds-id`) still resolves a
+   * single element. Pass an empty array (or omit) to fall back to the
+   * legacy active-only rendering.
+   */
+  allHueZones?: HueZone[];
 }
 
 /**
@@ -135,6 +146,7 @@ export function HueChannelOverlay({
   panMode = false,
   activeHueZone = null,
   onHueZoneCenterChange,
+  allHueZones,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation("common");
 
@@ -267,27 +279,59 @@ export function HueChannelOverlay({
   }, []);
 
   // ── v1.5 W1-A6: zone bounds + center marker (rendered behind channels) ──
-  const zoneBoundsBox = activeHueZone
-    ? (() => {
-        const zone = activeHueZone;
-        const minX = clamp(zone.centerX - Math.abs(zone.scaleX), -1, 1);
-        const maxX = clamp(zone.centerX + Math.abs(zone.scaleX), -1, 1);
-        const minY = clamp(zone.centerY - Math.abs(zone.scaleY), -1, 1);
-        const maxY = clamp(zone.centerY + Math.abs(zone.scaleY), -1, 1);
-        const leftPx = hueToMetres(minX, roomWidthM) * pxPerMeter;
-        const rightPx = hueToMetres(maxX, roomWidthM) * pxPerMeter;
-        // Y flip: Hue +y is front wall (canvas bottom)
-        const topPx = hueToMetres(-maxY, roomDepthM) * pxPerMeter;
-        const bottomPx = hueToMetres(-minY, roomDepthM) * pxPerMeter;
-        const centerLeftPx = hueToMetres(zone.centerX, roomWidthM) * pxPerMeter;
-        const centerTopPx = hueToMetres(-zone.centerY, roomDepthM) * pxPerMeter;
-        const color = zone.borderColor ?? "var(--lm-zone-1)";
-        return { leftPx, rightPx, topPx, bottomPx, centerLeftPx, centerTopPx, color };
-      })()
-    : null;
+  // W4-J #3: factored into a helper so we can render bounds for *any*
+  // zone (passive list) using the same projection math.
+  const computeZoneBoundsBox = (zone: HueZone) => {
+    const minX = clamp(zone.centerX - Math.abs(zone.scaleX), -1, 1);
+    const maxX = clamp(zone.centerX + Math.abs(zone.scaleX), -1, 1);
+    const minY = clamp(zone.centerY - Math.abs(zone.scaleY), -1, 1);
+    const maxY = clamp(zone.centerY + Math.abs(zone.scaleY), -1, 1);
+    const leftPx = hueToMetres(minX, roomWidthM) * pxPerMeter;
+    const rightPx = hueToMetres(maxX, roomWidthM) * pxPerMeter;
+    // Y flip: Hue +y is front wall (canvas bottom)
+    const topPx = hueToMetres(-maxY, roomDepthM) * pxPerMeter;
+    const bottomPx = hueToMetres(-minY, roomDepthM) * pxPerMeter;
+    const centerLeftPx = hueToMetres(zone.centerX, roomWidthM) * pxPerMeter;
+    const centerTopPx = hueToMetres(-zone.centerY, roomDepthM) * pxPerMeter;
+    const color = zone.borderColor ?? "var(--lm-zone-1)";
+    return { leftPx, rightPx, topPx, bottomPx, centerLeftPx, centerTopPx, color };
+  };
+  const zoneBoundsBox = activeHueZone ? computeZoneBoundsBox(activeHueZone) : null;
+  // W4-J #3 — passive zones (every zone except the active one) render
+  // dimmer and without the center-drag handle so the user can see the
+  // full layout at a glance. The active zone keeps full chrome and is
+  // matched by id so the drag-time DOM lookup
+  // (`[data-zone-bounds-id=...]`) still resolves a single element.
+  const passiveZones = (allHueZones ?? []).filter(
+    (z) => !activeHueZone || z.id !== activeHueZone.id,
+  );
 
   return (
     <>
+      {/* W4-J #3 — passive zone bounds (read-only). Sits behind the
+          active zone chrome so the active dashed border stays visually
+          dominant. No center marker, no drag wiring, no chip — just the
+          rectangle so the user can see where each zone lives. */}
+      {passiveZones.map((zone) => {
+        const box = computeZoneBoundsBox(zone);
+        return (
+          <div
+            key={`passive-zone-${zone.id}`}
+            className="pointer-events-none absolute rounded"
+            style={{
+              left: box.leftPx,
+              top: box.topPx,
+              width: box.rightPx - box.leftPx,
+              height: box.bottomPx - box.topPx,
+              border: `1px dashed color-mix(in srgb, ${box.color} 35%, transparent)`,
+              background: `color-mix(in srgb, ${box.color} 1.5%, transparent)`,
+              zIndex: 17,
+              opacity: 0.6,
+            }}
+            aria-hidden
+          />
+        );
+      })}
       {/* Zone bounds box + center marker — only when a Hue zone is active */}
       {activeHueZone && zoneBoundsBox && (
         <>

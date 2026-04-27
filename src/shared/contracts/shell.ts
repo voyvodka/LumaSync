@@ -192,6 +192,14 @@ export interface ShellState {
   roomMapShowGrid?: boolean;
   /** Room map editor grid stroke width (px) */
   roomMapGridStrokeWidth?: number;
+  /**
+   * v1.5 W4-J #3 — Hue zone bounds visibility on the room-map canvas.
+   * When true (default), every persisted Hue zone renders its dashed
+   * bounds box; when false, only the active selection's bounds render
+   * (or none, if nothing is selected). Persisted so the user's
+   * preference survives editor reopen.
+   */
+  roomMapShowHueZones?: boolean;
   /** Room map editor background image opacity (0-100) */
   roomMapBackgroundOpacity?: number;
   /** Active UI layout mode (compact tray panel vs full settings window) */

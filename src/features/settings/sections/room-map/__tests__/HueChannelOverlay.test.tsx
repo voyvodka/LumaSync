@@ -95,6 +95,82 @@ describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
   });
 });
 
+describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
+  it("renders bounds for every zone in allHueZones (passive zones besides the active one)", () => {
+    const passive: HueZone = {
+      id: "zone-2",
+      name: "Reading nook",
+      entertainmentAreaId: "area-1",
+      centerX: 0.4,
+      centerY: -0.4,
+      centerZ: 0,
+      scaleX: 0.2,
+      scaleY: 0.2,
+      scaleZ: 0.2,
+      channelIndices: [],
+      borderColor: "#a855f7",
+    };
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        zoom={1}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE, passive]}
+      />,
+    );
+
+    // Passive zone renders a dashed border but does NOT carry the
+    // `data-zone-bounds-id` attribute (that one is reserved for the
+    // active zone so the center-drag DOM lookup stays unambiguous).
+    const activeBounds = container.querySelectorAll(`[data-zone-bounds-id="${ZONE.id}"]`);
+    expect(activeBounds).toHaveLength(1);
+    const passiveBounds = container.querySelectorAll(`[data-zone-bounds-id="${passive.id}"]`);
+    expect(passiveBounds).toHaveLength(0);
+
+    // The passive layer paints at `z-index: 17` (behind the active
+    // chrome) and the active bounds paint at `z-index: 18`. jsdom
+    // silently drops `color-mix()` declarations from the inline
+    // `border` shorthand, so we count layers via `z-index` instead of
+    // dashed-border presence — the structural signal is enough to
+    // prove both layers actually render.
+    const passiveLayers = Array.from(container.querySelectorAll<HTMLDivElement>("div"))
+      .filter((el) => el.style.zIndex === "17");
+    expect(passiveLayers).toHaveLength(1);
+    const activeLayers = Array.from(container.querySelectorAll<HTMLDivElement>("div"))
+      .filter((el) => el.style.zIndex === "18");
+    expect(activeLayers).toHaveLength(1);
+  });
+
+  it("omits the active zone from the passive list so it is not double-rendered", () => {
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        zoom={1}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={() => {}}
+        activeHueZone={ZONE}
+        allHueZones={[ZONE]}
+      />,
+    );
+    // Only one bounds element with this zone's id should exist (the
+    // active chrome). If the passive layer rendered the same zone we
+    // would get two — and the center drag would attach to the wrong
+    // one.
+    const bounds = container.querySelectorAll(`[data-zone-bounds-id="${ZONE.id}"]`);
+    expect(bounds).toHaveLength(1);
+  });
+});
+
 describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
   it("tags zone-bound channels with data-zone-channel-id so the center handler can move them", () => {
     const { container } = render(

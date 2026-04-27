@@ -62,9 +62,12 @@ interface RoomMapSettingsPopoverProps {
   dimensions: RoomDimensions;
   showGrid: boolean;
   gridStrokeWidth: number;
+  /** v1.5 W4-J #3 — Hue zone bounds visibility toggle. */
+  showHueZones: boolean;
   onDimensionsChange: (d: RoomDimensions) => void;
   onGridToggle: (v: boolean) => void;
   onGridStrokeWidthChange: (v: number) => void;
+  onHueZonesToggle: (v: boolean) => void;
   onReset: () => void;
 }
 
@@ -74,9 +77,11 @@ export function RoomMapSettingsPopover({
   dimensions,
   showGrid,
   gridStrokeWidth,
+  showHueZones,
   onDimensionsChange,
   onGridToggle,
   onGridStrokeWidthChange,
+  onHueZonesToggle,
   onReset,
 }: RoomMapSettingsPopoverProps) {
   const { t } = useTranslation("common");
@@ -197,6 +202,24 @@ export function RoomMapSettingsPopover({
               />
             </div>
           )}
+        </div>
+
+        {/* W4-J #3 — Hue zone bounds visibility toggle. Persisted to
+            shellStore as `roomMapShowHueZones` so the user's choice
+            survives editor reopen. */}
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-zinc-300">
+            <input
+              type="checkbox"
+              checked={showHueZones}
+              onChange={() => onHueZonesToggle(!showHueZones)}
+              className="rounded accent-zinc-300"
+            />
+            {t("roomMap.settings.showHueZones")}
+          </label>
+          <p className="mt-1 text-[10.5px] leading-snug text-zinc-500">
+            {t("roomMap.settings.showHueZonesHint")}
+          </p>
         </div>
 
         {/* Divider */}

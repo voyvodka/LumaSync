@@ -152,6 +152,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const [derivePreview, setDerivePreview] = useState<ZoneDeriveResult | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [gridStrokeWidth, setGridStrokeWidth] = useState(0.5);
+  // W4-J #3 — visibility toggle for Hue zone bounds. Default ON so a
+  // newly authored zone is visible without first selecting it; user
+  // can flip OFF to declutter the canvas while editing other objects.
+  const [showHueZones, setShowHueZones] = useState(true);
   const gridSettingsLoaded = useRef(false);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -169,23 +173,25 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
 
-  // Load persisted grid settings on mount
+  // Load persisted grid + Hue zone visibility settings on mount
   useEffect(() => {
     void shellStore.load().then((state) => {
       if (state.roomMapShowGrid !== undefined) setShowGrid(state.roomMapShowGrid);
       if (state.roomMapGridStrokeWidth !== undefined) setGridStrokeWidth(state.roomMapGridStrokeWidth);
+      if (state.roomMapShowHueZones !== undefined) setShowHueZones(state.roomMapShowHueZones);
       gridSettingsLoaded.current = true;
     });
   }, []);
 
-  // Persist grid settings when they change (skip initial load)
+  // Persist grid + Hue zone visibility settings when they change (skip initial load)
   useEffect(() => {
     if (!gridSettingsLoaded.current) return;
     void shellStore.save({
       roomMapShowGrid: showGrid,
       roomMapGridStrokeWidth: gridStrokeWidth,
+      roomMapShowHueZones: showHueZones,
     });
-  }, [showGrid, gridStrokeWidth]);
+  }, [showGrid, gridStrokeWidth, showHueZones]);
 
   // Zone management state
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
@@ -1116,8 +1122,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
               showGrid={showGrid}
               onDimensionsChange={handleDimensionsChange}
               gridStrokeWidth={gridStrokeWidth}
+              showHueZones={showHueZones}
               onGridToggle={setShowGrid}
               onGridStrokeWidthChange={setGridStrokeWidth}
+              onHueZonesToggle={setShowHueZones}
               onReset={() => void resetConfig()}
             />
           )}
@@ -1226,8 +1234,17 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
               />
             )}
 
-            {/* Hue channel dots + zone bounds — bug #53: bounds box must render even when no channels exist yet so the user can author a zone before the area is paired. */}
-            {(config.hueChannels.length > 0 || activeHueZone !== null) && (
+            {/* Hue channel dots + zone bounds — bug #53: bounds box must
+                render even when no channels exist yet so the user can
+                author a zone before the area is paired. W4-J #3: also
+                mount whenever the user has at least one Hue zone AND
+                the visibility toggle is on, so passive zones paint
+                without needing an active selection. */}
+            {(
+              config.hueChannels.length > 0
+              || activeHueZone !== null
+              || (showHueZones && hueZones.length > 0)
+            ) && (
               <HueChannelOverlay
                 channels={config.hueChannels}
                 pxPerMeter={pxPerMeter}
@@ -1250,6 +1267,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 panMode={spaceHeld}
                 activeHueZone={activeHueZone}
                 onHueZoneCenterChange={handleHueZoneCenterChange}
+                allHueZones={showHueZones ? hueZones : []}
               />
             )}
 
