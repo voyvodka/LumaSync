@@ -4847,6 +4847,225 @@ body {
   text-transform: uppercase;
 }
 
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-B (B1) — Hue area state strip
+   ─────────────────────────────────────────────────────────────────────
+   Renders at the top of the Hue Zones tab body. Three visual variants
+   (`--not-configured`, `--no-area`, `--ready`) signal the bridge state
+   so the user never has to leave the editor to find out why "+ Zone"
+   is disabled. Color is paired with copy and a leading dot — never the
+   sole signal. CTA button takes the user straight to the Devices
+   section through the parent-supplied callback.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-area-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 8px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.lm-room-dock-area-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--lm-ink-faint);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+.lm-room-dock-area-state-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.lm-room-dock-area-state-title {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+}
+.lm-room-dock-area-state-sub {
+  font-size: 10.5px;
+  color: var(--lm-ink-dim);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-area-state-cta {
+  all: unset;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.25);
+  text-transform: none;
+}
+.lm-room-dock-area-state-cta:hover {
+  background: rgba(255, 176, 32, 0.16);
+}
+.lm-room-dock-area-state-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-area-state--not-configured .lm-room-dock-area-state-dot {
+  background: var(--lm-ink-faint);
+}
+.lm-room-dock-area-state--no-area .lm-room-dock-area-state-dot {
+  background: var(--lm-amber);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.18);
+}
+.lm-room-dock-area-state--ready .lm-room-dock-area-state-dot {
+  background: var(--lm-green, #28c76f);
+  box-shadow: 0 0 0 2px rgba(40, 199, 111, 0.18);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-B (B2/B3) — Channel drag handle + drop target highlight
+   ─────────────────────────────────────────────────────────────────────
+   The grip is always rendered (it is the discoverability anchor for
+   B2). Drop targets — zone rows + the Unassigned bucket header — get
+   an amber outline + soft tinted background while a drag is in
+   flight, so the user knows exactly where their drop will land.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-row-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--lm-ink-faint);
+  cursor: grab;
+  border-radius: 3px;
+  opacity: 0.6;
+  transition: opacity 100ms ease, color 100ms ease;
+}
+.lm-room-dock-row:hover .lm-room-dock-row-grip,
+.lm-room-dock-row:focus-within .lm-room-dock-row-grip {
+  opacity: 1;
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-row.is-drag-source {
+  opacity: 0.5;
+}
+.lm-room-dock-row.is-drag-source .lm-room-dock-row-grip {
+  cursor: grabbing;
+  color: var(--lm-amber);
+}
+.lm-room-dock-row.is-drop-target {
+  background: rgba(255, 176, 32, 0.12);
+  outline: 1px dashed rgba(255, 176, 32, 0.55);
+  outline-offset: -1px;
+}
+.lm-room-dock-h.is-drop-target {
+  background: rgba(255, 176, 32, 0.08);
+  outline: 1px dashed rgba(255, 176, 32, 0.4);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+.lm-room-dock-row-action--move {
+  opacity: 0;
+}
+.lm-room-dock-row:hover .lm-room-dock-row-action--move,
+.lm-room-dock-row:focus-within .lm-room-dock-row-action--move {
+  opacity: 1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Move-to popover — anchored to a row's "→" button
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-move-popover {
+  z-index: 220;
+  min-width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.24);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lm-room-dock-move-item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-move-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lm-ink);
+}
+.lm-room-dock-move-item.is-on {
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-amber);
+}
+.lm-room-dock-move-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-move-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-dock-row-grip,
+  .lm-room-dock-row-action--move {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-dock-area-state {
+    border-color: CanvasText;
+  }
+  .lm-room-dock-area-state-cta {
+    color: ButtonText;
+    border-color: ButtonText;
+    background: ButtonFace;
+    forced-color-adjust: none;
+  }
+  .lm-room-dock-row.is-drop-target,
+  .lm-room-dock-h.is-drop-target {
+    outline-color: Highlight;
+    background: Canvas;
+  }
+  .lm-room-dock-move-popover {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-room-dock-move-item.is-on {
+    background: SelectedItem;
+    color: SelectedItemText;
+    forced-color-adjust: none;
+  }
+}
+
 /* Reduced motion + forced colors */
 @media (prefers-reduced-motion: reduce) {
   .lm-room-dock-tab,

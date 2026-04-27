@@ -170,7 +170,10 @@ export const SettingsLayout = memo(function SettingsLayout({
 
         {activeSection === SECTION_IDS.ROOM_MAP && (
           <div className="h-full overflow-hidden">
-            <RoomMapEditor onZoneCountsConfirmed={setPendingZoneCounts} />
+            <RoomMapEditor
+              onZoneCountsConfirmed={setPendingZoneCounts}
+              onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
+            />
           </div>
         )}
 

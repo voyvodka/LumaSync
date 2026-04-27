@@ -969,7 +969,22 @@
       "unassignedTitle": "Atanmamış",
       "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin.",
       "centerMarkerAriaLabel": "{{name}} bölgesinin merkezini sürükleyin",
-      "activeChipTip": "aktif"
+      "activeChipTip": "aktif",
+      "movePopoverLabel": "Kanalı bölgeye taşı",
+      "moveChannelAriaLabel": "Kanal {{channel}} öğesini başka bir bölgeye taşı",
+      "dragHandleTip": "Başka bölgeye sürükle",
+      "areaState": {
+        "notConfiguredTitle": "Köprü eşleşmedi",
+        "notConfiguredHint": "Bölge oluşturmak için Cihazlar'da bir Hue köprüsü eşleyin.",
+        "notConfiguredCta": "Köprü eşle",
+        "noAreaTitle": "Köprü hazır · Alan yok",
+        "noAreaHint": "Bölge tanımlamaya başlamak için Cihazlar'da bir eğlence alanı seçin.",
+        "noAreaCta": "Alan seç",
+        "readyTitle": "Alan hazır · {{N}} bölge",
+        "readyHint": "Bir kanalı bölgeye sürükleyin veya Taşı eylemini kullanın.",
+        "offlineTitle": "Köprü çevrimdışı",
+        "offlineHint": "Son alan hatırlandı; erişiminiz yoksa yeniden eşleyin."
+      }
     },
     "zoneProperties": {
       "title": "Bölge özellikleri",

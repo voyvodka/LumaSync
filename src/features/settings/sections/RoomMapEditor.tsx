@@ -37,6 +37,13 @@ import { HUE_ZONE_COMMANDS } from "../../../shared/contracts/hue";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
+  /**
+   * Wave 4-B (B1) — invoked when the dock state strip's CTA prompts the
+   * user to finish Hue onboarding (pair bridge or pick an entertainment
+   * area). The Settings shell wires this to `setActiveSection(DEVICES)`
+   * so the user is dropped into the right place to recover.
+   */
+  onNavigateToDevices?: () => void;
 }
 
 // CSS custom property references matching ZONE_COLORS Tailwind classes
@@ -128,7 +135,7 @@ function getZoneColorHex(index: number): string {
 }
 
 
-export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}) {
+export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: RoomMapEditorProps = {}) {
   const { t } = useTranslation("common");
   const { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -178,6 +185,13 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
   const [hueAreaId, setHueAreaId] = useState<string | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
 
+  // Wave 4-B (B1) — track Hue bridge state alongside the area id so the
+  // dock can render a state-aware header (no bridge / no area / ready)
+  // without mounting the full onboarding state machine. We treat
+  // `hueAppKey` (legacy plaintext) OR `credentialStorageBackend === keychain`
+  // as "configured"; reachability beyond that requires `useHueOnboarding`
+  // and is intentionally out of scope for the editor.
+  const [hueBridgeConfigured, setHueBridgeConfigured] = useState(false);
   // Load the persisted last-selected entertainment area id once. We do not
   // mount useHueOnboarding here to keep the editor decoupled from the
   // onboarding state machine; the area id alone is enough to author zones.
@@ -186,6 +200,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
     void shellStore.load().then((state) => {
       if (cancelled) return;
       setHueAreaId(state.lastHueAreaId ?? null);
+      const hasKeychain = state.credentialStorageBackend === "keychain";
+      const hasLegacyKey = !!state.hueAppKey;
+      const hasBridge = !!state.lastHueBridge;
+      setHueBridgeConfigured(hasBridge && (hasKeychain || hasLegacyKey));
     });
     return () => { cancelled = true; };
   }, []);
@@ -680,6 +698,80 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
     setActiveHueZoneId(zoneId);
   }, []);
 
+  // ── Wave 4-B (B2/B3) — Channel ↔ zone assignment + cross-zone transfer
+  // ─────────────────────────────────────────────────────────────────────
+  // Single optimistic handler the dock uses for every channel→zone path:
+  //   - drag-drop onto a zone header
+  //   - drag-drop onto the "Unassigned" bucket
+  //   - context "Move to → <zone>" popover
+  // The local config update keeps three derived shapes in sync:
+  //   1. `hueChannels[i].zoneId` — primary join key
+  //   2. `hueChannels[i].zoneRelativePosition` — defaults to (0,0,0) so the
+  //      dot lands on the zone center; user can drag to refine.
+  //   3. `hueZones[*].channelIndices` — denormalized list mirrored for
+  //      runtime sampler; we keep it consistent so frame-builder and
+  //      zone-cap validators do not desync.
+  // The Tauri mirror (`assign_channel_to_zone`) follows the same
+  // silent-catch-banned pattern: we log on failure but keep the local
+  // edit so the UI does not flicker.
+  const handleAssignChannelToZone = useCallback(
+    (channelIndex: number, targetZoneId: string | null) => {
+      const channel = config.hueChannels.find((c) => c.channelIndex === channelIndex);
+      if (!channel) return;
+      // No-op if already in the target bucket — avoids spurious invokes.
+      const currentZoneId = channel.zoneId ?? null;
+      if (currentZoneId === targetZoneId) return;
+
+      // Resolve the entertainment area id we will send to the backend.
+      // Prefer the target zone's value when attaching; on detach, keep the
+      // channel's last known area (or the persisted `hueAreaId` fallback).
+      const targetZone = targetZoneId
+        ? hueZones.find((z) => z.id === targetZoneId)
+        : null;
+      const entertainmentAreaId =
+        targetZone?.entertainmentAreaId ?? hueAreaId ?? "";
+
+      // Default zone-relative position lands on the zone center so the
+      // dot is visible inside the dashed bounds; the user can drag it
+      // afterwards to refine the placement.
+      const nextChannels = config.hueChannels.map((c) =>
+        c.channelIndex === channelIndex
+          ? targetZoneId
+            ? {
+                ...c,
+                zoneId: targetZoneId,
+                zoneRelativePosition: { x: 0, y: 0, z: 0 },
+              }
+            : { ...c, zoneId: undefined, zoneRelativePosition: undefined }
+          : c,
+      );
+      // Keep `hueZones[*].channelIndices` in sync — remove from old zone,
+      // add to new zone (idempotent).
+      const nextZones = hueZones.map((z) => {
+        const without = z.channelIndices.filter((i) => i !== channelIndex);
+        if (z.id === targetZoneId) {
+          return { ...z, channelIndices: [...without, channelIndex] };
+        }
+        return { ...z, channelIndices: without };
+      });
+      void updateConfig({ hueChannels: nextChannels, hueZones: nextZones });
+
+      void invoke(HUE_ZONE_COMMANDS.ASSIGN_CHANNEL_TO_ZONE, {
+        request: {
+          channelIndex,
+          zoneId: targetZoneId,
+          zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
+          entertainmentAreaId,
+          existingZones: nextZones,
+          channels: nextChannels,
+        },
+      }).catch((e) => {
+        console.error("[LumaSync] assign_channel_to_zone failed", e);
+      });
+    },
+    [config.hueChannels, hueZones, hueAreaId, updateConfig],
+  );
+
   // Property bar handlers
   const handleUpdatePosition = useCallback(
     (id: string, x: number, y: number) => {
@@ -1172,6 +1264,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
             onUpdateHueZone={handleHueZoneUpdate}
             addHueZoneDisabled={!hueAreaId}
             addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
+            hueBridgeConfigured={hueBridgeConfigured}
+            hueAreaId={hueAreaId}
+            onAssignChannelToZone={handleAssignChannelToZone}
+            onNavigateToDevices={onNavigateToDevices}
           />
         )}
       </div>

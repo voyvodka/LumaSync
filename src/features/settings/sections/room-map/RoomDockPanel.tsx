@@ -37,7 +37,8 @@
  *   status signal).
  * - Reduced-motion and forced-colors branches in `styles.css`.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type React from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -79,6 +80,24 @@ interface RoomDockPanelProps {
   /** When true, "+ Hue zone" CTA is disabled (no entertainment area paired). */
   addHueZoneDisabled?: boolean;
   addHueZoneDisabledTooltip?: string;
+  // ── Wave 4-B props ────────────────────────────────────────────────
+  /** True when a Hue bridge is paired (legacy plaintext or keychain). */
+  hueBridgeConfigured?: boolean;
+  /** Persisted entertainment area id; null when no area picked. */
+  hueAreaId?: string | null;
+  /**
+   * B2/B3 — move a single channel between zones (or detach when target is
+   * `null`). Powers the row drag handle, "Unassigned" drop bucket, and the
+   * inline "Move to →" popover. Inert when omitted, so the dock degrades
+   * to the v1.5 read-only flow.
+   */
+  onAssignChannelToZone?: (channelIndex: number, targetZoneId: string | null) => void;
+  /**
+   * B1 — emitted when the state strip CTA prompts the user to finish Hue
+   * onboarding. Inert when omitted (CTA still renders for clarity but
+   * does nothing on click).
+   */
+  onNavigateToDevices?: () => void;
 }
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -521,6 +540,144 @@ function ZonesTab(props: {
   );
 }
 
+interface HueAreaState {
+  kind: "not-configured" | "no-area" | "ready";
+  /** True when an entertainment area id is persisted but no bridge cred is on file. */
+  orphanedAreaId: boolean;
+}
+
+function deriveHueAreaState(
+  hueBridgeConfigured: boolean,
+  hueAreaId: string | null | undefined,
+): HueAreaState {
+  if (!hueBridgeConfigured) {
+    return {
+      kind: "not-configured",
+      // Surface the "you have an old area id but no bridge to talk to"
+      // case so the strip can show a slightly different copy and a
+      // clear "re-pair" CTA. The persisted area id is kept (we do NOT
+      // clear it here) — the user may simply be offline, and dropping
+      // the id would force them to re-pick after every disconnect.
+      orphanedAreaId: !!hueAreaId,
+    };
+  }
+  if (!hueAreaId) {
+    return { kind: "no-area", orphanedAreaId: false };
+  }
+  return { kind: "ready", orphanedAreaId: false };
+}
+
+/**
+ * Inline "Move to → <zone>" popover anchored to a channel row's move
+ * button. Renders fixed-positioned next to the trigger so it can never
+ * be clipped by the dock's vertical scroll. Closes on outside click,
+ * Escape, or zone pick — keeps focus management trap-free.
+ */
+function MovePopover({
+  zones,
+  currentZoneId,
+  onPick,
+  onClose,
+  triggerRect,
+}: {
+  zones: HueZone[];
+  currentZoneId: string | null;
+  onPick: (zoneId: string | null) => void;
+  onClose: () => void;
+  triggerRect: DOMRect | null;
+}) {
+  const { t } = useTranslation("common");
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest("[data-move-popover]")) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  if (!triggerRect) return null;
+  const top = Math.max(8, triggerRect.bottom + 4);
+  const left = Math.max(8, triggerRect.right - 200);
+
+  return (
+    <div
+      data-move-popover
+      role="menu"
+      aria-label={t("roomMap.hueZones.movePopoverLabel")}
+      className="lm-room-dock-move-popover"
+      style={{ position: "fixed", top, left }}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        className={`lm-room-dock-move-item ${currentZoneId === null ? "is-on" : ""}`}
+        onClick={() => {
+          onPick(null);
+          onClose();
+        }}
+      >
+        <span
+          className="lm-room-dock-move-item-dot"
+          style={{ background: "var(--lm-ink-faint)" }}
+          aria-hidden
+        />
+        <span>{t("roomMap.hueZones.unassignedTitle")}</span>
+      </button>
+      {zones.map((z, zi) => (
+        <button
+          key={z.id}
+          type="button"
+          role="menuitem"
+          className={`lm-room-dock-move-item ${currentZoneId === z.id ? "is-on" : ""}`}
+          onClick={() => {
+            onPick(z.id);
+            onClose();
+          }}
+        >
+          <span
+            className="lm-room-dock-move-item-dot"
+            style={{ background: getZoneColor(z, zi) }}
+            aria-hidden
+          />
+          <span>{z.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function IconDragHandle() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="currentColor" aria-hidden>
+      <circle cx="3.5" cy="3" r="0.9" />
+      <circle cx="3.5" cy="6" r="0.9" />
+      <circle cx="3.5" cy="9" r="0.9" />
+      <circle cx="8.5" cy="3" r="0.9" />
+      <circle cx="8.5" cy="6" r="0.9" />
+      <circle cx="8.5" cy="9" r="0.9" />
+    </svg>
+  );
+}
+
+function IconMoveTo() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M2 6h7" />
+      <path d="M6 3l3 3-3 3" />
+    </svg>
+  );
+}
+
 function HueZonesTab(props: {
   hueZones: HueZone[];
   channels: HueChannelPlacement[];
@@ -532,6 +689,10 @@ function HueZonesTab(props: {
   addHueZoneDisabled: boolean;
   addHueZoneDisabledTooltip?: string;
   onSelectChannel: (idx: number) => void;
+  hueBridgeConfigured: boolean;
+  hueAreaId: string | null;
+  onAssignChannelToZone?: (channelIndex: number, targetZoneId: string | null) => void;
+  onNavigateToDevices?: () => void;
 }) {
   const {
     hueZones,
@@ -544,12 +705,33 @@ function HueZonesTab(props: {
     addHueZoneDisabled,
     addHueZoneDisabledTooltip,
     onSelectChannel,
+    hueBridgeConfigured,
+    hueAreaId,
+    onAssignChannelToZone,
+    onNavigateToDevices,
   } = props;
   const { t } = useTranslation("common");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  // Bucket channels by zone id
+  // ── Wave 4-B (B1) — area-state header ─────────────────────────────
+  const areaState = deriveHueAreaState(hueBridgeConfigured, hueAreaId);
+
+  // ── Wave 4-B (B2/B3) — drag-and-drop + move popover state ─────────
+  const [dragChannelIndex, setDragChannelIndex] = useState<number | null>(null);
+  const [dropTargetZoneId, setDropTargetZoneId] = useState<string | null | undefined>(undefined);
+  const [movePopover, setMovePopover] = useState<{
+    channelIndex: number;
+    triggerRect: DOMRect;
+  } | null>(null);
+
+  useEffect(() => {
+    if (dragChannelIndex !== null && !channels.some((c) => c.channelIndex === dragChannelIndex)) {
+      setDragChannelIndex(null);
+      setDropTargetZoneId(undefined);
+    }
+  }, [channels, dragChannelIndex]);
+
   const byZone = new Map<string, HueChannelPlacement[]>();
   const unassigned: HueChannelPlacement[] = [];
   for (const ch of channels) {
@@ -562,8 +744,95 @@ function HueZonesTab(props: {
     }
   }
 
+  const dragSupported = !!onAssignChannelToZone;
+
+  const channelDragProps = (ch: HueChannelPlacement) => {
+    if (!dragSupported) return {} as Record<string, never>;
+    return {
+      draggable: true,
+      onDragStart: (e: React.DragEvent<HTMLLIElement>) => {
+        e.stopPropagation();
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-lumasync-channel", String(ch.channelIndex));
+        setDragChannelIndex(ch.channelIndex);
+      },
+      onDragEnd: () => {
+        setDragChannelIndex(null);
+        setDropTargetZoneId(undefined);
+      },
+    } as const;
+  };
+
+  const dropTargetProps = (targetZoneId: string | null) => {
+    if (!dragSupported) return {} as Record<string, never>;
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (dragChannelIndex === null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (dropTargetZoneId !== targetZoneId) setDropTargetZoneId(targetZoneId);
+      },
+      onDragLeave: () => {
+        if (dropTargetZoneId === targetZoneId) setDropTargetZoneId(undefined);
+      },
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault();
+        const raw = e.dataTransfer.getData("application/x-lumasync-channel");
+        const idx = raw ? parseInt(raw, 10) : dragChannelIndex;
+        if (idx === null || Number.isNaN(idx)) return;
+        onAssignChannelToZone?.(idx, targetZoneId);
+        setDragChannelIndex(null);
+        setDropTargetZoneId(undefined);
+      },
+    } as const;
+  };
+
   return (
     <>
+      {/* B1 — Hue area state strip; renders above the Title row so the
+          user always knows whether the dock is operational without
+          cross-referencing the Devices section. */}
+      <div
+        className={`lm-room-dock-area-state lm-room-dock-area-state--${areaState.kind}`}
+        role="status"
+        aria-live="polite"
+      >
+        <span className="lm-room-dock-area-state-dot" aria-hidden />
+        <div className="lm-room-dock-area-state-text">
+          <span className="lm-room-dock-area-state-title">
+            {areaState.kind === "not-configured"
+              ? areaState.orphanedAreaId
+                ? t("roomMap.hueZones.areaState.offlineTitle")
+                : t("roomMap.hueZones.areaState.notConfiguredTitle")
+              : areaState.kind === "no-area"
+                ? t("roomMap.hueZones.areaState.noAreaTitle")
+                : t("roomMap.hueZones.areaState.readyTitle", {
+                    N: String(hueZones.length),
+                  })}
+          </span>
+          <span className="lm-room-dock-area-state-sub">
+            {areaState.kind === "not-configured"
+              ? areaState.orphanedAreaId
+                ? t("roomMap.hueZones.areaState.offlineHint")
+                : t("roomMap.hueZones.areaState.notConfiguredHint")
+              : areaState.kind === "no-area"
+                ? t("roomMap.hueZones.areaState.noAreaHint")
+                : t("roomMap.hueZones.areaState.readyHint")}
+          </span>
+        </div>
+        {areaState.kind !== "ready" && onNavigateToDevices && (
+          <button
+            type="button"
+            className="lm-room-dock-area-state-cta"
+            onClick={onNavigateToDevices}
+          >
+            {areaState.kind === "not-configured"
+              ? t("roomMap.hueZones.areaState.notConfiguredCta")
+              : t("roomMap.hueZones.areaState.noAreaCta")}
+          </button>
+        )}
+      </div>
+
       <div className="lm-room-dock-h">
         <span className="lm-room-dock-h-name">{t("roomMap.hueZones.title")}</span>
         <button
@@ -599,13 +868,21 @@ function HueZonesTab(props: {
             const isEditing = editingId === zone.id;
             const color = getZoneColor(zone, zi);
             const bucket = byZone.get(zone.id) ?? [];
+            const isDropTarget = dropTargetZoneId === zone.id && dragChannelIndex !== null;
             return (
               <li key={zone.id}>
                 <div
-                  className={`lm-room-dock-row ${isActive ? "is-on" : ""}`}
+                  className={[
+                    "lm-room-dock-row",
+                    isActive ? "is-on" : "",
+                    isDropTarget ? "is-drop-target" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   role="button"
                   tabIndex={0}
                   aria-pressed={isActive}
+                  data-drop-zone-id={zone.id}
                   onClick={() => onSelectHueZone(isActive ? null : zone.id)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -613,6 +890,7 @@ function HueZonesTab(props: {
                       onSelectHueZone(isActive ? null : zone.id);
                     }
                   }}
+                  {...dropTargetProps(zone.id)}
                 >
                   <span
                     className="lm-room-dock-row-dot"
@@ -679,7 +957,13 @@ function HueZonesTab(props: {
                     {bucket.map((ch) => (
                       <li
                         key={ch.channelIndex}
-                        className="lm-room-dock-row is-nested"
+                        className={[
+                          "lm-room-dock-row",
+                          "is-nested",
+                          dragChannelIndex === ch.channelIndex ? "is-drag-source" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                         role="button"
                         tabIndex={0}
                         onClick={(e) => {
@@ -692,7 +976,17 @@ function HueZonesTab(props: {
                             onSelectChannel(ch.channelIndex);
                           }
                         }}
+                        {...channelDragProps(ch)}
                       >
+                        {dragSupported && (
+                          <span
+                            className="lm-room-dock-row-grip"
+                            aria-hidden
+                            title={t("roomMap.hueZones.dragHandleTip")}
+                          >
+                            <IconDragHandle />
+                          </span>
+                        )}
                         <span
                           className="lm-room-dock-row-dot"
                           style={{ background: color, opacity: 0.7 }}
@@ -704,6 +998,22 @@ function HueZonesTab(props: {
                               index: String(ch.channelIndex + 1),
                             })}
                         </span>
+                        {dragSupported && (
+                          <button
+                            type="button"
+                            className="lm-room-dock-row-action lm-room-dock-row-action--move"
+                            aria-label={t("roomMap.hueZones.moveChannelAriaLabel", {
+                              channel: String(ch.channelIndex + 1),
+                            })}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                              setMovePopover({ channelIndex: ch.channelIndex, triggerRect: rect });
+                            }}
+                          >
+                            <IconMoveTo />
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -711,9 +1021,20 @@ function HueZonesTab(props: {
               </li>
             );
           })}
-          {unassigned.length > 0 && (
+          {(unassigned.length > 0 || dragSupported) && (
             <li>
-              <div className="lm-room-dock-h" role="heading" aria-level={3}>
+              <div
+                className={[
+                  "lm-room-dock-h",
+                  dropTargetZoneId === null && dragChannelIndex !== null ? "is-drop-target" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                role="heading"
+                aria-level={3}
+                data-drop-zone-id="__unassigned__"
+                {...dropTargetProps(null)}
+              >
                 <span
                   className="lm-room-dock-h-dot"
                   style={{ background: "var(--lm-ink-faint)" }}
@@ -724,38 +1045,84 @@ function HueZonesTab(props: {
                 </span>
                 <span className="lm-room-dock-h-count">{unassigned.length}</span>
               </div>
-              <ul className="space-y-px">
-                {unassigned.map((ch) => (
-                  <li
-                    key={ch.channelIndex}
-                    className="lm-room-dock-row is-nested"
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectChannel(ch.channelIndex)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onSelectChannel(ch.channelIndex);
-                      }
-                    }}
-                  >
-                    <span
-                      className="lm-room-dock-row-dot"
-                      style={{ background: "var(--lm-ink-faint)", opacity: 0.7 }}
-                      aria-hidden
-                    />
-                    <span className="lm-room-dock-row-label">
-                      {ch.label ??
-                        t("roomMap.hueChannel.defaultLabel", {
-                          index: String(ch.channelIndex + 1),
-                        })}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              {unassigned.length > 0 && (
+                <ul className="space-y-px">
+                  {unassigned.map((ch) => (
+                    <li
+                      key={ch.channelIndex}
+                      className={[
+                        "lm-room-dock-row",
+                        "is-nested",
+                        dragChannelIndex === ch.channelIndex ? "is-drag-source" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectChannel(ch.channelIndex)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelectChannel(ch.channelIndex);
+                        }
+                      }}
+                      {...channelDragProps(ch)}
+                    >
+                      {dragSupported && (
+                        <span
+                          className="lm-room-dock-row-grip"
+                          aria-hidden
+                          title={t("roomMap.hueZones.dragHandleTip")}
+                        >
+                          <IconDragHandle />
+                        </span>
+                      )}
+                      <span
+                        className="lm-room-dock-row-dot"
+                        style={{ background: "var(--lm-ink-faint)", opacity: 0.7 }}
+                        aria-hidden
+                      />
+                      <span className="lm-room-dock-row-label">
+                        {ch.label ??
+                          t("roomMap.hueChannel.defaultLabel", {
+                            index: String(ch.channelIndex + 1),
+                          })}
+                      </span>
+                      {dragSupported && hueZones.length > 0 && (
+                        <button
+                          type="button"
+                          className="lm-room-dock-row-action lm-room-dock-row-action--move"
+                          aria-label={t("roomMap.hueZones.moveChannelAriaLabel", {
+                            channel: String(ch.channelIndex + 1),
+                          })}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                            setMovePopover({ channelIndex: ch.channelIndex, triggerRect: rect });
+                          }}
+                        >
+                          <IconMoveTo />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           )}
         </ul>
+      )}
+
+      {movePopover && onAssignChannelToZone && (
+        <MovePopover
+          zones={hueZones}
+          currentZoneId={
+            channels.find((c) => c.channelIndex === movePopover.channelIndex)?.zoneId ?? null
+          }
+          triggerRect={movePopover.triggerRect}
+          onPick={(zoneId) => onAssignChannelToZone(movePopover.channelIndex, zoneId)}
+          onClose={() => setMovePopover(null)}
+        />
       )}
     </>
   );
@@ -849,6 +1216,10 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onUpdateHueZone,
     addHueZoneDisabled = false,
     addHueZoneDisabledTooltip,
+    hueBridgeConfigured = false,
+    hueAreaId = null,
+    onAssignChannelToZone,
+    onNavigateToDevices,
   } = props;
   const { t } = useTranslation("common");
 
@@ -985,6 +1356,10 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               addHueZoneDisabled={addHueZoneDisabled}
               addHueZoneDisabledTooltip={addHueZoneDisabledTooltip}
               onSelectChannel={(idx) => onSelect(`hue-${idx}`)}
+              hueBridgeConfigured={hueBridgeConfigured}
+              hueAreaId={hueAreaId}
+              onAssignChannelToZone={onAssignChannelToZone}
+              onNavigateToDevices={onNavigateToDevices}
             />
           ) : activeTab === "properties" ? (
             <div className="lm-room-dock-empty">{t("roomMap.inspector.tabHint")}</div>

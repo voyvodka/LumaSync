@@ -969,7 +969,22 @@
       "unassignedTitle": "Unassigned",
       "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones.",
       "centerMarkerAriaLabel": "Drag to move the {{name}} zone center",
-      "activeChipTip": "active"
+      "activeChipTip": "active",
+      "movePopoverLabel": "Move channel to zone",
+      "moveChannelAriaLabel": "Move channel {{channel}} to another zone",
+      "dragHandleTip": "Drag to another zone",
+      "areaState": {
+        "notConfiguredTitle": "No bridge paired",
+        "notConfiguredHint": "Pair a Hue bridge in Devices to author zones.",
+        "notConfiguredCta": "Pair bridge",
+        "noAreaTitle": "Bridge ready · No area",
+        "noAreaHint": "Pick an entertainment area in Devices to start authoring zones.",
+        "noAreaCta": "Choose area",
+        "readyTitle": "Area ready · {{N}} zones",
+        "readyHint": "Drag a channel onto a zone, or use the Move action.",
+        "offlineTitle": "Bridge offline",
+        "offlineHint": "Last area is remembered; re-pair if you no longer have access."
+      }
     },
     "zoneProperties": {
       "title": "Zone properties",
