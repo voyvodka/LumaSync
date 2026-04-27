@@ -290,6 +290,25 @@ export interface HueZone {
 // ---------------------------------------------------------------------------
 
 /**
+ * Internal helper — guards a legacy persisted record against the most common
+ * corruption shapes seen in plaintext on-disk JSON: `null`, non-object,
+ * `Array.isArray`, missing fields. Centralised so both legacy converters
+ * reuse the same gate.
+ */
+function isPlainLegacyRecord(legacy: unknown): legacy is Record<string, unknown> {
+  return (
+    typeof legacy === "object" &&
+    legacy !== null &&
+    !Array.isArray(legacy)
+  );
+}
+
+/** True when `value` is a finite, non-NaN number. */
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
  * Convert a legacy `ZoneDefinition` (USB-side region grouping) into a
  * unified `Zone` with `zoneType === "logical"`. Pure function — safe to
  * call in any context.
@@ -297,13 +316,49 @@ export interface HueZone {
  * Used by the `schemaVersion 1 → 2` migration shim that lands in F6.
  * This helper is exported here (and not inside `loadShellState`) so the
  * migration is testable in isolation.
+ *
+ * Returns `null` and emits `console.warn` when the input fails the minimal
+ * shape gate (non-object, missing/empty `id` or `name`, non-array
+ * `channelIndices`). Migration callers MUST filter `null` results so corrupt
+ * records are dropped instead of corrupting the unified `zones[]`. RFC §7 #1.
  */
-export function toLogicalZone(legacy: ZoneDefinition): Zone {
+export function toLogicalZone(legacy: ZoneDefinition): Zone | null {
+  if (!isPlainLegacyRecord(legacy)) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt ZoneDefinition (not a plain object)",
+      legacy,
+    );
+    return null;
+  }
+
+  const id = legacy.id;
+  const name = legacy.name;
+  const channelIndices = legacy.channelIndices;
+
+  if (typeof id !== "string" || id.length === 0) {
+    console.warn("[LumaSync] migration: dropping corrupt ZoneDefinition (missing id)", legacy);
+    return null;
+  }
+  if (typeof name !== "string" || name.length === 0) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt ZoneDefinition (missing name)",
+      legacy,
+    );
+    return null;
+  }
+  if (!Array.isArray(channelIndices)) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt ZoneDefinition (channelIndices not an array)",
+      legacy,
+    );
+    return null;
+  }
+
   return {
-    id: legacy.id,
-    name: legacy.name,
+    id,
+    name,
     zoneType: ZONE_TYPES.LOGICAL,
-    channelIndices: legacy.channelIndices,
+    channelIndices,
     region: legacy.region,
   };
 }
@@ -316,20 +371,83 @@ export function toLogicalZone(legacy: ZoneDefinition): Zone {
  * The `centerColor` deprecated field is intentionally dropped on the
  * way through; the migration shim's behaviour matches the W1-A1 v1.5
  * deprecation note (new authoring never writes it, old reads tolerated).
+ *
+ * Returns `null` and emits `console.warn` when the input fails the Hue
+ * shape gate (non-object, missing/empty `id` / `name` / `entertainmentAreaId`,
+ * non-finite `centerX/Y/Z` or `scaleX/Y/Z`, non-array `channelIndices`).
+ * Migration callers MUST filter `null` results. RFC §7 #1.
  */
-export function toHueZone(legacy: HueZone): Zone {
+export function toHueZone(legacy: HueZone): Zone | null {
+  if (!isPlainLegacyRecord(legacy)) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt HueZone (not a plain object)",
+      legacy,
+    );
+    return null;
+  }
+
+  const id = legacy.id;
+  const name = legacy.name;
+  const entertainmentAreaId = legacy.entertainmentAreaId;
+  const channelIndices = legacy.channelIndices;
+
+  if (typeof id !== "string" || id.length === 0) {
+    console.warn("[LumaSync] migration: dropping corrupt HueZone (missing id)", legacy);
+    return null;
+  }
+  if (typeof name !== "string" || name.length === 0) {
+    console.warn("[LumaSync] migration: dropping corrupt HueZone (missing name)", legacy);
+    return null;
+  }
+  if (typeof entertainmentAreaId !== "string" || entertainmentAreaId.length === 0) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt HueZone (missing entertainmentAreaId)",
+      legacy,
+    );
+    return null;
+  }
+  if (
+    !isFiniteNumber(legacy.centerX) ||
+    !isFiniteNumber(legacy.centerY) ||
+    !isFiniteNumber(legacy.centerZ)
+  ) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt HueZone (non-finite center coordinates)",
+      legacy,
+    );
+    return null;
+  }
+  if (
+    !isFiniteNumber(legacy.scaleX) ||
+    !isFiniteNumber(legacy.scaleY) ||
+    !isFiniteNumber(legacy.scaleZ)
+  ) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt HueZone (non-finite scale)",
+      legacy,
+    );
+    return null;
+  }
+  if (!Array.isArray(channelIndices)) {
+    console.warn(
+      "[LumaSync] migration: dropping corrupt HueZone (channelIndices not an array)",
+      legacy,
+    );
+    return null;
+  }
+
   return {
-    id: legacy.id,
-    name: legacy.name,
+    id,
+    name,
     zoneType: ZONE_TYPES.HUE,
-    entertainmentAreaId: legacy.entertainmentAreaId,
+    entertainmentAreaId,
     centerX: legacy.centerX,
     centerY: legacy.centerY,
     centerZ: legacy.centerZ,
     scaleX: legacy.scaleX,
     scaleY: legacy.scaleY,
     scaleZ: legacy.scaleZ,
-    channelIndices: legacy.channelIndices,
+    channelIndices,
     borderColor: legacy.borderColor,
   };
 }
