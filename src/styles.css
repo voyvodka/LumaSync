@@ -4393,7 +4393,14 @@ body {
   background: var(--lm-panel);
   font-family: var(--lm-sans);
   color: var(--lm-ink);
+  /* Fill the parent row vertically so the inner flex-column can clamp
+     `.lm-room-dock-inspect` (max-height: 50%) against a real height
+     instead of `auto`. Without this the inspector's percentage cap
+     resolves to "no cap" and tall content (HSV picker + swatches +
+     metric read-out + slider) overflows past the dock. */
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 @media (max-width: 1100px) {
   .lm-room-dock {
@@ -4702,9 +4709,17 @@ body {
 
 /* Inspector panel — sits below the list */
 .lm-room-dock-inspect {
-  flex-shrink: 0;
-  max-height: 50%;
+  /* W4-G #1 — was `flex-shrink: 0` which let the inspector push the
+     list area into negative space when the picker + swatches + slider
+     stack exceeded 50 % of the dock. `0 1 auto` lets the inspector
+     shrink alongside the list, and the absolute 360 px ceiling keeps
+     the inspector usable on very tall monitors where 50 % would
+     swallow the whole list. */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(50%, 360px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   border-top: 1px solid var(--lm-line);
   background: var(--lm-panel-2);
   padding: 10px 12px 12px;
