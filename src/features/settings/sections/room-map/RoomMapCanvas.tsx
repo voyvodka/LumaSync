@@ -450,7 +450,15 @@ export function RoomMapCanvas({
     <RoomMapContext.Provider value={{ pxPerMeter, canvasSize }}>
       <div
         ref={canvasRef}
-        className={`relative w-full h-full overflow-hidden bg-zinc-950 ${spaceHeld ? "cursor-grab" : ""}`}
+        // W4-I bug #5 — `select-none` on the canvas root prevents
+        // browser text selection while the user drags an object. Drag
+        // gestures originate inside this div (objects, zone center,
+        // pan), and the bubbled pointer-move events would otherwise
+        // sweep across `<text>` / chip labels and highlight them. The
+        // input fields inside `RoomDockPanel` are unaffected — they
+        // mount outside this root and keep their native selection
+        // behaviour.
+        className={`select-none relative w-full h-full overflow-hidden bg-zinc-950 ${spaceHeld ? "cursor-grab" : ""}`}
         onClick={handleBackgroundClick}
         onWheel={handleCanvasWheel}
         onPointerDown={handleCanvasPointerDown}
