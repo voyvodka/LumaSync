@@ -464,11 +464,19 @@ export function UsbStripInspector({
 export function HueChannelInspector({
   channel,
   zoneName,
+  bridgeStatus = "unknown",
   onRename,
   onToggleLock,
 }: {
   channel: HueChannelPlacement;
   zoneName: string | null;
+  /**
+   * Wave 4-G #4 — Hue bridge reachability mirror. Renders the same
+   * connection chip vocabulary used by `UsbStripInspector` so a
+   * disconnected Hue bridge is as visible as a disconnected USB port.
+   * `unknown` (default) ⇒ no chip rendered.
+   */
+  bridgeStatus?: UsbStripConnectionStatus;
   onRename: (label: string) => void;
   onToggleLock: () => void;
 }) {
@@ -537,6 +545,25 @@ export function HueChannelInspector({
           }}
         />
       </div>
+      {bridgeStatus !== "unknown" ? (
+        <div className="lm-room-dock-field">
+          <span className="lm-room-dock-field-label">
+            {t("roomMap.inspector.hueBridgeLabel")}
+          </span>
+          <span
+            className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${bridgeStatus}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="lm-room-dock-conn-chip-dot" aria-hidden />
+            <span className="lm-room-dock-conn-chip-tx">
+              {bridgeStatus === "connected"
+                ? t("roomMap.inspector.hueBridgeConnected")
+                : t("roomMap.inspector.hueBridgeDisconnected")}
+            </span>
+          </span>
+        </div>
+      ) : null}
       <div className="lm-room-dock-field">
         <span className="lm-room-dock-field-label">
           {t("roomMap.inspector.hueChannelIndexLabel")}

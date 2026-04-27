@@ -45,6 +45,14 @@ interface RoomMapEditorProps {
    * so the user is dropped into the right place to recover.
    */
   onNavigateToDevices?: () => void;
+  /**
+   * Wave 4-G #4 — App-level Hue reachability snapshot, forwarded into
+   * the dock so HueChannelInspector + Hue zone rows can mirror the
+   * "Bridge offline" state alongside the existing USB connection chip
+   * pattern. `undefined` keeps the dock in legacy "unknown" mode so
+   * embeds that do not own a reachability source render no chip.
+   */
+  hueReachable?: boolean;
 }
 
 // CSS custom property references matching ZONE_COLORS Tailwind classes
@@ -136,7 +144,7 @@ function getZoneColorHex(index: number): string {
 }
 
 
-export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: RoomMapEditorProps = {}) {
+export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
   const { t } = useTranslation("common");
   const { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -257,6 +265,17 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: Ro
   const usbConnectionStatus = usb.ready
     ? (usb.connectedPort ? "connected" : "disconnected")
     : "unknown";
+  // Wave 4-G #4 — Mirror the Hue bridge reachability into the same
+  // chip vocabulary the USB inspector already uses. `undefined` ⇒
+  // we have no source of truth (e.g. SettingsLayout passes nothing in
+  // a legacy embed) so we render no chip; `true` ⇒ connected,
+  // `false` ⇒ disconnected.
+  const hueChannelStatus: "connected" | "disconnected" | "unknown" =
+    hueReachable === undefined
+      ? "unknown"
+      : hueReachable
+        ? "connected"
+        : "disconnected";
   // Wave 4-E — there is no Rust-side `disconnect_serial_port` yet
   // (out-of-scope contract change), so the inspector deep-links the
   // user to Devices where the existing pair / health-check / forget
@@ -1338,6 +1357,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: Ro
             usbConnectedPort={usb.connectedPort}
             usbConnectionStatus={usbConnectionStatus}
             onUsbManage={handleManageUsb}
+            // Wave 4-G #4 — Hue reachability mirror (parallel to the
+            // USB connection status above). Drives the channel inspector
+            // chip and Hue zone row dim-state.
+            hueChannelStatus={hueChannelStatus}
           />
         )}
       </div>

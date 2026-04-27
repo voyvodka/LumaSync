@@ -145,6 +145,15 @@ interface RoomDockPanelProps {
   usbConnectionStatus?: UsbStripConnectionStatus;
   /** Drop the active USB connection (Disconnect button in inspector). */
   onUsbManage?: () => void;
+
+  // ── Wave 4-G #4 — Hue bridge reachability mirror ─────────────────
+  /**
+   * App-level Hue reachability snapshot. Forwarded into
+   * `HueChannelInspector` so the channel inspector renders the same
+   * "Bridge online / Bridge offline" chip vocabulary the USB strip
+   * inspector already exposes. `unknown` (default) ⇒ no chip rendered.
+   */
+  hueChannelStatus?: UsbStripConnectionStatus;
 }
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -1251,6 +1260,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     usbConnectedPort = null,
     usbConnectionStatus = "unknown",
     onUsbManage,
+    hueChannelStatus = "unknown",
   } = props;
   const { t } = useTranslation("common");
 
@@ -1333,6 +1343,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           <HueChannelInspector
             channel={ch}
             zoneName={inspectorTarget.zoneName}
+            bridgeStatus={hueChannelStatus}
             onRename={(label) =>
               onRenameHueChannel?.(ch.channelIndex, label)
             }

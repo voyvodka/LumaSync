@@ -175,6 +175,7 @@ export const SettingsLayout = memo(function SettingsLayout({
             <RoomMapEditor
               onZoneCountsConfirmed={setPendingZoneCounts}
               onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
+              hueReachable={hueReachable}
             />
           </div>
         )}
