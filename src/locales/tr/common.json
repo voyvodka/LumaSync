@@ -1022,7 +1022,11 @@
       "typeImage": "Görsel",
       "typeHueZone": "Hue bölgesi",
       "scaleX": "Genişlik",
-      "scaleY": "Derinlik"
+      "scaleY": "Derinlik",
+      "zoneSize": "Boyut",
+      "zoneSizeMetric": "{{width}}m × {{depth}}m",
+      "zoneSizeMetricAriaLabel": "Bölge boyutu: {{width}} metre genişlik, {{depth}} metre derinlik, odanın %{{percent}}'i",
+      "zoneSizeHint": "Bölgenin en/boy oranı odayla aynıdır. En büyük boyut oda kadardır."
     },
     "propertyBar": {
       "aspectLocked": "En boy oranı kilitli",

@@ -1267,6 +1267,8 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
         <HueZoneInspector
           zone={activeHueZone}
           onUpdate={(patch) => onUpdateHueZone?.(activeHueZone.id, patch)}
+          roomWidthM={config.dimensions.widthMeters}
+          roomDepthM={config.dimensions.depthMeters}
         />
       );
     }
