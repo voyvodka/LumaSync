@@ -219,6 +219,18 @@ export interface ShellState {
    */
   firmwareProfile?: FirmwareProfile;
   /**
+   * v1.5 H4 — when `true`, the FirmwareProfilePicker override-warning
+   * dialog is suppressed and the user's mismatched-profile commit
+   * proceeds without confirmation. Set by the "Don't ask again" checkbox
+   * inside the dialog. Absent / `false` ⇒ the dialog renders on every
+   * mismatched commit. Reset to `false` on factory-reset only.
+   *
+   * Additive — no schemaVersion bump because absence naturally degrades
+   * to "always show the warning", which is exactly the safe default for
+   * users upgrading from v1.4.
+   */
+  dontWarnFirmwareProfileMismatch?: boolean;
+  /**
    * Display chosen for ambilight capture (v1.4 GAP 2). Absent ⇒ capture
    * pipeline uses the OS primary display as it does today.
    */

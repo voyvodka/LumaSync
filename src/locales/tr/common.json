@@ -1275,7 +1275,16 @@
       "lumasyncV1Description": "Saglik kontrolu ve telemetri iceren LumaSync yerel protokolu.",
       "adalightLabel": "Adalight",
       "adalightDescription": "Prismatik, Hyperion, Boblight ve cogu DIY Arduino sketch ile uyumlu.",
-      "brightnessDisabledTooltip": "Adalight profili: parlaklik firmware tarafindan kontrol edilir"
+      "brightnessDisabledTooltip": "Adalight profili: parlaklik firmware tarafindan kontrol edilir",
+      "mismatchTooltip": "Firmware {{advertised}} bildiriyor; {{attempted}} secmek sessiz bir sekilde gormezden gelinecek. Firmware'i guncelleyin veya dikkatli sekilde gecersiz kilin.",
+      "advertisedBadge": "Algilanan: {{advertised}}",
+      "useAnywayLabel": "Yine de kullan",
+      "useAnywayHint": "Firmware'in algiladigi profili gecersiz kilar. Yalnizca ozel firmware kullaniyorsaniz etkinlestirin.",
+      "overrideWarningTitle": "Uyumsuz firmware profili",
+      "overrideWarningBody": "Kontrolcunuz son saglik kontrolunde {{advertised}} bildirdi, ancak {{attempted}} secmek uzeresiniz. USB seridi sessizce hicbir sey yapmayacak; Hue ise akmaya devam edecek. Yalnizca firmware'inizin {{attempted}} kablo formatini anladigindan eminseniz devam edin.",
+      "overrideWarningConfirm": "Yine de {{attempted}} kullan",
+      "overrideWarningCancel": "Vazgec",
+      "overrideWarningDontAskAgain": "Bir daha sorma"
     }
   },
   "notifications": {

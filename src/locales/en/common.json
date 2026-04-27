@@ -1275,7 +1275,16 @@
       "lumasyncV1Description": "Native LumaSync protocol with health check and telemetry.",
       "adalightLabel": "Adalight",
       "adalightDescription": "Compatible with Prismatik, Hyperion, Boblight, and most DIY Arduino sketches.",
-      "brightnessDisabledTooltip": "Adalight profile: brightness is fixed in firmware"
+      "brightnessDisabledTooltip": "Adalight profile: brightness is fixed in firmware",
+      "mismatchTooltip": "Firmware reports {{advertised}}; selecting {{attempted}} will result in silent no-op. Update firmware or override with caution.",
+      "advertisedBadge": "Detected: {{advertised}}",
+      "useAnywayLabel": "Use anyway",
+      "useAnywayHint": "Override the firmware-detected profile. Only enable if you are running custom firmware.",
+      "overrideWarningTitle": "Mismatched firmware profile",
+      "overrideWarningBody": "Your controller advertised {{advertised}} during the last health check, but you are about to select {{attempted}}. The USB strip will silently no-op while Hue keeps streaming. Continue only if you are sure your firmware understands the {{attempted}} wire format.",
+      "overrideWarningConfirm": "Use {{attempted}} anyway",
+      "overrideWarningCancel": "Cancel",
+      "overrideWarningDontAskAgain": "Don't ask me again"
     }
   },
   "notifications": {
