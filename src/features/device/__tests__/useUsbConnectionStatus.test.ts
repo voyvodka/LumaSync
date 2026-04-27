@@ -24,7 +24,7 @@ function makeStatus(portName: string | null): SerialConnectionStatus {
   return {
     portName,
     connected: portName !== null,
-    status: { code: "OK", message: "ok" },
+    status: { code: "OK", message: "ok", details: null },
     updatedAtUnixMs: Date.now(),
   };
 }
