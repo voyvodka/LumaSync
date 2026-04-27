@@ -50,14 +50,15 @@ pub(crate) const HUE_ZONE_SCALE_MIN: f64 = 0.05;
 /// strictly larger.
 pub(crate) const HUE_ZONE_SCALE_MAX: f64 = 1.0;
 
-/// Maximum allowed difference between `scale_x` and `scale_y` after the
-/// uniform aspect-ratio lock (v1.5 W4-C). Floating-point round-trips
-/// through the Tauri JSON bridge can introduce ~1e-12 jitter on values
-/// that the frontend authored as exactly equal — so we tolerate a tiny
-/// sliver before reporting a violation. Anything wider than this is a
-/// genuine asymmetry (legacy persisted data or a third-party writer)
-/// and gets normalised to the larger of the two axes.
-const HUE_ZONE_SCALE_AR_TOLERANCE: f64 = 1e-6;
+/// Floating-point slack used when verifying the cube-overflow invariant
+/// (`|center| + |scale| <= 1.0`). Tauri's JSON bridge can introduce
+/// ~1e-12 jitter on values the frontend authored exactly at the limit;
+/// this tolerance keeps a legitimate "zone == room" write from being
+/// rejected while still catching real overflow. (v1.5 W4-I — was the
+/// uniform aspect-ratio tolerance under W4-C; the AR lock is gone now
+/// that zones are physical metric squares authored by the frontend with
+/// asymmetric `scale_x` / `scale_y` for non-square rooms.)
+const HUE_ZONE_BOUNDS_TOLERANCE: f64 = 1e-6;
 
 const STATUS_ZONE_CREATED: &str = "HUE_ZONE_CREATED";
 const STATUS_ZONE_UPDATED: &str = "HUE_ZONE_UPDATED";
@@ -66,11 +67,15 @@ const STATUS_ZONE_NOT_FOUND: &str = "HUE_ZONE_NOT_FOUND";
 const STATUS_ZONE_OUT_OF_BOUNDS: &str = "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS";
 const STATUS_ZONE_LIMIT_REACHED: &str = "HUE_ZONE_LIMIT_REACHED";
 const STATUS_ZONE_CHANNEL_NOT_IN_AREA: &str = "HUE_ZONE_CHANNEL_NOT_IN_AREA";
-/// New in W4-C: zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]`
-/// on at least one axis. Distinct from `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`
-/// (which is per-channel relative drift) because the cause is a slider
-/// the user pulled past the room-equals-zone ceiling — the recovery is
-/// "shrink the zone", not "drag the channel back inside".
+/// Zone scale is outside `[HUE_ZONE_SCALE_MIN, HUE_ZONE_SCALE_MAX]` on
+/// at least one axis, or non-finite. Distinct from
+/// `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel relative drift) because
+/// the cause is a slider the user pulled past the room-equals-zone
+/// ceiling — recovery is "shrink the zone", not "drag the channel back
+/// inside". (W4-I update: the previous W4-C uniform aspect-ratio lock
+/// was dropped — zones are 1:1 physical squares now, which means
+/// `scale_x` and `scale_y` are intentionally unequal in non-square
+/// rooms. Each axis is still clamped independently.)
 const STATUS_ZONE_OVERSIZED: &str = "HUE_ZONE_OVERSIZED";
 
 // ---------------------------------------------------------------------------
@@ -189,15 +194,22 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
             details: None,
         });
     }
-    // ── v1.5 W4-C: room-relative scale ceiling + uniform aspect-ratio lock ──
+    // ── v1.5 W4-I: per-axis scale ceiling, no aspect-ratio lock ──
     //
-    // The Inspector now treats zone size as a single room-relative scalar
-    // ("zone == X% of the room") with `scaleX === scaleY` enforced so that
-    // the zone bounds box always mirrors the room aspect ratio. Zone size
-    // can equal the room (`scale == 1.0`) but never exceed it. NaN /
-    // Infinity / negative / sub-floor / above-ceiling values are flagged
-    // here so the UI can surface a clamp hint instead of letting them
-    // round-trip into the runtime sampler.
+    // Zones are now authored as physical 1:1 metric squares: a single
+    // edge length in metres maps to `scale_x = edge / room_width_m` and
+    // `scale_y = edge / room_depth_m`. In a non-square room those two
+    // numbers are intentionally unequal in cube space — that is the
+    // *whole point* of the W4-I revision (the previous W4-C lockstep
+    // gave a square in cube space, which renders as a room-AR rectangle
+    // on the metric canvas — the visual bug the user reported).
+    //
+    // Backend therefore validates each axis independently against the
+    // [MIN, MAX] band and against the cube-overflow invariant, but
+    // never checks `scale_x == scale_y`. NaN / Infinity / negative /
+    // sub-floor / above-ceiling values are still flagged so the UI can
+    // surface a clamp hint instead of letting them round-trip into the
+    // runtime sampler.
     let sx = zone.scale_x;
     let sy = zone.scale_y;
     if !sx.is_finite() || !sy.is_finite() {
@@ -224,21 +236,13 @@ fn validate_zone_shape(zone: &HueZone) -> Result<(), CommandStatus> {
             details: None,
         });
     }
-    if (sx - sy).abs() > HUE_ZONE_SCALE_AR_TOLERANCE {
-        return Err(CommandStatus {
-            code: STATUS_ZONE_OVERSIZED.to_string(),
-            message: "Zone scaleX and scaleY must match (zone aspect ratio mirrors the room)."
-                .to_string(),
-            details: None,
-        });
-    }
     // Bug #50/#53 invariant — `|center| + halfScale <= 1.0` so the zone
     // bounds box never overflows the Hue cube. Center drag enforces this
     // imperatively; create/update enforce it declaratively here.
     let half_x = sx;
     let half_y = sy;
-    if zone.center_x.abs() + half_x > 1.0 + HUE_ZONE_SCALE_AR_TOLERANCE
-        || zone.center_y.abs() + half_y > 1.0 + HUE_ZONE_SCALE_AR_TOLERANCE
+    if zone.center_x.abs() + half_x > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE
+        || zone.center_y.abs() + half_y > 1.0 + HUE_ZONE_BOUNDS_TOLERANCE
     {
         return Err(CommandStatus {
             code: STATUS_ZONE_OUT_OF_BOUNDS.to_string(),
@@ -845,13 +849,13 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // v1.5 W4-C — room-relative scale validation (uniform AR + ceiling)
+    // v1.5 W4-I — per-axis scale validation (no AR lock; physical 1:1 square)
     // -----------------------------------------------------------------------
 
     #[test]
     fn create_zone_rejects_oversized_scale_above_room_size() {
         // scale > 1.0 ⇒ zone bigger than the room. User spec: zone may
-        // equal the room (`1.0`), never exceed it.
+        // equal the room (`1.0`), never exceed it. Per-axis check.
         let mut zone = make_zone("z1", "area-1", vec![]);
         zone.center_x = 0.0;
         zone.center_y = 0.0;
@@ -898,14 +902,35 @@ mod tests {
     }
 
     #[test]
-    fn create_zone_rejects_non_uniform_scale_aspect_ratio() {
-        // scaleX != scaleY ⇒ zone aspect ratio drifts from the room's.
-        // User spec: "en boy oranı değişemez" — uniform scale enforced.
+    fn create_zone_accepts_asymmetric_scale_for_physical_metric_square() {
+        // W4-I — a 2 m × 2 m physical square in a 5 m × 4 m room maps
+        // to scale_x = 2/5 = 0.40 and scale_y = 2/4 = 0.50. The two
+        // axes are intentionally unequal in cube space; the W4-C
+        // uniform-AR lock is dropped. Each axis independently sits in
+        // [MIN, MAX] so validation must accept the write.
         let mut zone = make_zone("z1", "area-1", vec![]);
         zone.center_x = 0.0;
         zone.center_y = 0.0;
         zone.scale_x = 0.4;
-        zone.scale_y = 0.6;
+        zone.scale_y = 0.5;
+        let result = create_zone(CreateZoneRequest {
+            zone,
+            existing_zones: Vec::new(),
+        });
+        assert_eq!(result.status.code, STATUS_ZONE_CREATED);
+        assert_eq!(result.zones.len(), 1);
+    }
+
+    #[test]
+    fn create_zone_rejects_when_only_one_axis_overflows() {
+        // Asymmetric scale is fine, but each axis is still individually
+        // bounded — `scale_x = 1.2` overflows even though `scale_y` is
+        // legal. Defends the runtime sampler against half-broken writes.
+        let mut zone = make_zone("z1", "area-1", vec![]);
+        zone.center_x = 0.0;
+        zone.center_y = 0.0;
+        zone.scale_x = 1.2;
+        zone.scale_y = 0.5;
         let result = create_zone(CreateZoneRequest {
             zone,
             existing_zones: Vec::new(),

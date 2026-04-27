@@ -2,23 +2,34 @@
  * HueZoneInspector — properties surface rendered inside `RoomDockPanel`
  * when a Hue zone is the active selection.
  *
- * Successor to `HueZonePropertiesPanel` (still on disk for backward
- * compatibility with anything that imported it directly). The dock
- * version exposes:
+ * v1.5 W4-I — physical 1:1 metric square authoring
+ * --------------------------------------------------
+ * Successor to the W4-C "room-relative AR-locked" surface. The user
+ * feedback (post-W4-G manual test) was that an AR-locked zone in a
+ * non-square room renders as a rectangle on the metric canvas — the
+ * Hue native cube is symmetric (`±1` per axis), but the canvas paints
+ * `scaleX * roomWidthM` wide and `scaleY * roomDepthM` deep, so cube-
+ * space squares stretch with the room. The W4-I revision drops the
+ * uniform AR lock and authors zones as **physical 1:1 metric squares**:
  *
- *   - Identity strip: zone name + colored chip (color is paired with
- *     name so it is never the sole status signal).
- *   - Color picker: 6-slot quick palette (`--lm-zone-1..6`) followed by
- *     the SVG-native `HsvColorPicker` from W1-A7.
- *   - Single "size" control (W4-C — room-relative scale): slider +
- *     long-edge metre input hybrid (W4-G). The zone size is authored
- *     as a fraction of the room (1.0 ⇒ zone equals the room; the Rust
- *     validator rejects anything above with `HUE_ZONE_OVERSIZED`).
- *     Both controls write `scaleX` and `scaleY` to the same value so
- *     the zone aspect ratio always mirrors the room ("en boy oranı
- *     değişemez" rule). The metre input edits the room's long edge
- *     (max(width, depth) × scale) so the user can type a concrete
- *     measurement without re-deriving the percentage.
+ *   - Single user input: edge length in metres (the long-edge metre
+ *     control from W4-G, repurposed without "long" framing).
+ *   - Maximum edge: `min(roomWidthM, roomDepthM)` — the largest square
+ *     that still fits inside the room footprint.
+ *   - Per-axis cube-space scale derived from the edge:
+ *       scaleX = edge_m / roomWidthM
+ *       scaleY = edge_m / roomDepthM
+ *     so the zone bounds box paints as a true square in metres.
+ *   - The Hue ±1 zone-relative cube is unchanged. Channels keep
+ *     positioning relative to the zone center via
+ *     `world = center + scale * relative`.
+ *
+ * Backend (Rust `commands/hue/zone.rs`) validates each axis
+ * independently against `[0.05, 1.0]` plus the cube-overflow
+ * invariant — the AR lock is gone there too.
+ *
+ * Other dock surfaces (color picker, swatches, channel list) are
+ * unchanged from W4-C / W4-G.
  *
  *  `scaleZ` is reserved for a future depth UI; we keep the persisted
  *  value untouched.
@@ -39,10 +50,12 @@ interface HueZoneInspectorProps {
   zone: HueZone;
   onUpdate: (patch: Partial<HueZone>) => void;
   /**
-   * Room dimensions so the size slider can render a metric read-out
-   * ("zone is 2.5m × 2.0m") and clamp against `widthMeters` /
-   * `depthMeters`. The zone scale itself is a unitless `[0, 1]` fraction
-   * of the room; the metres are derived purely for display.
+   * Room dimensions are required to translate the user's edge-length
+   * (metres) into the per-axis Hue cube-space scales the bridge
+   * persists. They also drive the metric read-out and the maximum
+   * allowed edge (the room's *short* side). May briefly be `0` during
+   * initial mount before the room map loads — the component falls back
+   * to safe defaults so nothing renders as NaN.
    */
   roomWidthM: number;
   roomDepthM: number;
@@ -65,12 +78,12 @@ function resolveDisplayHex(value: string | undefined, fallback: string): string 
   return fallback;
 }
 
-// W4-C — size is room-relative; the slider domain matches the Rust
-// validation floor/ceiling in `commands/hue/zone.rs`. `1.0` means the
-// zone equals the room (legal); anything above is rejected.
+// W4-I — per-axis cube-space scale band. Mirrors `commands/hue/zone.rs`
+// (`HUE_ZONE_SCALE_MIN` / `HUE_ZONE_SCALE_MAX`). The slider edits a
+// physical edge in metres; we derive cube-space scales from it but
+// still clamp each axis through this band before writing.
 const SCALE_MIN = 0.05;
 const SCALE_MAX = 1;
-const SCALE_STEP = 0.01;
 
 function clampScale(value: number): number {
   if (!Number.isFinite(value)) return SCALE_MIN;
@@ -78,17 +91,21 @@ function clampScale(value: number): number {
 }
 
 /**
- * Resolve a HueZone's room-relative scale to a single uniform value the
- * size slider can drive. Persisted zones from before W4-C may have
- * `scaleX !== scaleY`; we collapse to the larger axis so the zone never
- * shrinks unexpectedly on first interaction (Rust would reject the
- * asymmetric write anyway). The new authoring path always writes both
- * axes in lockstep, so this only fires once per legacy zone.
+ * Resolve the current physical edge length (metres) of the zone from
+ * its persisted cube-space scales. The zone is authored as a physical
+ * square, so `scaleX * roomWidthM` and `scaleY * roomDepthM` should be
+ * approximately equal — but legacy zones (pre-W4-I, or any third-party
+ * write) may carry asymmetric values. We pick the *minimum* of the two
+ * physical edges so the zone visually fits inside its persisted bounds
+ * on first interaction, never spilling outside the room.
  */
-function resolveUniformScale(zone: HueZone): number {
+function resolvePhysicalEdgeM(zone: HueZone, roomWidthM: number, roomDepthM: number): number {
+  if (roomWidthM <= 0 || roomDepthM <= 0) return 0;
   const sx = Number.isFinite(zone.scaleX) ? zone.scaleX : SCALE_MIN;
   const sy = Number.isFinite(zone.scaleY) ? zone.scaleY : SCALE_MIN;
-  return clampScale(Math.max(sx, sy));
+  const xEdge = Math.max(0, sx) * roomWidthM;
+  const yEdge = Math.max(0, sy) * roomDepthM;
+  return Math.min(xEdge, yEdge);
 }
 
 export function HueZoneInspector({
@@ -105,75 +122,63 @@ export function HueZoneInspector({
     [onUpdate],
   );
 
-  // W4-C — write `scaleX` and `scaleY` in lockstep so the zone keeps the
-  // room aspect ratio. The Rust validator will reject any asymmetric
-  // write with `HUE_ZONE_OVERSIZED`; this guarantee on the UI side keeps
-  // the validator at the contract boundary, not the hot path.
-  const setSize = useCallback(
-    (raw: number) => {
-      const next = clampScale(raw);
-      onUpdate({ scaleX: next, scaleY: next });
-    },
-    [onUpdate],
-  );
-
-  const sizeFraction = resolveUniformScale(zone);
-  // Resolve metric read-out: zone covers `sizeFraction` of each room
-  // dimension. `widthMeters` / `depthMeters` may be 0 during initial
-  // mount before the room map loads — fall back to 0 so the read-out
-  // shows "0.0m × 0.0m" instead of NaN.
   const safeWidthM = Math.max(0, roomWidthM);
   const safeDepthM = Math.max(0, roomDepthM);
-  const widthM = safeWidthM * sizeFraction;
-  const depthM = safeDepthM * sizeFraction;
-  const sizePercent = Math.round(sizeFraction * 100);
+  // The largest square that still fits inside the room footprint.
+  // This becomes both the slider/input maximum and the metric ceiling
+  // of the zone's edge. When dimensions have not loaded yet we fall
+  // back to `0` — the input is then disabled to avoid divide-by-zero
+  // in the cube-space derivation.
+  const maxEdgeM = Math.min(safeWidthM, safeDepthM);
+  // The physical floor mirrors the Rust per-axis floor: `SCALE_MIN`
+  // applied to whichever axis has the smaller room dimension. In a
+  // 5×4 m room that gives `0.05 × 4 = 0.20 m` — small enough to author
+  // a single-bulb zone, large enough that the Hue ±1 cube still has
+  // useful resolution.
+  const minEdgeM = SCALE_MIN * maxEdgeM;
+  const currentEdgeM = resolvePhysicalEdgeM(zone, safeWidthM, safeDepthM);
 
-  // ── W4-G #2 — long-edge metre input (slider + input hybrid) ───────
-  // The zone is AR-locked to the room, so a single number expresses the
-  // entire footprint. We pick the room's *long* edge as the canonical
-  // metre value: typing "5.0" for a 5×4 m room sets scale = 1.0 and the
-  // short edge follows automatically (4.0 m). This avoids two redundant
-  // inputs in the dock while still letting the user reach an exact
-  // measurement instead of dragging the slider in 1 % steps.
-  const longEdgeM = Math.max(safeWidthM, safeDepthM);
-  const longEdgeMin = SCALE_MIN * longEdgeM;
-  const longEdgeMax = SCALE_MAX * longEdgeM;
-  const currentLongEdgeM = sizeFraction * longEdgeM;
-
-  const [longEdgeDraft, setLongEdgeDraft] = useState<string>(
-    currentLongEdgeM.toFixed(1),
+  // ── W4-I — single edge-length input drives both axes ─────────────
+  // The slider range is in metres, not a unitless fraction. We convert
+  // the metre value back to per-axis cube-space scales so the bridge
+  // can keep its native ±1 frame. In a square room both axes resolve
+  // to the same scale; in a non-square room they diverge intentionally
+  // so the zone paints as a true physical square on the canvas.
+  const setEdgeM = useCallback(
+    (rawMetres: number) => {
+      if (maxEdgeM <= 0) return;
+      const clampedM = Math.max(minEdgeM, Math.min(maxEdgeM, rawMetres));
+      const sx = clampScale(clampedM / safeWidthM);
+      const sy = clampScale(clampedM / safeDepthM);
+      onUpdate({ scaleX: sx, scaleY: sy });
+    },
+    [maxEdgeM, minEdgeM, safeWidthM, safeDepthM, onUpdate],
   );
-  const [editingLongEdge, setEditingLongEdge] = useState(false);
+
+  const [edgeDraft, setEdgeDraft] = useState<string>(currentEdgeM.toFixed(2));
+  const [editingEdge, setEditingEdge] = useState(false);
 
   // Keep the draft in sync with external changes (slider drag, swatch
   // pick, undo) while the input is *not* focused — same pattern the
   // PropertyBar's NumberInput uses to avoid clobbering an in-flight
   // typed value.
   useEffect(() => {
-    if (!editingLongEdge) {
-      setLongEdgeDraft(currentLongEdgeM.toFixed(1));
+    if (!editingEdge) {
+      setEdgeDraft(currentEdgeM.toFixed(2));
     }
-  }, [currentLongEdgeM, editingLongEdge]);
+  }, [currentEdgeM, editingEdge]);
 
-  const commitLongEdge = useCallback(() => {
-    setEditingLongEdge(false);
-    const parsed = parseFloat(longEdgeDraft);
-    if (!Number.isFinite(parsed) || longEdgeM <= 0) {
-      setLongEdgeDraft(currentLongEdgeM.toFixed(1));
+  const commitEdge = useCallback(() => {
+    setEditingEdge(false);
+    const parsed = parseFloat(edgeDraft);
+    if (!Number.isFinite(parsed) || maxEdgeM <= 0) {
+      setEdgeDraft(currentEdgeM.toFixed(2));
       return;
     }
-    const clampedM = Math.max(longEdgeMin, Math.min(longEdgeMax, parsed));
-    const nextFraction = clampScale(clampedM / longEdgeM);
-    setLongEdgeDraft((nextFraction * longEdgeM).toFixed(1));
-    setSize(nextFraction);
-  }, [
-    longEdgeDraft,
-    longEdgeM,
-    longEdgeMin,
-    longEdgeMax,
-    currentLongEdgeM,
-    setSize,
-  ]);
+    const clampedM = Math.max(minEdgeM, Math.min(maxEdgeM, parsed));
+    setEdgeDraft(clampedM.toFixed(2));
+    setEdgeM(clampedM);
+  }, [edgeDraft, maxEdgeM, minEdgeM, currentEdgeM, setEdgeM]);
 
   return (
     <>
@@ -227,7 +232,8 @@ export function HueZoneInspector({
         </div>
       </div>
 
-      {/* Size — W4-C uniform scale (AR-locked to the room) + W4-G long-edge input */}
+      {/* Size — W4-I single edge length (metres). Drives both axes so
+          the zone paints as a physical 1:1 square on the canvas. */}
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`zone-size-${zone.id}`}>
           {t("roomMap.inspector.zoneSize")}
@@ -235,15 +241,16 @@ export function HueZoneInspector({
         <input
           id={`zone-size-${zone.id}`}
           type="range"
-          min={SCALE_MIN}
-          max={SCALE_MAX}
-          step={SCALE_STEP}
-          value={sizeFraction}
-          onChange={(e) => setSize(parseFloat(e.target.value))}
+          min={Number(minEdgeM.toFixed(2))}
+          max={Number(maxEdgeM.toFixed(2))}
+          step={0.05}
+          value={currentEdgeM}
+          onChange={(e) => setEdgeM(parseFloat(e.target.value))}
+          disabled={maxEdgeM <= 0}
           className="lm-room-dock-slider"
-          aria-valuemin={SCALE_MIN}
-          aria-valuemax={SCALE_MAX}
-          aria-valuenow={sizeFraction}
+          aria-valuemin={minEdgeM}
+          aria-valuemax={maxEdgeM}
+          aria-valuenow={currentEdgeM}
           aria-label={t("roomMap.inspector.zoneSize")}
           data-testid="hue-zone-size-slider"
         />
@@ -253,31 +260,31 @@ export function HueZoneInspector({
           className="lm-room-dock-field-label"
           htmlFor={`zone-size-m-${zone.id}`}
         >
-          {t("roomMap.inspector.zoneSizeLongEdgeLabel")}
+          {t("roomMap.inspector.zoneEdgeLabel")}
         </label>
         <input
           id={`zone-size-m-${zone.id}`}
           type="number"
-          step={0.1}
-          min={Number(longEdgeMin.toFixed(2))}
-          max={Number(longEdgeMax.toFixed(2))}
+          step={0.05}
+          min={Number(minEdgeM.toFixed(2))}
+          max={Number(maxEdgeM.toFixed(2))}
           inputMode="decimal"
           className="lm-room-dock-input"
-          value={longEdgeDraft}
-          aria-label={t("roomMap.inspector.zoneSizeLongEdgeAriaLabel")}
-          disabled={longEdgeM <= 0}
-          data-testid="hue-zone-size-long-edge-input"
-          onFocus={() => setEditingLongEdge(true)}
-          onChange={(e) => setLongEdgeDraft(e.target.value)}
-          onBlur={commitLongEdge}
+          value={edgeDraft}
+          aria-label={t("roomMap.inspector.zoneEdgeAriaLabel")}
+          disabled={maxEdgeM <= 0}
+          data-testid="hue-zone-size-edge-input"
+          onFocus={() => setEditingEdge(true)}
+          onChange={(e) => setEdgeDraft(e.target.value)}
+          onBlur={commitEdge}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Enter") {
               e.preventDefault();
-              commitLongEdge();
+              commitEdge();
             } else if (e.key === "Escape") {
-              setLongEdgeDraft(currentLongEdgeM.toFixed(1));
-              setEditingLongEdge(false);
+              setEdgeDraft(currentEdgeM.toFixed(2));
+              setEditingEdge(false);
             }
           }}
         />
@@ -289,20 +296,15 @@ export function HueZoneInspector({
         </span>
         <span
           className="lm-room-dock-field-value"
-          aria-label={t("roomMap.inspector.zoneSizeMetricAriaLabel", {
-            width: widthM.toFixed(2),
-            depth: depthM.toFixed(2),
-            percent: sizePercent,
+          aria-label={t("roomMap.inspector.zoneEdgeMetricAriaLabel", {
+            edge: currentEdgeM.toFixed(2),
           })}
-          title={t("roomMap.inspector.zoneSizeMetricAriaLabel", {
-            width: widthM.toFixed(2),
-            depth: depthM.toFixed(2),
-            percent: sizePercent,
+          title={t("roomMap.inspector.zoneEdgeMetricAriaLabel", {
+            edge: currentEdgeM.toFixed(2),
           })}
         >
-          {t("roomMap.inspector.zoneSizeMetric", {
-            width: widthM.toFixed(2),
-            depth: depthM.toFixed(2),
+          {t("roomMap.inspector.zoneEdgeMetric", {
+            edge: currentEdgeM.toFixed(2),
           })}
         </span>
       </div>

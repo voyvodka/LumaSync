@@ -1028,27 +1028,22 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   );
 
   // ── v1.5 W1-A8: Generic Hue zone patch handler ───────────────────────
-  // Used by HueZoneInspector to update borderColor + room-relative size
-  // (W4-C uniform AR-locked scale). Same optimistic pattern as the
-  // create / delete / center handlers — local config first, then mirror
-  // via update_hue_zone with silent-catch logging.
+  // Used by HueZoneInspector to update borderColor + per-axis room-
+  // relative scale. Same optimistic pattern as the create / delete /
+  // center handlers — local config first, then mirror via update_hue_zone
+  // with silent-catch logging.
   //
-  // W4-C invariant — zone aspect ratio mirrors the room. The Inspector
-  // always writes scaleX/scaleY together, but this handler mirrors any
-  // single-axis patch onto both axes so a future caller cannot drift
-  // the zone AR off the room AR (Rust would reject it with
-  // HUE_ZONE_OVERSIZED, so this is also a "fail closed before invoke"
-  // safety net).
+  // W4-I revision — the W4-C uniform aspect-ratio lock is gone. Zones
+  // are physical 1:1 metric squares now, which in a non-square room
+  // means the Inspector writes asymmetric scaleX / scaleY (edge_m /
+  // roomWidthM and edge_m / roomDepthM). We therefore pass the patch
+  // through verbatim instead of mirroring one axis onto the other.
+  // Rust still validates each axis independently against the [MIN, MAX]
+  // band and the cube-overflow invariant.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
-      const normalised: Partial<HueZone> = { ...patch };
-      if (typeof patch.scaleX === "number" && typeof patch.scaleY !== "number") {
-        normalised.scaleY = patch.scaleX;
-      } else if (typeof patch.scaleY === "number" && typeof patch.scaleX !== "number") {
-        normalised.scaleX = patch.scaleY;
-      }
       const next = (config.hueZones ?? []).map((z) =>
-        z.id === zoneId ? { ...z, ...normalised } : z,
+        z.id === zoneId ? { ...z, ...patch } : z,
       );
       void updateConfig({ hueZones: next });
       const updated = next.find((z) => z.id === zoneId);

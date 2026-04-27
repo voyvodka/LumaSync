@@ -131,14 +131,20 @@ export const HUE_STATUS = {
    */
   ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
   /**
-   * v1.5 W4-C — zone scale exceeds the room (or undershoots the slider
-   * floor / is non-finite). Zone size is room-relative: a `scale` of
-   * `1.0` means "zone == room"; values above 1.0 are rejected because
-   * the zone bounds box would visually overflow the room map AND the
-   * Hue cube. Distinct from `ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel
-   * relative drift) — recovery here is "shrink the zone", not "drag
-   * the channel back". Also raised when `scaleX !== scaleY` so the
-   * zone aspect ratio always mirrors the room.
+   * v1.5 W4-I — zone scale exceeds the room (or undershoots the slider
+   * floor / is non-finite). Zone size is room-relative per axis: each of
+   * `scaleX` / `scaleY` is independently clamped to `[0.05, 1.0]`. A
+   * `scale` of `1.0` means "zone equals the room on that axis"; values
+   * above 1.0 are rejected because the zone bounds box would visually
+   * overflow the room map AND the Hue cube. Distinct from
+   * `ZONE_CHANNEL_OUT_OF_BOUNDS` (per-channel relative drift) —
+   * recovery here is "shrink the zone", not "drag the channel back".
+   *
+   * Note: the previous W4-C uniform aspect-ratio lock ("scaleX must
+   * equal scaleY") was dropped in W4-I. Zones are now authored as
+   * physical 1:1 metric squares — in a non-square room the frontend
+   * deliberately writes asymmetric `scaleX` / `scaleY` so the zone
+   * renders as a true square in metres on the canvas.
    */
   ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
   // -------------------------------------------------------------------------
