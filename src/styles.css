@@ -4714,7 +4714,10 @@ body {
      stack exceeded 50 % of the dock. `0 1 auto` lets the inspector
      shrink alongside the list, and the absolute 360 px ceiling keeps
      the inspector usable on very tall monitors where 50 % would
-     swallow the whole list. */
+     swallow the whole list. W4-I #4 — tightened vertical rhythm
+     (gap 8 → 6, padding 10 → 8) so the size slider, metre input,
+     metric read-out and hint stack stops overlapping when the dock
+     is narrow. */
   flex: 0 1 auto;
   min-height: 0;
   max-height: min(50%, 360px);
@@ -4722,10 +4725,10 @@ body {
   overscroll-behavior: contain;
   border-top: 1px solid var(--lm-line);
   background: var(--lm-panel-2);
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .lm-room-dock-inspect-h {
   display: flex;
@@ -4782,7 +4785,12 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 26px;
+  /* W4-I #4 — was 26 px, which combined with the slider thumb
+     (12 px) and the 14 px line-height of the metric read-out caused
+     the rows to stack tighter than their bounding box on narrow
+     docks. 24 px keeps the same visual rhythm but trims 6 px off the
+     four-row size cluster, giving the hint room to breathe. */
+  min-height: 24px;
 }
 .lm-room-dock-field-label {
   font-family: var(--lm-mono);
@@ -4790,13 +4798,13 @@ body {
   letter-spacing: 0.04em;
   color: var(--lm-ink-dim);
   flex-shrink: 0;
-  width: 56px;
+  width: 52px;
   text-transform: uppercase;
 }
 .lm-room-dock-field-hint {
-  margin: 0 0 0 64px;
-  font-size: 10px;
-  line-height: 1.35;
+  margin: 2px 0 0 60px;
+  font-size: 9.5px;
+  line-height: 1.3;
   color: var(--lm-ink-dim);
   letter-spacing: 0.01em;
 }
