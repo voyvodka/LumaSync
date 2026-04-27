@@ -1079,11 +1079,11 @@ mod tests {
     }
 
     /// Bug H2: a saturated cyan input clipped to gamut B used to lose
-    /// >70% of its luminance because `xy_to_rgb` collapsed Y to 1.0 and
-    /// then the "max channel saturates" normaliser shrank the linear-RGB
-    /// triplet. After the fix the clipped frame's luminance proxy
-    /// (R+G+B in u16 space) must stay within 70% of the unclipped
-    /// pristine path.
+    /// more than 70% of its luminance because `xy_to_rgb` collapsed Y
+    /// to 1.0 and then the "max channel saturates" normaliser shrank
+    /// the linear-RGB triplet. After the fix the clipped frame's
+    /// luminance proxy (R+G+B in u16 space) must stay within 70% of
+    /// the unclipped pristine path.
     ///
     /// The chromaticity-preserving clip should change *hue* (cyan →
     /// teal-ish, leaning towards gamut B's nearest edge), but it should

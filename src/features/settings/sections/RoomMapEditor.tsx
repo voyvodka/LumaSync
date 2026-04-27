@@ -632,7 +632,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
     setObjectPanelOpen(true);
 
     // Mirror to backend; never throw — silent-catch ban → log only.
-    void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, { zone: newZone }).catch((e) => {
+    void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, {
+      request: { zone: newZone, existingZones: hueZones },
+    }).catch((e) => {
       console.error("[LumaSync] create_hue_zone failed", e);
     });
   }, [hueAreaId, hueZones, updateConfig, t]);
@@ -649,7 +651,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
       void updateConfig({ hueZones: nextZones, hueChannels: nextChannels });
       if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
 
-      void invoke(HUE_ZONE_COMMANDS.DELETE_ZONE, { zoneId }).catch((e) => {
+      void invoke(HUE_ZONE_COMMANDS.DELETE_ZONE, {
+        request: { zoneId, existingZones: hueZones, channels: config.hueChannels },
+      }).catch((e) => {
         console.error("[LumaSync] delete_hue_zone failed", e);
       });
     },
@@ -662,7 +666,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
       void updateConfig({ hueZones: next });
       const renamed = next.find((z) => z.id === zoneId);
       if (renamed) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, { zone: renamed }).catch((e) => {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
+          request: { zone: renamed, existingZones: next },
+        }).catch((e) => {
           console.error("[LumaSync] update_hue_zone (rename) failed", e);
         });
       }
@@ -882,7 +888,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
       void updateConfig({ hueZones: next });
       const updated = next.find((z) => z.id === zoneId);
       if (updated) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, { zone: updated }).catch((e) => {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
+          request: { zone: updated, existingZones: next },
+        }).catch((e) => {
           console.error("[LumaSync] update_hue_zone (center) failed", e);
         });
       }
@@ -903,7 +911,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed }: RoomMapEditorProps = {}
       void updateConfig({ hueZones: next });
       const updated = next.find((z) => z.id === zoneId);
       if (updated) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, { zone: updated }).catch((e) => {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
+          request: { zone: updated, existingZones: next },
+        }).catch((e) => {
           console.error("[LumaSync] update_hue_zone (props) failed", e);
         });
       }
