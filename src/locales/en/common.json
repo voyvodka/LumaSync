@@ -1035,6 +1035,8 @@
       "zoneSize": "Size",
       "zoneSizeMetric": "{{width}}m × {{depth}}m",
       "zoneSizeMetricAriaLabel": "Zone size: {{width}} metres wide by {{depth}} metres deep, {{percent}}% of the room",
+      "zoneSizeLongEdgeLabel": "Long edge",
+      "zoneSizeLongEdgeAriaLabel": "Zone long edge in metres",
       "zoneSizeHint": "Zone aspect ratio matches the room. Maximum size equals the room.",
       "widthLabel": "Width",
       "heightLabel": "Height",

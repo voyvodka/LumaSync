@@ -10,14 +10,15 @@
  *     name so it is never the sole status signal).
  *   - Color picker: 6-slot quick palette (`--lm-zone-1..6`) followed by
  *     the SVG-native `HsvColorPicker` from W1-A7.
- *   - Single "size" slider (W4-C — room-relative scale): the zone size
- *     is authored as a fraction of the room. Value `1.0` means the
- *     zone equals the room; anything above is rejected by Rust
- *     (`HUE_ZONE_OVERSIZED`). The slider writes BOTH `scaleX` and
- *     `scaleY` to the same value so the zone aspect ratio always
- *     mirrors the room ("en boy oranı değişemez" rule). The metric
- *     read-out shows the resolved width × depth in metres so the user
- *     can see the zone size in concrete units.
+ *   - Single "size" control (W4-C — room-relative scale): slider +
+ *     long-edge metre input hybrid (W4-G). The zone size is authored
+ *     as a fraction of the room (1.0 ⇒ zone equals the room; the Rust
+ *     validator rejects anything above with `HUE_ZONE_OVERSIZED`).
+ *     Both controls write `scaleX` and `scaleY` to the same value so
+ *     the zone aspect ratio always mirrors the room ("en boy oranı
+ *     değişemez" rule). The metre input edits the room's long edge
+ *     (max(width, depth) × scale) so the user can type a concrete
+ *     measurement without re-deriving the percentage.
  *
  *  `scaleZ` is reserved for a future depth UI; we keep the persisted
  *  value untouched.
@@ -28,7 +29,7 @@
  * never authored from this surface (deprecated optional in the
  * contract).
  */
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueZone } from "../../../../shared/contracts/roomMap";
@@ -121,9 +122,58 @@ export function HueZoneInspector({
   // dimension. `widthMeters` / `depthMeters` may be 0 during initial
   // mount before the room map loads — fall back to 0 so the read-out
   // shows "0.0m × 0.0m" instead of NaN.
-  const widthM = Math.max(0, roomWidthM) * sizeFraction;
-  const depthM = Math.max(0, roomDepthM) * sizeFraction;
+  const safeWidthM = Math.max(0, roomWidthM);
+  const safeDepthM = Math.max(0, roomDepthM);
+  const widthM = safeWidthM * sizeFraction;
+  const depthM = safeDepthM * sizeFraction;
   const sizePercent = Math.round(sizeFraction * 100);
+
+  // ── W4-G #2 — long-edge metre input (slider + input hybrid) ───────
+  // The zone is AR-locked to the room, so a single number expresses the
+  // entire footprint. We pick the room's *long* edge as the canonical
+  // metre value: typing "5.0" for a 5×4 m room sets scale = 1.0 and the
+  // short edge follows automatically (4.0 m). This avoids two redundant
+  // inputs in the dock while still letting the user reach an exact
+  // measurement instead of dragging the slider in 1 % steps.
+  const longEdgeM = Math.max(safeWidthM, safeDepthM);
+  const longEdgeMin = SCALE_MIN * longEdgeM;
+  const longEdgeMax = SCALE_MAX * longEdgeM;
+  const currentLongEdgeM = sizeFraction * longEdgeM;
+
+  const [longEdgeDraft, setLongEdgeDraft] = useState<string>(
+    currentLongEdgeM.toFixed(1),
+  );
+  const [editingLongEdge, setEditingLongEdge] = useState(false);
+
+  // Keep the draft in sync with external changes (slider drag, swatch
+  // pick, undo) while the input is *not* focused — same pattern the
+  // PropertyBar's NumberInput uses to avoid clobbering an in-flight
+  // typed value.
+  useEffect(() => {
+    if (!editingLongEdge) {
+      setLongEdgeDraft(currentLongEdgeM.toFixed(1));
+    }
+  }, [currentLongEdgeM, editingLongEdge]);
+
+  const commitLongEdge = useCallback(() => {
+    setEditingLongEdge(false);
+    const parsed = parseFloat(longEdgeDraft);
+    if (!Number.isFinite(parsed) || longEdgeM <= 0) {
+      setLongEdgeDraft(currentLongEdgeM.toFixed(1));
+      return;
+    }
+    const clampedM = Math.max(longEdgeMin, Math.min(longEdgeMax, parsed));
+    const nextFraction = clampScale(clampedM / longEdgeM);
+    setLongEdgeDraft((nextFraction * longEdgeM).toFixed(1));
+    setSize(nextFraction);
+  }, [
+    longEdgeDraft,
+    longEdgeM,
+    longEdgeMin,
+    longEdgeMax,
+    currentLongEdgeM,
+    setSize,
+  ]);
 
   return (
     <>
@@ -177,7 +227,7 @@ export function HueZoneInspector({
         </div>
       </div>
 
-      {/* Size — W4-C uniform scale (AR-locked to the room) */}
+      {/* Size — W4-C uniform scale (AR-locked to the room) + W4-G long-edge input */}
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`zone-size-${zone.id}`}>
           {t("roomMap.inspector.zoneSize")}
@@ -197,6 +247,46 @@ export function HueZoneInspector({
           aria-label={t("roomMap.inspector.zoneSize")}
           data-testid="hue-zone-size-slider"
         />
+      </div>
+      <div className="lm-room-dock-field">
+        <label
+          className="lm-room-dock-field-label"
+          htmlFor={`zone-size-m-${zone.id}`}
+        >
+          {t("roomMap.inspector.zoneSizeLongEdgeLabel")}
+        </label>
+        <input
+          id={`zone-size-m-${zone.id}`}
+          type="number"
+          step={0.1}
+          min={Number(longEdgeMin.toFixed(2))}
+          max={Number(longEdgeMax.toFixed(2))}
+          inputMode="decimal"
+          className="lm-room-dock-input"
+          value={longEdgeDraft}
+          aria-label={t("roomMap.inspector.zoneSizeLongEdgeAriaLabel")}
+          disabled={longEdgeM <= 0}
+          data-testid="hue-zone-size-long-edge-input"
+          onFocus={() => setEditingLongEdge(true)}
+          onChange={(e) => setLongEdgeDraft(e.target.value)}
+          onBlur={commitLongEdge}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitLongEdge();
+            } else if (e.key === "Escape") {
+              setLongEdgeDraft(currentLongEdgeM.toFixed(1));
+              setEditingLongEdge(false);
+            }
+          }}
+        />
+        <span className="lm-room-dock-field-unit">m</span>
+      </div>
+      <div className="lm-room-dock-field">
+        <span className="lm-room-dock-field-label" aria-hidden>
+          {/* spacer keeps the metric read-out aligned with the inputs */}
+        </span>
         <span
           className="lm-room-dock-field-value"
           aria-label={t("roomMap.inspector.zoneSizeMetricAriaLabel", {

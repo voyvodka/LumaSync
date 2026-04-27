@@ -1035,6 +1035,8 @@
       "zoneSize": "Boyut",
       "zoneSizeMetric": "{{width}}m × {{depth}}m",
       "zoneSizeMetricAriaLabel": "Bölge boyutu: {{width}} metre genişlik, {{depth}} metre derinlik, odanın %{{percent}}'i",
+      "zoneSizeLongEdgeLabel": "Uzun kenar",
+      "zoneSizeLongEdgeAriaLabel": "Bölgenin uzun kenarı (metre)",
       "zoneSizeHint": "Bölgenin en/boy oranı odayla aynıdır. En büyük boyut oda kadardır.",
       "widthLabel": "Genişlik",
       "heightLabel": "Yükseklik",
