@@ -1294,11 +1294,23 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     },
   ];
 
+  // W4-I #3 — `key` per selection forces React to unmount the previous
+  // inspector instance and remount a fresh one when the user moves
+  // between objects of the same kind. Without the key the dispatcher
+  // returns the same component identity for two different USB strips
+  // (or two image layers, etc.) and the inner `InspectorNumberField`
+  // local state — which holds the in-flight typed string — leaks from
+  // the previously selected object. Manual report (W4-I bug #3): two
+  // strips on different ports both showed the values of whichever
+  // strip was selected last. The key is `${kind}:${id}` so it changes
+  // any time the active selection swaps to a different concrete
+  // object, even when the kind is unchanged.
   const renderInspector = () => {
     switch (inspectorTarget.kind) {
       case "hueZone":
         return (
           <HueZoneInspector
+            key={`hueZone:${inspectorTarget.zone.id}`}
             zone={inspectorTarget.zone}
             onUpdate={(patch) => onUpdateHueZone?.(inspectorTarget.zone.id, patch)}
             roomWidthM={config.dimensions.widthMeters}
@@ -1308,6 +1320,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
       case "tv":
         return (
           <TvAnchorInspector
+            key="tv:singleton"
             tv={inspectorTarget.tv}
             onUpdate={(patch) => onUpdateTvAnchor?.(patch)}
             onToggleLock={() => onToggleLock("tv")}
@@ -1317,6 +1330,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
         const item = inspectorTarget.item;
         return (
           <FurnitureInspector
+            key={`furniture:${item.id}`}
             item={item}
             onUpdate={(patch) => onUpdateFurniture?.(item.id, patch)}
             onToggleLock={() => onToggleLock(`furniture-${item.id}`)}
@@ -1328,6 +1342,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
         const strip = inspectorTarget.strip;
         return (
           <UsbStripInspector
+            key={`usb:${strip.stripId}`}
             strip={strip}
             connectionStatus={usbConnectionStatus}
             connectedPort={usbConnectedPort}
@@ -1341,6 +1356,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
         const ch = inspectorTarget.channel;
         return (
           <HueChannelInspector
+            key={`hueChannel:${ch.channelIndex}`}
             channel={ch}
             zoneName={inspectorTarget.zoneName}
             bridgeStatus={hueChannelStatus}
@@ -1355,6 +1371,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
         const layer = inspectorTarget.layer;
         return (
           <ImageLayerInspector
+            key={`image:${layer.id}`}
             layer={layer}
             onUpdate={(patch) => onUpdateImageLayer?.(layer.id, patch)}
             onToggleLock={() => onToggleLock(`img-${layer.id}`)}
@@ -1363,7 +1380,12 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
         );
       }
       case "legacyZone":
-        return <LegacyZoneInspector zone={inspectorTarget.zone} />;
+        return (
+          <LegacyZoneInspector
+            key={`legacyZone:${inspectorTarget.zone.id}`}
+            zone={inspectorTarget.zone}
+          />
+        );
       default:
         return (
           <p className="lm-room-dock-inspect-empty">{t("roomMap.inspector.empty")}</p>
