@@ -1174,12 +1174,12 @@ mod tests {
         // that the bug lived on. None of these should produce a black
         // frame.
         let probes: &[(u8, u8, u8)] = &[
-            (0, 255, 255),   // cyan (canonical Bug H2 case)
-            (0, 220, 220),   // moderately saturated cyan
-            (0, 255, 200),   // green-cyan
-            (0, 200, 255),   // blue-cyan
-            (50, 255, 255),  // slightly de-saturated cyan
-            (0, 255, 100),   // bright green leaning teal
+            (0, 255, 255),  // cyan (canonical Bug H2 case)
+            (0, 220, 220),  // moderately saturated cyan
+            (0, 255, 200),  // green-cyan
+            (0, 200, 255),  // blue-cyan
+            (50, 255, 255), // slightly de-saturated cyan
+            (0, 255, 100),  // bright green leaning teal
         ];
 
         for (r, g, b) in probes {

@@ -921,11 +921,13 @@ mod tests {
     use std::collections::VecDeque;
     use std::time::Duration;
 
-    use super::{is_macos_tty_path, is_supported_usb, HealthCheckResult, SUPPORTED_USB_DEVICE_ALLOWLIST};
     use super::super::device_handshake::{
         perform_handshake, SerialRoundTrip, FRAME_MAGIC, HANDSHAKE_OPCODE_PONG,
     };
     use super::super::led_output::FirmwareProfile;
+    use super::{
+        is_macos_tty_path, is_supported_usb, HealthCheckResult, SUPPORTED_USB_DEVICE_ALLOWLIST,
+    };
 
     // ---------------------------------------------------------------------------
     // Original v1.x allowlist entries (regression)
@@ -1221,7 +1223,10 @@ mod tests {
             "PONG with profile byte 0x01 must propagate as LumaSyncV1"
         );
         assert!(result.pass, "success arm must set pass = true");
-        assert!(result.firmware_version.is_some(), "firmware_version must be populated on success");
+        assert!(
+            result.firmware_version.is_some(),
+            "firmware_version must be populated on success"
+        );
     }
 
     #[test]
@@ -1261,8 +1266,7 @@ mod tests {
         };
 
         assert_eq!(
-            err_result.advertised_firmware_profile,
-            None,
+            err_result.advertised_firmware_profile, None,
             "handshake timeout must leave advertised_firmware_profile as None"
         );
         assert_eq!(err_result.round_trip_ms, None);
@@ -1296,8 +1300,7 @@ mod tests {
         };
 
         assert_eq!(
-            err_result.advertised_firmware_profile,
-            None,
+            err_result.advertised_firmware_profile, None,
             "protocol error must leave advertised_firmware_profile as None"
         );
         assert_eq!(err_result.round_trip_ms, None);

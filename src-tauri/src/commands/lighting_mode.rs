@@ -3510,8 +3510,8 @@ mod lighting_mode_tests {
         // This guards against drift between the snake_case Rust struct
         // and the camelCase JSON contract that the frontend writes.
         let raw = fixture_shell_state_with_ambilight(1.5, true, "moderate");
-        let parsed = super::parse_ambilight_from_shell_state(&raw)
-            .expect("canonical fixture must parse");
+        let parsed =
+            super::parse_ambilight_from_shell_state(&raw).expect("canonical fixture must parse");
         let serialised = serde_json::to_string(&parsed).expect("serialise");
         assert!(
             serialised.contains("\"saturation\":1.5"),
