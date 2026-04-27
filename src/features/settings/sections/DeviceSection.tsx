@@ -375,6 +375,15 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     .map((p) => p.portName)
     .filter((name) => !pairedPortNames.has(name));
 
+  // W4-J #1 — kick off a fresh `list_serial_ports` invoke whenever the
+  // user opens the form. The previous implementation reused the stale
+  // `ports` snapshot from the last manual rescan, which meant a USB
+  // device plugged in *after* the page first rendered never appeared
+  // in the dropdown. Discovery is fire-and-forget so the form opens
+  // immediately; the dropdown re-renders when `useDeviceConnection`
+  // pushes the refreshed port list. Errors are swallowed by the hook
+  // (it logs internally) — we never want a discovery hiccup to block
+  // the strip authoring flow.
   const handleOpenStripForm = useCallback(() => {
     setStripFormOpen(true);
     // Default the dropdown to the live connected port when it is still
@@ -384,7 +393,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         ? connectedPort
         : availablePortsForPairing[0] ?? null;
     setStripDraftPortName(fallback);
-  }, [connectedPort, availablePortsForPairing, pairedPortNames]);
+    void refreshPorts();
+  }, [connectedPort, availablePortsForPairing, pairedPortNames, refreshPorts]);
 
   const handleAddStrip = useCallback(async () => {
     const portName = stripDraftPortName;
@@ -768,81 +778,131 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               })
             )}
 
-            {/* W4-I #2 — "+ Add LED strip" CTA. Now drives a port
-                dropdown (any unpaired discovered port is eligible) +
-                LED count input. Disabled when no unpaired port exists;
-                tooltip directs the user back to the discovery panel
-                above so the next step is obvious. */}
-            {stripFormOpen && availablePortsForPairing.length > 0 ? (
+            {/* W4-I #2 — "+ Add LED strip" CTA. Drives a port dropdown
+                (any unpaired discovered port is eligible) + LED count
+                input. W4-J #1: opening the form fires a fresh
+                `list_serial_ports` invoke, and the dropdown stays open
+                even when the available-port list is momentarily empty
+                (e.g. user opens with one device, plugs / unplugs
+                between renders) so the empty state can render an
+                inline rescan affordance instead of silently collapsing
+                back to the disabled add-button. The dropdown options
+                are re-filtered against `pairedPortNames` at render time
+                — defensive against any race where `availablePortsFor-
+                Pairing` is computed against a stale snapshot. */}
+            {stripFormOpen ? (
               <div className="lm-paired-strip-form">
-                <label
-                  className="lm-paired-strip-form-label"
-                  htmlFor="paired-strip-port-select"
-                >
-                  {t("devicesPage.usb.paired.portLabel")}
-                </label>
-                <select
-                  id="paired-strip-port-select"
-                  className="lm-paired-strip-form-select"
-                  value={stripDraftPortName ?? ""}
-                  onChange={(e) => setStripDraftPortName(e.target.value || null)}
-                  aria-label={t("devicesPage.usb.paired.portLabel")}
-                >
-                  {availablePortsForPairing.map((portName) => {
-                    const port = ports.find((p) => p.portName === portName);
-                    const display = port
-                      ? portDisplayName(port.portName, port.product, port.manufacturer)
-                      : portName;
-                    return (
-                      <option key={portName} value={portName}>
-                        {display === portName ? portName : `${display} (${portName})`}
-                      </option>
-                    );
-                  })}
-                </select>
-                <label
-                  className="lm-paired-strip-form-label"
-                  htmlFor="paired-strip-led-count"
-                >
-                  {t("devicesPage.usb.paired.ledCountLabel")}
-                </label>
-                <input
-                  id="paired-strip-led-count"
-                  type="number"
-                  min={1}
-                  max={1000}
-                  step={1}
-                  inputMode="numeric"
-                  className="lm-paired-strip-form-input"
-                  value={stripDraftLedCount}
-                  onChange={(e) => setStripDraftLedCount(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void handleAddStrip();
-                    } else if (e.key === "Escape") {
-                      setStripFormOpen(false);
-                    }
-                  }}
-                  autoFocus
-                />
-                <div className="lm-paired-strip-form-actions">
-                  <button
-                    type="button"
-                    className="lm-paired-strip-action"
-                    onClick={() => setStripFormOpen(false)}
-                  >
-                    {t("devicesPage.usb.paired.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    className="lm-paired-strip-action is-primary"
-                    onClick={() => { void handleAddStrip(); }}
-                    disabled={!stripDraftPortName}
-                  >
-                    {t("devicesPage.usb.paired.confirmAdd")}
-                  </button>
-                </div>
+                {availablePortsForPairing.length === 0 ? (
+                  <>
+                    <span className="lm-paired-strip-form-empty">
+                      {ports.length === 0
+                        ? t("devicesPage.usb.paired.formEmptyNoPorts")
+                        : t("devicesPage.usb.paired.formEmptyAllPaired")}
+                    </span>
+                    <div className="lm-paired-strip-form-actions">
+                      <button
+                        type="button"
+                        className="lm-paired-strip-action"
+                        onClick={() => setStripFormOpen(false)}
+                      >
+                        {t("devicesPage.usb.paired.cancel")}
+                      </button>
+                      <button
+                        type="button"
+                        className="lm-paired-strip-action is-primary"
+                        onClick={() => { void refreshPorts(); }}
+                        disabled={isScanning}
+                      >
+                        {isScanning
+                          ? t("device.actions.scanning")
+                          : t("devicesPage.usb.paired.rescan")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label
+                      className="lm-paired-strip-form-label"
+                      htmlFor="paired-strip-port-select"
+                    >
+                      {t("devicesPage.usb.paired.portLabel")}
+                    </label>
+                    <select
+                      id="paired-strip-port-select"
+                      className="lm-paired-strip-form-select"
+                      value={stripDraftPortName ?? ""}
+                      onChange={(e) => setStripDraftPortName(e.target.value || null)}
+                      aria-label={t("devicesPage.usb.paired.portLabel")}
+                    >
+                      {availablePortsForPairing
+                        .filter((portName) => !pairedPortNames.has(portName))
+                        .map((portName) => {
+                          const port = ports.find((p) => p.portName === portName);
+                          const display = port
+                            ? portDisplayName(port.portName, port.product, port.manufacturer)
+                            : portName;
+                          return (
+                            <option key={portName} value={portName}>
+                              {display === portName ? portName : `${display} (${portName})`}
+                            </option>
+                          );
+                        })}
+                    </select>
+                    <label
+                      className="lm-paired-strip-form-label"
+                      htmlFor="paired-strip-led-count"
+                    >
+                      {t("devicesPage.usb.paired.ledCountLabel")}
+                    </label>
+                    <input
+                      id="paired-strip-led-count"
+                      type="number"
+                      min={1}
+                      max={1000}
+                      step={1}
+                      inputMode="numeric"
+                      className="lm-paired-strip-form-input"
+                      value={stripDraftLedCount}
+                      onChange={(e) => setStripDraftLedCount(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleAddStrip();
+                        } else if (e.key === "Escape") {
+                          setStripFormOpen(false);
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <div className="lm-paired-strip-form-actions">
+                      <button
+                        type="button"
+                        className="lm-paired-strip-action"
+                        onClick={() => { void refreshPorts(); }}
+                        title={t("devicesPage.usb.paired.rescan")}
+                        aria-label={t("devicesPage.usb.paired.rescan")}
+                        disabled={isScanning}
+                      >
+                        {isScanning ? "…" : "\u21BB"}
+                      </button>
+                      <button
+                        type="button"
+                        className="lm-paired-strip-action"
+                        onClick={() => setStripFormOpen(false)}
+                      >
+                        {t("devicesPage.usb.paired.cancel")}
+                      </button>
+                      <button
+                        type="button"
+                        className="lm-paired-strip-action is-primary"
+                        onClick={() => { void handleAddStrip(); }}
+                        disabled={!stripDraftPortName}
+                      >
+                        {t("devicesPage.usb.paired.confirmAdd")}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <button

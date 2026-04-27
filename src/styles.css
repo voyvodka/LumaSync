@@ -5952,6 +5952,17 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* W4-J #1 — empty-state copy inside the inline strip form. Used when
+   the user opens the form but there are no eligible ports (none
+   detected, or every detected port is already paired). Sits in place
+   of the dropdown + LED count fields and pairs with a Rescan button
+   in the form-actions row. */
+.lm-paired-strip-form-empty {
+  flex: 1 1 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+}
 .lm-paired-strip-form-actions {
   display: flex;
   gap: 6px;

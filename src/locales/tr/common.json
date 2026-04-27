@@ -180,10 +180,17 @@
         "addAnother": "+ Başka şerit ekle",
         "addDisabledNoPortsTooltip": "Seri port algılanmadı. Denetleyiciyi bağlayıp yeniden tarayın.",
         "addDisabledAllPairedTooltip": "Tüm keşfedilen portlar zaten eşleşmiş.",
+        "formEmptyNoPorts": "Seri port algılanmadı — başka bir USB denetleyici bağlayıp yeniden tarayın.",
+        "formEmptyAllPaired": "Keşfedilen tüm portlar zaten eşleşmiş. Başka bir denetleyici bağlayıp yeniden tarayın.",
+        "rescan": "Yeniden tara",
         "cancel": "İptal",
         "confirmAdd": "Ekle",
         "persistError": "Şerit kaydedilemedi. Tekrar deneyin.",
-        "openInMap": "Haritada aç"
+        "openInMap": "Haritada aç",
+        "changePort": "Portu değiştir",
+        "changePortAriaLabel": "Bu şeride bağlı USB portunu değiştir",
+        "changePortConfirm": "Kaydet",
+        "changePortCancel": "İptal"
       }
     },
     "displays": {

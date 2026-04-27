@@ -188,10 +188,17 @@
         "addAnother": "+ Add another strip",
         "addDisabledNoPortsTooltip": "No serial ports detected. Plug in your controller and rescan.",
         "addDisabledAllPairedTooltip": "All discovered ports are already paired.",
+        "formEmptyNoPorts": "No serial ports detected — plug in another USB controller and rescan.",
+        "formEmptyAllPaired": "All discovered ports are already paired. Plug in another controller and rescan.",
+        "rescan": "Rescan",
         "cancel": "Cancel",
         "confirmAdd": "Add",
         "persistError": "Could not save the strip. Try again.",
-        "openInMap": "Open in map"
+        "openInMap": "Open in map",
+        "changePort": "Change port",
+        "changePortAriaLabel": "Change the USB port linked to this strip",
+        "changePortConfirm": "Save",
+        "changePortCancel": "Cancel"
       }
     },
     "displays": {
