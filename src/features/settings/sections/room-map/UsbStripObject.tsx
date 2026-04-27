@@ -8,6 +8,14 @@ interface UsbStripObjectProps {
   selected: boolean;
   zoom?: number;
   panMode?: boolean;
+  /**
+   * Wave 4-E — live connection status the canvas badge consumes.
+   * `connected` ⇒ green ONLINE chip beside the start handle,
+   * `disconnected` ⇒ red OFFLINE chip,
+   * `unknown` (default) ⇒ no chip rendered, so legacy maps stay clean
+   *  before the parent has wired `useUsbConnectionStatus`.
+   */
+  connectionStatus?: "connected" | "disconnected" | "unknown";
   onSelect: (id: string) => void;
   onChange: (updated: UsbStripPlacement) => void;
 }
@@ -23,6 +31,7 @@ export function UsbStripObject({
   selected,
   zoom = 1,
   panMode = false,
+  connectionStatus = "unknown",
   onSelect,
   onChange,
 }: UsbStripObjectProps) {
@@ -272,6 +281,28 @@ export function UsbStripObject({
           </>
         )}
       </svg>
+
+      {/* Wave 4-E — Connection status badge anchored above the start
+          handle. Only rendered when the parent has wired the live
+          `useUsbConnectionStatus` snapshot (`unknown` ⇒ no chrome so
+          existing maps stay clean before the hook lands). */}
+      {connectionStatus !== "unknown" ? (
+        <div
+          className={`lm-room-usb-status-badge lm-room-usb-status-badge--${connectionStatus}`}
+          style={{
+            left: sx - 32,
+            top: sy - 22,
+          }}
+          aria-hidden
+        >
+          <span className="lm-room-usb-status-badge-dot" aria-hidden />
+          <span>
+            {connectionStatus === "connected"
+              ? t("roomMap.usbStrip.online")
+              : t("roomMap.usbStrip.offline")}
+          </span>
+        </div>
+      ) : null}
 
       {/* Start handle */}
       <div

@@ -4,7 +4,11 @@ import { useTranslation } from "react-i18next";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
 import type { DisplayInfo } from "../../../shared/contracts/display";
 import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
-import type { HueChannelPlacement, RoomMapConfig } from "../../../shared/contracts/roomMap";
+import type {
+  HueChannelPlacement,
+  RoomMapConfig,
+  UsbStripPlacement,
+} from "../../../shared/contracts/roomMap";
 import { shellStore } from "../../persistence/shellStore";
 import { listDisplays } from "../../calibration/calibrationApi";
 import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
@@ -132,7 +136,16 @@ function IconRefresh() {
   );
 }
 
-export function DeviceSection() {
+export interface DeviceSectionProps {
+  /**
+   * Wave 4-E — deep-link the user from the "Paired strips" sub-card
+   * back to the Room Map editor where the strip's placement and LED
+   * count live. Inert when omitted.
+   */
+  onNavigateToRoomMap?: () => void;
+}
+
+export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) {
   const { t } = useTranslation("common");
   const {
     bridges,
@@ -254,6 +267,7 @@ export function DeviceSection() {
   // -------------------------------------------------------------------------
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
+  const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);
   const [persistError, setPersistError] = useState(false);
   const persistErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -263,6 +277,7 @@ export function DeviceSection() {
     shellStore.load().then((state) => {
       if (cancelled) return;
       setChannelPlacements(state.roomMap?.hueChannels ?? []);
+      setPairedStrips(state.roomMap?.usbStrips ?? []);
     });
     return () => { cancelled = true; };
   }, [selectedAreaId]);
@@ -279,6 +294,20 @@ export function DeviceSection() {
   // -------------------------------------------------------------------------
   const [activeCategory, setActiveCategory] = useState<DeviceCategory>("usb");
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
+
+  // Wave 4-E — re-hydrate paired strips when this section becomes
+  // visible or the connected port changes. The room-map editor authors
+  // strips on its own surface, so this catches add/remove there
+  // without coupling the two stores.
+  useEffect(() => {
+    if (activeCategory !== "usb") return;
+    let cancelled = false;
+    void shellStore.load().then((state) => {
+      if (cancelled) return;
+      setPairedStrips(state.roomMap?.usbStrips ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [activeCategory, connectedPort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -547,6 +576,65 @@ export function DeviceSection() {
 
           {/* Chip type selector — USB sink strip config (v1.5 G3) */}
           <LedChipTypePicker />
+
+          {/* Paired strips — Wave 4-E surface. Lists every persisted
+              UsbStripPlacement with a live ONLINE/OFFLINE chip plus a
+              deep-link to the room-map editor where the strip's
+              physical placement is authored. */}
+          <div className="lm-paired-strips">
+            <div className="lm-paired-strips-h">
+              <span>{t("devicesPage.usb.paired.title")}</span>
+              <span className="lm-paired-strips-h-count">
+                {pairedStrips.length === 1
+                  ? t("devicesPage.usb.paired.countOne")
+                  : t("devicesPage.usb.paired.count", { count: pairedStrips.length })}
+              </span>
+            </div>
+            {pairedStrips.length === 0 ? (
+              <div className="lm-paired-strips-empty">
+                {t("devicesPage.usb.paired.empty")}
+              </div>
+            ) : (
+              pairedStrips.map((strip) => {
+                const stripStatus: "connected" | "disconnected" =
+                  connectedPort ? "connected" : "disconnected";
+                return (
+                  <div key={strip.stripId} className="lm-paired-strip">
+                    <div className="lm-paired-strip-ic"><IconUsb /></div>
+                    <div className="lm-paired-strip-tx">
+                      <div className="lm-paired-strip-name">
+                        {t("devicesPage.usb.paired.stripName", { count: strip.ledCount })}
+                      </div>
+                      <div className="lm-paired-strip-sub">
+                        {connectedPort ?? t("devicesPage.usb.paired.noPort")}
+                      </div>
+                    </div>
+                    <span
+                      className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${stripStatus}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span className="lm-room-dock-conn-chip-dot" aria-hidden />
+                      <span className="lm-room-dock-conn-chip-tx">
+                        {stripStatus === "connected"
+                          ? t("devicesPage.usb.pill.online")
+                          : t("devicesPage.usb.paired.offline")}
+                      </span>
+                    </span>
+                    {onNavigateToRoomMap ? (
+                      <button
+                        type="button"
+                        className="lm-paired-strip-action"
+                        onClick={onNavigateToRoomMap}
+                      >
+                        {t("devicesPage.usb.paired.openInMap")}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
 
         </div>
 

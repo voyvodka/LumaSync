@@ -34,6 +34,7 @@ import type { LedSegmentCounts } from "../../calibration/model/contracts";
 import React from "react";
 import { shellStore } from "../../persistence/shellStore";
 import { HUE_ZONE_COMMANDS } from "../../../shared/contracts/hue";
+import { useUsbConnectionStatus } from "../../device/useUsbConnectionStatus";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
@@ -247,6 +248,23 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: Ro
   }, []);
 
   const { widthMeters, depthMeters } = config.dimensions;
+
+  // Wave 4-E — live USB connection snapshot for the canvas badge +
+  // UsbStripInspector. The hook subscribes to the same connectionEvents
+  // bus that the LightsSection/Devices flows already use, so a pair or
+  // disconnect anywhere in the app instantly re-syncs the editor.
+  const usb = useUsbConnectionStatus();
+  const usbConnectionStatus = usb.ready
+    ? (usb.connectedPort ? "connected" : "disconnected")
+    : "unknown";
+  // Wave 4-E — there is no Rust-side `disconnect_serial_port` yet
+  // (out-of-scope contract change), so the inspector deep-links the
+  // user to Devices where the existing pair / health-check / forget
+  // flow already lives. The shape stays a callback so a future
+  // commit can swap in a true disconnect without touching consumers.
+  const handleManageUsb = useCallback(() => {
+    onNavigateToDevices?.();
+  }, [onNavigateToDevices]);
 
   // Fixed physical scale — objects always render at this size regardless of canvas
   const pxPerMeter = 80;
@@ -1128,6 +1146,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: Ro
                 selected={selectedId === `usb-${strip.stripId}`}
                 zoom={zoom}
                 panMode={spaceHeld}
+                connectionStatus={usbConnectionStatus}
                 onSelect={(id) => setSelectedId(`usb-${id}`)}
                 onChange={(updated) => {
                   const next = config.usbStrips.map((s) =>
@@ -1281,6 +1300,44 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices }: Ro
             hueAreaId={hueAreaId}
             onAssignChannelToZone={handleAssignChannelToZone}
             onNavigateToDevices={onNavigateToDevices}
+            // Wave 4-D — type-aware inspector patch hooks
+            onUpdateTvAnchor={(patch) => {
+              if (!config.tvAnchor) return;
+              void updateConfig({ tvAnchor: { ...config.tvAnchor, ...patch } });
+            }}
+            onUpdateFurniture={(id, patch) => {
+              void updateConfig({
+                furniture: config.furniture.map((f) =>
+                  f.id === id ? { ...f, ...patch } : f,
+                ),
+              });
+            }}
+            onUpdateUsbStrip={(stripId, patch) => {
+              void updateConfig({
+                usbStrips: config.usbStrips.map((s) =>
+                  s.stripId === stripId ? { ...s, ...patch } : s,
+                ),
+              });
+            }}
+            onUpdateImageLayer={(id, patch) => {
+              void updateConfig({
+                imageLayers: config.imageLayers.map((l) =>
+                  l.id === id ? { ...l, ...patch } : l,
+                ),
+              });
+            }}
+            onRenameHueChannel={(channelIndex, label) => {
+              void updateConfig({
+                hueChannels: config.hueChannels.map((ch) =>
+                  ch.channelIndex === channelIndex ? { ...ch, label } : ch,
+                ),
+              });
+            }}
+            onRenameImageLayer={handleRenameImage}
+            // Wave 4-E — USB connection status feed for inspectors
+            usbConnectedPort={usb.connectedPort}
+            usbConnectionStatus={usbConnectionStatus}
+            onUsbManage={handleManageUsb}
           />
         )}
       </div>

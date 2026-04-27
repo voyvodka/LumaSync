@@ -167,6 +167,16 @@
       "empty": {
         "title": "No USB ports found",
         "body": "Plug in your controller and click Rescan."
+      },
+      "paired": {
+        "title": "Paired strips",
+        "count": "{{count}} strips",
+        "countOne": "1 strip",
+        "empty": "No strips paired yet — pair a port above to add it to the room map.",
+        "stripName": "{{count}}-LED strip",
+        "noPort": "No port linked",
+        "offline": "OFFLINE",
+        "openInMap": "Open in map"
       }
     },
     "displays": {
@@ -933,7 +943,9 @@
     },
     "persistError": "Map could not be saved. Changes may be lost on restart.",
     "usbStrip": {
-      "ledCount": "LED count"
+      "ledCount": "LED count",
+      "online": "ONLINE",
+      "offline": "OFFLINE"
     },
     "hueChannel": {
       "defaultLabel": "Channel {{index}}"
@@ -1004,14 +1016,11 @@
       "lock": "Lock",
       "unlock": "Unlock",
       "delete": "Delete",
-      "propertiesTab": "Properties",
-      "dockAriaLabel": "Room map dock — switch between Objects, Zones, Hue Zones, and Properties tabs"
+      "dockAriaLabel": "Room map dock — switch between Objects, Zones, and Hue Zones tabs"
     },
     "inspector": {
       "regionAriaLabel": "Selected item properties",
       "empty": "Select an object or zone to edit its properties.",
-      "tabHint": "Tab content lives below — pick an object or zone to fill the inspector.",
-      "objectHint": "Use the property bar at the bottom to edit position, size, or rotation.",
       "zoneTitle": "Zone",
       "channelsLabel": "Channels",
       "legacyZoneHint": "Click LED dots on the canvas to add or remove channels from this zone.",
@@ -1026,7 +1035,25 @@
       "zoneSize": "Size",
       "zoneSizeMetric": "{{width}}m × {{depth}}m",
       "zoneSizeMetricAriaLabel": "Zone size: {{width}} metres wide by {{depth}} metres deep, {{percent}}% of the room",
-      "zoneSizeHint": "Zone aspect ratio matches the room. Maximum size equals the room."
+      "zoneSizeHint": "Zone aspect ratio matches the room. Maximum size equals the room.",
+      "widthLabel": "Width",
+      "heightLabel": "Height",
+      "furnitureNameLabel": "Name",
+      "furnitureTypeLabel": "Type",
+      "furnitureRotationLabel": "Rotation",
+      "tvHint": "Drag the TV anchor on the canvas to position it; use the lock to keep it in place.",
+      "usbHint": "LED count is sent to the strip on the next pair handshake. Use the canvas handles to set start and end points.",
+      "usbLedCountLabel": "LEDs",
+      "usbPortLabel": "Port",
+      "usbConnectedFallback": "Online",
+      "usbConnectionDisconnected": "Offline",
+      "usbConnectionUnknown": "—",
+      "usbManage": "Manage in Devices",
+      "hueChannelIndexLabel": "Channel",
+      "hueZoneLabel": "Zone",
+      "hueChannelHint": "Drag the dot on the canvas to fine-tune position. Assign to a zone in the Hue Zones tab.",
+      "imageOpacityLabel": "Opacity",
+      "imageHint": "Use the canvas handles to scale and position the image. Lower opacity to keep the room outline visible."
     },
     "propertyBar": {
       "aspectLocked": "Aspect ratio locked",

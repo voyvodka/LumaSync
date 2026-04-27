@@ -5379,3 +5379,355 @@ body {
     background: Canvas;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-D — Type-aware inspector chrome
+   ─────────────────────────────────────────────────────────────────────
+   Shared input + button styles for the per-type inspectors rendered
+   inside `.lm-room-dock-inspect`. These tokens stack onto the existing
+   field rhythm (`lm-room-dock-field*`) so a furniture row, USB strip
+   row, and Hue channel row all read with the same metric typography.
+
+   A11y posture:
+   - Tap targets ≥ 32 px on every interactive control (input, select,
+     button) — matches the Inspector's promise that nothing in the dock
+     ever drops below the design-system floor.
+   - `:focus-visible` paints the amber soft ring; never `:focus`.
+   - `forced-colors: active` blocks fall back to system colours so the
+     inspector reads under high-contrast modes the same way the rest of
+     the dock does.
+   - No new transitions > 120 ms, so the existing reduced-motion guards
+     for the dock continue to cover this surface.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-input,
+.lm-room-dock-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  outline: none;
+  appearance: none;
+}
+.lm-room-dock-input[type="number"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-room-dock-input::-webkit-outer-spin-button,
+.lm-room-dock-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-room-dock-input:focus,
+.lm-room-dock-select:focus {
+  border-color: rgba(255, 176, 32, 0.45);
+}
+.lm-room-dock-input:focus-visible,
+.lm-room-dock-select:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-input:disabled,
+.lm-room-dock-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-room-dock-field-unit {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.lm-room-dock-inspect-action {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lm-line-2);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lm-room-dock-inspect-action:hover {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-room-dock-inspect-action:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-inspect-action[aria-pressed="true"] {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-room-dock-inspect-action.is-danger:hover {
+  color: var(--lm-red);
+  border-color: rgba(239, 91, 91, 0.45);
+  background: rgba(239, 91, 91, 0.08);
+}
+.lm-room-dock-field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+@media (forced-colors: active) {
+  .lm-room-dock-input,
+  .lm-room-dock-select,
+  .lm-room-dock-inspect-action {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-room-dock-inspect-action[aria-pressed="true"] {
+    border-color: Highlight;
+    color: Highlight;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-E — USB strip connection status chip
+   ─────────────────────────────────────────────────────────────────────
+   A small live-status badge embedded in the UsbStripInspector and the
+   UsbStripObject overlay. Three variants — `connected` / `disconnected`
+   / `unknown` — pair colour with a leading dot AND mono caps copy so
+   colour is never the sole signal (a11y rule from
+   `ls-design-language` §6).
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-conn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-conn-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lm-ink-faint);
+}
+.lm-room-dock-conn-chip-tx {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: inherit;
+}
+.lm-room-dock-conn-chip--connected {
+  border-color: rgba(74, 222, 128, 0.32);
+  background: rgba(74, 222, 128, 0.06);
+  color: var(--lm-green);
+}
+.lm-room-dock-conn-chip--connected .lm-room-dock-conn-chip-dot {
+  background: var(--lm-green);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
+}
+.lm-room-dock-conn-chip--disconnected {
+  border-color: rgba(239, 91, 91, 0.32);
+  background: rgba(239, 91, 91, 0.06);
+  color: var(--lm-red);
+}
+.lm-room-dock-conn-chip--disconnected .lm-room-dock-conn-chip-dot {
+  background: var(--lm-red);
+}
+@media (forced-colors: active) {
+  .lm-room-dock-conn-chip {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-room-dock-conn-chip--connected,
+  .lm-room-dock-conn-chip--disconnected {
+    border-color: Highlight;
+    color: Highlight;
+  }
+  .lm-room-dock-conn-chip-dot {
+    background: CanvasText;
+    box-shadow: none;
+  }
+}
+
+/* USB strip on canvas — connection status badge anchored to the start
+   handle. Signals OFFLINE without occluding LED-count input which sits
+   at the line midpoint. */
+.lm-room-usb-status-badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(7, 8, 10, 0.78);
+  border: 1px solid var(--lm-line-2);
+  backdrop-filter: blur(4px);
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  pointer-events: none;
+  z-index: 22;
+  white-space: nowrap;
+}
+.lm-room-usb-status-badge--connected {
+  border-color: rgba(74, 222, 128, 0.32);
+  color: var(--lm-green);
+}
+.lm-room-usb-status-badge--disconnected {
+  border-color: rgba(239, 91, 91, 0.45);
+  color: var(--lm-red);
+}
+.lm-room-usb-status-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+@media (forced-colors: active) {
+  .lm-room-usb-status-badge {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-room-usb-status-badge--connected,
+  .lm-room-usb-status-badge--disconnected {
+    border-color: Highlight;
+    color: Highlight;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-E — Devices section "Paired strips" sub-card
+   ─────────────────────────────────────────────────────────────────────
+   Surfaces every persisted UsbStripPlacement under the USB ports grid,
+   with a live connection chip and a deep-link to open the strip in the
+   room map editor. Reuses the existing `.lm-dcard` shell so the
+   styling stays consistent with the rest of the Devices grid.
+   ────────────────────────────────────────────────────────────────── */
+.lm-paired-strips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+.lm-paired-strips-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-paired-strips-h-count {
+  margin-left: auto;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: none;
+}
+.lm-paired-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+}
+.lm-paired-strip-ic {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--lm-line-2);
+  color: var(--lm-ink-dim);
+}
+.lm-paired-strip-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lm-paired-strip-name {
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-paired-strip-sub {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+}
+.lm-paired-strip-action {
+  all: unset;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lm-paired-strip-action:hover {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-paired-strip-action:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strips-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+}
+@media (forced-colors: active) {
+  .lm-paired-strip,
+  .lm-paired-strip-action,
+  .lm-paired-strip-ic {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}

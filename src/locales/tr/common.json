@@ -159,6 +159,16 @@
       "empty": {
         "title": "USB portu bulunamadı",
         "body": "Denetleyiciyi bağlayıp Yeniden Tara'ya basın."
+      },
+      "paired": {
+        "title": "Eşleşen şeritler",
+        "count": "{{count}} şerit",
+        "countOne": "1 şerit",
+        "empty": "Henüz şerit eşleşmedi — yukarıdaki bir portu eşleyerek oda haritasına ekleyin.",
+        "stripName": "{{count}} LED'lik şerit",
+        "noPort": "Port bağlı değil",
+        "offline": "OFFLINE",
+        "openInMap": "Haritada aç"
       }
     },
     "displays": {
@@ -933,7 +943,9 @@
     },
     "persistError": "Harita kaydedilemedi. Değişiklikler yeniden başlatmada kaybolabilir.",
     "usbStrip": {
-      "ledCount": "LED sayısı"
+      "ledCount": "LED sayısı",
+      "online": "BAĞLI",
+      "offline": "OFFLINE"
     },
     "hueChannel": {
       "defaultLabel": "Kanal {{index}}"
@@ -1004,14 +1016,11 @@
       "lock": "Kilitle",
       "unlock": "Kilidi Aç",
       "delete": "Sil",
-      "propertiesTab": "Özellikler",
-      "dockAriaLabel": "Oda haritası paneli — Nesneler, Zone'lar, Hue Bölgeleri ve Özellikler sekmeleri"
+      "dockAriaLabel": "Oda haritası paneli — Nesneler, Zone'lar ve Hue Bölgeleri sekmeleri"
     },
     "inspector": {
       "regionAriaLabel": "Seçili öğe özellikleri",
       "empty": "Özelliklerini düzenlemek için bir nesne veya bölge seçin.",
-      "tabHint": "Sekme içeriği aşağıda — kontrolleri görmek için nesne veya bölge seçin.",
-      "objectHint": "Konum, boyut veya rotasyon için alttaki özellik çubuğunu kullanın.",
       "zoneTitle": "Zone",
       "channelsLabel": "Kanallar",
       "legacyZoneHint": "Bu zone'a kanal eklemek/çıkarmak için tuvaldeki LED noktalarına tıklayın.",
@@ -1026,7 +1035,25 @@
       "zoneSize": "Boyut",
       "zoneSizeMetric": "{{width}}m × {{depth}}m",
       "zoneSizeMetricAriaLabel": "Bölge boyutu: {{width}} metre genişlik, {{depth}} metre derinlik, odanın %{{percent}}'i",
-      "zoneSizeHint": "Bölgenin en/boy oranı odayla aynıdır. En büyük boyut oda kadardır."
+      "zoneSizeHint": "Bölgenin en/boy oranı odayla aynıdır. En büyük boyut oda kadardır.",
+      "widthLabel": "Genişlik",
+      "heightLabel": "Yükseklik",
+      "furnitureNameLabel": "Ad",
+      "furnitureTypeLabel": "Tür",
+      "furnitureRotationLabel": "Dönüş",
+      "tvHint": "TV'yi konumlandırmak için tuvalde sürükleyin; sabitlemek için kilidi kullanın.",
+      "usbHint": "LED sayısı bir sonraki bağlantıda şeride iletilir. Başlangıç ve bitiş noktalarını tuvalden ayarlayın.",
+      "usbLedCountLabel": "LED",
+      "usbPortLabel": "Port",
+      "usbConnectedFallback": "Bağlı",
+      "usbConnectionDisconnected": "Bağlı değil",
+      "usbConnectionUnknown": "—",
+      "usbManage": "Cihazlarda yönet",
+      "hueChannelIndexLabel": "Kanal",
+      "hueZoneLabel": "Bölge",
+      "hueChannelHint": "Konumu hassaslaştırmak için tuvaldeki noktayı sürükleyin. Hue Bölgeleri sekmesinden bölgeye atayın.",
+      "imageOpacityLabel": "Opaklık",
+      "imageHint": "Görseli ölçeklemek ve konumlandırmak için tuval tutamaçlarını kullanın. Oda hatlarının görünür kalması için opaklığı düşürün."
     },
     "propertyBar": {
       "aspectLocked": "En boy oranı kilitli",

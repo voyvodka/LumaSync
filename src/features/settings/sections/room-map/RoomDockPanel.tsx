@@ -42,14 +42,28 @@ import type React from "react";
 import { useTranslation } from "react-i18next";
 
 import type {
+  FurniturePlacement,
   HueChannelPlacement,
   HueZone,
+  ImageLayer,
   RoomMapConfig,
+  TvAnchorPlacement,
+  UsbStripPlacement,
   ZoneDefinition,
 } from "../../../../shared/contracts/roomMap";
 import { HueZoneInspector } from "./HueZoneInspector";
+import {
+  FurnitureInspector,
+  HueChannelInspector,
+  ImageLayerInspector,
+  LegacyZoneInspector,
+  TvAnchorInspector,
+  UsbStripInspector,
+  resolveInspectorTarget,
+  type UsbStripConnectionStatus,
+} from "./ObjectInspectors";
 
-type DockTab = "objects" | "zones" | "hueZones" | "properties";
+type DockTab = "objects" | "zones" | "hueZones";
 
 interface RoomDockPanelProps {
   config: RoomMapConfig;
@@ -98,6 +112,39 @@ interface RoomDockPanelProps {
    * does nothing on click).
    */
   onNavigateToDevices?: () => void;
+
+  // ── Wave 4-D inspector hooks ──────────────────────────────────────
+  // Type-aware inspectors live in `ObjectInspectors.tsx` and call back
+  // through these patches. Each callback is optional so the dock keeps
+  // working under read-only embeds (e.g. previews) — when a callback is
+  // missing, the inspector still renders but the affected control is
+  // disabled.
+  /** Patch a furniture placement by id (rotation, type, w/h). */
+  onUpdateFurniture?: (id: string, patch: Partial<FurniturePlacement>) => void;
+  /** Patch the TV anchor (single instance, no id). */
+  onUpdateTvAnchor?: (patch: Partial<TvAnchorPlacement>) => void;
+  /** Patch a USB strip placement by stripId (LED count primarily). */
+  onUpdateUsbStrip?: (stripId: string, patch: Partial<UsbStripPlacement>) => void;
+  /** Patch an image layer by id (opacity edits from the inspector). */
+  onUpdateImageLayer?: (id: string, patch: Partial<ImageLayer>) => void;
+  /** Rename a Hue channel by index. */
+  onRenameHueChannel?: (channelIndex: number, label: string) => void;
+  /** Rename an image layer by id. */
+  onRenameImageLayer?: (id: string, label: string) => void;
+
+  // ── Wave 4-E props ────────────────────────────────────────────────
+  /**
+   * Currently bound USB port name; null when nothing is connected.
+   * Drives the connection chip rendered in `UsbStripInspector`.
+   */
+  usbConnectedPort?: string | null;
+  /**
+   * Resolved connection status for USB strips. The dock does not own
+   * the snapshot (`useUsbConnectionStatus` does); it just renders.
+   */
+  usbConnectionStatus?: UsbStripConnectionStatus;
+  /** Drop the active USB connection (Disconnect button in inspector). */
+  onUsbManage?: () => void;
 }
 
 /* ── helpers ─────────────────────────────────────────────────────── */
@@ -1128,69 +1175,6 @@ function HueZonesTab(props: {
   );
 }
 
-/* ── inspector ──────────────────────────────────────────────────── */
-
-function ObjectInspector({ config, selectedId }: { config: RoomMapConfig; selectedId: string }) {
-  const { t } = useTranslation("common");
-  // Render type-aware summary so the inspector mirrors the property bar
-  // without duplicating the editable fields (PropertyBar is the source
-  // of truth for numeric edits — the inspector surfaces context).
-  let label = "";
-  let typeKey = "";
-  let dotColor = TYPE_DOT_COLOR.image;
-  if (selectedId === "tv" && config.tvAnchor) {
-    label = t("roomMap.objectPanel.tvLabel");
-    typeKey = t("roomMap.inspector.typeTv");
-    dotColor = TYPE_DOT_COLOR.tv;
-  } else if (selectedId.startsWith("furniture-")) {
-    const f = config.furniture.find((it) => it.id === selectedId.replace("furniture-", ""));
-    if (!f) return null;
-    label = f.label ?? t(`roomMap.furniture.type.${f.type}`);
-    typeKey = t("roomMap.inspector.typeFurniture");
-    dotColor = TYPE_DOT_COLOR.furniture;
-  } else if (selectedId.startsWith("usb-")) {
-    const s = config.usbStrips.find((it) => it.stripId === selectedId.replace("usb-", ""));
-    if (!s) return null;
-    label = t("roomMap.objectPanel.ledLabel", { count: String(s.ledCount) });
-    typeKey = t("roomMap.inspector.typeUsb");
-    dotColor = TYPE_DOT_COLOR.usb;
-  } else if (selectedId.startsWith("hue-")) {
-    const idx = parseInt(selectedId.replace("hue-", ""), 10);
-    const ch = config.hueChannels[idx];
-    if (!ch) return null;
-    label = ch.label ?? t("roomMap.objectPanel.hueLabel", { index: String(idx + 1) });
-    typeKey = t("roomMap.inspector.typeHue");
-    dotColor = TYPE_DOT_COLOR.hue;
-  } else if (selectedId.startsWith("img-")) {
-    const layer = config.imageLayers.find((l) => l.id === selectedId.replace("img-", ""));
-    if (!layer) return null;
-    label = layer.label;
-    typeKey = t("roomMap.inspector.typeImage");
-    dotColor = TYPE_DOT_COLOR.image;
-  }
-
-  return (
-    <>
-      <div className="lm-room-dock-inspect-h">
-        <span className="lm-room-dock-inspect-h-chip">
-          <span
-            className="lm-room-dock-inspect-h-chip-dot"
-            style={{ background: dotColor }}
-            aria-hidden
-          />
-          <span>{typeKey}</span>
-        </span>
-        <span className="sub" title={label}>
-          {label}
-        </span>
-      </div>
-      <p className="lm-room-dock-inspect-empty">
-        {t("roomMap.inspector.objectHint")}
-      </p>
-    </>
-  );
-}
-
 /* ── main panel ─────────────────────────────────────────────────── */
 
 export function RoomDockPanel(props: RoomDockPanelProps) {
@@ -1220,6 +1204,15 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     hueAreaId = null,
     onAssignChannelToZone,
     onNavigateToDevices,
+    onUpdateFurniture,
+    onUpdateTvAnchor,
+    onUpdateUsbStrip,
+    onUpdateImageLayer,
+    onRenameHueChannel,
+    onRenameImageLayer,
+    usbConnectedPort = null,
+    usbConnectionStatus = "unknown",
+    onUsbManage,
   } = props;
   const { t } = useTranslation("common");
 
@@ -1231,19 +1224,16 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
 
   const [activeTab, setActiveTab] = useState<DockTab>("objects");
 
-  const activeHueZone = activeHueZoneId
-    ? hueZones.find((z) => z.id === activeHueZoneId) ?? null
-    : null;
-  const activeLegacyZone = activeZoneId ? zones.find((z) => z.id === activeZoneId) ?? null : null;
-
-  // Inspector pick: Hue zone wins (active zone > selected object > legacy zone)
-  const inspectorMode: "hueZone" | "object" | "legacyZone" | "empty" = activeHueZone
-    ? "hueZone"
-    : selectedId
-      ? "object"
-      : activeLegacyZone
-        ? "legacyZone"
-        : "empty";
+  // Wave 4-D — resolve the active inspector target once. Hue zone wins
+  // (W4-C surface), then the selected object, then the active legacy
+  // zone, then empty. The dispatcher returns a tagged-union the
+  // renderer can switch over without re-doing the lookup.
+  const inspectorTarget = resolveInspectorTarget(
+    config,
+    selectedId,
+    activeHueZoneId,
+    activeZoneId,
+  );
 
   const tabs: Array<{ id: DockTab; label: string; count?: number; visible: boolean }> = [
     { id: "objects", label: t("roomMap.objectPanel.objectsTab"), visible: true },
@@ -1254,53 +1244,82 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
       count: hueZones.length,
       visible: hueZoneEditing,
     },
-    {
-      id: "properties",
-      label: t("roomMap.objectPanel.propertiesTab"),
-      visible: true,
-    },
   ];
 
   const renderInspector = () => {
-    if (inspectorMode === "hueZone" && activeHueZone) {
-      return (
-        <HueZoneInspector
-          zone={activeHueZone}
-          onUpdate={(patch) => onUpdateHueZone?.(activeHueZone.id, patch)}
-          roomWidthM={config.dimensions.widthMeters}
-          roomDepthM={config.dimensions.depthMeters}
-        />
-      );
+    switch (inspectorTarget.kind) {
+      case "hueZone":
+        return (
+          <HueZoneInspector
+            zone={inspectorTarget.zone}
+            onUpdate={(patch) => onUpdateHueZone?.(inspectorTarget.zone.id, patch)}
+            roomWidthM={config.dimensions.widthMeters}
+            roomDepthM={config.dimensions.depthMeters}
+          />
+        );
+      case "tv":
+        return (
+          <TvAnchorInspector
+            tv={inspectorTarget.tv}
+            onUpdate={(patch) => onUpdateTvAnchor?.(patch)}
+            onToggleLock={() => onToggleLock("tv")}
+          />
+        );
+      case "furniture": {
+        const item = inspectorTarget.item;
+        return (
+          <FurnitureInspector
+            item={item}
+            onUpdate={(patch) => onUpdateFurniture?.(item.id, patch)}
+            onToggleLock={() => onToggleLock(`furniture-${item.id}`)}
+            onRename={(label) => onRenameFurniture(item.id, label)}
+          />
+        );
+      }
+      case "usb": {
+        const strip = inspectorTarget.strip;
+        return (
+          <UsbStripInspector
+            strip={strip}
+            connectionStatus={usbConnectionStatus}
+            connectedPort={usbConnectedPort}
+            onUpdate={(patch) => onUpdateUsbStrip?.(strip.stripId, patch)}
+            onToggleLock={() => onToggleLock(`usb-${strip.stripId}`)}
+            onManage={onUsbManage}
+          />
+        );
+      }
+      case "hueChannel": {
+        const ch = inspectorTarget.channel;
+        return (
+          <HueChannelInspector
+            channel={ch}
+            zoneName={inspectorTarget.zoneName}
+            onRename={(label) =>
+              onRenameHueChannel?.(ch.channelIndex, label)
+            }
+            onToggleLock={() => onToggleLock(`hue-${ch.channelIndex}`)}
+          />
+        );
+      }
+      case "image": {
+        const layer = inspectorTarget.layer;
+        return (
+          <ImageLayerInspector
+            layer={layer}
+            onUpdate={(patch) => onUpdateImageLayer?.(layer.id, patch)}
+            onToggleLock={() => onToggleLock(`img-${layer.id}`)}
+            onRename={(label) => onRenameImageLayer?.(layer.id, label)}
+          />
+        );
+      }
+      case "legacyZone":
+        return <LegacyZoneInspector zone={inspectorTarget.zone} />;
+      default:
+        return (
+          <p className="lm-room-dock-inspect-empty">{t("roomMap.inspector.empty")}</p>
+        );
     }
-    if (inspectorMode === "object" && selectedId) {
-      return <ObjectInspector config={config} selectedId={selectedId} />;
-    }
-    if (inspectorMode === "legacyZone" && activeLegacyZone) {
-      return (
-        <>
-          <div className="lm-room-dock-inspect-h">
-            <span>{t("roomMap.inspector.zoneTitle")}</span>
-            <span className="sub" title={activeLegacyZone.name}>
-              {activeLegacyZone.name}
-            </span>
-          </div>
-          <div className="lm-room-dock-field">
-            <span className="lm-room-dock-field-label">
-              {t("roomMap.inspector.channelsLabel")}
-            </span>
-            <span className="lm-room-dock-field-value">
-              {activeLegacyZone.channelIndices.length}
-            </span>
-          </div>
-          <p className="lm-room-dock-inspect-empty">
-            {t("roomMap.inspector.legacyZoneHint")}
-          </p>
-        </>
-      );
-    }
-    return (
-      <p className="lm-room-dock-inspect-empty">{t("roomMap.inspector.empty")}</p>
-    );
   };
 
   return (
@@ -1363,8 +1382,6 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               onAssignChannelToZone={onAssignChannelToZone}
               onNavigateToDevices={onNavigateToDevices}
             />
-          ) : activeTab === "properties" ? (
-            <div className="lm-room-dock-empty">{t("roomMap.inspector.tabHint")}</div>
           ) : null}
         </div>
 
