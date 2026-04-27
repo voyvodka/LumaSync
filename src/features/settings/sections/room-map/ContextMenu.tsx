@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface ContextMenuAction {
   label: string;
@@ -15,16 +15,34 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
+/**
+ * Right-click context menu for the room map editor.
+ *
+ * Wave 4-G #5 polish:
+ *  - Migrated from the legacy zinc / red-400 palette to the amber
+ *    Rev 07 dock tokens (`lm-context-menu*`) so it stops reading as a
+ *    different app next to the rest of the editor chrome.
+ *  - Two-pass positioning — render hidden (`visibility: hidden`) at
+ *    `(x, y)`, measure with `getBoundingClientRect`, then clamp inside
+ *    an 8 px viewport safe-zone before flipping `visibility` back on.
+ *    This kills the "menu opens far from the cursor" flicker that
+ *    came from the menu animating from the raw mouse coords to the
+ *    clamped position on the same frame.
+ *  - Each action clears the 32 px tap-target floor.
+ */
 export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ left: x, top: y });
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
-  // Clamp position so menu stays within viewport
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const pad = 4;
+    // 8 px breathing room around every viewport edge — large enough to
+    // dodge titlebar / status-bar chrome while still letting the menu
+    // hug the cursor on small windows. Matches `ls-design-language`'s
+    // safe-zone guidance for floating panels.
+    const pad = 8;
     let left = x;
     let top = y;
     if (left + rect.width > window.innerWidth - pad) {
@@ -58,21 +76,30 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
   return (
     <div
       ref={ref}
-      className="fixed z-[100] min-w-[140px] rounded-md border border-zinc-700 bg-zinc-900 shadow-lg py-1"
-      style={{ left: pos.left, top: pos.top }}
+      role="menu"
+      className="lm-context-menu"
+      style={{
+        // First-pass render is invisible at the raw cursor coords so
+        // the layout effect can measure without a flash. Second pass
+        // (after clamp) flips visibility on at the final coords.
+        position: "fixed",
+        left: pos?.left ?? x,
+        top: pos?.top ?? y,
+        visibility: pos ? "visible" : "hidden",
+      }}
     >
       {actions.map((action, i) => (
         <button
           key={i}
+          type="button"
+          role="menuitem"
           className={[
-            "w-full text-left px-3 py-1.5 text-[11px] flex items-center justify-between gap-4",
-            action.disabled
-              ? "text-zinc-600 cursor-not-allowed"
-              : action.danger
-                ? "text-red-400 hover:bg-red-900/20"
-                : "text-zinc-300 hover:bg-zinc-800",
-            "focus-visible:outline-none focus-visible:bg-zinc-800",
-          ].join(" ")}
+            "lm-context-menu-item",
+            action.danger ? "is-danger" : "",
+            action.disabled ? "is-disabled" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
           onClick={() => {
             if (action.disabled) return;
             action.onClick();
@@ -80,10 +107,10 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           }}
           disabled={action.disabled}
         >
-          <span>{action.label}</span>
-          {action.shortcut && (
-            <span className="text-[9px] text-zinc-500">{action.shortcut}</span>
-          )}
+          <span className="lm-context-menu-item-label">{action.label}</span>
+          {action.shortcut ? (
+            <span className="lm-context-menu-item-kbd">{action.shortcut}</span>
+          ) : null}
         </button>
       ))}
     </div>

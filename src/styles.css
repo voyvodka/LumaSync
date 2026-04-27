@@ -5746,3 +5746,110 @@ body {
     color: CanvasText;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-G #5 — Room map context menu (amber Rev 07 migration)
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the legacy zinc/red-400 styling baked into ContextMenu.tsx
+   with the same panel + line + amber-on-hover vocabulary used by the
+   rest of the dock. Each item clears the 32 px tap floor and the
+   shortcut badge picks up `lm-mono` so it reads consistently with the
+   rest of the editor's keyboard hint surfaces.
+   ────────────────────────────────────────────────────────────────── */
+.lm-context-menu {
+  z-index: 100;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  font-family: var(--lm-sans);
+  color: var(--lm-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lm-context-menu-item {
+  all: unset;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 11.5px;
+  color: var(--lm-ink-dim);
+  transition: background 100ms ease, color 100ms ease;
+}
+.lm-context-menu-item:hover {
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink);
+}
+.lm-context-menu-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink);
+}
+.lm-context-menu-item.is-danger {
+  color: var(--lm-red);
+}
+.lm-context-menu-item.is-danger:hover,
+.lm-context-menu-item.is-danger:focus-visible {
+  background: rgba(239, 91, 91, 0.1);
+  color: var(--lm-red);
+}
+.lm-context-menu-item.is-disabled,
+.lm-context-menu-item:disabled {
+  cursor: not-allowed;
+  color: var(--lm-ink-faint);
+  opacity: 0.55;
+}
+.lm-context-menu-item.is-disabled:hover,
+.lm-context-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--lm-ink-faint);
+}
+.lm-context-menu-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-context-menu-item-kbd {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-context-menu-item {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-context-menu {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-context-menu-item {
+    color: CanvasText;
+  }
+  .lm-context-menu-item:hover,
+  .lm-context-menu-item:focus-visible {
+    background: Highlight;
+    color: HighlightText;
+  }
+  .lm-context-menu-item.is-danger {
+    color: LinkText;
+  }
+}
