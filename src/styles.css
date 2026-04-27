@@ -5853,3 +5853,155 @@ body {
     color: LinkText;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-G #6 — Multi-strip pair flow
+   ─────────────────────────────────────────────────────────────────────
+   "Add LED strip" CTA + inline LED-count form for the DeviceSection's
+   paired-strips sub-card, plus a port label that hovers above each
+   strip's start handle on the canvas. The form reuses the existing
+   amber Rev 07 panel vocabulary so it sits inside the same chrome as
+   the rest of the paired-strips list.
+   ────────────────────────────────────────────────────────────────── */
+.lm-paired-strip-add {
+  all: unset;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px dashed var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.lm-paired-strip-add:hover {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-paired-strip-add:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strip-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-paired-strip-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.06);
+}
+.lm-paired-strip-form-label {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  flex-shrink: 0;
+}
+.lm-paired-strip-form-input {
+  flex: 0 0 80px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  appearance: none;
+}
+.lm-paired-strip-form-input::-webkit-outer-spin-button,
+.lm-paired-strip-form-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-paired-strip-form-input:focus,
+.lm-paired-strip-form-input:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strip-form-port {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-paired-strip-form-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.lm-paired-strip-action.is-primary {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-paired-strip-action.is-primary:hover {
+  background: rgba(255, 176, 32, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-paired-strip-add,
+  .lm-paired-strip-action.is-primary {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-paired-strip-add,
+  .lm-paired-strip-form,
+  .lm-paired-strip-form-input,
+  .lm-paired-strip-form-port,
+  .lm-paired-strip-action.is-primary {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}
+
+/* Multi-strip canvas affordance — port name floats above each strip's
+   start handle so the user can tell which controller drives which run.
+   Sits 16 px above the W4-E status badge so the two never collide. */
+.lm-room-usb-port-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(7, 8, 10, 0.78);
+  border: 1px solid var(--lm-line-2);
+  backdrop-filter: blur(4px);
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--lm-ink-dim);
+  pointer-events: none;
+  z-index: 22;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (forced-colors: active) {
+  .lm-room-usb-port-label {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}

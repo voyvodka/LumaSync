@@ -271,6 +271,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
   const [persistError, setPersistError] = useState(false);
   const persistErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Wave 4-G #6 — inline "Add LED strip" form state. Open one form at
+  // a time and remember the LED count between adds (most users author
+  // identical-length segments back to back). The form is gated on a
+  // live `connectedPort` so the strip we author is always linked to a
+  // real serial connection.
+  const [stripFormOpen, setStripFormOpen] = useState(false);
+  const [stripDraftLedCount, setStripDraftLedCount] = useState("60");
+
   // Load placements from shellStore on mount and when selectedAreaId changes
   useEffect(() => {
     let cancelled = false;
@@ -341,6 +349,51 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
       persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
     }
   }, []);
+
+  // Wave 4-G #6 — Add a new LED-strip placement bound to the live
+  // connected port. Multiple strips may share the same `portName`
+  // (multi-segment controllers) and each carries its own `stripId`
+  // so the room editor can place / lock / delete them independently.
+  // The default geometry drops the strip at the room centre so the
+  // user can immediately drag the endpoints in the canvas; LED count
+  // comes from the inline form draft.
+  const handleAddStrip = useCallback(async () => {
+    if (!connectedPort) return;
+    const parsedCount = parseInt(stripDraftLedCount, 10);
+    const ledCount = Number.isFinite(parsedCount)
+      ? Math.max(1, Math.min(1000, parsedCount))
+      : 60;
+    try {
+      const current = await shellStore.load();
+      const currentRoomMap = current.roomMap ?? DEFAULT_ROOM_MAP;
+      const widthM = currentRoomMap.dimensions?.widthMeters ?? DEFAULT_ROOM_MAP.dimensions.widthMeters;
+      const newStrip: UsbStripPlacement = {
+        stripId: `usb-${crypto.randomUUID()}`,
+        startX: 1,
+        startY: 1,
+        endX: Math.max(2, widthM - 1),
+        endY: 1,
+        ledCount,
+        portName: connectedPort,
+      };
+      const updatedRoomMap: RoomMapConfig = {
+        ...currentRoomMap,
+        usbStrips: [...currentRoomMap.usbStrips, newStrip],
+      };
+      await shellStore.save({
+        roomMap: updatedRoomMap,
+        roomMapVersion: (current.roomMapVersion ?? 0) + 1,
+      });
+      setPairedStrips(updatedRoomMap.usbStrips);
+      setStripFormOpen(false);
+      setPersistError(false);
+    } catch (e) {
+      console.error("[LumaSync] handleAddStrip failed", e);
+      setPersistError(true);
+      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
+      persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
+    }
+  }, [connectedPort, stripDraftLedCount]);
 
   return (
     <div className="lm-device-page">
@@ -577,10 +630,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           {/* Chip type selector — USB sink strip config (v1.5 G3) */}
           <LedChipTypePicker />
 
-          {/* Paired strips — Wave 4-E surface. Lists every persisted
-              UsbStripPlacement with a live ONLINE/OFFLINE chip plus a
-              deep-link to the room-map editor where the strip's
-              physical placement is authored. */}
+          {/* Paired strips — Wave 4-E + 4-G surface. Lists every
+              persisted UsbStripPlacement with a per-strip portName,
+              live ONLINE/OFFLINE chip, and a deep-link to the room-map
+              editor. The W4-G "+ Add LED strip" CTA below allows
+              authoring multiple segments per controller (multi-strip
+              flow). */}
           <div className="lm-paired-strips">
             <div className="lm-paired-strips-h">
               <span>{t("devicesPage.usb.paired.title")}</span>
@@ -596,8 +651,21 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               </div>
             ) : (
               pairedStrips.map((strip) => {
+                // W4-G #6 — multi-strip aware connection chip. A strip
+                // is `connected` only when its persisted `portName`
+                // matches the live `connectedPort`; legacy strips
+                // without a portName fall back to the W4-E heuristic
+                // (any active port ⇒ connected) so existing maps keep
+                // their badge until the user re-pairs.
                 const stripStatus: "connected" | "disconnected" =
-                  connectedPort ? "connected" : "disconnected";
+                  strip.portName
+                    ? strip.portName === connectedPort
+                      ? "connected"
+                      : "disconnected"
+                    : connectedPort
+                      ? "connected"
+                      : "disconnected";
+                const portLabel = strip.portName ?? connectedPort ?? t("devicesPage.usb.paired.noPort");
                 return (
                   <div key={strip.stripId} className="lm-paired-strip">
                     <div className="lm-paired-strip-ic"><IconUsb /></div>
@@ -606,7 +674,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         {t("devicesPage.usb.paired.stripName", { count: strip.ledCount })}
                       </div>
                       <div className="lm-paired-strip-sub">
-                        {connectedPort ?? t("devicesPage.usb.paired.noPort")}
+                        {portLabel}
                       </div>
                     </div>
                     <span
@@ -634,6 +702,81 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 );
               })
             )}
+
+            {/* W4-G #6 — "+ Add LED strip" CTA. Disabled until a port
+                is connected (we will not author orphan strips); when
+                already open, swaps to an inline LED-count form. */}
+            {stripFormOpen && connectedPort ? (
+              <div className="lm-paired-strip-form">
+                <label
+                  className="lm-paired-strip-form-label"
+                  htmlFor="paired-strip-led-count"
+                >
+                  {t("devicesPage.usb.paired.ledCountLabel")}
+                </label>
+                <input
+                  id="paired-strip-led-count"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  step={1}
+                  inputMode="numeric"
+                  className="lm-paired-strip-form-input"
+                  value={stripDraftLedCount}
+                  onChange={(e) => setStripDraftLedCount(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleAddStrip();
+                    } else if (e.key === "Escape") {
+                      setStripFormOpen(false);
+                    }
+                  }}
+                  autoFocus
+                />
+                <span className="lm-paired-strip-form-port">
+                  {connectedPort}
+                </span>
+                <div className="lm-paired-strip-form-actions">
+                  <button
+                    type="button"
+                    className="lm-paired-strip-action"
+                    onClick={() => setStripFormOpen(false)}
+                  >
+                    {t("devicesPage.usb.paired.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    className="lm-paired-strip-action is-primary"
+                    onClick={() => { void handleAddStrip(); }}
+                  >
+                    {t("devicesPage.usb.paired.confirmAdd")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="lm-paired-strip-add"
+                onClick={() => setStripFormOpen(true)}
+                disabled={!connectedPort}
+                title={
+                  connectedPort
+                    ? undefined
+                    : t("devicesPage.usb.paired.addDisabledTooltip")
+                }
+              >
+                {pairedStrips.length === 0
+                  ? t("devicesPage.usb.paired.addFirst")
+                  : t("devicesPage.usb.paired.addAnother")}
+              </button>
+            )}
+
+            {persistError ? (
+              <div className="lm-paired-strips-empty" role="status" aria-live="polite">
+                {t("devicesPage.usb.paired.persistError")}
+              </div>
+            ) : null}
           </div>
 
         </div>

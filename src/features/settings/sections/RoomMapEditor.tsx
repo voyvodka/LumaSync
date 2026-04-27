@@ -1157,7 +1157,21 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             />
 
             {/* USB strip SVG overlay + handles */}
-            {config.usbStrips.map((strip) => (
+            {config.usbStrips.map((strip) => {
+              // W4-G #6 — per-strip connection status. Strips with a
+              // persisted `portName` are graded against the live
+              // `connectedPort` so a controller plugged into a
+              // different port renders OFFLINE. Strips authored before
+              // W4-G (no portName) fall back to the global W4-E
+              // heuristic.
+              const stripStatus: "connected" | "disconnected" | "unknown" = strip.portName
+                ? usb.ready
+                  ? strip.portName === usb.connectedPort
+                    ? "connected"
+                    : "disconnected"
+                  : "unknown"
+                : usbConnectionStatus;
+              return (
               <UsbStripObject
                 key={strip.stripId}
                 placement={strip}
@@ -1165,7 +1179,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 selected={selectedId === `usb-${strip.stripId}`}
                 zoom={zoom}
                 panMode={spaceHeld}
-                connectionStatus={usbConnectionStatus}
+                connectionStatus={stripStatus}
                 onSelect={(id) => setSelectedId(`usb-${id}`)}
                 onChange={(updated) => {
                   const next = config.usbStrips.map((s) =>
@@ -1174,7 +1188,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                   void updateConfig({ usbStrips: next });
                 }}
               />
-            ))}
+              );
+            })}
 
             {/* Furniture objects */}
             {config.furniture.map((f) => (

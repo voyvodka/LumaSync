@@ -282,10 +282,11 @@ export function UsbStripObject({
         )}
       </svg>
 
-      {/* Wave 4-E — Connection status badge anchored above the start
-          handle. Only rendered when the parent has wired the live
-          `useUsbConnectionStatus` snapshot (`unknown` ⇒ no chrome so
-          existing maps stay clean before the hook lands). */}
+      {/* Wave 4-E + 4-G — Connection status badge + multi-strip
+          port label anchored above the start handle. The port label
+          renders whenever the strip carries a persisted `portName`
+          (W4-G contract field); the live status chip overlays the
+          existing W4-E badge palette. */}
       {connectionStatus !== "unknown" ? (
         <div
           className={`lm-room-usb-status-badge lm-room-usb-status-badge--${connectionStatus}`}
@@ -301,6 +302,19 @@ export function UsbStripObject({
               ? t("roomMap.usbStrip.online")
               : t("roomMap.usbStrip.offline")}
           </span>
+        </div>
+      ) : null}
+      {placement.portName ? (
+        <div
+          className="lm-room-usb-port-label"
+          style={{
+            left: sx - 32,
+            top: sy - 38,
+          }}
+          aria-hidden
+          title={placement.portName}
+        >
+          {placement.portName}
         </div>
       ) : null}
 

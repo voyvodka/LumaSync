@@ -168,6 +168,13 @@
         "stripName": "{{count}} LED'lik şerit",
         "noPort": "Port bağlı değil",
         "offline": "OFFLINE",
+        "ledCountLabel": "LED",
+        "addFirst": "+ LED şerit ekle",
+        "addAnother": "+ Başka şerit ekle",
+        "addDisabledTooltip": "Şerit eklemek için önce bir USB portu bağlayın.",
+        "cancel": "İptal",
+        "confirmAdd": "Ekle",
+        "persistError": "Şerit kaydedilemedi. Tekrar deneyin.",
         "openInMap": "Haritada aç"
       }
     },
