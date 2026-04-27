@@ -82,6 +82,16 @@ export interface UsbStripPlacement {
   /** Number of LEDs on this strip segment */
   ledCount: number;
   locked?: boolean;
+  /**
+   * Wave 4-G #6 — USB serial port the strip is bound to (e.g.
+   * `/dev/tty.usbserial-110`). Multiple `UsbStripPlacement` rows can
+   * share the same `portName` so a single controller can host
+   * multiple physical segments. Optional for backwards compatibility
+   * with strips authored before W4-G; consumers must treat `undefined`
+   * as "not yet linked" and surface a re-pair affordance instead of
+   * blocking the user.
+   */
+  portName?: string;
 }
 
 // ---------------------------------------------------------------------------
