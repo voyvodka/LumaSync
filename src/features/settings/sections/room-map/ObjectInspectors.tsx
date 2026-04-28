@@ -131,7 +131,10 @@ function InspectorNumberField({
         className="lm-room-dock-input"
         value={local}
         onFocus={() => setEditing(true)}
-        onChange={(e) => setLocal(e.target.value)}
+        onChange={(e) => {
+          setEditing(true);
+          setLocal(e.target.value);
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
           e.stopPropagation();
