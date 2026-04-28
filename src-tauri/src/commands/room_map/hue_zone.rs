@@ -275,11 +275,11 @@ pub fn world_pos_clamped(
 /// zone shape, rejects duplicate ids, and enforces the per-area channel
 /// cap by counting how many channels the zone references.
 #[tauri::command]
-pub fn create_hue_zone(req: CreateHueZoneRequest) -> HueZoneCommandResult {
+pub fn create_hue_zone(request: CreateHueZoneRequest) -> HueZoneCommandResult {
     let CreateHueZoneRequest {
         zone,
         mut existing_zones,
-    } = req;
+    } = request;
 
     if let Err(status) = validate_zone_shape(&zone) {
         return HueZoneCommandResult {
@@ -331,11 +331,11 @@ pub fn create_hue_zone(req: CreateHueZoneRequest) -> HueZoneCommandResult {
 
 /// Replace an existing zone (matched by id) with the supplied draft.
 #[tauri::command]
-pub fn update_hue_zone(req: UpdateHueZoneRequest) -> HueZoneCommandResult {
+pub fn update_hue_zone(request: UpdateHueZoneRequest) -> HueZoneCommandResult {
     let UpdateHueZoneRequest {
         zone,
         mut existing_zones,
-    } = req;
+    } = request;
 
     if let Err(status) = validate_zone_shape(&zone) {
         return HueZoneCommandResult {
@@ -389,12 +389,12 @@ pub fn update_hue_zone(req: UpdateHueZoneRequest) -> HueZoneCommandResult {
 /// Detached channels keep their last-known absolute `x/y/z` (legacy
 /// mode); both `zone_id` and `zone_relative_position` are cleared.
 #[tauri::command]
-pub fn delete_hue_zone(req: DeleteHueZoneRequest) -> HueZoneCommandResult {
+pub fn delete_hue_zone(request: DeleteHueZoneRequest) -> HueZoneCommandResult {
     let DeleteHueZoneRequest {
         zone_id,
         mut existing_zones,
         mut channels,
-    } = req;
+    } = request;
 
     let Some(target_idx) = existing_zones.iter().position(|z| z.id == zone_id) else {
         return HueZoneCommandResult {
@@ -435,7 +435,7 @@ pub fn delete_hue_zone(req: DeleteHueZoneRequest) -> HueZoneCommandResult {
 /// 3. Zone-relative position is supplied and inside `[-1, 1]^3`.
 /// 4. Zone has not exceeded the bridge per-area channel cap.
 #[tauri::command]
-pub fn assign_channel_to_hue_zone(req: AssignChannelRequest) -> HueZoneCommandResult {
+pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneCommandResult {
     let AssignChannelRequest {
         channel_index,
         zone_id,
@@ -443,7 +443,7 @@ pub fn assign_channel_to_hue_zone(req: AssignChannelRequest) -> HueZoneCommandRe
         entertainment_area_id,
         mut existing_zones,
         mut channels,
-    } = req;
+    } = request;
 
     // Detach branch — clears any zone reference on the channel.
     let Some(target_zone_id) = zone_id else {

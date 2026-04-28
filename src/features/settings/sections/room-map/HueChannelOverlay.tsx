@@ -235,11 +235,16 @@ export function HueChannelOverlay({
     dr.currentRelX = relX;
     dr.currentRelY = relY;
 
-    // Imperative DOM update for smooth drag — avoids re-render
+    // Imperative DOM update for smooth drag — avoids re-render. NaN
+    // guards mirror the render-path defaults (W4-F2 manual-test fix):
+    // a stale ref or zero-room dimension must never stamp `NaN` onto
+    // `style.left/top` mid-drag.
     const wrapper = dr.element?.parentElement;
     if (wrapper) {
-      const leftPx = hueToMetres(newX, widthRef.current) * ppmRef.current;
-      const topPx = hueToMetres(-newY, depthRef.current) * ppmRef.current;
+      const rawLeft = hueToMetres(newX, widthRef.current) * ppmRef.current;
+      const rawTop = hueToMetres(-newY, depthRef.current) * ppmRef.current;
+      const leftPx = Number.isFinite(rawLeft) ? rawLeft : 0;
+      const topPx = Number.isFinite(rawTop) ? rawTop : 0;
       wrapper.style.left = `${leftPx}px`;
       wrapper.style.top = `${topPx}px`;
     }
@@ -510,9 +515,18 @@ export function HueChannelOverlay({
             1,
           );
         }
-        const leftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
+        // v1.5 W4-F2 manual-test (2026-04-28): if any input is NaN
+        // (e.g. an `update_hue_zone` invoke failed mid-drag and left the
+        // zone center stale, or `pxPerMeter` is briefly 0 during mount),
+        // fall back to 0 instead of letting React stamp `NaN` onto the
+        // element's `style.left` — that triggers the
+        // `setValueForStyle: NaN is invalid for left` warning and the
+        // dot drifts off-canvas.
+        const rawLeftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
+        const rawTopPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
+        const leftPx = Number.isFinite(rawLeftPx) ? rawLeftPx : 0;
         // Invert Y: Hue +y = front wall (bottom of canvas)
-        const topPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
+        const topPx = Number.isFinite(rawTopPx) ? rawTopPx : 0;
 
         const isSelected = selectedId === `hue-${ch.channelIndex}`;
         const isInActiveZone = activeZoneChannels?.has(ch.channelIndex) ?? false;

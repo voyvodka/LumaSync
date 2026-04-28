@@ -407,10 +407,16 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       } else if (id.startsWith("usb-")) {
         const sId = id.replace("usb-", "");
         void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== sId) });
-      } else if (id.startsWith("hue-")) {
-        const idx = parseInt(id.replace("hue-", ""), 10);
-        void updateConfig({ hueChannels: config.hueChannels.filter((_, i) => i !== idx) });
       }
+      // v1.5 W4-F2 manual-test feedback (2026-04-28): Hue channels are
+      // bridge-managed — the user cannot remove them from the LumaSync
+      // side, only the Hue app / bridge can. The previous branch tried
+      // to splice them out of `config.hueChannels` by array index (not
+      // even by `channelIndex`), which both leaked the channel from
+      // its zone in a way the user did not expect and silently shifted
+      // every subsequent channel's array slot. We drop the branch
+      // entirely; zone detach should go through the "Move to →
+      // Unassigned" affordance in the Hue Zones tab instead.
       setSelectedId(null);
     },
     [config, updateConfig, isLocked],
