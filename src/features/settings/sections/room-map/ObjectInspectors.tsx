@@ -694,12 +694,17 @@ export function ImageLayerInspector({
 
 /**
  * Resolve the active selection from the dock's `selectedId` shape and
- * the active Hue-zone id. Hue zone wins (W4-C surface), then the
- * selected object, then empty.
+ * the active Hue-zone id.
  *
- * v1.5 W4-F2: only `HueZone` (Hue Entertainment Area spatial 3D subset)
- * survives. Logical zones were dropped — see RFC §"Direction reversal"
- * — so the dispatcher reads exclusively from `config.zones: HueZone[]`.
+ * v1.5 W4-F2 manual-test (2026-04-28) — priority swap: a concrete
+ * object selection wins over `activeHueZoneId` so clicking a TV /
+ * furniture / strip / channel / image row in the Objects list
+ * routes its inspector into the dock even when a Hue zone is the
+ * current zone selection. The Hue zone inspector is reserved for
+ * the case where the user picks a zone (no concrete object selected).
+ *
+ * Logical zones were dropped — see RFC §"Direction reversal" — so
+ * the dispatcher reads exclusively from `config.zones: HueZone[]`.
  */
 export type InspectorTarget =
   | { kind: "hueZone"; zone: HueZone }
@@ -715,10 +720,6 @@ export function resolveInspectorTarget(
   selectedId: string | null,
   activeHueZoneId: string | null,
 ): InspectorTarget {
-  if (activeHueZoneId) {
-    const zone = config.zones.find((z) => z.id === activeHueZoneId);
-    if (zone) return { kind: "hueZone", zone };
-  }
   if (selectedId) {
     if (selectedId === "tv" && config.tvAnchor) {
       return { kind: "tv", tv: config.tvAnchor };
@@ -748,6 +749,11 @@ export function resolveInspectorTarget(
       const layer = config.imageLayers.find((l) => l.id === id);
       if (layer) return { kind: "image", layer };
     }
+  }
+  // No concrete object selected — fall back to the active Hue zone.
+  if (activeHueZoneId) {
+    const zone = config.zones.find((z) => z.id === activeHueZoneId);
+    if (zone) return { kind: "hueZone", zone };
   }
   return { kind: "empty" };
 }

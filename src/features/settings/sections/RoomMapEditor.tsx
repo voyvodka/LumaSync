@@ -701,8 +701,18 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [config.zones, updateConfig],
   );
 
+  // v1.5 W4-F2 manual-test (2026-04-28) — selection model is exclusive
+  // between concrete objects and Hue zones. Selecting one clears the
+  // other so the bottom inspector + side-list highlights always agree
+  // on a single source of truth.
   const handleSelectHueZone = useCallback((zoneId: string | null) => {
     setActiveHueZoneId(zoneId);
+    if (zoneId !== null) setSelectedId(null);
+  }, []);
+
+  const handleSelectObject = useCallback((id: string | null) => {
+    setSelectedId(id);
+    if (id !== null) setActiveHueZoneId(null);
   }, []);
 
   // ── Wave 4-B (B2/B3) — Channel ↔ zone assignment + cross-zone transfer
@@ -1251,7 +1261,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
           <RoomDockPanel
             config={config}
             selectedId={selectedId}
-            onSelect={setSelectedId}
+            onSelect={handleSelectObject}
             onDelete={deleteById}
             onRenameFurniture={handleRenameFurniture}
             onToggleLock={(id) => {

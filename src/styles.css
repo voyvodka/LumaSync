@@ -4511,6 +4511,37 @@ body {
   text-transform: uppercase;
   color: var(--lm-ink-faint);
 }
+/*
+ * v1.5 W4-F2 manual-test (2026-04-28): clickable Hue zone headers in
+ * the Objects list. Hover lifts opacity + shows the amber selection
+ * cue, `is-on` matches the `.lm-room-dock-row.is-on` treatment so a
+ * selected zone in the side list visually pairs with the bottom
+ * inspector.
+ */
+.lm-room-dock-h.is-clickable {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin: 6px 0 2px;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.lm-room-dock-h.is-clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-h.is-clickable:focus-visible {
+  outline: var(--lm-focus-ring, 2px solid currentColor);
+  outline-offset: 1px;
+}
+.lm-room-dock-h.is-clickable.is-on {
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-dock-h.is-clickable {
+    transition: none;
+  }
+}
 .lm-room-dock-h-dot {
   width: 6px;
   height: 6px;

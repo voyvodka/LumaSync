@@ -373,12 +373,37 @@ function ObjectsTab(props: {
   config: RoomMapConfig;
   selectedId: string | null;
   hueZones: HueZone[];
+  /**
+   * v1.5 W4-F2 manual-test (2026-04-28) — id of the currently
+   * selected Hue zone in the room editor (mirrors `activeHueZoneId`
+   * upstream). Drives the "is-on" highlight on zone headers in the
+   * Objects list so the user can tell which zone the bottom inspector
+   * belongs to.
+   */
+  activeHueZoneId: string | null;
   onSelect: (id: string) => void;
+  /**
+   * v1.5 W4-F2 manual-test (2026-04-28) — clicking a Hue zone header
+   * in the Objects list selects it for the bottom inspector. Inert
+   * when omitted so embeds without zone editing keep the headers
+   * read-only.
+   */
+  onSelectHueZone?: (zoneId: string | null) => void;
   onDelete: (id: string) => void;
   onRenameFurniture: (id: string, label: string) => void;
   onToggleLock: (id: string) => void;
 }) {
-  const { config, selectedId, hueZones, onSelect, onDelete, onRenameFurniture, onToggleLock } = props;
+  const {
+    config,
+    selectedId,
+    hueZones,
+    activeHueZoneId,
+    onSelect,
+    onSelectHueZone,
+    onDelete,
+    onRenameFurniture,
+    onToggleLock,
+  } = props;
   const { t } = useTranslation("common");
   const rows = buildObjectList(config, t);
   if (rows.length === 0) {
@@ -420,9 +445,45 @@ function ObjectsTab(props: {
       {hueZones.map((zone, zi) => {
         const bucket = hueByZone.get(zone.id) ?? [];
         const color = getZoneColor(zone, zi);
+        const isZoneActive = activeHueZoneId === zone.id;
+        const zoneSelectable = !!onSelectHueZone;
         return (
           <li key={`zone-${zone.id}`}>
-            <div className="lm-room-dock-h" role="heading" aria-level={3}>
+            {/*
+              v1.5 W4-F2 manual-test (2026-04-28): zone headers in the
+              Objects list are now clickable — selecting one routes the
+              Hue zone inspector into the bottom dock without forcing
+              the user to switch to the Hue Zones tab. The header acts
+              as a toggle so a second click re-deselects the zone.
+            */}
+            <div
+              className={[
+                "lm-room-dock-h",
+                zoneSelectable ? "is-clickable" : "",
+                isZoneActive ? "is-on" : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              role={zoneSelectable ? "button" : "heading"}
+              aria-level={zoneSelectable ? undefined : 3}
+              aria-pressed={zoneSelectable ? isZoneActive : undefined}
+              tabIndex={zoneSelectable ? 0 : undefined}
+              onClick={
+                zoneSelectable
+                  ? () => onSelectHueZone(isZoneActive ? null : zone.id)
+                  : undefined
+              }
+              onKeyDown={
+                zoneSelectable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onSelectHueZone(isZoneActive ? null : zone.id);
+                      }
+                    }
+                  : undefined
+              }
+            >
               <span className="lm-room-dock-h-dot" style={{ background: color }} aria-hidden />
               <span className="lm-room-dock-h-name">{zone.name}</span>
               <span className="lm-room-dock-h-count">{bucket.length}</span>
@@ -1298,7 +1359,9 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               config={config}
               hueZones={hueZones}
               selectedId={selectedId}
+              activeHueZoneId={activeHueZoneId}
               onSelect={onSelect}
+              onSelectHueZone={onSelectHueZone}
               onDelete={onDelete}
               onRenameFurniture={onRenameFurniture}
               onToggleLock={onToggleLock}
