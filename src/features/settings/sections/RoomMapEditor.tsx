@@ -57,6 +57,11 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 }) {
   const displayRef = useRef<HTMLDivElement>(null);
 
+  const stateRef = useRef({ panOffset, pxPerMeter, zoom, widthMeters, depthMeters });
+  useEffect(() => {
+    stateRef.current = { panOffset, pxPerMeter, zoom, widthMeters, depthMeters };
+  }, [panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
@@ -67,11 +72,12 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
     const updateCoord = () => {
       if (!latestEvent || !displayRef.current) return;
       const rect = el.getBoundingClientRect();
-      const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
-      const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
+      const state = stateRef.current;
+      const mx = (latestEvent.clientX - rect.left - state.panOffset.x) / (state.pxPerMeter * state.zoom);
+      const my = (latestEvent.clientY - rect.top - state.panOffset.y) / (state.pxPerMeter * state.zoom);
 
-      const worldX = mx - widthMeters / 2;
-      const worldY = my - depthMeters / 2;
+      const worldX = mx - state.widthMeters / 2;
+      const worldY = my - state.depthMeters / 2;
 
       displayRef.current.textContent = `x: ${worldX >= 0 ? "+" : ""}${worldX.toFixed(1)}m, y: ${worldY >= 0 ? "+" : ""}${worldY.toFixed(1)}m`;
       displayRef.current.style.display = "block";
@@ -101,7 +107,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [canvasContainerRef, panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+  }, [canvasContainerRef]);
 
   return (
     <div
