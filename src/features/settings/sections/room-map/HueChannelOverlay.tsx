@@ -42,10 +42,23 @@ interface HueChannelOverlayProps {
    * cannot be accidentally moved while selecting elsewhere; the active
    * zone (if any) keeps its full chrome and is matched by id so the
    * drag-time DOM lookup (`data-zone-bounds-id`) still resolves a
-   * single element. Pass an empty array (or omit) to fall back to the
-   * legacy active-only rendering.
+   * single element.
+   *
+   * v1.5 W4-F2 manual-test (2026-04-28): this list also drives the
+   * channel-bound zone lookup used by the drag handler and the world-
+   * pos derivation, so it MUST stay populated even when the user
+   * toggles the dashed-bounds visibility off. Pair this with the
+   * `hidePassiveZoneBounds` flag below to hide the dashed boxes for
+   * non-active zones without breaking the channel zone-binding.
    */
   allHueZones?: HueZone[];
+  /**
+   * When true, suppress the dashed bounds-box rendering for every
+   * zone except the active one. Channel positions are still resolved
+   * through their bound zone via `allHueZones` — only the visual
+   * outline is hidden.
+   */
+  hidePassiveZoneBounds?: boolean;
 }
 
 /**
@@ -147,6 +160,7 @@ export function HueChannelOverlay({
   activeHueZone = null,
   onHueZoneCenterChange,
   allHueZones,
+  hidePassiveZoneBounds = false,
 }: HueChannelOverlayProps) {
   const { t } = useTranslation("common");
 
@@ -172,6 +186,13 @@ export function HueChannelOverlay({
 
   const activeHueZoneRef = useRef(activeHueZone);
   activeHueZoneRef.current = activeHueZone;
+
+  // Manual-test (2026-04-28): channel drag must clamp through the
+  // bound zone's bounds whether or not that zone is selected. Keep a
+  // ref to the full zone list so the drag handler can resolve
+  // `ch.zoneId` → bounding zone without re-running on every render.
+  const allHueZonesRef = useRef(allHueZones ?? []);
+  allHueZonesRef.current = allHueZones ?? [];
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, ch: HueChannelPlacement) => {
@@ -217,13 +238,26 @@ export function HueChannelOverlay({
     let relX: number | null = null;
     let relY: number | null = null;
 
-    // Bug #52(a) — when this channel is bound to the active zone, clamp
-    // the world coords through the zone box so the dot can never visually
-    // leave the zone bounds.
-    const zone = activeHueZoneRef.current;
+    // v1.5 W4-F2 manual-test (2026-04-28): channels bound to a Hue
+    // zone must clamp through that zone's bounding box on EVERY drag,
+    // regardless of whether the zone is the active selection. The
+    // earlier path only enforced the bound when the zone was active —
+    // selecting another zone (or no zone) let the dot drift outside
+    // its parent's box, breaking the zone-relative coordinate
+    // contract on the next save.
+    //
+    // Resolution order: full `allHueZones` list (canonical) → fallback
+    // to `activeHueZone` so callers that don't pass the full list (or
+    // legacy tests) still clamp the active zone correctly.
     const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
-    if (zone && ch && ch.zoneId === zone.id) {
-      const bounded = clampWithinZone(newX, newY, zone);
+    let boundZone = ch?.zoneId
+      ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
+      : null;
+    if (!boundZone && ch?.zoneId && activeHueZoneRef.current?.id === ch.zoneId) {
+      boundZone = activeHueZoneRef.current;
+    }
+    if (boundZone && ch) {
+      const bounded = clampWithinZone(newX, newY, boundZone);
       newX = bounded.worldX;
       newY = bounded.worldY;
       relX = bounded.relX;
@@ -258,13 +292,20 @@ export function HueChannelOverlay({
 
     const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
     if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
-      const zone = activeHueZoneRef.current;
-      // When the channel is bound to the active Hue zone, the absolute
-      // x/y we computed during the drag are world-space; we persist the
-      // already-clamped zone-relative pair captured in the move handler
-      // so HUE_ZONE_CHANNEL_OUT_OF_BOUNDS never round-trips to the
-      // bridge.
-      if (zone && ch.zoneId === zone.id && dr.currentRelX !== null && dr.currentRelY !== null) {
+      // v1.5 W4-F2 manual-test (2026-04-28): persist zone-relative
+      // coords for ANY channel bound to a zone, not just the active
+      // one. The clamp in `handlePointerMove` already wrote the
+      // bounded `currentRelX/Y` into `dragRef`, so we just need to
+      // make sure we read them back here whenever `ch.zoneId` is set
+      // and resolves to a known zone (with the same fallback to
+      // `activeHueZone` the move handler uses).
+      let boundZone = ch.zoneId
+        ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
+        : null;
+      if (!boundZone && ch.zoneId && activeHueZoneRef.current?.id === ch.zoneId) {
+        boundZone = activeHueZoneRef.current;
+      }
+      if (boundZone && dr.currentRelX !== null && dr.currentRelY !== null) {
         onChangeRef.current({
           ...ch,
           x: dr.currentX,
@@ -307,9 +348,11 @@ export function HueChannelOverlay({
   // full layout at a glance. The active zone keeps full chrome and is
   // matched by id so the drag-time DOM lookup
   // (`[data-zone-bounds-id=...]`) still resolves a single element.
-  const passiveZones = (allHueZones ?? []).filter(
-    (z) => !activeHueZone || z.id !== activeHueZone.id,
-  );
+  const passiveZones = hidePassiveZoneBounds
+    ? []
+    : (allHueZones ?? []).filter(
+        (z) => !activeHueZone || z.id !== activeHueZone.id,
+      );
 
   return (
     <>
@@ -498,19 +541,29 @@ export function HueChannelOverlay({
       )}
 
       {channels.map((ch) => {
-        // ── v1.5 W1-A6: when in Hue zone scope, derive world position
-        // from the zone-relative coordinates so dragging the zone center
-        // moves all bound channels together without a per-channel update.
+        // ── v1.5 W1-A6 (W4-F2 manual-test 2026-04-28): derive world
+        // position from zone-relative coordinates whenever the channel
+        // is bound to a known Hue zone, regardless of whether that zone
+        // is the active selection. Without this every passive zone's
+        // channels would render at their stale absolute `ch.x/y` coords
+        // and visibly drift away from their parent zone box once the
+        // user moved the zone center.
         let worldX = ch.x;
         let worldY = ch.y;
-        if (activeHueZone && ch.zoneId === activeHueZone.id && ch.zoneRelativePosition) {
+        let boundZone = ch.zoneId
+          ? allHueZones?.find((z) => z.id === ch.zoneId) ?? null
+          : null;
+        if (!boundZone && ch.zoneId && activeHueZone?.id === ch.zoneId) {
+          boundZone = activeHueZone;
+        }
+        if (boundZone && ch.zoneRelativePosition) {
           worldX = clamp(
-            activeHueZone.centerX + activeHueZone.scaleX * ch.zoneRelativePosition.x,
+            boundZone.centerX + boundZone.scaleX * ch.zoneRelativePosition.x,
             -1,
             1,
           );
           worldY = clamp(
-            activeHueZone.centerY + activeHueZone.scaleY * ch.zoneRelativePosition.y,
+            boundZone.centerY + boundZone.scaleY * ch.zoneRelativePosition.y,
             -1,
             1,
           );

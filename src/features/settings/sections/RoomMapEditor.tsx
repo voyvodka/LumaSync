@@ -1209,7 +1209,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 panMode={spaceHeld}
                 activeHueZone={activeHueZone}
                 onHueZoneCenterChange={handleHueZoneCenterChange}
-                allHueZones={showHueZones ? hueZones : []}
+                allHueZones={hueZones}
+                hidePassiveZoneBounds={!showHueZones}
               />
             )}
 
