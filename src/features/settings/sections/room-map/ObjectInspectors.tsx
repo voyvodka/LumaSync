@@ -48,13 +48,12 @@ import { useTranslation } from "react-i18next";
 import type {
   FurniturePlacement,
   HueChannelPlacement,
+  HueZone,
   ImageLayer,
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-  Zone,
 } from "../../../../shared/contracts/roomMap";
-import { ZONE_TYPES } from "../../../../shared/contracts/roomMap";
 
 /* ── shared helpers ─────────────────────────────────────────────── */
 
@@ -691,55 +690,19 @@ export function ImageLayerInspector({
   );
 }
 
-/* ── LogicalZoneInspector ───────────────────────────────────────── */
-
-/**
- * Inspector for `Zone` records with `zoneType === "logical"` (W4-F).
- * Logical zones are USB-side region grouping; they carry no center /
- * scale / entertainment-area metadata. The inspector therefore shows
- * only the channel-count summary and the assignment hint.
- *
- * `LegacyZoneInspector` was the W4-D name for the same surface back when
- * `Zone` and `HueZone` were two parallel structs. The component is
- * re-exported under the legacy name below so older imports keep
- * compiling during the W4-F2 sweep.
- */
-export function LogicalZoneInspector({ zone }: { zone: Zone }) {
-  const { t } = useTranslation("common");
-  return (
-    <>
-      <div className="lm-room-dock-inspect-h">
-        <span>{t("roomMap.inspector.zoneTitle")}</span>
-        <span className="sub" title={zone.name}>
-          {zone.name}
-        </span>
-      </div>
-      <div className="lm-room-dock-field">
-        <span className="lm-room-dock-field-label">{t("roomMap.inspector.channelsLabel")}</span>
-        <span className="lm-room-dock-field-value">{zone.channelIndices.length}</span>
-      </div>
-      <p className="lm-room-dock-field-hint">{t("roomMap.inspector.legacyZoneHint")}</p>
-    </>
-  );
-}
-
-/** @deprecated v1.5 W4-F — re-exported under the W4-D name. Use `LogicalZoneInspector`. */
-export const LegacyZoneInspector = LogicalZoneInspector;
-
 /* ── dispatcher helper used by RoomDockPanel ────────────────────── */
 
 /**
  * Resolve the active selection from the dock's `selectedId` shape and
- * the active zone id. Hue zone wins (W4-C surface), then the selected
- * object, then the active logical zone, then empty.
+ * the active Hue-zone id. Hue zone wins (W4-C surface), then the
+ * selected object, then empty.
  *
- * v1.5 W4-F: both Hue and logical zones live in the unified
- * `config.zones[]` array, disambiguated by `zone.zoneType`. The legacy
- * `config.hueZones[]` field is migrated away by the F6 shim before this
- * dispatcher ever sees the state, so we read exclusively from `zones`.
+ * v1.5 W4-F2: only `HueZone` (Hue Entertainment Area spatial 3D subset)
+ * survives. Logical zones were dropped — see RFC §"Direction reversal"
+ * — so the dispatcher reads exclusively from `config.zones: HueZone[]`.
  */
 export type InspectorTarget =
-  | { kind: "zone"; zone: Zone }
+  | { kind: "hueZone"; zone: HueZone }
   | { kind: "tv"; tv: TvAnchorPlacement }
   | { kind: "furniture"; item: FurniturePlacement }
   | { kind: "usb"; strip: UsbStripPlacement }
@@ -751,13 +714,10 @@ export function resolveInspectorTarget(
   config: RoomMapConfig,
   selectedId: string | null,
   activeHueZoneId: string | null,
-  activeLogicalZoneId: string | null,
 ): InspectorTarget {
   if (activeHueZoneId) {
-    const zone = config.zones.find(
-      (z) => z.id === activeHueZoneId && z.zoneType === ZONE_TYPES.HUE,
-    );
-    if (zone) return { kind: "zone", zone };
+    const zone = config.zones.find((z) => z.id === activeHueZoneId);
+    if (zone) return { kind: "hueZone", zone };
   }
   if (selectedId) {
     if (selectedId === "tv" && config.tvAnchor) {
@@ -778,9 +738,7 @@ export function resolveInspectorTarget(
       const channel = config.hueChannels.find((c) => c.channelIndex === idx);
       if (channel) {
         const zoneName = channel.zoneId
-          ? config.zones.find(
-              (z) => z.id === channel.zoneId && z.zoneType === ZONE_TYPES.HUE,
-            )?.name ?? null
+          ? config.zones.find((z) => z.id === channel.zoneId)?.name ?? null
           : null;
         return { kind: "hueChannel", channel, zoneName };
       }
@@ -790,12 +748,6 @@ export function resolveInspectorTarget(
       const layer = config.imageLayers.find((l) => l.id === id);
       if (layer) return { kind: "image", layer };
     }
-  }
-  if (activeLogicalZoneId) {
-    const zone = config.zones.find(
-      (z) => z.id === activeLogicalZoneId && z.zoneType === ZONE_TYPES.LOGICAL,
-    );
-    if (zone) return { kind: "zone", zone };
   }
   return { kind: "empty" };
 }

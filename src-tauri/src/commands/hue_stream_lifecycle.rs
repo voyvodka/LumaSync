@@ -17,12 +17,12 @@
 //!   `set_hue_solid_color`, `get_hue_stream_status`,
 //!   `get_hue_area_channels`, `simulate_hue_fault`)
 //!
-//! v1.5 W4-F: zone authoring commands (`create_zone`, `update_zone`,
-//! `delete_zone`, `assign_channel_to_zone`) used to live under
-//! `commands::hue::zone`; they have moved to `commands::room_map::zone`
-//! because zones are no longer Hue-exclusive (a unified `Zone` covers
-//! both `ZoneType::Logical` and `ZoneType::Hue`). `lib.rs` registers
-//! them through the new path.
+//! v1.5 W4-F2: Hue zone authoring commands (`create_hue_zone`,
+//! `update_hue_zone`, `delete_hue_zone`, `assign_channel_to_hue_zone`)
+//! used to live under `commands::hue::zone`; they have moved to
+//! `commands::room_map::hue_zone`. The brief unified-`Zone` direction
+//! (W4-F PR1+PR2) was reverted in W4-F2 — only Hue zones remain. `lib.rs`
+//! registers them through the new path.
 
 // ---------------------------------------------------------------------------
 // Frame & state-store types — used by lighting_mode.rs / runtime_telemetry.rs

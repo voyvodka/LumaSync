@@ -68,10 +68,12 @@ use commands::lighting_mode::{
 };
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
+use commands::room_map::hue_zone::{
+    assign_channel_to_hue_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
+};
 use commands::room_map::save_load::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
-use commands::room_map::zone::{assign_channel_to_zone, create_zone, delete_zone, update_zone};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
 
@@ -443,10 +445,10 @@ pub fn run() {
             load_room_map,
             copy_background_image,
             update_hue_channel_positions,
-            create_zone,
-            update_zone,
-            delete_zone,
-            assign_channel_to_zone,
+            create_hue_zone,
+            update_hue_zone,
+            delete_hue_zone,
+            assign_channel_to_hue_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
             discover_wled_devices,
             connect_wled_sink,

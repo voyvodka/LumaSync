@@ -7,7 +7,13 @@ import {
   LIGHTING_SMOOTHING_PRESET_COEFFICIENTS,
   type LightingSmoothingPreset,
 } from "./lighting";
-import { ZONE_COMMANDS, type Zone } from "./roomMap";
+import {
+  HUE_ZONE_COMMANDS as ROOM_MAP_HUE_ZONE_COMMANDS,
+  HUE_ZONE_STATUS_CODES as ROOM_MAP_HUE_ZONE_STATUS_CODES,
+  type HueZone as RoomMapHueZone,
+  type HueZoneCommandId as RoomMapHueZoneCommandId,
+  type HueZoneStatusCode as RoomMapHueZoneStatusCode,
+} from "./roomMap";
 
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
@@ -28,33 +34,40 @@ export const HUE_COMMANDS = {
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
 
 // ---------------------------------------------------------------------------
-// Hue zone authoring — moved to roomMap.ts (v1.5 W4-F)
+// Hue zone authoring — canonical surface lives in `roomMap.ts` (v1.5 W4-F2)
 // ---------------------------------------------------------------------------
 
 /**
- * @deprecated v1.5 W4-F — zone authoring moved to
- * `roomMap.ts > ZONE_COMMANDS` because zones are no longer Hue-exclusive
- * (a unified `Zone` covers both `zoneType: "hue"` and `zoneType: "logical"`).
- * The legacy export points at the new command map so existing call sites
- * (`RoomMapEditor.tsx`, `LightsSection.tsx`) keep compiling until the F2
- * sweep replaces them with `ZONE_COMMANDS`. Note that the dispatched
- * command strings now resolve to `create_zone` / `update_zone` /
- * `delete_zone` / `assign_channel_to_zone` — Rust handlers catch up in F5.
+ * Re-export of the canonical Hue zone command map from `roomMap.ts`.
+ *
+ * v1.5 W4-F2 rolled the W4-F generic `ZONE_COMMANDS` map back to a
+ * Hue-only `HUE_ZONE_COMMANDS` after the direction reversal — see
+ * `.planning/RFCs/v1.5-w4-f-zone-unification.md` "Direction reversal".
+ * The map is owned by `roomMap.ts` (zones are persisted on
+ * `RoomMapConfig`); the alias here keeps existing imports
+ * (`LightsSection`, `RoomMapEditor`) working without source churn.
  */
-export const HUE_ZONE_COMMANDS = ZONE_COMMANDS;
+export const HUE_ZONE_COMMANDS = ROOM_MAP_HUE_ZONE_COMMANDS;
+
+/** Re-export of the canonical Hue zone command id type. */
+export type HueZoneCommandId = RoomMapHueZoneCommandId;
 
 /**
- * @deprecated v1.5 W4-F — use `ZoneCommandId` from `./roomMap` instead.
+ * Re-export of the canonical `HueZone` interface (single source of truth
+ * in `roomMap.ts`). Hue-only after the W4-F2 reversal — no longer a
+ * discriminated-union projection.
  */
-export type HueZoneCommandId =
-  (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
+export type HueZone = RoomMapHueZone;
 
 /**
- * @deprecated v1.5 W4-F — re-exported from `./roomMap`. Hue zone is now a
- * `Zone & { zoneType: "hue" }` view of the unified `Zone` struct. New
- * call sites should import `Zone` directly.
+ * Re-export of the eight Hue zone authoring status codes. Surfaced here
+ * so consumers that already import from `hue.ts` keep a single import
+ * surface for Hue runtime + Hue zone authoring.
  */
-export type HueZone = Zone;
+export const HUE_ZONE_STATUS_CODES = ROOM_MAP_HUE_ZONE_STATUS_CODES;
+
+/** Re-export of the canonical Hue zone status code union. */
+export type HueZoneStatusCode = RoomMapHueZoneStatusCode;
 
 export const HUE_STATUS = {
   DISCOVERY_OK: "HUE_DISCOVERY_OK",
@@ -104,19 +117,16 @@ export const HUE_STATUS = {
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
   // -------------------------------------------------------------------------
-  // Hue zone authoring codes — REMOVED in v1.5 W4-F
+  // Hue zone authoring codes — live in `roomMap.ts > HUE_ZONE_STATUS_CODES`
   // -------------------------------------------------------------------------
-  // The previous `ZONE_*` family (`HUE_ZONE_CREATED`, `HUE_ZONE_UPDATED`,
+  // The eight Hue zone authoring codes (`HUE_ZONE_CREATED`, `HUE_ZONE_UPDATED`,
   // `HUE_ZONE_DELETED`, `HUE_ZONE_NOT_FOUND`, `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`,
   // `HUE_ZONE_LIMIT_REACHED`, `HUE_ZONE_CHANNEL_NOT_IN_AREA`,
-  // `HUE_ZONE_OVERSIZED`) was dropped from `HUE_STATUS`. Zone codes now
-  // live in `roomMap.ts > ZONE_STATUS_CODES` under the renamed `ZONE_*`
-  // prefix because zones are no longer Hue-exclusive. Two new codes
-  // (`ZONE_TYPE_INVALID`, `ZONE_CONVERSION_OK`) accompany the move.
-  //
-  // Per RFC §2.2 there is no published frontend that depends on the old
-  // strings (W1-A2 shipped only on dev branches), so no backwards-compat
-  // alias is exported. The Rust constants will be renamed in F5.
+  // `HUE_ZONE_OVERSIZED`) are NOT inlined in `HUE_STATUS`. They live in
+  // `roomMap.ts > HUE_ZONE_STATUS_CODES` and are re-exported above as
+  // `HUE_ZONE_STATUS_CODES` for callers that prefer a single Hue import
+  // surface. (The brief W4-F generic `ZONE_*` rename was reverted in
+  // W4-F2 alongside the unification rollback.)
   // -------------------------------------------------------------------------
   // OS keychain credential store (v1.5 W2-A1 / W2-A2)
   // -------------------------------------------------------------------------

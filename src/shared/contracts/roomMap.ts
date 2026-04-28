@@ -11,6 +11,16 @@
  * x: -1=left, +1=right
  * y: -1=bottom, +1=top
  * z: -1=floor, +1=ceiling
+ *
+ * v1.5 W4-F2 (2026-04-28): the W4-F unification (`Zone` discriminated by
+ * `zoneType: "logical" | "hue"`) is rolled forward into a single Hue-only
+ * surface. The "logical zone" concept has no clean industry analog and is
+ * dropped entirely; only `HueZone` (spatial 3D, mirroring Hue Entertainment
+ * Area channels) survives. Future zone kinds — `ScreenZone` (Hyperion-style
+ * screen rectangles) and `LedZone` (USB-side grouping) — will land later as
+ * separate, explicit-prefix types in their own modules and are NOT wired
+ * through this contract. See `.planning/RFCs/v1.5-w4-f-zone-unification.md`
+ * "Direction reversal (2026-04-28)".
  */
 
 // ---------------------------------------------------------------------------
@@ -33,13 +43,12 @@ export const ROOM_MAP_COMMANDS = {
  * v1.5 W1-A1: an optional `zoneId` + `zoneRelativePosition` pair is layered
  * on top of the legacy absolute coordinates. When `zoneId` is set, the
  * `zoneRelativePosition` is the authoritative source of truth and the
- * absolute `x/y/z` are derived from `Zone.center{X,Y,Z}` plus
- * `Zone.scale{X,Y,Z}` at runtime. Existing call sites that only know
+ * absolute `x/y/z` are derived from `HueZone.center{X,Y,Z}` plus
+ * `HueZone.scale{X,Y,Z}` at runtime. Existing call sites that only know
  * about `x/y/z` keep working unchanged (legacy flat mode).
  *
- * v1.5 W4-F: `zoneId` references a unified `Zone` whose `zoneType === "hue"`
- * (resolution is a no-op for `zoneType === "logical"` — logical zones never
- * own zone-relative coordinates).
+ * v1.5 W4-F2: `zoneId` references a `HueZone` (the only surviving zone
+ * kind after the direction reversal — logical zones were dropped).
  */
 export interface HueChannelPlacement {
   /** Channel index within the entertainment area (0-based) */
@@ -55,15 +64,14 @@ export interface HueChannelPlacement {
   locked?: boolean;
   /**
    * v1.5 W1-A1 — when present, this channel is logically grouped under the
-   * referenced `Zone` (with `zoneType === "hue"`). Absent ⇒ legacy
-   * absolute placement.
+   * referenced `HueZone`. Absent ⇒ legacy absolute placement.
    */
   zoneId?: string;
   /**
    * v1.5 W1-A1 — zone-relative position in [-1, 1] × [-1, 1] × [-1, 1]
    * coordinates. Authoritative when `zoneId` is set; ignored otherwise.
    * The world-space `x/y/z` above are derived from this via
-   * `Zone.center + Zone.scale * zoneRelativePosition`.
+   * `HueZone.center + HueZone.scale * zoneRelativePosition`.
    */
   zoneRelativePosition?: {
     x: number;
@@ -145,128 +153,86 @@ export interface RoomDimensions {
 }
 
 // ---------------------------------------------------------------------------
-// Zone (v1.5 W4-F — unified `Zone` replacing `ZoneDefinition` + `HueZone`)
+// Hue Zone (v1.5 W4-F2 — sole surviving zone kind, Hue Entertainment Area
+// spatial 3D subset). Logical / screen / LED zones intentionally NOT wired
+// into this contract; they ship later as explicit-prefix types in their own
+// modules.
 // ---------------------------------------------------------------------------
 
 /**
- * Discriminator value for `Zone.zoneType`.
+ * Hue Entertainment Area zone descriptor. A `HueZone` represents a named
+ * 3D-positioned subset of an entertainment area's channels — the user
+ * authors the zone as a physical bounding box (center + per-axis scale)
+ * and channels reference the zone via `HueChannelPlacement.zoneId`. The
+ * runtime sampler resolves world-space coordinates as
+ * `world = center + scale * zoneRelativePosition`.
  *
- * - `"logical"` — USB-side region grouping. No bridge interaction; carries
- *   `channelIndices` + optional `region` hint and (optionally) a UI
- *   `borderColor` for the strip badge.
- * - `"hue"` — Hue entertainment area subset. Owns `entertainmentAreaId`,
- *   center coordinates and per-axis scale; channels referencing this
- *   zone via `HueChannelPlacement.zoneId` are resolved as
- *   `world = center + scale * zoneRelativePosition`.
+ * Coordinate system: same Hue native space as `HueChannelPlacement` —
+ * `centerX/Y/Z` and `scaleX/Y/Z` are in `[-1, 1]`. The bridge per-area
+ * channel cap (10) applies to `channelIndices`.
+ *
+ * `borderColor` is a UI hint for the dashed bounds box and channel ring
+ * tint; the runtime sampler never reads it.
  */
-export const ZONE_TYPES = {
-  LOGICAL: "logical",
-  HUE: "hue",
-} as const;
-
-export type ZoneType = (typeof ZONE_TYPES)[keyof typeof ZONE_TYPES];
-
-/**
- * Unified zone descriptor (v1.5 W4-F). Single struct with optional Hue-only
- * fields rather than a TS discriminated union — see RFC §1.1 for rationale:
- *
- * - Persisted JSON survives a sloppy migration (extra fields on a `logical`
- *   zone are tolerated, ignored).
- * - Rust mirror maps cleanly to a single struct with `Option<>` fields, no
- *   `#[serde(tag = "zoneType")]` round-trip during the switchover commit.
- * - Frontend disambiguation is one `zone.zoneType === ZONE_TYPES.HUE`
- *   check at the point of use.
- *
- * Backend invariants (enforced in Rust handlers):
- * - `zoneType === "hue"` ⇒ `entertainmentAreaId`, `centerX/Y/Z`, `scaleX/Y/Z`
- *   MUST be populated (else `ZONE_TYPE_INVALID`).
- * - `zoneType === "logical"` ⇒ Hue-only fields MUST be absent or undefined
- *   (else `ZONE_TYPE_INVALID`).
- *
- * Coordinate system (when `zoneType === "hue"`): same Hue native space as
- * `HueChannelPlacement` — `centerX/Y/Z` and `scaleX/Y/Z` are in `[-1, 1]`.
- *
- * `borderColor` is a UI hint shared by both types; the runtime sampler
- * never reads it.
- */
-export interface Zone {
+export interface HueZone {
   /** Stable id used by `HueChannelPlacement.zoneId`. */
   id: string;
   /** Human-readable label shown in the zone editor. */
   name: string;
-  /** Discriminator — drives badge selection + backend validation branch. */
-  zoneType: ZoneType;
   /**
-   * Channel indices assigned to this zone.
-   * - `zoneType === "hue"` ⇒ entertainment-area channel indices (0-based,
-   *   bounded by the bridge's per-area cap).
-   * - `zoneType === "logical"` ⇒ USB-side LED indices grouped under this
-   *   region. May be empty (zone exists for region tagging only).
+   * Parent entertainment area id (one Hue zone never spans two areas).
+   */
+  entertainmentAreaId: string;
+  /** Zone center X in Hue native space ([-1, 1]). */
+  centerX: number;
+  /** Zone center Y in Hue native space ([-1, 1]). */
+  centerY: number;
+  /** Zone center Z in Hue native space ([-1, 1]). */
+  centerZ: number;
+  /** Per-axis zone-to-world scale. `1.0` ⇒ zone covers full Hue space. */
+  scaleX: number;
+  /** Per-axis zone-to-world scale. */
+  scaleY: number;
+  /** Per-axis zone-to-world scale. */
+  scaleZ: number;
+  /**
+   * Entertainment-area channel indices (0-based, bounded by the bridge's
+   * per-area cap of 10).
    */
   channelIndices: number[];
   /**
-   * Parent entertainment area id (one Hue zone never spans two areas).
-   * Required when `zoneType === "hue"`, undefined for `"logical"` zones.
-   */
-  entertainmentAreaId?: string;
-  /** Zone center X in Hue native space ([-1, 1]). Hue-only. */
-  centerX?: number;
-  /** Zone center Y in Hue native space ([-1, 1]). Hue-only. */
-  centerY?: number;
-  /** Zone center Z in Hue native space ([-1, 1]). Hue-only. */
-  centerZ?: number;
-  /** Per-axis zone-to-world scale. `1.0` ⇒ zone covers full Hue space. Hue-only. */
-  scaleX?: number;
-  /** Per-axis zone-to-world scale. Hue-only. */
-  scaleY?: number;
-  /** Per-axis zone-to-world scale. Hue-only. */
-  scaleZ?: number;
-  /**
-   * Logical zone region hint (USB region-assignment system).
-   * Logical-only — Hue zones express position via center/scale instead.
-   */
-  region?: string;
-  /**
    * Optional UI hint for the zone outline color. Drives the dashed bounds
-   * box (Hue zones), the strip badge tint (logical zones), and the channel
-   * ring rendered by `HueChannelOverlay`. Both zone types render the same
-   * amber Rev 07 fallback when absent.
+   * box and the channel ring rendered by `HueChannelOverlay`. Falls back
+   * to the amber Rev 07 token when absent. The runtime sampler ignores
+   * this field.
    */
   borderColor?: string;
   /**
-   * @deprecated v1.5 — collapsed onto `borderColor` (legacy `HueZone`
-   * field). Kept on the contract so previously persisted configs
-   * deserialise without loss; new authoring flows must NOT write this
-   * field.
+   * @deprecated v1.5 — collapsed onto `borderColor` after manual testing
+   * showed the dual-color affordance was confusing. Kept on the contract
+   * so previously persisted configs deserialise without loss; new
+   * authoring flows MUST NOT write this field.
    */
   centerColor?: string;
 }
 
 // ---------------------------------------------------------------------------
-// Legacy zone shapes (v1.5 W4-F migration shim — read-only fallbacks)
+// Legacy zone shapes (v1.5 W4-F2 migration shim — read-only fallbacks)
 // ---------------------------------------------------------------------------
 
 /**
- * @deprecated v1.5 W4-F — superseded by `Zone` with `zoneType: "logical"`.
- * Kept as a type so `toLogicalZone` can convert legacy persisted records
- * during the one-shot `schemaVersion: 1 → 2` migration.
+ * @deprecated v1.5 W4-F2 — read-only legacy migration shape. The original
+ * v1.5 W1-A1 `HueZone` interface (pre-W4-F unification) had the same
+ * structural shape as the canonical `HueZone` above. Kept under the
+ * `LegacyHueZone` name so `migrateLegacyHueZone` can validate persisted
+ * records during the one-shot `schemaVersion: 1 → 2` migration without
+ * colliding with the new canonical type.
+ *
+ * Note that the structural layout is identical to `HueZone`; the rename
+ * exists purely so the migration helper has a distinct compile-time
+ * type to anchor on.
  */
-export interface ZoneDefinition {
-  id: string;
-  name: string;
-  /** Channel indices assigned to this zone */
-  channelIndices: number[];
-  /** Zone region hint (maps to region assignment system) */
-  region?: string;
-}
-
-/**
- * @deprecated v1.5 W4-F — superseded by `Zone` with `zoneType: "hue"`.
- * Kept as a type so `toHueZone` can convert legacy persisted records
- * during the one-shot `schemaVersion: 1 → 2` migration. Re-exported with
- * the legacy structural shape from W1-A1.
- */
-export interface HueZone {
+export interface LegacyHueZone {
   id: string;
   name: string;
   entertainmentAreaId: string;
@@ -285,15 +251,34 @@ export interface HueZone {
   centerColor?: string;
 }
 
+/**
+ * @deprecated v1.5 W4-F2 — read-only legacy migration shape. Pre-W4-F
+ * USB-side region grouping. The W4-F unification briefly tried to
+ * promote this into a generic `Zone & { zoneType: "logical" }`; the
+ * reversal dropped the concept entirely. The interface survives only so
+ * the migration shim can detect previously persisted records and DROP
+ * them with a `console.warn`. New code paths MUST NOT consume this
+ * type. See `.planning/RFCs/v1.5-w4-f-zone-unification.md` "Direction
+ * reversal".
+ */
+export interface ZoneDefinition {
+  id: string;
+  name: string;
+  /** Channel indices assigned to this zone */
+  channelIndices: number[];
+  /** Zone region hint (maps to region assignment system) */
+  region?: string;
+}
+
 // ---------------------------------------------------------------------------
-// Migration helpers (v1.5 W4-F — pure functions, wire-up lands in F6)
+// Migration helpers (v1.5 W4-F2 — pure functions consumed by F6 shim)
 // ---------------------------------------------------------------------------
 
 /**
  * Internal helper — guards a legacy persisted record against the most common
  * corruption shapes seen in plaintext on-disk JSON: `null`, non-object,
- * `Array.isArray`, missing fields. Centralised so both legacy converters
- * reuse the same gate.
+ * `Array.isArray`, missing fields. Centralised so the migration helper
+ * reuses a single gate.
  */
 function isPlainLegacyRecord(legacy: unknown): legacy is Record<string, unknown> {
   return (
@@ -309,78 +294,27 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
- * Convert a legacy `ZoneDefinition` (USB-side region grouping) into a
- * unified `Zone` with `zoneType === "logical"`. Pure function — safe to
- * call in any context.
+ * Convert a `LegacyHueZone` (pre-W4-F2 persisted shape, structurally
+ * identical to the canonical `HueZone` but typed separately so the
+ * migration is anchored at compile time) into a canonical `HueZone`.
+ * Pure function — safe to call in any context.
  *
- * Used by the `schemaVersion 1 → 2` migration shim that lands in F6.
- * This helper is exported here (and not inside `loadShellState`) so the
- * migration is testable in isolation.
- *
- * Returns `null` and emits `console.warn` when the input fails the minimal
- * shape gate (non-object, missing/empty `id` or `name`, non-array
- * `channelIndices`). Migration callers MUST filter `null` results so corrupt
- * records are dropped instead of corrupting the unified `zones[]`. RFC §7 #1.
- */
-export function toLogicalZone(legacy: ZoneDefinition): Zone | null {
-  if (!isPlainLegacyRecord(legacy)) {
-    console.warn(
-      "[LumaSync] migration: dropping corrupt ZoneDefinition (not a plain object)",
-      legacy,
-    );
-    return null;
-  }
-
-  const id = legacy.id;
-  const name = legacy.name;
-  const channelIndices = legacy.channelIndices;
-
-  if (typeof id !== "string" || id.length === 0) {
-    console.warn("[LumaSync] migration: dropping corrupt ZoneDefinition (missing id)", legacy);
-    return null;
-  }
-  if (typeof name !== "string" || name.length === 0) {
-    console.warn(
-      "[LumaSync] migration: dropping corrupt ZoneDefinition (missing name)",
-      legacy,
-    );
-    return null;
-  }
-  if (!Array.isArray(channelIndices)) {
-    console.warn(
-      "[LumaSync] migration: dropping corrupt ZoneDefinition (channelIndices not an array)",
-      legacy,
-    );
-    return null;
-  }
-
-  return {
-    id,
-    name,
-    zoneType: ZONE_TYPES.LOGICAL,
-    channelIndices,
-    region: legacy.region,
-  };
-}
-
-/**
- * Convert a legacy `HueZone` into a unified `Zone` with
- * `zoneType === "hue"`. Pure function — safe to call in any context.
- *
- * Used by the `schemaVersion 1 → 2` migration shim that lands in F6.
- * The `centerColor` deprecated field is intentionally dropped on the
- * way through; the migration shim's behaviour matches the W1-A1 v1.5
- * deprecation note (new authoring never writes it, old reads tolerated).
+ * Used by the `schemaVersion 1 → 2` migration shim. This helper is
+ * exported here (not inside `loadShellState`) so the migration is
+ * testable in isolation.
  *
  * Returns `null` and emits `console.warn` when the input fails the Hue
- * shape gate (non-object, missing/empty `id` / `name` / `entertainmentAreaId`,
- * non-finite `centerX/Y/Z` or `scaleX/Y/Z`, non-array `channelIndices`).
- * Migration callers MUST filter `null` results. RFC §7 #1.
+ * shape gate (non-object, missing/empty `id` / `name` /
+ * `entertainmentAreaId`, non-finite `centerX/Y/Z` or `scaleX/Y/Z`,
+ * non-array `channelIndices`). Migration callers MUST filter `null`
+ * results so corrupt records are dropped instead of corrupting the
+ * `zones[]` array. See `.planning/RFCs/v1.5-w4-f-zone-unification.md`
+ * §7 #1.
  */
-export function toHueZone(legacy: HueZone): Zone | null {
+export function migrateLegacyHueZone(legacy: LegacyHueZone): HueZone | null {
   if (!isPlainLegacyRecord(legacy)) {
     console.warn(
-      "[LumaSync] migration: dropping corrupt HueZone (not a plain object)",
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (not a plain object)",
       legacy,
     );
     return null;
@@ -392,16 +326,22 @@ export function toHueZone(legacy: HueZone): Zone | null {
   const channelIndices = legacy.channelIndices;
 
   if (typeof id !== "string" || id.length === 0) {
-    console.warn("[LumaSync] migration: dropping corrupt HueZone (missing id)", legacy);
+    console.warn(
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (missing id)",
+      legacy,
+    );
     return null;
   }
   if (typeof name !== "string" || name.length === 0) {
-    console.warn("[LumaSync] migration: dropping corrupt HueZone (missing name)", legacy);
+    console.warn(
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (missing name)",
+      legacy,
+    );
     return null;
   }
   if (typeof entertainmentAreaId !== "string" || entertainmentAreaId.length === 0) {
     console.warn(
-      "[LumaSync] migration: dropping corrupt HueZone (missing entertainmentAreaId)",
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (missing entertainmentAreaId)",
       legacy,
     );
     return null;
@@ -412,7 +352,7 @@ export function toHueZone(legacy: HueZone): Zone | null {
     !isFiniteNumber(legacy.centerZ)
   ) {
     console.warn(
-      "[LumaSync] migration: dropping corrupt HueZone (non-finite center coordinates)",
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (non-finite center coordinates)",
       legacy,
     );
     return null;
@@ -423,14 +363,14 @@ export function toHueZone(legacy: HueZone): Zone | null {
     !isFiniteNumber(legacy.scaleZ)
   ) {
     console.warn(
-      "[LumaSync] migration: dropping corrupt HueZone (non-finite scale)",
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (non-finite scale)",
       legacy,
     );
     return null;
   }
   if (!Array.isArray(channelIndices)) {
     console.warn(
-      "[LumaSync] migration: dropping corrupt HueZone (channelIndices not an array)",
+      "[LumaSync] migration: dropping corrupt LegacyHueZone (channelIndices not an array)",
       legacy,
     );
     return null;
@@ -439,7 +379,6 @@ export function toHueZone(legacy: HueZone): Zone | null {
   return {
     id,
     name,
-    zoneType: ZONE_TYPES.HUE,
     entertainmentAreaId,
     centerX: legacy.centerX,
     centerY: legacy.centerY,
@@ -452,154 +391,77 @@ export function toHueZone(legacy: HueZone): Zone | null {
   };
 }
 
-/**
- * Project a unified `Zone` back to the legacy `HueZone` shape (Hue-only
- * fields required, no discriminator). Returns `null` when the input is
- * not a Hue zone or when one of the Hue-only fields is missing.
- *
- * Why this exists (v1.5 W4-F transition): a number of downstream UI
- * components — `RoomDockPanel`, `HueChannelOverlay`, `RoomMapCanvas` —
- * still consume the legacy `HueZone` interface. Migrating each of them
- * to read `Zone` directly is a large blast-radius sweep; the legacy
- * projection lets the new `config.zones[]` source-of-truth coexist with
- * the old prop signatures during the W4-F2/F3/F4 UX rollout. The
- * migration shim guarantees every `zoneType: "hue"` record has the
- * required fields populated, so the null returns here are a defensive
- * guard against contract drift in caller code rather than a normal
- * branch.
- *
- * Future work (v1.6+): once every consumer accepts `Zone` directly the
- * helper can be deleted along with the legacy `HueZone` interface.
- */
-export function asHueZoneLegacy(zone: Zone): HueZone | null {
-  if (zone.zoneType !== ZONE_TYPES.HUE) return null;
-  if (
-    zone.entertainmentAreaId === undefined ||
-    zone.centerX === undefined ||
-    zone.centerY === undefined ||
-    zone.centerZ === undefined ||
-    zone.scaleX === undefined ||
-    zone.scaleY === undefined ||
-    zone.scaleZ === undefined
-  ) {
-    return null;
-  }
-  return {
-    id: zone.id,
-    name: zone.name,
-    entertainmentAreaId: zone.entertainmentAreaId,
-    centerX: zone.centerX,
-    centerY: zone.centerY,
-    centerZ: zone.centerZ,
-    scaleX: zone.scaleX,
-    scaleY: zone.scaleY,
-    scaleZ: zone.scaleZ,
-    channelIndices: zone.channelIndices,
-    borderColor: zone.borderColor,
-  };
-}
-
 // ---------------------------------------------------------------------------
-// Zone command surface (v1.5 W4-F — moved out of `hue.ts > HUE_ZONE_COMMANDS`)
+// Hue Zone command surface (v1.5 W4-F2 — Hue-only after the direction
+// reversal; the W4-F generic `ZONE_COMMANDS` map is replaced 1:1 by the
+// renamed Hue-only map below).
 // ---------------------------------------------------------------------------
 
 /**
- * Authoring commands for `Zone[]`. Backend dispatch branches on
- * `zone.zoneType` so a single command surface covers both logical and
- * Hue zones — no parallel `create_logical_zone` / `create_hue_zone`
- * pair is required.
- *
- * The previous `HUE_ZONE_COMMANDS` map (v1.5 W1-A2) is preserved as a
- * `@deprecated` re-export inside `hue.ts` pointing at THESE values, so
- * the call sites in `RoomMapEditor.tsx` and `LightsSection.tsx` keep
- * compiling until F2/F3/F4 sweep them. The Rust handler list catches
- * up in F5; both sides become green together at the end of PR #1.
+ * Authoring commands for `HueZone[]`. Backend dispatch is single-branch
+ * (no `zoneType` discriminator after the W4-F2 reversal). The four
+ * verbs map 1:1 to the four Rust handlers under
+ * `src-tauri/src/commands/room_map/hue_zone.rs`.
  */
-export const ZONE_COMMANDS = {
-  CREATE_ZONE: "create_zone",
-  UPDATE_ZONE: "update_zone",
-  DELETE_ZONE: "delete_zone",
-  ASSIGN_CHANNEL_TO_ZONE: "assign_channel_to_zone",
+export const HUE_ZONE_COMMANDS = {
+  CREATE_HUE_ZONE: "create_hue_zone",
+  UPDATE_HUE_ZONE: "update_hue_zone",
+  DELETE_HUE_ZONE: "delete_hue_zone",
+  ASSIGN_CHANNEL_TO_HUE_ZONE: "assign_channel_to_hue_zone",
 } as const;
 
-export type ZoneCommandId = (typeof ZONE_COMMANDS)[keyof typeof ZONE_COMMANDS];
+export type HueZoneCommandId =
+  (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
 
 // ---------------------------------------------------------------------------
-// Zone status codes (v1.5 W4-F — renamed from `HUE_ZONE_*` to `ZONE_*`)
+// Hue Zone status codes (v1.5 W4-F2 — Hue-only after the direction reversal,
+// renamed from the W4-F generic `ZONE_*` family back to `HUE_ZONE_*`).
 // ---------------------------------------------------------------------------
 
 /**
- * Status codes emitted by the four zone authoring commands. Replaces the
- * v1.5 W1-A2 `HUE_ZONE_*` family in `hue.ts > HUE_STATUS`. The codes
- * carry the `ZONE_*` prefix because zones are no longer Hue-exclusive
- * (a `zoneType === "logical"` rejection still uses these codes).
+ * Status codes emitted by the four Hue zone authoring commands. After the
+ * v1.5 W4-F2 direction reversal these codes are Hue-only — the W4-F
+ * `ZONE_TYPE_INVALID` and `ZONE_CONVERSION_OK` codes (which only made
+ * sense in a logical/Hue discriminated world) are gone.
  *
- * Two new codes (vs. the W1-A2 baseline):
- * - `ZONE_TYPE_INVALID` — the zone failed the type-shape contract (Hue
- *   zone missing required field, logical zone carrying Hue-only fields).
- * - `ZONE_CONVERSION_OK` — the F4 "duplicate as logical" path succeeded;
- *   distinguished from `ZONE_CREATED` so the UI can show a "duplicated
- *   as logical" toast separate from the generic "zone added" toast.
- *
- * The remaining 6 are mechanical renames (`HUE_ZONE_X` → `ZONE_X`) and
- * narrow which `zoneType` may emit them — see RFC §2.2.
+ * The eight surviving codes mirror the original v1.5 W1-A2 baseline. The
+ * Rust constants will catch up in the paired `hue-expert` spawn.
  */
-export const ZONE_STATUS_CODES = {
-  /** `create_zone` succeeded; the new zone id is in the payload. */
-  ZONE_CREATED: "ZONE_CREATED",
-  /** `update_zone` succeeded; the mutated zone is in the payload. */
-  ZONE_UPDATED: "ZONE_UPDATED",
-  /** `delete_zone` succeeded; channels formerly in the zone fall back to legacy absolute placement (Hue) or unassigned (logical). */
-  ZONE_DELETED: "ZONE_DELETED",
+export const HUE_ZONE_STATUS_CODES = {
+  /** `create_hue_zone` succeeded; the new zone id is in the payload. */
+  HUE_ZONE_CREATED: "HUE_ZONE_CREATED",
+  /** `update_hue_zone` succeeded; the mutated zone is in the payload. */
+  HUE_ZONE_UPDATED: "HUE_ZONE_UPDATED",
+  /** `delete_hue_zone` succeeded; channels formerly in the zone fall back to legacy absolute placement. */
+  HUE_ZONE_DELETED: "HUE_ZONE_DELETED",
   /** Referenced zone id does not exist in the active room map. */
-  ZONE_NOT_FOUND: "ZONE_NOT_FOUND",
+  HUE_ZONE_NOT_FOUND: "HUE_ZONE_NOT_FOUND",
   /**
    * Zone-relative position is outside the [-1, 1] cube on at least one
-   * axis. Emitted only when `zoneType === "hue"` — logical zones do not
-   * own zone-relative coordinates.
+   * axis.
    */
-  ZONE_CHANNEL_OUT_OF_BOUNDS: "ZONE_CHANNEL_OUT_OF_BOUNDS",
+  HUE_ZONE_CHANNEL_OUT_OF_BOUNDS: "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS",
   /**
-   * Per-area bridge channel cap (Hue: 10 per area) reached. Emitted only
-   * when `zoneType === "hue"` — logical zones have no bridge cap, so a
-   * 12-LED USB strip's logical zone never trips this code.
+   * Per-area bridge channel cap (Hue: 10 per area) reached.
    */
-  ZONE_LIMIT_REACHED: "ZONE_LIMIT_REACHED",
+  HUE_ZONE_LIMIT_REACHED: "HUE_ZONE_LIMIT_REACHED",
   /**
    * Tried to assign a channel that lives in a different entertainment
-   * area than the zone's `entertainmentAreaId`. Emitted only when
-   * `zoneType === "hue"`; logical zones have no `entertainmentAreaId`,
-   * so the area check is skipped entirely.
+   * area than the zone's `entertainmentAreaId`.
    */
-  ZONE_CHANNEL_NOT_IN_AREA: "ZONE_CHANNEL_NOT_IN_AREA",
+  HUE_ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
   /**
    * Zone scale exceeds the room or undershoots the slider floor (per-axis
-   * `[0.05, 1.0]` clamp). Emitted only when `zoneType === "hue"`. See
-   * v1.5 W4-I notes — the previous uniform aspect-ratio lock was dropped,
-   * zones are authored as physical 1:1 metric squares, so a non-square
-   * room deliberately writes asymmetric `scaleX` / `scaleY`.
+   * `[0.05, 1.0]` clamp). See v1.5 W4-I notes — the previous uniform
+   * aspect-ratio lock was dropped, zones are authored as physical 1:1
+   * metric squares, so a non-square room deliberately writes asymmetric
+   * `scaleX` / `scaleY`.
    */
-  ZONE_OVERSIZED: "ZONE_OVERSIZED",
-  /**
-   * v1.5 W4-F (new) — rejection when a `zoneType: "hue"` zone is missing
-   * `entertainmentAreaId` / center / scale, OR a `zoneType: "logical"`
-   * zone carries Hue-only fields populated with non-default values.
-   * Distinct from `ZONE_NOT_FOUND` (id resolution) — this is a
-   * type-shape contract violation surfaced before the persist.
-   */
-  ZONE_TYPE_INVALID: "ZONE_TYPE_INVALID",
-  /**
-   * v1.5 W4-F (new) — F4 "convert hue → logical" duplicate succeeded.
-   * Status differs from `ZONE_CREATED` so the UI can show a
-   * "duplicated as logical" toast distinct from the generic "zone added"
-   * toast. The new logical zone id is in the payload alongside the
-   * original Hue zone id (so the UI can flash both).
-   */
-  ZONE_CONVERSION_OK: "ZONE_CONVERSION_OK",
+  HUE_ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
 } as const;
 
-export type ZoneStatusCode =
-  (typeof ZONE_STATUS_CODES)[keyof typeof ZONE_STATUS_CODES];
+export type HueZoneStatusCode =
+  (typeof HUE_ZONE_STATUS_CODES)[keyof typeof HUE_ZONE_STATUS_CODES];
 
 // ---------------------------------------------------------------------------
 // Image Layer
@@ -637,12 +499,13 @@ export interface ImageLayer {
  * Full room map configuration persisted via shellStore.
  * Optional fields allow partial configurations during initial setup.
  *
- * v1.5 W4-F: `zones` was widened from `ZoneDefinition[]` to `Zone[]`. The
- * legacy `hueZones?: HueZone[]` field stays on the contract as a
- * `@deprecated` read-only fallback so the F6 migration shim can detect
- * leftover plaintext-on-disk states from in-development W1-A1 builds.
- * New code paths MUST NOT write `hueZones` — write into the unified
- * `zones[]` with `zoneType: "hue"` instead.
+ * v1.5 W4-F2: `zones: HueZone[]` is the single Hue-only zone array (the
+ * W4-F unified discriminator was rolled back — see RFC "Direction
+ * reversal"). The legacy `hueZones?: LegacyHueZone[]` field stays on the
+ * contract as a `@deprecated` read-only fallback so the F6 migration
+ * shim can fold leftover plaintext-on-disk states from in-development
+ * W1-A1 builds. New code paths MUST NOT write `hueZones` — write into
+ * `zones[]` instead.
  */
 export interface RoomMapConfig {
   dimensions: RoomDimensions;
@@ -651,18 +514,18 @@ export interface RoomMapConfig {
   furniture: FurniturePlacement[];
   tvAnchor?: TvAnchorPlacement;
   /**
-   * Unified zone list (v1.5 W4-F). Replaces both `ZoneDefinition[]` and
-   * the deprecated `hueZones?: HueZone[]` field below; disambiguate via
-   * `zone.zoneType` at the point of use.
+   * Hue zone list (v1.5 W4-F2 — Hue-only after the direction reversal).
+   * Each entry is a `HueZone`; logical / screen / LED zones are NOT
+   * stored here and will land later in their own arrays.
    */
-  zones: Zone[];
+  zones: HueZone[];
   /**
-   * @deprecated v1.5 W4-F — read-only fallback during migration shim
-   * window. The F6 migration converts these into `zones[]` entries with
-   * `zoneType: "hue"` and strips the field on next save. New code paths
-   * MUST NOT write here; logical and Hue zones share `zones[]`.
+   * @deprecated v1.5 W4-F2 — read-only fallback during migration shim
+   * window. The F6 migration converts these into `zones[]: HueZone[]`
+   * entries and strips the field on next save. New code paths MUST NOT
+   * write here.
    */
-  hueZones?: HueZone[];
+  hueZones?: LegacyHueZone[];
   /** Image layers (floor plans, reference images, etc.) */
   imageLayers: ImageLayer[];
   /** @deprecated Use imageLayers instead — kept for migration */

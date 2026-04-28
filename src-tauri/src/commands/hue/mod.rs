@@ -18,9 +18,11 @@
 //!   Keychain / Windows CredMan / Linux Secret Service) used by W2-A2
 //!   to migrate Hue credentials off the plaintext shellStore fields.
 //!
-//! v1.5 W4-F: the previous `zone` submodule moved to
-//! `commands::room_map::zone` because zones are no longer Hue-exclusive
-//! (a unified `Zone` covers both `ZoneType::Logical` and `ZoneType::Hue`).
+//! v1.5 W4-F2: the previous `zone` submodule moved to
+//! `commands::room_map::hue_zone`. The unified-`Zone`-with-discriminator
+//! direction (W4-F PR1+PR2) was reverted in W4-F2 — `HueZone` is the only
+//! zone kind that lives there today; future zone kinds (`ScreenZone`,
+//! `LedZone`) will land in their own modules with their own struct shapes.
 //!
 //! The parent `commands::hue_stream_lifecycle` module is kept as a thin
 //! re-export shim so external callers (`lib.rs`, `lighting_mode.rs`,

@@ -28,9 +28,7 @@ import type {
   HueChannelPlacement,
   HueZone,
   RoomDimensions,
-  Zone,
 } from "../../../shared/contracts/roomMap";
-import { ZONE_TYPES, asHueZoneLegacy } from "../../../shared/contracts/roomMap";
 import type { LedSegmentCounts } from "../../calibration/model/contracts";
 import React from "react";
 import { shellStore } from "../../persistence/shellStore";
@@ -55,18 +53,6 @@ interface RoomMapEditorProps {
    */
   hueReachable?: boolean;
 }
-
-// CSS custom property references matching ZONE_COLORS Tailwind classes
-// (for inline boxShadow ring). Hex values are defined in src/styles.css
-// under --lm-zone-{1..6} so JS and CSS share a single source of truth.
-const ZONE_COLOR_HEX = [
-  "var(--lm-zone-1)",
-  "var(--lm-zone-2)",
-  "var(--lm-zone-3)",
-  "var(--lm-zone-4)",
-  "var(--lm-zone-5)",
-  "var(--lm-zone-6)",
-];
 
 const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
   canvasContainerRef,
@@ -140,11 +126,6 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
   );
 });
 
-function getZoneColorHex(index: number): string {
-  return ZONE_COLOR_HEX[index % ZONE_COLOR_HEX.length];
-}
-
-
 export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
   const { t } = useTranslation("common");
   const { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
@@ -195,7 +176,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   }, [showGrid, gridStrokeWidth, showHueZones]);
 
   // Zone management state
-  const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
   const [activeHueZoneId, setActiveHueZoneId] = useState<string | null>(null);
   /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
   const [hueAreaId, setHueAreaId] = useState<string | null>(null);
@@ -630,40 +610,13 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [updateConfig, config, panOffset, widthMeters, depthMeters, zoom],
   );
 
-  // Zone CRUD handlers
-  const handleAddZone = useCallback(() => {
-    const id = `zone-${crypto.randomUUID()}`;
-    const name = t("roomMap.zones.defaultName", { N: String(config.zones.length + 1) });
-    const newZone: Zone = { id, name, zoneType: ZONE_TYPES.LOGICAL, channelIndices: [] };
-    void updateConfig({ zones: [...config.zones, newZone] });
-    setActiveZoneId(id);
-    setObjectPanelOpen(true);
-  }, [config.zones, updateConfig, t]);
-
-  const handleDeleteZone = useCallback(
-    (zoneId: string) => {
-      void updateConfig({ zones: config.zones.filter((z) => z.id !== zoneId) });
-      if (activeZoneId === zoneId) setActiveZoneId(null);
-    },
-    [config.zones, activeZoneId, updateConfig],
-  );
-
-  const handleRenameZone = useCallback(
-    (zoneId: string, name: string) => {
-      void updateConfig({
-        zones: config.zones.map((z) => (z.id === zoneId ? { ...z, name } : z)),
-      });
-    },
-    [config.zones, updateConfig],
-  );
-
   // ---------------------------------------------------------------------------
-  // Hue Zone CRUD handlers (v1.5 W1-A5 → W4-F unified)
+  // Hue Zone CRUD handlers (v1.5 W1-A5 → W4-F2 Hue-only canonical)
   // ---------------------------------------------------------------------------
-  // v1.5 W4-F: Hue zones live in the unified `config.zones[]` array under
-  // `zoneType === "hue"`. The legacy `config.hueZones[]` field is migrated
-  // away by the F6 shim before any handler runs; new authoring writes
-  // exclusively to `zones[]`.
+  // v1.5 W4-F2: only Hue zones live in `config.zones: HueZone[]`. Logical
+  // zones were dropped — see RFC §"Direction reversal". The migration
+  // shim handles the schemaVersion 1→2 fold from legacy `hueZones[]` so
+  // no projection is needed at runtime.
   //
   // Each handler optimistically mutates `config.zones` then fires the
   // matching Tauri command. The local config is the persistence source of
@@ -672,7 +625,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   // but keep the local edit so the UI does not flicker — the next save
   // round will reconcile.
 
-  const hueZones = config.zones.filter((z) => z.zoneType === ZONE_TYPES.HUE);
+  const hueZones = config.zones;
 
   const handleAddHueZone = useCallback(() => {
     if (!hueAreaId) return;
@@ -680,10 +633,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     const name = t("roomMap.hueZones.defaultName", { N: String(hueZones.length + 1) });
     const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
     const colorVar = `var(${palette[hueZones.length % palette.length]})`;
-    const newZone: Zone = {
+    const newZone: HueZone = {
       id,
       name,
-      zoneType: ZONE_TYPES.HUE,
       entertainmentAreaId: hueAreaId,
       centerX: 0,
       centerY: 0,
@@ -699,10 +651,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     setObjectPanelOpen(true);
 
     // Mirror to backend; never throw — silent-catch ban → log only.
-    void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, {
+    void invoke(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, {
       request: { zone: newZone, existingZones: hueZones },
     }).catch((e) => {
-      console.error("[LumaSync] create_zone failed", e);
+      console.error("[LumaSync] create_hue_zone failed", e);
     });
   }, [hueAreaId, hueZones, config.zones, updateConfig, t]);
 
@@ -718,10 +670,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       void updateConfig({ zones: nextZones, hueChannels: nextChannels });
       if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
 
-      void invoke(HUE_ZONE_COMMANDS.DELETE_ZONE, {
+      void invoke(HUE_ZONE_COMMANDS.DELETE_HUE_ZONE, {
         request: { zoneId, existingZones: hueZones, channels: config.hueChannels },
       }).catch((e) => {
-        console.error("[LumaSync] delete_zone failed", e);
+        console.error("[LumaSync] delete_hue_zone failed", e);
       });
     },
     [hueZones, config.zones, config.hueChannels, activeHueZoneId, updateConfig],
@@ -732,11 +684,11 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       const next = config.zones.map((z) => (z.id === zoneId ? { ...z, name } : z));
       void updateConfig({ zones: next });
       const renamed = next.find((z) => z.id === zoneId);
-      if (renamed && renamed.zoneType === ZONE_TYPES.HUE) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
-          request: { zone: renamed, existingZones: next.filter((z) => z.zoneType === ZONE_TYPES.HUE) },
+      if (renamed) {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
+          request: { zone: renamed, existingZones: next },
         }).catch((e) => {
-          console.error("[LumaSync] update_zone (rename) failed", e);
+          console.error("[LumaSync] update_hue_zone (rename) failed", e);
         });
       }
     },
@@ -795,10 +747,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
           : c,
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
-      // add to new zone (idempotent). Logical zones in `config.zones` are
-      // pass-through (W4-F: both zone types share the unified array).
+      // add to new zone (idempotent). v1.5 W4-F2: only Hue zones live in
+      // `config.zones`, so the previous `zoneType !== HUE` skip is gone.
       const nextZones = config.zones.map((z) => {
-        if (z.zoneType !== ZONE_TYPES.HUE) return z;
         const without = z.channelIndices.filter((i) => i !== channelIndex);
         if (z.id === targetZoneId) {
           return { ...z, channelIndices: [...without, channelIndex] };
@@ -807,20 +758,17 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
       void updateConfig({ hueChannels: nextChannels, zones: nextZones });
 
-      const nextHueZonesLegacy = nextZones
-        .map(asHueZoneLegacy)
-        .filter((z): z is HueZone => z !== null);
-      void invoke(HUE_ZONE_COMMANDS.ASSIGN_CHANNEL_TO_ZONE, {
+      void invoke(HUE_ZONE_COMMANDS.ASSIGN_CHANNEL_TO_HUE_ZONE, {
         request: {
           channelIndex,
           zoneId: targetZoneId,
           zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
           entertainmentAreaId,
-          existingZones: nextHueZonesLegacy,
+          existingZones: nextZones,
           channels: nextChannels,
         },
       }).catch((e) => {
-        console.error("[LumaSync] assign_channel_to_zone failed", e);
+        console.error("[LumaSync] assign_channel_to_hue_zone failed", e);
       });
     },
     [config.hueChannels, config.zones, hueZones, hueAreaId, updateConfig],
@@ -907,10 +855,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [config.imageLayers, updateConfig],
   );
 
-  const handleSelectZone = useCallback((zoneId: string | null) => {
-    setActiveZoneId(zoneId);
-  }, []);
-
   const handleRenameFurniture = useCallback(
     (id: string, label: string) => {
       void updateConfig({
@@ -995,125 +939,43 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     return actions;
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, config.furniture, config.imageLayers, handleRenameFurniture]);
 
-  const handleChannelZoneToggle = useCallback(
-    (channelIndex: number) => {
-      if (!activeZoneId) return;
-      const zone = config.zones.find((z) => z.id === activeZoneId);
-      if (!zone) return;
-      const hasChannel = zone.channelIndices.includes(channelIndex);
-      const updatedIndices = hasChannel
-        ? zone.channelIndices.filter((i) => i !== channelIndex)
-        : [...zone.channelIndices, channelIndex];
-      void updateConfig({
-        zones: config.zones.map((z) =>
-          z.id === activeZoneId ? { ...z, channelIndices: updatedIndices } : z,
-        ),
-      });
-    },
-    [activeZoneId, config.zones, updateConfig],
-  );
-
-  // Derived zone assign values
-  const zoneAssignMode = activeZoneId !== null;
-  const activeZone = config.zones.find((z) => z.id === activeZoneId);
-  const activeZoneIndex = config.zones.findIndex((z) => z.id === activeZoneId);
-  const activeZoneColor = activeZoneIndex >= 0 ? getZoneColorHex(activeZoneIndex) : null;
-  const assignedChannels = new Set(config.zones.flatMap((z) => z.channelIndices));
-  const activeZoneChannels = new Set(activeZone?.channelIndices ?? []);
-
-  // ── v1.5 W1-A6 (W4-F unified): derive active Hue zone ──────────────
-  // `activeHueZone` keeps the legacy `HueZone | null` shape because
-  // RoomMapCanvas + HueChannelOverlay still consume that interface (W4-F
-  // transition — see `asHueZoneLegacy` doc comment for the migration
-  // plan). The unified `Zone` source-of-truth lives in `hueZones` above.
-  const activeHueZoneUnified = activeHueZoneId
+  // ── v1.5 W1-A6 (W4-F2 Hue-only): derive active Hue zone ────────────
+  // v1.5 W4-F2: `config.zones` is now `HueZone[]` (logical zones were
+  // dropped). Downstream consumers (RoomMapCanvas + HueChannelOverlay)
+  // already accept `HueZone | null` so the lookup is a direct find,
+  // no projection needed.
+  const activeHueZone: HueZone | null = activeHueZoneId
     ? hueZones.find((z) => z.id === activeHueZoneId) ?? null
     : null;
-  const activeHueZone: HueZone | null = activeHueZoneUnified
-    ? asHueZoneLegacy(activeHueZoneUnified)
-    : null;
-  /** Hue zones projected to the legacy shape for downstream consumers. */
-  const hueZonesLegacy = hueZones
-    .map(asHueZoneLegacy)
-    .filter((z): z is HueZone => z !== null);
 
   const handleHueZoneCenterChange = useCallback(
     (zoneId: string, centerX: number, centerY: number) => {
       const next = config.zones.map((z) =>
-        z.id === zoneId && z.zoneType === ZONE_TYPES.HUE
+        z.id === zoneId
           ? { ...z, centerX, centerY }
           : z,
       );
       void updateConfig({ zones: next });
       const updated = next.find((z) => z.id === zoneId);
-      if (updated && updated.zoneType === ZONE_TYPES.HUE) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
+      if (updated) {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
           request: {
             zone: updated,
-            existingZones: next.filter((z) => z.zoneType === ZONE_TYPES.HUE),
+            existingZones: next,
           },
         }).catch((e) => {
-          console.error("[LumaSync] update_zone (center) failed", e);
+          console.error("[LumaSync] update_hue_zone (center) failed", e);
         });
       }
     },
     [config.zones, updateConfig],
   );
 
-  // ── v1.5 W4-F4 — duplicate Hue zone as logical ─────────────────────
-  // Creates a new `zoneType: "logical"` zone that mirrors a Hue zone's
-  // user-visible content (name + channelIndices + borderColor) but
-  // strips every Hue-only field. The original Hue zone is left
-  // untouched — this is a duplicate, not a convert. The new logical
-  // zone becomes the active selection so the user can immediately edit
-  // its name or assign it to a USB region.
-  //
-  // Backend mirror dispatches `create_zone`; the Rust handler validates
-  // the type-shape contract (logical zones MUST NOT carry Hue-only
-  // fields populated) and returns either `ZONE_CREATED` or
-  // `ZONE_CONVERSION_OK` — the UI accepts both during the W4-F PR2
-  // window because the Rust placeholder for `ZONE_CONVERSION_OK` is
-  // still `#[allow(dead_code)]`.
-  const handleConvertHueZoneToLogical = useCallback(
-    (zoneId: string) => {
-      const source = config.zones.find(
-        (z) => z.id === zoneId && z.zoneType === ZONE_TYPES.HUE,
-      );
-      if (!source) return;
-      const newId = `zone-${crypto.randomUUID()}`;
-      const newZone: Zone = {
-        id: newId,
-        name: t("zone.toast.convertedToLogicalName", {
-          source: source.name,
-        }),
-        zoneType: ZONE_TYPES.LOGICAL,
-        channelIndices: [...source.channelIndices],
-        borderColor: source.borderColor,
-      };
-      void updateConfig({ zones: [...config.zones, newZone] });
-
-      void invoke(HUE_ZONE_COMMANDS.CREATE_ZONE, {
-        request: {
-          zone: newZone,
-          existingZones: hueZones
-            .map(asHueZoneLegacy)
-            .filter((z): z is HueZone => z !== null),
-        },
-      }).catch((e) => {
-        console.error(
-          "[LumaSync] convert hue→logical create_zone failed",
-          e,
-        );
-      });
-    },
-    [config.zones, hueZones, updateConfig, t],
-  );
-
-  // ── v1.5 W1-A8 (W4-F unified): Generic Hue zone patch handler ──────
+  // ── v1.5 W1-A8 (W4-F2 Hue-only): Generic Hue zone patch handler ────
   // Used by HueZoneInspector to update borderColor + per-axis room-
   // relative scale. Same optimistic pattern as the create / delete /
-  // center handlers — local config first, then mirror via update_zone
-  // with silent-catch logging.
+  // center handlers — local config first, then mirror via
+  // `update_hue_zone` with silent-catch logging.
   //
   // W4-I revision — the W4-C uniform aspect-ratio lock is gone. Zones
   // are physical 1:1 metric squares now, which in a non-square room
@@ -1122,26 +984,21 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   // through verbatim instead of mirroring one axis onto the other.
   // Rust still validates each axis independently against the [MIN, MAX]
   // band and the cube-overflow invariant.
-  //
-  // W4-F: patch is `Partial<Zone>` (Hue-only fields are optional on the
-  // unified type). The handler only fires the backend mirror when the
-  // resulting record still has `zoneType === "hue"` — defensive guard
-  // against accidental discriminator drift in caller code.
   const handleHueZoneUpdate = useCallback(
-    (zoneId: string, patch: Partial<Zone>) => {
+    (zoneId: string, patch: Partial<HueZone>) => {
       const next = config.zones.map((z) =>
         z.id === zoneId ? { ...z, ...patch } : z,
       );
       void updateConfig({ zones: next });
       const updated = next.find((z) => z.id === zoneId);
-      if (updated && updated.zoneType === ZONE_TYPES.HUE) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_ZONE, {
+      if (updated) {
+        void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
           request: {
             zone: updated,
-            existingZones: next.filter((z) => z.zoneType === ZONE_TYPES.HUE),
+            existingZones: next,
           },
         }).catch((e) => {
-          console.error("[LumaSync] update_zone (props) failed", e);
+          console.error("[LumaSync] update_hue_zone (props) failed", e);
         });
       }
     },
@@ -1175,7 +1032,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         derivePreviewActive={derivePreviewActive}
         zoneCount={config.zones.length}
         onDeriveZones={handleDeriveZones}
-        onAddZone={handleAddZone}
+        onAddZone={handleAddHueZone}
         settingsOpen={settingsOpen}
         onToggleSettings={() => setSettingsOpen((v) => !v)}
         canUndo={canUndo}
@@ -1343,15 +1200,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                   );
                   void updateConfig({ hueChannels: next });
                 }}
-                zoneAssignMode={zoneAssignMode}
-                activeZoneColor={activeZoneColor}
-                assignedChannels={assignedChannels}
-                activeZoneChannels={activeZoneChannels}
-                onChannelZoneToggle={handleChannelZoneToggle}
                 panMode={spaceHeld}
                 activeHueZone={activeHueZone}
                 onHueZoneCenterChange={handleHueZoneCenterChange}
-                allHueZones={showHueZones ? hueZonesLegacy : []}
+                allHueZones={showHueZones ? hueZones : []}
               />
             )}
 
@@ -1412,20 +1264,13 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imgId ? { ...l, locked: !l.locked } : l)) });
               }
             }}
-            zones={config.zones}
-            activeZoneId={activeZoneId}
-            onSelectZone={handleSelectZone}
-            onAddZone={handleAddZone}
-            onDeleteZone={handleDeleteZone}
-            onRenameZone={handleRenameZone}
-            hueZones={hueZonesLegacy}
+            hueZones={hueZones}
             activeHueZoneId={activeHueZoneId}
             onSelectHueZone={handleSelectHueZone}
             onAddHueZone={handleAddHueZone}
             onDeleteHueZone={handleDeleteHueZone}
             onRenameHueZone={handleRenameHueZone}
             onUpdateHueZone={handleHueZoneUpdate}
-            onConvertHueZoneToLogical={handleConvertHueZoneToLogical}
             addHueZoneDisabled={!hueAreaId}
             addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
             hueBridgeConfigured={hueBridgeConfigured}

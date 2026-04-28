@@ -49,22 +49,19 @@ import type {
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-  Zone,
 } from "../../../../shared/contracts/roomMap";
-import { ZONE_TYPES, asHueZoneLegacy } from "../../../../shared/contracts/roomMap";
 import { HueZoneInspector } from "./HueZoneInspector";
 import {
   FurnitureInspector,
   HueChannelInspector,
   ImageLayerInspector,
-  LogicalZoneInspector,
   TvAnchorInspector,
   UsbStripInspector,
   resolveInspectorTarget,
   type UsbStripConnectionStatus,
 } from "./ObjectInspectors";
 
-type DockTab = "objects" | "zones" | "hueZones";
+type DockTab = "objects" | "hueZones";
 
 interface RoomDockPanelProps {
   config: RoomMapConfig;
@@ -76,17 +73,9 @@ interface RoomDockPanelProps {
   onRenameFurniture: (id: string, label: string) => void;
   onToggleLock: (id: string) => void;
 
-  // Logical zones (W4-F: unified `Zone` type with `zoneType: "logical"`).
-  // Hue zones live in the same `config.zones[]` array but are passed
-  // separately as `hueZones` (legacy projection) for the W4-F transition.
-  zones: Zone[];
-  activeZoneId: string | null;
-  onSelectZone: (zoneId: string | null) => void;
-  onAddZone: () => void;
-  onDeleteZone: (zoneId: string) => void;
-  onRenameZone: (zoneId: string, name: string) => void;
-
-  // Hue zones (v1.5)
+  // Hue zones (v1.5 W4-F2 — sole surviving zone kind, spatial 3D Hue
+  // Entertainment Area subset). Logical zones were dropped; the dock no
+  // longer renders a Zones tab.
   hueZones?: HueZone[];
   activeHueZoneId?: string | null;
   onSelectHueZone?: (zoneId: string | null) => void;
@@ -94,13 +83,6 @@ interface RoomDockPanelProps {
   onDeleteHueZone?: (zoneId: string) => void;
   onRenameHueZone?: (zoneId: string, name: string) => void;
   onUpdateHueZone?: (zoneId: string, patch: Partial<HueZone>) => void;
-  /**
-   * v1.5 W4-F4 — duplicate the active Hue zone as a logical (USB-side
-   * region) zone. Wired to the inspector header's "Duplicate as logical"
-   * action; inert when omitted, so embeds without zone authoring fall
-   * back to a read-only inspector.
-   */
-  onConvertHueZoneToLogical?: (zoneId: string) => void;
   /** When true, "+ Hue zone" CTA is disabled (no entertainment area paired). */
   addHueZoneDisabled?: boolean;
   addHueZoneDisabledTooltip?: string;
@@ -490,119 +472,6 @@ function ObjectsTab(props: {
         </li>
       )}
     </ul>
-  );
-}
-
-function ZonesTab(props: {
-  zones: Zone[];
-  activeZoneId: string | null;
-  onSelectZone: (id: string | null) => void;
-  onAddZone: () => void;
-  onDeleteZone: (id: string) => void;
-  onRenameZone: (id: string, name: string) => void;
-}) {
-  const { zones, activeZoneId, onSelectZone, onAddZone, onDeleteZone, onRenameZone } = props;
-  const { t } = useTranslation("common");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-
-  return (
-    <>
-      <div className="lm-room-dock-h">
-        <span className="lm-room-dock-h-name">{t("roomMap.zones.panelTitle")}</span>
-        <button
-          type="button"
-          className="lm-room-dock-h-add"
-          onClick={onAddZone}
-        >
-          {t("roomMap.zones.addZoneButton")}
-        </button>
-      </div>
-      {zones.length === 0 ? (
-        <div className="lm-room-dock-empty">{t("roomMap.zones.emptyPanel")}</div>
-      ) : (
-        <ul className="space-y-px">
-          {zones.map((zone, zi) => {
-            const isActive = activeZoneId === zone.id;
-            const isEditing = editingId === zone.id;
-            return (
-              <li
-                key={zone.id}
-                className={`lm-room-dock-row ${isActive ? "is-on" : ""}`}
-                role="button"
-                tabIndex={0}
-                aria-pressed={isActive}
-                onClick={() => onSelectZone(isActive ? null : zone.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onSelectZone(isActive ? null : zone.id);
-                  }
-                }}
-              >
-                <span
-                  className="lm-room-dock-row-dot"
-                  style={{ background: ZONE_TOKENS[zi % ZONE_TOKENS.length] }}
-                  aria-hidden
-                />
-                {isEditing ? (
-                  <input
-                    autoFocus
-                    className="lm-room-dock-row-edit"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={() => {
-                      const name =
-                        editValue.trim() ||
-                        t("roomMap.zones.defaultName", { N: String(zi + 1) });
-                      onRenameZone(zone.id, name);
-                      setEditingId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const name =
-                          editValue.trim() ||
-                          t("roomMap.zones.defaultName", { N: String(zi + 1) });
-                        onRenameZone(zone.id, name);
-                        setEditingId(null);
-                      } else if (e.key === "Escape") {
-                        setEditingId(null);
-                      }
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span
-                    className="lm-room-dock-row-label"
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      setEditingId(zone.id);
-                      setEditValue(zone.name);
-                    }}
-                  >
-                    {zone.name}
-                  </span>
-                )}
-                <span className="lm-room-dock-row-meta">{zone.channelIndices.length}</span>
-                <button
-                  type="button"
-                  className="lm-room-dock-row-action is-danger"
-                  aria-label={t("roomMap.zones.deleteAriaLabel", { name: zone.name })}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteZone(zone.id);
-                  }}
-                >
-                  ×
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </>
   );
 }
 
@@ -1242,12 +1111,6 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onDelete,
     onRenameFurniture,
     onToggleLock,
-    zones,
-    activeZoneId,
-    onSelectZone,
-    onAddZone,
-    onDeleteZone,
-    onRenameZone,
     hueZones = [],
     activeHueZoneId = null,
     onSelectHueZone,
@@ -1255,7 +1118,6 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onDeleteHueZone,
     onRenameHueZone,
     onUpdateHueZone,
-    onConvertHueZoneToLogical,
     addHueZoneDisabled = false,
     addHueZoneDisabledTooltip,
     hueBridgeConfigured = false,
@@ -1284,19 +1146,17 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
   const [activeTab, setActiveTab] = useState<DockTab>("objects");
 
   // Wave 4-D — resolve the active inspector target once. Hue zone wins
-  // (W4-C surface), then the selected object, then the active legacy
-  // zone, then empty. The dispatcher returns a tagged-union the
-  // renderer can switch over without re-doing the lookup.
+  // (W4-C surface), then the selected object, then empty. v1.5 W4-F2:
+  // logical zones were dropped; dispatcher now reads only Hue zones
+  // from `config.zones[]`.
   const inspectorTarget = resolveInspectorTarget(
     config,
     selectedId,
     activeHueZoneId,
-    activeZoneId,
   );
 
   const tabs: Array<{ id: DockTab; label: string; count?: number; visible: boolean }> = [
     { id: "objects", label: t("roomMap.objectPanel.objectsTab"), visible: true },
-    { id: "zones", label: t("roomMap.objectPanel.zonesTab"), count: zones.length, visible: true },
     {
       id: "hueZones",
       label: t("roomMap.objectPanel.hueZonesTab"),
@@ -1318,39 +1178,20 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
   // object, even when the kind is unchanged.
   const renderInspector = () => {
     switch (inspectorTarget.kind) {
-      case "zone": {
-        // v1.5 W4-F: a single dispatcher arm covers both Hue and logical
-        // zones — branch on `zoneType` here so the inspector picks the
-        // right view. Hue zones run through `asHueZoneLegacy` to bridge
-        // the unified `Zone` source-of-truth to `HueZoneInspector`'s
-        // legacy prop signature (W4-F transition; the helper has a doc
-        // comment in `roomMap.ts` explaining the eventual cleanup).
+      case "hueZone": {
+        // v1.5 W4-F2: only Hue zones survive in `config.zones[]`. The
+        // dispatcher feeds the canonical `HueZone` straight into
+        // HueZoneInspector with no projection step.
         const zone = inspectorTarget.zone;
-        if (zone.zoneType === ZONE_TYPES.HUE) {
-          const legacy = asHueZoneLegacy(zone);
-          if (!legacy) {
-            return (
-              <p className="lm-room-dock-inspect-empty">
-                {t("roomMap.inspector.empty")}
-              </p>
-            );
-          }
-          return (
-            <HueZoneInspector
-              key={`zone:${zone.id}`}
-              zone={legacy}
-              onUpdate={(patch) => onUpdateHueZone?.(zone.id, patch)}
-              onConvertToLogical={
-                onConvertHueZoneToLogical
-                  ? () => onConvertHueZoneToLogical(zone.id)
-                  : undefined
-              }
-              roomWidthM={config.dimensions.widthMeters}
-              roomDepthM={config.dimensions.depthMeters}
-            />
-          );
-        }
-        return <LogicalZoneInspector key={`zone:${zone.id}`} zone={zone} />;
+        return (
+          <HueZoneInspector
+            key={`hueZone:${zone.id}`}
+            zone={zone}
+            onUpdate={(patch) => onUpdateHueZone?.(zone.id, patch)}
+            roomWidthM={config.dimensions.widthMeters}
+            roomDepthM={config.dimensions.depthMeters}
+          />
+        );
       }
       case "tv":
         return (
@@ -1454,15 +1295,6 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               onDelete={onDelete}
               onRenameFurniture={onRenameFurniture}
               onToggleLock={onToggleLock}
-            />
-          ) : activeTab === "zones" ? (
-            <ZonesTab
-              zones={zones}
-              activeZoneId={activeZoneId}
-              onSelectZone={onSelectZone}
-              onAddZone={onAddZone}
-              onDeleteZone={onDeleteZone}
-              onRenameZone={onRenameZone}
             />
           ) : activeTab === "hueZones" && hueZoneEditing ? (
             <HueZonesTab

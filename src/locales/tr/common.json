@@ -1365,24 +1365,16 @@
       "overrideWarningDontAskAgain": "Bir daha sorma"
     }
   },
-  "zone": {
+  "hueZone": {
     "statusCode": {
-      "created": "Bölge oluşturuldu.",
-      "updated": "Bölge güncellendi.",
-      "deleted": "Bölge silindi.",
-      "notFound": "Bölge bulunamadı.",
+      "created": "Hue bölgesi oluşturuldu.",
+      "updated": "Hue bölgesi güncellendi.",
+      "deleted": "Hue bölgesi silindi.",
+      "notFound": "Hue bölgesi bulunamadı.",
       "channelOutOfBounds": "Kanal pozisyonu izinli aralığın dışında.",
       "limitReached": "Bridge bu Hue eğlence alanı için kanal sınırına ulaşıldı.",
-      "channelNotInArea": "Kanal bu bölgenin eğlence alanına ait değil.",
-      "oversized": "Bölge boyutu izinli aralığın dışında.",
-      "typeInvalid": "Bölge alanları seçilen türle eşleşmiyor (mantıksal/Hue).",
-      "conversionOk": "Bölge mantıksal kopya olarak çoğaltıldı."
-    },
-    "action": {
-      "convertToLogical": "Mantıksal bölge olarak çoğalt"
-    },
-    "toast": {
-      "convertedToLogicalName": "{{source}} (mantıksal kopya)"
+      "channelNotInArea": "Kanal bu Hue bölgesinin eğlence alanına ait değil.",
+      "oversized": "Hue bölge boyutu izinli aralığın dışında."
     }
   },
   "notifications": {
