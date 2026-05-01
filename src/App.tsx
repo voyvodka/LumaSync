@@ -1093,23 +1093,27 @@ function App() {
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
 
     // Delta-stop: for each removed target that is currently active, stop it
-    for (const target of removedTargets) {
-      if (!currentActive.includes(target)) continue;
-      if (target === "usb") {
-        try {
-          await invoke("stop_lighting");
-        } catch (err) {
-          console.error("[LumaSync] stop_lighting during delta-stop failed:", err);
+    // Optimization: Execute stop commands concurrently for independent targets
+    // (USB and Hue) to minimize shutdown phase latency.
+    await Promise.all(
+      removedTargets.map(async (target) => {
+        if (!currentActive.includes(target)) return;
+        if (target === "usb") {
+          try {
+            await invoke("stop_lighting");
+          } catch (err) {
+            console.error("[LumaSync] stop_lighting during delta-stop failed:", err);
+          }
         }
-      }
-      if (target === "hue") {
-        try {
-          await invoke("stop_hue_stream");
-        } catch (err) {
-          console.error("[LumaSync] stop_hue_stream during delta-stop failed:", err);
+        if (target === "hue") {
+          try {
+            await invoke("stop_hue_stream");
+          } catch (err) {
+            console.error("[LumaSync] stop_hue_stream during delta-stop failed:", err);
+          }
         }
-      }
-    }
+      })
+    );
     // Update activeOutputTargets by removing stopped targets
     if (removedTargets.length > 0) {
       const nextActive = currentActive.filter((t) => !removedTargets.includes(t));
