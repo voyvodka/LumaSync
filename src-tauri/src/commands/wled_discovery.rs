@@ -142,6 +142,15 @@ fn parse_ipv4(ip: &str) -> Result<Ipv4Addr, String> {
 }
 
 fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
+    // SECURITY: Validate the input IP address to prevent SSRF vulnerabilities
+    if let Err(msg) = parse_ipv4(ip) {
+        return Err(WledCommandStatus::err(
+            "WLED_INVALID_IP",
+            "Invalid WLED device IP address format.",
+            Some(msg),
+        ));
+    }
+
     let url = format!("http://{}/json/info", ip);
 
     let client = reqwest::blocking::Client::builder()
