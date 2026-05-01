@@ -44,7 +44,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          prefix-key: v1.4-rust-cache
+          prefix-key: v1.5-rust-cache
           shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri + xcap (X11 capture)
@@ -92,7 +92,10 @@ jobs:
 
       - name: Rust tests
         working-directory: src-tauri
-        run: cargo test --all-features
+        # --test-threads=1 is required: lighting_mode tests share a global
+        # ACTIVE_AMBILIGHT_WORKERS AtomicUsize; parallel test execution causes
+        # spurious failures when other tests' workers bleed into the count.
+        run: cargo test --all-features -- --test-threads=1
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'

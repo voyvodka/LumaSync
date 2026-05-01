@@ -77,6 +77,21 @@ vi.mock("../features/mode/modeApi", () => ({
   setHueSolidColor: (payload: unknown) => setHueSolidColorMock(payload),
 }));
 
+// StatusBar renders useRuntimeTelemetry which polls `get_runtime_telemetry`
+// via invokeMock. With a flat `mockResolvedValue({ connected: true })` the
+// DTO lands as `{ connected: true }`, `mapFullTelemetrySnapshot` throws on
+// `dto.usb` (undefined), and the repeated throw/catch in the polling loop
+// floods the jsdom event queue — causing ambilight `waitFor` assertions to
+// hit their 3 s timeout in the full suite even though each test passes in
+// isolation. Stubbing the entire StatusBar component is the cleanest
+// isolation boundary; it already contains no state being tested here.
+vi.mock("../features/shell/StatusBar", () => ({
+  StatusBar: () => null,
+  statusBarHeightPx: () => 24,
+  STATUS_BAR_HEIGHT_FULL_PX: 24,
+  STATUS_BAR_HEIGHT_COMPACT_PX: 22,
+}));
+
 vi.mock("../features/settings/SettingsLayout", () => ({
   SettingsLayout: (props: {
     lightingMode: LightingModeConfig;
@@ -180,7 +195,9 @@ describe("App mode orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsConnected = true;
-    // Default: USB is connected at startup
+    // Default: serial connection status and any other bootstrap invokes.
+    // useRuntimeTelemetry is mocked at module level so get_runtime_telemetry
+    // never reaches invokeMock.
     invokeMock.mockResolvedValue({ connected: true });
     getHueStreamStatusMock.mockResolvedValue({
       active: false,
