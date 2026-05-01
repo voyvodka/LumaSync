@@ -1039,6 +1039,11 @@ mod tests {
     // and all paths pass through unchanged.
     // ---------------------------------------------------------------------------
 
+    // The two filter-positive assertions only hold on macOS — on Linux/Windows
+    // `is_macos_tty_path` is a compile-time `false`, so these tests would fire
+    // bogus failures from the cross-platform CI legs. Gate them per target.
+
+    #[cfg(target_os = "macos")]
     #[test]
     fn macos_tty_usbserial_is_filtered() {
         // The exact path from the real incident on 2026-04-26.
@@ -1048,6 +1053,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn macos_tty_usbmodem_is_filtered() {
         // Arduino Uno via ATmega16U2 — tty.* sibling must also be suppressed.
