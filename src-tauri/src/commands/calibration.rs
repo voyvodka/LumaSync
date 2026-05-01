@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -104,10 +105,21 @@ fn overlay_error_result(code: &str, message: &str, reason: &str) -> DisplayOverl
     }
 }
 
+// Monotonic counter so every overlay open produces a fresh, unique label.
+// `WebviewWindowBuilder::new` reserves labels in a registry that is NOT
+// instantly freed when the prior window is destroyed (Tauri 2 destroy is
+// asynchronous — see https://github.com/tauri-apps/tauri/issues/9627).
+// On a frontend refresh while an overlay is open, the Rust process — and
+// the registry — survives, so the next open call would collide on the
+// hash-only label. Suffixing with a counter sidesteps the registry race
+// entirely; `OverlayState` keeps the truth source for the active label.
+static OVERLAY_LABEL_COUNTER: AtomicU64 = AtomicU64::new(0);
+
 fn build_overlay_window_label(display_id: &str) -> String {
     let mut hasher = DefaultHasher::new();
     display_id.hash(&mut hasher);
-    format!("calibration-overlay-{:016x}", hasher.finish())
+    let seq = OVERLAY_LABEL_COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("calibration-overlay-{:016x}-{}", hasher.finish(), seq)
 }
 
 fn close_overlay_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> Result<(), String> {

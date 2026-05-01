@@ -34,14 +34,10 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      # windows-capture 2.0.0 has upstream compile errors on the Windows MSVC
-      # target (frame.rs:404 — wrong arg count; map_err on &[u8]). Dependabot
-      # PR #10 merged on Ubuntu-only CI, masking the break. Pin to 1.5.x
-      # until upstream ships a fix.
-      - dependency-name: 'windows-capture'
-        update-types:
-          - version-update:semver-major
+    # No package-specific ignores — `windows-capture` was successfully
+    # bumped to 2.0.0 in v1.5 (W2-C1) after the FrameBuffer::nopadding
+    # API was ported in `ambilight_capture.rs`. Future majors are reviewed
+    # individually through Dependabot's default ungrouped-major flow.
 
   # ── Frontend (Tauri webview) ────────────────────────────────────
   - package-ecosystem: npm

@@ -53,9 +53,13 @@ Microcontrollers using the following USB-to-serial chips are supported:
 
 | Chip | USB ID |
 |------|--------|
-| CH340 | `1A86:7523` |
-| FTDI FT232 | `0403:6001` |
+| CH340 (WCH) | `1A86:7523` |
+| CH341 (WCH) | `1A86:5523` |
+| FTDI FT232R | `0403:6001` |
+| FTDI FT232H | `0403:6014` |
 | CP2102 (Silicon Labs) | `10C4:EA60` |
+| CP2104 (Silicon Labs) | `10C4:EA70` |
+| PL2303 (Prolific) | `067B:2303` |
 | Arduino Uno R3 | `2341:0043` |
 | Arduino Uno (original) | `2341:0001` |
 
@@ -78,13 +82,13 @@ Profile is selected per device in the Devices section.
 |----------|--------|-------|
 | macOS | Full support | Primary development target. `macos-private-api` enabled for fullscreen overlays. |
 | Windows | Full support | USB and Hue features work. Windows Graphics Capture powers the capture pipeline. |
-| Linux | Planned (v1.5) | Not shipped in v1.4. Targeted for the next release; requires GTK 3, WebKitGTK 4.1, and `libudev`. |
+| Linux | Full support (v1.5+) | X11 capture via xcap. Requires GTK 3, WebKitGTK 4.1, `libudev`, and `libgbm`. |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - pnpm 10+
 - Rust toolchain (stable)
 - Tauri platform prerequisites for your OS

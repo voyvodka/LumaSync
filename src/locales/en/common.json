@@ -28,6 +28,36 @@
       "tr": "Türkçe"
     }
   },
+  "ui": {
+    "colorPicker": {
+      "rootAriaLabel": "Color picker",
+      "hueLabel": "Hue",
+      "svLabel": "Saturation and brightness",
+      "hexLabel": "HEX",
+      "recentColors": "Recent",
+      "recentItemAriaLabel": "Use {{hex}}"
+    },
+    "onboardingBanner": {
+      "dismissAriaLabel": "Dismiss hint"
+    },
+    "onboarding": {
+      "step1": {
+        "title": "Welcome to LumaSync",
+        "body": "Pick a lighting mode to get started — Off, Ambilight, or a single solid color.",
+        "action": "Open lights"
+      },
+      "step2": {
+        "title": "Connect your lights",
+        "body": "Connect a USB LED controller, a WLED ESP, or pair a Hue bridge so the modes have somewhere to send frames.",
+        "action": "Open devices"
+      },
+      "step3": {
+        "title": "Calibrate your strip",
+        "body": "Tell LumaSync how many LEDs sit on each screen edge so Ambilight maps colors to the right corners.",
+        "action": "Open calibration"
+      }
+    }
+  },
   "general": {
     "title": "General",
     "description": "General application settings.",
@@ -79,6 +109,11 @@
         "music": "Music",
         "chill": "Chill",
         "read": "Read"
+      },
+      "offline": {
+        "title": "No reachable output",
+        "body": "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
+        "action": "Open devices"
       }
     }
   },
@@ -96,6 +131,7 @@
       "other": "Other",
       "usbStrips": "USB Strips",
       "hueBridges": "Hue Bridges",
+      "wled": "WLED",
       "displays": "Displays",
       "manualEntry": "Manual Entry"
     },
@@ -131,6 +167,38 @@
       "empty": {
         "title": "No USB ports found",
         "body": "Plug in your controller and click Rescan."
+      },
+      "discover": {
+        "title": "Discover ports",
+        "count": "{{count}} ports",
+        "countOne": "1 port",
+        "hint": "Detected serial ports. The list below is the full strip roster — use this section only when you need to inspect or connect a raw port directly."
+      },
+      "paired": {
+        "title": "Paired strips",
+        "count": "{{count}} strips",
+        "countOne": "1 strip",
+        "empty": "No strips paired yet — add one to start building the room map.",
+        "stripName": "{{count}}-LED strip",
+        "noPort": "No port linked",
+        "offline": "OFFLINE",
+        "ledCountLabel": "LEDs",
+        "portLabel": "Port",
+        "addFirst": "+ Add LED strip",
+        "addAnother": "+ Add another strip",
+        "addDisabledNoPortsTooltip": "No serial ports detected. Plug in your controller and rescan.",
+        "addDisabledAllPairedTooltip": "All discovered ports are already paired.",
+        "formEmptyNoPorts": "No serial ports detected — plug in another USB controller and rescan.",
+        "formEmptyAllPaired": "All discovered ports are already paired. Plug in another controller and rescan.",
+        "rescan": "Rescan",
+        "cancel": "Cancel",
+        "confirmAdd": "Add",
+        "persistError": "Could not save the strip. Try again.",
+        "openInMap": "Open in map",
+        "changePort": "Change port",
+        "changePortAriaLabel": "Change the USB port linked to this strip",
+        "changePortConfirm": "Save",
+        "changePortCancel": "Cancel"
       }
     },
     "displays": {
@@ -175,6 +243,40 @@
         "failed": "FAILED",
         "discovered": "DISCOVERED"
       }
+    },
+    "wled": {
+      "title": "WLED Devices",
+      "subtitle": "Network LED panels reachable on the local network",
+      "manualIp": "WLED IP",
+      "manualIpHint": "Leave blank to scan via mDNS, or paste a known address.",
+      "manualIpPlaceholder": "192.168.1.42",
+      "discoverAction": "Discover",
+      "discovering": "Discovering...",
+      "connectAction": "Connect",
+      "reconnectAction": "Reconnect",
+      "connecting": "Connecting...",
+      "testAction": "Test",
+      "testing": "Testing...",
+      "invalidIp": "Enter a valid IPv4 or IPv6 address.",
+      "cellLedCount": "LEDs",
+      "cellVersion": "Version",
+      "cellMac": "MAC",
+      "empty": {
+        "title": "No WLED devices yet",
+        "body": "Run discovery, or paste a known IP and press Discover."
+      },
+      "pill": {
+        "discovered": "DISCOVERED",
+        "connected": "ACTIVE"
+      },
+      "status": {
+        "discoveryOk": "Discovery completed.",
+        "discoveryEmpty": "No WLED devices were found on the network.",
+        "discoveryTimeout": "Discovery timed out before any device responded.",
+        "bridgeUnreachable": "WLED device is not reachable.",
+        "protocolMismatch": "Device rejected the wire protocol — try the alternate.",
+        "ledCountMismatch": "Device reports a different LED count than expected."
+      }
     }
   },
   "lightsPage": {
@@ -217,6 +319,7 @@
         "sub": "—"
       },
       "profile": {
+        "brightness": "Brightness",
         "saturation": "Saturation",
         "blackBorder": "Black border",
         "blackBorderAuto": "auto",
@@ -234,6 +337,8 @@
       "outputs": "Outputs",
       "addAria": "Add output",
       "addTooltip": "Coming soon — multi Hue zone",
+      "addHueZoneTooltip": "Add a new Hue zone",
+      "addDisabledTooltip": "Pair a Hue bridge to add zones",
       "hintTitle": "Room space",
       "hintBody": "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
       "rows": {
@@ -559,7 +664,12 @@
           "center": "C"
         },
         "selectZoneHint": "Click a zone on the map to assign the selected channel.",
-        "chipLabel": "Ch {{index}}"
+        "chipLabel": "Ch {{index}}",
+        "detailStripChannel": "Channel {{index}}",
+        "detailStripCoords": "x: {{x}}  ·  y: {{y}}",
+        "canvasAriaLabel": "Channel position canvas",
+        "regionRowAriaLabel": "Region for channel {{index}}",
+        "rowDotAriaLabel": "Select channel {{index}}"
       },
       "targetFailed": "Could not add {{target}} to active output.",
       "readiness": {
@@ -848,6 +958,8 @@
       "opacity": "Opacity",
       "showGrid": "Show grid",
       "gridStrokeWidth": "Grid thickness",
+      "showHueZones": "Show Hue zones",
+      "showHueZonesHint": "Always render every Hue zone's bounds; turn off to hide non-selected zones.",
       "roomWidth": "Width (m)",
       "roomDepth": "Depth (m)",
       "resetMap": "Reset map",
@@ -855,7 +967,9 @@
     },
     "persistError": "Map could not be saved. Changes may be lost on restart.",
     "usbStrip": {
-      "ledCount": "LED count"
+      "ledCount": "LED count",
+      "online": "ONLINE",
+      "offline": "OFFLINE"
     },
     "hueChannel": {
       "defaultLabel": "Channel {{index}}"
@@ -878,16 +992,100 @@
       "lightCount": "{{N}} lights",
       "lightCountOne": "1 light"
     },
+    "hueZones": {
+      "title": "Hue Zones",
+      "addAction": "+ Zone",
+      "empty": "No Hue zones yet.",
+      "emptyCta": "Add your first Hue zone",
+      "defaultName": "Hue Zone {{N}}",
+      "deleteAriaLabel": "Delete zone {{name}}",
+      "lightCount": "{{N}} lights",
+      "lightCountOne": "1 light",
+      "groupEmpty": "No channels assigned yet",
+      "unassignedTitle": "Unassigned",
+      "addDisabledTooltip": "Pair a Hue bridge and pick an entertainment area to add zones.",
+      "centerMarkerAriaLabel": "Drag to move the {{name}} zone center",
+      "activeChipTip": "active",
+      "movePopoverLabel": "Move channel to zone",
+      "moveChannelAriaLabel": "Move channel {{channel}} to another zone",
+      "dragHandleTip": "Drag to another zone",
+      "areaState": {
+        "notConfiguredTitle": "No bridge paired",
+        "notConfiguredHint": "Pair a Hue bridge in Devices to author zones.",
+        "notConfiguredCta": "Pair bridge",
+        "noAreaTitle": "Bridge ready · No area",
+        "noAreaHint": "Pick an entertainment area in Devices to start authoring zones.",
+        "noAreaCta": "Choose area",
+        "readyTitle": "Area ready · {{N}} zones",
+        "readyHint": "Drag a channel onto a zone, or use the Move action.",
+        "offlineTitle": "Bridge offline",
+        "offlineHint": "Last area is remembered; re-pair if you no longer have access."
+      }
+    },
+    "zoneProperties": {
+      "title": "Zone properties",
+      "color": "Color",
+      "borderColor": "Border",
+      "centerColor": "Center",
+      "swatchAriaLabel": "Use {{name}} swatch"
+    },
     "objectPanel": {
       "objectsTab": "Objects",
       "zonesTab": "Zones",
+      "hueZonesTab": "Hue Zones",
       "empty": "No objects placed yet.",
       "tvLabel": "TV",
       "ledLabel": "LED {{count}}",
       "hueLabel": "Hue {{index}}",
       "lock": "Lock",
       "unlock": "Unlock",
-      "delete": "Delete"
+      "delete": "Delete",
+      "dockAriaLabel": "Room map dock — switch between Objects, Zones, and Hue Zones tabs"
+    },
+    "inspector": {
+      "regionAriaLabel": "Selected item properties",
+      "empty": "Select an object or zone to edit its properties.",
+      "zoneTitle": "Zone",
+      "channelsLabel": "Channels",
+      "legacyZoneHint": "Click LED dots on the canvas to add or remove channels from this zone.",
+      "typeTv": "TV",
+      "typeFurniture": "Furniture",
+      "typeUsb": "USB strip",
+      "typeHue": "Hue light",
+      "typeImage": "Image",
+      "typeHueZone": "Hue zone",
+      "scaleX": "Width",
+      "scaleY": "Depth",
+      "zoneSize": "Size",
+      "zoneEdgeLabel": "Edge length",
+      "zoneEdgeShort": "Edge",
+      "zoneEdgeAriaLabel": "Zone edge length in metres",
+      "zoneHexShort": "Hex",
+      "zoneHexAriaLabel": "Zone color hex value",
+      "zoneChannelCount_one": "{{count}} light",
+      "zoneChannelCount_other": "{{count}} lights",
+      "zoneSizeHint": "Zone is a 1:1 square; max equals the shorter room side.",
+      "widthLabel": "Width",
+      "heightLabel": "Height",
+      "furnitureNameLabel": "Name",
+      "furnitureTypeLabel": "Type",
+      "furnitureRotationLabel": "Rotation",
+      "tvHint": "Drag the TV anchor on the canvas to position it; use the lock to keep it in place.",
+      "usbHint": "LED count is sent to the strip on the next pair handshake. Use the canvas handles to set start and end points.",
+      "usbLedCountLabel": "LEDs",
+      "usbPortLabel": "Port",
+      "usbConnectedFallback": "Online",
+      "usbConnectionDisconnected": "Offline",
+      "usbConnectionUnknown": "—",
+      "usbManage": "Manage in Devices",
+      "hueBridgeLabel": "Bridge",
+      "hueBridgeConnected": "Online",
+      "hueBridgeDisconnected": "Offline",
+      "hueChannelIndexLabel": "Channel",
+      "hueZoneLabel": "Zone",
+      "hueChannelHint": "Drag the dot on the canvas to fine-tune position. Assign to a zone in the Hue Zones tab.",
+      "imageOpacityLabel": "Opacity",
+      "imageHint": "Use the canvas handles to scale and position the image. Lower opacity to keep the room outline visible."
     },
     "propertyBar": {
       "aspectLocked": "Aspect ratio locked",
@@ -1096,7 +1294,12 @@
   },
   "statusBar": {
     "kbdMode": "mode",
-    "kbdSettings": "settings"
+    "kbdSettings": "settings",
+    "reconnect": {
+      "usbAriaLabel": "Reconnect USB device",
+      "hueAriaLabel": "Reconnect Hue bridge",
+      "tooltip": "Open device settings"
+    }
   },
   "shell": {
     "keybind": {
@@ -1134,6 +1337,15 @@
       "reset": "Reset to defaults",
       "kelvinHint": "Lower = warmer, higher = cooler"
     },
+    "chipType": {
+      "label": "LED Chip Type",
+      "description": "SK6812 RGBW strips include a dedicated white LED for cleaner whites.",
+      "options": {
+        "ws2812b": "WS2812B (3-byte RGB)",
+        "sk6812rgbw": "SK6812 RGBW (4-byte)"
+      },
+      "sk6812AdalightWarning": "SK6812 RGBW is not supported with the Adalight profile. Falling back to WS2812B encoding."
+    },
     "firmwareProfile": {
       "title": "Firmware Profile",
       "description": "Choose the serial protocol that matches your LED controller firmware.",
@@ -1141,7 +1353,28 @@
       "lumasyncV1Description": "Native LumaSync protocol with health check and telemetry.",
       "adalightLabel": "Adalight",
       "adalightDescription": "Compatible with Prismatik, Hyperion, Boblight, and most DIY Arduino sketches.",
-      "brightnessDisabledTooltip": "Adalight profile: brightness is fixed in firmware"
+      "brightnessDisabledTooltip": "Adalight profile: brightness is fixed in firmware",
+      "mismatchTooltip": "Firmware reports {{advertised}}; selecting {{attempted}} will result in silent no-op. Update firmware or override with caution.",
+      "advertisedBadge": "Detected: {{advertised}}",
+      "useAnywayLabel": "Use anyway",
+      "useAnywayHint": "Override the firmware-detected profile. Only enable if you are running custom firmware.",
+      "overrideWarningTitle": "Mismatched firmware profile",
+      "overrideWarningBody": "Your controller advertised {{advertised}} during the last health check, but you are about to select {{attempted}}. The USB strip will silently no-op while Hue keeps streaming. Continue only if you are sure your firmware understands the {{attempted}} wire format.",
+      "overrideWarningConfirm": "Use {{attempted}} anyway",
+      "overrideWarningCancel": "Cancel",
+      "overrideWarningDontAskAgain": "Don't ask me again"
+    }
+  },
+  "hueZone": {
+    "statusCode": {
+      "created": "Hue zone created.",
+      "updated": "Hue zone updated.",
+      "deleted": "Hue zone deleted.",
+      "notFound": "Hue zone not found.",
+      "channelOutOfBounds": "Channel position is outside the allowed range.",
+      "limitReached": "Bridge channel cap reached for this Hue entertainment area.",
+      "channelNotInArea": "Channel does not belong to this Hue zone’s entertainment area.",
+      "oversized": "Hue zone size is outside the allowed range."
     }
   },
   "notifications": {

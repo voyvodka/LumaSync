@@ -87,24 +87,24 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-[480px] px-4">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-zinc-200 text-center mb-1">
+        <h3 className="text-sm font-semibold text-zinc-200 text-center mb-1">
           {t("roomMap.templates.title")}
         </h3>
-        <p className="text-[11px] text-slate-500 dark:text-zinc-400 text-center mb-4">
+        <p className="text-[11px] text-zinc-400 text-center mb-4">
           {t("roomMap.templates.subtitle")}
         </p>
         <div className="grid grid-cols-2 gap-2">
           {TEMPLATES.map((tmpl) => (
             <button
               key={tmpl.id}
-              className="flex flex-col items-center gap-1.5 rounded-lg border border-slate-200/70 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-3 hover:bg-slate-50 dark:hover:bg-zinc-800 hover:border-cyan-400/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+              className="flex flex-col items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-3 hover:bg-zinc-900 dark:hover:bg-zinc-800 hover:border-amber-400/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
               onClick={() => onSelect(tmpl.config(t))}
             >
               <span className="text-2xl">{tmpl.icon}</span>
-              <span className="text-[11px] font-semibold text-slate-700 dark:text-zinc-200">
+              <span className="text-[11px] font-semibold text-zinc-200">
                 {t(tmpl.nameKey)}
               </span>
-              <span className="text-[9px] text-slate-400 dark:text-zinc-500 text-center leading-tight">
+              <span className="text-[9px] text-zinc-500 text-center leading-tight">
                 {t(tmpl.descKey)}
               </span>
             </button>

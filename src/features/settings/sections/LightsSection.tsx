@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 
 import {
   MODE_GUARD_REASONS,
@@ -19,7 +20,9 @@ import {
   findMatchingScenePreset,
   type ScenePreset,
 } from "../../mode/model/scenePresets";
-import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
+import { HUE_ZONE_COMMANDS, type HueIntensityPreset, type HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { HueZone, RoomMapConfig } from "../../../shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
 import type { DisplayInfo } from "../../../shared/contracts/display";
 import {
   FIRMWARE_PROFILE,
@@ -37,6 +40,7 @@ import type { LedCalibrationConfig } from "../../calibration/model/contracts";
 import { getFullTelemetrySnapshot } from "../../telemetry/telemetryApi";
 import type { RuntimeTelemetrySnapshot } from "../../telemetry/model/contracts";
 import { shellStore } from "../../persistence/shellStore";
+import { OnboardingBanner } from "../../../shared/ui/OnboardingBanner";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
@@ -230,6 +234,66 @@ export function LightsSection({
     };
   }, []);
 
+  // ── Hue zone authoring (v1.5 W1-A5) ──────────────────────────────
+  // Track the persisted entertainment area so the dock "+" CTA is only
+  // enabled when the user has finished Hue onboarding. We do not mount
+  // the full useHueOnboarding state machine here; the area id alone is
+  // enough to author a logical zone.
+  const [lastHueAreaId, setLastHueAreaId] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void shellStore.load().then((state) => {
+      if (cancelled) return;
+      setLastHueAreaId(state.lastHueAreaId ?? null);
+    }).catch((error) => {
+      console.error("[LumaSync] LightsSection hueAreaId hydrate failed:", error);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const canAddHueZone = hueConfigured && hueReachable && lastHueAreaId !== null;
+
+  const handleAddHueZone = useCallback(async () => {
+    if (!canAddHueZone || !lastHueAreaId) return;
+    try {
+      const state = await shellStore.load();
+      const currentMap: RoomMapConfig = state.roomMap ?? DEFAULT_ROOM_MAP;
+      const existing = currentMap.hueZones ?? [];
+      const id = `hue-zone-${crypto.randomUUID()}`;
+      const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
+      const colorVar = `var(${palette[existing.length % palette.length]})`;
+      const newZone: HueZone = {
+        id,
+        name: t("roomMap.hueZones.defaultName", { N: String(existing.length + 1) }),
+        entertainmentAreaId: lastHueAreaId,
+        centerX: 0,
+        centerY: 0,
+        centerZ: 0,
+        scaleX: 0.5,
+        scaleY: 0.5,
+        scaleZ: 0.5,
+        channelIndices: [],
+        borderColor: colorVar,
+        centerColor: colorVar,
+      };
+      const nextMap: RoomMapConfig = {
+        ...currentMap,
+        hueZones: [...existing, newZone],
+      };
+      await shellStore.save({
+        roomMap: nextMap,
+        roomMapVersion: (state.roomMapVersion ?? 0) + 1,
+      });
+      try {
+        await invoke(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, { zone: newZone });
+      } catch (invokeErr) {
+        console.error("[LumaSync] create_hue_zone failed", invokeErr);
+      }
+    } catch (error) {
+      console.error("[LumaSync] handleAddHueZone failed:", error);
+    }
+  }, [canAddHueZone, lastHueAreaId, t]);
+
   const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
 
   const handleScenePresetClick = (preset: ScenePreset) => {
@@ -273,6 +337,18 @@ export function LightsSection({
       ambilight: { ...incomingAmbilight, saturation: percent / 100 },
     });
   };
+
+  // v1.5 W2 fix #40 — Ambilight brightness used to live only in the
+  // CompactLayout. Mirrored here so the full-mode Lights view exposes
+  // the same control set; payload field is `ambilight.brightness`
+  // (0..1 unit), surfaced as a 0..100% dial.
+  const handleAmbilightBrightnessChange = (percent: number) => {
+    onModeChange({
+      kind: LIGHTING_MODE_KIND.AMBILIGHT,
+      ambilight: { ...incomingAmbilight, brightness: percent / 100 },
+    });
+  };
+  const ambilightBrightnessPct = Math.round((incomingAmbilight.brightness ?? 1) * 100);
 
   const totalLeds = calibration?.totalLeds;
 
@@ -364,21 +440,25 @@ export function LightsSection({
   const blackBorderOn = incomingAmbilight.blackBorderDetection ?? false;
 
   const slidersDisabled = !isAmbilight || modeSelectorDisabled;
+  // Adalight (firmware-fixed brightness) gets the same lock parity as
+  // SolidColorPanel. Locking is OR-ed with the standard slider disable
+  // so the slider tooltip surfaces the firmware reason while transient
+  // mode-transition disables stay generic.
+  const ambilightBrightnessLocked = isAdalight || slidersDisabled;
 
   return (
     <div className="lm-lights-page">
       {/* ── Center column ─────────────────────────────────────────────── */}
       <div className="lm-lights-center">
         {lockState.showReason && (
-          <div className="lm-lights-cal-banner">
-            <div>
-              <div className="ttl">{t("lightsPage.calibrationBanner.title")}</div>
-              <div className="sub">{t("lightsPage.calibrationBanner.sub")}</div>
-            </div>
-            <button type="button" className="act" onClick={onOpenCalibration}>
-              {t("lightsPage.calibrationBanner.action")}
-            </button>
-          </div>
+          <OnboardingBanner
+            title={t("lightsPage.calibrationBanner.title")}
+            body={t("lightsPage.calibrationBanner.sub")}
+            primaryAction={{
+              label: t("lightsPage.calibrationBanner.action"),
+              onClick: onOpenCalibration,
+            }}
+          />
         )}
 
         {/* Mode strip */}
@@ -541,6 +621,38 @@ export function LightsSection({
               />
             )}
             <div className="lm-profile">
+              {/* Brightness — wired to AmbilightPayload.brightness (0..1).
+                  Adalight firmware does not carry a brightness byte, so the
+                  control falls into a visible-but-disabled state with the
+                  shared firmware-profile tooltip — same parity logic as
+                  the SolidColorPanel brightness slider. */}
+              <div className="lm-psl">
+                <div className="row">
+                  <span>{t("lightsPage.signal.profile.brightness")}</span>
+                  <b>{ambilightBrightnessPct}%</b>
+                </div>
+                <div className="tr">
+                  <div className="tr-track">
+                    <span className="tr-fill" style={{ width: `${ambilightBrightnessPct}%` }} />
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={ambilightBrightnessPct}
+                    disabled={ambilightBrightnessLocked}
+                    aria-disabled={ambilightBrightnessLocked}
+                    aria-label={t("lightsPage.signal.profile.brightness")}
+                    title={
+                      isAdalight
+                        ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+                        : undefined
+                    }
+                    onChange={(e) => handleAmbilightBrightnessChange(parseInt(e.target.value, 10))}
+                  />
+                </div>
+              </div>
               {/* Saturation — wired to AmbilightPayload.saturation (0.5–2.0). */}
               <div className="lm-psl">
                 <div className="row">
@@ -654,10 +766,15 @@ export function LightsSection({
             <button
               type="button"
               className="add"
-              disabled
-              aria-disabled="true"
+              disabled={!canAddHueZone}
+              aria-disabled={!canAddHueZone}
               aria-label={t("lightsPage.dock.addAria")}
-              title={t("lightsPage.dock.addTooltip")}
+              title={
+                canAddHueZone
+                  ? t("lightsPage.dock.addHueZoneTooltip")
+                  : t("lightsPage.dock.addDisabledTooltip")
+              }
+              onClick={canAddHueZone ? () => { void handleAddHueZone(); } : undefined}
             >
               +
             </button>

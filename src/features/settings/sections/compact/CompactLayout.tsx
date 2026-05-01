@@ -17,8 +17,11 @@
  * cascading reconciliations during a drag.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+
+import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
@@ -28,8 +31,11 @@ import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
 } from "../../../mode/state/modeGuard";
-import type { HueRuntimeTarget } from "../../../../shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "../../../../shared/contracts/hue";
+import { FIRMWARE_PROFILE, type FirmwareProfile } from "../../../../shared/contracts/device";
 import { SCENE_PRESETS, type ScenePreset } from "../../../mode/model/scenePresets";
+import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
+import { shellStore } from "../../../persistence/shellStore";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
@@ -40,6 +46,22 @@ interface CompactLayoutProps {
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (next: LightingModeConfig) => void;
+  /**
+   * v1.5 W2-B1 — deep-link from the compact-mode "no reachable output"
+   * banner into the DEVICES section. Optional so callers that wire the
+   * compact layout outside the main shell (test fixtures, storybook)
+   * can omit it; in production App.tsx supplies a `handleSectionChange`
+   * bound to `SECTION_IDS.DEVICES`.
+   */
+  onOpenDevices?: () => void;
+  /**
+   * v1.5 W2 fix #40 — Compact ↔ Full feature parity for the lighting
+   * smoothing preset. The compact ambilight card mounts the same
+   * `LightingSmoothingPresetControl` the Lights section uses, and forwards
+   * a chosen preset back to the parent so the running worker hot-reloads.
+   * Optional so test fixtures can mount the layout without wiring it.
+   */
+  onHueIntensityPresetChange?: (preset: HueIntensityPreset) => void;
 }
 
 const DEFAULT_SOLID = { r: 255, g: 220, b: 180, brightness: 1 } as const;
@@ -58,8 +80,38 @@ export function CompactLayout({
   isModeTransitioning,
   modeLockReason,
   onLightingModeChange,
+  onOpenDevices,
+  onHueIntensityPresetChange,
 }: CompactLayoutProps) {
   const { t } = useTranslation("common");
+
+  // v1.5 W2 fix #41 — Adalight brightness lock parity with full settings.
+  // Hydrate the persisted firmware profile so the compact Solid card can
+  // disable the brightness slider exactly like SolidColorPanel does in
+  // full mode. Without this, the user could nudge brightness in compact
+  // and the firmware would silently swallow the byte (Adalight wire
+  // format has no brightness field) — divergent UX between the two
+  // surfaces of the same runtime.
+  const [firmwareProfile, setFirmwareProfile] = useState<FirmwareProfile | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    void shellStore
+      .load()
+      .then((state) => {
+        if (cancelled) return;
+        setFirmwareProfile(state.firmwareProfile);
+      })
+      .catch((error) => {
+        console.error("[LumaSync] CompactLayout firmwareProfile hydrate failed:", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
+  const adalightLockReason = isAdalight
+    ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+    : undefined;
 
   const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID;
   const ambilightConfig = lightingMode.ambilight ?? DEFAULT_AMBILIGHT;
@@ -144,6 +196,30 @@ export function CompactLayout({
   return (
     <div className="lm-compact">
       <div className="lm-compact-body">
+        {/* ── Offline banner (v1.5 W2-B1) ───────────────────────────
+            Compact-friendly inline message + deep-link into DEVICES.
+            Shown only when neither USB nor Hue is reachable; non-Off
+            modes are already guarded by `nonOffDisabled`, so this
+            replaces the silent "buttons are dim" affordance with an
+            explicit recovery path. */}
+        {activationBlocked && (
+          <div className="lm-compact-offline" role="status" aria-live="polite">
+            <div className="lm-compact-offline-text">
+              <div className="ttl">{t("general.compact.offline.title")}</div>
+              <div className="sub">{t("general.compact.offline.body")}</div>
+            </div>
+            {onOpenDevices && (
+              <button
+                type="button"
+                className="lm-compact-offline-action"
+                onClick={onOpenDevices}
+              >
+                {t("general.compact.offline.action")}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ── Mode strip ─────────────────────────────────────────── */}
         <div>
           <div className="lm-compact-section-title">{t("general.compact.sections.mode")}</div>
@@ -183,9 +259,19 @@ export function CompactLayout({
             </div>
             <SelfContainedBrightnessRow
               initialPercent={ambilightBrightnessPct}
-              disabled={nonOffDisabled}
+              disabled={nonOffDisabled || isAdalight}
+              brightnessDisabledReason={adalightLockReason}
               onCommit={handleAmbilightBrightnessCommit}
             />
+            {/* v1.5 W2 fix #40 — smoothing preset parity with full mode.
+                Reuses the same control + persistence path so the chosen
+                preset hot-reloads the worker through App.tsx without a
+                mode toggle. */}
+            <div className="lm-compact-smoothing">
+              <LightingSmoothingPresetControl
+                onPresetChange={(next) => onHueIntensityPresetChange?.(next)}
+              />
+            </div>
           </div>
         )}
 
@@ -196,6 +282,8 @@ export function CompactLayout({
             onCommit={handleSolidCommit}
             label={t("general.mode.options.solid")}
             sublabel={t("general.mode.solidColor")}
+            brightnessDisabled={isAdalight}
+            brightnessDisabledReason={adalightLockReason}
           />
         )}
 
@@ -303,6 +391,10 @@ const BRIGHTNESS_COMMIT_MIN_INTERVAL_MS = 50;
 interface CompactSolidSectionProps {
   incoming: { r: number; g: number; b: number; brightness: number };
   disabled: boolean;
+  /** v1.5 W2 fix #41 — Adalight firmware lock parity with full Lights view. */
+  brightnessDisabled?: boolean;
+  /** Tooltip / mono notice surfaced when `brightnessDisabled` is true. */
+  brightnessDisabledReason?: string;
   label: string;
   sublabel: string;
   onCommit: (payload: { r: number; g: number; b: number; brightness: number }) => void;
@@ -311,6 +403,8 @@ interface CompactSolidSectionProps {
 function CompactSolidSection({
   incoming,
   disabled,
+  brightnessDisabled = false,
+  brightnessDisabledReason,
   label,
   sublabel,
   onCommit,
@@ -354,7 +448,8 @@ function CompactSolidSection({
       />
       <SelfContainedBrightnessRow
         initialPercent={brightnessPct}
-        disabled={disabled}
+        disabled={disabled || brightnessDisabled}
+        brightnessDisabledReason={brightnessDisabled ? brightnessDisabledReason : undefined}
         onCommit={handleBrightnessCommit}
       />
     </div>
@@ -381,6 +476,16 @@ function perceivedLuminance({ r, g, b }: { r: number; g: number; b: number }): n
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }
 
+/** Popover sizing constants used to clamp the position into the viewport.
+ *  Width matches the rendered HsvColorPicker(compact) + 12 px wrapper padding.
+ *  The height is now dynamically measured (see `useLayoutEffect` below) so
+ *  that variable-height surfaces — recent-colors strip in particular —
+ *  position correctly. The fallback estimate is only used during the very
+ *  first render before the popover commits to the DOM. */
+const POPOVER_WIDTH_PX = 200;
+const POPOVER_FALLBACK_HEIGHT_PX = 270;
+const POPOVER_VIEWPORT_MARGIN_PX = 8;
+
 function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps) {
   const { t } = useTranslation("common");
   const hex = rgbToHex(rgb);
@@ -390,41 +495,188 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
   const edgeColor = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.18)";
   const eyeBg = isLight ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.28)";
 
-  return (
-    <label
-      className={`lm-compact-hero ${disabled ? "is-disabled" : ""}`}
+  // v1.5 W1-A7 — open the SVG-native HSV picker in a small popover
+  // anchored to the hero card. The native <input type="color"> is gone;
+  // see HsvColorPicker for the replacement (keyboard nav + recent colors).
+  //
+  // v1.5 W2 fix #42 — popover is rendered through React.createPortal into
+  // document.body so the surrounding `.lm-compact-body { overflow: auto }`
+  // and `.lm-compact { overflow: hidden }` chain can no longer clip it.
+  // Position is computed from the trigger's getBoundingClientRect() and
+  // refreshed on resize / scroll so the popover tracks the hero tile while
+  // the user adjusts the brightness slider underneath.
+  //
+  // v1.5 W2 fix #43 — when the window is too short to fit the popover at
+  // either anchor (compact 320×480 with the 8-swatch RECENT row pushes
+  // ~290 px tall), the popover now clamps its own height to the viewport
+  // and scrolls internally instead of overflowing off-screen. The position
+  // is computed from a *measured* popover height rather than the
+  // POPOVER_FALLBACK_HEIGHT_PX constant — important because the recent
+  // strip mounts lazily and the picker grows after first paint. A
+  // useLayoutEffect re-measure follows the initial paint so the second
+  // commit lands at the final, post-measurement coordinates.
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{
+    left: number;
+    top: number;
+    maxHeight: number;
+  } | null>(null);
+
+  const recomputePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    // Prefer the live measurement of the rendered popover; fall back to the
+    // estimate only on the very first pass before the DOM has the node.
+    const measuredHeight = popoverRef.current?.offsetHeight;
+    const desiredHeight = measuredHeight && measuredHeight > 0
+      ? measuredHeight
+      : POPOVER_FALLBACK_HEIGHT_PX;
+
+    // Available space below the trigger and above it, both already
+    // accounting for the 8 px viewport margin.
+    const spaceBelow =
+      window.innerHeight - rect.bottom - POPOVER_VIEWPORT_MARGIN_PX - 6;
+    const spaceAbove = rect.top - POPOVER_VIEWPORT_MARGIN_PX - 6;
+    // Pick the side with more room. If neither side fits the popover in
+    // full, the larger side hosts the popover with internal scroll.
+    const placeAbove = spaceAbove > spaceBelow && desiredHeight > spaceBelow;
+    const availableSpace = placeAbove ? spaceAbove : spaceBelow;
+    // The popover is allowed to consume the entire available side, capped
+    // by the viewport. The CSS rule `overflow-y: auto` inside the popover
+    // wrapper does the actual scrolling once the picker exceeds maxHeight.
+    const viewportCap =
+      window.innerHeight - POPOVER_VIEWPORT_MARGIN_PX * 2;
+    const maxHeight = Math.max(120, Math.min(availableSpace, viewportCap));
+    const renderHeight = Math.min(desiredHeight, maxHeight);
+
+    const top = placeAbove
+      ? Math.max(POPOVER_VIEWPORT_MARGIN_PX, rect.top - renderHeight - 6)
+      : Math.min(
+          rect.bottom + 6,
+          window.innerHeight - renderHeight - POPOVER_VIEWPORT_MARGIN_PX,
+        );
+    let left = rect.left + rect.width / 2 - POPOVER_WIDTH_PX / 2;
+    // Clamp horizontally so the popover does not leak off-window. The
+    // 320 px compact frame is narrow enough that center-anchoring rarely
+    // overflows, but resizing the window mid-open made the picker flush
+    // against the right edge of the viewport without this clamp.
+    const maxLeft = window.innerWidth - POPOVER_WIDTH_PX - POPOVER_VIEWPORT_MARGIN_PX;
+    if (left < POPOVER_VIEWPORT_MARGIN_PX) left = POPOVER_VIEWPORT_MARGIN_PX;
+    if (left > maxLeft) left = Math.max(POPOVER_VIEWPORT_MARGIN_PX, maxLeft);
+    setPopoverPos({ left, top, maxHeight });
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setPopoverPos(null);
+      return;
+    }
+    recomputePosition();
+    const onResize = () => recomputePosition();
+    const onScroll = () => recomputePosition();
+    window.addEventListener("resize", onResize);
+    // Capture-phase scroll listener catches scrolls inside compact-body
+    // (which is the actual scroller — the window itself does not scroll).
+    window.addEventListener("scroll", onScroll, true);
+    const onDoc = (e: MouseEvent) => {
+      if (popoverRef.current?.contains(e.target as Node)) return;
+      if (triggerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, recomputePosition]);
+
+  // Two-pass positioning: the first render uses the fallback estimate, then
+  // useLayoutEffect re-runs synchronously after the popover has been laid
+  // out so the second pass uses the *measured* height. This is what fixes
+  // the off-by-N gap when the recent-colors strip pushes the picker past
+  // the estimate. Plus a ResizeObserver re-measures if the picker grows
+  // mid-open (e.g. the first time a swatch lands in the recent row).
+  useLayoutEffect(() => {
+    if (!open) return;
+    recomputePosition();
+    const node = popoverRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => recomputePosition());
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [open, recomputePosition]);
+
+  const popover = open && popoverPos ? (
+    <div
+      ref={popoverRef}
+      role="dialog"
+      aria-modal="false"
       aria-label={t("general.mode.solidColor")}
+      className="lm-compact-color-popover"
       style={{
-        background: hex,
-        backgroundImage:
-          "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%, rgba(0,0,0,0.08) 100%)",
-        boxShadow: `0 8px 24px -8px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55), inset 0 0 0 1px ${edgeColor}`,
+        position: "fixed",
+        left: popoverPos.left,
+        top: popoverPos.top,
+        width: POPOVER_WIDTH_PX,
+        maxHeight: popoverPos.maxHeight,
+        zIndex: 1000,
       }}
     >
-      <span className="lm-compact-hero-text">
-        <span className="lm-compact-hero-hex" style={{ color: textColor }}>
-          {hex.toUpperCase()}
-        </span>
-        <span className="lm-compact-hero-sub" style={{ color: subTextColor }}>
-          {sublabel}
-        </span>
-      </span>
-      <span
-        aria-hidden
-        className="lm-compact-hero-eye"
-        style={{ background: eyeBg, color: textColor }}
-      >
-        <EyedropperIcon />
-      </span>
-      <input
-        type="color"
+      <HsvColorPicker
         value={hex}
+        onChange={onChange}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        aria-label={t("general.mode.solidColor")}
-        className="lm-compact-hero-input"
+        ariaLabel={t("general.mode.solidColor")}
+        compact
       />
-    </label>
+    </div>
+  ) : null;
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`lm-compact-hero ${disabled ? "is-disabled" : ""}`}
+        aria-label={t("general.mode.solidColor")}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => { if (!disabled) setOpen((v) => !v); }}
+        style={{
+          backgroundColor: hex,
+          backgroundImage:
+            "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 55%, rgba(0,0,0,0.08) 100%)",
+          boxShadow: `0 8px 24px -8px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.55), inset 0 0 0 1px ${edgeColor}`,
+        }}
+      >
+        <span className="lm-compact-hero-text">
+          <span className="lm-compact-hero-hex" style={{ color: textColor }}>
+            {hex.toUpperCase()}
+          </span>
+          <span className="lm-compact-hero-sub" style={{ color: subTextColor }}>
+            {sublabel}
+          </span>
+        </span>
+        <span
+          aria-hidden
+          className="lm-compact-hero-eye"
+          style={{ background: eyeBg, color: textColor }}
+        >
+          <EyedropperIcon />
+        </span>
+      </button>
+      {popover && createPortal(popover, document.body)}
+    </div>
   );
 }
 
@@ -460,12 +712,20 @@ function EyedropperIcon() {
 interface SelfContainedBrightnessRowProps {
   initialPercent: number;
   disabled: boolean;
+  /**
+   * Mono mini-notice rendered under the slider when the row is disabled
+   * for a firmware-level reason (Adalight, primarily). Mirrors the
+   * SolidColorPanel surface in full mode so users see the same copy
+   * regardless of which window they're in.
+   */
+  brightnessDisabledReason?: string;
   onCommit: (next: number) => void;
 }
 
 function SelfContainedBrightnessRow({
   initialPercent,
   disabled,
+  brightnessDisabledReason,
   onCommit,
 }: SelfContainedBrightnessRowProps) {
   const { t } = useTranslation("common");
@@ -549,6 +809,8 @@ function SelfContainedBrightnessRow({
         step={1}
         value={localPercent}
         disabled={disabled}
+        aria-disabled={disabled}
+        title={brightnessDisabledReason}
         className="lm-compact-slider"
         style={sliderStyle}
         onPointerDown={() => {
@@ -562,6 +824,11 @@ function SelfContainedBrightnessRow({
           scheduleCommit(next);
         }}
       />
+      {brightnessDisabledReason && (
+        <div className="lm-compact-brightness-note" role="note">
+          {brightnessDisabledReason}
+        </div>
+      )}
     </div>
   );
 }

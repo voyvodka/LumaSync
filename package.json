@@ -1,7 +1,7 @@
 {
   "name": "lumasync",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Native desktop app that mirrors your screen to WS2812B LED strips and Philips Hue entertainment areas in real time — per-edge room-map calibration, fully local processing.",
   "homepage": "https://lumasync.app",
   "repository": {
@@ -13,7 +13,7 @@
   },
   "license": "MIT",
   "author": "voyvodka",
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@10.33.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -43,7 +43,7 @@
     "i18next-browser-languagedetector": "^8.2.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-i18next": "^17.0.4"
+    "react-i18next": "^17.0.6"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.9.0",

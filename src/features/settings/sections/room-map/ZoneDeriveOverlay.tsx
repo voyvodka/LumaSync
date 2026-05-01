@@ -190,7 +190,7 @@ export function ZoneDeriveOverlay({
         style={{ zIndex: 30 }}
       >
         <button
-          className="bg-slate-800 text-white hover:bg-slate-900 dark:bg-zinc-700 dark:hover:bg-zinc-600 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+          className="bg-amber-500 text-zinc-950 hover:bg-amber-400 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
           onClick={onConfirm}
           // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
@@ -198,7 +198,7 @@ export function ZoneDeriveOverlay({
           {t("roomMap.zones.confirmDeriveButton")}
         </button>
         <button
-          className="text-slate-500 hover:text-slate-700 dark:text-zinc-400 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+          className="text-zinc-400 hover:text-zinc-200 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
           onClick={onDiscard}
         >
           {t("roomMap.zones.cancelDeriveButton")}

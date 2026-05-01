@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 
+import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
 import { useSolidColorDraft } from "./useSolidColorDraft";
 
 function toHexPair(value: number): string {
@@ -61,7 +62,7 @@ export function SolidColorPanel({
       <div>
         <p className="mb-2 text-xs font-medium text-slate-600 dark:text-zinc-300">
           {t("general.mode.solidColor")}
-          <span className="ml-2 font-mono text-slate-900 dark:text-zinc-100">
+          <span className="ml-2 [font-family:var(--lm-mono)] text-zinc-100">
             {hexColor.toUpperCase()}
           </span>
         </p>
@@ -71,13 +72,11 @@ export function SolidColorPanel({
             background: `linear-gradient(135deg, rgba(${draft.r}, ${draft.g}, ${draft.b}, 0.18) 0%, transparent 100%)`,
           }}
         >
-          <input
-            type="color"
-            aria-label={t("general.mode.solidColor")}
-            disabled={disabled}
+          <HsvColorPicker
             value={hexColor}
-            className="h-9 w-14 cursor-pointer rounded border border-slate-300 bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-600"
-            onChange={(e) => setColor(parseHexColor(e.currentTarget.value))}
+            onChange={(hex) => setColor(parseHexColor(hex))}
+            disabled={disabled}
+            ariaLabel={t("general.mode.solidColor")}
           />
           <div className="min-w-0">
             <p className="text-xs font-medium text-slate-800 dark:text-zinc-100">
@@ -94,7 +93,7 @@ export function SolidColorPanel({
       <div>
         <p className="mb-2 flex items-center justify-between text-xs font-medium text-slate-600 dark:text-zinc-300">
           <span>{t("general.mode.brightness")}</span>
-          <span className="tabular-nums text-slate-900 dark:text-zinc-100">
+          <span className="tabular-nums text-zinc-100">
             {brightnessPercent}%
           </span>
         </p>
@@ -121,7 +120,7 @@ export function SolidColorPanel({
         </div>
         {brightnessDisabled && brightnessDisabledReason && (
           <div
-            className="mt-2 font-mono text-[10px] leading-snug text-amber-400/80 dark:text-amber-300/80"
+            className="mt-2 [font-family:var(--lm-mono)] text-[10px] leading-snug text-amber-300/80"
             role="note"
           >
             {brightnessDisabledReason}

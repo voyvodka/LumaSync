@@ -27,6 +27,7 @@ const REQUIRED_EXPORTS = [
   "SectionId",
   "SECTION_ORDER",
   "ShellState",
+  "SHELL_STATE_SCHEMA_VERSION",
   "DEFAULT_SHELL_STATE",
   "SHELL_STORE_KEY",
   "UI_MODE_SIZES",
@@ -60,6 +61,7 @@ const REQUIRED_SECTION_IDS = [
 // Required ShellState fields
 // ---------------------------------------------------------------------------
 const REQUIRED_STATE_FIELDS = [
+  "schemaVersion",
   "windowWidth",
   "windowHeight",
   "windowX",
@@ -82,6 +84,26 @@ const REQUIRED_V14_STATE_FIELDS = [
   "firmwareProfile",
   "selectedDisplayId",
   "notificationsEnabled",
+];
+
+/**
+ * v1.5 ShellState additions. All optional / additive — the absence of
+ * each field naturally degrades to a v1.4-compatible default
+ * (`hasCompletedOnboarding=false` shows onboarding once, `updateChannel`
+ * absent ⇒ stable channel, `selectedChipType` absent ⇒ WS2812B GRB).
+ * Strict optional-`?:` presence check, no default-value check.
+ */
+const REQUIRED_V15_STATE_FIELDS = [
+  "hasCompletedOnboarding",
+  "updateChannel",
+  "selectedChipType",
+  "dontWarnFirmwareProfileMismatch",
+];
+
+/** v1.5 contract surface that must be exported alongside the new fields. */
+const REQUIRED_V15_EXPORTS = [
+  "UpdateChannel",
+  "DEFAULT_UPDATE_CHANNEL",
 ];
 
 // ---------------------------------------------------------------------------
@@ -185,6 +207,24 @@ for (const field of REQUIRED_V14_STATE_FIELDS) {
   );
 }
 
+// Check v1.5 optional additions (chip type, update channel, onboarding)
+console.log("\n[ ShellState v1.5 additions ]");
+for (const field of REQUIRED_V15_STATE_FIELDS) {
+  check(
+    source.includes(field + "?:"),
+    `ShellState v1.5 field "${field}" declared optional`,
+    `MISSING optional ShellState v1.5 field "${field}"`
+  );
+}
+for (const name of REQUIRED_V15_EXPORTS) {
+  check(
+    source.includes(name),
+    `v1.5 export "${name}" present`,
+    `MISSING v1.5 export "${name}"`
+  );
+}
+
+
 // Check SECTION_ORDER completeness
 console.log("\n[ SECTION_ORDER completeness ]");
 const orderMatch = source.match(/SECTION_ORDER[^=]*=\s*\[([^\]]+)\]/s);
@@ -212,6 +252,18 @@ if (orderMatch) {
     "SECTION_ORDER array not found"
   );
 }
+
+// ---------------------------------------------------------------------------
+// Schema version bump (v1.5 W4-F — must be 2 to gate the zone migration shim;
+// retained at 2 across the W4-F2 direction reversal so the shim still triggers
+// on v1 on-disk states even though the migration semantics changed).
+// ---------------------------------------------------------------------------
+console.log("\n[ Shell state schema version (v1.5 W4-F / W4-F2) ]");
+check(
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*2\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 2 (W4-F2 zone migration gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 2 — F6 migration shim has no trigger"
+);
 
 // ---------------------------------------------------------------------------
 // Hue contract
@@ -301,6 +353,47 @@ check(
   "MISSING DEFAULT_HUE_INTENSITY_PRESET"
 );
 
+console.log("\n[ Hue zone re-export surface (v1.5 W4-F2) ]");
+// After the W4-F2 reversal, hue.ts re-exports the canonical Hue zone
+// surface from `roomMap.ts`. The literal command strings must NOT appear
+// inline in `hue.ts` (they live in `roomMap.ts > HUE_ZONE_COMMANDS`); the
+// re-export pointer must.
+check(
+  hueSource.includes("HUE_ZONE_COMMANDS"),
+  "hue.ts re-exports HUE_ZONE_COMMANDS pointer",
+  "MISSING HUE_ZONE_COMMANDS re-export in hue.ts"
+);
+check(
+  hueSource.includes("HUE_ZONE_STATUS_CODES"),
+  "hue.ts re-exports HUE_ZONE_STATUS_CODES pointer",
+  "MISSING HUE_ZONE_STATUS_CODES re-export in hue.ts"
+);
+check(
+  /export\s+type\s+HueZone\s*=/.test(hueSource),
+  "hue.ts re-exports HueZone type alias from roomMap.ts",
+  "MISSING HueZone type re-export in hue.ts"
+);
+check(
+  !hueSource.includes(`"create_hue_zone"`)
+    && !hueSource.includes(`"update_hue_zone"`)
+    && !hueSource.includes(`"delete_hue_zone"`)
+    && !hueSource.includes(`"assign_channel_to_hue_zone"`),
+  "literal Hue zone command strings NOT inlined in hue.ts (live in roomMap.ts)",
+  "STILL PRESENT: literal Hue zone command strings in hue.ts (move to roomMap.ts > HUE_ZONE_COMMANDS)"
+);
+check(
+  !hueSource.includes(`"HUE_ZONE_CREATED"`)
+    && !hueSource.includes(`"HUE_ZONE_UPDATED"`)
+    && !hueSource.includes(`"HUE_ZONE_DELETED"`)
+    && !hueSource.includes(`"HUE_ZONE_NOT_FOUND"`)
+    && !hueSource.includes(`"HUE_ZONE_CHANNEL_OUT_OF_BOUNDS"`)
+    && !hueSource.includes(`"HUE_ZONE_LIMIT_REACHED"`)
+    && !hueSource.includes(`"HUE_ZONE_CHANNEL_NOT_IN_AREA"`)
+    && !hueSource.includes(`"HUE_ZONE_OVERSIZED"`),
+  "literal Hue zone status code strings NOT inlined in hue.ts",
+  "STILL PRESENT: literal Hue zone status code strings in hue.ts (move to roomMap.ts > HUE_ZONE_STATUS_CODES)"
+);
+
 // ---------------------------------------------------------------------------
 // Device contract
 // ---------------------------------------------------------------------------
@@ -356,6 +449,56 @@ for (const name of REQUIRED_COLOR_CORRECTION_EXPORTS) {
   );
 }
 
+console.log("\n[ Device LED chip type (v1.5 G3) ]");
+const REQUIRED_LED_CHIP_TYPE_VALUES = [
+  "ws2812b-grb",
+  "sk6812-rgbw",
+];
+for (const value of REQUIRED_LED_CHIP_TYPE_VALUES) {
+  check(
+    deviceSource.includes(`"${value}"`),
+    `LED chip type value "${value}" defined`,
+    `MISSING LED chip type value "${value}"`
+  );
+}
+check(
+  deviceSource.includes("LED_CHIP_TYPE"),
+  "LED_CHIP_TYPE enum exported",
+  "MISSING LED_CHIP_TYPE enum"
+);
+check(
+  deviceSource.includes("LedChipType"),
+  "LedChipType type exported",
+  "MISSING LedChipType type"
+);
+
+console.log("\n[ Device advertised firmware profile (v1.5 H4) ]");
+const RUST_HEALTH_CHECK_RESULT_FILE = resolve(
+  ROOT,
+  "src-tauri/src/commands/device_connection.rs"
+);
+const RUST_HEALTH_CHECK_API_FILE = resolve(
+  ROOT,
+  "src/features/device/deviceConnectionApi.ts"
+);
+const rustHealthSource = readOrEmpty(RUST_HEALTH_CHECK_RESULT_FILE, "rust device_connection");
+const tsHealthApiSource = readOrEmpty(RUST_HEALTH_CHECK_API_FILE, "ts deviceConnectionApi");
+check(
+  deviceSource.includes("advertisedFirmwareProfile?: FirmwareProfile"),
+  "device.ts SerialHealthReport.advertisedFirmwareProfile field declared",
+  "MISSING device.ts SerialHealthReport.advertisedFirmwareProfile field"
+);
+check(
+  tsHealthApiSource.includes("advertisedFirmwareProfile?: FirmwareProfile"),
+  "deviceConnectionApi HealthCheckResult.advertisedFirmwareProfile field declared",
+  "MISSING deviceConnectionApi HealthCheckResult.advertisedFirmwareProfile field"
+);
+check(
+  rustHealthSource.includes("pub advertised_firmware_profile: Option<FirmwareProfile>"),
+  "Rust HealthCheckResult.advertised_firmware_profile field declared",
+  "MISSING Rust HealthCheckResult.advertised_firmware_profile field"
+);
+
 console.log("\n[ Device sample-LED-frame command ]");
 check(
   deviceSource.includes(`"sample_led_frame"`),
@@ -402,7 +545,7 @@ for (const cmd of REQUIRED_PLATFORM_COMMANDS) {
   check(
     platformSource.includes(`"${cmd}"`),
     `platform command "${cmd}" defined`,
-    `MISSING platform command "${cmd}"`
+    `MISSING platform command "${cmd}" in platform.ts`
   );
 }
 
@@ -437,6 +580,10 @@ const ROOM_MAP_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/roomMap.ts");
 const roomMapSource = readOrEmpty(ROOM_MAP_CONTRACT_FILE, "room map");
 
 console.log("\n[ Room map contract types ]");
+// `ZoneDefinition` and `LegacyHueZone` survive as @deprecated migration-shim
+// types (consumed by `migrateLegacyHueZone` and the W4-F2 logical-drop path);
+// `HueZone` is the canonical authoring type and MUST be present alongside
+// them.
 const REQUIRED_ROOM_MAP_TYPES = [
   "RoomDimensions",
   "HueChannelPlacement",
@@ -444,6 +591,8 @@ const REQUIRED_ROOM_MAP_TYPES = [
   "FurniturePlacement",
   "TvAnchorPlacement",
   "ZoneDefinition",
+  "LegacyHueZone",
+  "HueZone",
   "RoomMapConfig",
 ];
 for (const typeName of REQUIRED_ROOM_MAP_TYPES) {
@@ -464,6 +613,220 @@ for (const cmd of REQUIRED_ROOM_MAP_COMMANDS) {
     roomMapSource.includes(`"${cmd}"`),
     `room map command "${cmd}" defined`,
     `MISSING room map command "${cmd}" in roomMap.ts`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hue zone surface (v1.5 W4-F2 — Hue-only after the direction reversal)
+// ---------------------------------------------------------------------------
+console.log("\n[ Hue zone — canonical type shape (v1.5 W4-F2) ]");
+// `HueZone` is now Hue-only; the W4-F-era `zoneType` discriminator is gone,
+// so the Hue-required fields are non-optional on the canonical type.
+check(
+  /export\s+interface\s+HueZone\b/.test(roomMapSource),
+  "HueZone interface present in roomMap.ts",
+  "MISSING HueZone interface in roomMap.ts"
+);
+const HUE_ZONE_REQUIRED_FIELDS = [
+  ["entertainmentAreaId", "string"],
+  ["centerX", "number"],
+  ["centerY", "number"],
+  ["centerZ", "number"],
+  ["scaleX", "number"],
+  ["scaleY", "number"],
+  ["scaleZ", "number"],
+];
+// Slice the HueZone block so we only check fields inside that interface.
+const hueZoneBlockMatch = roomMapSource.match(
+  /export\s+interface\s+HueZone\b[\s\S]*?\n\}/,
+);
+const hueZoneBlock = hueZoneBlockMatch ? hueZoneBlockMatch[0] : "";
+for (const [field, ty] of HUE_ZONE_REQUIRED_FIELDS) {
+  // Required (no `?:`). Match `field: ty` — allow trailing semicolon /
+  // newline / comment.
+  const re = new RegExp(`\\b${field}:\\s*${ty}\\b`);
+  check(
+    re.test(hueZoneBlock),
+    `HueZone.${field} declared required (${ty})`,
+    `HueZone.${field} not declared required ${ty} (W4-F2: Hue-only fields lost their optional marker)`
+  );
+}
+// `zoneType` discriminator MUST be gone from the canonical HueZone block.
+check(
+  !/zoneType\s*[?:]/.test(hueZoneBlock),
+  "HueZone.zoneType discriminator removed (W4-F2 direction reversal)",
+  "HueZone.zoneType discriminator still present — W4-F2 cleanup incomplete"
+);
+
+console.log("\n[ Hue zone — legacy migration shape (v1.5 W4-F2) ]");
+check(
+  /export\s+interface\s+LegacyHueZone\b/.test(roomMapSource),
+  "LegacyHueZone interface present (read-only migration shape)",
+  "MISSING LegacyHueZone interface in roomMap.ts"
+);
+
+console.log("\n[ Hue zone — RoomMapConfig fields (v1.5 W4-F2) ]");
+check(
+  /zones:\s*HueZone\[\]/.test(roomMapSource),
+  "RoomMapConfig.zones typed HueZone[] (Hue-only, post-W4-F2)",
+  "RoomMapConfig.zones is not typed HueZone[] (W4-F2 cleanup incomplete)"
+);
+check(
+  /hueZones\?:\s*LegacyHueZone\[\]/.test(roomMapSource),
+  "RoomMapConfig.hueZones kept as @deprecated LegacyHueZone[] fallback",
+  "MISSING @deprecated RoomMapConfig.hueZones field — F6 migration shim has no fallback to read"
+);
+
+console.log("\n[ Hue zone — migration helper (v1.5 W4-F2) ]");
+check(
+  /export\s+function\s+migrateLegacyHueZone\s*\(/.test(roomMapSource),
+  "migrateLegacyHueZone helper exported (Hue-only)",
+  "MISSING migrateLegacyHueZone helper in roomMap.ts"
+);
+// The W4-F-era `toLogicalZone` and `toHueZone` helpers MUST be gone (the
+// brief logical-zone migration path was rolled back in W4-F2).
+check(
+  !/export\s+function\s+toLogicalZone\b/.test(roomMapSource),
+  "toLogicalZone helper removed (W4-F2 direction reversal)",
+  "STILL PRESENT: toLogicalZone helper — W4-F2 cleanup incomplete"
+);
+check(
+  !/export\s+function\s+toHueZone\b/.test(roomMapSource),
+  "toHueZone helper removed (renamed to migrateLegacyHueZone)",
+  "STILL PRESENT: toHueZone helper — should be renamed to migrateLegacyHueZone"
+);
+check(
+  !/export\s+function\s+asHueZoneLegacy\b/.test(roomMapSource),
+  "asHueZoneLegacy projection removed (W4-F2: HueZone is canonical, no projection needed)",
+  "STILL PRESENT: asHueZoneLegacy projection — should be deleted in W4-F2"
+);
+
+console.log("\n[ Hue zone — discriminator surface removed (v1.5 W4-F2) ]");
+// `ZONE_TYPES` / `ZoneType` were the W4-F unification's discriminator — both
+// must be gone after the direction reversal.
+check(
+  !/export\s+const\s+ZONE_TYPES\b/.test(roomMapSource),
+  "ZONE_TYPES const removed (W4-F2 reversal)",
+  "STILL PRESENT: ZONE_TYPES const — discriminator should be gone in W4-F2"
+);
+check(
+  !/export\s+type\s+ZoneType\b/.test(roomMapSource),
+  "ZoneType type removed (W4-F2 reversal)",
+  "STILL PRESENT: ZoneType type — discriminator should be gone in W4-F2"
+);
+// The brief generic `ZONE_COMMANDS` / `ZONE_STATUS_CODES` maps were renamed
+// back to the Hue-only `HUE_ZONE_*` family in W4-F2.
+check(
+  !/export\s+const\s+ZONE_COMMANDS\b/.test(roomMapSource),
+  "generic ZONE_COMMANDS map removed (W4-F2 reversal)",
+  "STILL PRESENT: generic ZONE_COMMANDS map — should be HUE_ZONE_COMMANDS after W4-F2"
+);
+check(
+  !/export\s+const\s+ZONE_STATUS_CODES\b/.test(roomMapSource),
+  "generic ZONE_STATUS_CODES map removed (W4-F2 reversal)",
+  "STILL PRESENT: generic ZONE_STATUS_CODES map — should be HUE_ZONE_STATUS_CODES after W4-F2"
+);
+// Brief W4-F-only status codes that only made sense in a logical/Hue
+// discriminated world.
+check(
+  !roomMapSource.includes(`"ZONE_TYPE_INVALID"`),
+  "ZONE_TYPE_INVALID status code removed (W4-F2 reversal)",
+  "STILL PRESENT: ZONE_TYPE_INVALID — only meaningful when discriminator existed"
+);
+check(
+  !roomMapSource.includes(`"ZONE_CONVERSION_OK"`),
+  "ZONE_CONVERSION_OK status code removed (W4-F2 reversal)",
+  "STILL PRESENT: ZONE_CONVERSION_OK — only meaningful for hue → logical conversion path"
+);
+
+console.log("\n[ Hue zone — command surface (v1.5 W4-F2) ]");
+const REQUIRED_HUE_ZONE_COMMANDS = [
+  "create_hue_zone",
+  "update_hue_zone",
+  "delete_hue_zone",
+  "assign_channel_to_hue_zone",
+];
+for (const cmd of REQUIRED_HUE_ZONE_COMMANDS) {
+  check(
+    roomMapSource.includes(`"${cmd}"`),
+    `hue zone command "${cmd}" defined in roomMap.ts`,
+    `MISSING hue zone command "${cmd}" in roomMap.ts > HUE_ZONE_COMMANDS`
+  );
+}
+check(
+  /export\s+const\s+HUE_ZONE_COMMANDS\s*=\s*\{/.test(roomMapSource),
+  "HUE_ZONE_COMMANDS const exported (Hue-only, post-W4-F2)",
+  "MISSING HUE_ZONE_COMMANDS const in roomMap.ts"
+);
+
+console.log("\n[ Hue zone — status codes (v1.5 W4-F2) ]");
+const REQUIRED_HUE_ZONE_STATUS_CODES = [
+  "HUE_ZONE_CREATED",
+  "HUE_ZONE_UPDATED",
+  "HUE_ZONE_DELETED",
+  "HUE_ZONE_NOT_FOUND",
+  "HUE_ZONE_CHANNEL_OUT_OF_BOUNDS",
+  "HUE_ZONE_LIMIT_REACHED",
+  "HUE_ZONE_CHANNEL_NOT_IN_AREA",
+  "HUE_ZONE_OVERSIZED",
+];
+for (const code of REQUIRED_HUE_ZONE_STATUS_CODES) {
+  check(
+    roomMapSource.includes(`"${code}"`),
+    `hue zone status code "${code}" defined`,
+    `MISSING hue zone status code "${code}" in roomMap.ts > HUE_ZONE_STATUS_CODES`
+  );
+}
+check(
+  /export\s+const\s+HUE_ZONE_STATUS_CODES\s*=\s*\{/.test(roomMapSource),
+  "HUE_ZONE_STATUS_CODES const exported (Hue-only, post-W4-F2)",
+  "MISSING HUE_ZONE_STATUS_CODES const in roomMap.ts"
+);
+
+// ---------------------------------------------------------------------------
+// Rust handler parity for the renamed Hue zone commands (v1.5 W4-F2).
+//
+// `lib.rs` registers Tauri commands through `generate_handler!` — the
+// post-W4-F2 verbs (`create_hue_zone`, `update_hue_zone`, `delete_hue_zone`,
+// `assign_channel_to_hue_zone`) MUST appear in that list, otherwise the
+// frontend's `invoke(HUE_ZONE_COMMANDS.X)` call resolves to nothing. The
+// brief W4-F-era generic `create_zone` / `update_zone` etc. handlers MUST
+// be gone.
+// ---------------------------------------------------------------------------
+const RUST_LIB_FILE = resolve(ROOT, "src-tauri/src/lib.rs");
+const rustLibSource = readOrEmpty(RUST_LIB_FILE, "rust lib.rs");
+
+console.log("\n[ Hue zone — Rust handler parity (v1.5 W4-F2) ]");
+const REQUIRED_RUST_HUE_ZONE_HANDLERS = [
+  "create_hue_zone",
+  "update_hue_zone",
+  "delete_hue_zone",
+  "assign_channel_to_hue_zone",
+];
+const handlerListMatch = rustLibSource.match(/generate_handler!\[([\s\S]*?)\]/);
+const handlerListBlock = handlerListMatch ? handlerListMatch[1] : "";
+for (const fn of REQUIRED_RUST_HUE_ZONE_HANDLERS) {
+  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
+  check(
+    re.test(handlerListBlock),
+    `Rust generate_handler! list registers "${fn}"`,
+    `MISSING Rust generate_handler! entry for "${fn}" — `
+      + `frontend invoke(HUE_ZONE_COMMANDS.X) will resolve to nothing`
+  );
+}
+// Brief W4-F-era handler names MUST be gone.
+const LEGACY_W4F_HANDLERS = [
+  "create_zone",
+  "update_zone",
+  "delete_zone",
+  "assign_channel_to_zone",
+];
+for (const fn of LEGACY_W4F_HANDLERS) {
+  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
+  check(
+    !re.test(handlerListBlock),
+    `legacy W4-F Rust handler "${fn}" removed from generate_handler! list`,
+    `STILL PRESENT: legacy W4-F Rust handler "${fn}" — partial rename detected`
   );
 }
 

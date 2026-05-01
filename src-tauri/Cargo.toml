@@ -1,6 +1,6 @@
 [package]
 name = "lumasync"
-version = "1.4.0"
+version = "1.5.0"
 description = "LumaSync — screen-synced ambient lighting for WS2812B LEDs and Philips Hue"
 authors = ["voyvodka"]
 edition = "2021"
@@ -43,9 +43,17 @@ serialport = "4"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1.52.1", features = ["rt"] }
+# v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
+# Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+# v1.5 W2-A3 — pure-Rust mDNS responder for LAN bridge discovery.
+# Used by `_hue._tcp.local.` (Hue) today; the shared `network::mdns` registry
+# also serves the future WLED `_wled._tcp.local.` browser (D5 — single
+# responder per process to avoid macOS SO_REUSEPORT contention).
+mdns-sd = "0.13"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-capture = "1.5.0"
+windows-capture = "2.0.0"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 raw-window-handle = "0.6"
 
@@ -53,3 +61,6 @@ raw-window-handle = "0.6"
 screencapturekit = "1.5.4"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow", "NSControl", "NSButton", "NSView"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+xcap = "0.9.4"

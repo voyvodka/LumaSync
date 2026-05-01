@@ -7,7 +7,7 @@ use serde_json::json;
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
-use super::hue_onboarding::CommandStatus;
+use crate::commands::hue_onboarding::CommandStatus;
 use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

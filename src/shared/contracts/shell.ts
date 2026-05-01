@@ -1,9 +1,10 @@
 import type { LedCalibrationConfig } from "./calibration";
-import type { ColorCorrectionConfig, FirmwareProfile } from "./device";
+import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./device";
 import type { DisplayId } from "./display";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
 import type {
   HueBridgeSummary,
+  HueCredentialBackend,
   HueCredentialStatus,
   HueIntensityPreset,
   HueOnboardingStep,
@@ -75,8 +76,35 @@ export const SECTION_ORDER: SectionId[] = [
 // Persisted Shell State Contract
 // ---------------------------------------------------------------------------
 
+/**
+ * Current persisted state schema version.
+ *
+ * Bumped whenever a non-additive change to `ShellState` requires a migration
+ * step on load (renamed/removed fields, semantic changes to existing data).
+ * Pure additive changes (new optional fields with backend-provided defaults)
+ * do NOT bump the version — the legacy spread-merge in `loadShellState` keeps
+ * existing user data compatible.
+ *
+ * v1.5 introduced this field at value `1`; absent on disk ⇒ treat as legacy
+ * pre-versioning state (also `1`, since v1.4 and earlier match the same
+ * additive shape).
+ *
+ * v1.5 W4-F bumps to `2` because the unified `Zone` shape is a non-additive
+ * change to `RoomMapConfig`: `zones` was widened from `ZoneDefinition[]` to
+ * `Zone[]` and the deprecated `hueZones?` array must be folded into the new
+ * unified list. The F6 migration shim converts both legacy arrays into the
+ * new `zones[]` on load and writes back at the new schema version.
+ */
+export const SHELL_STATE_SCHEMA_VERSION = 2 as const;
+
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {
+  /**
+   * Persisted-state schema version (v1.5+). Defaults to
+   * `SHELL_STATE_SCHEMA_VERSION` for fresh state and during legacy migration
+   * write-back. Future bumps run a one-shot upgrade in `loadShellState`.
+   */
+  schemaVersion: number;
   /** Window geometry (pixels) */
   windowWidth: number | null;
   windowHeight: number | null;
@@ -144,6 +172,19 @@ export interface ShellState {
    */
   hueCredentialStatus?: HueCredentialStatus;
   /**
+   * v1.5 W2-A2 — where the Hue credentials currently live.
+   *
+   * `keychain` ⇒ `hueAppKey` / `hueClientKey` MUST be cleared on the
+   *   shellStore (the OS keychain is the source of truth).
+   * `plaintext-legacy` ⇒ keychain is unavailable on this platform OR
+   *   migration failed; `hueAppKey` / `hueClientKey` remain populated
+   *   so the bridge stays usable.
+   *
+   * Absent ⇒ no pairing has happened on v1.5 yet (treat as legacy
+   * shape; the next successful pair will set this field).
+   */
+  credentialStorageBackend?: HueCredentialBackend;
+  /**
    * Persisted room map configuration.
    * Absent until the user first opens the room map editor.
    */
@@ -157,6 +198,14 @@ export interface ShellState {
   roomMapShowGrid?: boolean;
   /** Room map editor grid stroke width (px) */
   roomMapGridStrokeWidth?: number;
+  /**
+   * v1.5 W4-J #3 — Hue zone bounds visibility on the room-map canvas.
+   * When true (default), every persisted Hue zone renders its dashed
+   * bounds box; when false, only the active selection's bounds render
+   * (or none, if nothing is selected). Persisted so the user's
+   * preference survives editor reopen.
+   */
+  roomMapShowHueZones?: boolean;
   /** Room map editor background image opacity (0-100) */
   roomMapBackgroundOpacity?: number;
   /** Active UI layout mode (compact tray panel vs full settings window) */
@@ -184,6 +233,18 @@ export interface ShellState {
    */
   firmwareProfile?: FirmwareProfile;
   /**
+   * v1.5 H4 — when `true`, the FirmwareProfilePicker override-warning
+   * dialog is suppressed and the user's mismatched-profile commit
+   * proceeds without confirmation. Set by the "Don't ask again" checkbox
+   * inside the dialog. Absent / `false` ⇒ the dialog renders on every
+   * mismatched commit. Reset to `false` on factory-reset only.
+   *
+   * Additive — no schemaVersion bump because absence naturally degrades
+   * to "always show the warning", which is exactly the safe default for
+   * users upgrading from v1.4.
+   */
+  dontWarnFirmwareProfileMismatch?: boolean;
+  /**
    * Display chosen for ambilight capture (v1.4 GAP 2). Absent ⇒ capture
    * pipeline uses the OS primary display as it does today.
    */
@@ -193,10 +254,46 @@ export interface ShellState {
    * GAP). Absent ⇒ notifications disabled until the user opts in.
    */
   notificationsEnabled?: boolean;
+  /**
+   * v1.5 W2-B4 — first-run onboarding completion flag. When `true`,
+   * `OnboardingFlow` skips render entirely; when `undefined` / `false`,
+   * the 3-step inline progressive banner walks the user through
+   * picking a mode → connecting devices → calibrating LEDs. Set to
+   * `true` once the user finishes (or explicitly skips) the final step.
+   *
+   * Additive — no schemaVersion bump because the absence of the field
+   * naturally degrades to "show onboarding for first-launch users",
+   * which is exactly the legacy default for everyone upgrading from
+   * v1.4 (they will see the banner once and dismiss it).
+   */
+  hasCompletedOnboarding?: boolean;
+  /**
+   * LED chip type for the USB serial sink (v1.5 G3). Controls the per-pixel
+   * byte layout: `ws2812b-grb` (3 bytes, default) or `sk6812-rgbw` (4 bytes
+   * with host-side W = min(R,G,B) extraction). Absent ⇒ `WS2812B_GRB`.
+   */
+  selectedChipType?: LedChipType;
+  /**
+   * Update channel preference (v1.5 W2-C6). Defaults to `"stable"` when
+   * absent — `"beta"` opts the user into the prerelease feed served from
+   * `latest-beta.json` alongside the canonical `latest.json`.
+   *
+   * The channel is read at startup by `useAutoUpdater` so it can render the
+   * active channel badge inside `<UpdateModal />`. Endpoint selection is a
+   * fallback list today (Tauri updater walks both endpoints in order); a
+   * future Rust-side dynamic `app.updater_builder().endpoints(...)` rewrite
+   * is tracked behind Platform GAP 16 — the contract field lands first so
+   * the toggle UI and persisted state ship without blocking on it.
+   *
+   * Additive — `schemaVersion` is not bumped because absence naturally
+   * degrades to `"stable"` which matches v1.4 behaviour exactly.
+   */
+  updateChannel?: UpdateChannel;
 }
 
 /** Default shell state for first launch */
 export const DEFAULT_SHELL_STATE: ShellState = {
+  schemaVersion: SHELL_STATE_SCHEMA_VERSION,
   windowWidth: null,
   windowHeight: null,
   windowX: null,
@@ -219,6 +316,25 @@ export const SHELL_STORE_KEY = "shell-state";
 
 /** Window layout mode — compact for tray-first quick controls, full for settings */
 export type UIMode = "compact" | "full";
+
+/**
+ * Auto-update release channel (v1.5 W2-C6).
+ *
+ * - `"stable"` — production releases tagged `vX.Y.Z` (no suffix). Served
+ *   from `latest.json`. Default for fresh installs and upgrades from
+ *   v1.4 where the field is absent.
+ * - `"beta"` — prereleases tagged `vX.Y.Z-beta.N`. Served from
+ *   `latest-beta.json`. Opt-in via the Settings → System pane.
+ *
+ * Endpoint mapping today is a single canonical `latest.json` inside
+ * `tauri.conf.json`; a follow-up Rust-side dynamic
+ * `app.updater_builder().endpoints(...)` will route opted-in installs to
+ * `latest-beta.json` once the prerelease publishing flow is exercised.
+ */
+export type UpdateChannel = "stable" | "beta";
+
+/** Default update channel for fresh installs / unset state. */
+export const DEFAULT_UPDATE_CHANNEL: UpdateChannel = "stable";
 
 /** Logical pixel dimensions for each UI mode */
 export const UI_MODE_SIZES: Readonly<Record<UIMode, { width: number; height: number }>> = {

@@ -21,6 +21,25 @@ export const DEVICE_COMMANDS = {
    * sampling playground UI while the Rust handler lands in Wave 2.
    */
   SAMPLE_LED_FRAME: "sample_led_frame",
+  /**
+   * v1.5 W1-B1 — passive mDNS / SSDP scan for WLED instances on the LAN.
+   * Returns `WledDeviceInfo[]` so the device picker can list candidates
+   * before the user commits to a sink.
+   */
+  DISCOVER_WLED_DEVICES: "discover_wled_devices",
+  /**
+   * v1.5 W1-B1 — promote a discovered WLED instance to the active sink.
+   * Mirrors `connect_serial_port` semantics: idempotent, replaces the
+   * current sink, no implicit stream start.
+   */
+  CONNECT_WLED_SINK: "connect_wled_sink",
+  /**
+   * v1.5 W1-B1 — round-trip a single test packet to verify reachability,
+   * negotiated protocol, and reported LED count match the user's config.
+   * Surfaces `WLED_BRIDGE_UNREACHABLE` / `WLED_PROTOCOL_MISMATCH` /
+   * `WLED_LED_COUNT_MISMATCH` instead of generic transport errors.
+   */
+  TEST_WLED_BRIDGE: "test_wled_bridge",
 } as const;
 
 export const DEVICE_STATUS = {
@@ -44,6 +63,10 @@ export const SUPPORTED_CONTROLLER_IDS = [
   "10C4:EA60", // CP2102 (Silicon Labs)
   "2341:0043", // Arduino Uno R3
   "2341:0001", // Arduino Uno (original USB ID)
+  "067B:2303", // PL2303 (Prolific)
+  "1A86:5523", // CH341 (WinChipHead)
+  "10C4:EA70", // CP2104 (Silicon Labs)
+  "0403:6014", // FT232H (FTDI Hi-Speed)
 ] as const;
 
 export type SupportedControllerId = (typeof SUPPORTED_CONTROLLER_IDS)[number];
@@ -102,6 +125,35 @@ export const FIRMWARE_PROFILE = {
 } as const;
 
 export type FirmwareProfile = (typeof FIRMWARE_PROFILE)[keyof typeof FIRMWARE_PROFILE];
+
+// ---------------------------------------------------------------------------
+// LED chip type (v1.5 G3 — SK6812 RGBW host-side encoder)
+// ---------------------------------------------------------------------------
+
+/**
+ * LED chip type — controls the per-pixel byte layout in the encoded payload.
+ *
+ * This is an orthogonal axis to `FirmwareProfile`: the profile selects the
+ * wire framing family (LumaSync v1 vs Adalight); the chip type selects the
+ * per-pixel byte width within the payload.
+ *
+ * - `ws2812b-grb`: 3-byte RGB pixels (default). Backward-compatible with all
+ *   v1.x firmware.
+ * - `sk6812-rgbw`: 4-byte RGBW pixels. White channel `W = min(R, G, B)` is
+ *   extracted on the host after colour corrections are applied to R/G/B; the
+ *   W channel bypasses the LUT so that the firmware's native white
+ *   temperature is preserved.
+ *
+ * APA102 is deferred to v2.0 (firmware companion repo decision pending).
+ *
+ * Stored under `ShellState.selectedChipType`. Absent ⇒ `WS2812B_GRB`.
+ */
+export const LED_CHIP_TYPE = {
+  WS2812B_GRB: "ws2812b-grb",
+  SK6812_RGBW: "sk6812-rgbw",
+} as const;
+
+export type LedChipType = (typeof LED_CHIP_TYPE)[keyof typeof LED_CHIP_TYPE];
 
 // ---------------------------------------------------------------------------
 // Color correction (v1.4 G4 — per-channel gamma, Kelvin, saturation)
@@ -195,6 +247,11 @@ export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_
  * Report returned by `run_serial_health_check`. Exactly one report per
  * invocation; the `step` field records the last health-check stage that
  * produced a verdict so the UI can step through the health modal.
+ *
+ * NOTE: the live runtime surface is `HealthCheckResult` in
+ * `src/features/device/deviceConnectionApi.ts` — this declaration is the
+ * forward-looking shape kept in sync with the same Rust struct so that
+ * future re-platforming onto a single per-step report is non-breaking.
  */
 export interface SerialHealthReport {
   step: DeviceHealthStep;
@@ -202,8 +259,132 @@ export interface SerialHealthReport {
   message: string;
   /** Firmware self-reported semantic version, e.g. `"1.4.0"`. Populated when the handshake returned a version frame. */
   firmwareVersion?: string;
-  /** Firmware profile advertised by the device. Populated on successful handshake. */
-  firmwareProfile?: FirmwareProfile;
+  /**
+   * Firmware profile **advertised by the device** in the PONG profile byte.
+   *
+   * Distinct from `ShellState.firmwareProfile`, which is the user-selected
+   * encoder. The UI compares the two to detect Bug H4 — the user chose
+   * Adalight in Settings but the connected firmware advertised LumaSyncV1
+   * (or vice versa), causing the USB sink to silently no-op while Hue
+   * keeps streaming. (v1.5 H4)
+   *
+   * Absence semantics: undefined whenever Step 4 (HANDSHAKE) did not
+   * complete with `SERIAL_HEALTH_OK`, including timeout, protocol error,
+   * unknown profile byte, or legacy firmware that ships no profile byte.
+   * The UI MUST treat undefined as "unknown — do not gate the dropdown".
+   */
+  advertisedFirmwareProfile?: FirmwareProfile;
   /** Wall-clock latency of the handshake round trip. Populated on `SERIAL_HEALTH_OK`. */
   roundTripMs?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Sink reference (v1.5 W1-B1 — TS mirror of the Rust `LedSink` trait)
+// ---------------------------------------------------------------------------
+
+/**
+ * Discriminated union identifying the active LED output sink.
+ *
+ * This is the frontend mirror of the Rust `LedSink` trait (v1.4 G11).
+ * Every command that targets "the active sink" — health check, sampling
+ * playground, lighting mode start — accepts a `SinkRef` so the UI no
+ * longer special-cases serial vs. WLED. The Rust handler dispatches on
+ * `type` and routes to the matching trait implementation.
+ *
+ * Variants:
+ * - `serial` — USB / serial controller identified by its OS-reported
+ *   port name (the existing surface; v1.4 contract).
+ * - `wled-udp` — WLED instance reached over UDP on the LAN (v1.5 G1).
+ *
+ * Future variants (v2.0): `openrgb`, `tpm2`, `sacn`, `art-net`,
+ * `hyperion-rpc-output`. Keep the discriminant string in lower-kebab so
+ * Rust-side `serde(tag = "type")` round-trips unchanged.
+ */
+export type SinkRef =
+  | { type: "serial"; portName: string }
+  | { type: "wled-udp"; ip: string; port: number; ledCount: number };
+
+// ---------------------------------------------------------------------------
+// WLED UDP sink (v1.5 G1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persisted configuration for a WLED UDP sink.
+ *
+ * `port` defaults to 4048 (DDP) when the user has not customised it; the
+ * other DDP-compatible WLED ports (21324 for WARLS) live behind the
+ * `protocol` discriminant. `ledCount` mirrors the bridge-reported value
+ * at connect time and is checked at every reconnect — a mismatch surfaces
+ * `WLED_LED_COUNT_MISMATCH` so the user can re-trim their virtual strip
+ * before frames go out.
+ */
+export interface WledUdpSinkConfig {
+  /** WLED instance IP (IPv4 or IPv6 textual form). */
+  ip: string;
+  /** UDP port. Default 4048 for DDP, 21324 for WARLS. */
+  port: number;
+  /** Number of LEDs reported by the WLED instance. */
+  ledCount: number;
+  /**
+   * Wire protocol the host should speak.
+   *
+   * - `ddp`: Distributed Display Protocol — preferred, supports >490 LEDs
+   *   in a single frame, header carries an offset for chunked sends.
+   * - `warls`: WLED's native sync protocol — older, limited to one
+   *   datagram per packet, but compatible with every WLED build since
+   *   0.9.0. Fallback when the user pins compatibility.
+   */
+  protocol: "ddp" | "warls";
+}
+
+/** Default UDP port for the DDP wire protocol used by WLED. */
+export const WLED_DEFAULT_DDP_PORT = 4048 as const;
+
+/** Default UDP port for the WARLS wire protocol used by WLED. */
+export const WLED_DEFAULT_WARLS_PORT = 21324 as const;
+
+/**
+ * Snapshot of a WLED instance returned by `discover_wled_devices`.
+ *
+ * Mirrors the shape of the bridge's `/json/info` HTTP endpoint so the
+ * frontend can render a meaningful card in the device picker without a
+ * second round-trip. `mac` / `name` / `version` are best-effort — older
+ * WLED builds may omit them.
+ */
+export interface WledDeviceInfo {
+  ip: string;
+  mac?: string;
+  ledCount: number;
+  name?: string;
+  version?: string;
+}
+
+/**
+ * Status codes returned by the WLED command surface. Same coded-status
+ * pattern as the rest of the device contract: never throw, always a
+ * `status.code` discriminator.
+ */
+export const WLED_STATUS = {
+  /** `discover_wled_devices` succeeded; payload contains zero-or-more `WledDeviceInfo`. */
+  DISCOVERY_OK: "WLED_DISCOVERY_OK",
+  /** `discover_wled_devices` succeeded but no instances were found within the scan window. */
+  DISCOVERY_EMPTY: "WLED_DISCOVERY_EMPTY",
+  /** `discover_wled_devices` aborted before completion (mDNS/SSDP scan window exhausted). */
+  DISCOVERY_TIMEOUT: "WLED_DISCOVERY_TIMEOUT",
+  /** `connect_wled_sink` / `test_wled_bridge` could not reach the configured IP. */
+  BRIDGE_UNREACHABLE: "WLED_BRIDGE_UNREACHABLE",
+  /**
+   * The bridge replied but rejected our wire protocol (e.g. user picked
+   * DDP against a 0.8.x WLED build that only speaks WARLS). User must
+   * pick the alternate protocol on the same port.
+   */
+  PROTOCOL_MISMATCH: "WLED_PROTOCOL_MISMATCH",
+  /**
+   * The bridge advertised a `ledCount` different from the persisted
+   * `WledUdpSinkConfig.ledCount`. Surfaces both numbers so the UI can
+   * offer a one-click "trust the bridge" re-sync.
+   */
+  LED_COUNT_MISMATCH: "WLED_LED_COUNT_MISMATCH",
+} as const;
+
+export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];

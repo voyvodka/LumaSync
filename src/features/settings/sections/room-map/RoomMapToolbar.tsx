@@ -80,6 +80,10 @@ interface RoomMapToolbarProps {
   onRedo?: () => void;
 }
 
+/* Shared button styling — amber Rev 07 tokens, 32px tap floor */
+const TOOLBAR_BTN =
+  "lm-room-toolbar-btn focus-visible:outline-none";
+
 export function RoomMapToolbar({
   settingsOpen,
   onToggleSettings,
@@ -95,84 +99,62 @@ export function RoomMapToolbar({
   onRedo = () => {},
 }: RoomMapToolbarProps) {
   const { t } = useTranslation("common");
-
-  const btnBase =
-    "px-2 py-1 text-[11px] font-semibold rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60";
-  const btnActive =
-    "text-slate-700 hover:bg-slate-100 hover:text-slate-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
+  const deriveDisabled = !hasUsb || !hasTv;
 
   return (
-    <div className="relative h-10 flex items-center gap-2 px-3 border-b border-slate-200/70 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 shrink-0">
+    <div className="lm-room-toolbar shrink-0">
       {/* Derive Zones */}
-      {(() => {
-        const deriveDisabled = !hasUsb || !hasTv;
-        return (
-          <button
-            className={`${btnBase} flex items-center gap-1 ${
-              deriveDisabled
-                ? "opacity-40 cursor-not-allowed text-slate-500 dark:text-zinc-500"
-                : derivePreviewActive
-                  ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                  : btnActive
-            }`}
-            onClick={deriveDisabled ? undefined : onDeriveZones}
-            disabled={deriveDisabled}
-            aria-disabled={deriveDisabled}
-            title={deriveDisabled ? t("roomMap.zones.deriveDisabledTooltip") : undefined}
-          >
-            <IconGrid />
-            {t("roomMap.zones.deriveButton")}
-          </button>
-        );
-      })()}
-
-      {/* + Zone */}
       <button
-        className={`${btnBase} ${btnActive} flex items-center`}
-        onClick={onAddZone}
+        type="button"
+        className={`${TOOLBAR_BTN} ${
+          deriveDisabled ? "is-disabled" : derivePreviewActive ? "is-on" : ""
+        }`}
+        onClick={deriveDisabled ? undefined : onDeriveZones}
+        disabled={deriveDisabled}
+        aria-disabled={deriveDisabled}
+        title={deriveDisabled ? t("roomMap.zones.deriveDisabledTooltip") : undefined}
       >
-        {t("roomMap.zones.addZoneButton")}
-        {zoneCount > 0 && (
-          <span className="ml-1 rounded-full bg-slate-200 dark:bg-zinc-700 px-1 text-[9px]">
-            {zoneCount}
-          </span>
-        )}
+        <IconGrid />
+        <span>{t("roomMap.zones.deriveButton")}</span>
       </button>
 
-      {/* Separator + Undo/Redo */}
-      <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-zinc-700" />
+      {/* + Zone */}
+      <button type="button" className={TOOLBAR_BTN} onClick={onAddZone}>
+        <span>{t("roomMap.zones.addZoneButton")}</span>
+        {zoneCount > 0 && <span className="lm-room-toolbar-badge">{zoneCount}</span>}
+      </button>
+
+      <span className="lm-room-toolbar-sep" aria-hidden />
+
+      {/* Undo / Redo */}
       <button
-        className={`${btnBase} ${canUndo ? btnActive : "opacity-30 cursor-not-allowed text-slate-500 dark:text-zinc-500"} flex items-center min-w-[28px] min-h-[28px] justify-center`}
+        type="button"
+        className={`${TOOLBAR_BTN} is-icon ${!canUndo ? "is-disabled" : ""}`}
         onClick={canUndo ? onUndo : undefined}
         disabled={!canUndo}
         aria-label={t("roomMap.toolbar.undo")}
-        title={`${t("roomMap.toolbar.undo")} (${navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+"}Z)`}
+        title={`${t("roomMap.toolbar.undo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}Z)`}
       >
         <IconUndo />
       </button>
       <button
-        className={`${btnBase} ${canRedo ? btnActive : "opacity-30 cursor-not-allowed text-slate-500 dark:text-zinc-500"} flex items-center min-w-[28px] min-h-[28px] justify-center`}
+        type="button"
+        className={`${TOOLBAR_BTN} is-icon ${!canRedo ? "is-disabled" : ""}`}
         onClick={canRedo ? onRedo : undefined}
         disabled={!canRedo}
         aria-label={t("roomMap.toolbar.redo")}
-        title={`${t("roomMap.toolbar.redo")} (${navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+"}${navigator.platform.includes("Mac") ? "\u21E7" : "Shift+"}Z)`}
+        title={`${t("roomMap.toolbar.redo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}${navigator.platform.includes("Mac") ? "⇧" : "Shift+"}Z)`}
       >
         <IconRedo />
       </button>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Shortcuts help */}
-      <ShortcutsHelpButton btnBase={btnBase} btnActive={btnActive} />
+      <ShortcutsHelpButton />
 
-      {/* Settings gear */}
       <button
-        className={`${btnBase} ${
-          settingsOpen
-            ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-            : btnActive
-        } flex items-center gap-1 min-w-[32px] min-h-[32px] justify-center`}
+        type="button"
+        className={`${TOOLBAR_BTN} is-icon ${settingsOpen ? "is-on" : ""}`}
         onClick={onToggleSettings}
         aria-label={t("roomMap.toolbar.settingsAriaLabel")}
         aria-pressed={settingsOpen}
@@ -183,15 +165,15 @@ export function RoomMapToolbar({
   );
 }
 
-function ShortcutsHelpButton({ btnBase, btnActive }: { btnBase: string; btnActive: string }) {
+function ShortcutsHelpButton() {
   const { t } = useTranslation("common");
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const isMac = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
-  const mod = isMac ? "\u2318" : "Ctrl+";
-  const shift = isMac ? "\u21E7" : "Shift+";
+  const mod = isMac ? "⌘" : "Ctrl+";
+  const shift = isMac ? "⇧" : "Shift+";
 
   const shortcuts = [
     { key: `${mod}Z`, desc: t("roomMap.shortcuts.undo") },
@@ -234,9 +216,11 @@ function ShortcutsHelpButton({ btnBase, btnActive }: { btnBase: string; btnActiv
     <div className="relative">
       <button
         ref={btnRef}
-        className={`${btnBase} ${open ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100" : btnActive} flex items-center min-w-[28px] min-h-[28px] justify-center`}
+        type="button"
+        className={`${TOOLBAR_BTN} is-icon ${open ? "is-on" : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-label={t("roomMap.shortcuts.title")}
+        aria-expanded={open}
         title={t("roomMap.shortcuts.title")}
       >
         <IconInfo />
@@ -244,18 +228,19 @@ function ShortcutsHelpButton({ btnBase, btnActive }: { btnBase: string; btnActiv
       {open && (
         <div
           ref={popoverRef}
-          className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-slate-200/70 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl z-50 py-2 px-3"
+          className="lm-room-toolbar-popover"
+          role="dialog"
+          aria-modal="false"
+          aria-label={t("roomMap.shortcuts.title")}
         >
-          <h3 className="text-[11px] font-bold text-slate-700 dark:text-zinc-200 mb-1.5">
+          <h3 className="lm-room-toolbar-popover-h">
             {t("roomMap.shortcuts.title")}
           </h3>
-          <div className="space-y-1">
+          <div className="lm-room-toolbar-popover-body">
             {shortcuts.map((s) => (
-              <div key={s.key} className="flex items-center justify-between text-[10px]">
-                <span className="text-slate-500 dark:text-zinc-400">{s.desc}</span>
-                <kbd className="ml-2 rounded bg-slate-100 dark:bg-zinc-800 px-1 py-0.5 text-[9px] font-mono text-slate-600 dark:text-zinc-300 whitespace-nowrap">
-                  {s.key}
-                </kbd>
+              <div key={s.key} className="lm-room-toolbar-popover-row">
+                <span>{s.desc}</span>
+                <kbd>{s.key}</kbd>
               </div>
             ))}
           </div>

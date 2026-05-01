@@ -41,6 +41,24 @@
   --lm-mono:      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --lm-sans:      "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
+  /* Room-map zone identity palette. Six perceptually-separated hues used
+     for zone badges (Tailwind .bg-{blue,emerald,purple,amber,rose,cyan}-500
+     in ZoneListPanel.ZONE_COLORS). Mirrored here so JS can read the same
+     hex via CSS custom properties for inline boxShadow rings on Hue dots. */
+  --lm-zone-1: #3b82f6; /* blue-500   */
+  --lm-zone-2: #10b981; /* emerald-500 */
+  --lm-zone-3: #a855f7; /* purple-500 */
+  --lm-zone-4: #f59e0b; /* amber-500  */
+  --lm-zone-5: #f43f5e; /* rose-500   */
+  --lm-zone-6: #06b6d4; /* cyan-500   */
+
+  /* Focus ring tokens — every interactive surface uses one of these so the
+     ring color stays in lockstep across the app. `box-shadow` is the
+     preferred carrier (no layout shift). UI Gap 7 a11y consistency.       */
+  --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
+  --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+
   /* Lighting accent — driven by useAccentTheme. Fallbacks below match
      AMBILIGHT_ACCENT so the UI has a sensible default before the hook mounts. */
   --accent-color: rgb(20, 184, 166);
@@ -75,8 +93,8 @@
 }
 
 .lm-titlebar-toggle {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   border: 1px solid rgba(255, 176, 32, 0.22);
   background: rgba(255, 176, 32, 0.06);
@@ -97,7 +115,7 @@
 }
 .lm-titlebar-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-titlebar-toggle svg {
   width: 13px;
@@ -227,12 +245,57 @@
   color: var(--lm-red);
 }
 
+/* v1.5 W2-B1 — inline Reconnect button rendered next to an offline chip's
+   value. Uses the chip's currentColor so it inherits the offline tone
+   (idle = ink-faint, off = ink-faint), upgrades to amber on hover/focus,
+   and collapses to system colors under forced-colors. */
+.lm-statusbar-reconnect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.85;
+  padding: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.lm-statusbar-reconnect:hover {
+  opacity: 1;
+  background: rgba(255, 176, 32, 0.14);
+  color: var(--lm-amber);
+}
+.lm-statusbar-reconnect:focus-visible {
+  opacity: 1;
+  outline: none;
+  background: rgba(255, 176, 32, 0.18);
+  color: var(--lm-amber);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-statusbar.is-compact .lm-statusbar-reconnect {
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-statusbar-reconnect {
+    transition: none;
+  }
+}
+
 /* Forced-colors (Windows high contrast / accessibility skins) — the amber
    palette collapses to system colors. Mirror the semantic kinds to the
-   closest CSS system color so the pill stays legible without relying on
-   our brand tokens. Narrow to the FPS pill + StatusBar chrome for now;
-   broader forced-colors coverage is tracked under UI Gap 7. */
+   closest CSS system color so chrome surfaces stay legible without
+   relying on brand tokens. Covers TitleBar, StatusBar, status chips,
+   compact mode strip, and scene tiles (UI Gap 7). */
 @media (forced-colors: active) {
+  /* StatusBar — pills, labels, version, chrome */
   .lm-statusbar-value.is-ok,
   .lm-statusbar-value.is-active,
   .lm-statusbar-value.is-idle,
@@ -246,6 +309,75 @@
   }
   .lm-statusbar {
     border-top-color: CanvasText;
+  }
+  .lm-statusbar-kbd kbd {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-statusbar-reconnect {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+
+  /* TitleBar — brand, tabs, toggle, native control replacements */
+  .lm-titlebar {
+    border-bottom-color: CanvasText;
+    color: CanvasText;
+  }
+  .lm-titlebar-brand,
+  .lm-titlebar-brand .accent {
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-titlebar-toggle,
+  .lm-titlebar-ctrl {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-titlebar-toggle:focus-visible,
+  .lm-titlebar-ctrl:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-titlebar-tab {
+    color: CanvasText;
+  }
+  .lm-titlebar-tab.is-on {
+    color: Highlight;
+  }
+  .lm-titlebar-tab.is-on::after {
+    background: Highlight;
+    box-shadow: none;
+  }
+  .lm-titlebar-mark {
+    color: Highlight;
+  }
+
+  /* Compact mode strip + scene tiles — selection state must not rely
+     on color alone. Use Highlight for the active surface, CanvasText
+     borders for everything else. */
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-compact-mbtn.is-on {
+    color: Highlight;
+    border-color: Highlight;
+  }
+  .lm-compact-mbtn:focus-visible,
+  .lm-compact-scene-tile:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
   }
 }
 
@@ -298,7 +430,7 @@
 }
 .lm-titlebar-ctrl:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring-inset);
 }
 
 /* Small leading brand mark on Win/Linux (where mac traffic-lights live
@@ -341,10 +473,25 @@
   display: flex;
   flex-direction: column;
   gap: 11px;
-  flex: 1;
+  /* flex-basis: 0 forces the body to size from its overflow rather than its
+     intrinsic content height — without it, flex children with `min-height:
+     auto` push the body past its share of the column and the `overflow-y`
+     never engages because the body itself stretches the parent. */
+  flex: 1 1 0;
   min-height: 0;
   padding: 12px 12px 10px;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Keep flex children from claiming `min-content` space, which would
+   otherwise let intrinsic widths leak past the 320 px frame and starve
+   `lm-compact-body` of its scrollable region. */
+.lm-compact-body > * {
+  min-height: 0;
+  min-width: 0;
 }
 
 /* Section title — uppercase mono small + flexed gradient line */
@@ -398,7 +545,7 @@
 }
 .lm-compact-mbtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-compact-mbtn .ico {
   display: grid;
@@ -429,6 +576,75 @@
 .lm-compact-mbtn.is-on .ico,
 .lm-compact-mbtn.is-on .tn {
   color: var(--lm-amber);
+}
+
+/* v1.5 W2-B1 — Compact-mode offline banner. Inline alternative to a
+   greyed-out hero/scene tile when no USB/Hue output is reachable. Mirrors
+   the dark amber language of `.lm-lights-cal-banner` but shrunk to fit
+   the 320 px tray window. */
+.lm-compact-offline {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--lm-ink);
+}
+.lm-compact-offline-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-compact-offline-text .ttl {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber);
+  font-weight: 500;
+}
+.lm-compact-offline-text .sub {
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.lm-compact-offline-action {
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 32px;
+}
+.lm-compact-offline-action:hover {
+  background: rgba(255, 176, 32, 0.18);
+  border-color: rgba(255, 176, 32, 0.55);
+}
+.lm-compact-offline-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+@media (forced-colors: active) {
+  .lm-compact-offline {
+    border-color: CanvasText;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-compact-offline-text .ttl,
+  .lm-compact-offline-action {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
 }
 
 /* Active mode card */
@@ -611,6 +827,96 @@
   cursor: not-allowed;
 }
 
+/* v1.5 W2 fix #41 — Adalight brightness-locked notice. Mono mini-text
+   slotted under the slider when the firmware profile owns brightness;
+   matches the amber tone SolidColorPanel uses in the full Lights view. */
+.lm-compact-brightness-note {
+  margin-top: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  line-height: 1.35;
+  color: rgba(255, 176, 32, 0.78);
+}
+
+/* v1.5 W2 fix #40 — compact ambilight smoothing preset.
+   The shared LightingSmoothingPresetControl ships with `.lm-psl.lm-psl-seg`
+   styles tuned for the full Lights view; in the compact card we wrap it so
+   the segmented chip strip slots flush under the brightness slider with a
+   matching divider and slimmer padding. */
+.lm-compact-smoothing {
+  border-top: 1px solid var(--lm-line);
+}
+.lm-compact-smoothing .lm-psl {
+  padding: 8px 12px 10px;
+  border-right: 0;
+}
+.lm-compact-smoothing .lm-psl .row {
+  margin-bottom: 6px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--lm-ink-faint);
+}
+.lm-compact-smoothing .lm-psl .row b {
+  font-size: 10px;
+  color: var(--lm-ink);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Compact-mode color picker popover (v1.5 W2 fix #43).
+
+   Rendered through React.createPortal into document.body so the
+   surrounding `.lm-compact-body { overflow: auto }` chain cannot clip
+   it. Position + maxHeight are computed in CompactLayout.tsx; this rule
+   only owns the visual chrome (panel surface, amber-themed scrollbar,
+   forced-colors fallback, reduced-motion respect).
+
+   The internal `overflow-y: auto` is the load-bearing piece for short
+   windows: when the picker (hue ring + S/V square + hex + recent strip)
+   is taller than the available viewport side, the popover scrolls
+   inside its own clamp instead of overflowing off-screen — the original
+   bug pre-fix #43.                                                       */
+.lm-compact-color-popover {
+  background-color: var(--lm-panel);
+  border: 1px solid var(--lm-line-2);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow:
+    0 12px 32px -8px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 176, 32, 0.04);
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Honor the maxHeight set inline by CompactLayout, but never spill
+     below the viewport even if positioning math drifts. */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 176, 32, 0.28) transparent;
+}
+.lm-compact-color-popover::-webkit-scrollbar {
+  width: 6px;
+}
+.lm-compact-color-popover::-webkit-scrollbar-track {
+  background: transparent;
+}
+.lm-compact-color-popover::-webkit-scrollbar-thumb {
+  background: rgba(255, 176, 32, 0.28);
+  border-radius: 3px;
+}
+.lm-compact-color-popover::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 176, 32, 0.45);
+}
+
+/* Forced-colors fallback — Windows High Contrast collapses our amber
+   tokens to system colors so the popover stays distinguishable from
+   the underlying surface. */
+@media (forced-colors: active) {
+  .lm-compact-color-popover {
+    border: 1px solid CanvasText;
+    background-color: Canvas;
+    box-shadow: none;
+  }
+}
+
 /* Scene tile row — 5-flex with gradient backgrounds */
 .lm-compact-scenes {
   display: flex;
@@ -651,7 +957,7 @@
 }
 .lm-compact-scene-tile:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-compact-scene-tile::after {
   content: "";
@@ -1068,17 +1374,47 @@
 .lm-updater-btn-primary:focus-visible,
 .lm-updater-btn-retry:focus-visible {
   outline: none;
-  box-shadow:
-    0 0 0 2px rgba(255, 176, 32, 0.35),
-    0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Updater (existing) */
   .lm-updater-prog-fill::after {
     animation: none;
   }
   .lm-updater-spinner::before {
     animation-duration: 2.2s;
+  }
+
+  /* Decorative infinite loops — kill outright (UI Gap 7).
+     Functional spinners (lm-spin) keep ticking but at a calmer cadence. */
+  .lm-dcard-pill.is-streaming::before,
+  .lm-hue-traffic-fill::after {
+    animation: none !important;
+  }
+
+  /* TitleBar / StatusBar / chips — collapse hover/focus transitions
+     so keyboard navigation does not animate. */
+  .lm-titlebar-toggle,
+  .lm-titlebar-ctrl,
+  .lm-titlebar-tab,
+  .lm-statusbar-value {
+    transition: none !important;
+  }
+
+  /* Compact mode — fade-in, scene-tile hover, mbtn ripple-style press */
+  .lm-compact,
+  .lm-compact-mbtn,
+  .lm-compact-scene-tile,
+  .lm-compact-hero,
+  .lm-compact-hero-text,
+  .lm-compact-hero-eye {
+    transition: none !important;
+  }
+
+  /* Updater spinner stays animated (functional) but slower. */
+  .lm-updater-spinner::before {
+    animation-duration: 2.2s !important;
   }
 }
 
@@ -1215,7 +1551,7 @@
 }
 .lm-settings-tg:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 .lm-settings-tg:disabled {
   opacity: 0.5;
@@ -1281,7 +1617,7 @@
 }
 .lm-settings-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 
 /* About block */
@@ -1499,7 +1835,7 @@
 }
 .lm-device-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
+  box-shadow: var(--lm-focus-ring-soft);
 }
 
 /* Category body — each rail category has its own content column */
@@ -1558,7 +1894,7 @@
 }
 .lm-dcard[role="button"]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-dcard::after {
   content: "";
@@ -2483,7 +2819,7 @@
 }
 .lm-mbtn:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
+  box-shadow: var(--lm-focus-ring-inset);
 }
 .lm-mbtn .ico {
   width: 30px;
@@ -3144,6 +3480,152 @@
   text-transform: uppercase;
 }
 
+/* v1.5 W2-B3 — generic OnboardingBanner. Generalised from the
+   `.lm-lights-cal-banner` pattern so every progressive hint (calibration
+   required, first-run flow, future stale-state warnings) renders with
+   the same dark amber language. */
+.lm-onboarding-banner {
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--lm-ink);
+}
+.lm-onboarding-banner-step {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-amber);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.lm-onboarding-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-onboarding-banner-text .ttl {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-amber);
+  font-weight: 500;
+}
+.lm-onboarding-banner-text .sub {
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+.lm-onboarding-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.lm-onboarding-banner-primary {
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 32px;
+}
+.lm-onboarding-banner-primary:hover {
+  background: rgba(255, 176, 32, 0.18);
+  border-color: rgba(255, 176, 32, 0.55);
+}
+.lm-onboarding-banner-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-onboarding-banner-secondary {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--lm-ink-dim);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  font-weight: 500;
+  min-height: 32px;
+}
+.lm-onboarding-banner-secondary:hover {
+  color: var(--lm-ink);
+}
+.lm-onboarding-banner-secondary:focus-visible {
+  outline: none;
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+.lm-onboarding-banner-dismiss {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--lm-ink-faint);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.lm-onboarding-banner-dismiss:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-onboarding-banner-dismiss:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.55);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-onboarding-banner-dismiss {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-onboarding-banner {
+    border-color: CanvasText;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-onboarding-banner-step,
+  .lm-onboarding-banner-text .ttl,
+  .lm-onboarding-banner-primary,
+  .lm-onboarding-banner-secondary,
+  .lm-onboarding-banner-dismiss {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+}
+
 /* Calibration required banner (Phase 9 — amber dark variant) */
 .lm-lights-cal-banner {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.1), rgba(255, 176, 32, 0.03));
@@ -3277,5 +3759,2631 @@ body {
   }
   *::-webkit-scrollbar-thumb:hover {
     background-color: rgba(113, 113, 122, 0.75);
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Hue Channel Map (Channel Screen Regions panel) — v1.5 Rev 07 rework
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the legacy zinc/Tailwind-default surface that used to ship
+   inside `HueChannelMapPanel.tsx`. Aligned with `lm-settings-group` and
+   `lm-device-btn` so the panel stops looking like a foreign island
+   underneath the amber-tokenized DeviceSection cards.
+
+   Tokens consumed:
+   - `--lm-panel`, `--lm-panel-2`, `--lm-line`, `--lm-line-2`
+   - `--lm-ink`, `--lm-ink-dim`, `--lm-ink-faint`
+   - `--lm-amber`, `--lm-zone-1..4`, `--lm-ink-faint` (region dot ramp)
+   - `--lm-mono`, `--lm-focus-ring-soft`
+
+   A11y guarantees:
+   - `:focus-visible` everywhere via amber soft ring.
+   - All interactive controls clear the 28-32px tap-area floor.
+   - `prefers-reduced-motion` disables the selected-dot pulse.
+   - `forced-colors: active` mirrors selection chrome to system colors.
+   ────────────────────────────────────────────────────────────────── */
+
+/* Outer card sits in the same DeviceSection column as `.lm-settings-group`
+   and adopts the same shell so they read as one continuous surface. */
+.lm-chmap {
+  margin-top: 12px;
+}
+.lm-chmap-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+}
+
+/* Hint row + multi-select badge */
+.lm-chmap-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--lm-ink-dim, #8a94a3);
+  line-height: 1.5;
+}
+.lm-chmap-hint-text {
+  flex: 1;
+  min-width: 0;
+}
+.lm-chmap-multi {
+  flex-shrink: 0;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Position canvas — primary spatial control */
+.lm-chmap-canvas {
+  position: relative;
+  width: 100%;
+  height: 152px;
+  border: 1px solid var(--lm-line-2, #252b34);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 176, 32, 0.04), transparent 60%),
+    var(--lm-panel-2, #14171d);
+  overflow: hidden;
+  touch-action: none;
+}
+.lm-chmap-canvas-axis {
+  position: absolute;
+  background: var(--lm-line, #1a1e25);
+  pointer-events: none;
+}
+.lm-chmap-canvas-axis.is-v {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+}
+.lm-chmap-canvas-axis.is-h {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
+.lm-chmap-canvas-edge {
+  position: absolute;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--lm-ink-faint, #4d5564);
+  pointer-events: none;
+  user-select: none;
+}
+.lm-chmap-canvas-edge.is-l {
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lm-chmap-canvas-edge.is-r {
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lm-chmap-canvas-edge.is-t {
+  left: 50%;
+  top: 4px;
+  transform: translateX(-50%);
+}
+.lm-chmap-canvas-edge.is-b {
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+}
+
+/* Soft scrim shown in assign-zone mode while a single dot is selected
+   so the user sees the zone-pill row downstream as the next action. */
+.lm-chmap-canvas-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 8, 10, 0.35);
+  pointer-events: none;
+}
+
+/* Channel dot — anchor for hit area + visual disc.
+   The button itself is a 32px square hit area (a11y tap floor); the
+   visible coloured disc is rendered via ::before so we can scale it
+   without clipping the focus ring. */
+.lm-chmap-dot {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #07080a;
+  border-radius: 50%;
+}
+.lm-chmap-dot::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
+  transition: inset 140ms cubic-bezier(0.33, 1, 0.68, 1),
+    box-shadow 140ms ease;
+  z-index: 0;
+}
+.lm-chmap-dot > * {
+  position: relative;
+  z-index: 1;
+}
+.lm-chmap-dot.is-selected::before {
+  inset: 4px;
+  box-shadow:
+    0 0 0 2px var(--lm-bg, #07080a),
+    0 0 0 4px rgba(255, 176, 32, 0.55);
+}
+.lm-chmap-dot.is-multi::before {
+  inset: 6px;
+  box-shadow:
+    0 0 0 2px var(--lm-bg, #07080a),
+    0 0 0 3px rgba(255, 176, 32, 0.4);
+}
+.lm-chmap-dot.is-overridden::before {
+  outline: 1.5px solid #fff;
+  outline-offset: -1px;
+}
+.lm-chmap-dot.is-position {
+  cursor: grab;
+}
+.lm-chmap-dot.is-position.is-dragging {
+  cursor: grabbing;
+}
+.lm-chmap-dot:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Pulse ring — only on single-selection. Reduced-motion strips it. */
+.lm-chmap-dot-pulse {
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
+  opacity: 0.18;
+  pointer-events: none;
+  animation: lm-chmap-pulse 1.6s ease-out infinite;
+}
+@keyframes lm-chmap-pulse {
+  0% { transform: scale(0.85); opacity: 0.25; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-chmap-dot-pulse {
+    animation: none;
+    opacity: 0;
+  }
+  .lm-chmap-dot::before {
+    transition: none;
+  }
+}
+
+/* Drag-time coordinate tooltip */
+.lm-chmap-tooltip {
+  position: absolute;
+  z-index: 30;
+  transform: translate(14px, -34px);
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: rgba(7, 8, 10, 0.92);
+  border: 1px solid var(--lm-line-2, #252b34);
+  color: var(--lm-ink, #eaeef4);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Detail strip — appears under the canvas while a channel is selected.
+   Z-axis slider lives here. */
+.lm-chmap-detail {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--lm-line, #1a1e25);
+  border-radius: 8px;
+  background: var(--lm-panel-2, #14171d);
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+}
+.lm-chmap-detail-name {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink, #eaeef4);
+  flex-shrink: 0;
+}
+.lm-chmap-detail-pos {
+  font-size: 10px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.lm-chmap-detail-pos b {
+  color: var(--lm-ink, #eaeef4);
+  font-weight: 500;
+}
+.lm-chmap-detail-z {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.lm-chmap-detail-z-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint, #4d5564);
+}
+.lm-chmap-detail-z input[type="range"] {
+  width: 110px;
+  accent-color: var(--lm-amber, #ffb020);
+  cursor: pointer;
+}
+.lm-chmap-detail-z input[type="range"]:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 4px;
+}
+.lm-chmap-detail-z-val {
+  width: 38px;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--lm-ink, #eaeef4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Region rows — per-channel override list */
+.lm-chmap-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--lm-line, #1a1e25);
+}
+.lm-chmap-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--lm-line, #1a1e25);
+}
+.lm-chmap-row:last-child {
+  border-bottom: 0;
+}
+.lm-chmap-row-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 96px;
+}
+.lm-chmap-row-dot {
+  all: unset;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lm-chmap-row-dot::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
+  transition: width 120ms ease, height 120ms ease;
+}
+.lm-chmap-row-dot.is-selected::before {
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.5);
+}
+.lm-chmap-row-dot:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 50%;
+}
+.lm-chmap-row-num {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lm-ink, #eaeef4);
+  letter-spacing: 0.04em;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.lm-chmap-row-lights {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+}
+
+/* Region pill row — same family as `.lm-settings-seg button` */
+.lm-chmap-pills {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+}
+.lm-chmap-pill {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 5px 10px;
+  min-height: 26px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim, #8a94a3);
+  background: var(--lm-panel-2, #14171d);
+  border: 1px solid var(--lm-line-2, #252b34);
+  border-radius: 6px;
+  font-weight: 500;
+  text-align: center;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.lm-chmap-pill:hover:not(:disabled) {
+  color: var(--lm-ink, #eaeef4);
+  border-color: #3a4250;
+}
+.lm-chmap-pill.is-active {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.12);
+  border-color: rgba(255, 176, 32, 0.4);
+}
+.lm-chmap-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Trailing slot for "Reset" / "Saved" indicator */
+.lm-chmap-row-trail {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+}
+.lm-chmap-row-saved {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-green, #4ade80);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lm-chmap-row-saved::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lm-green, #4ade80);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+}
+.lm-chmap-row-reset {
+  all: unset;
+  cursor: pointer;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint, #4d5564);
+  padding: 4px 8px;
+  border-radius: 5px;
+  transition: color 120ms ease, background 120ms ease;
+}
+.lm-chmap-row-reset:hover {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-chmap-row-reset:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Footer — Save to bridge action + status feedback */
+.lm-chmap-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--lm-line, #1a1e25);
+  background: rgba(255, 255, 255, 0.01);
+}
+.lm-chmap-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.lm-chmap-beta {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+.lm-chmap-footer-spacer {
+  flex: 1;
+}
+/* Inline status panel — error / success for save and persist */
+.lm-chmap-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+.lm-chmap-feedback::before {
+  content: "";
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 5px;
+}
+.lm-chmap-feedback.is-ok {
+  color: var(--lm-green, #4ade80);
+  background: rgba(74, 222, 128, 0.06);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.lm-chmap-feedback.is-ok::before {
+  background: var(--lm-green, #4ade80);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+.lm-chmap-feedback.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.07);
+  border-color: rgba(255, 176, 32, 0.3);
+}
+.lm-chmap-feedback.is-warn::before {
+  background: var(--lm-amber, #ffb020);
+  box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
+}
+.lm-chmap-feedback.is-err {
+  color: var(--lm-red, #ef5b5b);
+  background: rgba(239, 91, 91, 0.07);
+  border-color: rgba(239, 91, 91, 0.3);
+}
+.lm-chmap-feedback.is-err::before {
+  background: var(--lm-red, #ef5b5b);
+  box-shadow: 0 0 6px rgba(239, 91, 91, 0.5);
+}
+.lm-chmap-feedback-retry {
+  all: unset;
+  cursor: pointer;
+  margin-left: 6px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  color: inherit;
+}
+.lm-chmap-feedback-retry:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 3px;
+}
+
+/* Forced-colors fallback — selection chrome must collapse to system
+   colors so users on Windows high-contrast skins still get an
+   unambiguous selection signal. */
+@media (forced-colors: active) {
+  .lm-chmap-canvas {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-chmap-canvas-axis,
+  .lm-chmap-canvas-edge {
+    color: CanvasText;
+    background: CanvasText;
+  }
+  .lm-chmap-dot::before {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-dot.is-selected::before,
+  .lm-chmap-dot.is-multi::before {
+    background: Highlight;
+    box-shadow: 0 0 0 2px Canvas, 0 0 0 4px Highlight;
+  }
+  .lm-chmap-pill {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-pill.is-active {
+    color: Highlight;
+    border-color: Highlight;
+  }
+  .lm-chmap-pill:focus-visible,
+  .lm-chmap-dot:focus-visible,
+  .lm-chmap-row-dot:focus-visible,
+  .lm-chmap-row-reset:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+    box-shadow: none;
+  }
+  .lm-chmap-feedback {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-chmap-feedback::before {
+    background: CanvasText;
+  }
+  .lm-chmap-beta,
+  .lm-chmap-multi {
+    color: Highlight;
+    border-color: Highlight;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Room map editor — right dock + zone bounds + zone label chip
+   v1.5 surface rework (replaces zinc/Tailwind ad-hoc panel chrome)
+   ─────────────────────────────────────────────────────────────────────
+   Consolidates the previous `ObjectListPanel` + `HueZonePropertiesPanel`
+   side-by-side layout (two 180px columns that broke on narrow windows)
+   into a single 260-300px tabbed dock that always shows the active
+   selection's properties below the list.
+
+   Tokens consumed:
+   - `--lm-panel`, `--lm-panel-2`, `--lm-line`, `--lm-line-2`
+   - `--lm-ink`, `--lm-ink-dim`, `--lm-ink-faint`
+   - `--lm-amber`, `--lm-zone-1..6`
+   - `--lm-mono`, `--lm-focus-ring-soft`
+
+   A11y guarantees:
+   - Tab buttons + chips clear the 32px tap floor.
+   - `:focus-visible` ⇒ amber soft ring (no plain `:focus`).
+   - `prefers-reduced-motion` disables the underline slide.
+   - `forced-colors: active` mirrors active tab + chip chrome.
+   ────────────────────────────────────────────────────────────────── */
+
+.lm-room-dock {
+  display: flex;
+  flex-direction: column;
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  font-family: var(--lm-sans);
+  color: var(--lm-ink);
+  /* Fill the parent row vertically so the inner flex-column can clamp
+     `.lm-room-dock-inspect` (max-height: 50%) against a real height
+     instead of `auto`. Without this the inspector's percentage cap
+     resolves to "no cap" and tall content (HSV picker + swatches +
+     metric read-out + slider) overflows past the dock. */
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 1100px) {
+  .lm-room-dock {
+    width: 240px;
+  }
+}
+
+/* Tab bar — sits directly under the canvas toolbar; uses mono caps */
+.lm-room-dock-tabs {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+  flex-shrink: 0;
+}
+.lm-room-dock-tab {
+  all: unset;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 8px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  cursor: pointer;
+  position: relative;
+  transition: color 120ms ease;
+}
+.lm-room-dock-tab:hover {
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-tab:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-tab.is-on {
+  color: var(--lm-ink);
+}
+.lm-room-dock-tab.is-on::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  background: var(--lm-amber);
+  border-radius: 1px 1px 0 0;
+}
+.lm-room-dock-tab-count {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--lm-ink-faint);
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lm-line-2);
+  text-transform: none;
+}
+.lm-room-dock-tab.is-on .lm-room-dock-tab-count {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.1);
+  border-color: rgba(255, 176, 32, 0.32);
+}
+
+/* Split body — list (auto) + inspector (auto, capped) */
+.lm-room-dock-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.lm-room-dock-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px 8px;
+}
+.lm-room-dock-empty {
+  padding: 14px 12px;
+  text-align: center;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+.lm-room-dock-empty .lm-room-dock-empty-cta {
+  margin-top: 8px;
+}
+
+/* Section header inside list (zone group, unassigned bucket) */
+.lm-room-dock-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 4px 2px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+/*
+ * v1.5 W4-F2 manual-test (2026-04-28): clickable Hue zone headers in
+ * the Objects list. Hover lifts opacity + shows the amber selection
+ * cue, `is-on` matches the `.lm-room-dock-row.is-on` treatment so a
+ * selected zone in the side list visually pairs with the bottom
+ * inspector.
+ */
+.lm-room-dock-h.is-clickable {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin: 6px 0 2px;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+.lm-room-dock-h.is-clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-h.is-clickable:focus-visible {
+  outline: var(--lm-focus-ring, 2px solid currentColor);
+  outline-offset: 1px;
+}
+.lm-room-dock-h.is-clickable.is-on {
+  background: rgba(255, 176, 32, 0.1);
+  color: var(--lm-amber);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-dock-h.is-clickable {
+    transition: none;
+  }
+}
+.lm-room-dock-h-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.lm-room-dock-h-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-h-count {
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--lm-ink-faint);
+  text-transform: none;
+}
+.lm-room-dock-h-add {
+  all: unset;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-dim);
+  border-radius: 4px;
+  text-transform: none;
+}
+.lm-room-dock-h-add:hover {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-room-dock-h-add:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  color: var(--lm-amber);
+}
+.lm-room-dock-h-add[aria-disabled="true"] {
+  color: var(--lm-ink-faint);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* List rows */
+.lm-room-dock-row {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  position: relative;
+  transition: background 100ms ease, color 100ms ease;
+}
+.lm-room-dock-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--lm-ink);
+}
+.lm-room-dock-row:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-row.is-on {
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink);
+}
+.lm-room-dock-row.is-on::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--lm-amber);
+}
+.lm-room-dock-row.is-nested {
+  margin-left: 12px;
+  padding-left: 8px;
+  border-left: 1px solid var(--lm-line);
+  border-radius: 0 5px 5px 0;
+  min-height: 24px;
+  font-size: 10.5px;
+  color: var(--lm-ink-faint);
+}
+.lm-room-dock-row.is-nested:hover {
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-row-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+.lm-room-dock-row.is-nested .lm-room-dock-row-dot {
+  width: 6px;
+  height: 6px;
+}
+.lm-room-dock-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-row-meta {
+  flex-shrink: 0;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+}
+.lm-room-dock-row-edit {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--lm-line-2);
+  color: var(--lm-ink);
+  font-size: 11px;
+  padding: 2px 0;
+}
+.lm-room-dock-row-edit:focus {
+  outline: none;
+  border-bottom-color: var(--lm-amber);
+}
+.lm-room-dock-row-action {
+  all: unset;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  color: var(--lm-ink-faint);
+  font-size: 12px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.lm-room-dock-row:hover .lm-room-dock-row-action,
+.lm-room-dock-row:focus-within .lm-room-dock-row-action {
+  opacity: 1;
+}
+.lm-room-dock-row-action:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-room-dock-row-action.is-danger:hover {
+  color: var(--lm-red);
+  background: rgba(239, 91, 91, 0.08);
+}
+.lm-room-dock-row-action:focus-visible {
+  outline: none;
+  opacity: 1;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* CTA buttons (Add zone, retry) */
+.lm-room-dock-cta {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.32);
+  color: var(--lm-amber);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.lm-room-dock-cta:hover {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-room-dock-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-cta[aria-disabled="true"],
+.lm-room-dock-cta:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Inspector panel — sits below the list */
+.lm-room-dock-inspect {
+  /* W4-G #1 — was `flex-shrink: 0` which let the inspector push the
+     list area into negative space when the picker + swatches + slider
+     stack exceeded 50 % of the dock. `0 1 auto` lets the inspector
+     shrink alongside the list, and the absolute 360 px ceiling keeps
+     the inspector usable on very tall monitors where 50 % would
+     swallow the whole list. W4-I #4 — tightened vertical rhythm
+     (gap 8 → 6, padding 10 → 8) so the size slider, metre input,
+     metric read-out and hint stack stops overlapping when the dock
+     is narrow. */
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(50%, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lm-room-dock-inspect-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+}
+.lm-room-dock-inspect-h .sub {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--lm-ink-dim);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-inspect-h-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--lm-ink-dim);
+  font-size: 8.5px;
+}
+.lm-room-dock-inspect-h-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.lm-room-dock-inspect-empty {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  padding: 6px 0;
+}
+
+/* Inspector field rows (label + control) */
+.lm-room-dock-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* W4-I #4 — was 26 px, which combined with the slider thumb
+     (12 px) and the 14 px line-height of the metric read-out caused
+     the rows to stack tighter than their bounding box on narrow
+     docks. 24 px keeps the same visual rhythm but trims 6 px off the
+     four-row size cluster, giving the hint room to breathe. */
+  min-height: 24px;
+}
+.lm-room-dock-field-label {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-dim);
+  flex-shrink: 0;
+  width: 52px;
+  text-transform: uppercase;
+}
+.lm-room-dock-field-hint {
+  margin: 2px 0 0 60px;
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: var(--lm-ink-dim);
+  letter-spacing: 0.01em;
+}
+.lm-room-dock-field-value {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink);
+  letter-spacing: 0.02em;
+  flex: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-room-dock-slider {
+  flex: 1;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lm-line-2);
+  cursor: pointer;
+}
+.lm-room-dock-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  border: 2px solid var(--lm-bg);
+  cursor: pointer;
+}
+.lm-room-dock-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  border: 2px solid var(--lm-bg);
+  cursor: pointer;
+}
+.lm-room-dock-slider:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
+/* Zone label chip — pinned to canvas top-left when a Hue zone is active */
+.lm-room-zone-chip {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(7, 8, 10, 0.78);
+  backdrop-filter: blur(4px);
+  border: 1px solid var(--lm-line-2);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink);
+  pointer-events: none;
+  z-index: 22;
+}
+.lm-room-zone-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.lm-room-zone-chip-tip {
+  color: var(--lm-ink-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-B (B1) — Hue area state strip
+   ─────────────────────────────────────────────────────────────────────
+   Renders at the top of the Hue Zones tab body. Three visual variants
+   (`--not-configured`, `--no-area`, `--ready`) signal the bridge state
+   so the user never has to leave the editor to find out why "+ Zone"
+   is disabled. Color is paired with copy and a leading dot — never the
+   sole signal. CTA button takes the user straight to the Devices
+   section through the parent-supplied callback.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-area-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 8px 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line);
+  background: rgba(255, 255, 255, 0.02);
+}
+.lm-room-dock-area-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--lm-ink-faint);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.04);
+}
+.lm-room-dock-area-state-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.lm-room-dock-area-state-title {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+}
+.lm-room-dock-area-state-sub {
+  font-size: 10.5px;
+  color: var(--lm-ink-dim);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-room-dock-area-state-cta {
+  all: unset;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.25);
+  text-transform: none;
+}
+.lm-room-dock-area-state-cta:hover {
+  background: rgba(255, 176, 32, 0.16);
+}
+.lm-room-dock-area-state-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-area-state--not-configured .lm-room-dock-area-state-dot {
+  background: var(--lm-ink-faint);
+}
+.lm-room-dock-area-state--no-area .lm-room-dock-area-state-dot {
+  background: var(--lm-amber);
+  box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.18);
+}
+.lm-room-dock-area-state--ready .lm-room-dock-area-state-dot {
+  background: var(--lm-green, #28c76f);
+  box-shadow: 0 0 0 2px rgba(40, 199, 111, 0.18);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-B (B2/B3) — Channel drag handle + drop target highlight
+   ─────────────────────────────────────────────────────────────────────
+   The grip is always rendered (it is the discoverability anchor for
+   B2). Drop targets — zone rows + the Unassigned bucket header — get
+   an amber outline + soft tinted background while a drag is in
+   flight, so the user knows exactly where their drop will land.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-row-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--lm-ink-faint);
+  cursor: grab;
+  border-radius: 3px;
+  opacity: 0.6;
+  transition: opacity 100ms ease, color 100ms ease;
+}
+.lm-room-dock-row:hover .lm-room-dock-row-grip,
+.lm-room-dock-row:focus-within .lm-room-dock-row-grip {
+  opacity: 1;
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-row.is-drag-source {
+  opacity: 0.5;
+}
+.lm-room-dock-row.is-drag-source .lm-room-dock-row-grip {
+  cursor: grabbing;
+  color: var(--lm-amber);
+}
+.lm-room-dock-row.is-drop-target {
+  background: rgba(255, 176, 32, 0.12);
+  outline: 1px dashed rgba(255, 176, 32, 0.55);
+  outline-offset: -1px;
+}
+.lm-room-dock-h.is-drop-target {
+  background: rgba(255, 176, 32, 0.08);
+  outline: 1px dashed rgba(255, 176, 32, 0.4);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+.lm-room-dock-row-action--move {
+  opacity: 0;
+}
+.lm-room-dock-row:hover .lm-room-dock-row-action--move,
+.lm-room-dock-row:focus-within .lm-room-dock-row-action--move {
+  opacity: 1;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Move-to popover — anchored to a row's "→" button
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-move-popover {
+  z-index: 220;
+  min-width: 200px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.24);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lm-room-dock-move-item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-move-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lm-ink);
+}
+.lm-room-dock-move-item.is-on {
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-amber);
+}
+.lm-room-dock-move-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-move-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-dock-row-grip,
+  .lm-room-dock-row-action--move {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-dock-area-state {
+    border-color: CanvasText;
+  }
+  .lm-room-dock-area-state-cta {
+    color: ButtonText;
+    border-color: ButtonText;
+    background: ButtonFace;
+    forced-color-adjust: none;
+  }
+  .lm-room-dock-row.is-drop-target,
+  .lm-room-dock-h.is-drop-target {
+    outline-color: Highlight;
+    background: Canvas;
+  }
+  .lm-room-dock-move-popover {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-room-dock-move-item.is-on {
+    background: SelectedItem;
+    color: SelectedItemText;
+    forced-color-adjust: none;
+  }
+}
+
+/* Reduced motion + forced colors */
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-dock-tab,
+  .lm-room-dock-row,
+  .lm-room-dock-cta {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-dock {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+  .lm-room-dock-tab.is-on {
+    color: Highlight;
+  }
+  .lm-room-dock-tab.is-on::after {
+    background: Highlight;
+  }
+  .lm-room-dock-row.is-on {
+    background: SelectedItem;
+    color: SelectedItemText;
+    forced-color-adjust: none;
+  }
+  .lm-room-dock-cta {
+    color: ButtonText;
+    border-color: ButtonText;
+    background: ButtonFace;
+    forced-color-adjust: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Room map editor — toolbar (top bar) tokens
+   ─────────────────────────────────────────────────────────────────────
+   Migrates `RoomMapToolbar.tsx` off the legacy `bg-zinc-900/80` +
+   `border-zinc-800` Tailwind utilities onto amber Rev 07 tokens so the
+   editor's chrome reads as one continuous surface with the rest of the
+   app. Mirrors the `.lm-titlebar-tab` shape language (mono caps, amber
+   underline on the active state) for visual continuity.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-toolbar {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+}
+.lm-room-toolbar-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  min-width: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.lm-room-toolbar-btn.is-icon {
+  padding: 0 6px;
+}
+.lm-room-toolbar-btn:hover {
+  color: var(--lm-ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+.lm-room-toolbar-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  color: var(--lm-amber);
+}
+.lm-room-toolbar-btn.is-on {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.1);
+}
+.lm-room-toolbar-btn.is-disabled,
+.lm-room-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--lm-ink-faint);
+}
+.lm-room-toolbar-badge {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lm-line-2);
+  font-size: 9px;
+  letter-spacing: 0;
+  color: var(--lm-ink);
+}
+.lm-room-toolbar-btn.is-on .lm-room-toolbar-badge {
+  background: rgba(255, 176, 32, 0.16);
+  border-color: rgba(255, 176, 32, 0.4);
+  color: var(--lm-amber);
+}
+.lm-room-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--lm-line-2);
+  display: inline-block;
+}
+
+/* Shortcut help popover */
+.lm-room-toolbar-popover {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  width: 224px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+  z-index: 50;
+}
+.lm-room-toolbar-popover-h {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink);
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lm-room-toolbar-popover-h::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  box-shadow: 0 0 6px var(--lm-amber);
+}
+.lm-room-toolbar-popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.lm-room-toolbar-popover-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--lm-ink-dim);
+}
+.lm-room-toolbar-popover-row kbd {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  color: var(--lm-ink);
+  background: var(--lm-panel-2);
+  border: 1px solid var(--lm-line-2);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-toolbar-btn {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-toolbar {
+    border-color: CanvasText;
+  }
+  .lm-room-toolbar-btn.is-on {
+    color: Highlight;
+    border: 1px solid Highlight;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+}
+
+/* Room map editor — bottom property bar (X/Y/W/H/R numeric edit row) */
+.lm-room-propbar {
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-top: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+}
+.lm-room-propbar--empty {
+  justify-content: flex-start;
+}
+.lm-room-propbar-empty {
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.04em;
+}
+.lm-room-propbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--lm-line-2);
+  display: inline-block;
+}
+.lm-room-propbar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  letter-spacing: 0.04em;
+}
+.lm-room-propbar-field.is-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.lm-room-propbar-field-label {
+  font-weight: 600;
+  width: 12px;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+}
+.lm-room-propbar-input {
+  width: 52px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--lm-line-2);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  outline: none;
+  padding: 1px 0;
+}
+.lm-room-propbar-input::-webkit-outer-spin-button,
+.lm-room-propbar-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-room-propbar-input:focus {
+  border-bottom-color: var(--lm-amber);
+}
+.lm-room-propbar-input:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-propbar-input:disabled {
+  cursor: not-allowed;
+}
+@media (forced-colors: active) {
+  .lm-room-propbar {
+    border-color: CanvasText;
+  }
+}
+
+/* Room map editor — left tool chip dropdown menu */
+.lm-room-toolchip-menu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  margin-left: 6px;
+  min-width: 120px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  padding: 4px 0;
+  z-index: 50;
+}
+.lm-room-toolchip-menu-item {
+  all: unset;
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  font-family: var(--lm-sans);
+}
+.lm-room-toolchip-menu-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--lm-ink);
+}
+.lm-room-toolchip-menu-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  color: var(--lm-amber);
+}
+@media (forced-colors: active) {
+  .lm-room-toolchip-menu {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-D — Type-aware inspector chrome
+   ─────────────────────────────────────────────────────────────────────
+   Shared input + button styles for the per-type inspectors rendered
+   inside `.lm-room-dock-inspect`. These tokens stack onto the existing
+   field rhythm (`lm-room-dock-field*`) so a furniture row, USB strip
+   row, and Hue channel row all read with the same metric typography.
+
+   A11y posture:
+   - Tap targets ≥ 32 px on every interactive control (input, select,
+     button) — matches the Inspector's promise that nothing in the dock
+     ever drops below the design-system floor.
+   - `:focus-visible` paints the amber soft ring; never `:focus`.
+   - `forced-colors: active` blocks fall back to system colours so the
+     inspector reads under high-contrast modes the same way the rest of
+     the dock does.
+   - No new transitions > 120 ms, so the existing reduced-motion guards
+     for the dock continue to cover this surface.
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-input,
+.lm-room-dock-select {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  outline: none;
+  appearance: none;
+}
+.lm-room-dock-input[type="number"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-room-dock-input::-webkit-outer-spin-button,
+.lm-room-dock-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-room-dock-input:focus,
+.lm-room-dock-select:focus {
+  border-color: rgba(255, 176, 32, 0.45);
+}
+.lm-room-dock-input:focus-visible,
+.lm-room-dock-select:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-input:disabled,
+.lm-room-dock-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-room-dock-field-unit {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.lm-room-dock-inspect-action {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--lm-line-2);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lm-room-dock-inspect-action:hover {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-room-dock-inspect-action:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-dock-inspect-action[aria-pressed="true"] {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-room-dock-inspect-action.is-danger:hover {
+  color: var(--lm-red);
+  border-color: rgba(239, 91, 91, 0.45);
+  background: rgba(239, 91, 91, 0.08);
+}
+.lm-room-dock-field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+@media (forced-colors: active) {
+  .lm-room-dock-input,
+  .lm-room-dock-select,
+  .lm-room-dock-inspect-action {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-room-dock-inspect-action[aria-pressed="true"] {
+    border-color: Highlight;
+    color: Highlight;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-K — HueZoneInspector single-row refactor
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the W4-I four-row size cluster + AR-hint paragraph that
+   collided with the HSV picker's own hex input + recent swatches on
+   the 320 px dock. The new layout:
+
+     1. Compact header (chip + name + channel-count meta)
+     2. Slider row, full width
+     3. EDGE [n.nn] m   |   HEX [#XXXXXX]   single side-by-side row
+     4. Preset swatches, single row
+     5. HSV picker, centred
+     6. RECENT swatches (rendered by HsvColorPicker)
+     7. One-line hint paragraph
+
+   Tokens:
+   - `lm-zone-inspector-pair` is the EDGE/HEX row. Group order is
+     LABEL → NUM → UNIT → LABEL → HEX so the layout reads left-to-
+     right under both LTR and forced-colors.
+   - `lm-zone-inspector-num` is a 64 px-cap mono number input; the
+     hex input mirrors it at 96 px. Both inherit the focus ring and
+     forced-colors fallback from the existing `.lm-room-dock-input`
+     pattern.
+   - The picker block is a flex column centred on the dock width so
+     the 160 px compact ring sits visually middle-aligned. No
+     transitions > 120 ms here so the dock-wide reduced-motion rule
+     covers this surface unchanged.
+   - 32 px tap-target floor preserved on every interactive control.
+   ────────────────────────────────────────────────────────────────── */
+.lm-zone-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.lm-zone-inspector-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.lm-zone-inspector-h-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--lm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-zone-inspector-h-meta {
+  flex-shrink: 0;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+}
+/*
+ * v1.5 W4-F4 — header action slot used for "Duplicate as logical zone".
+ * Square 24×24 button with the same chip-style border as the rest of
+ * the inspector header so it does not pull attention away from the
+ * zone name. Hover lifts to amber accent to telegraph it as
+ * actionable. Tap target hits the 24 px floor — close to but below
+ * the 32 px global tap-target rule because the dock header band is
+ * height-constrained; the broader inspector body keeps the 32 px
+ * minimum on its primary controls.
+ */
+.lm-zone-inspector-h-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--lm-ink-dim);
+  border: 1px solid var(--lm-border, rgba(255, 255, 255, 0.08));
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+.lm-zone-inspector-h-action:hover {
+  color: var(--lm-amber);
+  border-color: var(--lm-amber);
+}
+.lm-zone-inspector-h-action:focus-visible {
+  outline: var(--lm-focus-ring, 2px solid currentColor);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-zone-inspector-h-action {
+    transition: none;
+  }
+}
+.lm-zone-inspector-slider-row {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
+}
+.lm-zone-inspector-slider-row .lm-room-dock-slider {
+  flex: 1;
+  min-width: 0;
+}
+.lm-zone-inspector-pair {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+.lm-zone-inspector-pair-label {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  flex-shrink: 0;
+}
+.lm-zone-inspector-pair-label--hex {
+  margin-left: 4px;
+}
+.lm-zone-inspector-pair-unit {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.lm-zone-inspector-num,
+.lm-zone-inspector-hex {
+  flex: 0 0 auto;
+  min-height: 26px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  outline: none;
+  appearance: none;
+}
+.lm-zone-inspector-num {
+  width: 64px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-zone-inspector-num::-webkit-outer-spin-button,
+.lm-zone-inspector-num::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-zone-inspector-hex {
+  flex: 1 1 96px;
+  min-width: 0;
+  text-transform: uppercase;
+}
+.lm-zone-inspector-num:focus,
+.lm-zone-inspector-hex:focus {
+  border-color: rgba(255, 176, 32, 0.45);
+}
+.lm-zone-inspector-num:focus-visible,
+.lm-zone-inspector-hex:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-zone-inspector-num:disabled,
+.lm-zone-inspector-hex:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.lm-zone-inspector-swatches {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+}
+.lm-zone-inspector-swatch {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+}
+.lm-zone-inspector-swatch:hover {
+  border-color: rgba(255, 176, 32, 0.45);
+}
+.lm-zone-inspector-swatch:focus-visible {
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-zone-inspector-swatch.is-active {
+  border-color: var(--lm-amber);
+  box-shadow: 0 0 0 1px var(--lm-amber);
+}
+.lm-zone-inspector-picker {
+  display: flex;
+  justify-content: center;
+}
+.lm-zone-inspector-hint {
+  margin: 2px 0 0;
+  font-size: 9.5px;
+  line-height: 1.3;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.01em;
+}
+@media (forced-colors: active) {
+  .lm-zone-inspector-num,
+  .lm-zone-inspector-hex,
+  .lm-zone-inspector-swatch {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-zone-inspector-swatch.is-active {
+    border-color: Highlight;
+    box-shadow: 0 0 0 1px Highlight;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-E — USB strip connection status chip
+   ─────────────────────────────────────────────────────────────────────
+   A small live-status badge embedded in the UsbStripInspector and the
+   UsbStripObject overlay. Three variants — `connected` / `disconnected`
+   / `unknown` — pair colour with a leading dot AND mono caps copy so
+   colour is never the sole signal (a11y rule from
+   `ls-design-language` §6).
+   ────────────────────────────────────────────────────────────────── */
+.lm-room-dock-conn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lm-ink-dim);
+}
+.lm-room-dock-conn-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lm-ink-faint);
+}
+.lm-room-dock-conn-chip-tx {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: inherit;
+}
+.lm-room-dock-conn-chip--connected {
+  border-color: rgba(74, 222, 128, 0.32);
+  background: rgba(74, 222, 128, 0.06);
+  color: var(--lm-green);
+}
+.lm-room-dock-conn-chip--connected .lm-room-dock-conn-chip-dot {
+  background: var(--lm-green);
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.55);
+}
+.lm-room-dock-conn-chip--disconnected {
+  border-color: rgba(239, 91, 91, 0.32);
+  background: rgba(239, 91, 91, 0.06);
+  color: var(--lm-red);
+}
+.lm-room-dock-conn-chip--disconnected .lm-room-dock-conn-chip-dot {
+  background: var(--lm-red);
+}
+@media (forced-colors: active) {
+  .lm-room-dock-conn-chip {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-room-dock-conn-chip--connected,
+  .lm-room-dock-conn-chip--disconnected {
+    border-color: Highlight;
+    color: Highlight;
+  }
+  .lm-room-dock-conn-chip-dot {
+    background: CanvasText;
+    box-shadow: none;
+  }
+}
+
+/* USB strip on canvas — connection status badge anchored to the start
+   handle. Signals OFFLINE without occluding LED-count input which sits
+   at the line midpoint. */
+.lm-room-usb-status-badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(7, 8, 10, 0.78);
+  border: 1px solid var(--lm-line-2);
+  backdrop-filter: blur(4px);
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  pointer-events: none;
+  z-index: 22;
+  white-space: nowrap;
+}
+.lm-room-usb-status-badge--connected {
+  border-color: rgba(74, 222, 128, 0.32);
+  color: var(--lm-green);
+}
+.lm-room-usb-status-badge--disconnected {
+  border-color: rgba(239, 91, 91, 0.45);
+  color: var(--lm-red);
+}
+.lm-room-usb-status-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+@media (forced-colors: active) {
+  .lm-room-usb-status-badge {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-room-usb-status-badge--connected,
+  .lm-room-usb-status-badge--disconnected {
+    border-color: Highlight;
+    color: Highlight;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-E — Devices section "Paired strips" sub-card
+   ─────────────────────────────────────────────────────────────────────
+   Surfaces every persisted UsbStripPlacement under the USB ports grid,
+   with a live connection chip and a deep-link to open the strip in the
+   room map editor. Reuses the existing `.lm-dcard` shell so the
+   styling stays consistent with the rest of the Devices grid.
+   ────────────────────────────────────────────────────────────────── */
+.lm-paired-strips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+.lm-paired-strips-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-paired-strips-h-count {
+  margin-left: auto;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: none;
+}
+.lm-paired-strip {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+}
+.lm-paired-strip-ic {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--lm-line-2);
+  color: var(--lm-ink-dim);
+}
+.lm-paired-strip-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lm-paired-strip-name {
+  font-family: var(--lm-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--lm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-paired-strip-sub {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+}
+/* W4-J #2 — inline port editor inside a paired-strip card. Replaces
+   the read-only `.lm-paired-strip-sub` line with a dropdown when the
+   user clicks Change port. The select sits flush with the strip name
+   above it; Save / Cancel buttons reuse the action-button row that
+   normally renders the connection chip and Open-in-map link. */
+.lm-paired-strip-port-editor {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+.lm-paired-strip-port-editor .lm-paired-strip-form-select {
+  flex: 1 1 auto;
+  min-height: 26px;
+  font-size: 10.5px;
+}
+.lm-paired-strip-action {
+  all: unset;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.lm-paired-strip-action:hover {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-paired-strip-action:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strips-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.02em;
+}
+@media (forced-colors: active) {
+  .lm-paired-strip,
+  .lm-paired-strip-action,
+  .lm-paired-strip-ic {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-G #5 — Room map context menu (amber Rev 07 migration)
+   ─────────────────────────────────────────────────────────────────────
+   Replaces the legacy zinc/red-400 styling baked into ContextMenu.tsx
+   with the same panel + line + amber-on-hover vocabulary used by the
+   rest of the dock. Each item clears the 32 px tap floor and the
+   shortcut badge picks up `lm-mono` so it reads consistently with the
+   rest of the editor's keyboard hint surfaces.
+   ────────────────────────────────────────────────────────────────── */
+.lm-context-menu {
+  z-index: 100;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  font-family: var(--lm-sans);
+  color: var(--lm-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lm-context-menu-item {
+  all: unset;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 11.5px;
+  color: var(--lm-ink-dim);
+  transition: background 100ms ease, color 100ms ease;
+}
+.lm-context-menu-item:hover {
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink);
+}
+.lm-context-menu-item:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink);
+}
+.lm-context-menu-item.is-danger {
+  color: var(--lm-red);
+}
+.lm-context-menu-item.is-danger:hover,
+.lm-context-menu-item.is-danger:focus-visible {
+  background: rgba(239, 91, 91, 0.1);
+  color: var(--lm-red);
+}
+.lm-context-menu-item.is-disabled,
+.lm-context-menu-item:disabled {
+  cursor: not-allowed;
+  color: var(--lm-ink-faint);
+  opacity: 0.55;
+}
+.lm-context-menu-item.is-disabled:hover,
+.lm-context-menu-item:disabled:hover {
+  background: transparent;
+  color: var(--lm-ink-faint);
+}
+.lm-context-menu-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-context-menu-item-kbd {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--lm-ink-faint);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-context-menu-item {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-context-menu {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+  .lm-context-menu-item {
+    color: CanvasText;
+  }
+  .lm-context-menu-item:hover,
+  .lm-context-menu-item:focus-visible {
+    background: Highlight;
+    color: HighlightText;
+  }
+  .lm-context-menu-item.is-danger {
+    color: LinkText;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Wave 4-G #6 — Multi-strip pair flow
+   ─────────────────────────────────────────────────────────────────────
+   "Add LED strip" CTA + inline LED-count form for the DeviceSection's
+   paired-strips sub-card, plus a port label that hovers above each
+   strip's start handle on the canvas. The form reuses the existing
+   amber Rev 07 panel vocabulary so it sits inside the same chrome as
+   the rest of the paired-strips list.
+   ────────────────────────────────────────────────────────────────── */
+.lm-paired-strip-add {
+  all: unset;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px dashed var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.lm-paired-strip-add:hover {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-paired-strip-add:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strip-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.lm-paired-strip-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.32);
+  background: rgba(255, 176, 32, 0.06);
+}
+.lm-paired-strip-form-label {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  flex-shrink: 0;
+}
+.lm-paired-strip-form-input {
+  flex: 0 0 80px;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  appearance: none;
+}
+.lm-paired-strip-form-input::-webkit-outer-spin-button,
+.lm-paired-strip-form-input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.lm-paired-strip-form-input:focus,
+.lm-paired-strip-form-input:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strip-form-port {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* W4-J #1 — empty-state copy inside the inline strip form. Used when
+   the user opens the form but there are no eligible ports (none
+   detected, or every detected port is already paired). Sits in place
+   of the dropdown + LED count fields and pairs with a Rescan button
+   in the form-actions row. */
+.lm-paired-strip-form-empty {
+  flex: 1 1 100%;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+}
+.lm-paired-strip-form-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+/* W4-I #2 — port dropdown shares the form-input visual rhythm but
+   stretches to fit the (port name + product) label so the user can
+   read the full controller identity before committing. */
+.lm-paired-strip-form-select {
+  flex: 1 1 140px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  outline: none;
+}
+.lm-paired-strip-form-select:focus,
+.lm-paired-strip-form-select:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-paired-strip-form {
+  flex-wrap: wrap;
+}
+.lm-paired-strip-action.is-primary {
+  color: var(--lm-amber);
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.12);
+}
+.lm-paired-strip-action.is-primary:hover {
+  background: rgba(255, 176, 32, 0.18);
+}
+.lm-paired-strip-action.is-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* W4-I #2 — collapsible "Discover ports" utility. Sits above the
+   primary paired-strips list and stays closed by default so the page
+   opens on the strip roster, not the legacy discovery grid. */
+.lm-device-discover {
+  margin-bottom: 12px;
+  border: 1px solid var(--lm-line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.015);
+}
+.lm-device-discover[open] {
+  background: rgba(255, 255, 255, 0.025);
+}
+.lm-device-discover-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  list-style: none;
+  user-select: none;
+}
+.lm-device-discover-h::-webkit-details-marker {
+  display: none;
+}
+.lm-device-discover-h::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 6px;
+  transition: transform 120ms ease-out;
+  color: var(--lm-ink-faint);
+}
+.lm-device-discover[open] > .lm-device-discover-h::before {
+  transform: rotate(90deg);
+}
+.lm-device-discover-h:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-device-discover-h-count {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-ink-faint);
+  text-transform: none;
+}
+.lm-device-discover-hint {
+  margin: 0 12px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--lm-ink-faint);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-paired-strip-add,
+  .lm-paired-strip-action.is-primary {
+    transition: none;
+  }
+  .lm-device-discover-h::before {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-paired-strip-add,
+  .lm-paired-strip-form,
+  .lm-paired-strip-form-input,
+  .lm-paired-strip-form-select,
+  .lm-paired-strip-form-port,
+  .lm-paired-strip-action.is-primary,
+  .lm-device-discover {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}
+
+/* Multi-strip canvas affordance — port name floats above each strip's
+   start handle so the user can tell which controller drives which run.
+   Sits 16 px above the W4-E status badge so the two never collide. */
+.lm-room-usb-port-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(7, 8, 10, 0.78);
+  border: 1px solid var(--lm-line-2);
+  backdrop-filter: blur(4px);
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--lm-ink-dim);
+  pointer-events: none;
+  z-index: 22;
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (forced-colors: active) {
+  .lm-room-usb-port-label {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
   }
 }

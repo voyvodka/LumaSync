@@ -7,6 +7,52 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-04-28
+
+### Added
+
+- Hue Zone system: entertainment areas now map to logical zones with zone-relative coordinates, AR-locked size slider, center/border color picker, and a live zone bounds visual on the room map canvas — zones render simultaneously with individual show/hide toggles
+- HSV color picker: hue/saturation/value wheel replaces the flat RGB swatch in the Hue zone inspector, with a portal-aware popover that escapes compact-mode clipping
+- WLED DDP bridge: UDP discovery (`_wled._tcp.local.` via mDNS), connect, and test-pattern flow; WLED appears as a first-class output target alongside USB and Hue
+- Linux X11 screen capture via xcap — LumaSync now ships on all three desktop platforms (macOS, Windows, Linux)
+- SK6812 RGBW host-side encoder: white channel derived as `W = min(R, G, B)` extraction, chip type persisted per device; selector exposed in device settings
+- Expanded USB VID/PID allowlist: PL2303, CH341, CP2104 (Silicon Labs CP2102), and FT232H added alongside the existing CH340 and FT232R entries
+- Hue per-bulb gamut clip: `gamut_type` (A/B/C) is fetched per light during area activation and applied in the DTLS frame builder hot-path with luminance-preserving xy→RGB mapping
+- Hue OS keychain credential migration: bridge username and PSK are moved from plaintext `shellStore` to the platform keychain (macOS Keychain, Windows CredMan, Linux Secret Service) with an idempotent, downgrade-safe migration path
+- mDNS bridge discovery: Hue bridges are discovered via `_hue._tcp.local.` with cloud API as fallback; shared mDNS responder also serves the WLED browser to avoid `SO_REUSEPORT` contention on macOS
+- First-run onboarding banner: three-step progressive inline flow guides new users from device pairing through first Ambilight activation; dismissed permanently after completion
+- Offline USB strip reconnect affordance: a reconnect button appears when a paired strip's port is unavailable on launch, replacing the silent failure path
+- Beta update channel scaffold: `updateChannel` shell state lets opted-in users receive pre-release builds via a separate `latest-beta.json` endpoint; stable channel behavior unchanged
+- Windows hardware-accelerated downscale scaffold: frame builder wired to accept a downscale hint for the Windows capture path (full implementation follows in a subsequent patch)
+- RoomMap editor full rework: tabbed dock with type-aware inspector dispatcher (USB strip / Hue zone / furniture / TV anchor), amber Rev 07 chrome throughout, multi-strip pair-as-strip flow, port change on paired strips via inline dropdown, and all Hue zones rendered simultaneously on the canvas
+
+### Changed
+
+- Hue zone identity collapsed onto `borderColor`; `HueZone` type unified into a `Zone` discriminated union (`zoneType` field) under the `room_map` module — schema version migrated 1→2 with an automatic shim so existing room maps open without data loss
+- RoomMap editor canvas drag-and-drop now works correctly in WKWebView; Hue channel drags clamp to the bound zone regardless of selection state
+- Lighting mode bootstrap reworked: ambilight state hydrated from persisted config on cold start (USB-only path); saturation and smoothing alpha preserved across brightness-only fast-path tweaks
+- Serial connect and health-check now unblock the IPC dispatcher during the operation, eliminating UI freezes on slow port enumeration
+- USB serial auto-reconnect broadcasts connection events with a structured lifecycle so the UI reacts without polling
+- Compact mode ambilight brightness and smoothing controls mirrored into full settings for parity; Adalight brightness lock applied in compact mode
+- App icon body inset to 720×720 to match the macOS dock squircle visual weight
+- Rust deps: `keyring` 3.x and `mdns-sd` 0.13 added; `tokio` held at 1.52.1
+- Frontend deps: i18next, jsdom, vite bumped (patch/minor); no breaking changes
+- GitHub Actions: Linux runner bumped from ubuntu-22.04 to ubuntu-24.04 across CI and release workflows; `libgbm-dev` added to apt deps for xcap linker
+
+### Fixed
+
+- Latent DTR auto-reset: 2-second bootloader settle delay added after DTR toggle so firmware has time to initialize before the first frame
+- Ambilight cold-start: persisted ambilight profile now hydrates correctly when the app launches directly into ambilight mode without a prior UI interaction
+- Hue color flash on stream start and dim-on-saturated artifact: color correction order aligned so the first frame does not briefly push an unintended hue
+- USB auto-pair race: connection state gate added so a rapid disconnect/reconnect sequence no longer leaves the port handle in a leaked state
+- Adalight firmware profile picker: brightness lock override now correctly applies in compact mode matching full-settings behavior
+- `InspectorNumberField` re-edit: committing a value with Enter no longer locks the field into read-only display until blur
+- LED setup canvas: arrow direction and start-anchor visualization now match the backend canonical traversal under both CW and CCW, including all eight corner anchors and the bottom-gap variants
+- LED setup cold-start: persisted display selection now derives default per-edge LED counts on launch instead of leaving the editor at 0/0/0/0 until a manual monitor change
+- Calibration overlay refresh race: opening the overlay after a frontend refresh no longer fails with `OVERLAY_WINDOW_OPEN_FAILED` from a stale Tauri window-label registry entry
+- First-run onboarding banner: persisted lighting mode now primes the LIGHTS step guard on cold start so returning users skip the gating ribbon
+- RoomMapEditor mousemove listener thrashing: pan/zoom interactions no longer detach and re-attach the canvas listener every frame
+
 ## [1.4.0] — 2026-04-24
 
 ### Added

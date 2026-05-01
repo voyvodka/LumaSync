@@ -110,7 +110,7 @@ export function HueAreaPreview() {
                       <button
                         type="button"
                         onClick={() => setSelectedAreaId(area.id)}
-                        className={`w-full rounded-xl border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-900 ${
+                        className={`w-full rounded-xl border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 ${
                           active
                             ? "border-slate-900/20 bg-slate-50 ring-1 ring-slate-900/30 dark:border-zinc-600 dark:bg-zinc-800/60 dark:ring-zinc-600"
                             : "border-slate-200/80 bg-white hover:border-slate-300 hover:bg-slate-50/50 dark:border-zinc-700/60 dark:bg-zinc-900 dark:hover:border-zinc-600 dark:hover:bg-zinc-800/40"

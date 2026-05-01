@@ -12,12 +12,14 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { load } from "@tauri-apps/plugin-store";
 import {
   SHELL_STORE_KEY,
+  SHELL_STATE_SCHEMA_VERSION,
   DEFAULT_SHELL_STATE,
   UI_MODE_SIZES,
   UI_MODE_MIN_SIZES,
   type ShellState,
   type UIMode,
 } from "../../shared/contracts/shell";
+import { migrateShellState } from "../persistence/migrations";
 
 // ---------------------------------------------------------------------------
 // Store helpers
@@ -34,11 +36,56 @@ async function getStore() {
 
 export async function loadShellState(): Promise<ShellState> {
   const store = await getStore();
-  const saved = await store.get<ShellState>(SHELL_STORE_KEY);
+  const saved = await store.get<Partial<ShellState>>(SHELL_STORE_KEY);
   if (!saved) return { ...DEFAULT_SHELL_STATE };
 
-  // Merge with defaults to handle new fields added in future phases
-  return { ...DEFAULT_SHELL_STATE, ...saved };
+  // Merge with defaults to handle new fields added in future phases. The
+  // `schemaVersion` defaults to `1` (NOT the latest) when absent so the
+  // migration shim below can detect a legacy pre-v1.5 snapshot and run the
+  // upgrade. v1.5 W4-F6 — see `migrations.ts`.
+  const merged: ShellState = {
+    ...DEFAULT_SHELL_STATE,
+    ...saved,
+    schemaVersion: saved.schemaVersion ?? 1,
+  };
+
+  // Run the schemaVersion-gated migration shim. Idempotent: states already at
+  // `SHELL_STATE_SCHEMA_VERSION` short-circuit and return unchanged. Wrapped
+  // in try/catch so a single corrupt persisted record cannot brick startup —
+  // on failure we fall back to the unmigrated `merged` shape (warn logged by
+  // the migration helpers themselves) and the next launch retries.
+  let migrated: ShellState;
+  try {
+    migrated = migrateShellState(merged);
+  } catch (error) {
+    console.warn(
+      "[LumaSync] migration: schemaVersion upgrade failed; keeping legacy shape until next launch",
+      error,
+    );
+    migrated = merged;
+  }
+
+  // Persist the migrated shape back so subsequent reads skip this branch.
+  // Two trigger conditions:
+  //   1. `saved.schemaVersion === undefined` — legacy pre-v1.5 state on disk.
+  //   2. `migrated.schemaVersion !== saved.schemaVersion` — the shim moved
+  //      the version forward (e.g. 1 → 2 W4-F6 zone unification).
+  if (
+    saved.schemaVersion === undefined ||
+    migrated.schemaVersion !== saved.schemaVersion
+  ) {
+    await store.set(SHELL_STORE_KEY, migrated);
+  }
+
+  // `schemaVersion` should always equal the current target after the shim.
+  // If a corruption path bypassed the migration we still hand back the
+  // merged (pre-migration) shape and let the next launch retry; explicitly
+  // surfaced here so the field is never an unsupported intermediate value.
+  if (migrated.schemaVersion < SHELL_STATE_SCHEMA_VERSION) {
+    return migrated;
+  }
+
+  return migrated;
 }
 
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {

@@ -21,10 +21,13 @@ pub struct SampledLedFrame {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AmbilightCaptureError {
-    #[cfg_attr(
-        not(any(test, target_os = "windows", target_os = "macos")),
-        allow(dead_code)
-    )]
+    /// Surfaced when a platform's capture pipeline reports a missing frame
+    /// (e.g. macOS SCDisplay drop, Windows DXGI desktop switch). Linux's
+    /// xcap branch currently constructs only `InvalidFrame`, so the
+    /// variant is forward-looking there — keep allow(dead_code)
+    /// unconditional rather than a per-platform cfg matrix that drifts
+    /// every time a backend lands.
+    #[allow(dead_code)]
     FrameUnavailable,
     InvalidFrame(&'static str),
 }
@@ -52,7 +55,10 @@ pub trait AmbilightFrameSource: Send {
 /// [`select_display_index`] when the requested id is missing (display
 /// unplugged / replugged with a different native handle, first launch
 /// before the user has picked one, etc).
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayCandidate {
     pub id: String,
@@ -68,7 +74,10 @@ pub struct DisplayCandidate {
 /// (macOS `SCDisplay` ordering can change on replug, Windows `HMONITOR`
 /// is recycled) — the worker must not fail hard when a persisted id no
 /// longer resolves.
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
+#[cfg_attr(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    allow(dead_code)
+)]
 pub fn select_display_index(
     id_hint: Option<&str>,
     candidates: &[DisplayCandidate],
@@ -318,12 +327,18 @@ mod platform {
         ) -> Result<(), Self::Error> {
             let width = frame.width();
             let height = frame.height();
-            let mut frame_buffer = frame
+            let frame_buffer = frame
                 .buffer()
                 .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")?;
-            let raw_pixels = frame_buffer
-                .as_nopadding_buffer()
-                .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")?;
+            // windows-capture 2.0: `as_nopadding_buffer` now takes a scratch
+            // `&mut Vec<u8>` the crate may resize+copy into when the source
+            // frame has row padding (and returns the inner slice unchanged
+            // when it does not). The previous 1.5 API returned
+            // `Result<&[u8], _>`; we adopt the new shape with a stack-local
+            // scratch buffer because the no-padding hot path is the common
+            // case and the allocation only happens on padded frames.
+            let mut nopad_scratch: Vec<u8> = Vec::new();
+            let raw_pixels = frame_buffer.as_nopadding_buffer(&mut nopad_scratch);
             let expected_len = (width as usize)
                 .saturating_mul(height as usize)
                 .saturating_mul(4);
@@ -332,19 +347,83 @@ mod platform {
                 return Err("AMBILIGHT_CAPTURE_PIXEL_BUFFER_INVALID");
             }
 
-            let mut pixels_rgb =
-                Vec::with_capacity((width as usize).saturating_mul(height as usize));
-            for pixel in raw_pixels[..expected_len].chunks_exact(4) {
-                pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+            // 4K downscale scaffold (v1.5 W2-C2 / Platform GAP 3).
+            //
+            // windows-capture 2.0 does not expose a GPU-side `output_size`
+            // hint the way macOS ScreenCaptureKit does, so a 4K capture
+            // path delivers ~33 MB per frame at 60 Hz — turning the
+            // RGBA→RGB conversion + per-pixel iteration into the 4K CPU
+            // hot spot. Until v2.0 ships a hardware downscale (Platform
+            // GAP 3 follow-up), we shoulder the cost CPU-side with a
+            // nearest-neighbor stride so the downstream sampler still
+            // sees a manageable grid.
+            //
+            // Heuristic mirrors the macOS branch: cap the longer axis at
+            // ~640 px. The integer stride keeps row/column iteration
+            // index-aligned and avoids interpolation cost — colour
+            // averaging in the sampler tolerates aliasing because each
+            // LED region already covers many output pixels. Native
+            // 1080p stays 1:1 (stride 1) so this is a no-op on common
+            // monitors.
+            const MAX_CAPTURE_DIM: u32 = 640;
+            let stride = (width.max(height) / MAX_CAPTURE_DIM).max(1) as usize;
+            let stride_active = stride > 1;
+            if stride_active {
+                log::debug!(
+                    "[ambilight-capture/windows] 4K downscale active: src={}x{} stride={} → ~{}x{}",
+                    width,
+                    height,
+                    stride,
+                    width as usize / stride,
+                    height as usize / stride,
+                );
             }
+
+            let src_w = width as usize;
+            let src_h = height as usize;
+            let dst_w = src_w.div_ceil(stride);
+            let dst_h = src_h.div_ceil(stride);
+            let mut pixels_rgb = Vec::with_capacity(dst_w.saturating_mul(dst_h));
+
+            // Stride-1 keeps the original tight loop (one allocation, one
+            // BGRA-vs-RGBA-agnostic copy). Stride-N walks rows + cols by
+            // `stride` so a 3840×2160 frame collapses to ~640×360 on the
+            // host CPU — the smallest impact we can land before a real
+            // hardware downscale path goes in.
+            if !stride_active {
+                for pixel in raw_pixels[..expected_len].chunks_exact(4) {
+                    pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+                }
+            } else {
+                let row_bytes = src_w.saturating_mul(4);
+                for y in (0..src_h).step_by(stride) {
+                    let row_start = y.saturating_mul(row_bytes);
+                    for x in (0..src_w).step_by(stride) {
+                        let offset = row_start + x.saturating_mul(4);
+                        if offset + 3 < raw_pixels.len() {
+                            pixels_rgb.push([
+                                raw_pixels[offset],
+                                raw_pixels[offset + 1],
+                                raw_pixels[offset + 2],
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            let (out_w, out_h) = if stride_active {
+                (dst_w as u32, dst_h as u32)
+            } else {
+                (width, height)
+            };
 
             let mut frame_guard = self
                 .latest_frame
                 .lock()
                 .map_err(|_| "AMBILIGHT_CAPTURE_FRAME_LOCK_FAILED")?;
             *frame_guard = Some(Arc::new(CapturedFrame {
-                width,
-                height,
+                width: out_w,
+                height: out_h,
                 pixels_rgb,
             }));
 
@@ -604,7 +683,138 @@ mod platform {
     unsafe impl Send for MacOSLiveFrameSource {}
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+#[cfg(target_os = "linux")]
+mod platform {
+    use std::sync::Arc;
+
+    use xcap::Monitor;
+
+    use super::{
+        select_display_index, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+        DisplayCandidate,
+    };
+
+    /// Resolve an `xcap::Monitor` for the requested capture display.
+    ///
+    /// `DisplayInfoPayload.id` on Linux is `"<name>:<x>:<y>"` where `name` is
+    /// the xrandr output name (e.g. `"HDMI-1"`, `"eDP-1"`) returned by both
+    /// Tauri's `available_monitors()` and `xcap::Monitor::name()` — both
+    /// resolve through libxcb/RandR so the values match. We strip the
+    /// trailing `":x:y"` and feed the prefix to [`select_display_index`]
+    /// with primary fallback for unplugged / re-routed outputs.
+    fn resolve_monitor(display_id: Option<&str>) -> Result<Monitor, AmbilightCaptureError> {
+        let monitors = Monitor::all().map_err(|_| {
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
+        })?;
+        if monitors.is_empty() {
+            return Err(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ));
+        }
+
+        let candidates: Vec<DisplayCandidate> = monitors
+            .iter()
+            .map(|monitor| {
+                let name = monitor.name().unwrap_or_default();
+                let is_primary = monitor.is_primary().unwrap_or(false);
+                DisplayCandidate {
+                    id: name,
+                    is_primary,
+                }
+            })
+            .collect();
+
+        // Strip trailing `":x:y"` so a persisted id from `list_displays`
+        // matches the bare xrandr output name after resolution / position
+        // changes.
+        let hint_name = display_id.and_then(|raw| {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let head = trimmed.rsplitn(3, ':').nth(2).unwrap_or(trimmed);
+            Some(head.to_string())
+        });
+
+        let index = select_display_index(hint_name.as_deref(), &candidates).ok_or(
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
+        )?;
+
+        monitors
+            .into_iter()
+            .nth(index)
+            .ok_or(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            ))
+    }
+
+    pub(super) fn create_live_frame_source(
+        display_id: Option<&str>,
+    ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
+        let monitor = resolve_monitor(display_id)?;
+        Ok(Box::new(LinuxFrameSource { monitor }))
+    }
+
+    /// Pull-mode frame source. xcap does not expose a streaming/callback
+    /// API on Linux (X11 / Wayland share the same blocking
+    /// `capture_image` surface), so each `capture_frame` call performs a
+    /// fresh xrandr-driven grab. The ambilight worker already paces calls
+    /// at the Hue 20 Hz cadence, so this matches the macOS + Windows
+    /// "latest frame on demand" contract from the worker's point of view.
+    ///
+    /// Wave 1 baseline: X11 path is the supported configuration. xcap
+    /// auto-detects Wayland and falls through to PipeWire / xdg-desktop-
+    /// portal under the hood; we do not block that, but we make no
+    /// promises about it either — Wayland hardening lands in v2.0
+    /// (Platform GAP 1b).
+    struct LinuxFrameSource {
+        monitor: Monitor,
+    }
+
+    impl AmbilightFrameSource for LinuxFrameSource {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+            let image = self.monitor.capture_image().map_err(|_| {
+                AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_FRAME_BUFFER_FAILED")
+            })?;
+
+            let width = image.width();
+            let height = image.height();
+
+            if width == 0 || height == 0 {
+                return Err(AmbilightCaptureError::InvalidFrame(
+                    "AMBILIGHT_CAPTURE_PIXEL_BUFFER_INVALID",
+                ));
+            }
+
+            let raw_pixels = image.as_raw();
+            let expected_len = (width as usize)
+                .saturating_mul(height as usize)
+                .saturating_mul(4);
+
+            if raw_pixels.len() < expected_len {
+                return Err(AmbilightCaptureError::InvalidFrame(
+                    "AMBILIGHT_CAPTURE_PIXEL_BUFFER_INVALID",
+                ));
+            }
+
+            // xcap returns RGBA on every backend (X11 + Wayland). Drop the
+            // alpha channel; the ambilight sampler operates on RGB.
+            let mut pixels_rgb =
+                Vec::with_capacity((width as usize).saturating_mul(height as usize));
+            for pixel in raw_pixels[..expected_len].chunks_exact(4) {
+                pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+            }
+
+            Ok(Arc::new(CapturedFrame {
+                width,
+                height,
+                pixels_rgb,
+            }))
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 mod platform {
     use super::{AmbilightCaptureError, AmbilightFrameSource};
 
@@ -804,7 +1014,7 @@ pub fn sample_led_frame(
 mod tests {
     use std::sync::Arc;
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     use super::create_live_frame_source;
     use super::{
         sample_led_frame, select_display_index, AmbilightCaptureError, AmbilightFrameSource,
@@ -878,7 +1088,7 @@ mod tests {
         assert_eq!(sampled.colors.len(), 6);
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     #[test]
     fn live_source_factory_returns_coded_unsupported_error_on_unsupported_platform() {
         let error = match create_live_frame_source(None) {

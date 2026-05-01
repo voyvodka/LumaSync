@@ -1,16 +1,20 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type {
+  HueZone,
   RoomMapConfig,
   ZoneDefinition,
 } from "../../../../shared/contracts/roomMap";
 import { getZoneColor } from "./ZoneListPanel";
+import { HueZoneListPanel } from "./HueZoneListPanel";
 
 type ObjectEntry = {
   id: string;
   type: "tv" | "furniture" | "usb" | "hue" | "image";
   label: string;
   locked?: boolean;
+  /** v1.5 W1-A5: when present, the row renders nested under its parent zone group. */
+  zoneId?: string;
 };
 
 interface ObjectListPanelProps {
@@ -20,13 +24,24 @@ interface ObjectListPanelProps {
   onDelete: (id: string) => void;
   onRenameFurniture: (id: string, label: string) => void;
   onToggleLock?: (id: string) => void;
-  // Zone props
+  // Legacy USB-side zone props
   zones: ZoneDefinition[];
   activeZoneId: string | null;
   onSelectZone: (zoneId: string | null) => void;
   onAddZone: () => void;
   onDeleteZone: (zoneId: string) => void;
   onRenameZone: (zoneId: string, name: string) => void;
+  // v1.5 W1-A5 — Hue zone props (consume `config.hueZones`)
+  hueZones?: HueZone[];
+  activeHueZoneId?: string | null;
+  onSelectHueZone?: (zoneId: string | null) => void;
+  onAddHueZone?: () => void;
+  onDeleteHueZone?: (zoneId: string) => void;
+  onRenameHueZone?: (zoneId: string, name: string) => void;
+  /** When true, the "+ Hue zone" CTA stays disabled (no entertainment area paired). */
+  addHueZoneDisabled?: boolean;
+  /** Tooltip on the disabled CTA. */
+  addHueZoneDisabledTooltip?: string;
 }
 
 const TYPE_COLORS: Record<ObjectEntry["type"], string> = {
@@ -34,10 +49,13 @@ const TYPE_COLORS: Record<ObjectEntry["type"], string> = {
   furniture: "bg-amber-500",
   usb: "bg-cyan-500",
   hue: "bg-white border border-zinc-400",
-  image: "bg-slate-500",
+  image: "bg-zinc-9000",
 };
 
-function buildObjectList(config: RoomMapConfig, t: (key: string, opts?: Record<string, string>) => string): ObjectEntry[] {
+function buildObjectList(
+  config: RoomMapConfig,
+  t: (key: string, opts?: Record<string, string>) => string,
+): ObjectEntry[] {
   const entries: ObjectEntry[] = [];
 
   // Image layers
@@ -73,6 +91,7 @@ function buildObjectList(config: RoomMapConfig, t: (key: string, opts?: Record<s
       type: "hue",
       label: ch.label ?? t("roomMap.objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
       locked: ch.locked,
+      zoneId: ch.zoneId,
     });
   }
 
@@ -86,6 +105,7 @@ function ObjectRow({
   onDelete,
   onRename,
   onToggleLock,
+  indented = false,
 }: {
   entry: ObjectEntry;
   selected: boolean;
@@ -93,6 +113,8 @@ function ObjectRow({
   onDelete: () => void;
   onRename?: (label: string) => void;
   onToggleLock?: () => void;
+  /** v1.5 W1-A5 — when nested under a zone header, indent and shrink. */
+  indented?: boolean;
 }) {
   const { t } = useTranslation("common");
   const rowRef = useRef<HTMLLIElement>(null);
@@ -123,18 +145,25 @@ function ObjectRow({
     <li
       ref={rowRef}
       className={[
-        "flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[11px] group",
+        "flex items-center gap-1.5 cursor-pointer rounded text-[11px] group",
+        indented ? "px-1.5 py-0.5" : "px-2 py-1",
         selected
-          ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-          : "text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50",
+          ? "bg-zinc-800 text-zinc-100"
+          : "text-zinc-300 hover:bg-zinc-800/50",
       ].join(" ")}
       onClick={onSelect}
     >
-      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${TYPE_COLORS[entry.type]}`} />
+      <span
+        className={[
+          "rounded-full shrink-0",
+          indented ? "w-1.5 h-1.5" : "w-2.5 h-2.5",
+          TYPE_COLORS[entry.type],
+        ].join(" ")}
+      />
       {editing ? (
         <input
           autoFocus
-          className="bg-transparent border-b border-slate-300 dark:border-zinc-600 text-[11px] focus:outline-none focus:border-cyan-400 flex-1 min-w-0"
+          className="bg-transparent border-b border-zinc-600 text-[11px] focus:outline-none focus:border-amber-400 flex-1 min-w-0"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCommit}
@@ -151,7 +180,7 @@ function ObjectRow({
       )}
       {onToggleLock && (
         <button
-          className="text-slate-400 dark:text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded transition-opacity hover:text-slate-700 dark:hover:text-zinc-200"
+          className="text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded transition-opacity hover:text-zinc-200"
           aria-label={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
           title={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
           onClick={(e) => { e.stopPropagation(); onToggleLock(); }}
@@ -171,14 +200,14 @@ function ObjectRow({
       )}
       {!entry.locked && (
         <button
-          className="text-slate-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 rounded transition-opacity"
+          className="text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 rounded transition-opacity hover:text-red-400"
           aria-label={t("roomMap.objectPanel.delete")}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
         >
-          x
+          ×
         </button>
       )}
     </li>
@@ -211,7 +240,7 @@ function ZoneTab({
   return (
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {zones.length === 0 ? (
-        <p className="text-[10px] text-slate-400 dark:text-zinc-500 py-3 text-center">
+        <p className="text-[10px] text-zinc-500 py-3 text-center">
           {t("roomMap.zones.emptyPanel")}
         </p>
       ) : (
@@ -225,8 +254,8 @@ function ZoneTab({
                 className={[
                   "flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[11px] group",
                   isActive
-                    ? "bg-slate-100 dark:bg-zinc-800 text-slate-900 dark:text-zinc-100"
-                    : "text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-800/50",
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-300 hover:bg-zinc-800/50",
                 ].join(" ")}
                 onClick={() => onSelectZone(isActive ? null : zone.id)}
               >
@@ -234,7 +263,7 @@ function ZoneTab({
                 {isEditing ? (
                   <input
                     autoFocus
-                    className="bg-transparent border-b border-slate-300 dark:border-zinc-600 text-[11px] focus:outline-none focus:border-cyan-400 flex-1 min-w-0"
+                    className="bg-transparent border-b border-zinc-600 text-[11px] focus:outline-none focus:border-amber-400 flex-1 min-w-0"
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={() => handleCommitEdit(zone, zoneIndex)}
@@ -252,14 +281,14 @@ function ZoneTab({
                     {zone.name}
                   </span>
                 )}
-                <span className="text-[9px] text-slate-400 dark:text-zinc-500 shrink-0">
+                <span className="text-[9px] text-zinc-500 shrink-0">
                   {zone.channelIndices.length}
                 </span>
                 <button
-                  className="text-slate-400 hover:text-red-500 dark:text-zinc-500 dark:hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded"
+                  className="text-zinc-500 hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded"
                   onClick={(e) => { e.stopPropagation(); onDeleteZone(zone.id); }}
                 >
-                  x
+                  ×
                 </button>
               </li>
             );
@@ -267,12 +296,135 @@ function ZoneTab({
         </ul>
       )}
       <button
-        className="mt-1 w-full text-[10px] text-slate-500 dark:text-zinc-400 hover:text-slate-700 dark:hover:text-zinc-200 py-1 transition-colors"
+        className="mt-1 w-full text-[10px] text-zinc-400 hover:text-zinc-200 py-1 transition-colors"
         onClick={onAddZone}
       >
         + {t("roomMap.zones.addZoneButton")}
       </button>
     </div>
+  );
+}
+
+/**
+ * v1.5 W1-A5 — render the Objects tab, but nest each Hue channel under its
+ * parent `HueZone` header (or under "Unassigned" when `zoneId` is absent).
+ * Non-Hue entries keep the legacy flat order so we don't disrupt USB / TV /
+ * furniture / image rows that have no zone semantics.
+ */
+function renderObjectsWithHueGrouping(
+  objects: ObjectEntry[],
+  hueZones: HueZone[],
+  selectedId: string | null,
+  onSelect: (id: string | null) => void,
+  onDelete: (id: string) => void,
+  onRenameFurniture: (id: string, label: string) => void,
+  onToggleLock: ((id: string) => void) | undefined,
+  t: (key: string, opts?: Record<string, string>) => string,
+): React.ReactNode {
+  const nonHue = objects.filter((o) => o.type !== "hue");
+  const hueObjects = objects.filter((o) => o.type === "hue");
+
+  // Bucket Hue rows by zone id; preserve legacy flat order when no zones exist.
+  const buckets = new Map<string, ObjectEntry[]>();
+  const unassigned: ObjectEntry[] = [];
+  for (const ho of hueObjects) {
+    if (ho.zoneId && hueZones.some((z) => z.id === ho.zoneId)) {
+      const bucket = buckets.get(ho.zoneId) ?? [];
+      bucket.push(ho);
+      buckets.set(ho.zoneId, bucket);
+    } else {
+      unassigned.push(ho);
+    }
+  }
+
+  return (
+    <ul>
+      {nonHue.map((entry) => (
+        <ObjectRow
+          key={entry.id}
+          entry={entry}
+          selected={selectedId === entry.id}
+          onSelect={() => onSelect(entry.id)}
+          onDelete={() => onDelete(entry.id)}
+          onRename={
+            entry.type === "furniture"
+              ? (label) => onRenameFurniture(entry.id.replace("furniture-", ""), label)
+              : undefined
+          }
+          onToggleLock={onToggleLock ? () => onToggleLock(entry.id) : undefined}
+        />
+      ))}
+
+      {/* Hue zones grouped */}
+      {hueZones.length > 0 &&
+        hueZones.map((zone) => {
+          const zoneRows = buckets.get(zone.id) ?? [];
+          return (
+            <li key={`zone-group-${zone.id}`} className="mt-1.5">
+              <div
+                className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500"
+                role="heading"
+                aria-level={3}
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: zone.borderColor ?? "var(--lm-zone-1)" }}
+                  aria-hidden
+                />
+                <span className="flex-1 truncate">{zone.name}</span>
+                <span className="text-[9px] text-zinc-600">{zoneRows.length}</span>
+              </div>
+              <ul className="ml-2 border-l border-zinc-800/60 pl-1">
+                {zoneRows.length === 0 ? (
+                  <li className="px-1.5 py-0.5 text-[9px] italic text-zinc-600">
+                    {t("roomMap.hueZones.groupEmpty")}
+                  </li>
+                ) : (
+                  zoneRows.map((entry) => (
+                    <ObjectRow
+                      key={entry.id}
+                      entry={entry}
+                      selected={selectedId === entry.id}
+                      onSelect={() => onSelect(entry.id)}
+                      onDelete={() => onDelete(entry.id)}
+                      onToggleLock={onToggleLock ? () => onToggleLock(entry.id) : undefined}
+                      indented
+                    />
+                  ))
+                )}
+              </ul>
+            </li>
+          );
+        })}
+
+      {/* Unassigned hue channels */}
+      {hueObjects.length > 0 && unassigned.length > 0 && (
+        <li className="mt-1.5">
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500"
+            role="heading"
+            aria-level={3}
+          >
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-600" aria-hidden />
+            <span className="flex-1 truncate">{t("roomMap.hueZones.unassignedTitle")}</span>
+            <span className="text-[9px] text-zinc-600">{unassigned.length}</span>
+          </div>
+          <ul className="ml-2 border-l border-zinc-800/60 pl-1">
+            {unassigned.map((entry) => (
+              <ObjectRow
+                key={entry.id}
+                entry={entry}
+                selected={selectedId === entry.id}
+                onSelect={() => onSelect(entry.id)}
+                onDelete={() => onDelete(entry.id)}
+                onToggleLock={onToggleLock ? () => onToggleLock(entry.id) : undefined}
+                indented
+              />
+            ))}
+          </ul>
+        </li>
+      )}
+    </ul>
   );
 }
 
@@ -289,65 +441,78 @@ export function ObjectListPanel({
   onAddZone,
   onDeleteZone,
   onRenameZone,
+  hueZones = [],
+  activeHueZoneId = null,
+  onSelectHueZone,
+  onAddHueZone,
+  onDeleteHueZone,
+  onRenameHueZone,
+  addHueZoneDisabled = false,
+  addHueZoneDisabledTooltip,
 }: ObjectListPanelProps) {
   const { t } = useTranslation("common");
-  const [activeTab, setActiveTab] = useState<"objects" | "zones">("objects");
+  const [activeTab, setActiveTab] = useState<"objects" | "zones" | "hueZones">("objects");
   const objects = buildObjectList(config, t);
+  const hueZoneEditingEnabled =
+    onSelectHueZone !== undefined &&
+    onAddHueZone !== undefined &&
+    onDeleteHueZone !== undefined &&
+    onRenameHueZone !== undefined;
 
-  const tabBase = "flex-1 text-center py-1.5 text-[10px] font-semibold transition-colors cursor-pointer";
-  const tabActive = "text-slate-900 dark:text-zinc-100 border-b-2 border-cyan-500";
-  const tabInactive = "text-slate-500 dark:text-zinc-400 border-b border-slate-200 dark:border-zinc-700 hover:text-slate-700 dark:hover:text-zinc-200";
+  const tabBase = "flex-1 text-center py-1.5 text-[10px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60";
+  const tabActive = "text-zinc-100 border-b-2 border-amber-500";
+  const tabInactive = "text-zinc-400 border-b border-zinc-700 hover:text-zinc-200";
 
   return (
-    <div className="flex flex-col h-full border-l border-slate-200/70 dark:border-zinc-800 bg-white/90 dark:bg-zinc-900/90 w-[180px] shrink-0">
+    <div className="flex flex-col h-full border-l border-zinc-800 bg-zinc-900/90 w-[180px] shrink-0">
       {/* Tab bar */}
       <div className="flex shrink-0">
         <button
+          type="button"
           className={`${tabBase} ${activeTab === "objects" ? tabActive : tabInactive}`}
           onClick={() => setActiveTab("objects")}
         >
           {t("roomMap.objectPanel.objectsTab")}
         </button>
         <button
+          type="button"
           className={`${tabBase} ${activeTab === "zones" ? tabActive : tabInactive}`}
           onClick={() => setActiveTab("zones")}
         >
           {t("roomMap.objectPanel.zonesTab")} {zones.length > 0 && `(${zones.length})`}
         </button>
+        {hueZoneEditingEnabled && (
+          <button
+            type="button"
+            className={`${tabBase} ${activeTab === "hueZones" ? tabActive : tabInactive}`}
+            onClick={() => setActiveTab("hueZones")}
+          >
+            {t("roomMap.objectPanel.hueZonesTab")} {hueZones.length > 0 && `(${hueZones.length})`}
+          </button>
+        )}
       </div>
 
       {/* Content */}
       {activeTab === "objects" ? (
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {objects.length === 0 ? (
-            <p className="text-[10px] text-slate-400 dark:text-zinc-500 py-3 text-center">
+            <p className="text-[10px] text-zinc-500 py-3 text-center">
               {t("roomMap.objectPanel.empty")}
             </p>
           ) : (
-            <ul>
-              {objects.map((entry) => (
-                <ObjectRow
-                  key={entry.id}
-                  entry={entry}
-                  selected={selectedId === entry.id}
-                  onSelect={() => onSelect(entry.id)}
-                  onDelete={() => onDelete(entry.id)}
-                  onRename={
-                    entry.type === "furniture"
-                      ? (label) => onRenameFurniture(entry.id.replace("furniture-", ""), label)
-                      : undefined
-                  }
-                  onToggleLock={
-                    onToggleLock
-                      ? () => onToggleLock(entry.id)
-                      : undefined
-                  }
-                />
-              ))}
-            </ul>
+            renderObjectsWithHueGrouping(
+              objects,
+              hueZones,
+              selectedId,
+              onSelect,
+              onDelete,
+              onRenameFurniture,
+              onToggleLock,
+              t,
+            )
           )}
         </div>
-      ) : (
+      ) : activeTab === "zones" ? (
         <ZoneTab
           zones={zones}
           activeZoneId={activeZoneId}
@@ -356,7 +521,20 @@ export function ObjectListPanel({
           onDeleteZone={onDeleteZone}
           onRenameZone={onRenameZone}
         />
-      )}
+      ) : hueZoneEditingEnabled ? (
+        <HueZoneListPanel
+          zones={hueZones}
+          channels={config.hueChannels}
+          activeZoneId={activeHueZoneId}
+          onSelectZone={onSelectHueZone!}
+          onAddZone={onAddHueZone!}
+          onDeleteZone={onDeleteHueZone!}
+          onRenameZone={onRenameHueZone!}
+          onSelectChannel={(idx) => onSelect(`hue-${idx}`)}
+          addZoneDisabled={addHueZoneDisabled}
+          addZoneDisabledTooltip={addHueZoneDisabledTooltip}
+        />
+      ) : null}
     </div>
   );
 }

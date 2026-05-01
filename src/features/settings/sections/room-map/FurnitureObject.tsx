@@ -8,8 +8,8 @@ const FURNITURE_COLORS: Record<
   { bg: string; border: string }
 > = {
   sofa: {
-    bg: "bg-slate-400/35 dark:bg-slate-600/35",
-    border: "border-slate-400",
+    bg: "bg-zinc-500/35",
+    border: "border-zinc-500",
   },
   table: {
     bg: "bg-amber-400/35 dark:bg-amber-600/35",
@@ -234,7 +234,7 @@ export function FurnitureObject({
     <div
       className={`absolute border-2 ${colors.bg} ${
         selected
-          ? placement.locked ? "border-white/40 dark:border-white/40" : "border-white dark:border-white"
+          ? placement.locked ? "border-white/40" : "border-white"
           : colors.border
       } ${placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"}`}
       style={{
@@ -252,7 +252,7 @@ export function FurnitureObject({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      <span className="pointer-events-none select-none px-1 text-[10px] font-semibold text-slate-700 dark:text-zinc-300 truncate block">
+      <span className="pointer-events-none select-none px-1 text-[10px] font-semibold text-zinc-300 truncate block">
         {placement.label}
       </span>
 

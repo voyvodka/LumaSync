@@ -7,6 +7,13 @@ import {
   LIGHTING_SMOOTHING_PRESET_COEFFICIENTS,
   type LightingSmoothingPreset,
 } from "./lighting";
+import {
+  HUE_ZONE_COMMANDS as ROOM_MAP_HUE_ZONE_COMMANDS,
+  HUE_ZONE_STATUS_CODES as ROOM_MAP_HUE_ZONE_STATUS_CODES,
+  type HueZone as RoomMapHueZone,
+  type HueZoneCommandId as RoomMapHueZoneCommandId,
+  type HueZoneStatusCode as RoomMapHueZoneStatusCode,
+} from "./roomMap";
 
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
@@ -25,6 +32,42 @@ export const HUE_COMMANDS = {
 } as const;
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
+
+// ---------------------------------------------------------------------------
+// Hue zone authoring — canonical surface lives in `roomMap.ts` (v1.5 W4-F2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Re-export of the canonical Hue zone command map from `roomMap.ts`.
+ *
+ * v1.5 W4-F2 rolled the W4-F generic `ZONE_COMMANDS` map back to a
+ * Hue-only `HUE_ZONE_COMMANDS` after the direction reversal — see
+ * `.planning/RFCs/v1.5-w4-f-zone-unification.md` "Direction reversal".
+ * The map is owned by `roomMap.ts` (zones are persisted on
+ * `RoomMapConfig`); the alias here keeps existing imports
+ * (`LightsSection`, `RoomMapEditor`) working without source churn.
+ */
+export const HUE_ZONE_COMMANDS = ROOM_MAP_HUE_ZONE_COMMANDS;
+
+/** Re-export of the canonical Hue zone command id type. */
+export type HueZoneCommandId = RoomMapHueZoneCommandId;
+
+/**
+ * Re-export of the canonical `HueZone` interface (single source of truth
+ * in `roomMap.ts`). Hue-only after the W4-F2 reversal — no longer a
+ * discriminated-union projection.
+ */
+export type HueZone = RoomMapHueZone;
+
+/**
+ * Re-export of the eight Hue zone authoring status codes. Surfaced here
+ * so consumers that already import from `hue.ts` keep a single import
+ * surface for Hue runtime + Hue zone authoring.
+ */
+export const HUE_ZONE_STATUS_CODES = ROOM_MAP_HUE_ZONE_STATUS_CODES;
+
+/** Re-export of the canonical Hue zone status code union. */
+export type HueZoneStatusCode = RoomMapHueZoneStatusCode;
 
 export const HUE_STATUS = {
   DISCOVERY_OK: "HUE_DISCOVERY_OK",
@@ -73,6 +116,76 @@ export const HUE_STATUS = {
   STREAM_READY: "HUE_STREAM_READY",
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
+  // -------------------------------------------------------------------------
+  // Hue zone authoring codes — live in `roomMap.ts > HUE_ZONE_STATUS_CODES`
+  // -------------------------------------------------------------------------
+  // The eight Hue zone authoring codes (`HUE_ZONE_CREATED`, `HUE_ZONE_UPDATED`,
+  // `HUE_ZONE_DELETED`, `HUE_ZONE_NOT_FOUND`, `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`,
+  // `HUE_ZONE_LIMIT_REACHED`, `HUE_ZONE_CHANNEL_NOT_IN_AREA`,
+  // `HUE_ZONE_OVERSIZED`) are NOT inlined in `HUE_STATUS`. They live in
+  // `roomMap.ts > HUE_ZONE_STATUS_CODES` and are re-exported above as
+  // `HUE_ZONE_STATUS_CODES` for callers that prefer a single Hue import
+  // surface. (The brief W4-F generic `ZONE_*` rename was reverted in
+  // W4-F2 alongside the unification rollback.)
+  // -------------------------------------------------------------------------
+  // OS keychain credential store (v1.5 W2-A1 / W2-A2)
+  // -------------------------------------------------------------------------
+  /**
+   * Credential store call (set / get / delete) succeeded against the
+   * platform-native keychain (macOS Keychain / Windows CredMan / Linux
+   * Secret Service).
+   */
+  CREDENTIAL_STORE_OK: "HUE_CREDENTIAL_STORE_OK",
+  /**
+   * The OS keychain backend is genuinely unavailable on this platform
+   * (no D-Bus / sandbox-blocked Keychain / locked CredMan). Caller
+   * MUST fall back to the legacy plaintext shellStore fields so the
+   * app keeps running for users who paired before v1.5.
+   */
+  CREDENTIAL_STORE_UNAVAILABLE: "HUE_CREDENTIAL_STORE_UNAVAILABLE",
+  /**
+   * Pairing succeeded AND the new credentials were written into the
+   * OS keychain. Frontend can clear `shellStore.hueAppKey` /
+   * `shellStore.hueClientKey` (the keychain is now source of truth).
+   */
+  CREDENTIAL_MIGRATION_OK: "HUE_CREDENTIAL_MIGRATION_OK",
+  /**
+   * Credentials already lived in the keychain and matched the values
+   * we just received from the bridge — no write performed. Idempotent
+   * happy path for re-pair flows.
+   */
+  CREDENTIAL_MIGRATION_SKIPPED: "HUE_CREDENTIAL_MIGRATION_SKIPPED",
+  /**
+   * Keychain write failed (or backend was unavailable). Frontend MUST
+   * keep the plaintext fallback so the bridge stays usable; downgrade-
+   * safe behaviour for users on platforms with broken keychain access.
+   */
+  CREDENTIAL_MIGRATION_FAILED: "HUE_CREDENTIAL_MIGRATION_FAILED",
+  // -------------------------------------------------------------------------
+  // mDNS LAN bridge discovery (v1.5 W2-A3)
+  // -------------------------------------------------------------------------
+  /**
+   * `_hue._tcp.local.` browse returned at least one bridge OR the
+   * cloud discovery returned bridges and the merged list is non-empty.
+   * Same code as the cloud-only happy path so existing UIs continue
+   * working without changes.
+   */
+  MDNS_DISCOVERY_OK: "HUE_MDNS_DISCOVERY_OK",
+  /**
+   * The mDNS browse window elapsed without resolving any bridges AND
+   * the cloud discovery also produced no results. Distinct from
+   * `HUE_DISCOVERY_EMPTY` because the timeout is mDNS-specific (no
+   * multicast packets observed during the bounded window).
+   */
+  MDNS_DISCOVERY_TIMEOUT: "HUE_MDNS_DISCOVERY_TIMEOUT",
+  /**
+   * The mDNS responder could not be initialised on this platform
+   * (sandbox-blocked multicast, no IPv4 stack, locked port 5353).
+   * The merged response falls back to cloud-only discovery; this code
+   * is reserved for the runtime-telemetry surface that will let users
+   * see why LAN discovery is offline on their machine.
+   */
+  MDNS_UNSUPPORTED: "HUE_MDNS_UNSUPPORTED",
 } as const;
 
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
@@ -190,6 +303,32 @@ export const HUE_FAULT_CODES = {
 } as const;
 
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
+
+// ---------------------------------------------------------------------------
+// Credential storage backend (v1.5 W2-A1 / W2-A2)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the Hue credentials are currently persisted. Surfaced via the
+ * optional `credentialStorageBackend` field on `ShellState` so the UI /
+ * dev tools can show a "stored in keychain" badge and so future
+ * migrations can detect the legacy fallback path.
+ *
+ * - `keychain` — OS-native keychain (macOS Keychain Services / Windows
+ *   Credential Manager / Linux Secret Service via libsecret + D-Bus).
+ *   This is the W2-A2 happy path.
+ * - `plaintext-legacy` — `shellStore.hueAppKey` / `shellStore.hueClientKey`.
+ *   Used by users who paired before v1.5 and as a downgrade-safe fallback
+ *   when the OS keychain is unavailable. Migration to `keychain` happens
+ *   silently on next successful keychain probe.
+ */
+export const HUE_CREDENTIAL_BACKENDS = {
+  KEYCHAIN: "keychain",
+  PLAINTEXT_LEGACY: "plaintext-legacy",
+} as const;
+
+export type HueCredentialBackend =
+  (typeof HUE_CREDENTIAL_BACKENDS)[keyof typeof HUE_CREDENTIAL_BACKENDS];
 
 // ---------------------------------------------------------------------------
 // Hue room archetypes (v1.4 — CLIP v2 whitelist)

@@ -29,6 +29,7 @@ const SOLID_MODE: LightingModeConfig = {
 describe("mergeLightingModeIntoShellState", () => {
   it("writes only lighting mode fields and preserves ledCalibration", () => {
     const currentState: ShellState = {
+      schemaVersion: 1,
       windowWidth: 1280,
       windowHeight: 720,
       windowX: 0,

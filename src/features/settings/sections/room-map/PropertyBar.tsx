@@ -106,13 +106,13 @@ function NumberInput({
   if (value === "") return null;
 
   return (
-    <label className={`flex items-center gap-1 text-[10px] ${disabled ? "opacity-40 pointer-events-none" : "text-slate-500 dark:text-zinc-400"}`}>
-      <span className="font-semibold w-3">{label}</span>
+    <label className={`lm-room-propbar-field ${disabled ? "is-disabled" : ""}`}>
+      <span className="lm-room-propbar-field-label">{label}</span>
       <input
         type="number"
         step="any"
         disabled={disabled}
-        className="w-[52px] bg-transparent border-b border-slate-300 dark:border-zinc-600 text-[10px] text-slate-800 dark:text-zinc-200 text-center focus:outline-none focus:border-cyan-400 tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none disabled:cursor-not-allowed"
+        className="lm-room-propbar-input"
         value={local}
         onChange={(e) => setLocal(e.target.value)}
         onBlur={commit}
@@ -166,8 +166,8 @@ export function PropertyBar({
 
   if (!fields || !selectedId) {
     return (
-      <div className="h-8 shrink-0 flex items-center px-3 border-t border-slate-200/70 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80">
-        <span className="text-[10px] text-slate-400 dark:text-zinc-500">—</span>
+      <div className="lm-room-propbar lm-room-propbar--empty">
+        <span className="lm-room-propbar-empty">—</span>
       </div>
     );
   }
@@ -177,7 +177,7 @@ export function PropertyBar({
 
   if (fields.isImage && imgId) {
     return (
-      <div className="h-8 shrink-0 flex items-center gap-3 px-3 border-t border-slate-200/70 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80">
+      <div className="lm-room-propbar">
         <NumberInput
           label="X"
           value={fields.x}
@@ -191,16 +191,16 @@ export function PropertyBar({
           disabled={locked}
         />
 
-        <div className="h-4 w-px bg-slate-200 dark:bg-zinc-700" />
+        <span className="lm-room-propbar-sep" aria-hidden />
 
         {/* Aspect lock toggle */}
         <button
           className={`flex items-center justify-center w-5 h-5 rounded transition-colors ${
             locked
-              ? "opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600"
+              ? "opacity-40 cursor-not-allowed text-zinc-600"
               : fields.aspectLocked
-                ? "text-cyan-500"
-                : "text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300"
+                ? "text-amber-500"
+                : "text-zinc-500 hover:text-zinc-300"
           }`}
           onClick={locked ? undefined : () => onUpdateImageAspectLock?.(imgId, !fields.aspectLocked)}
           disabled={locked}
@@ -245,8 +245,8 @@ export function PropertyBar({
         <button
           className={`flex items-center justify-center w-5 h-5 rounded transition-colors ${
             locked
-              ? "opacity-40 cursor-not-allowed text-slate-400 dark:text-zinc-600"
-              : "text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-200"
+              ? "opacity-40 cursor-not-allowed text-zinc-600"
+              : "text-zinc-500 hover:text-zinc-200"
           }`}
           onClick={locked ? undefined : () => onResetImageScale?.(imgId)}
           disabled={locked}
@@ -260,7 +260,7 @@ export function PropertyBar({
           </svg>
         </button>
 
-        <div className="h-4 w-px bg-slate-200 dark:bg-zinc-700" />
+        <span className="lm-room-propbar-sep" aria-hidden />
 
         {/* Opacity — compact inline */}
         <div className={`flex items-center gap-1.5 ${locked ? "opacity-40 pointer-events-none" : ""}`}>
@@ -273,16 +273,16 @@ export function PropertyBar({
             disabled={locked}
             value={parseInt(fields.opacity!, 10)}
             onChange={(e) => onUpdateImageOpacity?.(imgId, parseInt(e.target.value, 10))}
-            className="w-12 h-[3px] appearance-none rounded-full bg-slate-300 dark:bg-zinc-600 accent-cyan-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-cyan-500 [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
+            className="w-12 h-[3px] appearance-none rounded-full bg-zinc-700 accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
           />
-          <span className="w-5 text-right tabular-nums text-[9px] font-medium text-slate-600 dark:text-zinc-300">{fields.opacity}</span>
+          <span className="w-5 text-right tabular-nums text-[9px] font-medium text-zinc-300">{fields.opacity}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-8 shrink-0 flex items-center gap-3 px-3 border-t border-slate-200/70 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80">
+    <div className="lm-room-propbar">
       <NumberInput
         label="X"
         value={fields.x}

@@ -32,6 +32,7 @@ describe("resolveInitialLanguage()", () => {
   it("Test 1: first-launch — returns 'en' when no language is persisted (I18N-02)", async () => {
     // Arrange: simulate first launch — store has no language key (undefined)
     vi.mocked(shellStore.load).mockResolvedValue({
+      schemaVersion: 1,
       windowWidth: 900,
       windowHeight: 620,
       windowX: null,
@@ -53,6 +54,7 @@ describe("resolveInitialLanguage()", () => {
   it("Test 2: persisted language — returns stored language code when one exists", async () => {
     // Arrange: simulate returning user with 'tr' saved
     vi.mocked(shellStore.load).mockResolvedValue({
+      schemaVersion: 1,
       windowWidth: 900,
       windowHeight: 620,
       windowX: null,
@@ -73,6 +75,7 @@ describe("resolveInitialLanguage()", () => {
   it("Test 3: unknown locale falls back to 'en' (I18N-02 fallback)", async () => {
     // Arrange: simulate corrupt or unsupported locale in store
     vi.mocked(shellStore.load).mockResolvedValue({
+      schemaVersion: 1,
       windowWidth: 900,
       windowHeight: 620,
       windowX: null,

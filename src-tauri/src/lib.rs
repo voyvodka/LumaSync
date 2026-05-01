@@ -19,6 +19,7 @@ mod commands {
     pub mod calibration;
     pub mod device_connection;
     pub mod device_handshake;
+    pub mod hue;
     pub mod hue_http;
     pub mod hue_intensity;
     pub mod hue_onboarding;
@@ -32,6 +33,8 @@ mod commands {
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
+    pub mod wled_discovery;
+    pub mod wled_sink;
 }
 
 #[cfg(target_os = "macos")]
@@ -41,13 +44,16 @@ mod models {
     pub mod room_map;
 }
 
+// v1.5 W2-A3 — shared LAN-discovery primitives (mDNS responder registry).
+mod network;
+
 use commands::calibration::{
     close_display_overlay, list_displays, open_display_overlay, start_calibration_test_pattern,
     stop_calibration_test_pattern, update_display_overlay_preview, OverlayState,
 };
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
-    SerialConnectionState,
+    ActiveSinkRegistry, SerialConnectionState,
 };
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
@@ -62,10 +68,14 @@ use commands::lighting_mode::{
 };
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
-use commands::room_map::{
+use commands::room_map::hue_zone::{
+    assign_channel_to_hue_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
+};
+use commands::room_map::save_load::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
+use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
 
 const TRAY_ICON_ID: &str = "main-tray";
 
@@ -111,6 +121,9 @@ fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
     // 2. Deactivate Hue entertainment area so the bridge turns lights off.
     //    stop_hue_stream is synchronous (waits up to HUE_STOP_TIMEOUT_SECS=3s).
     let _ = stop_hue_stream(None, app.state::<HueRuntimeStateStore>());
+
+    // 3. Stop and release the active sink (serial port session).
+    app.state::<ActiveSinkRegistry>().clear();
 
     app.exit(0);
 }
@@ -345,6 +358,7 @@ pub fn run() {
 
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());
+            app.manage(ActiveSinkRegistry::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
             app.manage(HueRuntimeStateStore::default());
@@ -431,7 +445,14 @@ pub fn run() {
             load_room_map,
             copy_background_image,
             update_hue_channel_positions,
+            create_hue_zone,
+            update_hue_zone,
+            delete_hue_zone,
+            assign_channel_to_hue_zone,
             simulate_hue_fault, // debug: real fault injection, release: returns error stub
+            discover_wled_devices,
+            connect_wled_sink,
+            test_wled_bridge,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

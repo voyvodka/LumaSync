@@ -138,12 +138,15 @@ export function LeftToolbar({
         {furnitureOpen && (
           <div
             ref={dropdownRef}
-            className="absolute left-full top-0 ml-1.5 min-w-[100px] rounded-md border border-zinc-700 bg-zinc-900 shadow-lg z-50 py-1"
+            className="lm-room-toolchip-menu"
+            role="menu"
           >
             {FURNITURE_TYPES.map((type) => (
               <button
                 key={type}
-                className="w-full text-left px-3 py-1.5 text-[11px] text-zinc-300 hover:bg-zinc-800"
+                type="button"
+                role="menuitem"
+                className="lm-room-toolchip-menu-item"
                 onClick={() => { onAddFurniture(type); close(); }}
               >
                 {t(`roomMap.furniture.type.${type}`)}

@@ -28,6 +28,36 @@
       "tr": "Türkçe"
     }
   },
+  "ui": {
+    "colorPicker": {
+      "rootAriaLabel": "Renk seçici",
+      "hueLabel": "Renk tonu",
+      "svLabel": "Doygunluk ve parlaklık",
+      "hexLabel": "HEX",
+      "recentColors": "Son kullanılanlar",
+      "recentItemAriaLabel": "{{hex}} rengini kullan"
+    },
+    "onboardingBanner": {
+      "dismissAriaLabel": "İpucunu kapat"
+    },
+    "onboarding": {
+      "step1": {
+        "title": "LumaSync'e hoş geldin",
+        "body": "Başlamak için bir aydınlatma modu seç — Kapalı, Ambilight ya da tek bir sabit renk.",
+        "action": "Işıkları aç"
+      },
+      "step2": {
+        "title": "Işıklarını bağla",
+        "body": "Modların kareleri gönderebilmesi için bir USB LED denetleyicisi, WLED ESP ya da Hue köprüsü bağla.",
+        "action": "Cihazları aç"
+      },
+      "step3": {
+        "title": "Şeridini kalibre et",
+        "body": "Ambilight'ın renkleri doğru köşelere eşlemesi için her ekran kenarında kaç LED olduğunu LumaSync'e bildir.",
+        "action": "Kalibrasyonu aç"
+      }
+    }
+  },
   "general": {
     "title": "Genel",
     "description": "Genel uygulama ayarları.",
@@ -79,6 +109,11 @@
         "music": "Müzik",
         "chill": "Sakin",
         "read": "Okuma"
+      },
+      "offline": {
+        "title": "Ulaşılabilir çıkış yok",
+        "body": "Aydınlatma modlarını etkinleştirmek için bir USB LED şerit bağla veya Hue köprüsünü eşleştir.",
+        "action": "Cihazları aç"
       }
     }
   },
@@ -88,6 +123,7 @@
       "other": "Diğer",
       "usbStrips": "USB Şeritleri",
       "hueBridges": "Hue Köprüleri",
+      "wled": "WLED",
       "displays": "Ekranlar",
       "manualEntry": "Manuel Giriş"
     },
@@ -123,6 +159,38 @@
       "empty": {
         "title": "USB portu bulunamadı",
         "body": "Denetleyiciyi bağlayıp Yeniden Tara'ya basın."
+      },
+      "discover": {
+        "title": "Portları keşfet",
+        "count": "{{count}} port",
+        "countOne": "1 port",
+        "hint": "Algılanan seri portlar. Aşağıdaki liste asıl şerit kaydıdır — bu bölümü sadece bir portu doğrudan incelemek veya bağlamak istediğinde kullan."
+      },
+      "paired": {
+        "title": "Eşleşen şeritler",
+        "count": "{{count}} şerit",
+        "countOne": "1 şerit",
+        "empty": "Henüz şerit eşleşmedi — oda haritasını oluşturmak için bir tane ekle.",
+        "stripName": "{{count}} LED'lik şerit",
+        "noPort": "Port bağlı değil",
+        "offline": "OFFLINE",
+        "ledCountLabel": "LED",
+        "portLabel": "Port",
+        "addFirst": "+ LED şerit ekle",
+        "addAnother": "+ Başka şerit ekle",
+        "addDisabledNoPortsTooltip": "Seri port algılanmadı. Denetleyiciyi bağlayıp yeniden tarayın.",
+        "addDisabledAllPairedTooltip": "Tüm keşfedilen portlar zaten eşleşmiş.",
+        "formEmptyNoPorts": "Seri port algılanmadı — başka bir USB denetleyici bağlayıp yeniden tarayın.",
+        "formEmptyAllPaired": "Keşfedilen tüm portlar zaten eşleşmiş. Başka bir denetleyici bağlayıp yeniden tarayın.",
+        "rescan": "Yeniden tara",
+        "cancel": "İptal",
+        "confirmAdd": "Ekle",
+        "persistError": "Şerit kaydedilemedi. Tekrar deneyin.",
+        "openInMap": "Haritada aç",
+        "changePort": "Portu değiştir",
+        "changePortAriaLabel": "Bu şeride bağlı USB portunu değiştir",
+        "changePortConfirm": "Kaydet",
+        "changePortCancel": "İptal"
       }
     },
     "displays": {
@@ -167,6 +235,40 @@
         "failed": "BAŞARISIZ",
         "discovered": "KEŞFEDİLDİ"
       }
+    },
+    "wled": {
+      "title": "WLED Cihazları",
+      "subtitle": "Yerel ağda erişilebilen ağ LED panelleri",
+      "manualIp": "WLED IP",
+      "manualIpHint": "mDNS ile taramak için boş bırakın veya bilinen bir adres yapıştırın.",
+      "manualIpPlaceholder": "192.168.1.42",
+      "discoverAction": "Tara",
+      "discovering": "Taranıyor...",
+      "connectAction": "Bağlan",
+      "reconnectAction": "Yeniden bağlan",
+      "connecting": "Bağlanılıyor...",
+      "testAction": "Test",
+      "testing": "Test ediliyor...",
+      "invalidIp": "Geçerli bir IPv4 veya IPv6 adresi girin.",
+      "cellLedCount": "LED",
+      "cellVersion": "Sürüm",
+      "cellMac": "MAC",
+      "empty": {
+        "title": "Henüz WLED cihazı yok",
+        "body": "Tarama başlatın veya bilinen bir IP yapıştırıp Tara'ya basın."
+      },
+      "pill": {
+        "discovered": "BULUNDU",
+        "connected": "AKTIF"
+      },
+      "status": {
+        "discoveryOk": "Tarama tamamlandı.",
+        "discoveryEmpty": "Ağda hiç WLED cihazı bulunamadı.",
+        "discoveryTimeout": "Tarama süresi içinde hiçbir cihaz yanıt vermedi.",
+        "bridgeUnreachable": "WLED cihazına erişilemiyor.",
+        "protocolMismatch": "Cihaz protokolü reddetti — diğer protokolü deneyin.",
+        "ledCountMismatch": "Cihaz farklı bir LED sayısı bildiriyor."
+      }
     }
   },
   "lightsPage": {
@@ -209,6 +311,7 @@
         "sub": "—"
       },
       "profile": {
+        "brightness": "Parlaklık",
         "saturation": "Doygunluk",
         "blackBorder": "Siyah kenar",
         "blackBorderAuto": "oto",
@@ -226,6 +329,8 @@
       "outputs": "Çıkışlar",
       "addAria": "Çıkış ekle",
       "addTooltip": "Yakında — çoklu Hue alanı",
+      "addHueZoneTooltip": "Yeni bir Hue bölgesi ekle",
+      "addDisabledTooltip": "Bölge eklemek için bir Hue köprüsü eşleyin",
       "hintTitle": "Oda alanı",
       "hintBody": "Telemetri / mini oda\nönizlemesi / kısayollar\niçin yer tutucu",
       "rows": {
@@ -559,7 +664,12 @@
           "center": "O"
         },
         "selectZoneHint": "Seçili kanalı atamak için haritada bir bölgeye tıkla.",
-        "chipLabel": "Kn {{index}}"
+        "chipLabel": "Kn {{index}}",
+        "detailStripChannel": "Kanal {{index}}",
+        "detailStripCoords": "x: {{x}}  ·  y: {{y}}",
+        "canvasAriaLabel": "Kanal konum tuvali",
+        "regionRowAriaLabel": "{{index}}. kanalin bolgesi",
+        "rowDotAriaLabel": "{{index}}. kanali sec"
       },
       "targetFailed": "{{target}} hedefi baslatılamadı, mevcut çıkış devam ediyor.",
       "readiness": {
@@ -848,6 +958,8 @@
       "opacity": "Şeffaflık",
       "showGrid": "Izgarayı göster",
       "gridStrokeWidth": "Izgara kalınlığı",
+      "showHueZones": "Hue bölgelerini göster",
+      "showHueZonesHint": "Her Hue bölgesinin sınırını her zaman çiz; kapatınca yalnızca seçili bölge görünür.",
       "roomWidth": "Genişlik (m)",
       "roomDepth": "Derinlik (m)",
       "resetMap": "Haritayı sıfırla",
@@ -855,7 +967,9 @@
     },
     "persistError": "Harita kaydedilemedi. Değişiklikler yeniden başlatmada kaybolabilir.",
     "usbStrip": {
-      "ledCount": "LED sayısı"
+      "ledCount": "LED sayısı",
+      "online": "BAĞLI",
+      "offline": "OFFLINE"
     },
     "hueChannel": {
       "defaultLabel": "Kanal {{index}}"
@@ -878,16 +992,100 @@
       "lightCount": "{{N}} ışık",
       "lightCountOne": "1 ışık"
     },
+    "hueZones": {
+      "title": "Hue Bölgeleri",
+      "addAction": "+ Bölge",
+      "empty": "Henüz Hue bölgesi yok.",
+      "emptyCta": "İlk Hue bölgenizi ekleyin",
+      "defaultName": "Hue Bölgesi {{N}}",
+      "deleteAriaLabel": "{{name}} bölgesini sil",
+      "lightCount": "{{N}} ışık",
+      "lightCountOne": "1 ışık",
+      "groupEmpty": "Henüz kanal atanmadı",
+      "unassignedTitle": "Atanmamış",
+      "addDisabledTooltip": "Bölge eklemek için Hue köprüsü eşleyin ve eğlence alanı seçin.",
+      "centerMarkerAriaLabel": "{{name}} bölgesinin merkezini sürükleyin",
+      "activeChipTip": "aktif",
+      "movePopoverLabel": "Kanalı bölgeye taşı",
+      "moveChannelAriaLabel": "Kanal {{channel}} öğesini başka bir bölgeye taşı",
+      "dragHandleTip": "Başka bölgeye sürükle",
+      "areaState": {
+        "notConfiguredTitle": "Köprü eşleşmedi",
+        "notConfiguredHint": "Bölge oluşturmak için Cihazlar'da bir Hue köprüsü eşleyin.",
+        "notConfiguredCta": "Köprü eşle",
+        "noAreaTitle": "Köprü hazır · Alan yok",
+        "noAreaHint": "Bölge tanımlamaya başlamak için Cihazlar'da bir eğlence alanı seçin.",
+        "noAreaCta": "Alan seç",
+        "readyTitle": "Alan hazır · {{N}} bölge",
+        "readyHint": "Bir kanalı bölgeye sürükleyin veya Taşı eylemini kullanın.",
+        "offlineTitle": "Köprü çevrimdışı",
+        "offlineHint": "Son alan hatırlandı; erişiminiz yoksa yeniden eşleyin."
+      }
+    },
+    "zoneProperties": {
+      "title": "Bölge özellikleri",
+      "color": "Renk",
+      "borderColor": "Kenar",
+      "centerColor": "Merkez",
+      "swatchAriaLabel": "{{name}} rengini kullan"
+    },
     "objectPanel": {
       "objectsTab": "Nesneler",
       "zonesTab": "Zone'lar",
+      "hueZonesTab": "Hue Bölgeleri",
       "empty": "Henüz nesne eklenmedi.",
       "tvLabel": "TV",
       "ledLabel": "LED {{count}}",
       "hueLabel": "Hue {{index}}",
       "lock": "Kilitle",
       "unlock": "Kilidi Aç",
-      "delete": "Sil"
+      "delete": "Sil",
+      "dockAriaLabel": "Oda haritası paneli — Nesneler, Zone'lar ve Hue Bölgeleri sekmeleri"
+    },
+    "inspector": {
+      "regionAriaLabel": "Seçili öğe özellikleri",
+      "empty": "Özelliklerini düzenlemek için bir nesne veya bölge seçin.",
+      "zoneTitle": "Zone",
+      "channelsLabel": "Kanallar",
+      "legacyZoneHint": "Bu zone'a kanal eklemek/çıkarmak için tuvaldeki LED noktalarına tıklayın.",
+      "typeTv": "TV",
+      "typeFurniture": "Mobilya",
+      "typeUsb": "USB şerit",
+      "typeHue": "Hue ışık",
+      "typeImage": "Görsel",
+      "typeHueZone": "Hue bölgesi",
+      "scaleX": "Genişlik",
+      "scaleY": "Derinlik",
+      "zoneSize": "Boyut",
+      "zoneEdgeLabel": "Kenar uzunluğu",
+      "zoneEdgeShort": "Kenar",
+      "zoneEdgeAriaLabel": "Bölge kenar uzunluğu (metre)",
+      "zoneHexShort": "Hex",
+      "zoneHexAriaLabel": "Bölge renk hex değeri",
+      "zoneChannelCount_one": "{{count}} ışık",
+      "zoneChannelCount_other": "{{count}} ışık",
+      "zoneSizeHint": "Bölge 1:1 karedir; en büyük değer odanın kısa kenarına eşittir.",
+      "widthLabel": "Genişlik",
+      "heightLabel": "Yükseklik",
+      "furnitureNameLabel": "Ad",
+      "furnitureTypeLabel": "Tür",
+      "furnitureRotationLabel": "Dönüş",
+      "tvHint": "TV'yi konumlandırmak için tuvalde sürükleyin; sabitlemek için kilidi kullanın.",
+      "usbHint": "LED sayısı bir sonraki bağlantıda şeride iletilir. Başlangıç ve bitiş noktalarını tuvalden ayarlayın.",
+      "usbLedCountLabel": "LED",
+      "usbPortLabel": "Port",
+      "usbConnectedFallback": "Bağlı",
+      "usbConnectionDisconnected": "Bağlı değil",
+      "usbConnectionUnknown": "—",
+      "usbManage": "Cihazlarda yönet",
+      "hueBridgeLabel": "Köprü",
+      "hueBridgeConnected": "Çevrim içi",
+      "hueBridgeDisconnected": "Çevrim dışı",
+      "hueChannelIndexLabel": "Kanal",
+      "hueZoneLabel": "Bölge",
+      "hueChannelHint": "Konumu hassaslaştırmak için tuvaldeki noktayı sürükleyin. Hue Bölgeleri sekmesinden bölgeye atayın.",
+      "imageOpacityLabel": "Opaklık",
+      "imageHint": "Görseli ölçeklemek ve konumlandırmak için tuval tutamaçlarını kullanın. Oda hatlarının görünür kalması için opaklığı düşürün."
     },
     "propertyBar": {
       "aspectLocked": "En boy oranı kilitli",
@@ -1096,7 +1294,12 @@
   },
   "statusBar": {
     "kbdMode": "mod",
-    "kbdSettings": "ayarlar"
+    "kbdSettings": "ayarlar",
+    "reconnect": {
+      "usbAriaLabel": "USB cihazını yeniden bağla",
+      "hueAriaLabel": "Hue köprüsünü yeniden bağla",
+      "tooltip": "Cihaz ayarlarını aç"
+    }
   },
   "shell": {
     "keybind": {
@@ -1134,6 +1337,15 @@
       "reset": "Varsayilanlara sifirla",
       "kelvinHint": "Dusuk = sicak, yuksek = soguk"
     },
+    "chipType": {
+      "label": "LED Chip Tipi",
+      "description": "SK6812 RGBW seritler daha temiz beyazlar icin ayri bir beyaz LED icerir.",
+      "options": {
+        "ws2812b": "WS2812B (3 bayt RGB)",
+        "sk6812rgbw": "SK6812 RGBW (4 bayt)"
+      },
+      "sk6812AdalightWarning": "SK6812 RGBW, Adalight profili ile desteklenmez. WS2812B kodlamasina donuluyor."
+    },
     "firmwareProfile": {
       "title": "Firmware Profili",
       "description": "LED kontrolcu firmware'inizle uyumlu seri protokolu secin.",
@@ -1141,7 +1353,28 @@
       "lumasyncV1Description": "Saglik kontrolu ve telemetri iceren LumaSync yerel protokolu.",
       "adalightLabel": "Adalight",
       "adalightDescription": "Prismatik, Hyperion, Boblight ve cogu DIY Arduino sketch ile uyumlu.",
-      "brightnessDisabledTooltip": "Adalight profili: parlaklik firmware tarafindan kontrol edilir"
+      "brightnessDisabledTooltip": "Adalight profili: parlaklik firmware tarafindan kontrol edilir",
+      "mismatchTooltip": "Firmware {{advertised}} bildiriyor; {{attempted}} secmek sessiz bir sekilde gormezden gelinecek. Firmware'i guncelleyin veya dikkatli sekilde gecersiz kilin.",
+      "advertisedBadge": "Algilanan: {{advertised}}",
+      "useAnywayLabel": "Yine de kullan",
+      "useAnywayHint": "Firmware'in algiladigi profili gecersiz kilar. Yalnizca ozel firmware kullaniyorsaniz etkinlestirin.",
+      "overrideWarningTitle": "Uyumsuz firmware profili",
+      "overrideWarningBody": "Kontrolcunuz son saglik kontrolunde {{advertised}} bildirdi, ancak {{attempted}} secmek uzeresiniz. USB seridi sessizce hicbir sey yapmayacak; Hue ise akmaya devam edecek. Yalnizca firmware'inizin {{attempted}} kablo formatini anladigindan eminseniz devam edin.",
+      "overrideWarningConfirm": "Yine de {{attempted}} kullan",
+      "overrideWarningCancel": "Vazgec",
+      "overrideWarningDontAskAgain": "Bir daha sorma"
+    }
+  },
+  "hueZone": {
+    "statusCode": {
+      "created": "Hue bölgesi oluşturuldu.",
+      "updated": "Hue bölgesi güncellendi.",
+      "deleted": "Hue bölgesi silindi.",
+      "notFound": "Hue bölgesi bulunamadı.",
+      "channelOutOfBounds": "Kanal pozisyonu izinli aralığın dışında.",
+      "limitReached": "Bridge bu Hue eğlence alanı için kanal sınırına ulaşıldı.",
+      "channelNotInArea": "Kanal bu Hue bölgesinin eğlence alanına ait değil.",
+      "oversized": "Hue bölge boyutu izinli aralığın dışında."
     }
   },
   "notifications": {

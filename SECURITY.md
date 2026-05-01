@@ -6,9 +6,9 @@ Security updates are provided for the latest stable release.
 
 | Version | Supported |
 | --- | --- |
-| 1.4.x (current: 1.4.0) | Yes |
-| 1.3.x | No |
-| < 1.3.0 | No |
+| 1.5.x (current: 1.5.0) | Yes |
+| 1.4.x | No |
+| < 1.4.0 | No |
 
 ## Reporting a Vulnerability
 

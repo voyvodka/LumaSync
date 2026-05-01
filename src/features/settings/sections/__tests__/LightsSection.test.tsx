@@ -27,6 +27,12 @@ vi.mock("react-i18next", () => ({
         "lightsPage.dock.rows.hueSubIdle": "Bridge · standby",
         "general.mode.brightness": "Brightness",
         "general.mode.solidColor": "Solid color",
+        "ui.colorPicker.hexLabel": "HEX",
+        "ui.colorPicker.rootAriaLabel": "Color picker",
+        "ui.colorPicker.hueLabel": "Hue",
+        "ui.colorPicker.svLabel": "Saturation and value",
+        "ui.colorPicker.recentColors": "Recent",
+        "ui.colorPicker.recentItemAriaLabel": "Recent colour {{hex}}",
       };
 
       let value = dict[key] ?? key;
@@ -100,9 +106,12 @@ describe("LightsSection", () => {
     fireEvent.change(screen.getByLabelText("Brightness"), {
       target: { value: "35" },
     });
-    fireEvent.change(screen.getByLabelText("Solid color"), {
-      target: { value: "#00ff00" },
-    });
+    // v1.5 W1-A7: solid colour picker migrated from native <input type="color">
+    // to the SVG-native HsvColorPicker. Drive the change through the picker's
+    // hex text input — value setter + Enter triggers commitHexDraft.
+    const hexInput = screen.getByLabelText("HEX");
+    fireEvent.change(hexInput, { target: { value: "#00ff00" } });
+    fireEvent.keyDown(hexInput, { key: "Enter" });
 
     await waitFor(() => {
       expect(onModeChange).toHaveBeenLastCalledWith({
