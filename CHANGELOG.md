@@ -7,6 +7,17 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-05-01
+
+### Security
+
+- Bump `rand` 0.8.5 → 0.8.6 and `rand` 0.9.2 → 0.9.4 to clear RUSTSEC-2026-0097 (unsoundness with a custom logger using `rand::rng()`); both reach LumaSync transitively through `tauri-plugin-notification` and `xcap`. The remaining `glib 0.18.5` Linux-runtime warning (RUSTSEC-2024-0429) requires a Tauri/gtk major bump and is tracked for v1.6.
+
+### Changed
+
+- Rust deps: Tauri 2.10.3 → 2.11.0 (and the matching `tauri-build`, `tray-icon`, `wry` chain), `reqwest` 0.13.2 → 0.13.3 (Dependabot minor-and-patch group).
+- Frontend deps: `@tauri-apps/api` and `@tauri-apps/cli` 2.10.1 → 2.11.0, `jsdom` 29.1.0 → 29.1.1 (Dependabot minor-and-patch group).
+
 ## [1.5.0] — 2026-04-28
 
 ### Added
