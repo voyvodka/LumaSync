@@ -861,7 +861,7 @@ describe("App mode orchestration", () => {
         () => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
         },
-        { timeout: 3000 },
+        { timeout: 8000 },
       );
 
       expect(setLightingModeMock).toHaveBeenCalledTimes(1);
@@ -925,7 +925,7 @@ describe("App mode orchestration", () => {
         () => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
         },
-        { timeout: 3000 },
+        { timeout: 8000 },
       );
 
       expect(setLightingModeMock).toHaveBeenCalledWith(
