@@ -817,7 +817,10 @@ describe("App mode orchestration", () => {
   // macOS + Windows pass; the failure is environment-specific, not a
   // regression in the canonical-signature dedup the test guards. Gate
   // it to non-Linux until we land a fake-timer driven rewrite.
-  const itUnlessLinux = process.platform === "linux" ? it.skip : it;
+  const itUnlessLinux =
+    (globalThis as { process?: { platform?: string } }).process?.platform === "linux"
+      ? it.skip
+      : it;
 
   itUnlessLinux(
     "ambilight idempotency: key-reordered payload with same content does not re-invoke set_lighting_mode",
