@@ -47,49 +47,155 @@ function computeBottomDotXs(countBottom: number, bottomMissing: number): number[
   return result;
 }
 
+// Anchor → physical position + CW/CCW tail directions. Mirrors the backend
+// canonical sequence in `led_calibration.rs::led_to_screen_pos`:
+//   - Top edge:    local 0 = LEFT,   local n-1 = RIGHT  (L → R)
+//   - Right edge:  local 0 = TOP,    local m-1 = BOTTOM (T → B)
+//   - Bottom edge: local 0 = RIGHT,  local p-1 = LEFT   (R → L)
+//   - Left edge:   local 0 = BOTTOM, local q-1 = TOP    (B → T)
+// CW tail = direction of canonical[anchor+1]. CCW tail = direction of
+// canonical[anchor-1] (the backend's `items[1..]` reversal makes the
+// "previous" canonical neighbour the LED that comes second under CCW).
+// Note: simply negating CW does NOT yield CCW for corner anchors — at a
+// corner CCW continues along the perpendicular edge, not back along the
+// same edge.
 function anchorPosition(
   anchor: LedStartAnchor,
   bottomXs: number[],
   countBottom: number,
-): { x: number; y: number; tailDx: number; tailDy: number } {
+): {
+  x: number;
+  y: number;
+  cwDx: number;
+  cwDy: number;
+  ccwDx: number;
+  ccwDy: number;
+} {
   const bottomY = MON_Y + MON_H + DOT_OFFSET;
+  const TAIL = 20;
   switch (anchor) {
     case "top-start":
-      return { x: MON_X + DOT_OFFSET, y: MON_Y - DOT_OFFSET, tailDx: 20, tailDy: 0 };
-    case "top-end":
-      return { x: MON_X + MON_W - DOT_OFFSET, y: MON_Y - DOT_OFFSET, tailDx: -20, tailDy: 0 };
-    case "right-start":
-      return { x: MON_X + MON_W + DOT_OFFSET, y: MON_Y + DOT_OFFSET, tailDx: 0, tailDy: 20 };
-    case "right-end":
-      return { x: MON_X + MON_W + DOT_OFFSET, y: MON_Y + MON_H - DOT_OFFSET, tailDx: 0, tailDy: -20 };
-    case "bottom-start":
+      // (Top,0) at top-left. CW next = (Top,1) → RIGHT.
+      // CCW next = (Left,q-1) physically at top-left, then (Left,q-2) → DOWN.
       return {
-        x: bottomXs[0] ?? MON_X + DOT_OFFSET,
-        y: bottomY,
-        tailDx: 20,
-        tailDy: 0,
+        x: MON_X + DOT_OFFSET,
+        y: MON_Y - DOT_OFFSET,
+        cwDx: TAIL,
+        cwDy: 0,
+        ccwDx: 0,
+        ccwDy: TAIL,
       };
-    case "bottom-end":
+    case "top-end":
+      // (Top,n-1) at top-right. CW next = (Right,0) → DOWN.
+      // CCW next = (Top,n-2) → LEFT.
+      return {
+        x: MON_X + MON_W - DOT_OFFSET,
+        y: MON_Y - DOT_OFFSET,
+        cwDx: 0,
+        cwDy: TAIL,
+        ccwDx: -TAIL,
+        ccwDy: 0,
+      };
+    case "right-start":
+      // (Right,0) at top-right. CW next = (Right,1) → DOWN.
+      // CCW next = (Top,n-1) physically at top-right, then (Top,n-2) → LEFT.
+      return {
+        x: MON_X + MON_W + DOT_OFFSET,
+        y: MON_Y + DOT_OFFSET,
+        cwDx: 0,
+        cwDy: TAIL,
+        ccwDx: -TAIL,
+        ccwDy: 0,
+      };
+    case "right-end":
+      // (Right,m-1) at bottom-right. CW next = (Bottom,0) → LEFT.
+      // CCW next = (Right,m-2) → UP.
+      return {
+        x: MON_X + MON_W + DOT_OFFSET,
+        y: MON_Y + MON_H - DOT_OFFSET,
+        cwDx: -TAIL,
+        cwDy: 0,
+        ccwDx: 0,
+        ccwDy: -TAIL,
+      };
+    case "bottom-start":
+      // (Bottom,0) at bottom-RIGHT. CW next = (Bottom,1) → LEFT.
+      // CCW next = (Right,m-1) physically at bottom-right, then (Right,m-2) → UP.
       return {
         x: bottomXs[bottomXs.length - 1] ?? MON_X + MON_W - DOT_OFFSET,
         y: bottomY,
-        tailDx: -20,
-        tailDy: 0,
+        cwDx: -TAIL,
+        cwDy: 0,
+        ccwDx: 0,
+        ccwDy: -TAIL,
+      };
+    case "bottom-end":
+      // (Bottom,p-1) at bottom-LEFT. CW next = (Left,0) → UP.
+      // CCW next = (Bottom,p-2) → RIGHT.
+      return {
+        x: bottomXs[0] ?? MON_X + DOT_OFFSET,
+        y: bottomY,
+        cwDx: 0,
+        cwDy: -TAIL,
+        ccwDx: TAIL,
+        ccwDy: 0,
       };
     case "bottom-gap-right": {
-      const leftHalf = Math.floor(countBottom / 2);
-      const idx = Math.min(bottomXs.length - 1, Math.max(0, leftHalf - 1));
-      return { x: bottomXs[idx] ?? MON_X + DOT_OFFSET, y: bottomY, tailDx: -20, tailDy: 0 };
-    }
-    case "bottom-gap-left": {
+      // canonical (Bottom, leftHalf-1) = LAST canonical LED before gap, which
+      // is the dot IMMEDIATELY RIGHT of the gap physically. In canvas L→R
+      // indexing, that dot lives at index `leftHalf` (first dot after the gap).
+      // CW next continues canonical R→L → tail LEFT.
+      // CCW next = canonical (Bottom, leftHalf-2) → RIGHT.
       const leftHalf = Math.floor(countBottom / 2);
       const idx = Math.min(bottomXs.length - 1, Math.max(0, leftHalf));
-      return { x: bottomXs[idx] ?? MON_X + MON_W - DOT_OFFSET, y: bottomY, tailDx: 20, tailDy: 0 };
+      return {
+        x: bottomXs[idx] ?? MON_X + MON_W - DOT_OFFSET,
+        y: bottomY,
+        cwDx: -TAIL,
+        cwDy: 0,
+        ccwDx: TAIL,
+        ccwDy: 0,
+      };
+    }
+    case "bottom-gap-left": {
+      // canonical (Bottom, leftHalf) = FIRST canonical LED after gap, which
+      // is the dot IMMEDIATELY LEFT of the gap physically. Canvas L→R index
+      // = `leftHalf - 1` (last dot before the gap on the left side).
+      // CW next continues canonical R→L → tail LEFT.
+      // CCW next = (Bottom, leftHalf-1) on the OTHER side of the gap → RIGHT.
+      const leftHalf = Math.floor(countBottom / 2);
+      const idx = Math.min(bottomXs.length - 1, Math.max(0, leftHalf - 1));
+      return {
+        x: bottomXs[idx] ?? MON_X + DOT_OFFSET,
+        y: bottomY,
+        cwDx: -TAIL,
+        cwDy: 0,
+        ccwDx: TAIL,
+        ccwDy: 0,
+      };
     }
     case "left-start":
-      return { x: MON_X - DOT_OFFSET, y: MON_Y + DOT_OFFSET, tailDx: 0, tailDy: 20 };
+      // (Left,0) at bottom-LEFT. CW next = (Left,1) → UP.
+      // CCW next = (Bottom,p-1) physically at bottom-left, then (Bottom,p-2) → RIGHT.
+      return {
+        x: MON_X - DOT_OFFSET,
+        y: MON_Y + MON_H - DOT_OFFSET,
+        cwDx: 0,
+        cwDy: -TAIL,
+        ccwDx: TAIL,
+        ccwDy: 0,
+      };
     case "left-end":
-      return { x: MON_X - DOT_OFFSET, y: MON_Y + MON_H - DOT_OFFSET, tailDx: 0, tailDy: -20 };
+      // (Left,q-1) at top-LEFT. CW next = (Top,0) → RIGHT.
+      // CCW next = (Left,q-2) → DOWN.
+      return {
+        x: MON_X - DOT_OFFSET,
+        y: MON_Y + DOT_OFFSET,
+        cwDx: TAIL,
+        cwDy: 0,
+        ccwDx: 0,
+        ccwDy: TAIL,
+      };
   }
 }
 
@@ -107,8 +213,8 @@ export function LedRoomCanvas({ config }: LedRoomCanvasProps) {
   const leftYs = evenlySpaced(MON_Y + DOT_OFFSET, MON_Y + MON_H - DOT_OFFSET, counts.left);
 
   const anchor = anchorPosition(startAnchor, botXs, counts.bottom);
-  const tailDx = direction === "cw" ? anchor.tailDx : -anchor.tailDx;
-  const tailDy = direction === "cw" ? anchor.tailDy : -anchor.tailDy;
+  const tailDx = direction === "cw" ? anchor.cwDx : anchor.ccwDx;
+  const tailDy = direction === "cw" ? anchor.cwDy : anchor.ccwDy;
 
   return (
     <svg

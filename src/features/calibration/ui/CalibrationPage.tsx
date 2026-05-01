@@ -134,6 +134,23 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
           newState = displayTargetRef.current.selectDisplay(displays[0].id);
         }
         setDisplayTarget(newState);
+
+        // Auto-derive default LED counts from the resolved capture display
+        // if the editor still holds the all-zero \`MANUAL_COUNTS\` baseline.
+        // Mirrors the same heuristic that runs on a manual display click in
+        // \`handleSelectDisplay\` so cold-start without saved calibration
+        // does not leave the dock at 0/0/0/0 until the user changes monitors.
+        const selectedId = newState.selectedDisplayId;
+        const selectedDisplay = selectedId
+          ? displays.find((candidate) => candidate.id === selectedId)
+          : undefined;
+        if (selectedDisplay) {
+          setEditorState((prev) => {
+            if (prev.current.totalLeds !== 0) return prev;
+            const defaults = deriveDefaultCounts(selectedDisplay);
+            return updateEditorConfig(prev, { counts: defaults });
+          });
+        }
       })
       .catch((error) => {
         if (cancelled) return;

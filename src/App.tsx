@@ -837,6 +837,14 @@ function App() {
 
         const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
         setActiveOutputTargets(isActive ? restoredTargets : []);
+        // v1.5 W2-B4 — prime the LIGHTS-step guard from disk. Any persisted
+        // lightingMode (even \`off\`) means the user picked a mode at some
+        // point, so the onboarding flow should not gate them at step 1
+        // waiting for a fresh click. Truly fresh installs land here with
+        // \`state.lightingMode === undefined\` and the guard stays false.
+        if (state.lightingMode !== undefined) {
+          setHasInteractedWithMode(true);
+        }
         const hueBootstrapConfig = toHueStartConfig(state);
         setHueStartConfig(hueBootstrapConfig);
 
