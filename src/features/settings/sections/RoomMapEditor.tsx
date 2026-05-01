@@ -71,6 +71,10 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 }) {
   const displayRef = useRef<HTMLDivElement>(null);
 
+  // Store rapidly changing values in a ref to prevent event listener thrashing on every pan/zoom frame
+  const stateRef = useRef({ panOffset, zoom, widthMeters, depthMeters, pxPerMeter });
+  stateRef.current = { panOffset, zoom, widthMeters, depthMeters, pxPerMeter };
+
   useEffect(() => {
     const el = canvasContainerRef.current;
     if (!el) return;
@@ -81,6 +85,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
     const updateCoord = () => {
       if (!latestEvent || !displayRef.current) return;
       const rect = el.getBoundingClientRect();
+      const { panOffset, pxPerMeter, zoom, widthMeters, depthMeters } = stateRef.current;
       const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
       const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
 
@@ -115,7 +120,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
       el.removeEventListener("mousemove", handleMouseMove);
       el.removeEventListener("mouseleave", handleMouseLeave);
     };
-  }, [canvasContainerRef, panOffset, pxPerMeter, zoom, widthMeters, depthMeters]);
+  }, [canvasContainerRef]);
 
   return (
     <div
