@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use log::{debug, info, warn};
-use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
+use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
 
 /// Status codes mirrored on the frontend `HUE_STATUS` map.
 ///
@@ -177,9 +177,14 @@ impl MdnsBrowseHandle {
     /// Drain `ServiceResolved` events for up to `deadline`. Returns
     /// every fully-resolved instance the registry observed during the
     /// window (deduplicated by hostname).
-    pub fn snapshot(&self, deadline: Duration) -> Vec<ServiceInfo> {
+    ///
+    /// mdns-sd 0.19 reshaped `ServiceEvent::ServiceResolved` from
+    /// `ServiceInfo` to `Box<ResolvedService>`; we unbox into a plain
+    /// `ResolvedService` here so callers downstream see a uniform value
+    /// type instead of paying the heap-indirection on every accessor.
+    pub fn snapshot(&self, deadline: Duration) -> Vec<ResolvedService> {
         let started = Instant::now();
-        let mut found: HashMap<String, ServiceInfo> = HashMap::new();
+        let mut found: HashMap<String, ResolvedService> = HashMap::new();
         let Ok(rx) = self.receiver.lock() else {
             return Vec::new();
         };
@@ -195,7 +200,7 @@ impl MdnsBrowseHandle {
             match rx.recv_timeout(poll) {
                 Ok(ServiceEvent::ServiceResolved(info)) => {
                     let key = info.get_hostname().to_string();
-                    found.insert(key, info);
+                    found.insert(key, *info);
                 }
                 Ok(_) => continue,
                 Err(_) => {
@@ -241,17 +246,20 @@ pub fn browse_hue_bridges(
     Ok(bridges)
 }
 
-/// Parse a single `_hue._tcp.local.` `ServiceInfo` into the cloud-shaped
+/// Parse a single `_hue._tcp.local.` `ResolvedService` into the cloud-shaped
 /// candidate DTO. Falls back gracefully when the bridge omits TXT
 /// records (`bridgeid`) and synthesises an id from the instance name.
-pub(crate) fn parse_hue_service_info(info: ServiceInfo) -> Option<MdnsBridgeCandidate> {
+///
+/// mdns-sd 0.19 swapped `ServiceInfo` for `ResolvedService` and replaced
+/// `get_addresses() -> &HashSet<IpAddr>` with `get_addresses_v4() ->
+/// HashSet<Ipv4Addr>`. The new accessor already strips IPv6 entries and
+/// scope ids, so we just take the first available v4.
+pub(crate) fn parse_hue_service_info(info: ResolvedService) -> Option<MdnsBridgeCandidate> {
     let ip = info
-        .get_addresses()
-        .iter()
-        .find_map(|addr| match addr {
-            std::net::IpAddr::V4(v4) => Some(v4.to_string()),
-            _ => None,
-        })
+        .get_addresses_v4()
+        .into_iter()
+        .next()
+        .map(|v4| v4.to_string())
         .or_else(|| {
             // Fallback: if Service has no resolved IPv4 yet, try parsing
             // the hostname into an Ipv4Addr (defensive — shouldn't normally
