@@ -469,12 +469,21 @@ async function animateWindowRect(
     const x = Math.round(from.x + (to.x - from.x) * eased);
     const y = Math.round(from.y + (to.y - from.y) * eased);
 
-    await Promise.all([
-      win.setSize(new LogicalSize(w, h)),
-      win.setPosition(new LogicalPosition(x, y)),
-    ]);
+    if (t >= 1) {
+      // Final frame: await IPC to ensure state consistency
+      await Promise.all([
+        win.setSize(new LogicalSize(w, h)),
+        win.setPosition(new LogicalPosition(x, y)),
+      ]);
+      return;
+    } else {
+      // Intermediate frames: fire-and-forget to avoid stuttering from IPC round-trips.
+      // We swallow potential rejections (e.g., if window is destroyed mid-animation)
+      // to avoid unhandled promise rejections.
+      win.setSize(new LogicalSize(w, h)).catch(() => {});
+      win.setPosition(new LogicalPosition(x, y)).catch(() => {});
+    }
 
-    if (t >= 1) return;
     await nextFrame();
   }
 }
