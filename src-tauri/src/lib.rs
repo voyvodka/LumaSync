@@ -146,19 +146,55 @@ fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
     log::info!("[shutdown] cleanup thread started");
 
     // 1. Ambilight / serial capture worker.
+    let t1 = std::time::Instant::now();
     if let Err(e) = stop_lighting(app.state::<LightingRuntimeState>()) {
         log::warn!("[shutdown] stop_lighting reported: {e}");
     }
+    log::info!("[shutdown] step 1 (stop_lighting) took {:?}", t1.elapsed());
 
-    // 2. Hue entertainment stream (synchronous, bounded by HUE_STOP_TIMEOUT_SECS=3s).
-    if let Err(e) = stop_hue_stream(None, app.state::<HueRuntimeStateStore>()) {
-        log::warn!("[shutdown] stop_hue_stream reported: {e}");
+    // 2. Hue entertainment stream — bounded to 1.5s on shutdown.
+    //
+    // stop_hue_stream's worst case is HTTP deactivate (5s reqwest timeout)
+    // + sender shutdown wait (3s Condvar) = up to 8s when the bridge is
+    // slow or unreachable. That blew through our 4s watchdog and caused the
+    // "cleanup hung — forcing exit" path. Bridge state restore is
+    // best-effort (the bridge times out the entertainment session
+    // server-side anyway), so detach the call and abandon after 1.5s if it
+    // hasn't returned. process::exit(0) below will tear down the orphan
+    // worker thread regardless.
+    let t2 = std::time::Instant::now();
+    let app_for_hue = app.clone();
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    std::thread::Builder::new()
+        .name("lumasync-shutdown-hue".into())
+        .spawn(move || {
+            let result = stop_hue_stream(None, app_for_hue.state::<HueRuntimeStateStore>())
+                .map(|_| ())
+                .map_err(|e| format!("{e:?}"));
+            let _ = tx.send(result);
+        })
+        .ok();
+    match rx.recv_timeout(std::time::Duration::from_millis(1500)) {
+        Ok(Ok(())) => {
+            log::info!(
+                "[shutdown] step 2 (stop_hue_stream) took {:?}",
+                t2.elapsed()
+            )
+        }
+        Ok(Err(e)) => log::warn!("[shutdown] stop_hue_stream reported: {e}"),
+        Err(_) => log::warn!(
+            "[shutdown] step 2 (stop_hue_stream) abandoned after {:?}",
+            t2.elapsed()
+        ),
     }
 
     // 3. Active LED sink (serial port session).
+    let t3 = std::time::Instant::now();
     app.state::<ActiveSinkRegistry>().clear();
+    log::info!("[shutdown] step 3 (sink clear) took {:?}", t3.elapsed());
 
     log::info!("[shutdown] cleanup complete, exiting");
+    cleanup_orphan_socket();
     std::process::exit(0);
 }
 
@@ -195,9 +231,25 @@ fn kick_off_shutdown_and_die<R: Runtime>(app: &AppHandle<R>) {
         .spawn(|| {
             std::thread::sleep(SHUTDOWN_WATCHDOG);
             log::warn!("[shutdown] watchdog fired — forcing exit (cleanup hung)");
+            cleanup_orphan_socket();
             std::process::exit(0);
         })
         .expect("failed to spawn shutdown watchdog thread");
+}
+
+// Hard-exit (`std::process::exit`) bypasses Tauri plugin destroy() callbacks,
+// so the single-instance plugin's Unix socket at
+// /tmp/com_<identifier>_si.sock is leaked whenever the watchdog fires. The
+// next launch's plugin connect() succeeds against the stale inode and the
+// new instance silently exit(0)s. Remove the socket explicitly before the
+// hard exit so the next launch starts cleanly.
+fn cleanup_orphan_socket() {
+    let path = "/tmp/com_lumasync_app_si.sock";
+    match std::fs::remove_file(path) {
+        Ok(()) => log::info!("[shutdown] removed orphan socket {path}"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("[shutdown] could not remove {path}: {e}"),
+    }
 }
 
 fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
@@ -298,10 +350,19 @@ pub fn run() {
     // kick_off_shutdown_and_die guaranteeing process death + RunEvent::Exit
     // delivery, the plugin's socket is now reliably cleaned, so we keep
     // it enabled in BOTH debug and release builds.
-    builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        // Second launch: focus existing main window
-        show_and_focus_settings(app);
-    }));
+    // Debug builds skip single-instance: hard-exit (process::exit) bypasses
+    // the plugin's destroy() socket cleanup, so dev iterations leak
+    // /tmp/com_lumasync_app_si.sock and the next launch silently exits when
+    // the plugin connects to the stale socket. Release builds keep it on
+    // because tray-first UX needs single-instance contract; the explicit
+    // socket cleanup above guards against the hard-exit path on release too.
+    #[cfg(not(debug_assertions))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Second launch: focus existing main window
+            show_and_focus_settings(app);
+        }));
+    }
 
     // 2. Autostart
     builder = builder.plugin(tauri_plugin_autostart::init(
