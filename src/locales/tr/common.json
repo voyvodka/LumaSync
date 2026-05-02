@@ -446,6 +446,7 @@
     "addTarget": "Ekle",
     "dismiss": "Kapat",
     "usbDisconnected": "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor.",
+    "unsupportedFallback": "USB cihazı tanınmıyor — Hue-only moda alındı.",
     "stopFailed": "{{targets}} durdurulamadı. Çıkış etkin bırakıldı; yeniden deneyin.",
     "targetLabel": {
       "usb": "USB",

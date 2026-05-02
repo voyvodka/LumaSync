@@ -26,6 +26,7 @@ import {
 import {
   connectionEvents as defaultConnectionEvents,
   type ConnectionEventBus,
+  type ConnectionRejectionCode,
 } from "./connectionEvents";
 
 type Listener = (state: DeviceConnectionControllerState) => void;
@@ -626,11 +627,29 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
       // launch would be worse than a silent fall-through to manual
       // pair. We do log so production debugging stays possible.
       finishOperation(token);
+      const rejectionCode = connection.status?.code ?? "UNKNOWN";
       console.warn(
         "[LumaSync] auto-reconnect on init rejected:",
-        connection.status?.code ?? "UNKNOWN",
+        rejectionCode,
         connection.status?.message ?? "",
       );
+      // Bug 10D — surface "USB is structurally unavailable for this
+      // session" so the App-level subscriber can drop "usb" from
+      // selectedOutputTargets and avoid the silent backend
+      // DEVICE_NOT_CONNECTED gate on every mode-change. Limited to
+      // PORT_UNSUPPORTED / PORT_NOT_FOUND because transient codes
+      // (CONNECT_BUSY, handshake timeout) shouldn't strip the user's
+      // persisted output mix.
+      if (
+        connectionEventsBus &&
+        (rejectionCode === "PORT_UNSUPPORTED" || rejectionCode === "PORT_NOT_FOUND")
+      ) {
+        connectionEventsBus.emit({
+          portName: targetPort,
+          connected: false,
+          unsupportedReason: rejectionCode satisfies ConnectionRejectionCode,
+        });
+      }
     } catch (err) {
       if (token !== operationToken || disposed) return;
       finishOperation(token);

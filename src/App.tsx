@@ -23,6 +23,7 @@ import {
   startCalibrationFromSettings,
 } from "./features/calibration/state/entryFlow";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
+import { connectionEvents } from "./features/device/connectionEvents";
 import {
   canEnableLedMode,
   MODE_GUARD_REASONS,
@@ -196,6 +197,12 @@ function App() {
   const [bootstrapDone, setBootstrapDone] = useState(false);
   const [showUsbSuggest, setShowUsbSuggest] = useState(false);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
+  // Bug 10D — surfaces a one-time non-blocking notice when boot-time
+  // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
+  // the user understands why we just dropped them into Hue-only mode.
+  // Distinct from `usbDisconnectNotice` (which fires on a runtime
+  // unplug) so the copy can be specific.
+  const [usbUnsupportedNotice, setUsbUnsupportedNotice] = useState(false);
   // A1.2 — surfaces the targets whose stop_lighting / stop_hue_stream invoke
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
@@ -1259,6 +1266,49 @@ function App() {
     prevUsbConnectedRef.current = isConnected;
   }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
 
+  // ---------------------------------------------------------------------------
+  // Bug 10D — boot-time USB unsupported / missing fallback
+  //
+  // After commit 72fba5b ("reject non-USB serial ports up-front") the
+  // backend rejects previously-accepted phantom ports (e.g.
+  // /dev/cu.Bluetooth-Incoming-Port on macOS). Auto-reconnect on init
+  // emits the rejection code via `connectionEvents`, but `selectedOutputTargets`
+  // still includes "usb", so every subsequent `set_lighting_mode` invoke
+  // hits the Rust USB gate and returns `DEVICE_NOT_CONNECTED` silently.
+  // From the user's seat, "Ambilight does nothing".
+  //
+  // Fix: subscribe to the bus once, drop "usb" from targets on the
+  // PORT_UNSUPPORTED / PORT_NOT_FOUND signal, persist via the existing
+  // shellStore facade, and surface a one-time toast. We deliberately do
+  // NOT call `handleOutputTargetsChange` (its delta-stop branch tries to
+  // invoke `stop_lighting`, which is meaningless when nothing is running
+  // — boot path is always at OFF until the user picks a mode).
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const unsubscribe = connectionEvents.subscribe((event) => {
+      if (event.connected || !event.unsupportedReason) return;
+      const currentTargets = selectedOutputTargetsRef.current;
+      if (!currentTargets.includes("usb")) return;
+      // Use the raw filter result. `normalizeOutputTargets([])` reverts to
+      // DEFAULT_OUTPUT_TARGETS (= ["usb"]) which would silently re-add the
+      // very target we are trying to drop, defeating the fallback. Letting
+      // the array be empty is correct: with no available output the user
+      // sees Off-state until they manually re-add Hue (or plug a real USB
+      // device, which surfaces a separate `hotplug.usbDetected` toast).
+      const nextTargets = currentTargets.filter((t) => t !== "usb") as HueRuntimeTarget[];
+      setSelectedOutputTargets(nextTargets);
+      void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
+        console.error(
+          "[LumaSync] saveShellState(lastOutputTargets) on unsupported-port fallback failed:",
+          err,
+        );
+      });
+      setUsbUnsupportedNotice(true);
+      window.setTimeout(() => setUsbUnsupportedNotice(false), 6_000);
+    });
+    return unsubscribe;
+  }, []);
+
   const handleAcceptUsbTarget = useCallback(async () => {
     setShowUsbSuggest(false);
     if (!selectedOutputTargets.includes("usb")) {
@@ -1868,6 +1918,29 @@ function App() {
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
+        </div>
+      )}
+      {usbUnsupportedNotice && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-line-2)",
+            color: "var(--lm-ink)",
+            // Stack above usbDisconnectNotice / stopFailedNotice if any
+            // ever co-fire — boot-time signal should sit highest.
+            transform:
+              usbDisconnectNotice || (stopFailedNotice && stopFailedNotice.length > 0)
+                ? "translateY(-3.5rem)"
+                : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+            {t("hotplug.unsupportedFallback")}
+          </span>
         </div>
       )}
       {stopFailedNotice && stopFailedNotice.length > 0 && (

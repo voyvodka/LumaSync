@@ -28,9 +28,33 @@
  * leak into the next.
  */
 
+/**
+ * Bug 10D — boot-time auto-reconnect rejection codes that signal "the
+ * persisted USB target is no longer usable", so the App-level subscriber
+ * can drop "usb" from `selectedOutputTargets` and avoid the silent
+ * `DEVICE_NOT_CONNECTED` mode-change gate. Limited to boot-time auto-
+ * reconnect; runtime disconnects flow through the `wasConnected → false`
+ * transition in App.tsx and the existing `hotplug.usbDisconnected` toast.
+ *
+ * `PORT_UNSUPPORTED` — Rust rejected the persisted port up-front (e.g.
+ *   `/dev/cu.Bluetooth-Incoming-Port` after the WS2812B-only allowlist
+ *   tightened in commit 72fba5b).
+ * `PORT_NOT_FOUND` — port name no longer enumerates (cable unplugged
+ *   before launch).
+ */
+export type ConnectionRejectionCode = "PORT_UNSUPPORTED" | "PORT_NOT_FOUND";
+
 export interface ConnectionEvent {
   readonly portName: string;
   readonly connected: boolean;
+  /**
+   * Optional rejection reason — only populated by the boot-time
+   * `tryAutoReconnect` path when `connected === false` AND the rejection
+   * means USB is structurally unavailable for this session. Other
+   * rejection paths (CONNECT_BUSY, handshake timeout) deliberately do
+   * NOT set this so the caller doesn't strip USB on transient failures.
+   */
+  readonly unsupportedReason?: ConnectionRejectionCode;
 }
 
 export type ConnectionEventListener = (event: ConnectionEvent) => void;
