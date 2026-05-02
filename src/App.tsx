@@ -137,11 +137,16 @@ interface HueStartConfig {
 }
 
 function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
+  // First-install case (`undefined` / non-array shape from the persisted
+  // store): fall back to DEFAULT_OUTPUT_TARGETS so a fresh user lands on a
+  // sensible primary output. An EXPLICIT empty array means the user (or the
+  // unsupported-USB auto-fallback) has cleared targets — respect that and
+  // return `[]`. The previous unconditional DEFAULT fallback re-added the
+  // very target we had just removed and stranded the auto-deselect path.
   if (!Array.isArray(value)) return [...DEFAULT_OUTPUT_TARGETS];
   const targetSet = new Set(
     value.filter((t): t is HueRuntimeTarget => t === "usb" || t === "hue"),
   );
-  if (targetSet.size === 0) return [...DEFAULT_OUTPUT_TARGETS];
   return ["usb", "hue"].filter((t): t is HueRuntimeTarget => targetSet.has(t as HueRuntimeTarget));
 }
 
@@ -188,6 +193,10 @@ function App() {
   const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
   const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
   const [hueStartConfig, setHueStartConfig] = useState<HueStartConfig | null>(null);
+  // Mirror of `hueStartConfig` so the connection-event subscriber (in a
+  // useEffect with `[]` deps) can read the latest paired-bridge state
+  // without re-subscribing on every state mutation.
+  const hueStartConfigRef = useRef<HueStartConfig | null>(null);
   const [hueReachable, setHueReachable] = useState(false);
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
@@ -977,6 +986,7 @@ function App() {
   // Keep tray refs in sync with latest state
   useEffect(() => { lightingModeRef.current = lightingMode; }, [lightingMode]);
   useEffect(() => { selectedOutputTargetsRef.current = selectedOutputTargets; }, [selectedOutputTargets]);
+  useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
   // Mirror the persisted LED calibration state into a ref so
   // `withLedCalibration` (called inside `dispatchSetLightingMode`) can
   // read the latest value without re-creating the helper on every render.
@@ -1291,11 +1301,20 @@ function App() {
       if (!currentTargets.includes("usb")) return;
       // Use the raw filter result. `normalizeOutputTargets([])` reverts to
       // DEFAULT_OUTPUT_TARGETS (= ["usb"]) which would silently re-add the
-      // very target we are trying to drop, defeating the fallback. Letting
-      // the array be empty is correct: with no available output the user
-      // sees Off-state until they manually re-add Hue (or plug a real USB
-      // device, which surfaces a separate `hotplug.usbDetected` toast).
-      const nextTargets = currentTargets.filter((t) => t !== "usb") as HueRuntimeTarget[];
+      // very target we are trying to drop, defeating the fallback.
+      const filtered = currentTargets.filter((t) => t !== "usb") as HueRuntimeTarget[];
+      // If the user has a paired Hue bridge and hue is not already in the
+      // surviving targets, auto-add "hue" so Ambilight / Solid actually
+      // produces output instead of leaving the user stranded at the OFF
+      // state with no available sink. When Hue is not paired (or the
+      // bridge config is missing), fall back to the empty list — the user
+      // re-engages by plugging a supported USB controller (separate
+      // `hotplug.usbDetected` toast handles that flow).
+      const huePaired = hueStartConfigRef.current !== null;
+      const nextTargets: HueRuntimeTarget[] =
+        huePaired && !filtered.includes("hue")
+          ? ["hue"]
+          : filtered;
       setSelectedOutputTargets(nextTargets);
       void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
         console.error(
