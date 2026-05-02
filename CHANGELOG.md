@@ -7,6 +7,24 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Security
+
+- WLED IP validation hardened: parsable IPv4 inputs that resolve to loopback (127.0.0.0/8), unspecified (0.0.0.0), multicast (224.0.0.0/4), or broadcast (255.255.255.255) addresses are now rejected with `WLED_INVALID_IP`, layered on top of v1.5.1's parser-level SSRF guard.
+- Hue stream shutdown emits a DTLS `close_notify` alert before dropping the socket and dedupes foreground/background deactivate calls through a single-shot atomic token, so the bridge clears its "active streamer" slot immediately on stop instead of holding it for ~10 s. Removes the latent `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` 403 that could surface on the next session start, and retires the 1 s defensive sleep that was the previous workaround.
+
+### Fixed
+
+- macOS dev launch (`pnpm tauri dev` / `cargo run`) silently exited within ~50 ms of process start, leaving Web Inspector connected to a frontend that was driving a backend that had already torn itself down. Root cause: `tauri-plugin-single-instance` v2.4.x exits the process during init on unbundled binaries — diagnosed by a plugin-isolation pass where every other plugin enabled never reached `setup`, but disabling this one alone let the tray build and the main window show. The plugin's "second instance" detector appears to misclassify lingering `NSWorkspace.runningApplications` entries from previous unbundled runs as live siblings (zombie processes that launchd had not yet reaped). The plugin is now registered only in `cfg(not(debug_assertions))` builds — the single-instance contract still applies to shipped releases (which is where it matters for tray-first UX), and dev mode skips it.
+- WLED discovery / connect / test wire mismatch: response and request payload shapes between the Rust backend and the React layer were misaligned, so the picker rendered as silently empty and the Connect / Test buttons failed with `MissingField`. Aligned all three command pairs; `WledTestResponse` now reports a real round-trip in milliseconds. Manual-IP discovery also routes its `ip` parameter under the correct payload key.
+- Output-target delta-stop no longer drops a chip from active membership when the underlying `stop_lighting` / `stop_hue_stream` invoke fails. The chip stays active so the user can retry, and a transient banner explains which target needs attention. Previously the UI lied about state while the backend stream was still alive — the surface that produced the Hue stale-session 403 observed in v1.5.x dogfooding.
+- Reject WLED connect requests carrying `led_count == 0` with a coded `WLED_INVALID_LED_COUNT` instead of letting the downstream pipeline drift into an inconsistent state.
+- RoomMap rename dialog: ESC now cancels from any focused element (previously only the input listened) and Tab cycles between input → cancel → confirm; the `aria-labelledby` anchor is now generated via `useId()` so multiple instances and re-mounts cannot collide on the same DOM id.
+
+### Changed
+
+- `release.yml` now runs the same Rust hardening gate as `ci.yml` before any tag-triggered build (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`), closing the gap that previously let formatting / lint regressions slip into a release artefact even though pull-request CI rejected them.
+- `SECURITY.md` clarifies that the runtime `rand` 0.8.x and 0.9.x paths were bumped in v1.5.1; only the build-only 0.7.3 path remains documented as `not_used`.
+
 ## [1.5.1] — 2026-05-01
 
 ### Security
