@@ -831,6 +831,123 @@ for (const fn of LEGACY_W4F_HANDLERS) {
 }
 
 // ---------------------------------------------------------------------------
+// Device WLED status codes (v1.5.2 patch — F4 + A2.2)
+// ---------------------------------------------------------------------------
+const WLED_DISCOVERY_FILE = resolve(
+  ROOT,
+  "src-tauri/src/commands/wled_discovery.rs"
+);
+const wledRustSource = readOrEmpty(WLED_DISCOVERY_FILE, "wled_discovery.rs");
+
+console.log("\n[ Device WLED status codes (v1.5.2 patch — F4) ]");
+const REQUIRED_WLED_STATUS_CODES = [
+  "WLED_DISCOVERY_OK",
+  "WLED_DISCOVERY_EMPTY",
+  "WLED_DISCOVERY_TIMEOUT",
+  "WLED_BRIDGE_UNREACHABLE",
+  "WLED_PROTOCOL_MISMATCH",
+  "WLED_LED_COUNT_MISMATCH",
+  "WLED_INVALID_IP",
+  // A2.2: led_count=0 guard
+  "WLED_INVALID_LED_COUNT",
+];
+for (const code of REQUIRED_WLED_STATUS_CODES) {
+  check(
+    deviceSource.includes(`"${code}"`),
+    `WLED_STATUS map contains "${code}" (device.ts)`,
+    `MISSING WLED_STATUS entry "${code}" in device.ts`
+  );
+}
+// Rust side must also declare every code that the frontend sees.
+for (const code of REQUIRED_WLED_STATUS_CODES) {
+  // Not all codes appear in the discovery file (DISCOVERY_EMPTY is TS-only for
+  // the mDNS path), so we only require the ones that Rust actively emits.
+  const RUST_EMITTED = [
+    "WLED_DISCOVERY_OK",
+    "WLED_DISCOVERY_TIMEOUT",
+    "WLED_BRIDGE_UNREACHABLE",
+    "WLED_PROTOCOL_MISMATCH",
+    "WLED_LED_COUNT_MISMATCH",
+    "WLED_INVALID_IP",
+    "WLED_INVALID_LED_COUNT",
+  ];
+  if (RUST_EMITTED.includes(code)) {
+    check(
+      wledRustSource.includes(`"${code}"`),
+      `Rust wled_discovery.rs emits status code "${code}"`,
+      `MISSING status code "${code}" in wled_discovery.rs`
+    );
+  }
+}
+
+console.log("\n[ WLED discovery wire shape — Vec<WledDeviceInfo> (A1.1) ]");
+check(
+  wledRustSource.includes("pub devices: Vec<WledDeviceInfo>"),
+  "WledDiscoveryResponse.devices is Vec<WledDeviceInfo> (not Option)",
+  "MISSING: WledDiscoveryResponse.devices should be Vec<WledDeviceInfo>"
+);
+check(
+  !wledRustSource.includes("pub device: Option<WledDeviceInfo>"),
+  "Old WledDiscoveryResponse.device: Option<> removed",
+  "STILL PRESENT: old WledDiscoveryResponse.device: Option<> — A1.1 migration incomplete"
+);
+const WLED_API_FILE = resolve(ROOT, "src/features/device/wledApi.ts");
+const wledApiTsSource = readOrEmpty(WLED_API_FILE, "wledApi.ts");
+check(
+  deviceSource.includes("devices: WledDeviceInfo[]") ||
+    wledApiTsSource.includes("devices: WledDeviceInfo[]"),
+  "TS WledDiscoveryResponse.devices is WledDeviceInfo[] (wledApi.ts or device.ts)",
+  "MISSING: TS WledDiscoveryResponse.devices array field"
+);
+
+console.log("\n[ WLED connect request shape — device wrapper (A1.5) ]");
+check(
+  wledRustSource.includes("pub device: WledDeviceInfo"),
+  "WledConnectRequest.device: WledDeviceInfo present in Rust",
+  "MISSING: WledConnectRequest.device field — A1.5 connect fix incomplete"
+);
+check(
+  wledRustSource.includes("pub struct WledTestRequest") &&
+    wledRustSource.includes("pub device: WledDeviceInfo"),
+  "WledTestRequest.device: WledDeviceInfo present in Rust",
+  "MISSING: WledTestRequest.device field — A1.6 test fix incomplete"
+);
+
+console.log("\n[ WLED test response — roundTripMs (A1.6) ]");
+check(
+  wledRustSource.includes("pub round_trip_ms: Option<u64>"),
+  "WledTestResponse.round_trip_ms: Option<u64> present in Rust",
+  "MISSING: WledTestResponse.round_trip_ms field — A1.6 test response fix incomplete"
+);
+check(
+  !wledRustSource.match(/pub struct WledTestResponse[^}]*pub device:/s),
+  "Old WledTestResponse.device field removed (A1.6)",
+  "STILL PRESENT: WledTestResponse.device field — A1.6 cleanup incomplete"
+);
+
+console.log("\n[ WLED SSRF guard — extended address range checks (A2.1) ]");
+check(
+  wledRustSource.includes("is_loopback()"),
+  "parse_ipv4 rejects loopback (127.x) via is_loopback()",
+  "MISSING: is_loopback() check in parse_ipv4"
+);
+check(
+  wledRustSource.includes("is_unspecified()"),
+  "parse_ipv4 rejects unspecified (0.0.0.0) via is_unspecified()",
+  "MISSING: is_unspecified() check in parse_ipv4"
+);
+check(
+  wledRustSource.includes("is_multicast()"),
+  "parse_ipv4 rejects multicast (224.x/4) via is_multicast()",
+  "MISSING: is_multicast() check in parse_ipv4"
+);
+check(
+  wledRustSource.includes("is_broadcast()"),
+  "parse_ipv4 rejects broadcast (255.255.255.255) via is_broadcast()",
+  "MISSING: is_broadcast() check in parse_ipv4"
+);
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n====================================`);

@@ -267,7 +267,9 @@
         "discoveryTimeout": "Tarama süresi içinde hiçbir cihaz yanıt vermedi.",
         "bridgeUnreachable": "WLED cihazına erişilemiyor.",
         "protocolMismatch": "Cihaz protokolü reddetti — diğer protokolü deneyin.",
-        "ledCountMismatch": "Cihaz farklı bir LED sayısı bildiriyor."
+        "ledCountMismatch": "Cihaz farklı bir LED sayısı bildiriyor.",
+        "invalidIp": "Geçerli bir IPv4 adresi değil — WLED IP'sini kontrol edin.",
+        "invalidLedCount": "WLED cihazı geçersiz LED sayısı bildiriyor (0)."
       }
     }
   },
@@ -443,7 +445,12 @@
     "usbDetected": "USB LED şerit algılandı. Çıkış hedefi olarak eklensin mi?",
     "addTarget": "Ekle",
     "dismiss": "Kapat",
-    "usbDisconnected": "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor."
+    "usbDisconnected": "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor.",
+    "stopFailed": "{{targets}} durdurulamadı. Çıkış etkin bırakıldı; yeniden deneyin.",
+    "targetLabel": {
+      "usb": "USB",
+      "hue": "Hue"
+    }
   },
   "device": {
     "title": "Cihaz",

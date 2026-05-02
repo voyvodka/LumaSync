@@ -196,6 +196,10 @@ function App() {
   const [bootstrapDone, setBootstrapDone] = useState(false);
   const [showUsbSuggest, setShowUsbSuggest] = useState(false);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
+  // A1.2 — surfaces the targets whose stop_lighting / stop_hue_stream invoke
+  // failed during a delta-stop, so the chip stays active instead of silently
+  // lying about state. Banner auto-dismisses; user can retry by toggling.
+  const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
 
   // v1.5 W2-B4 — first-run onboarding state. The flag is hydrated from
   // shellStore on bootstrap; a fresh user (`undefined` / `false`) sees
@@ -1092,32 +1096,45 @@ function App() {
     const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
 
-    // Delta-stop: for each removed target that is currently active, stop it
-    // Optimization: Execute stop commands concurrently for independent targets
-    // (USB and Hue) to minimize shutdown phase latency.
-    await Promise.all(
-      removedTargets.map(async (target) => {
-        if (!currentActive.includes(target)) return;
-        if (target === "usb") {
-          try {
-            await invoke("stop_lighting");
-          } catch (err) {
-            console.error("[LumaSync] stop_lighting during delta-stop failed:", err);
-          }
-        }
-        if (target === "hue") {
-          try {
-            await invoke("stop_hue_stream");
-          } catch (err) {
-            console.error("[LumaSync] stop_hue_stream during delta-stop failed:", err);
-          }
+    // Delta-stop: for each removed target that is currently active, stop it.
+    // A1.2 (v1.5.2): track per-target outcome via Promise.allSettled — only
+    // successfully-stopped targets get pulled from active membership. A failed
+    // stop leaves the chip active so the user can retry (and the next
+    // dispatch sees a truthful activeOutputTargets), instead of the previous
+    // behaviour where Promise.all + silent catch dropped the target from UI
+    // state while the backend stream was still alive (root cause of the
+    // HUE_STREAM_NOT_READY_ACTIVE_STREAMER 403 on the next start).
+    type StopOutcome = { target: HueRuntimeTarget; ok: boolean };
+    const stopResults = await Promise.allSettled(
+      removedTargets.map(async (target): Promise<StopOutcome> => {
+        if (!currentActive.includes(target)) return { target, ok: true };
+        const command = target === "usb" ? "stop_lighting" : target === "hue" ? "stop_hue_stream" : null;
+        if (!command) return { target, ok: true };
+        try {
+          await invoke(command);
+          return { target, ok: true };
+        } catch (err) {
+          console.error(
+            `[LumaSync] stop failed for target=${target}, retaining in activeOutputTargets:`,
+            err,
+          );
+          return { target, ok: false };
         }
       })
     );
-    // Update activeOutputTargets by removing stopped targets
-    if (removedTargets.length > 0) {
-      const nextActive = currentActive.filter((t) => !removedTargets.includes(t));
+    const successfullyStopped = stopResults
+      .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && r.value.ok)
+      .map((r) => r.value.target);
+    const failedToStop = stopResults
+      .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && !r.value.ok)
+      .map((r) => r.value.target);
+    if (successfullyStopped.length > 0) {
+      const nextActive = currentActive.filter((t) => !successfullyStopped.includes(t));
       setActiveOutputTargets(nextActive);
+    }
+    if (failedToStop.length > 0) {
+      setStopFailedNotice(failedToStop);
+      window.setTimeout(() => setStopFailedNotice(null), 5_000);
     }
 
     // Delta-start: for each added target, start the current mode on it
@@ -1851,6 +1868,29 @@ function App() {
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
+        </div>
+      )}
+      {stopFailedNotice && stopFailedNotice.length > 0 && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-red, #f87171)",
+            color: "var(--lm-ink)",
+            // Stack above usbDisconnectNotice if both ever co-fire (rare; sequential).
+            transform: usbDisconnectNotice ? "translateY(-3.5rem)" : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+            {t("hotplug.stopFailed", {
+              targets: stopFailedNotice
+                .map((target) => t(`hotplug.targetLabel.${target}` as const))
+                .join(", "),
+            })}
+          </span>
         </div>
       )}
     </>
