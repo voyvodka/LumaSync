@@ -31,7 +31,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::frame::{HueAreaChannel, HueColorSender};
-use super::sender::ShutdownSignal;
+use super::sender::{DeactivateToken, ShutdownSignal};
 
 // ---------------------------------------------------------------------------
 // Retry policy tunables (consumed by retry.rs)
@@ -232,6 +232,14 @@ pub(crate) struct HueActiveStreamContext {
     /// Missing entries fall back to `HueGamutType::Other` (no clipping).
     #[allow(dead_code)] // read by the sender thread + frame builder, not the runtime owner
     pub(crate) light_metadata: Arc<HashMap<String, super::sender::HueLightMetadata>>,
+    /// One-shot dedupe primitive for the entertainment-configuration
+    /// deactivation PUT. Shared by the sender thread (drains it during
+    /// `close_notify` cleanup), the foreground `stop_hue_stream` Tauri
+    /// command, and the reconnect monitor — whoever calls
+    /// `try_acquire` first wins and performs the single PUT; later
+    /// callers no-op. Introduced in v1.5.2 A1.3 to fix the duplicate-PUT
+    /// race that produced "phantom active streamer" 403s.
+    pub(crate) deactivate_token: Arc<DeactivateToken>,
 }
 
 #[derive(Clone, Debug)]
@@ -446,7 +454,7 @@ pub(crate) mod test_helpers {
     use std::sync::Arc;
 
     use super::super::frame::{HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion};
-    use super::super::sender::new_shutdown_signal;
+    use super::super::sender::{new_shutdown_signal, DeactivateToken};
     use super::{HueActiveStreamContext, HueRuntimeGateEvidence};
 
     pub(crate) fn strict_gate_ready() -> HueRuntimeGateEvidence {
@@ -494,6 +502,7 @@ pub(crate) mod test_helpers {
             uses_dtls: false,
             shutdown_signal: new_shutdown_signal(),
             light_metadata: Arc::new(std::collections::HashMap::new()),
+            deactivate_token: DeactivateToken::new(),
         }
     }
 }

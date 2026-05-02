@@ -13,6 +13,7 @@
 //!
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -81,6 +82,73 @@ pub(crate) fn wait_for_shutdown(signal: &ShutdownSignal, timeout: Duration) -> b
 }
 
 // ---------------------------------------------------------------------------
+// Deactivate dedupe token (v1.5.2 A1.3)
+// ---------------------------------------------------------------------------
+//
+// `entertainment_configuration` deactivation can race between three call
+// sites: the sender thread's own cleanup path, the foreground
+// `stop_hue_stream` Tauri command, and the reconnect monitor's pre-restart
+// cleanup. Without coordination all three may PUT
+// `{ "action": "stop" }` to the same area, which the bridge logs as
+// duplicate stale-state mutations and which historically produced the
+// "phantom active streamer" symptom that bug audit A1.3 captured.
+//
+// `DeactivateToken` is the single-shot coordination primitive: whichever
+// caller wins `try_acquire()` is the only one that performs the HTTP PUT;
+// every later caller observes `false` and no-ops. The token is shared as
+// `Arc<DeactivateToken>` so all three call sites point at the same atomic
+// boolean for a given stream session.
+
+/// Single-shot atomic flag that gates the entertainment-configuration
+/// deactivation HTTP PUT. Exactly one acquirer wins; subsequent callers
+/// see the in-flight bit and skip the network round-trip.
+#[derive(Debug, Default)]
+pub(crate) struct DeactivateToken {
+    in_flight: AtomicBool,
+}
+
+impl DeactivateToken {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+
+    /// Returns `true` exactly once per token lifetime. The winner is
+    /// expected to perform the deactivation PUT; every later caller
+    /// observes `false` and must skip the request.
+    pub(crate) fn try_acquire(&self) -> bool {
+        self.in_flight
+            .compare_exchange(false, true, AtomicOrdering::AcqRel, AtomicOrdering::Acquire)
+            .is_ok()
+    }
+
+    /// Test/diagnostic-only probe: was the token already acquired?
+    #[cfg(test)]
+    pub(crate) fn was_acquired(&self) -> bool {
+        self.in_flight.load(AtomicOrdering::Acquire)
+    }
+}
+
+/// Best-effort, dedupe-aware wrapper around `deactivate_entertainment_config`.
+/// The first caller through the token performs the PUT; later callers are
+/// no-ops and return `Ok(())`. This is the only entry point any of the three
+/// shutdown call sites should use — direct calls to
+/// `deactivate_entertainment_config` bypass the dedupe and reintroduce the
+/// double-PUT race A1.3 fixed.
+pub(crate) fn deactivate_with_token(
+    token: &DeactivateToken,
+    client: &BlockingClient,
+    bridge_ip: &str,
+    username: &str,
+    area_id: &str,
+) -> Result<(), String> {
+    if !token.try_acquire() {
+        log::debug!("deactivate_with_token: skip — token already acquired for area {area_id}");
+        return Ok(());
+    }
+    deactivate_entertainment_config(client, bridge_ip, username, area_id)
+}
+
+// ---------------------------------------------------------------------------
 // Entertainment configuration activate/deactivate via CLIP v2
 // ---------------------------------------------------------------------------
 
@@ -113,6 +181,10 @@ fn activate_entertainment_config(
 /// body: { "action": "stop" }
 ///
 /// Tells the bridge to exit entertainment mode. Called when stopping the stream.
+///
+/// Prefer `deactivate_with_token` over calling this directly — direct
+/// callers bypass the v1.5.2 A1.3 dedupe primitive and risk re-introducing
+/// the double-PUT race.
 pub(crate) fn deactivate_entertainment_config(
     client: &BlockingClient,
     bridge_ip: &str,
@@ -214,11 +286,12 @@ fn send_light_put(
 /// 1. Activates the entertainment configuration via HTTPS
 /// 2. Connects via DTLS 1.2 PSK to bridge:2100
 /// 3. Continuously sends HueStream frames at 20 Hz
-/// 4. On channel close or error, deactivates entertainment config
+/// 4. On channel close or error, emits a DTLS `close_notify` alert and
+///    deactivates the entertainment configuration via the dedupe token.
 ///
 /// Returns the color sender handle, a shutdown signal that fires when the
 /// thread exits, and the DTLS cipher name used during the handshake.
-#[allow(clippy::too_many_arguments)] // bridge ip + username + client_key + area_id + channels + light_metadata + packet_counter is the minimal DTLS sender contract; collapsing into a struct would cost ergonomic clarity at the call sites in commands.rs / reconnect.rs
+#[allow(clippy::too_many_arguments)] // bridge ip + username + client_key + area_id + channels + light_metadata + packet_counter + deactivate_token is the minimal DTLS sender contract; collapsing into a struct would cost ergonomic clarity at the call sites in commands.rs / reconnect.rs
 pub(crate) fn spawn_hue_dtls_sender(
     client: Arc<BlockingClient>,
     bridge_ip: String,
@@ -228,6 +301,7 @@ pub(crate) fn spawn_hue_dtls_sender(
     channels: Vec<HueAreaChannel>,
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
+    deactivate_token: Arc<DeactivateToken>,
 ) -> Result<(HueColorSender, ShutdownSignal, Option<String>), String> {
     let channel_count = channels.len();
     let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
@@ -323,13 +397,47 @@ pub(crate) fn spawn_hue_dtls_sender(
             last_sent_at = Instant::now();
         }
 
-        // Cleanup: deactivate entertainment mode.
-        let _ = deactivate_entertainment_config(
+        // A1.3: emit DTLS `close_notify` before dropping the socket so the
+        // bridge releases its "active streamer" slot immediately. Without
+        // this the Hue bridge holds the slot for ~10 s and the next start
+        // (ours or another app's) sees `HUE_STREAM_NOT_READY_ACTIVE_STREAMER`.
+        // OpenSSL's `SslStream::shutdown` returns `Result<ShutdownResult, _>`;
+        // we treat any failure as best-effort (the deactivate PUT below is
+        // the protocol-level fallback). The `set_shutdown(RECEIVED)` hint
+        // nudges OpenSSL to skip waiting for the peer's matching alert,
+        // which the bridge does not always reply with promptly.
+        {
+            use openssl::ssl::ShutdownState;
+            // Hint to OpenSSL: we don't care about a peer close_notify reply;
+            // do not block waiting for one.
+            dtls_stream.set_shutdown(ShutdownState::RECEIVED);
+            match dtls_stream.shutdown() {
+                Ok(_state) => {
+                    log::debug!("DTLS close_notify emitted to bridge before socket drop.");
+                }
+                Err(err) => {
+                    log::debug!(
+                        "DTLS close_notify emission failed ({err}); falling back to deactivate PUT only."
+                    );
+                }
+            }
+        }
+
+        // Cleanup: deactivate entertainment mode via dedupe-aware token. Whoever
+        // wins the token (sender thread / foreground stop / reconnect monitor)
+        // performs the single PUT; later callers no-op. See `DeactivateToken`.
+        let _ = deactivate_with_token(
+            &deactivate_token,
             &deactivate_client,
             &deactivate_ip,
             &deactivate_username,
             &deactivate_area_id,
         );
+
+        // Drop the DTLS stream explicitly so the underlying UDP socket
+        // releases before we signal shutdown — every observer of
+        // `wait_for_shutdown` can now safely assume the bridge slot is free.
+        drop(dtls_stream);
 
         // Signal that this thread has completed shutdown.
         signal_shutdown_complete(&shutdown_inner);
@@ -652,25 +760,35 @@ pub(crate) fn no_op_sender() -> HueColorSender {
 /// Spawn the Hue color sender (DTLS or HTTP fallback) **outside** any mutex
 /// lock.  This function performs blocking network I/O (DTLS handshake, HTTP
 /// activate) and must never be called while the `HueRuntimeOwner` lock is held.
-/// Returns (sender, uses_dtls, shutdown_signal).
+/// Returns `(sender, uses_dtls, shutdown_signal, deactivate_token)`. The
+/// caller stores the token in `HueActiveStreamContext` so foreground
+/// `stop_hue_stream` and the reconnect monitor share the same one-shot
+/// dedupe primitive as the sender thread itself.
 pub(crate) fn build_hue_sender(
     request: &super::state_store::StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
-) -> (HueColorSender, bool, ShutdownSignal) {
+) -> (HueColorSender, bool, ShutdownSignal, Arc<DeactivateToken>) {
     let packet_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
-    let (sender, uses_dtls, shutdown, _cipher) =
+    let (sender, uses_dtls, shutdown, _cipher, token) =
         build_hue_sender_with_counter(request, channels, light_metadata, packet_counter);
-    (sender, uses_dtls, shutdown)
+    (sender, uses_dtls, shutdown, token)
 }
 
-/// Variant of `build_hue_sender` that takes an external packet counter and returns cipher.
+/// Variant of `build_hue_sender` that takes an external packet counter and
+/// returns the negotiated cipher together with the deactivate dedupe token.
 pub(crate) fn build_hue_sender_with_counter(
     request: &super::state_store::StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
-) -> (HueColorSender, bool, ShutdownSignal, Option<String>) {
+) -> (
+    HueColorSender,
+    bool,
+    ShutdownSignal,
+    Option<String>,
+    Arc<DeactivateToken>,
+) {
     // v1.5 W2-A2 — keychain-first credential resolution. The request
     // values from the Tauri command are treated as a downgrade-safe
     // fallback for legacy v1.4 users whose credentials still live in
@@ -689,6 +807,12 @@ pub(crate) fn build_hue_sender_with_counter(
     };
     let has_client_key = !resolved_client_key.trim().is_empty();
 
+    // Single dedupe token shared by the sender thread, foreground stop, and
+    // reconnect monitor. The HTTP fallback path also gets a token so call
+    // sites have a uniform shape — fallback paths simply never need to
+    // acquire it because there is no DTLS slot to release on the bridge.
+    let deactivate_token = DeactivateToken::new();
+
     if has_client_key {
         match hue_http_client_arc() {
             Ok(client) => {
@@ -704,6 +828,7 @@ pub(crate) fn build_hue_sender_with_counter(
                 let channels_t = channels.clone();
                 let light_metadata_t = Arc::clone(&light_metadata);
                 let counter_t = Arc::clone(&packet_counter);
+                let token_t = Arc::clone(&deactivate_token);
 
                 std::thread::spawn(move || {
                     let result = spawn_hue_dtls_sender(
@@ -715,6 +840,7 @@ pub(crate) fn build_hue_sender_with_counter(
                         channels_t,
                         light_metadata_t,
                         counter_t,
+                        token_t,
                     );
                     let _ = tx_result.send(result);
                 });
@@ -724,7 +850,7 @@ pub(crate) fn build_hue_sender_with_counter(
                 {
                     Ok(Ok((sender, shutdown, cipher_name))) => {
                         info!("DTLS entertainment stream established successfully.");
-                        (sender, true, shutdown, cipher_name)
+                        (sender, true, shutdown, cipher_name, deactivate_token)
                     }
                     Ok(Err(err)) => {
                         warn!("DTLS connection failed ({err}), falling back to HTTP.");
@@ -734,7 +860,7 @@ pub(crate) fn build_hue_sender_with_counter(
                             resolved_username.clone(),
                             channels.clone(),
                         );
-                        (sender, false, shutdown, None)
+                        (sender, false, shutdown, None, deactivate_token)
                     }
                     Err(_timeout) => {
                         warn!(
@@ -747,13 +873,19 @@ pub(crate) fn build_hue_sender_with_counter(
                             resolved_username.clone(),
                             channels.clone(),
                         );
-                        (sender, false, shutdown, None)
+                        (sender, false, shutdown, None, deactivate_token)
                     }
                 }
             }
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
-                (no_op_sender(), false, new_shutdown_signal(), None)
+                (
+                    no_op_sender(),
+                    false,
+                    new_shutdown_signal(),
+                    None,
+                    deactivate_token,
+                )
             }
         }
     } else {
@@ -766,11 +898,17 @@ pub(crate) fn build_hue_sender_with_counter(
                     resolved_username.clone(),
                     channels.clone(),
                 );
-                (sender, false, shutdown, None)
+                (sender, false, shutdown, None, deactivate_token)
             }
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
-                (no_op_sender(), false, new_shutdown_signal(), None)
+                (
+                    no_op_sender(),
+                    false,
+                    new_shutdown_signal(),
+                    None,
+                    deactivate_token,
+                )
             }
         }
     }
@@ -1030,5 +1168,53 @@ mod tests {
         ];
         let ids = unique_light_ids(&channels);
         assert_eq!(ids, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+    }
+
+    // -----------------------------------------------------------------------
+    // DeactivateToken (v1.5.2 A1.3) — dedupe primitive for entertainment-config
+    // deactivation across the sender thread, foreground stop, and reconnect monitor.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn deactivate_token_grants_first_caller_only_once() {
+        let token = DeactivateToken::new();
+        assert!(
+            token.try_acquire(),
+            "first caller should win the deactivate token"
+        );
+        assert!(
+            !token.try_acquire(),
+            "second caller must observe the in-flight bit and no-op"
+        );
+        assert!(
+            token.was_acquired(),
+            "was_acquired must reflect that a winner exists"
+        );
+    }
+
+    #[test]
+    fn deactivate_token_dedupes_concurrent_callers() {
+        // Spawn many threads that race for the token; exactly one wins.
+        let token = DeactivateToken::new();
+        let mut handles = Vec::new();
+        let winners = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..16 {
+            let t = Arc::clone(&token);
+            let w = Arc::clone(&winners);
+            handles.push(thread::spawn(move || {
+                if t.try_acquire() {
+                    w.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+                }
+            }));
+        }
+        for h in handles {
+            h.join().expect("worker did not panic");
+        }
+        assert_eq!(
+            winners.load(std::sync::atomic::Ordering::Acquire),
+            1,
+            "exactly one caller must win the token even under concurrent pressure"
+        );
+        assert!(token.was_acquired());
     }
 }

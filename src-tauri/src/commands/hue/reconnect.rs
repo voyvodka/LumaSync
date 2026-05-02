@@ -16,9 +16,13 @@
 //!   the reconnect monitor to bring up a new DTLS session without going
 //!   through the public `restart_hue_stream` Tauri command.
 //!
-//! All behaviour (200 ms shutdown poll, ~1 s post-deactivation grace,
-//! retry-budget exhaustion → `Failed`, user-override veto) is preserved
-//! exactly.
+//! v1.5.2 A1.3 update: the historical 1 s sleep that followed the
+//! reconnect-path deactivation has been removed. Both root causes
+//! (missing DTLS `close_notify`, double deactivate PUT) are now fixed at
+//! the source — the sender thread emits `close_notify` before drop, and
+//! `DeactivateToken` guarantees a single PUT regardless of which call
+//! site (sender thread / foreground stop / reconnect monitor) wins the
+//! race.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -31,9 +35,9 @@ use super::frame::HueAreaChannel;
 use super::frame::HueColorSender;
 use super::retry::register_transient_fault;
 use super::sender::{
-    apply_channel_region_overrides, build_hue_sender_with_counter, deactivate_entertainment_config,
+    apply_channel_region_overrides, build_hue_sender_with_counter, deactivate_with_token,
     fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled,
-    new_shutdown_signal, no_op_sender, HueLightMetadata, ShutdownSignal,
+    new_shutdown_signal, no_op_sender, DeactivateToken, HueLightMetadata, ShutdownSignal,
 };
 use super::state_store::{
     acquire_hue_runtime, make_result, status_with, HueActiveStreamContext, HuePersistentSender,
@@ -47,6 +51,7 @@ use super::state_store::{
 
 /// Store an already-spawned sender into the runtime owner.  This function only
 /// touches in-memory fields — no I/O — so it is safe to call under the lock.
+#[allow(clippy::too_many_arguments)] // light_metadata + deactivate_token push the arity past 7; collapsing into a struct hides the per-call-site distinction between fresh-spawn payload and runtime owner mutation
 pub(crate) fn store_active_stream_context(
     owner: &mut HueRuntimeOwner,
     request: &StartHueStreamRequest,
@@ -55,6 +60,7 @@ pub(crate) fn store_active_stream_context(
     uses_dtls: bool,
     shutdown_signal: ShutdownSignal,
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
+    deactivate_token: Arc<DeactivateToken>,
 ) {
     store_active_stream_context_with_cipher(
         owner,
@@ -65,10 +71,11 @@ pub(crate) fn store_active_stream_context(
         shutdown_signal,
         None,
         light_metadata,
+        deactivate_token,
     );
 }
 
-#[allow(clippy::too_many_arguments)] // adding light_metadata to the active-stream-context store crosses the 7-arg threshold; collapsing into a struct here would split the mutation boundary (HueRuntimeOwner) from the fresh-spawn payload and obscure which fields each caller controls
+#[allow(clippy::too_many_arguments)] // light_metadata + deactivate_token push the active-stream-context store past 7 args; collapsing into a struct here would split the mutation boundary (HueRuntimeOwner) from the fresh-spawn payload and obscure which fields each caller controls
 pub(crate) fn store_active_stream_context_with_cipher(
     owner: &mut HueRuntimeOwner,
     request: &StartHueStreamRequest,
@@ -78,6 +85,7 @@ pub(crate) fn store_active_stream_context_with_cipher(
     shutdown_signal: ShutdownSignal,
     cipher_name: Option<String>,
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
+    deactivate_token: Arc<DeactivateToken>,
 ) {
     // Keep a persistent clone that survives stream stop/start cycles.
     if !channels.is_empty() {
@@ -97,6 +105,7 @@ pub(crate) fn store_active_stream_context_with_cipher(
         uses_dtls,
         shutdown_signal,
         light_metadata,
+        deactivate_token,
     });
 
     // Update telemetry tracking fields.
@@ -274,31 +283,42 @@ async fn internal_restart_stream(
 ) -> Result<bool, String> {
     use super::frame::HueColorUpdate;
 
-    // 1. Extract current stream info and clear state.
+    // 1. Extract current stream info + dedupe token, then clear state.
     let dtls_deactivate = {
         let mut owner = acquire_hue_runtime(runtime);
         let deactivate = owner
             .active_stream
             .as_ref()
             .filter(|s| s.uses_dtls)
-            .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
+            .map(|s| {
+                (
+                    s.bridge_ip.clone(),
+                    s.username.clone(),
+                    s.area_id.clone(),
+                    Arc::clone(&s.deactivate_token),
+                )
+            });
         owner.active_stream = None;
         owner.persistent_sender = None;
         deactivate
     };
 
-    // Best-effort DTLS deactivation outside lock.
-    if let Some((ip, username, area_id)) = dtls_deactivate {
+    // Best-effort, dedupe-aware DTLS deactivation outside the lock. If the
+    // sender thread already drained the token (close_notify cleanup path),
+    // this call is a fast in-process no-op.
+    //
+    // A1.3: the historical 1 s sleep that used to follow this block was a
+    // band-aid for the bridge "phantom active streamer" symptom caused by
+    // the missing close_notify alert + double-deactivate race. Both root
+    // causes are now fixed (sender emits close_notify before drop, and the
+    // dedupe token guarantees a single PUT) so the sleep is gone.
+    if let Some((ip, username, area_id, token)) = dtls_deactivate {
         let _ = tokio::task::spawn_blocking(move || {
             if let Ok(client) = hue_http_client() {
-                let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
+                let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
             }
         })
         .await;
-        // Give the bridge ~1 s to propagate the deactivation before checking readiness.
-        // Without this delay, the bridge may still report active_streamer=true and
-        // the reconnect fails immediately.
-        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 
     // 2. Readiness check (async, no lock held).
@@ -356,12 +376,20 @@ async fn internal_restart_stream(
         let owner = acquire_hue_runtime(runtime);
         Arc::clone(&owner.packet_send_count)
     };
-    let (color_sender, uses_dtls, shutdown_signal, cipher_name) =
+    let (color_sender, uses_dtls, shutdown_signal, cipher_name, deactivate_token) =
         tokio::task::spawn_blocking(move || {
             build_hue_sender_with_counter(&req, ch, meta_for_sender, packet_counter)
         })
         .await
-        .unwrap_or_else(|_| (no_op_sender(), false, new_shutdown_signal(), None));
+        .unwrap_or_else(|_| {
+            (
+                no_op_sender(),
+                false,
+                new_shutdown_signal(),
+                None,
+                DeactivateToken::new(),
+            )
+        });
 
     // Suppress unused-import warning; HueColorUpdate is referenced indirectly
     // through HueColorSender's mpsc::SyncSender<HueColorUpdate> generic.
@@ -386,6 +414,7 @@ async fn internal_restart_stream(
             uses_dtls,
             shutdown_signal: Arc::clone(&shutdown_signal),
             light_metadata: Arc::clone(&light_metadata),
+            deactivate_token: Arc::clone(&deactivate_token),
         };
         if !channels.is_empty() {
             owner.persistent_sender = Some(HuePersistentSender {
@@ -483,6 +512,7 @@ mod tests {
             false,
             new_shutdown_signal(),
             Arc::new(std::collections::HashMap::new()),
+            DeactivateToken::new(),
         );
 
         let active_stream = owner.active_stream.as_ref().expect("active stream context");
@@ -494,5 +524,27 @@ mod tests {
             active_stream.channels[0].light_ids,
             vec!["light-1".to_string()]
         );
+    }
+
+    /// A1.3: when the sender thread already drained the token (close_notify
+    /// path), the reconnect-monitor's deactivate call must observe the
+    /// in-flight bit and skip the redundant PUT. This test covers the
+    /// dedupe primitive contract directly — the network path is not
+    /// exercised because `deactivate_with_token` short-circuits before
+    /// touching the HTTP client.
+    #[test]
+    fn reconnect_monitor_deactivate_no_ops_when_already_done() {
+        let token = DeactivateToken::new();
+        // Simulate the sender thread winning the race first.
+        assert!(token.try_acquire(), "sender thread should win first");
+
+        // Now the reconnect monitor's call must be a no-op.
+        // We exercise this by calling try_acquire again (the same primitive
+        // backs deactivate_with_token's short-circuit).
+        assert!(
+            !token.try_acquire(),
+            "reconnect monitor must observe the in-flight bit and skip the PUT"
+        );
+        assert!(token.was_acquired());
     }
 }

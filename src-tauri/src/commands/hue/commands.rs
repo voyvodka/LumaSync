@@ -26,9 +26,9 @@ use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
 };
 use super::sender::{
-    apply_channel_region_overrides, build_hue_sender, deactivate_entertainment_config,
-    fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled,
-    new_shutdown_signal, no_op_sender, signal_shutdown_complete, wait_for_shutdown,
+    apply_channel_region_overrides, build_hue_sender, deactivate_with_token, fetch_area_channels,
+    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, new_shutdown_signal,
+    no_op_sender, signal_shutdown_complete, wait_for_shutdown, DeactivateToken,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, flush_pending_solid_color, make_result,
@@ -153,7 +153,7 @@ pub async fn start_hue_stream(
 
     // 4b. Spawn sender on a blocking thread — DTLS handshake / HTTP activate
     //     create/drop a reqwest::blocking::Client which panics on Tokio workers.
-    let (color_sender, uses_dtls, shutdown_signal) = if result.active {
+    let (color_sender, uses_dtls, shutdown_signal, deactivate_token) = if result.active {
         let req = request.clone();
         let ch = channels.clone();
         let meta_for_sender = Arc::clone(&light_metadata);
@@ -161,10 +161,20 @@ pub async fn start_hue_stream(
             .await
             .unwrap_or_else(|_join_err| {
                 error!("build_hue_sender task panicked, using no-op sender.");
-                (no_op_sender(), false, new_shutdown_signal())
+                (
+                    no_op_sender(),
+                    false,
+                    new_shutdown_signal(),
+                    DeactivateToken::new(),
+                )
             })
     } else {
-        (no_op_sender(), false, new_shutdown_signal())
+        (
+            no_op_sender(),
+            false,
+            new_shutdown_signal(),
+            DeactivateToken::new(),
+        )
     };
 
     // 4c. Re-acquire lock to store the spawned sender context.
@@ -189,6 +199,7 @@ pub async fn start_hue_stream(
             uses_dtls,
             shutdown_signal,
             Arc::clone(&light_metadata),
+            Arc::clone(&deactivate_token),
         );
         abort_guard.disarm();
 
@@ -266,12 +277,22 @@ pub fn stop_hue_stream(
             .as_ref()
             .map(|s| Arc::clone(&s.shutdown_signal));
 
-        // Extract DTLS deactivation params before active_stream is cleared.
+        // Extract DTLS deactivation params + dedupe token before active_stream
+        // is cleared. The token is the A1.3 coordination point: whichever of
+        // {sender thread, foreground stop, reconnect monitor} acquires it
+        // first performs the single PUT; later callers no-op.
         let dtls_deactivate = owner
             .active_stream
             .as_ref()
             .filter(|s| s.uses_dtls)
-            .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
+            .map(|s| {
+                (
+                    s.bridge_ip.clone(),
+                    s.username.clone(),
+                    s.area_id.clone(),
+                    Arc::clone(&s.deactivate_token),
+                )
+            });
 
         // Perform synchronous cleanup (drop sender, reset state).
         // We pass `timed_out=false` initially; if the wait below times out
@@ -281,10 +302,12 @@ pub fn stop_hue_stream(
         (signal, dtls_deactivate)
     }; // lock released -- background thread can now observe the channel close.
 
-    // Best-effort DTLS deactivation outside the lock to avoid blocking the mutex.
-    if let Some((ip, username, area_id)) = dtls_deactivate {
+    // Best-effort, dedupe-aware DTLS deactivation outside the lock to avoid
+    // blocking the mutex. If the sender thread's close_notify cleanup path
+    // already drained the token, this call is a fast in-process no-op.
+    if let Some((ip, username, area_id, token)) = dtls_deactivate {
         if let Ok(client) = hue_http_client() {
-            let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
+            let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
         }
     }
 
@@ -324,24 +347,32 @@ pub async fn restart_hue_stream(
         .clone()
         .unwrap_or(HueRuntimeTriggerSource::DeviceSurface);
 
-    // 1. Stop first -- brief lock, no I/O.  Extract DTLS deactivation params
-    //    before the lock is released so we can deactivate outside the lock.
+    // 1. Stop first -- brief lock, no I/O. Extract DTLS deactivation params
+    //    + dedupe token before the lock is released so we can deactivate
+    //    outside the lock without re-PUTing what the sender thread already did.
     let dtls_deactivate = {
         let mut owner = acquire_hue_runtime(&runtime_state.runtime);
         let dtls_deactivate = owner
             .active_stream
             .as_ref()
             .filter(|s| s.uses_dtls)
-            .map(|s| (s.bridge_ip.clone(), s.username.clone(), s.area_id.clone()));
+            .map(|s| {
+                (
+                    s.bridge_ip.clone(),
+                    s.username.clone(),
+                    s.area_id.clone(),
+                    Arc::clone(&s.deactivate_token),
+                )
+            });
         let _ = stop_with_timeout(&mut owner, false, trigger.clone());
         dtls_deactivate
     }; // lock released before async I/O
 
-    // Best-effort DTLS deactivation outside the lock.
-    if let Some((ip, username, area_id)) = dtls_deactivate {
+    // Best-effort, dedupe-aware DTLS deactivation outside the lock.
+    if let Some((ip, username, area_id, token)) = dtls_deactivate {
         let _ = tokio::task::spawn_blocking(move || {
             if let Ok(client) = hue_http_client() {
-                let _ = deactivate_entertainment_config(&client, &ip, &username, &area_id);
+                let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
             }
         })
         .await;
@@ -410,7 +441,7 @@ pub async fn restart_hue_stream(
     };
 
     // 5b. Spawn sender on a blocking thread — same rationale as start_hue_stream 4b.
-    let (color_sender, uses_dtls, shutdown_signal) = if result.active {
+    let (color_sender, uses_dtls, shutdown_signal, deactivate_token) = if result.active {
         let req = request.clone();
         let ch = channels.clone();
         let meta_for_sender = Arc::clone(&light_metadata);
@@ -418,10 +449,20 @@ pub async fn restart_hue_stream(
             .await
             .unwrap_or_else(|_join_err| {
                 error!("build_hue_sender task panicked, using no-op sender.");
-                (no_op_sender(), false, new_shutdown_signal())
+                (
+                    no_op_sender(),
+                    false,
+                    new_shutdown_signal(),
+                    DeactivateToken::new(),
+                )
             })
     } else {
-        (no_op_sender(), false, new_shutdown_signal())
+        (
+            no_op_sender(),
+            false,
+            new_shutdown_signal(),
+            DeactivateToken::new(),
+        )
     };
 
     // 5c. Re-acquire lock to store the spawned sender context.
@@ -444,6 +485,7 @@ pub async fn restart_hue_stream(
             uses_dtls,
             shutdown_signal,
             Arc::clone(&light_metadata),
+            Arc::clone(&deactivate_token),
         );
         abort_guard.disarm();
 
