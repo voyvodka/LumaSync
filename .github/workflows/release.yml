@@ -79,8 +79,8 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
         working-directory: src-tauri
 
-      - name: Rust unit tests (cargo test)
-        run: cargo test --lib --no-fail-fast -- --test-threads=1
+      - name: Rust tests (cargo test)
+        run: cargo test --all-features -- --test-threads=1
         working-directory: src-tauri
 
       - name: Verify shell contracts
