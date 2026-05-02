@@ -1298,7 +1298,7 @@ function App() {
     const unsubscribe = connectionEvents.subscribe((event) => {
       if (event.connected || !event.unsupportedReason) return;
       const currentTargets = selectedOutputTargetsRef.current;
-      if (!currentTargets.includes("usb")) return;
+      const includedUsb = currentTargets.includes("usb");
       // Use the raw filter result. `normalizeOutputTargets([])` reverts to
       // DEFAULT_OUTPUT_TARGETS (= ["usb"]) which would silently re-add the
       // very target we are trying to drop, defeating the fallback.
@@ -1306,15 +1306,17 @@ function App() {
       // If the user has a paired Hue bridge and hue is not already in the
       // surviving targets, auto-add "hue" so Ambilight / Solid actually
       // produces output instead of leaving the user stranded at the OFF
-      // state with no available sink. When Hue is not paired (or the
-      // bridge config is missing), fall back to the empty list — the user
-      // re-engages by plugging a supported USB controller (separate
-      // `hotplug.usbDetected` toast handles that flow).
+      // state with no available sink. This also covers the case where a
+      // prior session already auto-deselected USB and persisted `[]` —
+      // boot lands here with `currentTargets === []`, no USB to drop, but
+      // Hue must still get auto-added or the user has zero output sinks
+      // and "ambilight does nothing" silently repeats.
       const huePaired = hueStartConfigRef.current !== null;
-      const nextTargets: HueRuntimeTarget[] =
-        huePaired && !filtered.includes("hue")
-          ? ["hue"]
-          : filtered;
+      const wantsHueAutoAdd = huePaired && !filtered.includes("hue");
+      // If we have nothing to do (USB not in targets and no hue auto-add
+      // needed) skip without persisting / toasting.
+      if (!includedUsb && !wantsHueAutoAdd) return;
+      const nextTargets: HueRuntimeTarget[] = wantsHueAutoAdd ? ["hue"] : filtered;
       setSelectedOutputTargets(nextTargets);
       void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
         console.error(
