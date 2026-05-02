@@ -424,6 +424,14 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Warn)
                 .level_for("lumasync_lib", log::LevelFilter::Debug)
+                // `webview` is the target name used by tauri-plugin-log's
+                // attachConsole() JS bridge — keeping it at Info preserves
+                // frontend `console.info`/`console.log` lines in the file
+                // sink so external observers (e.g. the lumasync-debug
+                // skill) can correlate frontend + backend timelines from a
+                // single log file. Without this, only console.warn / error
+                // would survive the global Warn filter.
+                .level_for("webview", log::LevelFilter::Info)
                 .level_for("reqwest", log::LevelFilter::Warn)
                 .level_for("hyper", log::LevelFilter::Warn)
                 .level_for("hyper_util", log::LevelFilter::Warn)
