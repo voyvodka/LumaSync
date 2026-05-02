@@ -71,6 +71,18 @@ jobs:
       - name: Rust check (cargo check)
         run: pnpm check:rust
 
+      - name: Rust format check (cargo fmt)
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: Rust lint (cargo clippy -D warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        working-directory: src-tauri
+
+      - name: Rust unit tests (cargo test)
+        run: cargo test --lib --no-fail-fast -- --test-threads=1
+        working-directory: src-tauri
+
       - name: Verify shell contracts
         run: pnpm verify:shell-contracts
 
