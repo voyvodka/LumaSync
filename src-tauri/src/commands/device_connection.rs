@@ -437,19 +437,42 @@ fn connect_serial_port_blocking(
         }
     };
 
-    if let SerialPortType::UsbPort(usb_info) = selected_port.port_type {
-        if !is_supported_usb(usb_info.vid, usb_info.pid) {
+    // Reject non-USB serial ports up-front. macOS exposes phantom serial
+    // endpoints like /dev/cu.Bluetooth-Incoming-Port that accept open() and
+    // write() but route to nowhere — every frame "succeeds" while the LEDs
+    // stay dark. Without this gate the backend silently writes 20 Hz worth
+    // of solid-color frames into the void and the user reads it as a crash
+    // because nothing lights up.
+    match selected_port.port_type {
+        SerialPortType::UsbPort(ref usb_info) => {
+            if !is_supported_usb(usb_info.vid, usb_info.pid) {
+                return ConnectOutcome::Failed {
+                    status: SerialConnectionStatus {
+                        port_name: Some(port_name),
+                        connected: false,
+                        status: command_status(
+                            "PORT_UNSUPPORTED",
+                            "Selected USB serial adapter is not in the supported allowlist.",
+                            Some(format!(
+                                "VID={:04X}, PID={:04X}",
+                                usb_info.vid, usb_info.pid
+                            )),
+                        ),
+                        updated_at_unix_ms: now_unix_ms(),
+                    },
+                    clear_sink: true,
+                };
+            }
+        }
+        SerialPortType::BluetoothPort | SerialPortType::PciPort | SerialPortType::Unknown => {
             return ConnectOutcome::Failed {
                 status: SerialConnectionStatus {
                     port_name: Some(port_name),
                     connected: false,
                     status: command_status(
                         "PORT_UNSUPPORTED",
-                        "Selected USB serial adapter is not in the supported allowlist.",
-                        Some(format!(
-                            "VID={:04X}, PID={:04X}",
-                            usb_info.vid, usb_info.pid
-                        )),
+                        "Only USB serial adapters are supported (Bluetooth and PCI serial ports cannot drive LED strips).",
+                        None,
                     ),
                     updated_at_unix_ms: now_unix_ms(),
                 },
