@@ -444,12 +444,19 @@ mod tests {
         let candidate = parse_hue_service_info(info)
             .expect("should return Some when TXT bridgeid and IPv4 are present");
 
-        assert_eq!(candidate.id, "001788FFFE001234",
-            "id must be the TXT bridgeid value, uppercased");
-        assert_eq!(candidate.ip, "192.168.1.100",
-            "ip must come from get_addresses_v4()");
-        assert!(candidate.name.contains("001234"),
-            "name must include the instance label; got: {:?}", candidate.name);
+        assert_eq!(
+            candidate.id, "001788FFFE001234",
+            "id must be the TXT bridgeid value, uppercased"
+        );
+        assert_eq!(
+            candidate.ip, "192.168.1.100",
+            "ip must come from get_addresses_v4()"
+        );
+        assert!(
+            candidate.name.contains("001234"),
+            "name must include the instance label; got: {:?}",
+            candidate.name
+        );
     }
 
     /// Scenario 2: TXT missing `bridgeid` — id derived from instance name suffix.
@@ -482,11 +489,16 @@ mod tests {
         let candidate = parse_hue_service_info(info)
             .expect("should return Some when id is derivable from instance name");
 
-        assert_eq!(candidate.id, "ABCDEF",
-            "id must be the uppercased last dash segment of fullname");
+        assert_eq!(
+            candidate.id, "ABCDEF",
+            "id must be the uppercased last dash segment of fullname"
+        );
         assert_eq!(candidate.ip, "10.0.0.42");
-        assert!(candidate.name.contains("ABCDEF"),
-            "name must reflect the instance label; got: {:?}", candidate.name);
+        assert!(
+            candidate.name.contains("ABCDEF"),
+            "name must reflect the instance label; got: {:?}",
+            candidate.name
+        );
     }
 
     /// Scenario 2 (bug documentation): space-dash-space separator leaves leading whitespace in id.
@@ -513,9 +525,11 @@ mod tests {
             .expect("fallback should return Some even with leading-whitespace id");
 
         // As-is: id has leading space. When this becomes "ABCDEF" (no space), update this test.
-        assert_eq!(candidate.id, " ABCDEF",
+        assert_eq!(
+            candidate.id, " ABCDEF",
             "as-is: leading whitespace retained in id fallback — update this assertion when \
-             trim() is added to the id derivation path");
+             trim() is added to the id derivation path"
+        );
     }
 
     /// Scenario 3: No IPv4 address → None.
@@ -587,8 +601,10 @@ mod tests {
         let candidate = parse_hue_service_info(info)
             .expect("TXT bridgeid present; should return Some despite whitespace instance");
 
-        assert_eq!(candidate.name, "Hue Bridge",
-            "whitespace-only instance must trigger the 'Hue Bridge' name default");
+        assert_eq!(
+            candidate.name, "Hue Bridge",
+            "whitespace-only instance must trigger the 'Hue Bridge' name default"
+        );
         assert_eq!(candidate.id, "001788FFFE999999");
     }
 
@@ -610,7 +626,9 @@ mod tests {
         let candidate = parse_hue_service_info(info)
             .expect("valid service with TXT bridgeid must produce Some");
 
-        assert_eq!(candidate.id, "AABBCCDDEEFF1122",
-            "TXT bridgeid must be uppercased to match cloud-discovery dedup key");
+        assert_eq!(
+            candidate.id, "AABBCCDDEEFF1122",
+            "TXT bridgeid must be uppercased to match cloud-discovery dedup key"
+        );
     }
 }
