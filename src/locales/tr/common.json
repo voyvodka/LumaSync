@@ -1207,8 +1207,10 @@
       "aria": {
         "countIncrease": "{{label}} sayısını artır",
         "countDecrease": "{{label}} sayısını azalt",
+        "countInput": "{{label}} LED sayısı, klavyeden gir",
         "gapIncrease": "Ayak boşluğunu artır",
-        "gapDecrease": "Ayak boşluğunu azalt"
+        "gapDecrease": "Ayak boşluğunu azalt",
+        "gapInput": "Ayak boşluğu LED sayısı, klavyeden gir"
       }
     },
     "overlay": {

@@ -1207,8 +1207,10 @@
       "aria": {
         "countIncrease": "Increase {{label}}",
         "countDecrease": "Decrease {{label}}",
+        "countInput": "{{label}} LED count, type a number",
         "gapIncrease": "Increase stand gap",
-        "gapDecrease": "Decrease stand gap"
+        "gapDecrease": "Decrease stand gap",
+        "gapInput": "Stand gap LEDs, type a number"
       }
     },
     "overlay": {

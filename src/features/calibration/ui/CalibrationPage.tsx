@@ -280,11 +280,16 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     }
   }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t]);
 
-  const handleCountChange = useCallback((segment: "top" | "right" | "bottom" | "left", delta: number) => {
+  // A3.7 — accept the absolute next value, not a delta. Stepper buttons
+  // pass `value + 1` / `value - 1` so the +/- affordance is preserved
+  // while the new keyboard-input path can submit any integer directly.
+  // Defensive cap at 1000 — the build still validates totalLeds downstream
+  // for protocol-specific budgets, but a hard upper bound here stops a
+  // typo (e.g. an extra trailing digit) from blowing up the editor state.
+  const handleCountChange = useCallback((segment: "top" | "right" | "bottom" | "left", nextValue: number) => {
     setEditorState((prev) => {
-      const current = prev.current.counts[segment];
-      const next = Math.max(0, current + delta);
-      return updateEditorConfig(prev, { counts: { [segment]: next } });
+      const clamped = Math.max(0, Math.min(1000, Math.floor(nextValue)));
+      return updateEditorConfig(prev, { counts: { [segment]: clamped } });
     });
     setValidationErrors(null);
   }, []);
@@ -300,10 +305,12 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     setValidationErrors(null);
   }, [displayTarget]);
 
-  const handleBottomMissingChange = useCallback((delta: number) => {
+  // A3.7 — accept the absolute next value, not a delta. Same shape as
+  // handleCountChange so StandGapStepper can use the unified API.
+  const handleBottomMissingChange = useCallback((nextValue: number) => {
     setEditorState((prev) => {
       const max = prev.current.counts.bottom;
-      const next = Math.max(0, Math.min(max, prev.current.bottomMissing + delta));
+      const next = Math.max(0, Math.min(max, Math.floor(nextValue)));
       return updateEditorConfig(prev, { bottomMissing: next });
     });
     setValidationErrors(null);
@@ -512,10 +519,10 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
 
           <DockSection title={t("calibration.page.dockLedCountPerEdge")}>
             <div className="grid grid-cols-2 gap-1.5">
-              <CountStepper label={t("calibration.page.edgeTop")} value={counts.top} onChange={(d) => handleCountChange("top", d)} />
-              <CountStepper label={t("calibration.page.edgeRight")} value={counts.right} onChange={(d) => handleCountChange("right", d)} />
-              <CountStepper label={t("calibration.page.edgeBottom")} value={counts.bottom} onChange={(d) => handleCountChange("bottom", d)} />
-              <CountStepper label={t("calibration.page.edgeLeft")} value={counts.left} onChange={(d) => handleCountChange("left", d)} />
+              <CountStepper label={t("calibration.page.edgeTop")} value={counts.top} onChange={(v) => handleCountChange("top", v)} />
+              <CountStepper label={t("calibration.page.edgeRight")} value={counts.right} onChange={(v) => handleCountChange("right", v)} />
+              <CountStepper label={t("calibration.page.edgeBottom")} value={counts.bottom} onChange={(v) => handleCountChange("bottom", v)} />
+              <CountStepper label={t("calibration.page.edgeLeft")} value={counts.left} onChange={(v) => handleCountChange("left", v)} />
             </div>
           </DockSection>
 
@@ -638,17 +645,70 @@ function EdgeSummary({ label, value }: { label: string; value: number }) {
   );
 }
 
-function CountStepper({ label, value, onChange }: { label: string; value: number; onChange: (delta: number) => void }) {
+// A3.7 — number stepper with always-editable keyboard input.
+// `value` is the committed integer; `draft` mirrors the user's
+// in-flight typing so the field can hold an empty / partial value
+// without bouncing back to `value` mid-keystroke. ENTER and blur
+// commit; ESC reverts; +/- buttons call onChange(value ± 1) so the
+// stepper preserves the original delta affordance via the unified
+// absolute-value API. type="text" + inputMode="numeric" gives the
+// mobile numeric keyboard without rendering the native spinner that
+// would visually conflict with our +/- column.
+function CountStepper({ label, value, onChange }: { label: string; value: number; onChange: (nextValue: number) => void }) {
   const { t } = useTranslation("common");
+  const [draft, setDraft] = useState<string>(String(value));
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sync the draft when the parent value changes from the outside
+  // (reset button, template apply, +/- click) so we never display a
+  // stale number after a programmatic update.
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = useCallback(() => {
+    const parsed = Number.parseInt(draft, 10);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    if (parsed === value) {
+      // No semantic change — re-sync draft to canonical (e.g. user
+      // typed "0007" → committed value would be 7, draft stays "0007").
+      setDraft(String(value));
+      return;
+    }
+    onChange(parsed);
+  }, [draft, value, onChange]);
+
   return (
     <div className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5">
       <div className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-zinc-500">{label}</div>
       <div className="mt-1 flex items-center gap-1.5">
-        <span className="flex-1 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100">{value}</span>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commit();
+              inputRef.current?.blur();
+            } else if (e.key === "Escape") {
+              setDraft(String(value));
+              inputRef.current?.blur();
+            }
+          }}
+          aria-label={t("calibration.page.aria.countInput", { label })}
+          className="min-w-0 flex-1 bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100 outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
+        />
         <div className="flex flex-col gap-0.5">
           <button
             type="button"
-            onClick={() => onChange(1)}
+            onClick={() => onChange(value + 1)}
             aria-label={t("calibration.page.aria.countIncrease", { label })}
             className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400"
           >
@@ -656,7 +716,7 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
           </button>
           <button
             type="button"
-            onClick={() => onChange(-1)}
+            onClick={() => onChange(value - 1)}
             aria-label={t("calibration.page.aria.countDecrease", { label })}
             className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400"
           >
@@ -720,22 +780,67 @@ function DirectionButton({ direction, label, active, onClick }: { direction: Led
   );
 }
 
-function StandGapStepper({ value, max, onChange }: { value: number; max: number; onChange: (delta: number) => void }) {
+// A3.7 — same keyboard-input pattern as CountStepper, with the
+// `max` cap (counts.bottom) preserved on commit so an out-of-range
+// keystroke still clamps. The label slot keeps the small "LED"
+// header + the "/ {max}" sibling so the user always sees the
+// available headroom while typing.
+function StandGapStepper({ value, max, onChange }: { value: number; max: number; onChange: (nextValue: number) => void }) {
   const { t } = useTranslation("common");
+  const [draft, setDraft] = useState<string>(String(value));
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = useCallback(() => {
+    const parsed = Number.parseInt(draft, 10);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    const clamped = Math.max(0, Math.min(max, parsed));
+    if (clamped === value) {
+      setDraft(String(value));
+      return;
+    }
+    onChange(clamped);
+  }, [draft, value, max, onChange]);
+
   return (
     <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5">
       <div className="min-w-0 flex-1">
         <div className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-zinc-500">
           LED
         </div>
-        <div className="[font-family:var(--lm-mono)] text-base font-medium text-zinc-100">{value}</div>
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              commit();
+              inputRef.current?.blur();
+            } else if (e.key === "Escape") {
+              setDraft(String(value));
+              inputRef.current?.blur();
+            }
+          }}
+          aria-label={t("calibration.page.aria.gapInput")}
+          className="w-full bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100 outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
+        />
       </div>
       <div className="[font-family:var(--lm-mono)] text-[9px] text-zinc-600">/ {max}</div>
       <div className="flex flex-col gap-0.5">
         <button
           type="button"
           disabled={value >= max}
-          onClick={() => onChange(1)}
+          onClick={() => onChange(value + 1)}
           aria-label={t("calibration.page.aria.gapIncrease")}
           className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-35"
         >
@@ -744,7 +849,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
         <button
           type="button"
           disabled={value <= 0}
-          onClick={() => onChange(-1)}
+          onClick={() => onChange(value - 1)}
           aria-label={t("calibration.page.aria.gapDecrease")}
           className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-35"
         >
