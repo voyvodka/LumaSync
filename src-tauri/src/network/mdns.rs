@@ -305,6 +305,62 @@ pub(crate) fn parse_hue_service_info(info: ResolvedService) -> Option<MdnsBridge
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mdns_sd::{ServiceInfo, TxtProperty};
+    use std::net::IpAddr;
+
+    // -----------------------------------------------------------------------
+    // Helpers — build ResolvedService fixtures via ServiceInfo::new +
+    // as_resolved_service() to avoid the #[non_exhaustive] struct literal
+    // restriction on ResolvedService in mdns-sd 0.19.
+    //
+    // ServiceInfo::new requires P: IntoTxtProperties. Vec<TxtProperty>
+    // implements that trait; we use it throughout so the same helper works
+    // for both empty-TXT and populated-TXT cases.
+    // -----------------------------------------------------------------------
+
+    fn make_hue_service(
+        instance_name: &str,
+        host: &str,
+        ip: Ipv4Addr,
+        txt_props: Vec<TxtProperty>,
+    ) -> ResolvedService {
+        ServiceInfo::new(
+            "_hue._tcp.local.",
+            instance_name,
+            host,
+            IpAddr::V4(ip),
+            443,
+            txt_props,
+        )
+        .expect("ServiceInfo::new should succeed with valid inputs")
+        .as_resolved_service()
+    }
+
+    fn make_service_with_type(
+        ty_domain: &str,
+        instance_name: &str,
+        host: &str,
+        ip: Ipv4Addr,
+    ) -> ResolvedService {
+        ServiceInfo::new(
+            ty_domain,
+            instance_name,
+            host,
+            IpAddr::V4(ip),
+            80,
+            Vec::<TxtProperty>::new(),
+        )
+        .expect("ServiceInfo::new should succeed")
+        .as_resolved_service()
+    }
+
+    fn txt_with_bridgeid(bridge_id: &str) -> Vec<TxtProperty> {
+        vec![TxtProperty::from(&("bridgeid", bridge_id))]
+    }
+
+    // -----------------------------------------------------------------------
+    // Existing tests (unchanged)
+    // -----------------------------------------------------------------------
 
     #[test]
     fn status_codes_match_frontend_contract() {
@@ -361,5 +417,200 @@ mod tests {
             name: "Hue Bridge".into(),
         };
         assert_eq!(a, b);
+    }
+
+    // -----------------------------------------------------------------------
+    // F1 — parse_hue_service_info coverage (mdns-sd 0.19 migration blind spot)
+    // -----------------------------------------------------------------------
+
+    /// Scenario 1: Full `bridgeid` present in TXT record.
+    ///
+    /// The canonical Hue v2 advertisement carries `bridgeid=001788fffe001234`
+    /// in the TXT record (case may vary across firmware). The parser must:
+    ///   - read the TXT `bridgeid` property
+    ///   - uppercase the value unconditionally
+    ///   - populate `ip` from `get_addresses_v4()` (mdns-sd 0.19 API)
+    ///   - derive `name` by stripping the `._hue._tcp.local.` suffix
+    #[test]
+    fn parse_hue_service_info_full_bridgeid_in_txt_returns_candidate() {
+        let ip = Ipv4Addr::new(192, 168, 1, 100);
+        let info = make_hue_service(
+            "Philips Hue - 001234",
+            "ecb5fa001234.local.",
+            ip,
+            txt_with_bridgeid("001788fffe001234"),
+        );
+
+        let candidate = parse_hue_service_info(info)
+            .expect("should return Some when TXT bridgeid and IPv4 are present");
+
+        assert_eq!(candidate.id, "001788FFFE001234",
+            "id must be the TXT bridgeid value, uppercased");
+        assert_eq!(candidate.ip, "192.168.1.100",
+            "ip must come from get_addresses_v4()");
+        assert!(candidate.name.contains("001234"),
+            "name must include the instance label; got: {:?}", candidate.name);
+    }
+
+    /// Scenario 2: TXT missing `bridgeid` — id derived from instance name suffix.
+    ///
+    /// Some Hue bridges do not populate the `bridgeid` TXT key, especially
+    /// during pairing. The fallback splits the fullname on `-` and uses the
+    /// last segment after stripping the service-type suffix.
+    ///
+    /// Instance name `"HueBridge-ABCDEF"` (no space around the dash) yields
+    /// a clean last segment: `"ABCDEF._hue._tcp.local."` → trim → `"ABCDEF"`.
+    ///
+    /// Known limitation: when the instance name uses the ` - ` (space-dash-space)
+    /// separator common in Philips firmware (e.g. `"Philips Hue - ABCDEF"`),
+    /// the derived id carries a leading space (`" ABCDEF"`) because the id
+    /// fallback path does not call `.trim()` on the split segment. This
+    /// prevents dedup against cloud-discovery IDs that are trimmed. That
+    /// limitation is flagged here for future fix; this test exercises the
+    /// clean dash-only format to verify the fallback path is wired at all.
+    #[test]
+    fn parse_hue_service_info_no_txt_bridgeid_falls_back_to_instance_name() {
+        let ip = Ipv4Addr::new(10, 0, 0, 42);
+        // Use dash-only separator to get a clean id without leading whitespace.
+        let info = make_hue_service(
+            "HueBridge-ABCDEF",
+            "ecb5fa00abcd.local.",
+            ip,
+            Vec::new(), // no bridgeid in TXT
+        );
+
+        let candidate = parse_hue_service_info(info)
+            .expect("should return Some when id is derivable from instance name");
+
+        assert_eq!(candidate.id, "ABCDEF",
+            "id must be the uppercased last dash segment of fullname");
+        assert_eq!(candidate.ip, "10.0.0.42");
+        assert!(candidate.name.contains("ABCDEF"),
+            "name must reflect the instance label; got: {:?}", candidate.name);
+    }
+
+    /// Scenario 2 (bug documentation): space-dash-space separator leaves leading whitespace in id.
+    ///
+    /// Hue firmware commonly uses `"Philips Hue - ABCDEF"` as instance name.
+    /// After `split('-').next_back()`, the last segment is `" ABCDEF._hue._tcp.local."`.
+    /// After `trim_end_matches("._hue._tcp.local.")`, the segment is `" ABCDEF"` (leading space).
+    /// The id fallback does NOT call `.trim()`, so the returned id is `" ABCDEF"` —
+    /// which will NOT dedup against cloud-discovery's `"ABCDEF"` (no space).
+    ///
+    /// This test pins the as-is buggy behaviour so the fix (adding `.trim()` to the
+    /// id fallback in `parse_hue_service_info`) produces a deliberate diff.
+    #[test]
+    fn parse_hue_service_info_space_dash_space_separator_leaves_leading_whitespace_in_id() {
+        let ip = Ipv4Addr::new(10, 0, 0, 43);
+        let info = make_hue_service(
+            "Philips Hue - ABCDEF",
+            "ecb5fa00abcd.local.",
+            ip,
+            Vec::new(),
+        );
+
+        let candidate = parse_hue_service_info(info)
+            .expect("fallback should return Some even with leading-whitespace id");
+
+        // As-is: id has leading space. When this becomes "ABCDEF" (no space), update this test.
+        assert_eq!(candidate.id, " ABCDEF",
+            "as-is: leading whitespace retained in id fallback — update this assertion when \
+             trim() is added to the id derivation path");
+    }
+
+    /// Scenario 3: No IPv4 address → None.
+    ///
+    /// `get_addresses_v4()` returns an empty set when only IPv6 addresses
+    /// are present. The hostname-as-IP fallback also fails (hostname is not
+    /// a bare IPv4 literal). Both paths exhausted → `None`.
+    #[test]
+    fn parse_hue_service_info_no_ipv4_address_returns_none() {
+        use std::net::Ipv6Addr;
+
+        let info = ServiceInfo::new(
+            "_hue._tcp.local.",
+            "Philips Hue - 001234",
+            "ecb5fa001234.local.",
+            IpAddr::V6(Ipv6Addr::new(0xfe80, 0, 0, 0, 0, 0, 0, 1)),
+            443,
+            txt_with_bridgeid("001788FFFE001234"),
+        )
+        .expect("ServiceInfo::new should accept an IPv6 address")
+        .as_resolved_service();
+
+        assert!(
+            parse_hue_service_info(info).is_none(),
+            "should return None when only IPv6 addresses are resolved"
+        );
+    }
+
+    /// Scenario 4 — domain agnosticism (as-is behaviour, not a bug fix).
+    ///
+    /// `parse_hue_service_info` does NOT validate `ty_domain`. It relies on
+    /// the caller (`browse_hue_bridges`) to filter events by service type.
+    /// A non-Hue service with a dash-containing instance name and an IPv4
+    /// address therefore yields `Some(candidate)`.
+    ///
+    /// This test documents that contract so a future domain-guard addition
+    /// produces a reviewable diff rather than a silent regression.
+    #[test]
+    fn parse_hue_service_info_non_hue_domain_parses_if_ip_and_id_derivable() {
+        let info = make_service_with_type(
+            "_other._tcp.local.",
+            "Device-XYZABC",
+            "device.local.",
+            Ipv4Addr::new(10, 0, 0, 1),
+        );
+
+        assert!(
+            parse_hue_service_info(info).is_some(),
+            "as-is: no ty_domain guard — non-hue service with derivable id yields Some"
+        );
+    }
+
+    /// Scenario 5a: whitespace-only instance + TXT bridgeid → `name = "Hue Bridge"` default.
+    ///
+    /// When the fullname strips to an empty or whitespace-only string, the
+    /// name defaults to `"Hue Bridge"`. A single-space instance name is the
+    /// minimal reproducible case: `" ._hue._tcp.local."` → strip suffix →
+    /// `" "` → `trim()` → `""` → default.
+    #[test]
+    fn parse_hue_service_info_whitespace_instance_with_txt_bridgeid_uses_default_name() {
+        let ip = Ipv4Addr::new(192, 168, 1, 1);
+        let info = make_hue_service(
+            " ",
+            "bridge.local.",
+            ip,
+            txt_with_bridgeid("001788FFFE999999"),
+        );
+
+        let candidate = parse_hue_service_info(info)
+            .expect("TXT bridgeid present; should return Some despite whitespace instance");
+
+        assert_eq!(candidate.name, "Hue Bridge",
+            "whitespace-only instance must trigger the 'Hue Bridge' name default");
+        assert_eq!(candidate.id, "001788FFFE999999");
+    }
+
+    /// Regression guard: `bridgeid` from TXT must be uppercased unconditionally.
+    ///
+    /// The cloud discovery path already uppercases IDs. If this function drifts
+    /// and stops uppercasing, `browse_hue_bridges` dedup creates duplicate entries
+    /// (one lower-case mDNS, one upper-case cloud) for the same physical bridge.
+    #[test]
+    fn parse_hue_service_info_txt_bridgeid_always_uppercased() {
+        let ip = Ipv4Addr::new(172, 16, 0, 1);
+        let info = make_hue_service(
+            "Bridge",
+            "bridge.local.",
+            ip,
+            txt_with_bridgeid("aabbccddeeff1122"),
+        );
+
+        let candidate = parse_hue_service_info(info)
+            .expect("valid service with TXT bridgeid must produce Some");
+
+        assert_eq!(candidate.id, "AABBCCDDEEFF1122",
+            "TXT bridgeid must be uppercased to match cloud-discovery dedup key");
     }
 }
