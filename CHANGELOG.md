@@ -7,6 +7,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- Frontend `console.*` calls are now bridged to `tauri-plugin-log`'s file sink: the same `[webview]` records that appear in DevTools are written alongside `[lumasync_lib::*]` entries in the platform log file (`~/Library/Logs/com.lumasync.app/` on macOS), so runtime debugging no longer requires an open DevTools window.
+
 ### Security
 
 - WLED IP validation hardened: parsable IPv4 inputs that resolve to loopback (127.0.0.0/8), unspecified (0.0.0.0), multicast (224.0.0.0/4), or broadcast (255.255.255.255) addresses are now rejected with `WLED_INVALID_IP`, layered on top of v1.5.1's parser-level SSRF guard.
@@ -14,7 +18,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
-- macOS dev launch (`pnpm tauri dev` / `cargo run`) silently exited within ~50 ms of process start, leaving Web Inspector connected to a frontend that was driving a backend that had already torn itself down. Root cause: `tauri-plugin-single-instance` v2.4.x exits the process during init on unbundled binaries — diagnosed by a plugin-isolation pass where every other plugin enabled never reached `setup`, but disabling this one alone let the tray build and the main window show. The plugin's "second instance" detector appears to misclassify lingering `NSWorkspace.runningApplications` entries from previous unbundled runs as live siblings (zombie processes that launchd had not yet reaped). The plugin is now registered only in `cfg(not(debug_assertions))` builds — the single-instance contract still applies to shipped releases (which is where it matters for tray-first UX), and dev mode skips it.
+- macOS Cmd+Q and dev-mode launches are now reliably stable across two previously distinct failure paths. The initial fix unified Cmd+Q, tray Quit, and Ctrl+C onto a single `kick_off_shutdown_and_die` path guarded by `SHUTDOWN_FIRED`; a follow-up corrected two regressions that surfaced after the rewrite: (1) the watchdog fires `std::process::exit(0)`, which bypasses Tauri plugin `destroy()` callbacks — `tauri-plugin-single-instance` therefore leaked `/tmp/com_lumasync_app_si.sock` on each watchdog exit and the next dev launch exited within ~50 ms on detecting the stale socket; the `#[cfg(not(debug_assertions))]` guard is restored so the plugin remains release-only. (2) `stop_hue_stream` blocked for up to 8 s under realistic conditions (5 s `reqwest` timeout + 3 s DTLS sender Condvar), blowing through the 4 s watchdog; it is now detached onto a worker thread and abandoned after 1.5 s, which is safe because the bridge times out the entertainment session server-side anyway.
+- Non-USB serial port types (Bluetooth, PCI, Unknown) are now rejected with `PORT_UNSUPPORTED` before `serialport::open()` is called. Previously, opening `/dev/cu.Bluetooth-Incoming-Port` on macOS succeeded at the OS level and silently accepted writes — the backend logged 20 Hz solid frames while the LED strip stayed dark, making the failure indistinguishable from an app crash.
+- Boot output-target recovery overhauled across three interrelated regressions: persisted `[]` targets were unconditionally overwritten with `DEFAULT_OUTPUT_TARGETS` on every launch (so an auto-deselected USB port would resurrect itself and immediately trip `DEVICE_NOT_CONNECTED` again); the `PORT_UNSUPPORTED` subscriber now auto-adds Hue when a bridge is paired and Hue was not already active; and a second boot path fixed the case where `currentTargets` was already `[]` before the subscriber ran, leaving paired-Hue users stranded in a permanent OFF state on every restart.
 - WLED discovery / connect / test wire mismatch: response and request payload shapes between the Rust backend and the React layer were misaligned, so the picker rendered as silently empty and the Connect / Test buttons failed with `MissingField`. Aligned all three command pairs; `WledTestResponse` now reports a real round-trip in milliseconds. Manual-IP discovery also routes its `ip` parameter under the correct payload key.
 - Output-target delta-stop no longer drops a chip from active membership when the underlying `stop_lighting` / `stop_hue_stream` invoke fails. The chip stays active so the user can retry, and a transient banner explains which target needs attention. Previously the UI lied about state while the backend stream was still alive — the surface that produced the Hue stale-session 403 observed in v1.5.x dogfooding.
 - Reject WLED connect requests carrying `led_count == 0` with a coded `WLED_INVALID_LED_COUNT` instead of letting the downstream pipeline drift into an inconsistent state.
@@ -22,8 +28,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
-- `release.yml` now runs the same Rust hardening gate as `ci.yml` before any tag-triggered build (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`), closing the gap that previously let formatting / lint regressions slip into a release artefact even though pull-request CI rejected them.
+- `release.yml` now runs the same Rust hardening gate as `ci.yml` before any tag-triggered build (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --all-features`), closing the gap that previously let formatting / lint regressions slip into a release artefact and silently skipped integration tests under `src-tauri/tests/` by scoping to `--lib` only.
 - `SECURITY.md` clarifies that the runtime `rand` 0.8.x and 0.9.x paths were bumped in v1.5.1; only the build-only 0.7.3 path remains documented as `not_used`.
+- Rust deps: `mdns-sd` 0.13.11 → 0.19.1 (major); `ResolvedService` surface adapted in the mDNS registry.
 
 ## [1.5.1] — 2026-05-01
 
