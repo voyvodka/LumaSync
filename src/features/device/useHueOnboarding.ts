@@ -32,7 +32,23 @@ const IPV4_PATTERN =
 type HueStep = "discover" | "pair" | "area" | "ready";
 const READINESS_STALE_MS = 30_000;
 const READINESS_BACKGROUND_REFRESH_MS = 15_000;
-const RUNTIME_POLL_INTERVAL_MS = 3_000;
+// Backend `spawn_reconnect_monitor` (`src-tauri/src/commands/hue/reconnect.rs`)
+// already polls the DTLS sender's shutdown signal every 200 ms and flips the
+// runtime state on its own — this frontend poll is a visual-reflection
+// concern only, so a tight 3 s cadence is wasteful HTTPS traffic to the
+// Bridge while the stream is alive. 10 s keeps the Devices-tab badge fresh
+// without piling redundant readiness GETs onto the live DTLS frame stream.
+const RUNTIME_POLL_INTERVAL_MS = 10_000;
+// Runtime states for which polling makes sense — the stream is alive (or
+// trying to be), so the readiness probe / dead-sender check carry signal.
+// In Idle / Stopping / Failed the backend snapshot is fully owned by the
+// state machine; redundant polling just churns IPC and causes pointless
+// Devices-tab re-renders.
+const STREAMING_RUNTIME_STATES = new Set<HueRuntimeStatus["state"]>([
+  "Starting",
+  "Running",
+  "Reconnecting",
+]);
 
 export interface HueAreaReadiness {
   ready: boolean;
@@ -916,27 +932,68 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     }
   }, []);
 
+  // Runtime-status loop. Two concerns share one effect:
+  //   1) "What's the bridge doing right now?" — fired on mount and on every
+  //      runtime-state change so the Devices tab always opens with a fresh
+  //      answer without a polling delay.
+  //   2) Streaming health watch — recursive setTimeout at
+  //      `RUNTIME_POLL_INTERVAL_MS` cadence, but ONLY while the runtime is
+  //      `Starting` / `Running` / `Reconnecting`. Idle / Stopping / Failed
+  //      get the mount tick and then go silent.
+  // Visibility-aware: the loop pauses while `document.visibilityState` is
+  // `hidden` (tray window collapsed / minimised) and re-arms with an
+  // immediate tick on `visibilitychange`, mirroring `useRuntimeTelemetry`.
+  const runtimeState = runtimeStatus?.state ?? null;
   useEffect(() => {
-    let active = true;
+    let mounted = true;
+    let timeoutId: number | null = null;
+    let inFlight = false;
 
-    const run = async () => {
-      if (!active) {
-        return;
+    const isStreaming = runtimeState !== null && STREAMING_RUNTIME_STATES.has(runtimeState);
+
+    const tick = async () => {
+      if (!mounted) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        await pollRuntimeStatus();
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
-      await pollRuntimeStatus();
     };
 
-    void run();
+    const scheduleNext = () => {
+      if (!mounted) return;
+      if (!isStreaming) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, RUNTIME_POLL_INTERVAL_MS);
+    };
 
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, RUNTIME_POLL_INTERVAL_MS);
+    const handleVisibilityChange = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      active = false;
-      window.clearInterval(intervalId);
+      mounted = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [pollRuntimeStatus]);
+  }, [pollRuntimeStatus, runtimeState]);
 
   const startRuntime = useCallback(async () => {
     if (isRuntimeMutating || !selectedBridge || !state.credentials || !state.selectedAreaId) {

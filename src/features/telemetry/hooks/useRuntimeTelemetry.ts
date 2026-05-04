@@ -62,16 +62,30 @@ function projectSnapshot(dto: FullTelemetrySnapshot): RuntimeTelemetrySnapshot {
  * - Pauses automatically while `document.visibilityState === "hidden"` so
  *   the tray window does not burn CPU while the user is focused elsewhere.
  *   Resumes on the next `visibilitychange` event.
+ * - When `enabled === false` the hook holds the `INITIAL_SNAPSHOT` and
+ *   issues no `invoke()` calls. Flipping `enabled` back to `true` re-mounts
+ *   the effect (it lives in the dependency array) which kicks off a fresh
+ *   immediate tick — useful when the lighting mode is OFF and there is no
+ *   possibility of meaningful frames flowing yet.
  * - Every mount/unmount cleans up both the pending timeout and the
  *   visibility listener; a re-mount therefore starts a single fresh poll
  *   loop, matching the TelemetrySection StrictMode guarantee.
  */
 export function useRuntimeTelemetry(
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
+  enabled: boolean = true,
 ): RuntimeTelemetrySnapshot {
   const [snapshot, setSnapshot] = useState<RuntimeTelemetrySnapshot>(INITIAL_SNAPSHOT);
 
   useEffect(() => {
+    if (!enabled) {
+      // Reset to the inactive placeholder so consumers that read the
+      // snapshot after a mode-off transition do not keep stale FPS values
+      // on screen.
+      setSnapshot(INITIAL_SNAPSHOT);
+      return;
+    }
+
     let mounted = true;
     // Pending re-arm timer. Non-null means "a poll is scheduled"; `inFlight`
     // means "a poll is currently awaiting its invoke()". At most one of the
@@ -136,7 +150,7 @@ export function useRuntimeTelemetry(
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [pollIntervalMs]);
+  }, [pollIntervalMs, enabled]);
 
   return snapshot;
 }

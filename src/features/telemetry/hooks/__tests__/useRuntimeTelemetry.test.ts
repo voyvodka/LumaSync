@@ -137,6 +137,43 @@ describe("useRuntimeTelemetry", () => {
     clearTimeoutSpy.mockRestore();
   });
 
+  it("does not invoke the backend while enabled is false and resumes when flipped to true", async () => {
+    vi.useFakeTimers();
+    const { rerender, result } = renderHook(
+      ({ enabled }: { enabled: boolean }) => useRuntimeTelemetry(1000, enabled),
+      { initialProps: { enabled: false } },
+    );
+
+    // Disabled mount: the effect short-circuits before scheduling a tick.
+    await act(async () => {
+      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(2000);
+      await flushMicrotasks();
+    });
+    expect(getFullTelemetrySnapshotMock).not.toHaveBeenCalled();
+    expect(result.current.fps).toBeNull();
+
+    // Flip to enabled — the effect remounts, fires an immediate tick, and
+    // surfaces the projected snapshot to consumers.
+    rerender({ enabled: true });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+    expect(result.current.fps).toBe(60);
+
+    // Flip back to disabled — the snapshot resets to the inactive
+    // placeholder and the loop stops issuing further invokes.
+    rerender({ enabled: false });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+      await flushMicrotasks();
+    });
+    expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
+    expect(result.current.fps).toBeNull();
+    expect(result.current.frameDrops).toBe(0);
+  });
+
   it("projects captureFps=0 as fps=null so consumers render the inactive placeholder", async () => {
     getFullTelemetrySnapshotMock.mockResolvedValue(
       makeSnapshot({ captureFps: 0, sendFps: 0, frameLatencyMs: 0 }),

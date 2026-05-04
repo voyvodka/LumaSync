@@ -74,13 +74,21 @@ export interface StatusItem {
 interface StatusBarProps {
   items: StatusItem[];
   uiMode: "full" | "compact";
+  /**
+   * Whether lighting is currently active (mode is not OFF). Drives the
+   * FPS pill telemetry poll: when `false`, the hook holds its inactive
+   * placeholder and issues no IPC calls — there are no frames flowing,
+   * so there is nothing meaningful to surface. Defaults to `true` for
+   * tests / consumers that have not yet wired the signal.
+   */
+  lightingActive?: boolean;
 }
 
 /** Fixed FPS thresholds — the user explicitly rejected a per-user preference. */
 const FPS_GREEN_THRESHOLD = 45;
 const FPS_AMBER_THRESHOLD = 25;
 
-export function StatusBar({ items, uiMode }: StatusBarProps) {
+export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarProps) {
   const { t } = useTranslation("common");
   const isCompact = uiMode === "compact";
   const platform = useMemo(() => resolveKeybindPlatform(), []);
@@ -113,7 +121,7 @@ export function StatusBar({ items, uiMode }: StatusBarProps) {
       {items.map((item) => (
         <StatusPill key={item.label} item={item} />
       ))}
-      <FpsPill isCompact={isCompact} />
+      <FpsPill isCompact={isCompact} enabled={lightingActive} />
       <div className="lm-statusbar-spacer" />
       {!isCompact && (
         <>
@@ -206,11 +214,18 @@ function ReconnectIcon() {
  */
 interface FpsPillProps {
   isCompact: boolean;
+  /**
+   * `false` when lighting is OFF — the underlying hook then suspends its
+   * 1 Hz poll and the pill renders the inactive `—` placeholder. As soon
+   * as the user flips into Ambilight or Solid this becomes `true` and
+   * the hook re-arms with an immediate first tick.
+   */
+  enabled: boolean;
 }
 
-function FpsPill({ isCompact }: FpsPillProps) {
+function FpsPill({ isCompact, enabled }: FpsPillProps) {
   const { t } = useTranslation("common");
-  const snapshot = useRuntimeTelemetry();
+  const snapshot = useRuntimeTelemetry(undefined, enabled);
 
   const fps = snapshot.fps;
   const latencyMs = snapshot.latencyMs;

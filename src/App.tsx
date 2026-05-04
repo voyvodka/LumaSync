@@ -638,32 +638,70 @@ function App() {
   // configured but stream is NOT active. Updates hueReachable so the chip
   // accurately reflects whether the bridge is currently on the same network.
   // While hue is streaming we skip polling — the active stream is proof enough.
+  //
+  // Visibility-aware (recursive setTimeout, not setInterval): the tray
+  // window can be hidden indefinitely with the React tree mounted, so
+  // unconditional 30 s ticks would keep firing HTTPS Bridge requests
+  // nobody can see. The loop pauses while hidden and resumes with an
+  // immediate first tick on `visibilitychange` so the chip refreshes
+  // instantly when the user re-opens the window.
   // ---------------------------------------------------------------------------
   const hueStreaming = activeOutputTargets.includes("hue");
   useEffect(() => {
     if (!hueStartConfig || hueStreaming) return;
 
-    let active = true;
+    let mounted = true;
+    let timeoutId: number | null = null;
+    let inFlight = false;
 
-    const poll = async () => {
-      if (!active) return;
+    const tick = async () => {
+      if (!mounted) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
         const validation = await validateHueCredentials(
           hueStartConfig.bridgeIp,
           hueStartConfig.username,
           hueStartConfig.clientKey,
         );
-        if (!active) return;
+        if (!mounted) return;
         setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
       } catch {
-        if (active) setHueReachable(false);
+        if (mounted) setHueReachable(false);
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
     };
 
-    const intervalId = window.setInterval(() => { void poll(); }, HUE_BRIDGE_REACHABILITY_POLL_MS);
+    const scheduleNext = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, HUE_BRIDGE_REACHABILITY_POLL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
-      active = false;
-      window.clearInterval(intervalId);
+      mounted = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [hueStartConfig, hueStreaming]);
 
@@ -1904,7 +1942,11 @@ function App() {
           <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
         </div>
       </div>
-      <StatusBar items={statusItems} uiMode={currentMode} />
+      <StatusBar
+        items={statusItems}
+        uiMode={currentMode}
+        lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
+      />
       <UpdateModal
         state={updaterState}
         onInstall={downloadAndInstall}

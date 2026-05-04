@@ -83,9 +83,9 @@ describe("TelemetrySection", () => {
     expect(screen.getByText("Healthy")).toBeInTheDocument();
   });
 
-  it("cleans polling interval on unmount and does not duplicate interval after remount", async () => {
+  it("cleans the pending poll on unmount and does not leak ticks after remount", async () => {
     vi.useFakeTimers();
-    const clearIntervalSpy = vi.spyOn(globalThis, "clearInterval");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
     const firstRender = render(<TelemetrySection usbConnected={true} />);
 
     await act(async () => {
@@ -96,6 +96,8 @@ describe("TelemetrySection", () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
 
@@ -105,7 +107,7 @@ describe("TelemetrySection", () => {
       await vi.advanceTimersByTimeAsync(4000);
     });
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
-    expect(clearIntervalSpy).toHaveBeenCalled();
+    expect(clearTimeoutSpy).toHaveBeenCalled();
 
     render(<TelemetrySection usbConnected={true} />);
     await act(async () => {
@@ -116,10 +118,12 @@ describe("TelemetrySection", () => {
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(4);
 
-    clearIntervalSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
   });
 
   it("renders Hue Stream section when hue telemetry is present", async () => {
