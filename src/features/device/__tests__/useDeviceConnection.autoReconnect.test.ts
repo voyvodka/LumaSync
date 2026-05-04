@@ -17,7 +17,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createConnectionEventBus, type ConnectionEvent } from "../connectionEvents";
-import type { SerialPortListResponse } from "../deviceConnectionApi";
+import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
 import { createDeviceConnectionController } from "../useDeviceConnection";
 
 // ---------------------------------------------------------------------------
@@ -60,9 +60,7 @@ const SUPPORTED_PORT: SerialPortListResponse["ports"][number] = {
 function makeController(
   persistedPort: string,
   portInScan: SerialPortListResponse["ports"][number],
-  connectResult: Awaited<ReturnType<ReturnType<typeof createDeviceConnectionController>["initialize"]>> extends void
-    ? never
-    : object,
+  connectResult: SerialConnectionStatus,
   bus = createConnectionEventBus(),
 ) {
   const connectSerialPort = vi.fn().mockResolvedValue(connectResult);

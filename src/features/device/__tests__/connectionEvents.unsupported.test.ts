@@ -8,7 +8,7 @@
  * No React, no mocks — the bus is a pure in-process pub-sub module.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   createConnectionEventBus,

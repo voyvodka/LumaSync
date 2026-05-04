@@ -548,8 +548,7 @@ pub fn run() {
                     //   magick tray-icon@2x.png -depth 8 RGBA:tray-icon@2x.rgba
                     // We embed the raw form so we can hand it directly to
                     // `Image::new` without dragging in a PNG decoder at runtime.
-                    const TRAY_ICON_RGBA: &[u8] =
-                        include_bytes!("../icons/tray-icon@2x.rgba");
+                    const TRAY_ICON_RGBA: &[u8] = include_bytes!("../icons/tray-icon@2x.rgba");
                     const TRAY_ICON_DIM: u32 = 44;
                     base.icon(tauri::image::Image::new(
                         TRAY_ICON_RGBA,
