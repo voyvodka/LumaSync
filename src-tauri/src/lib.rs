@@ -517,36 +517,45 @@ pub fn run() {
 
             // Build tray icon.
             //
-            // macOS sizing & spacing: NSStatusItem expects a ~22pt template
-            // image. Without `icon_as_template(true)` the supplied bundle
-            // icon is drawn as a regular (full-colour) image and macOS
-            // letterboxes it into the status slot — visually it appears
-            // smaller than neighbouring items and produces extra padding
-            // on either side. Setting the template flag makes AppKit treat
-            // the alpha channel as a mask, auto-tint for light/dark mode,
-            // and align to the menu-bar baseline like every other tray
-            // item.
+            // macOS sizing, spacing & silhouette: NSStatusItem expects a
+            // ~22pt template image. The default window icon is the
+            // bundle's full-colour rounded-square (opaque dark background
+            // + yellow slash); under template-image masking only its
+            // alpha channel matters, so it would render as a solid white
+            // square in the menu bar. We instead embed a dedicated
+            // pre-built monochrome silhouette of the slash glyph at 44x44
+            // (Retina-friendly; AppKit downscales to 22pt on non-Retina)
+            // and set `icon_as_template(true)` so AppKit treats the
+            // alpha as a mask and auto-tints for light/dark menu bar.
             //
-            // NOTE: the current `default_window_icon` is the full-colour
-            // app bundle icon (rounded-square + slash on opaque dark
-            // background). When rendered as a template image only its
-            // alpha mask is used, so the silhouette comes out as a solid
-            // square. A dedicated monochrome silhouette asset
-            // (`icons/tray-icon.png`, see CHANGELOG / README note) should
-            // be loaded here once available; until then the flag at least
-            // restores correct sizing and baseline so the icon no longer
-            // looks "small + detached" relative to the menu bar.
+            // The asset is `include_bytes!`'d at compile time so the
+            // tray works whether or not the running binary can resolve
+            // its bundle resources directory at runtime.
             //
-            // Linux/Windows are intentionally untouched: the template flag
-            // is macOS-only and both other platforms expect a full-colour
-            // tray icon.
+            // Linux & Windows are intentionally untouched: both expect a
+            // full-colour tray icon and the template flag is macOS-only.
             let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .tooltip("LumaSync");
             #[cfg(target_os = "macos")]
             {
-                tray_builder = tray_builder.icon_as_template(true);
+                // Pre-decoded RGBA bytes for `tray-icon@2x.png` (44x44).
+                // The companion PNG lives at `icons/tray-icon@2x.png`; the
+                // raw RGBA copy is generated from it via:
+                //   magick tray-icon@2x.png -depth 8 RGBA:tray-icon@2x.rgba
+                // We embed the raw form so we can hand it directly to
+                // `Image::new` without dragging in a PNG decoder at runtime.
+                const TRAY_ICON_RGBA: &[u8] =
+                    include_bytes!("../icons/tray-icon@2x.rgba");
+                const TRAY_ICON_DIM: u32 = 44;
+                tray_builder = tray_builder
+                    .icon(tauri::image::Image::new(
+                        TRAY_ICON_RGBA,
+                        TRAY_ICON_DIM,
+                        TRAY_ICON_DIM,
+                    ))
+                    .icon_as_template(true);
             }
             tray_builder
                 // Left-click on tray icon → open/focus settings
