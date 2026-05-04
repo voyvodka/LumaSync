@@ -195,15 +195,16 @@ export function PropertyBar({
 
         {/* Aspect lock toggle */}
         <button
-          className={`flex items-center justify-center w-5 h-5 rounded transition-colors ${
+          className={`flex items-center justify-center w-8 h-8 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 ${
             locked
-              ? "opacity-40 cursor-not-allowed text-zinc-600"
+              ? "opacity-40 cursor-not-allowed text-[var(--lm-ink-faint)]"
               : fields.aspectLocked
-                ? "text-amber-500"
-                : "text-zinc-500 hover:text-zinc-300"
+                ? "text-[var(--lm-amber)]"
+                : "text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)]"
           }`}
           onClick={locked ? undefined : () => onUpdateImageAspectLock?.(imgId, !fields.aspectLocked)}
           disabled={locked}
+          aria-label={fields.aspectLocked ? t("roomMap.propertyBar.aspectLocked") : t("roomMap.propertyBar.aspectUnlocked")}
           title={fields.aspectLocked ? t("roomMap.propertyBar.aspectLocked") : t("roomMap.propertyBar.aspectUnlocked")}
         >
           {fields.aspectLocked ? <IconLock /> : <IconUnlock />}
@@ -243,13 +244,14 @@ export function PropertyBar({
 
         {/* Reset to original size */}
         <button
-          className={`flex items-center justify-center w-5 h-5 rounded transition-colors ${
+          className={`flex items-center justify-center w-8 h-8 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 ${
             locked
-              ? "opacity-40 cursor-not-allowed text-zinc-600"
-              : "text-zinc-500 hover:text-zinc-200"
+              ? "opacity-40 cursor-not-allowed text-[var(--lm-ink-faint)]"
+              : "text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)]"
           }`}
           onClick={locked ? undefined : () => onResetImageScale?.(imgId)}
           disabled={locked}
+          aria-label={t("roomMap.propertyBar.resetScale")}
           title={t("roomMap.propertyBar.resetScale")}
         >
           <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -273,9 +275,9 @@ export function PropertyBar({
             disabled={locked}
             value={parseInt(fields.opacity!, 10)}
             onChange={(e) => onUpdateImageOpacity?.(imgId, parseInt(e.target.value, 10))}
-            className="w-12 h-[3px] appearance-none rounded-full bg-zinc-700 accent-amber-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
+            className="w-12 h-[3px] appearance-none rounded-full bg-[var(--lm-line-2)] accent-[var(--lm-amber)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--lm-amber)] [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
           />
-          <span className="w-5 text-right tabular-nums text-[9px] font-medium text-zinc-300">{fields.opacity}</span>
+          <span className="w-5 text-right tabular-nums text-[9px] font-medium text-[var(--lm-ink-dim)]">{fields.opacity}</span>
         </div>
       </div>
     );

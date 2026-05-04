@@ -76,23 +76,25 @@ export function HueZonePropertiesPanel({ zone, onUpdate }: HueZonePropertiesPane
 
   return (
     <div
-      className="flex flex-col gap-2 border-t border-zinc-800 bg-zinc-900/90 px-3 py-2"
+      className="flex flex-col gap-2 border-t border-[var(--lm-line)] bg-[var(--lm-panel)]/90 px-3 py-2"
       role="group"
       aria-label={t("roomMap.zoneProperties.title")}
     >
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--lm-ink-faint)]">
           {t("roomMap.zoneProperties.title")}
         </span>
-        <span className="truncate text-[10px] text-zinc-400">{zone.name}</span>
+        <span className="truncate text-[10px] text-[var(--lm-ink-dim)]">{zone.name}</span>
       </div>
 
-      <span className="text-[10px] font-semibold text-zinc-300">
+      <span className="text-[10px] font-semibold text-[var(--lm-ink)]">
         {t("roomMap.zoneProperties.color")}
       </span>
 
-      {/* Quick palette */}
-      <div className="flex flex-wrap gap-1.5" role="list">
+      {/* Quick palette — 32x32 transparent hit zone with a 20x20 visual swatch
+          inside. The hit zone wrapper preserves the 32px tap floor while the
+          inner swatch keeps the 180px panel compact. */}
+      <div className="flex flex-wrap gap-1" role="list">
         {ZONE_PALETTE.map((swatch) => (
           <button
             key={swatch.name}
@@ -100,10 +102,15 @@ export function HueZonePropertiesPanel({ zone, onUpdate }: HueZonePropertiesPane
             role="listitem"
             title={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
             aria-label={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
-            className="h-5 w-5 rounded border border-zinc-700 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
-            style={{ background: swatch.cssVar }}
+            className="h-8 w-8 flex items-center justify-center rounded transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60"
             onClick={() => setBorder(swatch.hex)}
-          />
+          >
+            <span
+              className="h-5 w-5 rounded border border-[var(--lm-line-2)]"
+              style={{ background: swatch.cssVar }}
+              aria-hidden
+            />
+          </button>
         ))}
       </div>
 

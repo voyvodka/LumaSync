@@ -164,11 +164,16 @@ function ImageLayerView({
   const imgW = naturalSize ? naturalSize.w * localSx : 0;
   const imgH = naturalSize ? naturalSize.h * localSy : 0;
 
-  const CORNER_CLASSES: Record<ResizeCorner, string> = {
-    nw: "top-[-4px] left-[-4px] cursor-nwse-resize",
-    ne: "top-[-4px] right-[-4px] cursor-nesw-resize",
-    sw: "bottom-[-4px] left-[-4px] cursor-nesw-resize",
-    se: "bottom-[-4px] right-[-4px] cursor-nwse-resize",
+  // Wrapper positions a 32x32 transparent hit zone so the pointer target
+  // meets the a11y tap-target floor. The visible 8x8 handle (rendered as a
+  // child) stays centered on the parent corner via `top/left -16px`.
+  // a11y-exception: canvas resize handles, expert pattern — visible handle
+  // intentionally stays 8x8 so it does not occlude the underlying image.
+  const HIT_ZONE_CLASSES: Record<ResizeCorner, string> = {
+    nw: "top-[-16px] left-[-16px] cursor-nwse-resize",
+    ne: "top-[-16px] right-[-16px] cursor-nesw-resize",
+    sw: "bottom-[-16px] left-[-16px] cursor-nesw-resize",
+    se: "bottom-[-16px] right-[-16px] cursor-nwse-resize",
   };
   const cornerKeys: ResizeCorner[] = ["nw", "ne", "sw", "se"];
 
@@ -203,15 +208,23 @@ function ImageLayerView({
         onPointerUp={handlePointerUp}
         onWheel={handleWheel}
       />
-      {/* Resize corner handles — same style as Furniture/TV ResizeHandle */}
+      {/* Resize corner handles — same style as Furniture/TV ResizeHandle.
+          The outer div is a 32x32 transparent hit zone (a11y tap-target);
+          the inner span renders the visible 8x8 handle centered on the
+          parent corner. */}
       {selected && canDrag && naturalSize && cornerKeys.map((key) => (
         <div
           key={key}
-          className={`absolute h-2 w-2 rounded-sm border border-zinc-100 bg-zinc-950 ${CORNER_CLASSES[key]}`}
+          className={`absolute h-8 w-8 ${HIT_ZONE_CLASSES[key]}`}
           onPointerDown={(e) => handleResizePointerDown(key, e)}
           onPointerMove={handleResizePointerMove}
           onPointerUp={handleResizePointerUp}
-        />
+        >
+          <span
+            className="pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-[var(--lm-ink)] bg-[var(--lm-bg)]"
+            aria-hidden
+          />
+        </div>
       ))}
     </div>
   );
@@ -458,7 +471,7 @@ export function RoomMapCanvas({
         // input fields inside `RoomDockPanel` are unaffected — they
         // mount outside this root and keep their native selection
         // behaviour.
-        className={`select-none relative w-full h-full overflow-hidden bg-zinc-950 ${spaceHeld ? "cursor-grab" : ""}`}
+        className={`select-none relative w-full h-full overflow-hidden bg-[var(--lm-bg)] ${spaceHeld ? "cursor-grab" : ""}`}
         onClick={handleBackgroundClick}
         onWheel={handleCanvasWheel}
         onPointerDown={handleCanvasPointerDown}

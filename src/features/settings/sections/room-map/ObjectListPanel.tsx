@@ -44,12 +44,14 @@ interface ObjectListPanelProps {
   addHueZoneDisabledTooltip?: string;
 }
 
+// Per-object identity swatch colors (5-10 px dots, not chrome). These are
+// domain markers, not surface tokens, so the palette utilities stay.
 const TYPE_COLORS: Record<ObjectEntry["type"], string> = {
   tv: "bg-violet-500",
   furniture: "bg-amber-500",
   usb: "bg-cyan-500",
   hue: "bg-white border border-zinc-400",
-  image: "bg-zinc-9000",
+  image: "bg-zinc-800",
 };
 
 function buildObjectList(
@@ -148,8 +150,8 @@ function ObjectRow({
         "flex items-center gap-1.5 cursor-pointer rounded text-[11px] group",
         indented ? "px-1.5 py-0.5" : "px-2 py-1",
         selected
-          ? "bg-zinc-800 text-zinc-100"
-          : "text-zinc-300 hover:bg-zinc-800/50",
+          ? "bg-[var(--lm-panel-2)] text-[var(--lm-ink)]"
+          : "text-[var(--lm-ink-dim)] hover:bg-[var(--lm-panel-2)]/50",
       ].join(" ")}
       onClick={onSelect}
     >
@@ -163,7 +165,7 @@ function ObjectRow({
       {editing ? (
         <input
           autoFocus
-          className="bg-transparent border-b border-zinc-600 text-[11px] focus:outline-none focus:border-amber-400 flex-1 min-w-0"
+          className="bg-transparent border-b border-[var(--lm-line-2)] text-[11px] focus:outline-none focus:border-[var(--lm-amber)] flex-1 min-w-0"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={handleCommit}
@@ -180,7 +182,7 @@ function ObjectRow({
       )}
       {onToggleLock && (
         <button
-          className="text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 rounded transition-opacity hover:text-zinc-200"
+          className="min-h-8 min-w-8 flex items-center justify-center text-[var(--lm-ink-faint)] text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 rounded transition-opacity hover:text-[var(--lm-ink)]"
           aria-label={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
           title={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
           onClick={(e) => { e.stopPropagation(); onToggleLock(); }}
@@ -200,7 +202,7 @@ function ObjectRow({
       )}
       {!entry.locked && (
         <button
-          className="text-zinc-500 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 rounded transition-opacity hover:text-red-400"
+          className="min-h-8 min-w-8 flex items-center justify-center text-[var(--lm-ink-faint)] text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 rounded transition-opacity hover:text-[var(--lm-red)]"
           aria-label={t("roomMap.objectPanel.delete")}
           onClick={(e) => {
             e.stopPropagation();
@@ -240,7 +242,7 @@ function ZoneTab({
   return (
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {zones.length === 0 ? (
-        <p className="text-[10px] text-zinc-500 py-3 text-center">
+        <p className="text-[10px] text-[var(--lm-ink-faint)] py-3 text-center">
           {t("roomMap.zones.emptyPanel")}
         </p>
       ) : (
@@ -254,8 +256,8 @@ function ZoneTab({
                 className={[
                   "flex items-center gap-1.5 px-2 py-1 cursor-pointer rounded text-[11px] group",
                   isActive
-                    ? "bg-zinc-800 text-zinc-100"
-                    : "text-zinc-300 hover:bg-zinc-800/50",
+                    ? "bg-[var(--lm-panel-2)] text-[var(--lm-ink)]"
+                    : "text-[var(--lm-ink-dim)] hover:bg-[var(--lm-panel-2)]/50",
                 ].join(" ")}
                 onClick={() => onSelectZone(isActive ? null : zone.id)}
               >
@@ -263,7 +265,7 @@ function ZoneTab({
                 {isEditing ? (
                   <input
                     autoFocus
-                    className="bg-transparent border-b border-zinc-600 text-[11px] focus:outline-none focus:border-amber-400 flex-1 min-w-0"
+                    className="bg-transparent border-b border-[var(--lm-line-2)] text-[11px] focus:outline-none focus:border-[var(--lm-amber)] flex-1 min-w-0"
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onBlur={() => handleCommitEdit(zone, zoneIndex)}
@@ -281,11 +283,12 @@ function ZoneTab({
                     {zone.name}
                   </span>
                 )}
-                <span className="text-[9px] text-zinc-500 shrink-0">
+                <span className="text-[9px] text-[var(--lm-ink-faint)] shrink-0">
                   {zone.channelIndices.length}
                 </span>
                 <button
-                  className="text-zinc-500 hover:text-red-400 text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity rounded"
+                  className="min-h-8 min-w-8 flex items-center justify-center text-[var(--lm-ink-faint)] hover:text-[var(--lm-red)] text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 transition-opacity rounded"
+                  aria-label={t("roomMap.objectPanel.delete")}
                   onClick={(e) => { e.stopPropagation(); onDeleteZone(zone.id); }}
                 >
                   ×
@@ -296,7 +299,7 @@ function ZoneTab({
         </ul>
       )}
       <button
-        className="mt-1 w-full text-[10px] text-zinc-400 hover:text-zinc-200 py-1 transition-colors"
+        className="mt-1 w-full min-h-8 flex items-center justify-center text-[10px] text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 rounded"
         onClick={onAddZone}
       >
         + {t("roomMap.zones.addZoneButton")}
@@ -362,7 +365,7 @@ function renderObjectsWithHueGrouping(
           return (
             <li key={`zone-group-${zone.id}`} className="mt-1.5">
               <div
-                className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500"
+                className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--lm-ink-faint)]"
                 role="heading"
                 aria-level={3}
               >
@@ -372,11 +375,11 @@ function renderObjectsWithHueGrouping(
                   aria-hidden
                 />
                 <span className="flex-1 truncate">{zone.name}</span>
-                <span className="text-[9px] text-zinc-600">{zoneRows.length}</span>
+                <span className="text-[9px] text-[var(--lm-ink-faint)]">{zoneRows.length}</span>
               </div>
-              <ul className="ml-2 border-l border-zinc-800/60 pl-1">
+              <ul className="ml-2 border-l border-[var(--lm-line)]/60 pl-1">
                 {zoneRows.length === 0 ? (
-                  <li className="px-1.5 py-0.5 text-[9px] italic text-zinc-600">
+                  <li className="px-1.5 py-0.5 text-[9px] italic text-[var(--lm-ink-faint)]">
                     {t("roomMap.hueZones.groupEmpty")}
                   </li>
                 ) : (
@@ -401,15 +404,15 @@ function renderObjectsWithHueGrouping(
       {hueObjects.length > 0 && unassigned.length > 0 && (
         <li className="mt-1.5">
           <div
-            className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-500"
+            className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--lm-ink-faint)]"
             role="heading"
             aria-level={3}
           >
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-600" aria-hidden />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--lm-ink-faint)]" aria-hidden />
             <span className="flex-1 truncate">{t("roomMap.hueZones.unassignedTitle")}</span>
-            <span className="text-[9px] text-zinc-600">{unassigned.length}</span>
+            <span className="text-[9px] text-[var(--lm-ink-faint)]">{unassigned.length}</span>
           </div>
-          <ul className="ml-2 border-l border-zinc-800/60 pl-1">
+          <ul className="ml-2 border-l border-[var(--lm-line)]/60 pl-1">
             {unassigned.map((entry) => (
               <ObjectRow
                 key={entry.id}
@@ -459,12 +462,12 @@ export function ObjectListPanel({
     onDeleteHueZone !== undefined &&
     onRenameHueZone !== undefined;
 
-  const tabBase = "flex-1 text-center py-1.5 text-[10px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60";
-  const tabActive = "text-zinc-100 border-b-2 border-amber-500";
-  const tabInactive = "text-zinc-400 border-b border-zinc-700 hover:text-zinc-200";
+  const tabBase = "flex-1 text-center py-1.5 text-[10px] font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60";
+  const tabActive = "text-[var(--lm-ink)] border-b-2 border-[var(--lm-amber)]";
+  const tabInactive = "text-[var(--lm-ink-dim)] border-b border-[var(--lm-line)] hover:text-[var(--lm-ink)]";
 
   return (
-    <div className="flex flex-col h-full border-l border-zinc-800 bg-zinc-900/90 w-[180px] shrink-0">
+    <div className="flex flex-col h-full border-l border-[var(--lm-line)] bg-[var(--lm-panel)]/90 w-[180px] shrink-0">
       {/* Tab bar */}
       <div className="flex shrink-0">
         <button
@@ -496,7 +499,7 @@ export function ObjectListPanel({
       {activeTab === "objects" ? (
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {objects.length === 0 ? (
-            <p className="text-[10px] text-zinc-500 py-3 text-center">
+            <p className="text-[10px] text-[var(--lm-ink-faint)] py-3 text-center">
               {t("roomMap.objectPanel.empty")}
             </p>
           ) : (

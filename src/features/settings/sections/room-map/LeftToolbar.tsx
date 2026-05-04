@@ -74,11 +74,13 @@ function ToolChip({
 }) {
   return (
     <button
-      className={`group/chip relative flex items-center justify-center w-7 h-7 rounded bg-black/60 backdrop-blur-sm transition-colors ${
+      className={`group/chip relative flex items-center justify-center w-8 h-8 rounded bg-black/60 backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 ${
         disabled
           ? "opacity-40 cursor-not-allowed text-white/50"
           : "text-white/90 hover:bg-black/80 active:bg-black/90"
       }`}
+      aria-label={label}
+      title={label}
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
     >
