@@ -793,11 +793,38 @@ function App() {
         // Restore window geometry immediately — before any heavy async work —
         // so the window settles into its saved position without a visible jump.
         await initWindowLifecycle({
+          // A4.1 — Trigger an OS-level notification the first time the
+          // user closes the window, so they know the app is still running
+          // in the tray (matches Spotify / Slack behaviour). The
+          // trayHintShown flag in shellStore guarantees this fires only
+          // once per install. The Rust command is never-throws and
+          // returns a coded status — we log a denied permission as
+          // diagnostic context and silently continue, since the hint is
+          // a nice-to-have, not a blocker for the close flow.
           onFirstCloseToTray: () => {
-            console.info(
-              "[LumaSync] Hint: The app is still running in the system tray. " +
-              "Click the tray icon to reopen settings.",
-            );
+            void (async () => {
+              try {
+                const result = await invoke<{ status: string; code?: string; message?: string }>(
+                  "show_notification",
+                  {
+                    payload: {
+                      title: t("trayHint.title"),
+                      body: t("trayHint.body"),
+                      kind: "info",
+                    },
+                  },
+                );
+                if (result.status !== "ok") {
+                  console.info(
+                    "[LumaSync] tray hint notification not delivered:",
+                    result.code ?? "unknown",
+                    result.message ?? "",
+                  );
+                }
+              } catch (err) {
+                console.warn("[LumaSync] tray hint notification invoke failed:", err);
+              }
+            })();
           },
         });
 

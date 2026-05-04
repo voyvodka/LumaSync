@@ -1152,6 +1152,10 @@
       }
     }
   },
+  "trayHint": {
+    "title": "LumaSync menü çubuğunda çalışıyor",
+    "body": "Pencereyi geri açmak için menü çubuğundaki simgeye tıkla. Bu mesaj sadece ilk kapatmada görünür."
+  },
   "calibration": {
     "section": {
       "title": "Kalibrasyon",
