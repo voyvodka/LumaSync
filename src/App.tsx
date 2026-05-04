@@ -227,6 +227,13 @@ function App() {
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
   const modeTransitionLockRef = useRef(false);
   const bootstrapRanRef = useRef(false);
+  // Auto-updater check is intentionally module-level (not inside the boot
+  // sequence) so it fires immediately on mount and is not blocked by
+  // shellStore / Hue / USB / DTLS work. The ref is a StrictMode dev-mode
+  // guard: the underlying effect re-runs once during double-mount, this
+  // ref short-circuits the second invocation so we always send exactly
+  // one `check()` request to GitHub Releases.
+  const updateCheckRanRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
   /**
    * Idempotent dispatch guard for `setLightingMode` (v1.5 fix #45).
@@ -554,6 +561,18 @@ function App() {
       if (pending) void saveShellState({ lightingMode: pending });
     }, LIGHTING_MODE_PERSIST_DEBOUNCE_MS);
   }, []);
+
+  // Auto-updater poll — fires once on mount, in parallel with the boot
+  // sequence. Previously lived at the tail of `bootstrap()` behind
+  // shellStore + Hue validate + USB reconnect + DTLS handshake, which
+  // pushed the GitHub Releases probe well past the user's first frame.
+  // The ref guard absorbs StrictMode dev double-mount so we never
+  // double-fire `check()`.
+  useEffect(() => {
+    if (updateCheckRanRef.current) return;
+    updateCheckRanRef.current = true;
+    void checkForUpdates();
+  }, [checkForUpdates]);
 
   // Flush pending lighting-mode persist on page hide / visibility change /
   // unmount so a Cmd+R or tray-close right after a slider move does not
@@ -906,18 +925,15 @@ function App() {
         const hueBootstrapConfig = toHueStartConfig(state);
         setHueStartConfig(hueBootstrapConfig);
 
-        if (hueBootstrapConfig) {
-          try {
-            const validation = await validateHueCredentials(
-              hueBootstrapConfig.bridgeIp,
-              hueBootstrapConfig.username,
-              hueBootstrapConfig.clientKey,
-            );
-            setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
-          } catch {
-            setHueReachable(false);
-          }
-        }
+        // NOTE: we deliberately do NOT call `validateHueCredentials` here.
+        // Setting `hueStartConfig` re-arms the visibility-aware
+        // reachability poll (further down in this file) which fires its
+        // own immediate mount tick — so the first credential probe lands
+        // ~1-2 s after this line resolves. Doing a bootstrap validate
+        // call as well meant every launch hit the Bridge twice (once
+        // here, once from the poll's mount tick) for the same answer.
+        // The chip starts as `hueReachable=false` and flips green on
+        // the poll's first successful tick.
 
         // Bootstrap path is split in two stages so the persisted Ambilight
         // payload (saturation / blackBorderDetection / smoothing preset) gets
@@ -996,9 +1012,6 @@ function App() {
             }
           }
         }
-
-        // Check for updates silently after startup
-        void checkForUpdates();
 
         // Push localized tray labels to Rust
         void updateTrayLabels({
