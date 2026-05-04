@@ -62,10 +62,12 @@ const REQUIRED_SECTION_IDS = [
 // ---------------------------------------------------------------------------
 const REQUIRED_STATE_FIELDS = [
   "schemaVersion",
-  "windowWidth",
-  "windowHeight",
-  "windowX",
-  "windowY",
+  // v1.5 (post-W4-F2) — corner+size geometry replaced by mode-invariant center.
+  // Bumped `SHELL_STATE_SCHEMA_VERSION` to 3; the 2 → 3 migration shim in
+  // `features/persistence/migrations.ts` derives the center from legacy fields
+  // and strips them.
+  "windowCenterX",
+  "windowCenterY",
   "lastSection",
   "trayHintShown",
   "startupEnabled",
@@ -254,15 +256,16 @@ if (orderMatch) {
 }
 
 // ---------------------------------------------------------------------------
-// Schema version bump (v1.5 W4-F — must be 2 to gate the zone migration shim;
-// retained at 2 across the W4-F2 direction reversal so the shim still triggers
-// on v1 on-disk states even though the migration semantics changed).
+// Schema version bump (v1.5 post-W4-F2 — must be 3 to gate the window-geometry
+// 2 → 3 migration that swaps corner+size persistence for a mode-invariant
+// center point. The 1 → 2 zone-unification step still runs in chain so v1
+// on-disk states upgrade through both rules on a single load.).
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (v1.5 W4-F / W4-F2) ]");
+console.log("\n[ Shell state schema version (v1.5 post-W4-F2) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*2\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 2 (W4-F2 zone migration gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 2 — F6 migration shim has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*3\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 3 (window-geometry center-point migration gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 3 — windowCenter migration shim has no trigger"
 );
 
 // ---------------------------------------------------------------------------

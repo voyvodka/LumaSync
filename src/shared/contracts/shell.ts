@@ -89,13 +89,22 @@ export const SECTION_ORDER: SectionId[] = [
  * pre-versioning state (also `1`, since v1.4 and earlier match the same
  * additive shape).
  *
- * v1.5 W4-F bumps to `2` because the unified `Zone` shape is a non-additive
- * change to `RoomMapConfig`: `zones` was widened from `ZoneDefinition[]` to
- * `Zone[]` and the deprecated `hueZones?` array must be folded into the new
- * unified list. The F6 migration shim converts both legacy arrays into the
- * new `zones[]` on load and writes back at the new schema version.
+ * v1.5 W4-F bumped to `2` for the unified `Zone` shape (folded
+ * `RoomMapConfig.hueZones` into `RoomMapConfig.zones: HueZone[]` via the
+ * `migrateLegacyHueZone` helper).
+ *
+ * v1.5 (post-W4-F2) bumps to `3` because the corner-anchored window
+ * geometry (`windowX` / `windowY` / `windowWidth` / `windowHeight`) is
+ * replaced by a mode-invariant center point (`windowCenterX` /
+ * `windowCenterY`). The boot path always (re)opens the window at compact
+ * dimensions regardless of the persisted `uiMode`, so persisting the
+ * top-left corner of a 900×620 outer rect produces a visibly off-center
+ * 320×480 window after restore. The 2 → 3 migration in
+ * `persistence/migrations.ts` derives the center from the legacy fields
+ * and drops the corner shape; restore now computes the corner from the
+ * saved center plus the current outer size.
  */
-export const SHELL_STATE_SCHEMA_VERSION = 2 as const;
+export const SHELL_STATE_SCHEMA_VERSION = 3 as const;
 
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {
@@ -105,12 +114,27 @@ export interface ShellState {
    * write-back. Future bumps run a one-shot upgrade in `loadShellState`.
    */
   schemaVersion: number;
-  /** Window geometry (pixels) */
-  windowWidth: number | null;
-  windowHeight: number | null;
-  /** Window position — null means use OS default / centered */
-  windowX: number | null;
-  windowY: number | null;
+  /**
+   * Mode-invariant window center (logical pixels, screen coordinates).
+   *
+   * Persisted instead of the top-left corner because the boot path always
+   * (re)opens the window at compact dimensions (320×480) regardless of the
+   * persisted `uiMode`, then `resizeToMode` re-anchors to the user's
+   * preferred mode size. Saving a corner that was correct for a 900×620
+   * outer rect leaves the restored 320×480 window biased toward the
+   * upper-left; saving the center keeps the window perceptually pinned
+   * across mode flips and across the boot mode-restore.
+   *
+   * `null` ⇒ no persisted center (fresh launch / never moved); the OS
+   * default placement / `centerOnPrimary` helper is used instead.
+   *
+   * On restore, the corner is computed as
+   * `{ x: centerX - outerWidth / 2, y: centerY - outerHeight / 2 }`
+   * using the *current* outer size (which already reflects the
+   * compact-on-boot constraint plus any subsequent `resizeToMode` call).
+   */
+  windowCenterX: number | null;
+  windowCenterY: number | null;
   /** Last active sidebar section */
   lastSection: SectionId;
   /** Whether the user has already seen the "minimized to tray" one-time hint */
@@ -294,10 +318,8 @@ export interface ShellState {
 /** Default shell state for first launch */
 export const DEFAULT_SHELL_STATE: ShellState = {
   schemaVersion: SHELL_STATE_SCHEMA_VERSION,
-  windowWidth: null,
-  windowHeight: null,
-  windowX: null,
-  windowY: null,
+  windowCenterX: null,
+  windowCenterY: null,
   lastSection: SECTION_IDS.LIGHTS,
   trayHintShown: false,
   startupEnabled: false,

@@ -33,10 +33,8 @@ describe("resolveInitialLanguage()", () => {
     // Arrange: simulate first launch — store has no language key (undefined)
     vi.mocked(shellStore.load).mockResolvedValue({
       schemaVersion: 1,
-      windowWidth: 900,
-      windowHeight: 620,
-      windowX: null,
-      windowY: null,
+      windowCenterX: null,
+      windowCenterY: null,
       lastSection: "lights",
       trayHintShown: false,
       startupEnabled: false,
@@ -55,10 +53,8 @@ describe("resolveInitialLanguage()", () => {
     // Arrange: simulate returning user with 'tr' saved
     vi.mocked(shellStore.load).mockResolvedValue({
       schemaVersion: 1,
-      windowWidth: 900,
-      windowHeight: 620,
-      windowX: null,
-      windowY: null,
+      windowCenterX: null,
+      windowCenterY: null,
       lastSection: "lights",
       trayHintShown: false,
       startupEnabled: false,
@@ -76,10 +72,8 @@ describe("resolveInitialLanguage()", () => {
     // Arrange: simulate corrupt or unsupported locale in store
     vi.mocked(shellStore.load).mockResolvedValue({
       schemaVersion: 1,
-      windowWidth: 900,
-      windowHeight: 620,
-      windowX: null,
-      windowY: null,
+      windowCenterX: null,
+      windowCenterY: null,
       lastSection: "lights",
       trayHintShown: false,
       startupEnabled: false,

@@ -116,10 +116,8 @@ describe("lighting mode contracts", () => {
   it("keeps ledCalibration contract intact when shell state includes lighting mode fields", () => {
     const shellState: ShellState = {
       schemaVersion: 1,
-      windowWidth: 1200,
-      windowHeight: 840,
-      windowX: 0,
-      windowY: 0,
+      windowCenterX: null,
+      windowCenterY: null,
       lastSection: "lights",
       trayHintShown: true,
       startupEnabled: false,
