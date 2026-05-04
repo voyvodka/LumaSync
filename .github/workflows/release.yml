@@ -5,6 +5,13 @@ on:
     tags:
       - "v*.*.*"
 
+# A tag push must NEVER be cancelled mid-flight (would leave a half-published
+# release on GitHub). The group is per-ref so two concurrent tag pushes
+# serialise rather than racing for the same release artefacts.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -37,6 +44,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          # Mirror ci.yml so the release matrix can re-use the per-OS cache
+          # the CI job populated against the same Cargo.lock.
+          prefix-key: v1.5-rust-cache
+          shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri bundle + xcap (X11 capture)
         if: matrix.os == 'ubuntu-24.04'
@@ -72,7 +83,7 @@ jobs:
         run: pnpm check:rust
 
       - name: Rust format check (cargo fmt)
-        run: cargo fmt --check
+        run: cargo fmt --all -- --check
         working-directory: src-tauri
 
       - name: Rust lint (cargo clippy -D warnings)
@@ -83,10 +94,16 @@ jobs:
         run: cargo test --all-features -- --test-threads=1
         working-directory: src-tauri
 
-      - name: Verify shell contracts
+      # Frontend-only verification — Linux runner is enough; running it on
+      # all three platforms in the release matrix wastes ~2-4 min per build
+      # without adding signal (the CI gate already covers cross-platform
+      # parity for these JS-only checks).
+      - name: Verify shell contracts (Linux only)
+        if: matrix.os == 'ubuntu-24.04'
         run: pnpm verify:shell-contracts
 
-      - name: Run frontend tests
+      - name: Run frontend tests (Linux only)
+        if: matrix.os == 'ubuntu-24.04'
         run: pnpm vitest run
 
       - name: Detect release channel from tag
@@ -135,4 +152,10 @@ jobs:
           releaseBody: ${{ steps.changelog.outputs.notes }}
           releaseDraft: false
           prerelease: ${{ steps.channel.outputs.is_prerelease }}
+          # Idempotency: when a tag is re-run (CI infrastructure retry, or a
+          # second matrix entry uploading after the first created the release)
+          # `tauri-action` would otherwise fail with "release already exists".
+          # `allowUpdates: true` upserts assets onto the existing release
+          # instead of erroring out.
+          allowUpdates: true
           args: ${{ matrix.os == 'macos-latest' && '--target universal-apple-darwin' || '' }}

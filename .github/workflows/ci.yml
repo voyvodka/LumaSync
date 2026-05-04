@@ -9,6 +9,13 @@ on:
     branches:
       - main
 
+# Cancel superseded runs when a branch is force-pushed or pushed multiple
+# times in quick succession. Saves ~15-20 minutes of duplicate Rust matrix
+# work per redundant push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
