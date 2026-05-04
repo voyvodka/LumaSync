@@ -53,6 +53,13 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "linux-
 # Used by `_hue._tcp.local.` (Hue) today; the shared `network::mdns` registry
 # also serves the future WLED `_wled._tcp.local.` browser (D5 — single
 # responder per process to avoid macOS SO_REUSEPORT contention).
+# Pin policy (evaluated 2026-05-04, G6): caret "0.19" is intentional.
+# 0.13→0.19 had major API churn (ScopedIpV4/ResolvedService surface rewrites);
+# registry was adapted at migration time. The 0.19.x patch line has been quiet
+# (0.19.1 was a clean bugfix — source-IP subnet selection + TXT length guard,
+# no consumer API change). Exact pin (=0.19.1) would block Dependabot from
+# picking up security patches automatically, which is the worse trade-off.
+# Dependabot will open a PR for any 0.19.x patch; review before merging.
 mdns-sd = "0.19"
 
 [target.'cfg(target_os = "windows")'.dependencies]

@@ -108,5 +108,5 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: src-tauri
         run: |
-          cargo install --locked cargo-audit || true
+          cargo install --locked cargo-audit
           cargo audit
