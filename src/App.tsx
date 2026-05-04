@@ -55,6 +55,7 @@ import {
 import {
   initWindowLifecycle,
   loadShellState,
+  resizeToMode,
   saveShellState,
 } from "./features/shell/windowLifecycle";
 import {
@@ -1115,13 +1116,28 @@ function App() {
   }, []);
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
+    // A3.5 — compact mode hosts only LIGHTS (CompactLayout ignores
+    // activeSection). Without this gate, deep-link clicks from the
+    // compact onboarding banner / CTA / tray menu would set
+    // activeSection silently while the user still sees the LIGHTS
+    // panel, leaving them with the "I clicked, nothing happened"
+    // experience. Switching to full first surfaces the destination
+    // section as the SettingsLayout fans out by activeSection.
+    if (currentMode === "compact" && sectionId !== SECTION_IDS.LIGHTS) {
+      try {
+        await resizeToMode("full");
+        setCurrentMode("full");
+      } catch (err) {
+        console.error("[LumaSync] resizeToMode(full) failed:", err);
+      }
+    }
     setActiveSection(sectionId);
     try {
       await saveShellState({ lastSection: sectionId });
     } catch (err) {
       console.error("[LumaSync] saveShellState(lastSection) failed:", err);
     }
-  }, []);
+  }, [currentMode, setCurrentMode]);
 
   // Auto-open calibration when device connects for the first time
   useEffect(() => {
