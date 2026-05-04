@@ -534,29 +534,34 @@ pub fn run() {
             //
             // Linux & Windows are intentionally untouched: both expect a
             // full-colour tray icon and the template flag is macOS-only.
-            let mut tray_builder = TrayIconBuilder::with_id(TRAY_ICON_ID)
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .tooltip("LumaSync");
-            #[cfg(target_os = "macos")]
-            {
-                // Pre-decoded RGBA bytes for `tray-icon@2x.png` (44x44).
-                // The companion PNG lives at `icons/tray-icon@2x.png`; the
-                // raw RGBA copy is generated from it via:
-                //   magick tray-icon@2x.png -depth 8 RGBA:tray-icon@2x.rgba
-                // We embed the raw form so we can hand it directly to
-                // `Image::new` without dragging in a PNG decoder at runtime.
-                const TRAY_ICON_RGBA: &[u8] =
-                    include_bytes!("../icons/tray-icon@2x.rgba");
-                const TRAY_ICON_DIM: u32 = 44;
-                tray_builder = tray_builder
-                    .icon(tauri::image::Image::new(
+            let tray_builder = {
+                let base = TrayIconBuilder::with_id(TRAY_ICON_ID)
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .menu(&menu)
+                    .tooltip("LumaSync");
+
+                #[cfg(target_os = "macos")]
+                {
+                    // Pre-decoded RGBA bytes for `tray-icon@2x.png` (44x44).
+                    // The companion PNG lives at `icons/tray-icon@2x.png`; the
+                    // raw RGBA copy is generated from it via:
+                    //   magick tray-icon@2x.png -depth 8 RGBA:tray-icon@2x.rgba
+                    // We embed the raw form so we can hand it directly to
+                    // `Image::new` without dragging in a PNG decoder at runtime.
+                    const TRAY_ICON_RGBA: &[u8] =
+                        include_bytes!("../icons/tray-icon@2x.rgba");
+                    const TRAY_ICON_DIM: u32 = 44;
+                    base.icon(tauri::image::Image::new(
                         TRAY_ICON_RGBA,
                         TRAY_ICON_DIM,
                         TRAY_ICON_DIM,
                     ))
-                    .icon_as_template(true);
-            }
+                    .icon_as_template(true)
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                base
+            };
             tray_builder
                 // Left-click on tray icon → open/focus settings
                 .on_tray_icon_event(|tray, event| {
