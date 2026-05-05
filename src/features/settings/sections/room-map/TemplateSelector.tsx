@@ -97,6 +97,7 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
           {TEMPLATES.map((tmpl) => (
             <button
               key={tmpl.id}
+              type="button"
               className="flex flex-col items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-3 hover:bg-zinc-900 dark:hover:bg-zinc-800 hover:border-amber-400/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
               onClick={() => onSelect(tmpl.config(t))}
             >
