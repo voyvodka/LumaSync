@@ -26,8 +26,6 @@ export interface WledDiscoveryResponse {
 
 export interface WledConnectResponse {
   status: WledCommandStatus;
-  /** Echo of the device the host is now bound to, when the connect succeeded. */
-  device: WledDeviceInfo | null;
 }
 
 export interface WledTestResponse {
@@ -50,7 +48,7 @@ export async function discoverWledDevices(
 ): Promise<WledDiscoveryResponse> {
   return invoke<WledDiscoveryResponse>(
     DEVICE_COMMANDS.DISCOVER_WLED_DEVICES,
-    manualIp ? { manualIp } : {},
+    manualIp ? { ip: manualIp } : {},
   );
 }
 

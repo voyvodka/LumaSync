@@ -301,6 +301,44 @@ async function ensureWindowRectOnScreen(rect: WindowRect): Promise<WindowRect | 
   return clampRectIntoMonitor(rect, nearest);
 }
 
+// ---------------------------------------------------------------------------
+// Center-anchored geometry helpers (shared by persist + restore paths)
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the center point of a rectangle in physical pixels.
+ *
+ * Center is the persisted invariant: when the user repositions the window in
+ * one mode (e.g. full 900×620), saving the *center* keeps the same visual
+ * pixel pinned across mode toggles and across reboots — even though the boot
+ * always starts in compact (see `initWindowLifecycle`). The top-left corner
+ * is mode-dependent and would land a smaller compact window biased toward the
+ * upper-left of where the user last placed it.
+ */
+function rectCenter(rect: { x: number; y: number; width: number; height: number }): { x: number; y: number } {
+  return {
+    x: rect.x + Math.round(rect.width / 2),
+    y: rect.y + Math.round(rect.height / 2),
+  };
+}
+
+/**
+ * Compute the top-left corner of a rectangle from a center point and a size.
+ *
+ * Inverse of `rectCenter`. Used at restore time: we know the persisted center
+ * and the *current* outer window size (boot-time compact), so the target
+ * top-left is `center - size/2`.
+ */
+function rectTopLeftFromCenter(
+  center: { x: number; y: number },
+  size: { width: number; height: number },
+): { x: number; y: number } {
+  return {
+    x: center.x - Math.round(size.width / 2),
+    y: center.y - Math.round(size.height / 2),
+  };
+}
+
 async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWindow>): Promise<void> {
   const { x, y } = await win.outerPosition();
   const { width, height } = await win.outerSize();
@@ -309,25 +347,22 @@ async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWind
   if (!nextRect) {
     await win.center();
     const centeredPosition = await win.outerPosition();
-    const centeredSize = await win.innerSize();
-    await saveShellState({
-      windowX: centeredPosition.x,
-      windowY: centeredPosition.y,
-      windowWidth: centeredSize.width,
-      windowHeight: centeredSize.height,
+    const centeredSize = await win.outerSize();
+    const center = rectCenter({
+      x: centeredPosition.x,
+      y: centeredPosition.y,
+      width: centeredSize.width,
+      height: centeredSize.height,
     });
+    await saveShellState({ windowCenterX: center.x, windowCenterY: center.y });
     return;
   }
 
   const moved = nextRect.x !== x || nextRect.y !== y;
   if (moved) {
     await win.setPosition(new PhysicalPosition(nextRect.x, nextRect.y));
-    await saveShellState({
-      windowX: nextRect.x,
-      windowY: nextRect.y,
-      windowWidth: nextRect.width,
-      windowHeight: nextRect.height,
-    });
+    const center = rectCenter(nextRect);
+    await saveShellState({ windowCenterX: center.x, windowCenterY: center.y });
   }
 }
 
@@ -343,50 +378,79 @@ async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWind
  * at compact dimensions via tauri.conf.json. Writing a persisted full-mode
  * size here would produce a visible big→compact flash before React mounts.
  *
- * Falls back to a safe centered position if saved coords are off-screen.
+ * Position uses a **center-anchored** model: the persisted `windowCenterX/Y`
+ * is mode-invariant. We re-derive the top-left from that center and the
+ * window's current outer size (compact at boot), then clamp the resulting
+ * rect into the nearest monitor so a saved center on a now-disconnected
+ * display is recovered to the closest visible screen.
  */
 export async function restoreWindowState(): Promise<void> {
   const win = getCurrentWindow();
   const state = await loadShellState();
 
-  // Restore position (with monitor-bounds guard)
-  if (state.windowX !== null && state.windowY !== null) {
+  if (state.windowCenterX !== null && state.windowCenterY !== null) {
     const currentSize = await win.outerSize();
+    const topLeft = rectTopLeftFromCenter(
+      { x: state.windowCenterX, y: state.windowCenterY },
+      currentSize,
+    );
     const candidateRect: WindowRect = {
-      x: state.windowX,
-      y: state.windowY,
-      width: state.windowWidth ?? currentSize.width,
-      height: state.windowHeight ?? currentSize.height,
+      x: topLeft.x,
+      y: topLeft.y,
+      width: currentSize.width,
+      height: currentSize.height,
     };
 
     const adjustedRect = await ensureWindowRectOnScreen(candidateRect);
     if (adjustedRect) {
       await win.setPosition(new PhysicalPosition(adjustedRect.x, adjustedRect.y));
 
-      if (adjustedRect.x !== state.windowX || adjustedRect.y !== state.windowY) {
-        await saveShellState({ windowX: adjustedRect.x, windowY: adjustedRect.y });
+      // If the monitor-bounds guard moved us, refresh the persisted center so
+      // future restores converge on the visible position rather than fighting
+      // the clamp every launch.
+      if (adjustedRect.x !== candidateRect.x || adjustedRect.y !== candidateRect.y) {
+        const center = rectCenter(adjustedRect);
+        await saveShellState({ windowCenterX: center.x, windowCenterY: center.y });
       }
     } else {
+      // No monitors available (rare; e.g. headless or all displays unplugged
+      // during sleep). Fall back to the OS centering behavior and persist
+      // whatever the OS chose.
       await win.center();
       const centeredPosition = await win.outerPosition();
-      await saveShellState({ windowX: centeredPosition.x, windowY: centeredPosition.y });
+      const centeredSize = await win.outerSize();
+      const center = rectCenter({
+        x: centeredPosition.x,
+        y: centeredPosition.y,
+        width: centeredSize.width,
+        height: centeredSize.height,
+      });
+      await saveShellState({ windowCenterX: center.x, windowCenterY: center.y });
     }
   } else {
-    // First launch (or legacy state without explicit position): if any plugin
-    // restored an off-screen geometry, pull it back into view.
+    // First launch (or migrated legacy state with all-null geometry): if any
+    // plugin restored an off-screen geometry, pull it back into view.
     await ensureCurrentWindowOnScreen(win);
   }
 }
 
 /**
  * Persist current window geometry to shell state store.
+ *
+ * Saves the window **center** (physical px) computed from `outerPosition` +
+ * `outerSize`. Using `outerSize` (not `innerSize`) means the center is
+ * symmetric across the window decorations — restoring against a different
+ * outer size on next launch (e.g. compact instead of full) lands the same
+ * visual pixel as the center.
+ *
  * Call this before hiding or on a debounced resize/move handler.
  */
 export async function persistWindowState(): Promise<void> {
   const win = getCurrentWindow();
-  const { width, height } = await win.innerSize();
+  const { width, height } = await win.outerSize();
   const { x, y } = await win.outerPosition();
-  await saveShellState({ windowWidth: width, windowHeight: height, windowX: x, windowY: y });
+  const center = rectCenter({ x, y, width, height });
+  await saveShellState({ windowCenterX: center.x, windowCenterY: center.y });
 }
 
 // ---------------------------------------------------------------------------

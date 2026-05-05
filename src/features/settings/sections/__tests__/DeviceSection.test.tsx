@@ -7,6 +7,8 @@ import { DeviceSection } from "../DeviceSection";
 
 const stopHueMock = vi.fn();
 const useHueOnboardingMock = vi.fn();
+// Mutable so individual tests can override port list without re-declaring the mock.
+const useDeviceConnectionMock = vi.fn();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -19,25 +21,7 @@ vi.mock("../../../mode/modeApi", () => ({
 }));
 
 vi.mock("../../../device/useDeviceConnection", () => ({
-  useDeviceConnection: () => ({
-    status: "idle",
-    groupedPorts: { supported: [], other: [] },
-    ports: [],
-    selectedPort: null,
-    connectedPort: null,
-    isScanning: false,
-    isConnecting: false,
-    isReconnecting: false,
-    isHealthChecking: false,
-    canConnect: false,
-    statusCard: null,
-    latestHealthCheck: null,
-    refreshPorts: vi.fn(),
-    selectPort: vi.fn(),
-    connectSelectedPort: vi.fn(),
-    runHealthCheck: vi.fn(),
-    connectButtonLabel: "connect",
-  }),
+  useDeviceConnection: () => useDeviceConnectionMock(),
 }));
 
 vi.mock("../../../device/useHueOnboarding", () => ({
@@ -50,6 +34,47 @@ vi.mock("../../../persistence/shellStore", () => ({
     save: vi.fn().mockResolvedValue(undefined),
   },
 }));
+
+// Stub calibrationApi.listDisplays so DeviceSection mounts without a Tauri backend.
+vi.mock("../../../calibration/calibrationApi", () => ({
+  listDisplays: vi.fn().mockResolvedValue([]),
+}));
+
+// Stub heavy sub-components that make their own invoke calls.
+vi.mock("../WledDevicePicker", () => ({
+  WledDevicePicker: () => null,
+}));
+
+vi.mock("../HueChannelMapPanel", () => ({
+  HueChannelMapPanel: () => null,
+}));
+
+vi.mock("./control/LedChipTypePicker", () => ({
+  LedChipTypePicker: () => null,
+}));
+
+function defaultDeviceConnectionState() {
+  return {
+    status: "idle",
+    groupedPorts: { supported: [], other: [] },
+    ports: [],
+    selectedPort: null,
+    connectedPort: null,
+    isScanning: false,
+    isConnecting: false,
+    isReconnecting: false,
+    isHealthChecking: false,
+    canConnect: false,
+    statusCard: null,
+    latestHealthCheck: null,
+    isConnected: false,
+    refreshPorts: vi.fn(),
+    selectPort: vi.fn(),
+    connectSelectedPort: vi.fn(),
+    runHealthCheck: vi.fn(),
+    connectButtonLabel: "connect",
+  };
+}
 
 function createHueHookState(overrides: Record<string, unknown> = {}) {
   return {
@@ -100,6 +125,7 @@ async function renderHueTab(state: ReturnType<typeof createHueHookState>) {
 describe("HueReadySummaryCard", () => {
   beforeEach(() => {
     stopHueMock.mockReset();
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
@@ -154,6 +180,7 @@ describe("HueReadySummaryCard", () => {
 describe("DeviceSection hue runtime controls", () => {
   beforeEach(() => {
     stopHueMock.mockReset();
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
 
@@ -241,5 +268,84 @@ describe("DeviceSection hue runtime controls", () => {
     await user.click(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" }));
 
     expect(retryRuntimeTarget).toHaveBeenCalledWith("hue");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A3.6 — DeviceSection persist banner visibility
+// ---------------------------------------------------------------------------
+
+describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
+  beforeEach(() => {
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      // One discovered port so the "Add strip" button is enabled.
+      ports: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
+      groupedPorts: {
+        supported: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
+        other: [],
+      },
+    });
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  it("shows persist error banner when shellStore.save rejects during USB strip add", async () => {
+    const { shellStore } = await import("../../../persistence/shellStore");
+    vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
+
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    // USB tab is active by default. Click "Add first strip" to open the form.
+    const addBtn = await screen.findByText("devicesPage.usb.paired.addFirst");
+    await user.click(addBtn);
+
+    // Port pre-selected (COM3 from mock). Click "Confirm add" to trigger handleAddStrip.
+    const confirmBtn = await screen.findByText("devicesPage.usb.paired.confirmAdd");
+    await user.click(confirmBtn);
+
+    // persistError banner renders with role="status" aria-live="polite".
+    // t() returns the key directly (react-i18next mock above).
+    await waitFor(() => {
+      expect(
+        screen.getByText("devicesPage.usb.paired.persistError")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("persist error banner auto-dismisses after 3 seconds", async () => {
+    const { shellStore } = await import("../../../persistence/shellStore");
+    vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
+
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    const addBtn = await screen.findByText("devicesPage.usb.paired.addFirst");
+    await user.click(addBtn);
+    const confirmBtn = await screen.findByText("devicesPage.usb.paired.confirmAdd");
+    await user.click(confirmBtn);
+
+    // Wait for banner to appear with real timers (so waitFor works normally).
+    await waitFor(() => {
+      expect(
+        screen.getByText("devicesPage.usb.paired.persistError")
+      ).toBeInTheDocument();
+    });
+
+    // Wait for the 3 s auto-dismiss timer with real timers. Fake timers
+    // would have to be mounted BEFORE the click that triggers
+    // setTimeout(...3000) in setPersistError, which collides with
+    // userEvent + waitFor's expectation of real timers during the
+    // async click + render handshake. Sleeping ~3.1s here is the
+    // simplest correct path; the test still completes well under
+    // vitest's 10 s default timeout.
+    await waitFor(
+      () => {
+        expect(
+          screen.queryByText("devicesPage.usb.paired.persistError"),
+        ).not.toBeInTheDocument();
+      },
+      { timeout: 4000, interval: 100 },
+    );
   });
 });

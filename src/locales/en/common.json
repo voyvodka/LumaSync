@@ -275,7 +275,9 @@
         "discoveryTimeout": "Discovery timed out before any device responded.",
         "bridgeUnreachable": "WLED device is not reachable.",
         "protocolMismatch": "Device rejected the wire protocol — try the alternate.",
-        "ledCountMismatch": "Device reports a different LED count than expected."
+        "ledCountMismatch": "Device reports a different LED count than expected.",
+        "invalidIp": "Not a valid IPv4 address — check the WLED IP and try again.",
+        "invalidLedCount": "WLED device reports an invalid LED count (0)."
       }
     }
   },
@@ -443,7 +445,13 @@
     "usbDetected": "USB LED strip detected. Add as output target?",
     "addTarget": "Add",
     "dismiss": "Dismiss",
-    "usbDisconnected": "USB device disconnected. Continuing with remaining targets."
+    "usbDisconnected": "USB device disconnected. Continuing with remaining targets.",
+    "unsupportedFallback": "USB device not recognised — switched to Hue-only mode.",
+    "stopFailed": "Stop failed for {{targets}}. Output left active — try again.",
+    "targetLabel": {
+      "usb": "USB",
+      "hue": "Hue"
+    }
   },
   "device": {
     "title": "Device",
@@ -1144,6 +1152,10 @@
       }
     }
   },
+  "trayHint": {
+    "title": "LumaSync is running in the tray",
+    "body": "Click the tray icon to bring the window back. This message appears only the first time you close it."
+  },
   "calibration": {
     "section": {
       "title": "Calibration",
@@ -1199,8 +1211,10 @@
       "aria": {
         "countIncrease": "Increase {{label}}",
         "countDecrease": "Decrease {{label}}",
+        "countInput": "{{label}} LED count, type a number",
         "gapIncrease": "Increase stand gap",
-        "gapDecrease": "Decrease stand gap"
+        "gapDecrease": "Decrease stand gap",
+        "gapInput": "Stand gap LEDs, type a number"
       }
     },
     "overlay": {

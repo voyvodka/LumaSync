@@ -62,10 +62,12 @@ const REQUIRED_SECTION_IDS = [
 // ---------------------------------------------------------------------------
 const REQUIRED_STATE_FIELDS = [
   "schemaVersion",
-  "windowWidth",
-  "windowHeight",
-  "windowX",
-  "windowY",
+  // v1.5 (post-W4-F2) — corner+size geometry replaced by mode-invariant center.
+  // Bumped `SHELL_STATE_SCHEMA_VERSION` to 3; the 2 → 3 migration shim in
+  // `features/persistence/migrations.ts` derives the center from legacy fields
+  // and strips them.
+  "windowCenterX",
+  "windowCenterY",
   "lastSection",
   "trayHintShown",
   "startupEnabled",
@@ -254,15 +256,16 @@ if (orderMatch) {
 }
 
 // ---------------------------------------------------------------------------
-// Schema version bump (v1.5 W4-F — must be 2 to gate the zone migration shim;
-// retained at 2 across the W4-F2 direction reversal so the shim still triggers
-// on v1 on-disk states even though the migration semantics changed).
+// Schema version bump (v1.5 post-W4-F2 — must be 3 to gate the window-geometry
+// 2 → 3 migration that swaps corner+size persistence for a mode-invariant
+// center point. The 1 → 2 zone-unification step still runs in chain so v1
+// on-disk states upgrade through both rules on a single load.).
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (v1.5 W4-F / W4-F2) ]");
+console.log("\n[ Shell state schema version (v1.5 post-W4-F2) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*2\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 2 (W4-F2 zone migration gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 2 — F6 migration shim has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*3\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 3 (window-geometry center-point migration gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 3 — windowCenter migration shim has no trigger"
 );
 
 // ---------------------------------------------------------------------------
@@ -829,6 +832,123 @@ for (const fn of LEGACY_W4F_HANDLERS) {
     `STILL PRESENT: legacy W4-F Rust handler "${fn}" — partial rename detected`
   );
 }
+
+// ---------------------------------------------------------------------------
+// Device WLED status codes (v1.5.2 patch — F4 + A2.2)
+// ---------------------------------------------------------------------------
+const WLED_DISCOVERY_FILE = resolve(
+  ROOT,
+  "src-tauri/src/commands/wled_discovery.rs"
+);
+const wledRustSource = readOrEmpty(WLED_DISCOVERY_FILE, "wled_discovery.rs");
+
+console.log("\n[ Device WLED status codes (v1.5.2 patch — F4) ]");
+const REQUIRED_WLED_STATUS_CODES = [
+  "WLED_DISCOVERY_OK",
+  "WLED_DISCOVERY_EMPTY",
+  "WLED_DISCOVERY_TIMEOUT",
+  "WLED_BRIDGE_UNREACHABLE",
+  "WLED_PROTOCOL_MISMATCH",
+  "WLED_LED_COUNT_MISMATCH",
+  "WLED_INVALID_IP",
+  // A2.2: led_count=0 guard
+  "WLED_INVALID_LED_COUNT",
+];
+for (const code of REQUIRED_WLED_STATUS_CODES) {
+  check(
+    deviceSource.includes(`"${code}"`),
+    `WLED_STATUS map contains "${code}" (device.ts)`,
+    `MISSING WLED_STATUS entry "${code}" in device.ts`
+  );
+}
+// Rust side must also declare every code that the frontend sees.
+for (const code of REQUIRED_WLED_STATUS_CODES) {
+  // Not all codes appear in the discovery file (DISCOVERY_EMPTY is TS-only for
+  // the mDNS path), so we only require the ones that Rust actively emits.
+  const RUST_EMITTED = [
+    "WLED_DISCOVERY_OK",
+    "WLED_DISCOVERY_TIMEOUT",
+    "WLED_BRIDGE_UNREACHABLE",
+    "WLED_PROTOCOL_MISMATCH",
+    "WLED_LED_COUNT_MISMATCH",
+    "WLED_INVALID_IP",
+    "WLED_INVALID_LED_COUNT",
+  ];
+  if (RUST_EMITTED.includes(code)) {
+    check(
+      wledRustSource.includes(`"${code}"`),
+      `Rust wled_discovery.rs emits status code "${code}"`,
+      `MISSING status code "${code}" in wled_discovery.rs`
+    );
+  }
+}
+
+console.log("\n[ WLED discovery wire shape — Vec<WledDeviceInfo> (A1.1) ]");
+check(
+  wledRustSource.includes("pub devices: Vec<WledDeviceInfo>"),
+  "WledDiscoveryResponse.devices is Vec<WledDeviceInfo> (not Option)",
+  "MISSING: WledDiscoveryResponse.devices should be Vec<WledDeviceInfo>"
+);
+check(
+  !wledRustSource.includes("pub device: Option<WledDeviceInfo>"),
+  "Old WledDiscoveryResponse.device: Option<> removed",
+  "STILL PRESENT: old WledDiscoveryResponse.device: Option<> — A1.1 migration incomplete"
+);
+const WLED_API_FILE = resolve(ROOT, "src/features/device/wledApi.ts");
+const wledApiTsSource = readOrEmpty(WLED_API_FILE, "wledApi.ts");
+check(
+  deviceSource.includes("devices: WledDeviceInfo[]") ||
+    wledApiTsSource.includes("devices: WledDeviceInfo[]"),
+  "TS WledDiscoveryResponse.devices is WledDeviceInfo[] (wledApi.ts or device.ts)",
+  "MISSING: TS WledDiscoveryResponse.devices array field"
+);
+
+console.log("\n[ WLED connect request shape — device wrapper (A1.5) ]");
+check(
+  wledRustSource.includes("pub device: WledDeviceInfo"),
+  "WledConnectRequest.device: WledDeviceInfo present in Rust",
+  "MISSING: WledConnectRequest.device field — A1.5 connect fix incomplete"
+);
+check(
+  wledRustSource.includes("pub struct WledTestRequest") &&
+    wledRustSource.includes("pub device: WledDeviceInfo"),
+  "WledTestRequest.device: WledDeviceInfo present in Rust",
+  "MISSING: WledTestRequest.device field — A1.6 test fix incomplete"
+);
+
+console.log("\n[ WLED test response — roundTripMs (A1.6) ]");
+check(
+  wledRustSource.includes("pub round_trip_ms: Option<u64>"),
+  "WledTestResponse.round_trip_ms: Option<u64> present in Rust",
+  "MISSING: WledTestResponse.round_trip_ms field — A1.6 test response fix incomplete"
+);
+check(
+  !wledRustSource.match(/pub struct WledTestResponse[^}]*pub device:/s),
+  "Old WledTestResponse.device field removed (A1.6)",
+  "STILL PRESENT: WledTestResponse.device field — A1.6 cleanup incomplete"
+);
+
+console.log("\n[ WLED SSRF guard — extended address range checks (A2.1) ]");
+check(
+  wledRustSource.includes("is_loopback()"),
+  "parse_ipv4 rejects loopback (127.x) via is_loopback()",
+  "MISSING: is_loopback() check in parse_ipv4"
+);
+check(
+  wledRustSource.includes("is_unspecified()"),
+  "parse_ipv4 rejects unspecified (0.0.0.0) via is_unspecified()",
+  "MISSING: is_unspecified() check in parse_ipv4"
+);
+check(
+  wledRustSource.includes("is_multicast()"),
+  "parse_ipv4 rejects multicast (224.x/4) via is_multicast()",
+  "MISSING: is_multicast() check in parse_ipv4"
+);
+check(
+  wledRustSource.includes("is_broadcast()"),
+  "parse_ipv4 rejects broadcast (255.255.255.255) via is_broadcast()",
+  "MISSING: is_broadcast() check in parse_ipv4"
+);
 
 // ---------------------------------------------------------------------------
 // Summary

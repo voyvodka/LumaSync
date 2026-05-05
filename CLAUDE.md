@@ -55,6 +55,24 @@ If in doubt, spawn the agent. The token cost of a redundant spawn is trivial com
 | PR review / release readiness / CHANGELOG / Conventional Commits / license / secrets audit | `opensource-guardian` |
 | "X.Y.Z atıyorum" / "release hazırla" / "new version" | `release-manager` |
 
+### Runtime debugging — invoke `debug-runtime` BEFORE spawning agents
+
+When the user reports a runtime symptom that cannot be diagnosed from code
+alone — UI hangs, crashes, mode transitions misbehaving, capture failures,
+Hue/USB anomalies, shutdown deadlocks — invoke the `debug-runtime` skill
+first via the Skill tool (or run `/debug-runtime "<problem>"` if the user
+typed it). The skill restarts a clean dev session, captures both frontend
+(via `tauri-plugin-log` `attachConsole` bridge) and backend logs into a
+single file, runs the validation suite, and either applies a small inline
+fix or hands the captured `/tmp/lumasync-debug-window.log` excerpt to the
+right specialist with file:line citations. Skipping this step and
+spawning a specialist on hypothesis means the agent re-discovers what the
+runtime would have proven in 30 seconds.
+
+Skip the skill only when the bug is already proven by a stack trace or a
+failing test in this conversation — re-running the app for evidence we
+already have wastes a warm-up cycle.
+
 ## Commands
 
 ```bash

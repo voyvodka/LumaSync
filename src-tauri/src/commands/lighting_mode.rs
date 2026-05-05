@@ -1381,6 +1381,10 @@ fn apply_mode_change(
 
     // USB gate: only applies when USB is a required target (per D-01).
     if normalized_next.kind != LightingModeKind::Off && needs_usb && !device_connected {
+        log::warn!(
+            "[apply_mode_change] gated DEVICE_NOT_CONNECTED — kind={:?} requested_targets={:?} device_connected={device_connected}",
+            normalized_next.kind, requested_targets,
+        );
         return make_result(
             owner.active_mode.clone(),
             command_status(
@@ -1434,6 +1438,14 @@ fn apply_mode_change(
                 .smoothing_alpha
                 .unwrap_or_else(|| live.read_smoothing_alpha());
             let next_saturation = cfg.saturation.unwrap_or_else(|| live.read_saturation());
+            log::info!(
+                "[ambilight-live-update] brightness={:.3} smoothing={:.3} saturation={:.3} black_border={} preset={:?}",
+                cfg.brightness,
+                next_smoothing_alpha,
+                next_saturation,
+                cfg.black_border_detection,
+                cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
+            );
             live.update(
                 cfg.brightness,
                 cfg.black_border_detection,

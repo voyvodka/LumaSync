@@ -1,6 +1,6 @@
 [package]
 name = "lumasync"
-version = "1.5.1"
+version = "1.5.2"
 description = "LumaSync — screen-synced ambient lighting for WS2812B LEDs and Philips Hue"
 authors = ["voyvodka"]
 edition = "2021"
@@ -42,7 +42,10 @@ serde_json = "1"
 serialport = "4"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 openssl = { version = "0.10", features = ["vendored"] }
-tokio = { version = "1.52.1", features = ["rt"] }
+# `signal` enables tokio::signal::ctrl_c() / unix SIGTERM handling, used by the
+# debug-only orderly-shutdown hook in lib.rs (dev terminal Ctrl+C should run
+# safe_quit drop guards instead of orphaning the NSApplication run loop).
+tokio = { version = "1.52.1", features = ["rt", "signal"] }
 # v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
 # Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
@@ -50,6 +53,13 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "linux-
 # Used by `_hue._tcp.local.` (Hue) today; the shared `network::mdns` registry
 # also serves the future WLED `_wled._tcp.local.` browser (D5 — single
 # responder per process to avoid macOS SO_REUSEPORT contention).
+# Pin policy (evaluated 2026-05-04, G6): caret "0.19" is intentional.
+# 0.13→0.19 had major API churn (ScopedIpV4/ResolvedService surface rewrites);
+# registry was adapted at migration time. The 0.19.x patch line has been quiet
+# (0.19.1 was a clean bugfix — source-IP subnet selection + TXT length guard,
+# no consumer API change). Exact pin (=0.19.1) would block Dependabot from
+# picking up security patches automatically, which is the worse trade-off.
+# Dependabot will open a PR for any 0.19.x patch; review before merging.
 mdns-sd = "0.19"
 
 [target.'cfg(target_os = "windows")'.dependencies]

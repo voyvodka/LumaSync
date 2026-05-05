@@ -101,8 +101,8 @@ export function WledDevicePicker({
           ...prev,
           [device.ip]: { kind: "result", status: response.status },
         }));
-        if (response.device && onConnected) {
-          onConnected(response.device);
+        if (response.status.code === "WLED_CONNECT_OK" && onConnected) {
+          onConnected(device);
         }
       } catch (e) {
         console.error("[LumaSync] connectWledSink failed", e);
@@ -339,6 +339,10 @@ function translateWledStatusCode(
       return t("devicesPage.wled.status.protocolMismatch");
     case WLED_STATUS.LED_COUNT_MISMATCH:
       return t("devicesPage.wled.status.ledCountMismatch");
+    case WLED_STATUS.INVALID_IP:
+      return t("devicesPage.wled.status.invalidIp");
+    case WLED_STATUS.INVALID_LED_COUNT:
+      return t("devicesPage.wled.status.invalidLedCount");
     default:
       return null;
   }

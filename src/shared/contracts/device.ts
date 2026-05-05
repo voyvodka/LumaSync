@@ -385,6 +385,20 @@ export const WLED_STATUS = {
    * offer a one-click "trust the bridge" re-sync.
    */
   LED_COUNT_MISMATCH: "WLED_LED_COUNT_MISMATCH",
+  /**
+   * The supplied IP address failed SSRF hardening (PR #31 + A2.1 widening).
+   * Triggered for non-parseable strings AND for parseable-but-rejected
+   * ranges: loopback (127.x), unspecified (0.0.0.0), multicast (224.x/4),
+   * broadcast (255.255.255.255). Distinct from `BRIDGE_UNREACHABLE` which
+   * means the address parsed fine but no WLED device responded.
+   */
+  INVALID_IP: "WLED_INVALID_IP",
+  /**
+   * `connect_wled_sink` received a `led_count` of 0, which is not a
+   * valid strip configuration. The user must enter a positive LED count
+   * before connecting.
+   */
+  INVALID_LED_COUNT: "WLED_INVALID_LED_COUNT",
 } as const;
 
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];

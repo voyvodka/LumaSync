@@ -107,19 +107,31 @@ describe("useHueOnboarding runtime wiring", () => {
     return renderHook(() => useHueOnboardingHook());
   }
 
-  it("polls getHueStreamStatus and updates runtimeStatus", async () => {
-    const setIntervalSpy = vi.spyOn(window, "setInterval");
+  it("polls getHueStreamStatus on mount and arms a 10 s recursive setTimeout while streaming", async () => {
+    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
 
     mountProbe();
 
+    // First the mount tick fires once so the hook learns the runtime state.
+    // The backend mock reports `Reconnecting` (a streaming state), which
+    // causes the effect to remount with the streaming gate satisfied —
+    // that re-run also issues a mount tick. Either way the call count
+    // must be >= 1 after the mock resolves.
     await waitFor(() => {
-      expect(getHueStreamStatusMock).toHaveBeenCalledTimes(1);
+      expect(getHueStreamStatusMock.mock.calls.length).toBeGreaterThanOrEqual(1);
     });
 
-    expect(setIntervalSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
-    expect(setIntervalSpy.mock.calls.some(([, delay]) => delay === 3_000)).toBe(true);
+    // The recursive setTimeout cadence is the public contract here:
+    // the polling frequency was tightened from 3 s → 10 s in v1.5.x to
+    // stop redundant Bridge HTTPS readiness probes piling on the live
+    // DTLS frame stream. Backend `spawn_reconnect_monitor` is the real
+    // dead-sender detector (200 ms tick); the frontend poll is purely
+    // visual reflection.
+    await waitFor(() => {
+      expect(setTimeoutSpy.mock.calls.some(([, delay]) => delay === 10_000)).toBe(true);
+    });
 
-    setIntervalSpy.mockRestore();
+    setTimeoutSpy.mockRestore();
   });
 
   it("maps telemetry to runtimeTargets with retry metadata", async () => {

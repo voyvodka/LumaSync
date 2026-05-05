@@ -9,6 +9,13 @@ on:
     branches:
       - main
 
+# Cancel superseded runs when a branch is force-pushed or pushed multiple
+# times in quick succession. Saves ~15-20 minutes of duplicate Rust matrix
+# work per redundant push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -27,7 +34,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -101,5 +108,5 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: src-tauri
         run: |
-          cargo install --locked cargo-audit || true
+          cargo install --locked cargo-audit
           cargo audit

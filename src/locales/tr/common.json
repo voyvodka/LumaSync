@@ -267,7 +267,9 @@
         "discoveryTimeout": "Tarama süresi içinde hiçbir cihaz yanıt vermedi.",
         "bridgeUnreachable": "WLED cihazına erişilemiyor.",
         "protocolMismatch": "Cihaz protokolü reddetti — diğer protokolü deneyin.",
-        "ledCountMismatch": "Cihaz farklı bir LED sayısı bildiriyor."
+        "ledCountMismatch": "Cihaz farklı bir LED sayısı bildiriyor.",
+        "invalidIp": "Geçerli bir IPv4 adresi değil — WLED IP'sini kontrol edin.",
+        "invalidLedCount": "WLED cihazı geçersiz LED sayısı bildiriyor (0)."
       }
     }
   },
@@ -443,7 +445,13 @@
     "usbDetected": "USB LED şerit algılandı. Çıkış hedefi olarak eklensin mi?",
     "addTarget": "Ekle",
     "dismiss": "Kapat",
-    "usbDisconnected": "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor."
+    "usbDisconnected": "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor.",
+    "unsupportedFallback": "USB cihazı tanınmıyor — Hue-only moda alındı.",
+    "stopFailed": "{{targets}} durdurulamadı. Çıkış etkin bırakıldı; yeniden deneyin.",
+    "targetLabel": {
+      "usb": "USB",
+      "hue": "Hue"
+    }
   },
   "device": {
     "title": "Cihaz",
@@ -1144,6 +1152,10 @@
       }
     }
   },
+  "trayHint": {
+    "title": "LumaSync menü çubuğunda çalışıyor",
+    "body": "Pencereyi geri açmak için menü çubuğundaki simgeye tıkla. Bu mesaj sadece ilk kapatmada görünür."
+  },
   "calibration": {
     "section": {
       "title": "Kalibrasyon",
@@ -1199,8 +1211,10 @@
       "aria": {
         "countIncrease": "{{label}} sayısını artır",
         "countDecrease": "{{label}} sayısını azalt",
+        "countInput": "{{label}} LED sayısı, klavyeden gir",
         "gapIncrease": "Ayak boşluğunu artır",
-        "gapDecrease": "Ayak boşluğunu azalt"
+        "gapDecrease": "Ayak boşluğunu azalt",
+        "gapInput": "Ayak boşluğu LED sayısı, klavyeden gir"
       }
     },
     "overlay": {

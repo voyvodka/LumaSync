@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { getFullTelemetrySnapshot } from "../telemetryApi";
-import type { FullTelemetrySnapshot } from "../model/contracts";
+import { useFullTelemetryPoll } from "../hooks/useFullTelemetryPoll";
 import { HueTelemetryGrid } from "./HueTelemetryGrid";
 
 const POLL_INTERVAL_MS = 2000;
@@ -24,44 +22,13 @@ interface TelemetrySectionProps {
 
 export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
   const { t } = useTranslation("common");
-  const [snapshot, setSnapshot] = useState<FullTelemetrySnapshot | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-
-  useEffect(() => {
-    // Don't poll when device is disconnected
-    if (!usbConnected) {
-      setIsLoading(false);
-      return;
-    }
-
-    let mounted = true;
-
-    const refresh = async () => {
-      // Skip poll when tab/window is not visible (P3-1)
-      if (document.visibilityState === "hidden") return;
-
-      try {
-        const next = await getFullTelemetrySnapshot();
-        if (!mounted) return;
-        setSnapshot(next);
-        setHasError(false);
-      } catch {
-        if (!mounted) return;
-        setHasError(true);
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    };
-
-    void refresh();
-    const intervalId = window.setInterval(() => { void refresh(); }, POLL_INTERVAL_MS);
-
-    return () => {
-      mounted = false;
-      window.clearInterval(intervalId);
-    };
-  }, [usbConnected]);
+  const { snapshot, error, isLoading } = useFullTelemetryPoll(usbConnected, POLL_INTERVAL_MS);
+  // The diagnostic surface only flags an error when the most recent tick
+  // failed AND we never received a successful snapshot — once a good
+  // snapshot is on screen, a single transient failure should not yank the
+  // values out from under the user. They will see the next successful
+  // tick within `POLL_INTERVAL_MS`.
+  const hasError = error !== null && snapshot === null;
 
   const showEmpty =
     !isLoading

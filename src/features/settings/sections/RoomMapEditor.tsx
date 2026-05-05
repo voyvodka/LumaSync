@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
@@ -1408,10 +1408,46 @@ function RenameDialog({
   const { t } = useTranslation("common");
   const [value, setValue] = useState(currentLabel);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  // A1.4 — useId() instead of a static "rename-dialog-label" so multiple
+  // RenameDialog instances (or re-mounts) don't collide on the aria-labelledby
+  // target. Pure a11y delta on top of the W4 i18n + role="dialog" pass.
+  const labelId = useId();
 
   useEffect(() => {
     inputRef.current?.select();
   }, []);
+
+  // A1.4 — document-level focus trap + global ESC cancel. Tab cycle:
+  // input → cancel → confirm → input (and Shift-Tab in reverse). ESC from any
+  // focused element triggers cancel — previously only the input handled ESC,
+  // so once focus left the input the dialog became un-cancellable by keyboard.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const order: HTMLElement[] = [inputRef.current, cancelRef.current, confirmRef.current].filter(
+        (el): el is HTMLInputElement | HTMLButtonElement => el !== null,
+      );
+      if (order.length === 0) return;
+      const active = document.activeElement as HTMLElement | null;
+      const idx = active ? order.indexOf(active) : -1;
+      const next = event.shiftKey
+        ? order[(idx <= 0 ? order.length : idx) - 1]
+        : order[(idx + 1) % order.length];
+      if (next && next !== active) {
+        event.preventDefault();
+        next.focus();
+      }
+    };
+    document.addEventListener("keydown", handler, true);
+    return () => document.removeEventListener("keydown", handler, true);
+  }, [onCancel]);
 
   const handleSubmit = () => {
     const trimmed = value.trim();
@@ -1426,14 +1462,14 @@ function RenameDialog({
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="rename-dialog-label"
+      aria-labelledby={labelId}
     >
       <div
         className="lm-settings-group p-4 w-64 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <label
-          id="rename-dialog-label"
+          id={labelId}
           className="block text-[11px] font-semibold mb-2"
           style={{ color: "var(--lm-ink)", fontFamily: "var(--lm-mono)", letterSpacing: "0.04em" }}
         >
@@ -1447,7 +1483,8 @@ function RenameDialog({
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === "Enter") handleSubmit();
-            if (e.key === "Escape") onCancel();
+            // ESC handled by document-level trap; stopPropagation still
+            // keeps room-map shortcuts from leaking through Tab/Enter.
           }}
           className="w-full rounded px-2 py-1.5 text-sm focus:outline-none"
           style={{
@@ -1466,6 +1503,7 @@ function RenameDialog({
         />
         <div className="mt-3 flex justify-end gap-2">
           <button
+            ref={cancelRef}
             type="button"
             className="rounded text-[11px]"
             style={{
@@ -1481,6 +1519,7 @@ function RenameDialog({
             {t("roomMap.contextMenu.renameCancel")}
           </button>
           <button
+            ref={confirmRef}
             type="button"
             className="rounded text-[11px] font-semibold"
             style={{

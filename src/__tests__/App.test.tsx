@@ -43,6 +43,25 @@ vi.mock("../features/tray/trayController", () => ({
   updateTrayLabels: () => Promise.resolve(),
 }));
 
+// useAutoUpdater wires `@tauri-apps/plugin-updater`'s `check()` to the
+// global invoke mock; without an explicit stub the auto-updater check
+// resolves to `{ connected: false }` (the default invokeMock value),
+// which `useAutoUpdater` interprets as "update available" and renders
+// the UpdateModal mid-test, racing the output-targets waitFor. The
+// modal is not under test in this file — stub the hook to a static
+// idle state so updater behaviour stays out of the lighting-mode
+// orchestration assertions.
+vi.mock("../features/updater/useAutoUpdater", () => ({
+  useAutoUpdater: () => ({
+    state: { status: "idle" },
+    channel: "stable",
+    checkForUpdates: vi.fn().mockResolvedValue(undefined),
+    downloadAndInstall: vi.fn().mockResolvedValue(undefined),
+    dismiss: vi.fn(),
+    devSetState: vi.fn(),
+  }),
+}));
+
 vi.mock("../features/shell/windowLifecycle", () => ({
   loadShellState: () => loadShellStateMock(),
   saveShellState: (patch: unknown) => saveShellStateMock(patch),

@@ -7,11 +7,26 @@
 //   4. window-state plugin
 //   5. tray icon + menu construction
 //   6. close-to-tray interception via on_window_event
+//
+// Shutdown flow (macOS, all OSes — see kick_off_shutdown_and_die for rationale):
+//   - red-X / Cmd+W → WindowEvent::CloseRequested → prevent_close + hide_to_tray
+//     (window stays alive in the tray; process keeps running).
+//   - Tray Quit menu item → kick_off_shutdown_and_die directly.
+//   - Cmd+Q on macOS → NSApp.terminate flow runs independently of our
+//     window event hook (tao 0.35 does NOT register applicationShouldTerminate:
+//     so there is no way to intercept it in user code). NSApp eventually fires
+//     applicationWillTerminate → tao emits LoopDestroyed → tauri-runtime-wry
+//     surfaces RunEvent::Exit. We catch RunEvent::Exit in the .run callback
+//     and run the same cleanup path. The watchdog inside
+//     kick_off_shutdown_and_die guarantees process death within 4s, so a
+//     stuck SCStream/DTLS Drop never produces a `?E` zombie.
+//   - Ctrl+C in the dev terminal → SIGINT → tokio::signal::ctrl_c task →
+//     kick_off_shutdown_and_die.
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, Runtime, State,
+    AppHandle, Emitter, Manager, RunEvent, Runtime, State,
 };
 
 mod commands {
@@ -79,6 +94,17 @@ use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wl
 
 const TRAY_ICON_ID: &str = "main-tray";
 
+/// Hard-exit deadline for shutdown. The cleanup path joins worker threads,
+/// drops SCStream, deactivates DTLS — each of which can theoretically hang
+/// (objc cleanup, network timeout, mutex contention). The watchdog ensures
+/// the process always dies within this window, even when something hangs.
+const SHUTDOWN_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// Set to `true` once a shutdown sequence has been kicked off so we don't
+/// spawn redundant cleanup threads on RunEvent::ExitRequested + RunEvent::Exit
+/// arriving back-to-back.
+static SHUTDOWN_FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 struct TrayState<R: Runtime> {
     open_settings: MenuItem<R>,
     lights_off: MenuItem<R>,
@@ -109,23 +135,121 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: safe quit — stop active workers before exiting
+// Helper: cleanup_blocking — actually stops all background workers.
+//
+// Runs on a dedicated std::thread (NEVER the macOS main thread). Joins
+// the ambilight worker (drops SCStream from a non-main thread, see
+// LightingWorkerRuntime::stop), waits up to 3s for the Hue DTLS sender
+// to ack shutdown, and releases the active serial sink.
 // ---------------------------------------------------------------------------
-fn safe_quit<R: Runtime>(app: &AppHandle<R>) {
-    // 1. Stop ambilight / serial worker synchronously.
-    //    Joins the worker thread and drops SCStream (the frame source) from
-    //    this thread — preventing SCStream::stop_capture from being called on
-    //    the OS process-cleanup thread, which causes a macOS crash.
-    let _ = stop_lighting(app.state::<LightingRuntimeState>());
+fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
+    log::info!("[shutdown] cleanup thread started");
 
-    // 2. Deactivate Hue entertainment area so the bridge turns lights off.
-    //    stop_hue_stream is synchronous (waits up to HUE_STOP_TIMEOUT_SECS=3s).
-    let _ = stop_hue_stream(None, app.state::<HueRuntimeStateStore>());
+    // 1. Ambilight / serial capture worker.
+    let t1 = std::time::Instant::now();
+    if let Err(e) = stop_lighting(app.state::<LightingRuntimeState>()) {
+        log::warn!("[shutdown] stop_lighting reported: {e}");
+    }
+    log::info!("[shutdown] step 1 (stop_lighting) took {:?}", t1.elapsed());
 
-    // 3. Stop and release the active sink (serial port session).
+    // 2. Hue entertainment stream — bounded to 1.5s on shutdown.
+    //
+    // stop_hue_stream's worst case is HTTP deactivate (5s reqwest timeout)
+    // + sender shutdown wait (3s Condvar) = up to 8s when the bridge is
+    // slow or unreachable. That blew through our 4s watchdog and caused the
+    // "cleanup hung — forcing exit" path. Bridge state restore is
+    // best-effort (the bridge times out the entertainment session
+    // server-side anyway), so detach the call and abandon after 1.5s if it
+    // hasn't returned. process::exit(0) below will tear down the orphan
+    // worker thread regardless.
+    let t2 = std::time::Instant::now();
+    let app_for_hue = app.clone();
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    std::thread::Builder::new()
+        .name("lumasync-shutdown-hue".into())
+        .spawn(move || {
+            let result = stop_hue_stream(None, app_for_hue.state::<HueRuntimeStateStore>())
+                .map(|_| ())
+                .map_err(|e| format!("{e:?}"));
+            let _ = tx.send(result);
+        })
+        .ok();
+    match rx.recv_timeout(std::time::Duration::from_millis(1500)) {
+        Ok(Ok(())) => {
+            log::info!(
+                "[shutdown] step 2 (stop_hue_stream) took {:?}",
+                t2.elapsed()
+            )
+        }
+        Ok(Err(e)) => log::warn!("[shutdown] stop_hue_stream reported: {e}"),
+        Err(_) => log::warn!(
+            "[shutdown] step 2 (stop_hue_stream) abandoned after {:?}",
+            t2.elapsed()
+        ),
+    }
+
+    // 3. Active LED sink (serial port session).
+    let t3 = std::time::Instant::now();
     app.state::<ActiveSinkRegistry>().clear();
+    log::info!("[shutdown] step 3 (sink clear) took {:?}", t3.elapsed());
 
-    app.exit(0);
+    log::info!("[shutdown] cleanup complete, exiting");
+    cleanup_orphan_socket();
+    std::process::exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// Helper: kick_off_shutdown_and_die — entry point for ALL shutdown triggers.
+//
+// Spawns cleanup_blocking on a worker thread (so the macOS main thread is
+// never held — that was the deadlock culprit in v1.5.1+ when safe_quit ran
+// inline inside the tray menu callback or the WindowEvent::CloseRequested
+// handler). Arms a watchdog thread that calls process::exit(0) after
+// SHUTDOWN_WATCHDOG no matter what. Idempotent via SHUTDOWN_FIRED.
+//
+// This is what guarantees no `?E` zombies: the process dies in <= 4s
+// regardless of whether SCStream Drop, DTLS deactivate, or any other
+// cleanup step hangs.
+// ---------------------------------------------------------------------------
+fn kick_off_shutdown_and_die<R: Runtime>(app: &AppHandle<R>) {
+    if SHUTDOWN_FIRED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        // Already in progress — don't re-arm.
+        return;
+    }
+    log::info!("[shutdown] kicked off (watchdog={SHUTDOWN_WATCHDOG:?})");
+
+    // Worker thread: do the graceful cleanup, then exit(0).
+    let app_for_cleanup = app.clone();
+    std::thread::Builder::new()
+        .name("lumasync-shutdown".into())
+        .spawn(move || cleanup_blocking(app_for_cleanup))
+        .expect("failed to spawn shutdown cleanup thread");
+
+    // Watchdog thread: guaranteed exit after SHUTDOWN_WATCHDOG.
+    std::thread::Builder::new()
+        .name("lumasync-shutdown-watchdog".into())
+        .spawn(|| {
+            std::thread::sleep(SHUTDOWN_WATCHDOG);
+            log::warn!("[shutdown] watchdog fired — forcing exit (cleanup hung)");
+            cleanup_orphan_socket();
+            std::process::exit(0);
+        })
+        .expect("failed to spawn shutdown watchdog thread");
+}
+
+// Hard-exit (`std::process::exit`) bypasses Tauri plugin destroy() callbacks,
+// so the single-instance plugin's Unix socket at
+// /tmp/com_<identifier>_si.sock is leaked whenever the watchdog fires. The
+// next launch's plugin connect() succeeds against the stale inode and the
+// new instance silently exit(0)s. Remove the socket explicitly before the
+// hard exit so the next launch starts cleanly.
+fn cleanup_orphan_socket() {
+    let path = "/tmp/com_lumasync_app_si.sock";
+    match std::fs::remove_file(path) {
+        Ok(()) => log::info!("[shutdown] removed orphan socket {path}"),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("[shutdown] could not remove {path}: {e}"),
+    }
 }
 
 fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
@@ -215,11 +339,30 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
 pub fn run() {
     let mut builder = tauri::Builder::default();
 
-    // 1. Single-instance must be registered first
-    builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-        // Second launch: focus existing main window
-        show_and_focus_settings(app);
-    }));
+    // 1. Single-instance must be registered first.
+    //
+    // The macOS impl uses a Unix domain socket at `/tmp/<identifier>_si.sock`,
+    // NOT NSWorkspace zombie detection (verified against
+    // tauri-plugin-single-instance 2.4.1 source). The earlier "silent
+    // exit within 50ms" launch failure traced to leftover sockets from
+    // `?E` zombies whose RunEvent::Exit hook never fired (so the plugin's
+    // socket cleanup at `destroy()` never ran). With the new
+    // kick_off_shutdown_and_die guaranteeing process death + RunEvent::Exit
+    // delivery, the plugin's socket is now reliably cleaned, so we keep
+    // it enabled in BOTH debug and release builds.
+    // Debug builds skip single-instance: hard-exit (process::exit) bypasses
+    // the plugin's destroy() socket cleanup, so dev iterations leak
+    // /tmp/com_lumasync_app_si.sock and the next launch silently exits when
+    // the plugin connects to the stale socket. Release builds keep it on
+    // because tray-first UX needs single-instance contract; the explicit
+    // socket cleanup above guards against the hard-exit path on release too.
+    #[cfg(not(debug_assertions))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Second launch: focus existing main window
+            show_and_focus_settings(app);
+        }));
+    }
 
     // 2. Autostart
     builder = builder.plugin(tauri_plugin_autostart::init(
@@ -281,6 +424,14 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Warn)
                 .level_for("lumasync_lib", log::LevelFilter::Debug)
+                // `webview` is the target name used by tauri-plugin-log's
+                // attachConsole() JS bridge — keeping it at Info preserves
+                // frontend `console.info`/`console.log` lines in the file
+                // sink so external observers (e.g. the lumasync-debug
+                // skill) can correlate frontend + backend timelines from a
+                // single log file. Without this, only console.warn / error
+                // would survive the global Warn filter.
+                .level_for("webview", log::LevelFilter::Info)
                 .level_for("reqwest", log::LevelFilter::Warn)
                 .level_for("hyper", log::LevelFilter::Warn)
                 .level_for("hyper_util", log::LevelFilter::Warn)
@@ -325,7 +476,7 @@ pub fn run() {
         );
     }
 
-    builder
+    let app = builder
         .setup(|app| {
             // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
@@ -364,11 +515,53 @@ pub fn run() {
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
 
-            // Build tray icon
-            TrayIconBuilder::with_id(TRAY_ICON_ID)
-                .icon(app.default_window_icon().unwrap().clone())
-                .menu(&menu)
-                .tooltip("LumaSync")
+            // Build tray icon.
+            //
+            // macOS sizing, spacing & silhouette: NSStatusItem expects a
+            // ~22pt template image. The default window icon is the
+            // bundle's full-colour rounded-square (opaque dark background
+            // + yellow slash); under template-image masking only its
+            // alpha channel matters, so it would render as a solid white
+            // square in the menu bar. We instead embed a dedicated
+            // pre-built monochrome silhouette of the slash glyph at 44x44
+            // (Retina-friendly; AppKit downscales to 22pt on non-Retina)
+            // and set `icon_as_template(true)` so AppKit treats the
+            // alpha as a mask and auto-tints for light/dark menu bar.
+            //
+            // The asset is `include_bytes!`'d at compile time so the
+            // tray works whether or not the running binary can resolve
+            // its bundle resources directory at runtime.
+            //
+            // Linux & Windows are intentionally untouched: both expect a
+            // full-colour tray icon and the template flag is macOS-only.
+            let tray_builder = {
+                let base = TrayIconBuilder::with_id(TRAY_ICON_ID)
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .menu(&menu)
+                    .tooltip("LumaSync");
+
+                #[cfg(target_os = "macos")]
+                {
+                    // Pre-decoded RGBA bytes for `tray-icon@2x.png` (44x44).
+                    // The companion PNG lives at `icons/tray-icon@2x.png`; the
+                    // raw RGBA copy is generated from it via:
+                    //   magick tray-icon@2x.png -depth 8 RGBA:tray-icon@2x.rgba
+                    // We embed the raw form so we can hand it directly to
+                    // `Image::new` without dragging in a PNG decoder at runtime.
+                    const TRAY_ICON_RGBA: &[u8] = include_bytes!("../icons/tray-icon@2x.rgba");
+                    const TRAY_ICON_DIM: u32 = 44;
+                    base.icon(tauri::image::Image::new(
+                        TRAY_ICON_RGBA,
+                        TRAY_ICON_DIM,
+                        TRAY_ICON_DIM,
+                    ))
+                    .icon_as_template(true)
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                base
+            };
+            tray_builder
                 // Left-click on tray icon → open/focus settings
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -392,20 +585,45 @@ pub fn run() {
                     "tray-solid-color" => {
                         let _ = app.emit("tray:solid-color", ());
                     }
-                    "quit" => safe_quit(app),
+                    "quit" => kick_off_shutdown_and_die(app),
                     _ => {}
                 })
                 .build(&app_handle)?;
 
+            // Dev-only: catch SIGINT (Ctrl+C in the terminal that ran
+            // `pnpm tauri dev`) and run the same orderly shutdown path
+            // so the dev terminal returns promptly instead of waiting on
+            // cargo to send SIGTERM after a 10s grace.
+            //
+            // Tauri's async runtime is the multi-threaded tokio runtime; the
+            // `signal` feature on the tokio dep is the only requirement.
+            #[cfg(all(unix, debug_assertions))]
+            {
+                let app_for_signal = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Ok(()) = tokio::signal::ctrl_c().await {
+                        log::info!("[shutdown] SIGINT received");
+                        kick_off_shutdown_and_die(&app_for_signal);
+                    }
+                });
+            }
+
             Ok(())
         })
-        // Close-to-tray interception (main window only — overlay windows must close freely)
+        // Close-to-tray interception (main window only — overlay windows must close freely).
+        //
+        // This handles red-X and Cmd+W cleanly. Cmd+Q on macOS ALSO routes
+        // through here (NSApp's terminate broadcast hits each window's
+        // windowShouldClose:), but the NSApp terminate flow proceeds
+        // independently of our prevent_close — applicationWillTerminate
+        // fires next regardless, surfaced as RunEvent::Exit below. So for
+        // Cmd+Q the user sees the window vanish (hide_to_tray) and then
+        // the process dies via the .run() callback's RunEvent::Exit branch.
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
             }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Prevent default close (process exit) and hide to tray instead
                 api.prevent_close();
                 hide_to_tray(window);
             }
@@ -454,6 +672,38 @@ pub fn run() {
             connect_wled_sink,
             test_wled_bridge,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // .run() with a callback is the only place that sees RunEvent::Exit on
+    // macOS Cmd+Q (tao 0.35 surfaces applicationWillTerminate as
+    // LoopDestroyed → tauri-runtime-wry → RunEvent::Exit). Without this
+    // hook, Cmd+Q tears the process down WITHOUT ever running our cleanup,
+    // which is what produced the `?E` zombies in earlier sessions.
+    //
+    // RunEvent::ExitRequested fires on app.exit() / app.restart() — currently
+    // unused but covered for completeness in case future code paths add a
+    // programmatic exit.
+    app.run(|app_handle, event| match event {
+        RunEvent::ExitRequested { api, .. } => {
+            // We do our own orderly shutdown; let Tauri proceed with its
+            // exit flow but make sure cleanup is kicked off so the process
+            // dies before any plugin cleanup hangs.
+            log::info!("[shutdown] RunEvent::ExitRequested received");
+            kick_off_shutdown_and_die(app_handle);
+            // Don't prevent — let Tauri also try its graceful path; whichever
+            // races to exit(0) first wins, watchdog backstop is armed.
+            let _ = api;
+        }
+        RunEvent::Exit => {
+            log::info!("[shutdown] RunEvent::Exit received");
+            kick_off_shutdown_and_die(app_handle);
+            // We do NOT return from this callback into Tauri's normal teardown
+            // because that path runs in the macOS main thread context post-
+            // applicationWillTerminate, where SCStream Drop has been observed
+            // to deadlock. The watchdog inside kick_off guarantees _exit(0)
+            // within SHUTDOWN_WATCHDOG.
+        }
+        _ => {}
+    });
 }

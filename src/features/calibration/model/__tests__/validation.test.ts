@@ -92,4 +92,23 @@ describe("validateCalibrationConfig", () => {
     expect(result.ok).toBe(false);
     expect(result.errors.some((error) => error.code === "TOTAL_MISMATCH")).toBe(true);
   });
+
+  // F7-b — edge case: bottom=0 but bottomMissing>0 (contradictory configuration).
+  // Production logic (validation.ts:40): `bottomMissing > counts.bottom` evaluates
+  // as `1 > 0 = true` → BOTTOM_MISSING_EXCEEDS_BOTTOM is surfaced.
+  // This pins the current behaviour so a future refactor cannot silently ignore it.
+  it("rejects bottomMissing > 0 when bottom edge has zero LEDs (contradictory config)", () => {
+    const result = validateCalibrationConfig({
+      ...VALID_CONFIG,
+      counts: { top: 36, right: 22, bottom: 0, left: 22 },
+      bottomMissing: 1,
+      totalLeds: 80, // top + right + left = 80; bottom intentionally 0
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.code === "BOTTOM_MISSING_EXCEEDS_BOTTOM")).toBe(true);
+    expect(result.errors.find((e) => e.code === "BOTTOM_MISSING_EXCEEDS_BOTTOM")?.field).toBe(
+      "bottomMissing",
+    );
+  });
 });

@@ -23,6 +23,7 @@ import {
   startCalibrationFromSettings,
 } from "./features/calibration/state/entryFlow";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
+import { connectionEvents } from "./features/device/connectionEvents";
 import {
   canEnableLedMode,
   MODE_GUARD_REASONS,
@@ -54,6 +55,7 @@ import {
 import {
   initWindowLifecycle,
   loadShellState,
+  resizeToMode,
   saveShellState,
 } from "./features/shell/windowLifecycle";
 import {
@@ -136,11 +138,16 @@ interface HueStartConfig {
 }
 
 function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
+  // First-install case (`undefined` / non-array shape from the persisted
+  // store): fall back to DEFAULT_OUTPUT_TARGETS so a fresh user lands on a
+  // sensible primary output. An EXPLICIT empty array means the user (or the
+  // unsupported-USB auto-fallback) has cleared targets — respect that and
+  // return `[]`. The previous unconditional DEFAULT fallback re-added the
+  // very target we had just removed and stranded the auto-deselect path.
   if (!Array.isArray(value)) return [...DEFAULT_OUTPUT_TARGETS];
   const targetSet = new Set(
     value.filter((t): t is HueRuntimeTarget => t === "usb" || t === "hue"),
   );
-  if (targetSet.size === 0) return [...DEFAULT_OUTPUT_TARGETS];
   return ["usb", "hue"].filter((t): t is HueRuntimeTarget => targetSet.has(t as HueRuntimeTarget));
 }
 
@@ -187,6 +194,10 @@ function App() {
   const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
   const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
   const [hueStartConfig, setHueStartConfig] = useState<HueStartConfig | null>(null);
+  // Mirror of `hueStartConfig` so the connection-event subscriber (in a
+  // useEffect with `[]` deps) can read the latest paired-bridge state
+  // without re-subscribing on every state mutation.
+  const hueStartConfigRef = useRef<HueStartConfig | null>(null);
   const [hueReachable, setHueReachable] = useState(false);
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
@@ -196,6 +207,16 @@ function App() {
   const [bootstrapDone, setBootstrapDone] = useState(false);
   const [showUsbSuggest, setShowUsbSuggest] = useState(false);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
+  // Bug 10D — surfaces a one-time non-blocking notice when boot-time
+  // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
+  // the user understands why we just dropped them into Hue-only mode.
+  // Distinct from `usbDisconnectNotice` (which fires on a runtime
+  // unplug) so the copy can be specific.
+  const [usbUnsupportedNotice, setUsbUnsupportedNotice] = useState(false);
+  // A1.2 — surfaces the targets whose stop_lighting / stop_hue_stream invoke
+  // failed during a delta-stop, so the chip stays active instead of silently
+  // lying about state. Banner auto-dismisses; user can retry by toggling.
+  const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
 
   // v1.5 W2-B4 — first-run onboarding state. The flag is hydrated from
   // shellStore on bootstrap; a fresh user (`undefined` / `false`) sees
@@ -207,6 +228,13 @@ function App() {
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
   const modeTransitionLockRef = useRef(false);
   const bootstrapRanRef = useRef(false);
+  // Auto-updater check is intentionally module-level (not inside the boot
+  // sequence) so it fires immediately on mount and is not blocked by
+  // shellStore / Hue / USB / DTLS work. The ref is a StrictMode dev-mode
+  // guard: the underlying effect re-runs once during double-mount, this
+  // ref short-circuits the second invocation so we always send exactly
+  // one `check()` request to GitHub Releases.
+  const updateCheckRanRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
   /**
    * Idempotent dispatch guard for `setLightingMode` (v1.5 fix #45).
@@ -535,6 +563,18 @@ function App() {
     }, LIGHTING_MODE_PERSIST_DEBOUNCE_MS);
   }, []);
 
+  // Auto-updater poll — fires once on mount, in parallel with the boot
+  // sequence. Previously lived at the tail of `bootstrap()` behind
+  // shellStore + Hue validate + USB reconnect + DTLS handshake, which
+  // pushed the GitHub Releases probe well past the user's first frame.
+  // The ref guard absorbs StrictMode dev double-mount so we never
+  // double-fire `check()`.
+  useEffect(() => {
+    if (updateCheckRanRef.current) return;
+    updateCheckRanRef.current = true;
+    void checkForUpdates();
+  }, [checkForUpdates]);
+
   // Flush pending lighting-mode persist on page hide / visibility change /
   // unmount so a Cmd+R or tray-close right after a slider move does not
   // discard the in-flight debounced write. Mirrors the pattern used for
@@ -618,32 +658,70 @@ function App() {
   // configured but stream is NOT active. Updates hueReachable so the chip
   // accurately reflects whether the bridge is currently on the same network.
   // While hue is streaming we skip polling — the active stream is proof enough.
+  //
+  // Visibility-aware (recursive setTimeout, not setInterval): the tray
+  // window can be hidden indefinitely with the React tree mounted, so
+  // unconditional 30 s ticks would keep firing HTTPS Bridge requests
+  // nobody can see. The loop pauses while hidden and resumes with an
+  // immediate first tick on `visibilitychange` so the chip refreshes
+  // instantly when the user re-opens the window.
   // ---------------------------------------------------------------------------
   const hueStreaming = activeOutputTargets.includes("hue");
   useEffect(() => {
     if (!hueStartConfig || hueStreaming) return;
 
-    let active = true;
+    let mounted = true;
+    let timeoutId: number | null = null;
+    let inFlight = false;
 
-    const poll = async () => {
-      if (!active) return;
+    const tick = async () => {
+      if (!mounted) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
         const validation = await validateHueCredentials(
           hueStartConfig.bridgeIp,
           hueStartConfig.username,
           hueStartConfig.clientKey,
         );
-        if (!active) return;
+        if (!mounted) return;
         setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
       } catch {
-        if (active) setHueReachable(false);
+        if (mounted) setHueReachable(false);
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
     };
 
-    const intervalId = window.setInterval(() => { void poll(); }, HUE_BRIDGE_REACHABILITY_POLL_MS);
+    const scheduleNext = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, HUE_BRIDGE_REACHABILITY_POLL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
-      active = false;
-      window.clearInterval(intervalId);
+      mounted = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [hueStartConfig, hueStreaming]);
 
@@ -715,11 +793,38 @@ function App() {
         // Restore window geometry immediately — before any heavy async work —
         // so the window settles into its saved position without a visible jump.
         await initWindowLifecycle({
+          // A4.1 — Trigger an OS-level notification the first time the
+          // user closes the window, so they know the app is still running
+          // in the tray (matches Spotify / Slack behaviour). The
+          // trayHintShown flag in shellStore guarantees this fires only
+          // once per install. The Rust command is never-throws and
+          // returns a coded status — we log a denied permission as
+          // diagnostic context and silently continue, since the hint is
+          // a nice-to-have, not a blocker for the close flow.
           onFirstCloseToTray: () => {
-            console.info(
-              "[LumaSync] Hint: The app is still running in the system tray. " +
-              "Click the tray icon to reopen settings.",
-            );
+            void (async () => {
+              try {
+                const result = await invoke<{ status: string; code?: string; message?: string }>(
+                  "show_notification",
+                  {
+                    payload: {
+                      title: t("trayHint.title"),
+                      body: t("trayHint.body"),
+                      kind: "info",
+                    },
+                  },
+                );
+                if (result.status !== "ok") {
+                  console.info(
+                    "[LumaSync] tray hint notification not delivered:",
+                    result.code ?? "unknown",
+                    result.message ?? "",
+                  );
+                }
+              } catch (err) {
+                console.warn("[LumaSync] tray hint notification invoke failed:", err);
+              }
+            })();
           },
         });
 
@@ -848,18 +953,15 @@ function App() {
         const hueBootstrapConfig = toHueStartConfig(state);
         setHueStartConfig(hueBootstrapConfig);
 
-        if (hueBootstrapConfig) {
-          try {
-            const validation = await validateHueCredentials(
-              hueBootstrapConfig.bridgeIp,
-              hueBootstrapConfig.username,
-              hueBootstrapConfig.clientKey,
-            );
-            setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
-          } catch {
-            setHueReachable(false);
-          }
-        }
+        // NOTE: we deliberately do NOT call `validateHueCredentials` here.
+        // Setting `hueStartConfig` re-arms the visibility-aware
+        // reachability poll (further down in this file) which fires its
+        // own immediate mount tick — so the first credential probe lands
+        // ~1-2 s after this line resolves. Doing a bootstrap validate
+        // call as well meant every launch hit the Bridge twice (once
+        // here, once from the poll's mount tick) for the same answer.
+        // The chip starts as `hueReachable=false` and flips green on
+        // the poll's first successful tick.
 
         // Bootstrap path is split in two stages so the persisted Ambilight
         // payload (saturation / blackBorderDetection / smoothing preset) gets
@@ -939,9 +1041,6 @@ function App() {
           }
         }
 
-        // Check for updates silently after startup
-        void checkForUpdates();
-
         // Push localized tray labels to Rust
         void updateTrayLabels({
           openSettings: i18next.t("tray.openSettings"),
@@ -966,6 +1065,7 @@ function App() {
   // Keep tray refs in sync with latest state
   useEffect(() => { lightingModeRef.current = lightingMode; }, [lightingMode]);
   useEffect(() => { selectedOutputTargetsRef.current = selectedOutputTargets; }, [selectedOutputTargets]);
+  useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
   // Mirror the persisted LED calibration state into a ref so
   // `withLedCalibration` (called inside `dispatchSetLightingMode`) can
   // read the latest value without re-creating the helper on every render.
@@ -1043,13 +1143,28 @@ function App() {
   }, []);
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
+    // A3.5 — compact mode hosts only LIGHTS (CompactLayout ignores
+    // activeSection). Without this gate, deep-link clicks from the
+    // compact onboarding banner / CTA / tray menu would set
+    // activeSection silently while the user still sees the LIGHTS
+    // panel, leaving them with the "I clicked, nothing happened"
+    // experience. Switching to full first surfaces the destination
+    // section as the SettingsLayout fans out by activeSection.
+    if (currentMode === "compact" && sectionId !== SECTION_IDS.LIGHTS) {
+      try {
+        await resizeToMode("full");
+        setCurrentMode("full");
+      } catch (err) {
+        console.error("[LumaSync] resizeToMode(full) failed:", err);
+      }
+    }
     setActiveSection(sectionId);
     try {
       await saveShellState({ lastSection: sectionId });
     } catch (err) {
       console.error("[LumaSync] saveShellState(lastSection) failed:", err);
     }
-  }, []);
+  }, [currentMode, setCurrentMode]);
 
   // Auto-open calibration when device connects for the first time
   useEffect(() => {
@@ -1092,32 +1207,45 @@ function App() {
     const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
 
-    // Delta-stop: for each removed target that is currently active, stop it
-    // Optimization: Execute stop commands concurrently for independent targets
-    // (USB and Hue) to minimize shutdown phase latency.
-    await Promise.all(
-      removedTargets.map(async (target) => {
-        if (!currentActive.includes(target)) return;
-        if (target === "usb") {
-          try {
-            await invoke("stop_lighting");
-          } catch (err) {
-            console.error("[LumaSync] stop_lighting during delta-stop failed:", err);
-          }
-        }
-        if (target === "hue") {
-          try {
-            await invoke("stop_hue_stream");
-          } catch (err) {
-            console.error("[LumaSync] stop_hue_stream during delta-stop failed:", err);
-          }
+    // Delta-stop: for each removed target that is currently active, stop it.
+    // A1.2 (v1.5.2): track per-target outcome via Promise.allSettled — only
+    // successfully-stopped targets get pulled from active membership. A failed
+    // stop leaves the chip active so the user can retry (and the next
+    // dispatch sees a truthful activeOutputTargets), instead of the previous
+    // behaviour where Promise.all + silent catch dropped the target from UI
+    // state while the backend stream was still alive (root cause of the
+    // HUE_STREAM_NOT_READY_ACTIVE_STREAMER 403 on the next start).
+    type StopOutcome = { target: HueRuntimeTarget; ok: boolean };
+    const stopResults = await Promise.allSettled(
+      removedTargets.map(async (target): Promise<StopOutcome> => {
+        if (!currentActive.includes(target)) return { target, ok: true };
+        const command = target === "usb" ? "stop_lighting" : target === "hue" ? "stop_hue_stream" : null;
+        if (!command) return { target, ok: true };
+        try {
+          await invoke(command);
+          return { target, ok: true };
+        } catch (err) {
+          console.error(
+            `[LumaSync] stop failed for target=${target}, retaining in activeOutputTargets:`,
+            err,
+          );
+          return { target, ok: false };
         }
       })
     );
-    // Update activeOutputTargets by removing stopped targets
-    if (removedTargets.length > 0) {
-      const nextActive = currentActive.filter((t) => !removedTargets.includes(t));
+    const successfullyStopped = stopResults
+      .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && r.value.ok)
+      .map((r) => r.value.target);
+    const failedToStop = stopResults
+      .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && !r.value.ok)
+      .map((r) => r.value.target);
+    if (successfullyStopped.length > 0) {
+      const nextActive = currentActive.filter((t) => !successfullyStopped.includes(t));
       setActiveOutputTargets(nextActive);
+    }
+    if (failedToStop.length > 0) {
+      setStopFailedNotice(failedToStop);
+      window.setTimeout(() => setStopFailedNotice(null), 5_000);
     }
 
     // Delta-start: for each added target, start the current mode on it
@@ -1241,6 +1369,60 @@ function App() {
 
     prevUsbConnectedRef.current = isConnected;
   }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
+
+  // ---------------------------------------------------------------------------
+  // Bug 10D — boot-time USB unsupported / missing fallback
+  //
+  // After commit 72fba5b ("reject non-USB serial ports up-front") the
+  // backend rejects previously-accepted phantom ports (e.g.
+  // /dev/cu.Bluetooth-Incoming-Port on macOS). Auto-reconnect on init
+  // emits the rejection code via `connectionEvents`, but `selectedOutputTargets`
+  // still includes "usb", so every subsequent `set_lighting_mode` invoke
+  // hits the Rust USB gate and returns `DEVICE_NOT_CONNECTED` silently.
+  // From the user's seat, "Ambilight does nothing".
+  //
+  // Fix: subscribe to the bus once, drop "usb" from targets on the
+  // PORT_UNSUPPORTED / PORT_NOT_FOUND signal, persist via the existing
+  // shellStore facade, and surface a one-time toast. We deliberately do
+  // NOT call `handleOutputTargetsChange` (its delta-stop branch tries to
+  // invoke `stop_lighting`, which is meaningless when nothing is running
+  // — boot path is always at OFF until the user picks a mode).
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const unsubscribe = connectionEvents.subscribe((event) => {
+      if (event.connected || !event.unsupportedReason) return;
+      const currentTargets = selectedOutputTargetsRef.current;
+      const includedUsb = currentTargets.includes("usb");
+      // Use the raw filter result. `normalizeOutputTargets([])` reverts to
+      // DEFAULT_OUTPUT_TARGETS (= ["usb"]) which would silently re-add the
+      // very target we are trying to drop, defeating the fallback.
+      const filtered = currentTargets.filter((t) => t !== "usb") as HueRuntimeTarget[];
+      // If the user has a paired Hue bridge and hue is not already in the
+      // surviving targets, auto-add "hue" so Ambilight / Solid actually
+      // produces output instead of leaving the user stranded at the OFF
+      // state with no available sink. This also covers the case where a
+      // prior session already auto-deselected USB and persisted `[]` —
+      // boot lands here with `currentTargets === []`, no USB to drop, but
+      // Hue must still get auto-added or the user has zero output sinks
+      // and "ambilight does nothing" silently repeats.
+      const huePaired = hueStartConfigRef.current !== null;
+      const wantsHueAutoAdd = huePaired && !filtered.includes("hue");
+      // If we have nothing to do (USB not in targets and no hue auto-add
+      // needed) skip without persisting / toasting.
+      if (!includedUsb && !wantsHueAutoAdd) return;
+      const nextTargets: HueRuntimeTarget[] = wantsHueAutoAdd ? ["hue"] : filtered;
+      setSelectedOutputTargets(nextTargets);
+      void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
+        console.error(
+          "[LumaSync] saveShellState(lastOutputTargets) on unsupported-port fallback failed:",
+          err,
+        );
+      });
+      setUsbUnsupportedNotice(true);
+      window.setTimeout(() => setUsbUnsupportedNotice(false), 6_000);
+    });
+    return unsubscribe;
+  }, []);
 
   const handleAcceptUsbTarget = useCallback(async () => {
     setShowUsbSuggest(false);
@@ -1816,7 +1998,11 @@ function App() {
           <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
         </div>
       </div>
-      <StatusBar items={statusItems} uiMode={currentMode} />
+      <StatusBar
+        items={statusItems}
+        uiMode={currentMode}
+        lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
+      />
       <UpdateModal
         state={updaterState}
         onInstall={downloadAndInstall}
@@ -1851,6 +2037,52 @@ function App() {
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
+        </div>
+      )}
+      {usbUnsupportedNotice && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-line-2)",
+            color: "var(--lm-ink)",
+            // Stack above usbDisconnectNotice / stopFailedNotice if any
+            // ever co-fire — boot-time signal should sit highest.
+            transform:
+              usbDisconnectNotice || (stopFailedNotice && stopFailedNotice.length > 0)
+                ? "translateY(-3.5rem)"
+                : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+            {t("hotplug.unsupportedFallback")}
+          </span>
+        </div>
+      )}
+      {stopFailedNotice && stopFailedNotice.length > 0 && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-red, #f87171)",
+            color: "var(--lm-ink)",
+            // Stack above usbDisconnectNotice if both ever co-fire (rare; sequential).
+            transform: usbDisconnectNotice ? "translateY(-3.5rem)" : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+            {t("hotplug.stopFailed", {
+              targets: stopFailedNotice
+                .map((target) => t(`hotplug.targetLabel.${target}` as const))
+                .join(", "),
+            })}
+          </span>
         </div>
       )}
     </>

@@ -1,6 +1,9 @@
 /// WLED device discovery and sink connection commands.
 ///
 /// v1.5 W1-B3: manual IP path only. mDNS auto-discovery is Wave 2 (W2-A3).
+/// `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` (not `Option<WledDeviceInfo>`)
+/// so the frontend always gets a stable array — empty on failure, `[device]` on success.
+/// This mirrors the Wave 2 mDNS path shape where multiple devices may appear.
 ///
 /// Status codes:
 ///   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
@@ -12,9 +15,12 @@
 ///   WLED_CONNECT_OK            -- Sink built and registered.
 ///   WLED_TEST_OK               -- Test frame sent without error.
 ///   WLED_TEST_SEND_FAILED      -- Test frame UDP send failed.
+///   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
+///                                 unspecified, multicast, or broadcast).
+///   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
 use std::net::Ipv4Addr;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -30,7 +36,7 @@ pub struct WledDiscoveryRequest {
     pub ip: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDeviceInfo {
     pub ip: String,
@@ -40,19 +46,30 @@ pub struct WledDeviceInfo {
     pub version: Option<String>,
 }
 
+/// Response from `discover_wled_devices`.
+///
+/// `devices` is always a stable Vec — empty on failure, `[device]` on a
+/// successful single-IP probe. This shape already matches the Wave 2 mDNS
+/// path (W2-A3) where multiple devices can appear in one response, so the
+/// frontend array-rendering code needs no change at that migration point.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDiscoveryResponse {
     pub status: WledCommandStatus,
-    pub device: Option<WledDeviceInfo>,
+    pub devices: Vec<WledDeviceInfo>,
 }
 
+/// Request payload for `connect_wled_sink`.
+///
+/// The frontend sends a `WledDeviceInfo` object (discovered via `discover_wled_devices`
+/// or typed manually). The Rust handler extracts `ip`, `led_count`, and optionally
+/// `port` from the nested `device` field, keeping the frontend payload shape stable.
+/// `protocol` is optional and defaults to DDP.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledConnectRequest {
-    pub ip: String,
+    pub device: WledDeviceInfo,
     pub port: Option<u16>,
-    pub led_count: u16,
     pub protocol: Option<String>,
 }
 
@@ -62,20 +79,28 @@ pub struct WledConnectResponse {
     pub status: WledCommandStatus,
 }
 
+/// Request payload for `test_wled_bridge`.
+///
+/// Matches `WledConnectRequest` shape — the frontend passes the same
+/// `WledDeviceInfo` for both connect and test operations.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledTestRequest {
-    pub ip: String,
+    pub device: WledDeviceInfo,
     pub port: Option<u16>,
-    pub led_count: u16,
     pub protocol: Option<String>,
 }
 
+/// Response from `test_wled_bridge`.
+///
+/// `round_trip_ms` measures the wall-clock time from the UDP send call to
+/// the moment it returns without error. This is a best-effort metric — it
+/// does not include WLED's processing time, only the host-side send latency.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledTestResponse {
     pub status: WledCommandStatus,
-    pub device: Option<WledDeviceInfo>,
+    pub round_trip_ms: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -136,13 +161,45 @@ fn default_port_for(protocol: WledProtocol) -> u16 {
     }
 }
 
+/// Validate an IPv4 address string, rejecting addresses that could enable
+/// SSRF or produce undefined routing behavior.
+///
+/// Rejected ranges (all return `WLED_INVALID_IP`):
+///   - Not parseable as IPv4
+///   - 127.0.0.0/8  (loopback)
+///   - 0.0.0.0      (unspecified)
+///   - 224.0.0.0/4  (multicast)
+///   - 255.255.255.255 (broadcast)
 fn parse_ipv4(ip: &str) -> Result<Ipv4Addr, String> {
-    Ipv4Addr::from_str(ip)
-        .map_err(|_| format!("WLED_INVALID_IP: '{}' is not a valid IPv4 address", ip))
+    let addr = Ipv4Addr::from_str(ip)
+        .map_err(|_| format!("WLED_INVALID_IP: '{}' is not a valid IPv4 address", ip))?;
+
+    if addr.is_loopback() {
+        return Err(format!("WLED_INVALID_IP: '{}' is a loopback address", ip));
+    }
+    if addr.is_unspecified() {
+        return Err(format!(
+            "WLED_INVALID_IP: '{}' is the unspecified address",
+            ip
+        ));
+    }
+    if addr.is_multicast() {
+        return Err(format!("WLED_INVALID_IP: '{}' is a multicast address", ip));
+    }
+    if addr.is_broadcast() {
+        return Err(format!(
+            "WLED_INVALID_IP: '{}' is the broadcast address",
+            ip
+        ));
+    }
+
+    Ok(addr)
 }
 
 fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
-    // SECURITY: Validate the input IP address to prevent SSRF vulnerabilities
+    // SECURITY: Validate the input IP address to prevent SSRF vulnerabilities.
+    // parse_ipv4 rejects loopback, unspecified, multicast, and broadcast in
+    // addition to non-parseable strings.
     if let Err(msg) = parse_ipv4(ip) {
         return Err(WledCommandStatus::err(
             "WLED_INVALID_IP",
@@ -239,12 +296,12 @@ pub fn discover_wled_devices(request: WledDiscoveryRequest) -> WledDiscoveryResp
                     "WLED_DISCOVERY_OK",
                     "WLED device found and info parsed.",
                 ),
-                device: Some(device),
+                devices: vec![device],
             }
         }
         Err(status) => WledDiscoveryResponse {
             status,
-            device: None,
+            devices: Vec::new(),
         },
     }
 }
@@ -254,7 +311,20 @@ pub fn connect_wled_sink(
     request: WledConnectRequest,
     sink_registry: tauri::State<'_, ActiveSinkRegistry>,
 ) -> WledConnectResponse {
-    let ip = match parse_ipv4(&request.ip) {
+    let device = &request.device;
+
+    // Guard: led_count == 0 is not a valid strip configuration.
+    if device.led_count == 0 {
+        return WledConnectResponse {
+            status: WledCommandStatus::err(
+                "WLED_INVALID_LED_COUNT",
+                "LED count must be greater than zero.",
+                None,
+            ),
+        };
+    }
+
+    let ip = match parse_ipv4(&device.ip) {
         Ok(addr) => addr,
         Err(msg) => {
             return WledConnectResponse {
@@ -266,7 +336,7 @@ pub fn connect_wled_sink(
     let protocol = parse_protocol(request.protocol.as_deref());
     let port = request.port.unwrap_or_else(|| default_port_for(protocol));
 
-    let mut sink = WledUdpSink::new(ip, port, request.led_count, protocol);
+    let mut sink = WledUdpSink::new(ip, port, device.led_count, protocol);
 
     if let Err(e) = sink.start() {
         return WledConnectResponse {
@@ -287,39 +357,38 @@ pub fn connect_wled_sink(
 
 #[tauri::command]
 pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
-    let info = match fetch_wled_info(&request.ip) {
+    let device = &request.device;
+
+    let info = match fetch_wled_info(&device.ip) {
         Ok(info) => info,
         Err(status) => {
             return WledTestResponse {
                 status,
-                device: None,
+                round_trip_ms: None,
             }
         }
     };
 
-    if info.leds.count != request.led_count {
-        let device = info_to_device(&request.ip, info);
+    if info.leds.count != device.led_count {
         return WledTestResponse {
             status: WledCommandStatus::err(
                 "WLED_LED_COUNT_MISMATCH",
                 "Requested LED count does not match device-reported LED count.",
                 Some(format!(
                     "requested={}, device={}",
-                    request.led_count, device.led_count
+                    device.led_count, info.leds.count
                 )),
             ),
-            device: Some(device),
+            round_trip_ms: None,
         };
     }
 
-    let device = info_to_device(&request.ip, info);
-
-    let ip = match parse_ipv4(&request.ip) {
+    let ip = match parse_ipv4(&device.ip) {
         Ok(addr) => addr,
         Err(msg) => {
             return WledTestResponse {
                 status: WledCommandStatus::err("WLED_INVALID_IP", &msg, None),
-                device: Some(device),
+                round_trip_ms: None,
             }
         }
     };
@@ -327,7 +396,7 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
     let protocol = parse_protocol(request.protocol.as_deref());
     let port = request.port.unwrap_or_else(|| default_port_for(protocol));
 
-    let mut sink = WledUdpSink::new(ip, port, request.led_count, protocol);
+    let mut sink = WledUdpSink::new(ip, port, device.led_count, protocol);
 
     if let Err(e) = sink.start() {
         return WledTestResponse {
@@ -336,16 +405,18 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
                 "Failed to bind UDP socket for test.",
                 Some(e),
             ),
-            device: Some(device),
+            round_trip_ms: None,
         };
     }
 
     // Red ramp: LED i -> [i % 256, 0, 0]
-    let frame: Vec<[u8; 3]> = (0..request.led_count as usize)
+    let frame: Vec<[u8; 3]> = (0..device.led_count as usize)
         .map(|i| [(i % 256) as u8, 0, 0])
         .collect();
 
+    let t0 = Instant::now();
     let send_result = sink.send_frame(&frame);
+    let elapsed_ms = t0.elapsed().as_millis() as u64;
     let _ = sink.stop();
 
     match send_result {
@@ -354,7 +425,7 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
                 "WLED_TEST_OK",
                 "Test frame (red ramp) sent successfully.",
             ),
-            device: Some(device),
+            round_trip_ms: Some(elapsed_ms),
         },
         Err(e) => WledTestResponse {
             status: WledCommandStatus::err(
@@ -362,7 +433,7 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
                 "Test frame send failed.",
                 Some(e),
             ),
-            device: Some(device),
+            round_trip_ms: None,
         },
     }
 }
@@ -402,6 +473,38 @@ mod tests {
     #[test]
     fn parse_ipv4_invalid_returns_coded_error() {
         let result = super::parse_ipv4("not-an-ip");
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(msg.starts_with("WLED_INVALID_IP"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_ipv4_loopback_is_rejected() {
+        let result = super::parse_ipv4("127.0.0.1");
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(msg.starts_with("WLED_INVALID_IP"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_ipv4_unspecified_is_rejected() {
+        let result = super::parse_ipv4("0.0.0.0");
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(msg.starts_with("WLED_INVALID_IP"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_ipv4_multicast_is_rejected() {
+        let result = super::parse_ipv4("224.0.0.1");
+        assert!(result.is_err());
+        let msg = result.unwrap_err();
+        assert!(msg.starts_with("WLED_INVALID_IP"), "got: {msg}");
+    }
+
+    #[test]
+    fn parse_ipv4_broadcast_is_rejected() {
+        let result = super::parse_ipv4("255.255.255.255");
         assert!(result.is_err());
         let msg = result.unwrap_err();
         assert!(msg.starts_with("WLED_INVALID_IP"), "got: {msg}");

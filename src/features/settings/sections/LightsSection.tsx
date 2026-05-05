@@ -37,8 +37,7 @@ import {
 } from "../../../shared/contracts/shell";
 import { listDisplays } from "../../calibration/calibrationApi";
 import type { LedCalibrationConfig } from "../../calibration/model/contracts";
-import { getFullTelemetrySnapshot } from "../../telemetry/telemetryApi";
-import type { RuntimeTelemetrySnapshot } from "../../telemetry/model/contracts";
+import { useFullTelemetryPoll } from "../../telemetry/hooks/useFullTelemetryPoll";
 import { shellStore } from "../../persistence/shellStore";
 import { OnboardingBanner } from "../../../shared/ui/OnboardingBanner";
 
@@ -353,34 +352,15 @@ export function LightsSection({
   const totalLeds = calibration?.totalLeds;
 
   // Poll runtime telemetry while Ambilight is active so the meta pill
-  // (Δ latency / Σ fps) reflects live worker state. Paused when tab hidden
-  // or when any other mode is selected — nothing to measure otherwise.
-  const [liveTelemetry, setLiveTelemetry] = useState<RuntimeTelemetrySnapshot | null>(null);
-  useEffect(() => {
-    if (!isAmbilight) {
-      setLiveTelemetry(null);
-      return;
-    }
-    let mounted = true;
-    const refresh = async () => {
-      if (document.visibilityState === "hidden") return;
-      try {
-        const snap = await getFullTelemetrySnapshot();
-        if (mounted) setLiveTelemetry(snap.usb);
-      } catch {
-        /* swallow — next tick retries */
-      }
-    };
-    void refresh();
-    const id = window.setInterval(() => { void refresh(); }, TELEMETRY_POLL_INTERVAL_MS);
-    return () => {
-      mounted = false;
-      window.clearInterval(id);
-    };
-  }, [isAmbilight]);
+  // (Δ latency / Σ fps) reflects live worker state. The shared hook pauses
+  // automatically when the tray window is hidden and re-arms with an
+  // immediate tick on resume — nothing to do here beyond passing the
+  // domain gate.
+  const { snapshot: liveTelemetry } = useFullTelemetryPoll(isAmbilight, TELEMETRY_POLL_INTERVAL_MS);
+  const liveUsb = liveTelemetry?.usb ?? null;
 
-  const latencyLabel = liveTelemetry ? `${Math.round(liveTelemetry.frameLatencyMs)}ms` : "—";
-  const fpsLabel = liveTelemetry ? `${Math.round(liveTelemetry.sendFps)} fps` : "—";
+  const latencyLabel = liveUsb ? `${Math.round(liveUsb.frameLatencyMs)}ms` : "—";
+  const fpsLabel = liveUsb ? `${Math.round(liveUsb.sendFps)} fps` : "—";
 
   // Edge signal preview — streamed from the ambilight worker (~10 Hz).
   // Subscribe only while Ambilight mode is active to avoid unnecessary IPC traffic.

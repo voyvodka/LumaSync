@@ -34,6 +34,7 @@
     "fs:allow-appdata-read",
     "fs:allow-appdata-read-recursive",
     "notification:default",
-    "process:default"
+    "process:default",
+    "log:default"
   ]
 }
