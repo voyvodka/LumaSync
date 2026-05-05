@@ -7,30 +7,40 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-05-05
+
 ### Added
 
-- Frontend `console.*` calls are now bridged to `tauri-plugin-log`'s file sink: the same `[webview]` records that appear in DevTools are written alongside `[lumasync_lib::*]` entries in the platform log file (`~/Library/Logs/com.lumasync.app/` on macOS), so runtime debugging no longer requires an open DevTools window.
-
-### Security
-
-- WLED IP validation hardened: parsable IPv4 inputs that resolve to loopback (127.0.0.0/8), unspecified (0.0.0.0), multicast (224.0.0.0/4), or broadcast (255.255.255.255) addresses are now rejected with `WLED_INVALID_IP`, layered on top of v1.5.1's parser-level SSRF guard.
-- Hue stream shutdown emits a DTLS `close_notify` alert before dropping the socket and dedupes foreground/background deactivate calls through a single-shot atomic token, so the bridge clears its "active streamer" slot immediately on stop instead of holding it for ~10 s. Removes the latent `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` 403 that could surface on the next session start, and retires the 1 s defensive sleep that was the previous workaround.
-
-### Fixed
-
-- macOS Cmd+Q and dev-mode launches are now reliably stable across two previously distinct failure paths. The initial fix unified Cmd+Q, tray Quit, and Ctrl+C onto a single `kick_off_shutdown_and_die` path guarded by `SHUTDOWN_FIRED`; a follow-up corrected two regressions that surfaced after the rewrite: (1) the watchdog fires `std::process::exit(0)`, which bypasses Tauri plugin `destroy()` callbacks — `tauri-plugin-single-instance` therefore leaked `/tmp/com_lumasync_app_si.sock` on each watchdog exit and the next dev launch exited within ~50 ms on detecting the stale socket; the `#[cfg(not(debug_assertions))]` guard is restored so the plugin remains release-only. (2) `stop_hue_stream` blocked for up to 8 s under realistic conditions (5 s `reqwest` timeout + 3 s DTLS sender Condvar), blowing through the 4 s watchdog; it is now detached onto a worker thread and abandoned after 1.5 s, which is safe because the bridge times out the entertainment session server-side anyway.
-- Non-USB serial port types (Bluetooth, PCI, Unknown) are now rejected with `PORT_UNSUPPORTED` before `serialport::open()` is called. Previously, opening `/dev/cu.Bluetooth-Incoming-Port` on macOS succeeded at the OS level and silently accepted writes — the backend logged 20 Hz solid frames while the LED strip stayed dark, making the failure indistinguishable from an app crash.
-- Boot output-target recovery overhauled across three interrelated regressions: persisted `[]` targets were unconditionally overwritten with `DEFAULT_OUTPUT_TARGETS` on every launch (so an auto-deselected USB port would resurrect itself and immediately trip `DEVICE_NOT_CONNECTED` again); the `PORT_UNSUPPORTED` subscriber now auto-adds Hue when a bridge is paired and Hue was not already active; and a second boot path fixed the case where `currentTargets` was already `[]` before the subscriber ran, leaving paired-Hue users stranded in a permanent OFF state on every restart.
-- WLED discovery / connect / test wire mismatch: response and request payload shapes between the Rust backend and the React layer were misaligned, so the picker rendered as silently empty and the Connect / Test buttons failed with `MissingField`. Aligned all three command pairs; `WledTestResponse` now reports a real round-trip in milliseconds. Manual-IP discovery also routes its `ip` parameter under the correct payload key.
-- Output-target delta-stop no longer drops a chip from active membership when the underlying `stop_lighting` / `stop_hue_stream` invoke fails. The chip stays active so the user can retry, and a transient banner explains which target needs attention. Previously the UI lied about state while the backend stream was still alive — the surface that produced the Hue stale-session 403 observed in v1.5.x dogfooding.
-- Reject WLED connect requests carrying `led_count == 0` with a coded `WLED_INVALID_LED_COUNT` instead of letting the downstream pipeline drift into an inconsistent state.
-- RoomMap rename dialog: ESC now cancels from any focused element (previously only the input listened) and Tab cycles between input → cancel → confirm; the `aria-labelledby` anchor is now generated via `useId()` so multiple instances and re-mounts cannot collide on the same DOM id.
+- Keyboard input for per-edge LED counts and stand-gap in LED Setup, allowing direct numeric entry instead of stepper-only interaction.
+- First close-to-tray OS notification guides new users who wonder where the app went after closing the window.
+- Frontend `console.*` calls are now bridged to `tauri-plugin-log`'s file sink, so `[webview]` records appear alongside Rust log entries in the platform log file — runtime debugging no longer requires an open DevTools window.
 
 ### Changed
 
-- `release.yml` now runs the same Rust hardening gate as `ci.yml` before any tag-triggered build (`cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --all-features`), closing the gap that previously let formatting / lint regressions slip into a release artefact and silently skipped integration tests under `src-tauri/tests/` by scoping to `--lib` only.
-- `SECURITY.md` clarifies that the runtime `rand` 0.8.x and 0.9.x paths were bumped in v1.5.1; only the build-only 0.7.3 path remains documented as `not_used`.
-- Rust deps: `mdns-sd` 0.13.11 → 0.19.1 (major); `ResolvedService` surface adapted in the mDNS registry.
+- Polling discipline tightened across telemetry and Hue health checks: all intervals pause when the window is hidden and resume on visibility, reducing CPU and battery draw when LumaSync is running in the background.
+- Boot sequence streamlined: Hue credential validation is de-duplicated (previously fired twice on some paths) and the updater check is hoisted to run earlier, so the first-launch experience is snappier.
+- RoomMap editor migrated to amber Rev 07 design tokens with a 32 px minimum tap-target floor throughout the dock and toolbar.
+- Compact-mode deep-links to non-LIGHTS sections now auto-expand to full-window mode so the target panel is always visible.
+- Window position persistence anchored by window center instead of top-left corner, with a monitor-clamp guard that snaps the window on-screen if the saved position falls outside the current display geometry.
+- Release pipeline (`release.yml`) now runs the same Rust hardening gate as `ci.yml` before any tag-triggered build — `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test --all-features` — closing the gap that previously let lint regressions or integration-test failures slip through to a release artefact.
+- CI: `pnpm/action-setup` bumped v4 → v6 to clear the Node 20 deprecation warning; workflow concurrency and release idempotency (`allowUpdates`) tightened.
+- Rust deps: `mdns-sd` 0.13.11 → 0.19.1 (major); `ResolvedService` surface adapted in the mDNS registry; Cargo.lock transitive graph refreshed on the 2.11.x Tauri line.
+
+### Fixed
+
+- macOS lifecycle hardened: Cmd+Q, tray Quit, and Ctrl+C now all route through a single `kick_off_shutdown_and_die` path. Two follow-up regressions from the initial rewrite are resolved — the `tauri-plugin-single-instance` socket is no longer leaked on watchdog exit (which caused the next dev launch to exit within ~50 ms), and `stop_hue_stream` is detached onto a worker thread with a 1.5 s abandon timeout so it cannot blow the 4 s watchdog.
+- macOS tray icon now ships as a template image (monochrome silhouette), so it renders at the correct size and respects Dark/Light menu bar mode.
+- Non-USB serial port types (Bluetooth, PCI, Unknown) are rejected with `PORT_UNSUPPORTED` before `serialport::open()` is called. Previously, opening `/dev/cu.Bluetooth-Incoming-Port` silently accepted writes while the LED strip stayed dark.
+- Boot output-target recovery: persisted empty `[]` targets are no longer overwritten with defaults on every launch; the `PORT_UNSUPPORTED` subscriber auto-adds Hue when a bridge is paired and Hue was not already active; a separate boot path prevents paired-Hue-only users from being stranded in OFF state on restart.
+- WLED backend–frontend wire mismatch: request/response payload shapes for discover, connect, and test were misaligned, causing the picker to render empty and the Connect/Test buttons to fail with `MissingField`. All three command pairs are now aligned; `WledTestResponse` reports a real round-trip in milliseconds.
+- WLED: additional validation rejects `led_count == 0` at connect time (`WLED_INVALID_LED_COUNT`) and extends the SSRF guard to also block loopback, unspecified, multicast, and broadcast addresses (`WLED_INVALID_IP`).
+- Output-target delta-stop no longer evicts a chip from active membership when the underlying stop call fails — the chip stays active so the user can retry, and a transient banner identifies which target needs attention.
+- Hue stream shutdown emits a DTLS `close_notify` alert and de-dupes foreground/background deactivate calls via a single-shot atomic token, so the bridge clears its "active streamer" slot immediately and the latent `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` 403 on the next session start is eliminated.
+- RoomMap rename dialog: ESC now cancels from any focused element; Tab cycles input → cancel → confirm; `aria-labelledby` IDs are generated with `useId()` to prevent DOM collisions on re-mount.
+
+### Security
+
+- WLED IP validation extended: loopback (127.0.0.0/8), unspecified, multicast, and broadcast addresses are now rejected with `WLED_INVALID_IP`, layered on top of v1.5.1's parser-level SSRF guard.
 
 ## [1.5.1] — 2026-05-01
 
