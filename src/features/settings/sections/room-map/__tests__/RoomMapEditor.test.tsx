@@ -234,7 +234,18 @@ describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)
 // ---------------------------------------------------------------------------
 
 describe("RoomMapEditor (pending)", () => {
+  // requires jsdom layout (offsetWidth/offsetHeight always 0 in jsdom);
+  // pxPerMeter is a fixed constant (80) in production, not derived from DOM
+  // measurements — ratio assertion needs a real browser environment; revisit
+  // when Playwright component tests are added.
   it.todo("ROOM-01: renders canvas with room dimensions proportional to config");
+
+  // requires coordinate-level assertion of Hue channel DOM positions relative
+  // to the TV anchor; needs real getBoundingClientRect values which jsdom does
+  // not compute — revisit when Playwright component tests are added.
   it.todo("ROOM-06: TV anchor acts as center reference — Hue channels positioned relative to TV");
-  it.todo("ROOM-08: background image renders on canvas when backgroundImagePath is set");
+
+  // ROOM-08 removed in v1.5.x — backgroundImagePath field was migrated to the
+  // imageLayers system (useRoomMapPersist.ts migration at load time); the old
+  // field is no longer rendered on the canvas and the assertion no longer applies.
 });
