@@ -76,7 +76,10 @@ pub fn update_hue_channel_positions(
 ) -> CommandStatus {
     // SECURITY: Validate bridge IP to prevent SSRF
     let is_valid_ip = Ipv4Addr::from_str(&bridge_ip).is_ok_and(|addr| {
-        !addr.is_loopback() && !addr.is_unspecified() && !addr.is_multicast() && !addr.is_broadcast()
+        !addr.is_loopback()
+            && !addr.is_unspecified()
+            && !addr.is_multicast()
+            && !addr.is_broadcast()
     });
     if !is_valid_ip {
         return CommandStatus {
