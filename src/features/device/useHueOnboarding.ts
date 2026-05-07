@@ -769,11 +769,15 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
 
-    const run = async () => {
-      if (!active) {
-        return;
-      }
+    let inFlight = false;
+    let timeoutId: number | null = null;
 
+    const run = async () => {
+      if (!active) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+
+      inFlight = true;
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
         if (!active) {
@@ -786,17 +790,39 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        scheduleNext();
+      }
+    };
+
+    const scheduleNext = () => {
+      if (!active) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void run();
+      }, READINESS_BACKGROUND_REFRESH_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!active) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void run();
       }
     };
 
     void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
