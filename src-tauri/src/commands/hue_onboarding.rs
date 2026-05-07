@@ -1207,7 +1207,15 @@ fn hue_http_client() -> Result<Client, String> {
 }
 
 fn is_valid_ipv4(value: &str) -> bool {
-    Ipv4Addr::from_str(value).is_ok()
+    if let Ok(addr) = Ipv4Addr::from_str(value) {
+        // SECURITY: Reject addresses that could enable SSRF or undefined routing
+        !addr.is_loopback()
+            && !addr.is_unspecified()
+            && !addr.is_multicast()
+            && !addr.is_broadcast()
+    } else {
+        false
+    }
 }
 
 fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
