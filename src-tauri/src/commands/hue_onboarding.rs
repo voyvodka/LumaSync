@@ -1207,7 +1207,10 @@ fn hue_http_client() -> Result<Client, String> {
 }
 
 fn is_valid_ipv4(value: &str) -> bool {
-    Ipv4Addr::from_str(value).is_ok()
+    let Ok(addr) = Ipv4Addr::from_str(value) else {
+        return false;
+    };
+    !addr.is_loopback() && !addr.is_unspecified() && !addr.is_multicast() && !addr.is_broadcast()
 }
 
 fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
@@ -1215,5 +1218,40 @@ fn command_status(code: &str, message: &str, details: Option<String>) -> Command
         code: code.to_string(),
         message: message.to_string(),
         details,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ipv4_valid_address() {
+        assert!(is_valid_ipv4("192.168.1.42"));
+    }
+
+    #[test]
+    fn parse_ipv4_invalid_returns_false() {
+        assert!(!is_valid_ipv4("not-an-ip"));
+    }
+
+    #[test]
+    fn parse_ipv4_loopback_is_rejected() {
+        assert!(!is_valid_ipv4("127.0.0.1"));
+    }
+
+    #[test]
+    fn parse_ipv4_unspecified_is_rejected() {
+        assert!(!is_valid_ipv4("0.0.0.0"));
+    }
+
+    #[test]
+    fn parse_ipv4_multicast_is_rejected() {
+        assert!(!is_valid_ipv4("224.0.0.1"));
+    }
+
+    #[test]
+    fn parse_ipv4_broadcast_is_rejected() {
+        assert!(!is_valid_ipv4("255.255.255.255"));
     }
 }
