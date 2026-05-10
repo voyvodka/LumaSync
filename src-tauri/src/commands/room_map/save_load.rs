@@ -75,7 +75,16 @@ pub fn update_hue_channel_positions(
     area_id: String,
 ) -> CommandStatus {
     // SECURITY: Validate bridge IP to prevent SSRF
-    if Ipv4Addr::from_str(&bridge_ip).is_err() {
+    if let Ok(addr) = Ipv4Addr::from_str(&bridge_ip) {
+        if addr.is_loopback() || addr.is_unspecified() || addr.is_multicast() || addr.is_broadcast()
+        {
+            return CommandStatus {
+                code: "HUE_IP_INVALID".to_string(),
+                message: "Invalid bridge IP address format.".to_string(),
+                details: None,
+            };
+        }
+    } else {
         return CommandStatus {
             code: "HUE_IP_INVALID".to_string(),
             message: "Invalid bridge IP address format.".to_string(),
