@@ -1208,7 +1208,10 @@ fn hue_http_client() -> Result<Client, String> {
 
 fn is_valid_ipv4(value: &str) -> bool {
     if let Ok(addr) = Ipv4Addr::from_str(value) {
-        !addr.is_loopback() && !addr.is_unspecified() && !addr.is_multicast() && !addr.is_broadcast()
+        !addr.is_loopback()
+            && !addr.is_unspecified()
+            && !addr.is_multicast()
+            && !addr.is_broadcast()
     } else {
         false
     }
