@@ -40,16 +40,16 @@
     "@tauri-apps/plugin-store": "^2.4.3",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@tauri-apps/plugin-window-state": "^2.4.1",
-    "i18next": "^26.0.8",
+    "i18next": "^26.0.10",
     "i18next-browser-languagedetector": "^8.2.1",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "react-i18next": "^17.0.6"
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-i18next": "^17.0.7"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.9.0",
-    "@tailwindcss/vite": "^4.2.4",
-    "@tauri-apps/cli": "^2.11.0",
+    "@tailwindcss/vite": "^4.3.0",
+    "@tauri-apps/cli": "^2.11.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -59,9 +59,9 @@
     "@vitejs/plugin-react": "^6.0.1",
     "happy-dom": "^20.9.0",
     "jsdom": "^29.1.1",
-    "tailwindcss": "^4.2.4",
+    "tailwindcss": "^4.3.0",
     "typescript": "~6.0.3",
-    "vite": "^8.0.10",
+    "vite": "^8.0.11",
     "vitest": "^4.1.5"
   }
 }
