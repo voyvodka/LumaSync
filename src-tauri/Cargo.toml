@@ -45,7 +45,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 # `signal` enables tokio::signal::ctrl_c() / unix SIGTERM handling, used by the
 # debug-only orderly-shutdown hook in lib.rs (dev terminal Ctrl+C should run
 # safe_quit drop guards instead of orphaning the NSApplication run loop).
-tokio = { version = "1.52.1", features = ["rt", "signal"] }
+tokio = { version = "1.52.3", features = ["rt", "signal"] }
 # v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
 # Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
 keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
