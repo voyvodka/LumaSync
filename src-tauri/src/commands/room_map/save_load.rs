@@ -59,10 +59,18 @@ pub async fn copy_background_image(
     let bg_dir = app_data_dir.join("room-map-backgrounds");
     std::fs::create_dir_all(&bg_dir)
         .map_err(|e| format!("Failed to create background dir: {}", e))?;
-    let filename = src
-        .file_name()
-        .ok_or_else(|| "Invalid source path: no filename".to_string())?;
+
+    // SECURITY: Use a random UUID for the destination filename to prevent path traversal
+    // and accidental file overwrites from user-provided filenames.
+    let ext = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| format!(".{}", e))
+        .unwrap_or_default();
+
+    let filename = format!("{}{}", uuid::Uuid::new_v4(), ext);
     let dest = bg_dir.join(filename);
+
     std::fs::copy(&src, &dest).map_err(|e| format!("Failed to copy background image: {}", e))?;
     Ok(dest.to_string_lossy().to_string())
 }
