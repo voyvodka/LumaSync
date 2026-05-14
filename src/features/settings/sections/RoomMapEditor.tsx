@@ -692,9 +692,16 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const handleRenameHueZone = useCallback(
     (zoneId: string, name: string) => {
-      const next = config.zones.map((z) => (z.id === zoneId ? { ...z, name } : z));
+      // Optimization: Capture the updated zone during the map to avoid O(N) find
+      let renamed: HueZone | null = null;
+      const next = config.zones.map((z) => {
+        if (z.id === zoneId) {
+          renamed = { ...z, name };
+          return renamed;
+        }
+        return z;
+      });
       void updateConfig({ zones: next });
-      const renamed = next.find((z) => z.id === zoneId);
       if (renamed) {
         void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
           request: { zone: renamed, existingZones: next },
@@ -971,13 +978,16 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const handleHueZoneCenterChange = useCallback(
     (zoneId: string, centerX: number, centerY: number) => {
-      const next = config.zones.map((z) =>
-        z.id === zoneId
-          ? { ...z, centerX, centerY }
-          : z,
-      );
+      // Optimization: Capture the updated zone during the map to avoid O(N) find
+      let updated: HueZone | null = null;
+      const next = config.zones.map((z) => {
+        if (z.id === zoneId) {
+          updated = { ...z, centerX, centerY };
+          return updated;
+        }
+        return z;
+      });
       void updateConfig({ zones: next });
-      const updated = next.find((z) => z.id === zoneId);
       if (updated) {
         void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
           request: {
@@ -1007,11 +1017,16 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   // band and the cube-overflow invariant.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
-      const next = config.zones.map((z) =>
-        z.id === zoneId ? { ...z, ...patch } : z,
-      );
+      // Optimization: Capture the updated zone during the map to avoid O(N) find
+      let updated: HueZone | null = null;
+      const next = config.zones.map((z) => {
+        if (z.id === zoneId) {
+          updated = { ...z, ...patch };
+          return updated;
+        }
+        return z;
+      });
       void updateConfig({ zones: next });
-      const updated = next.find((z) => z.id === zoneId);
       if (updated) {
         void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
           request: {
