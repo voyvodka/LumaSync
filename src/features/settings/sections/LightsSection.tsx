@@ -746,7 +746,6 @@ export function LightsSection({
             <button
               type="button"
               className="add"
-              disabled={!canAddHueZone}
               aria-disabled={!canAddHueZone}
               aria-label={t("lightsPage.dock.addAria")}
               title={
