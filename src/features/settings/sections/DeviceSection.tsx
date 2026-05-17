@@ -593,6 +593,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 className="lm-device-btn"
                 onClick={() => { void refreshPorts(); }}
                 disabled={isScanning}
+                aria-busy={isScanning}
               >
                 <IconRefresh />
                 <span>{isScanning ? t("device.actions.scanning") : t("devicesPage.actions.rescan")}</span>
@@ -705,6 +706,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                             void runHealthCheck();
                           }}
                           disabled={healthActionDisabled}
+                          aria-busy={isHealthChecking}
                         >
                           {isHealthChecking ? t("device.healthCheck.runningAction") : t("device.healthCheck.runAction")}
                         </button>
@@ -719,6 +721,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           void connectSelectedPort();
                         }}
                         disabled={isConnecting && isSelectedCard}
+                        aria-busy={isConnecting && isSelectedCard}
                       >
                         {isConnecting && isSelectedCard
                           ? t("device.actions.connecting")
@@ -970,6 +973,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         className="lm-paired-strip-action is-primary"
                         onClick={() => { void refreshPorts(); }}
                         disabled={isScanning}
+                        aria-busy={isScanning}
                       >
                         {isScanning
                           ? t("device.actions.scanning")
@@ -1040,6 +1044,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         title={t("devicesPage.usb.paired.rescan")}
                         aria-label={t("devicesPage.usb.paired.rescan")}
                         disabled={isScanning}
+                        aria-busy={isScanning}
                       >
                         {isScanning ? "…" : "\u21BB"}
                       </button>
