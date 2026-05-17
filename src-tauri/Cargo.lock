@@ -2730,6 +2730,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
  "tokio",
+ "uuid",
  "windows-capture",
  "windows-sys 0.61.2",
  "xcap",
