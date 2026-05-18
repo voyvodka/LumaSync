@@ -97,6 +97,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
               className={`lm-settings-tg ${startupEnabled ? "is-on" : ""}`}
               onClick={() => { void handleStartupToggle(); }}
               disabled={startupLoading}
+              aria-busy={startupLoading}
               aria-pressed={startupEnabled}
               aria-label={t("startupTray.launchAtLogin")}
             />
@@ -157,6 +158,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
               className="lm-settings-btn"
               onClick={onCheckForUpdates}
               disabled={isCheckingForUpdates}
+              aria-busy={isCheckingForUpdates}
             >
               {isCheckingForUpdates ? t("updater.checking") : t("updater.checkAction")}
             </button>
