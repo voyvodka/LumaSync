@@ -26,14 +26,14 @@ describe("RoomMapToolbar", () => {
   it("undo button is disabled when canUndo is false", () => {
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={false} canRedo={false} />);
     const undoBtn = screen.getByRole("button", { name: "roomMap.toolbar.undo" });
-    expect(undoBtn).toBeDisabled();
+    expect(undoBtn).toHaveAttribute("aria-disabled", "true");
   });
 
   it("undo button is enabled when canUndo is true", () => {
     const onUndo = vi.fn();
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={true} onUndo={onUndo} />);
     const undoBtn = screen.getByRole("button", { name: "roomMap.toolbar.undo" });
-    expect(undoBtn).not.toBeDisabled();
+    expect(undoBtn).toHaveAttribute("aria-disabled", "false");
     fireEvent.click(undoBtn);
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
@@ -41,13 +41,13 @@ describe("RoomMapToolbar", () => {
   it("redo button is disabled when canRedo is false", () => {
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={false} canRedo={false} />);
     const redoBtn = screen.getByRole("button", { name: "roomMap.toolbar.redo" });
-    expect(redoBtn).toBeDisabled();
+    expect(redoBtn).toHaveAttribute("aria-disabled", "true");
   });
 
   it("derive zones button is disabled when neither TV nor USB is present", () => {
     render(<RoomMapToolbar {...BASE_PROPS} hasTv={false} hasUsb={false} />);
     const deriveBtn = screen.getByRole("button", { name: "roomMap.zones.deriveButton" });
-    expect(deriveBtn).toBeDisabled();
+    expect(deriveBtn).toHaveAttribute("aria-disabled", "true");
   });
 
   it("derive zones button is enabled when both TV and USB are present", () => {

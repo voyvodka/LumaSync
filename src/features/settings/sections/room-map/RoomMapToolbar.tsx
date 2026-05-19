@@ -110,7 +110,6 @@ export function RoomMapToolbar({
           deriveDisabled ? "is-disabled" : derivePreviewActive ? "is-on" : ""
         }`}
         onClick={deriveDisabled ? undefined : onDeriveZones}
-        disabled={deriveDisabled}
         aria-disabled={deriveDisabled}
         title={deriveDisabled ? t("roomMap.zones.deriveDisabledTooltip") : undefined}
       >
@@ -131,7 +130,7 @@ export function RoomMapToolbar({
         type="button"
         className={`${TOOLBAR_BTN} is-icon ${!canUndo ? "is-disabled" : ""}`}
         onClick={canUndo ? onUndo : undefined}
-        disabled={!canUndo}
+        aria-disabled={!canUndo}
         aria-label={t("roomMap.toolbar.undo")}
         title={`${t("roomMap.toolbar.undo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}Z)`}
       >
@@ -141,7 +140,7 @@ export function RoomMapToolbar({
         type="button"
         className={`${TOOLBAR_BTN} is-icon ${!canRedo ? "is-disabled" : ""}`}
         onClick={canRedo ? onRedo : undefined}
-        disabled={!canRedo}
+        aria-disabled={!canRedo}
         aria-label={t("roomMap.toolbar.redo")}
         title={`${t("roomMap.toolbar.redo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}${navigator.platform.includes("Mac") ? "⇧" : "Shift+"}Z)`}
       >
