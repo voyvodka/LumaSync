@@ -59,10 +59,7 @@ pub async fn copy_background_image(
     let bg_dir = app_data_dir.join("room-map-backgrounds");
     std::fs::create_dir_all(&bg_dir)
         .map_err(|e| format!("Failed to create background dir: {}", e))?;
-    let ext = src
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("");
     let filename = if ext.is_empty() {
         uuid::Uuid::new_v4().to_string()
     } else {
