@@ -769,16 +769,22 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
 
-    const run = async () => {
-      if (!active) {
-        return;
-      }
+    // Performance Optimization: Replaced unconditional window.setInterval with a recursive setTimeout
+    // and visibility-aware polling. This prevents the app from firing HTTP requests to the Hue bridge
+    // in the background when the app is minimized or hidden, significantly reducing network overhead
+    // and preventing overlapping requests (inFlight lock).
+    let timeoutId: number | null = null;
+    let inFlight = false;
 
+    const tick = async () => {
+      if (!active) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+
+      inFlight = true;
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         applyReadinessResult(areaId, response, {
           publishStatus: false,
@@ -786,17 +792,40 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
     };
 
-    void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
+    const scheduleNext = () => {
+      if (!active) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, READINESS_BACKGROUND_REFRESH_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!active) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
