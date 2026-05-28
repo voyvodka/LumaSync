@@ -592,7 +592,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 type="button"
                 className="lm-device-btn"
                 onClick={() => { void refreshPorts(); }}
-                disabled={isScanning}
+                disabled={isScanning} aria-busy={isScanning}
               >
                 <IconRefresh />
                 <span>{isScanning ? t("device.actions.scanning") : t("devicesPage.actions.rescan")}</span>
@@ -704,7 +704,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                             event.stopPropagation();
                             void runHealthCheck();
                           }}
-                          disabled={healthActionDisabled}
+                          disabled={healthActionDisabled} aria-busy={isHealthChecking}
                         >
                           {isHealthChecking ? t("device.healthCheck.runningAction") : t("device.healthCheck.runAction")}
                         </button>
@@ -718,7 +718,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           selectPort(port.portName);
                           void connectSelectedPort();
                         }}
-                        disabled={isConnecting && isSelectedCard}
+                        disabled={isConnecting && isSelectedCard} aria-busy={isConnecting && isSelectedCard}
                       >
                         {isConnecting && isSelectedCard
                           ? t("device.actions.connecting")
@@ -969,7 +969,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         type="button"
                         className="lm-paired-strip-action is-primary"
                         onClick={() => { void refreshPorts(); }}
-                        disabled={isScanning}
+                        disabled={isScanning} aria-busy={isScanning}
                       >
                         {isScanning
                           ? t("device.actions.scanning")
@@ -1039,7 +1039,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         onClick={() => { void refreshPorts(); }}
                         title={t("devicesPage.usb.paired.rescan")}
                         aria-label={t("devicesPage.usb.paired.rescan")}
-                        disabled={isScanning}
+                        disabled={isScanning} aria-busy={isScanning}
                       >
                         {isScanning ? "…" : "\u21BB"}
                       </button>
@@ -1127,7 +1127,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 type="button"
                 className="lm-device-btn"
                 onClick={() => { void discover(); }}
-                disabled={isHueDiscovering}
+                disabled={isHueDiscovering} aria-busy={isHueDiscovering}
               >
                 <IconRefresh />
                 <span>{isHueDiscovering ? t("devicesPage.hue.scanning") : hueBridgeState === "offline" ? t("device.hue.wizard.offlineRediscover") : t("devicesPage.hue.scanNetwork")}</span>
@@ -1284,7 +1284,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         type="button"
                         className="lm-hue-repair-act"
                         onClick={() => { void pair(); }}
-                        disabled={isHuePairing}
+                        disabled={isHuePairing} aria-busy={isHuePairing}
                       >
                         {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.runtime.actions.repair")}
                       </button>
@@ -1532,7 +1532,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           type="button"
                           className="lm-hue-area-confirm"
                           onClick={() => { void revalidateArea(); }}
-                          disabled={hueReadinessDisabled}
+                          disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                         >
                           {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : `${t("devicesPage.hue.confirmArea")} →`}
                         </button>
@@ -1566,7 +1566,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         type="button"
                         className="lm-hue-retry-cancel"
                         onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }}
-                        disabled={isRuntimeMutating}
+                        disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}
                       >
                         {t("devicesPage.hue.stopRetrying")}
                       </button>
@@ -1582,7 +1582,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         type="button"
                         className="lm-hue-stale-act"
                         onClick={() => { void revalidateArea(); }}
-                        disabled={hueReadinessDisabled}
+                        disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                       >
                         {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
                       </button>
@@ -1604,7 +1604,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           type="button"
                           className="lm-hue-checklist-btn"
                           onClick={() => { void revalidateArea(); }}
-                          disabled={hueReadinessDisabled}
+                          disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                         >
                           {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
                         </button>
@@ -1623,10 +1623,10 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   <div className="lm-dcard-actions">
                     {hueBridgeState === "streaming" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
                           {t("devicesPage.hue.changeArea")}
                         </button>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={isRuntimeMutating || hueStartDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={isRuntimeMutating || hueStartDisabled} aria-busy={isRuntimeMutating}>
                           {t("devicesPage.hue.reconnectNow")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
@@ -1635,10 +1635,10 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       </>
                     ) : hueBridgeState === "idle" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
                           {t("devicesPage.hue.changeArea")}
                         </button>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
                           {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
@@ -1650,12 +1650,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         {t("devicesPage.hue.cancel")}
                       </button>
                     ) : hueBridgeState === "areaSelect" ? (
-                      <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled}>
+                      <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
                         {isLoadingAreas ? t("device.hue.actions.loadingAreas") : t("device.hue.actions.refreshAreas")}
                       </button>
                     ) : hueBridgeState === "authError" || hueBridgeState === "pairingFailed" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing} aria-busy={isHuePairing}>
                           {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.runtime.actions.repair")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
@@ -1664,7 +1664,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       </>
                     ) : hueBridgeState === "offline" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }} disabled={isHueDiscovering}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }} disabled={isHueDiscovering} aria-busy={isHueDiscovering}>
                           {isHueDiscovering ? t("device.hue.actions.discovering") : t("device.hue.wizard.offlineRediscover")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { setManualIp(""); }}>
@@ -1676,16 +1676,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       </>
                     ) : hueBridgeState === "reconnecting" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                           {t("devicesPage.hue.reconnectNow")}
                         </button>
-                        <button type="button" className="lm-dcard-act is-danger" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating}>
+                        <button type="button" className="lm-dcard-act is-danger" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                           {t("devicesPage.hue.stopRetrying")}
                         </button>
                       </>
                     ) : hueBridgeState === "stale" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
                           {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={hueStartDisabled}>
@@ -1697,16 +1697,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       </>
                     ) : hueBridgeState === "gateBlocked" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
                           {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
                         </button>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
                           {t("devicesPage.hue.changeArea")}
                         </button>
                       </>
                     ) : hueBridgeState === "stopPartial" ? (
                       <>
-                        <button type="button" className="lm-dcard-act" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating}>
+                        <button type="button" className="lm-dcard-act" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                           {t("devicesPage.hue.retryStop")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
