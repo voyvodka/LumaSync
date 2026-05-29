@@ -3348,7 +3348,7 @@
   font-size: 11px;
   line-height: 1;
 }
-.lm-dock h4 .add:disabled {
+.lm-dock h4 .add[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.45;
   color: #343a45;
@@ -4572,7 +4572,7 @@ body {
   border-radius: 4px;
   text-transform: none;
 }
-.lm-room-dock-h-add:hover {
+.lm-room-dock-h-add:hover:not([aria-disabled="true"]) {
   color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.08);
 }
