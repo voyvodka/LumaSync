@@ -275,7 +275,7 @@ export function PropertyBar({
             disabled={locked}
             value={parseInt(fields.opacity!, 10)}
             onChange={(e) => onUpdateImageOpacity?.(imgId, parseInt(e.target.value, 10))}
-            aria-label={t("roomMap.settings.imageOpacityLabel")}
+            aria-label={t("roomMap.inspector.imageOpacityLabel")}
             className="w-12 h-[3px] appearance-none rounded-full bg-[var(--lm-line-2)] accent-[var(--lm-amber)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--lm-amber)] [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
           />
           <span className="w-5 text-right tabular-nums text-[9px] font-medium text-[var(--lm-ink-dim)]">{fields.opacity}</span>
