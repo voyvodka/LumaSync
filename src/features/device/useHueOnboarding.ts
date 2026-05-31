@@ -765,20 +765,21 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     }
 
     let active = true;
+    let timeoutId: number | null = null;
+    let inFlight = false;
     const bridgeIp = selectedBridge.ip;
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
 
-    const run = async () => {
-      if (!active) {
-        return;
-      }
+    const tick = async () => {
+      if (!active) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+      inFlight = true;
 
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         applyReadinessResult(areaId, response, {
           publishStatus: false,
@@ -786,17 +787,39 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
     };
 
-    void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
+    const scheduleNext = () => {
+      if (!active) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, READINESS_BACKGROUND_REFRESH_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!active) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
