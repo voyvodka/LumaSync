@@ -120,7 +120,6 @@ export function HueZoneListPanel({
               : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
           }`}
           onClick={addZoneDisabled ? undefined : onAddZone}
-          disabled={addZoneDisabled}
           aria-disabled={addZoneDisabled}
           title={addZoneDisabled ? addZoneDisabledTooltip : undefined}
         >
@@ -140,7 +139,6 @@ export function HueZoneListPanel({
                 : "bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
             }`}
             onClick={addZoneDisabled ? undefined : onAddZone}
-            disabled={addZoneDisabled}
             aria-disabled={addZoneDisabled}
             title={addZoneDisabled ? addZoneDisabledTooltip : undefined}
           >

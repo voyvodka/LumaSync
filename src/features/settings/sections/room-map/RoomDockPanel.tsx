@@ -894,7 +894,6 @@ function HueZonesTab(props: {
             type="button"
             className="lm-room-dock-cta lm-room-dock-empty-cta"
             onClick={addHueZoneDisabled ? undefined : onAddHueZone}
-            disabled={addHueZoneDisabled}
             aria-disabled={addHueZoneDisabled}
             title={addHueZoneDisabled ? addHueZoneDisabledTooltip : undefined}
           >
