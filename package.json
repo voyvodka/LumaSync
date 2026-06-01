@@ -40,7 +40,7 @@
     "@tauri-apps/plugin-store": "^2.4.3",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@tauri-apps/plugin-window-state": "^2.4.1",
-    "i18next": "^26.2.0",
+    "i18next": "^26.3.0",
     "i18next-browser-languagedetector": "^8.2.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
@@ -61,7 +61,7 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.3",
-    "vite": "^8.0.14",
+    "vite": "^8.0.15",
     "vitest": "^4.1.7"
   }
 }
