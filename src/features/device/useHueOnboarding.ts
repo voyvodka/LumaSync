@@ -765,15 +765,22 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     }
 
     let active = true;
+    let timerId: number | undefined;
+    let inFlight = false;
     const bridgeIp = selectedBridge.ip;
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
 
     const run = async () => {
-      if (!active) {
+      if (!active || inFlight) {
         return;
       }
 
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+
+      inFlight = true;
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
         if (!active) {
@@ -786,17 +793,29 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        if (active) {
+          timerId = window.setTimeout(run, READINESS_BACKGROUND_REFRESH_MS);
+        }
       }
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !inFlight) {
+        window.clearTimeout(timerId);
+        void run();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      window.clearTimeout(timerId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
