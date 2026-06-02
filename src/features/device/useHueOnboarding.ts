@@ -764,19 +764,22 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       return;
     }
 
-    let active = true;
+    let mounted = true;
+    let timeoutId: number | null = null;
+    let inFlight = false;
     const bridgeIp = selectedBridge.ip;
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
 
-    const run = async () => {
-      if (!active) {
+    const tick = async () => {
+      if (!mounted || inFlight || document.visibilityState === "hidden") {
         return;
       }
 
+      inFlight = true;
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
-        if (!active) {
+        if (!mounted) {
           return;
         }
 
@@ -786,17 +789,39 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
     };
 
-    void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
+    const scheduleNext = () => {
+      if (!mounted || document.visibilityState === "hidden" || timeoutId !== null) {
+        return;
+      }
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, READINESS_BACKGROUND_REFRESH_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      active = false;
-      window.clearInterval(intervalId);
+      mounted = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
