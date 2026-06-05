@@ -171,6 +171,12 @@ export function WledDevicePicker({
             value={manualIp}
             placeholder={t("devicesPage.wled.manualIpPlaceholder")}
             onChange={(e) => setManualIp(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !isDiscovering) {
+                e.preventDefault();
+                void handleDiscover();
+              }
+            }}
             aria-label={t("devicesPage.wled.manualIp")}
           />
           <button
