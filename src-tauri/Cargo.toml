@@ -60,7 +60,7 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "linux-
 # no consumer API change). Exact pin (=0.19.1) would block Dependabot from
 # picking up security patches automatically, which is the worse trade-off.
 # Dependabot will open a PR for any 0.19.x patch; review before merging.
-mdns-sd = "0.19"
+mdns-sd = "0.20"
 uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
