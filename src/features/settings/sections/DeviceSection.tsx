@@ -1748,6 +1748,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     className="lm-hue-ip-input"
                     value={manualIp}
                     onChange={(e) => { setManualIp(e.target.value); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !hueManualIpDisabled) {
+                        e.preventDefault();
+                        void submitManualIp();
+                      }
+                    }}
                     placeholder={t("device.hue.manualIp.placeholder")}
                   />
                   <button
