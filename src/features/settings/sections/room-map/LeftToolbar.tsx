@@ -81,8 +81,14 @@ function ToolChip({
       }`}
       aria-label={label}
       title={label}
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
+      onClick={(e) => {
+        if (disabled) {
+          e.preventDefault();
+          return;
+        }
+        onClick();
+      }}
+      aria-disabled={disabled}
     >
       <span className="flex items-center justify-center shrink-0">{icon}</span>
       {/* Hover label — slides out to the right */}
