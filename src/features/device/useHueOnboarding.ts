@@ -769,16 +769,17 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
 
-    const run = async () => {
-      if (!active) {
-        return;
-      }
+    let timerId: number | undefined;
+    let inFlight = false;
 
+    const run = async () => {
+      if (!active || inFlight) return;
+      if (document.visibilityState === "hidden") return;
+
+      inFlight = true;
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         applyReadinessResult(areaId, response, {
           publishStatus: false,
@@ -786,17 +787,28 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        if (active && document.visibilityState === "visible") {
+          timerId = window.setTimeout(run, READINESS_BACKGROUND_REFRESH_MS);
+        }
       }
     };
 
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        window.clearTimeout(timerId);
+        void run();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
     void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearTimeout(timerId);
     };
   }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
 
