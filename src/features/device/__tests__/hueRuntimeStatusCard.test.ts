@@ -95,6 +95,18 @@ describe("buildHueRuntimeStatusCard", () => {
     expect(model.variant).toBe("error");
     expect(model.actionHints).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
   });
+
+  it("surfaces RETRY action hint when stop request times out partially", () => {
+    const model = buildHueRuntimeStatusCard({
+      status: createStatus({
+        state: "Failed",
+        code: "HUE_STOP_TIMEOUT_PARTIAL",
+        actionHint: undefined,
+      }),
+    });
+
+    expect(model.actionHints).toEqual([HUE_RUNTIME_ACTION_HINT.RETRY]);
+  });
 });
 
 describe("deriveFamilyActionHints", () => {
@@ -177,6 +189,14 @@ describe("deriveFamilyActionHints", () => {
       expect(deriveFamilyActionHints("TRANSIENT_RETRY_SCHEDULED")).toEqual([
         HUE_RUNTIME_ACTION_HINT.RETRY,
         HUE_RUNTIME_ACTION_HINT.RECONNECT,
+      ]);
+    });
+  });
+
+  describe("Specific codes", () => {
+    it("HUE_STOP_TIMEOUT_PARTIAL returns [RETRY]", () => {
+      expect(deriveFamilyActionHints("HUE_STOP_TIMEOUT_PARTIAL")).toEqual([
+        HUE_RUNTIME_ACTION_HINT.RETRY,
       ]);
     });
   });

@@ -32,6 +32,12 @@ const IPV4_PATTERN =
 type HueStep = "discover" | "pair" | "area" | "ready";
 const READINESS_STALE_MS = 30_000;
 const READINESS_BACKGROUND_REFRESH_MS = 15_000;
+// Tighter cadence used while the selected area is blocked by another
+// active streamer. The user is actively waiting for the foreign session
+// to release, so polling every 3 s keeps the banner from feeling stuck.
+// Once the area becomes free, we fall back to the regular 15 s cadence.
+const READINESS_BLOCKED_REFRESH_MS = 3_000;
+const ACTIVE_STREAMER_REASON = "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
 // Backend `spawn_reconnect_monitor` (`src-tauri/src/commands/hue/reconnect.rs`)
 // already polls the DTLS sender's shutdown signal every 200 ms and flips the
 // runtime state on its own — this frontend poll is a visual-reflection
@@ -270,6 +276,13 @@ function applyAreaReadinessSnapshot(
   areaId: string,
   readiness: HueAreaReadiness,
 ): HueAreaGroup[] {
+  // The bridge readiness probe re-fetches the entertainment area on every
+  // call, so `reasons` is the freshest signal we have for whether a
+  // foreign streamer is still attached. Mirror that into the area row
+  // so the active-streamer banner (which reads `area.activeStreamer`)
+  // clears as soon as the foreign session disconnects, without the user
+  // having to manually click revalidate (A3.1).
+  const activeStreamer = readiness.reasons.includes(ACTIVE_STREAMER_REASON);
   return areaGroups.map((group) => ({
     ...group,
     areas: group.areas.map((area) =>
@@ -277,6 +290,7 @@ function applyAreaReadinessSnapshot(
         ? {
             ...area,
             readiness,
+            activeStreamer,
           }
         : area,
     ),
@@ -759,46 +773,91 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     }
   }, [applyReadinessResult, patchState, selectedBridge, state.credentials, state.selectedAreaId]);
 
+  const selectedAreaIsBlocked = useMemo(
+    () =>
+      flattenAreaGroups(state.areaGroups).some(
+        (area) => area.id === state.selectedAreaId && area.activeStreamer === true,
+      ),
+    [state.areaGroups, state.selectedAreaId],
+  );
+
+  // Background readiness refresh.
+  //
+  // Two cadences share one effect:
+  //   * 15 s while the selected area is healthy (default polish cadence)
+  //   * 3 s while the area is blocked by a foreign active streamer, so
+  //     the active-streamer banner clears within ~3 s of the foreign
+  //     session disconnecting (A3.1 — previously the banner stayed
+  //     stuck until the user clicked revalidate).
+  //
+  // Visibility-aware: the loop pauses while `document.visibilityState`
+  // is `hidden` (tray window collapsed / minimised) and re-arms with an
+  // immediate tick on `visibilitychange`, mirroring the runtime-status
+  // loop below and `useRuntimeTelemetry`.
   useEffect(() => {
     if (!selectedBridge || !state.credentials || !state.selectedAreaId || state.isValidatingCredential || state.isLoadingAreas) {
       return;
     }
 
-    let active = true;
+    let mounted = true;
+    let timeoutId: number | null = null;
+    let inFlight = false;
     const bridgeIp = selectedBridge.ip;
     const username = state.credentials.username;
     const areaId = state.selectedAreaId;
+    const cadence = selectedAreaIsBlocked
+      ? READINESS_BLOCKED_REFRESH_MS
+      : READINESS_BACKGROUND_REFRESH_MS;
 
-    const run = async () => {
-      if (!active) {
-        return;
-      }
-
+    const tick = async () => {
+      if (!mounted) return;
+      if (inFlight) return;
+      if (document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
         const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
-        if (!active) {
-          return;
-        }
-
+        if (!mounted) return;
         applyReadinessResult(areaId, response, {
           publishStatus: false,
           persistReadyStep: false,
         });
       } catch {
         // Background readiness refresh is best-effort.
+      } finally {
+        inFlight = false;
+        scheduleNext();
       }
     };
 
-    void run();
-    const intervalId = window.setInterval(() => {
-      void run();
-    }, READINESS_BACKGROUND_REFRESH_MS);
+    const scheduleNext = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "hidden") return;
+      if (timeoutId !== null) return;
+      timeoutId = window.setTimeout(() => {
+        timeoutId = null;
+        void tick();
+      }, cadence);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!mounted) return;
+      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
+        void tick();
+      }
+    };
+
+    void tick();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
-      active = false;
-      window.clearInterval(intervalId);
+      mounted = false;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [applyReadinessResult, selectedBridge, state.credentials, state.isValidatingCredential, state.selectedAreaId]);
+  }, [applyReadinessResult, selectedAreaIsBlocked, selectedBridge, state.credentials, state.isValidatingCredential, state.isLoadingAreas, state.selectedAreaId]);
 
   useEffect(() => {
     let cancelled = false;
