@@ -34,15 +34,15 @@ describe("LeftToolbar", () => {
     const tvBtn = screen.getByRole("button", { name: "roomMap.toolbar.addTv" });
 
     // Before TV placed: button is enabled and clickable
-    expect(tvBtn).not.toBeDisabled();
+    expect(tvBtn).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(tvBtn);
     expect(onAddTv).toHaveBeenCalledTimes(1);
 
     // Simulate parent updating hasTv to true after placement
     rerender(<LeftToolbar {...BASE_PROPS} hasTv={true} onAddTv={onAddTv} />);
 
-    // After TV placed: button must be disabled
-    expect(tvBtn).toBeDisabled();
+    // After TV placed: button must be disabled via aria-disabled
+    expect(tvBtn).toHaveAttribute("aria-disabled", "true");
   });
 
   it("TV add button click is suppressed when already disabled (hasTv=true)", () => {
