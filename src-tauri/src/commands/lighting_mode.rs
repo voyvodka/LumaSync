@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
@@ -34,6 +34,20 @@ static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 static AMBILIGHT_FRAME_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
 static AMBILIGHT_CAPTURE_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
+
+// Test-only serial guard. `start_ambilight_worker` mutates the process-global
+// `ACTIVE_AMBILIGHT_WORKERS` counter, and several tests across BOTH test
+// modules below either spawn real worker threads or assert exact counter
+// values. Under `cargo test`'s default thread-level parallelism those tests
+// race on the shared counter (one test spawns a worker -> count==1 while
+// another asserts count==0). This mutex serialises every worker-touching test
+// so the global counter is guaranteed to start at 0 for each one. It lives at
+// the parent-module scope so both `mod tests` and `mod lighting_mode_tests`
+// share the SAME lock. `Mutex::new(())` is a const fn, so no lazy
+// initialisation is needed. Test-execution ordering only -- zero production
+// impact.
+#[cfg(test)]
+static WORKER_TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Request passed to the frame-source factory on worker start.
 /// Carries both the display selection hint and the LED calibration config
@@ -1795,7 +1809,15 @@ pub fn set_lighting_mode<R: Runtime>(
     let edge_emitter: Option<EdgeSignalEmitter> = {
         let app_handle = app.clone();
         Some(Arc::new(move |payload: EdgeSignalPayload| {
-            let _ = app_handle.emit(EDGE_SIGNAL_EVENT, payload);
+            // Hot path: 60 Hz frame rate. Target the main shell webview only
+            // so calibration-overlay windows (separate WebView2/WKWebView
+            // instances) are not woken on every frame. See
+            // `MAIN_WINDOW_LABEL` in `crate::lib`.
+            let _ = app_handle.emit_to(
+                EventTarget::webview_window(crate::MAIN_WINDOW_LABEL),
+                EDGE_SIGNAL_EVENT,
+                payload,
+            );
         }))
     };
 
@@ -1994,12 +2016,24 @@ mod tests {
         }
     }
 
+    /// Serialise a worker-touching test against the process-global
+    /// `ACTIVE_AMBILIGHT_WORKERS` counter. Hold the returned guard for the
+    /// whole test body so the next test only starts once this one has drained
+    /// its workers back to zero. Recovers from poisoning so a panic in one
+    /// guarded test does not cascade into spurious failures elsewhere.
+    fn acquire_worker_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        super::WORKER_TEST_GUARD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
     fn shared_runtime_telemetry() -> Arc<Mutex<RuntimeTelemetrySnapshot>> {
         Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
     }
 
     #[test]
     fn set_ambilight_stops_previous_then_starts_new_runtime() {
+        let _guard = acquire_worker_test_guard();
         let mut owner = owner_with_fake_sender();
         owner = LightingRuntimeOwner {
             active_mode: ambilight_mode(),
@@ -2077,6 +2111,7 @@ mod tests {
 
     #[test]
     fn ambilight_mode_attempts_to_send_at_least_one_frame() {
+        let _guard = acquire_worker_test_guard();
         AMBILIGHT_FRAME_ATTEMPTS.store(0, Ordering::SeqCst);
         AMBILIGHT_CAPTURE_ATTEMPTS.store(0, Ordering::SeqCst);
 
@@ -2105,10 +2140,12 @@ mod tests {
 
         let mut cleanup_trace = None;
         stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_worker_count(0);
     }
 
     #[test]
     fn repeated_switches_keep_single_active_runtime() {
+        let _guard = acquire_worker_test_guard();
         let mut owner = owner_with_fake_sender();
 
         let first = apply_mode_change(
@@ -2162,6 +2199,7 @@ mod tests {
         // race fires a stale Ambilight push, then user pushes Solid again.
         // The runtime owner must end on Solid with zero active workers and
         // the LED bridge must NOT be holding a stale ambilight worker.
+        let _guard = acquire_worker_test_guard();
         let mut owner = owner_with_fake_sender();
 
         // Solid #1
@@ -2466,6 +2504,7 @@ mod tests {
         // synchronously inside `start_ambilight_worker` BEFORE the worker
         // thread spawns. That deterministic write avoids racing the worker
         // loop's first iteration.
+        let _guard = acquire_worker_test_guard();
         AMBILIGHT_FRAME_ATTEMPTS.store(0, Ordering::SeqCst);
         AMBILIGHT_CAPTURE_ATTEMPTS.store(0, Ordering::SeqCst);
 
@@ -2584,6 +2623,28 @@ mod lighting_mode_tests {
 
     fn shared_telemetry() -> Arc<Mutex<RuntimeTelemetrySnapshot>> {
         Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
+    }
+
+    /// Serialise a worker-touching test against the process-global
+    /// `ACTIVE_AMBILIGHT_WORKERS` counter, sharing the SAME lock as the sibling
+    /// `tests` module. Hold the returned guard for the whole test body.
+    fn acquire_worker_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        super::WORKER_TEST_GUARD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Spin until the process-global active-worker count drains to zero (or a
+    /// short timeout elapses) so the guarded test releases its lock only after
+    /// its spawned workers have exited. Mirrors `tests::wait_for_worker_count`
+    /// but is local to this module, which does not import the counter directly.
+    fn wait_for_workers_drained() {
+        for _ in 0..20 {
+            if super::ACTIVE_AMBILIGHT_WORKERS.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
     }
 
     fn ambilight_with_targets(targets: Option<Vec<String>>) -> LightingModeConfig {
@@ -2912,6 +2973,7 @@ mod lighting_mode_tests {
 
     #[test]
     fn fast_path_preserves_saturation_when_payload_omits_it() {
+        let _guard = acquire_worker_test_guard();
         let mut owner = owner_with_fake_sender();
 
         // First call: bring up ambilight with explicit saturation = 1.5
@@ -2970,10 +3032,12 @@ mod lighting_mode_tests {
 
         let mut cleanup_trace = None;
         super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 
     #[test]
     fn fast_path_preserves_smoothing_alpha_when_payload_omits_it() {
+        let _guard = acquire_worker_test_guard();
         let mut owner = owner_with_fake_sender();
 
         let bring_up = apply_mode_change(
@@ -3016,6 +3080,7 @@ mod lighting_mode_tests {
 
         let mut cleanup_trace = None;
         super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 
     #[test]
@@ -3023,6 +3088,7 @@ mod lighting_mode_tests {
         // Sanity check: an explicit Some(value) STILL overrides the live atomic.
         // This guards against an over-eager None-preservation that would also
         // ignore explicit values.
+        let _guard = acquire_worker_test_guard();
         let mut owner = owner_with_fake_sender();
 
         let _ = apply_mode_change(
@@ -3064,6 +3130,7 @@ mod lighting_mode_tests {
 
         let mut cleanup_trace = None;
         super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 
     // -----------------------------------------------------------------------

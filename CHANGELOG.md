@@ -7,6 +7,21 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- Hue active-streamer banner now clears on its own: while an entertainment area is held by another active streamer, readiness is re-probed every 3 s (instead of the 15 s healthy cadence) and the banner dismisses within ~3 s of the foreign session releasing — no manual revalidate needed.
+- `HUE_STOP_TIMEOUT_PARTIAL` runtime faults now surface a "Retry Stop" action hint, matching the inline recovery CTA in the device panel.
+
+### Changed
+
+- Hot-path Rust→JS events (60 Hz edge signals, tray/shell lifecycle) are emitted to the main settings webview only, so calibration-overlay windows are no longer woken on every frame — lower idle CPU whenever an overlay window exists.
+- Hue background readiness refresh migrated from a fixed `setInterval` to a visibility-aware recursive `setTimeout`, pausing while the window is hidden and re-arming on focus, consistent with the rest of the polling discipline.
+- RoomMap template selector migrated to the amber Rev 07 design tokens.
+
+### Security
+
+- Resolved RUSTSEC-2026-0185 (7.5 high) by bumping the transitive `quinn-proto` dependency to 0.11.15; `memmap2` bumped to 0.9.11 (RUSTSEC-2026-0186). The `cargo audit` CI gate is green again.
+
 ## [1.5.2] — 2026-05-05
 
 ### Added
