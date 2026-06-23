@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
@@ -1795,7 +1795,15 @@ pub fn set_lighting_mode<R: Runtime>(
     let edge_emitter: Option<EdgeSignalEmitter> = {
         let app_handle = app.clone();
         Some(Arc::new(move |payload: EdgeSignalPayload| {
-            let _ = app_handle.emit(EDGE_SIGNAL_EVENT, payload);
+            // Hot path: 60 Hz frame rate. Target the main shell webview only
+            // so calibration-overlay windows (separate WebView2/WKWebView
+            // instances) are not woken on every frame. See
+            // `MAIN_WINDOW_LABEL` in `crate::lib`.
+            let _ = app_handle.emit_to(
+                EventTarget::webview_window(crate::MAIN_WINDOW_LABEL),
+                EDGE_SIGNAL_EVENT,
+                payload,
+            );
         }))
     };
 

@@ -26,7 +26,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, RunEvent, Runtime, State,
+    AppHandle, Emitter, EventTarget, Manager, RunEvent, Runtime, State,
 };
 
 mod commands {
@@ -91,6 +91,12 @@ use commands::room_map::save_load::{
 };
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
+
+/// Label of the primary settings webview window. Defined in
+/// `tauri.conf.json` (`app.windows[].label = "main"`). Hot-path Rust→JS
+/// events use `Emitter::emit_to(EventTarget::webview_window(MAIN_WINDOW_LABEL), ...)`
+/// to avoid waking calibration-overlay webviews on every frame.
+pub const MAIN_WINDOW_LABEL: &str = "main";
 
 const TRAY_ICON_ID: &str = "main-tray";
 
@@ -254,7 +260,16 @@ fn cleanup_orphan_socket() {
 
 fn hide_to_tray<R: Runtime>(window: &tauri::Window<R>) {
     let _ = window.hide();
-    let _ = window.emit("shell:close-to-tray", ());
+    // Target the main shell webview only — overlay windows must not receive
+    // tray/shell lifecycle events. The `Window` here is already the main
+    // window (filtered in the on_window_event handler) so a window-scoped
+    // emit would already be safe; we still go through `emit_to` for
+    // symmetry with the tray menu emits below.
+    let _ = window.emit_to(
+        EventTarget::webview_window(MAIN_WINDOW_LABEL),
+        "shell:close-to-tray",
+        (),
+    );
 }
 
 #[tauri::command]
@@ -577,13 +592,25 @@ pub fn run() {
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open-settings" => show_and_focus_settings(app),
                     "tray-lights-off" => {
-                        let _ = app.emit("tray:lights-off", ());
+                        let _ = app.emit_to(
+                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
+                            "tray:lights-off",
+                            (),
+                        );
                     }
                     "tray-resume-last-mode" => {
-                        let _ = app.emit("tray:resume-last-mode", ());
+                        let _ = app.emit_to(
+                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
+                            "tray:resume-last-mode",
+                            (),
+                        );
                     }
                     "tray-solid-color" => {
-                        let _ = app.emit("tray:solid-color", ());
+                        let _ = app.emit_to(
+                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
+                            "tray:solid-color",
+                            (),
+                        );
                     }
                     "quit" => kick_off_shutdown_and_die(app),
                     _ => {}
