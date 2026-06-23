@@ -1006,6 +1006,14 @@ pub async fn fetch_light_metadata(
     username: &str,
     light_id: &str,
 ) -> Result<HueLightMetadata, String> {
+    // SECURITY: Validate light_id to prevent path traversal
+    if !light_id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err(format!("Invalid light_id format: {light_id}"));
+    }
+
     let client = async_hue_http_client()?;
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
     let response = client
