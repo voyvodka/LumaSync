@@ -18,6 +18,10 @@ https://keepachangelog.com/en/1.1.0/
 - Hue background readiness refresh migrated from a fixed `setInterval` to a visibility-aware recursive `setTimeout`, pausing while the window is hidden and re-arming on focus, consistent with the rest of the polling discipline.
 - RoomMap template selector migrated to the amber Rev 07 design tokens.
 
+### Security
+
+- Resolved RUSTSEC-2026-0185 (7.5 high) by bumping the transitive `quinn-proto` dependency to 0.11.15; `memmap2` bumped to 0.9.11 (RUSTSEC-2026-0186). The `cargo audit` CI gate is green again.
+
 ## [1.5.2] — 2026-05-05
 
 ### Added
