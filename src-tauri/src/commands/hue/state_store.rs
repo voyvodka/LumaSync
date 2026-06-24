@@ -186,6 +186,21 @@ pub(crate) struct HueRuntimeOwner {
     pub(crate) persistent_sender: Option<HuePersistentSender>,
     pub(crate) reconnect_attempt: u8,
     pub(crate) user_override_pending: bool,
+    /// True while the reconnect monitor is actively driving a restart
+    /// (`internal_restart_stream`). Set under the runtime lock in the same
+    /// atomic check-and-set the monitor uses to claim the restart, and
+    /// cleared once that restart resolves (success or give-up).
+    ///
+    /// This is the monitor's *only* double-trigger guard. It must NOT be
+    /// conflated with `state == Reconnecting`: the status poll
+    /// (`get_hue_stream_status`) also marks the runtime `Reconnecting` via
+    /// `register_transient_fault` to surface `TRANSIENT_RETRY_SCHEDULED` to
+    /// the UI, but does so WITHOUT launching a restart. If the monitor keyed
+    /// its guard off `Reconnecting`, a status poll winning the race would
+    /// dead-end the monitor and strand the runtime in `Reconnecting` with
+    /// `active_stream = None` forever. Keying off this flag lets the monitor
+    /// still perform the restart in that case.
+    pub(crate) reconnect_in_progress: bool,
     pub(crate) last_status: HueRuntimeStatus,
     /// Most recent solid color successfully sent to the bridge.
     /// Persists across reconnects so the UI can restore the last applied color.
@@ -256,6 +271,7 @@ impl Default for HueRuntimeOwner {
             persistent_sender: None,
             reconnect_attempt: 0,
             user_override_pending: false,
+            reconnect_in_progress: false,
             last_status: status_with(
                 HueRuntimeState::Idle,
                 "HUE_STREAM_IDLE",

@@ -171,6 +171,72 @@ impl Drop for StartAbortGuard {
 }
 
 // ---------------------------------------------------------------------------
+// Reconnect-in-progress RAII guard
+// ---------------------------------------------------------------------------
+
+/// Clears `HueRuntimeOwner::reconnect_in_progress` when the reconnect monitor
+/// leaves its restart critical section, on EVERY exit path (early backoff
+/// return, readiness give-up, successful restart, or panic). Pairs with the
+/// atomic check-and-set the monitor performs to claim the restart, so a
+/// status-poll/monitor race can never leave the flag stuck `true` and block
+/// all future self-healing reconnects.
+struct ReconnectInProgressGuard {
+    runtime: Arc<Mutex<HueRuntimeOwner>>,
+}
+
+impl Drop for ReconnectInProgressGuard {
+    fn drop(&mut self) {
+        let mut owner = acquire_hue_runtime(&self.runtime);
+        owner.reconnect_in_progress = false;
+    }
+}
+
+/// Outcome of the monitor's atomic restart-claim decision.
+#[derive(Debug, PartialEq, Eq)]
+enum ReconnectClaim {
+    /// The monitor may proceed to restart; `reconnect_in_progress` was set.
+    Proceed,
+    /// The monitor must bail without restarting (intentional stop, exhausted
+    /// `Failed` runtime, or another restart already in flight).
+    Abort,
+}
+
+/// Atomic check-and-set that decides whether the reconnect monitor should
+/// drive a restart. Performed under the runtime lock so a status-poll/monitor
+/// race can never launch two restarts.
+///
+/// Returns `Abort` (and does NOT set the flag) when:
+/// - a user stop is pending or the runtime is `Idle`/`Stopping` (user wins),
+/// - the runtime is `Failed` (exhausted budget self-aborts),
+/// - a restart is already in flight (`reconnect_in_progress == true`).
+///
+/// Otherwise sets `reconnect_in_progress = true` and returns `Proceed`. The
+/// guard deliberately does NOT treat `state == Reconnecting` as a reason to
+/// abort: the status poll marks the runtime `Reconnecting` for the UI without
+/// launching a restart, and the monitor must still be able to heal that case.
+fn try_claim_reconnect(owner: &mut HueRuntimeOwner) -> ReconnectClaim {
+    if owner.user_override_pending
+        || matches!(
+            owner.state,
+            HueRuntimeState::Idle | HueRuntimeState::Stopping
+        )
+    {
+        return ReconnectClaim::Abort;
+    }
+    // A genuinely exhausted runtime must STILL self-abort — never let the
+    // monitor restart a Failed runtime.
+    if owner.state == HueRuntimeState::Failed {
+        return ReconnectClaim::Abort;
+    }
+    // If another monitor already claimed the restart, bail (no restart storm).
+    if owner.reconnect_in_progress {
+        return ReconnectClaim::Abort;
+    }
+    owner.reconnect_in_progress = true;
+    ReconnectClaim::Proceed
+}
+
+// ---------------------------------------------------------------------------
 // Reconnect monitor (HUE-08) — detects sender thread exit and triggers retry
 // ---------------------------------------------------------------------------
 
@@ -196,25 +262,26 @@ pub(crate) fn spawn_reconnect_monitor(
             }
         }
 
-        // Sender thread has exited — check if this is an intentional stop.
-        {
-            let owner = acquire_hue_runtime(&runtime);
-            if owner.user_override_pending
-                || matches!(
-                    owner.state,
-                    HueRuntimeState::Idle | HueRuntimeState::Stopping
-                )
-            {
-                return;
+        // Sender thread has exited — check if this is an intentional stop and,
+        // in the SAME lock acquisition, atomically claim the restart.
+        //
+        // Why one lock block: the status poll (`get_hue_stream_status`) may
+        // have already flipped `state` to `Reconnecting` via
+        // `register_transient_fault` to surface `TRANSIENT_RETRY_SCHEDULED` to
+        // the UI — WITHOUT launching any restart. The old guard returned early
+        // on `state == Reconnecting`, which dead-ended the monitor and left the
+        // runtime stuck in `Reconnecting` with `active_stream = None` forever.
+        // The double-trigger guard is now the `reconnect_in_progress` flag, set
+        // here and cleared by `ReconnectInProgressGuard` on every exit path.
+        let _in_progress_guard = {
+            let mut owner = acquire_hue_runtime(&runtime);
+            match try_claim_reconnect(&mut owner) {
+                ReconnectClaim::Proceed => ReconnectInProgressGuard {
+                    runtime: Arc::clone(&runtime),
+                },
+                ReconnectClaim::Abort => return,
             }
-            // If already Failed or Reconnecting from another path, don't double-trigger.
-            if matches!(
-                owner.state,
-                HueRuntimeState::Failed | HueRuntimeState::Reconnecting
-            ) {
-                return;
-            }
-        }
+        };
 
         // Register transient fault and get backoff delay.
         let backoff_ms = {
@@ -546,5 +613,125 @@ mod tests {
             "reconnect monitor must observe the in-flight bit and skip the PUT"
         );
         assert!(token.was_acquired());
+    }
+
+    /// Race resolution (the v1.5.x stall fix): a status poll
+    /// (`get_hue_stream_status`) can win the race and call
+    /// `register_transient_fault`, flipping the runtime to `Reconnecting` and
+    /// clearing `active_stream`, BEFORE the monitor's next tick. The monitor
+    /// must still be able to claim and drive the restart — it must NOT
+    /// dead-end on `state == Reconnecting`. Previously this stranded the
+    /// runtime in `Reconnecting` forever.
+    #[test]
+    fn monitor_still_claims_restart_after_status_poll_sets_reconnecting() {
+        let mut owner = HueRuntimeOwner::default();
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        // Simulate the status-poll branch: register a transient fault (sets
+        // Reconnecting + TRANSIENT_RETRY_SCHEDULED for the UI) and clear the
+        // dead stream context, but DO NOT spawn a restart or arm a monitor.
+        let poll = register_transient_fault(
+            &mut owner,
+            "DTLS sender thread exited unexpectedly.",
+            HueRuntimeTriggerSource::System,
+        );
+        owner.active_stream = None;
+        owner.persistent_sender = None;
+
+        // UI-facing status must still surface Reconnecting / scheduled retry.
+        assert_eq!(poll.status.state, HueRuntimeState::Reconnecting);
+        assert_eq!(poll.status.code, "TRANSIENT_RETRY_SCHEDULED");
+        assert!(!owner.reconnect_in_progress);
+
+        // The monitor's guard must now PROCEED (not abort on Reconnecting).
+        assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Proceed);
+        assert!(
+            owner.reconnect_in_progress,
+            "claim must mark the restart in flight"
+        );
+    }
+
+    /// Single-restart-per-fault guarantee: once a restart is in flight, a
+    /// second claim (e.g. a duplicate/raced monitor) must abort. No storm.
+    #[test]
+    fn second_claim_aborts_while_restart_in_flight() {
+        let mut owner = HueRuntimeOwner::default();
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let _ = register_transient_fault(
+            &mut owner,
+            "DTLS sender thread exited unexpectedly.",
+            HueRuntimeTriggerSource::System,
+        );
+
+        assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Proceed);
+        // A racing monitor sees the flag and bails without launching anything.
+        assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Abort);
+        assert!(owner.reconnect_in_progress);
+    }
+
+    /// The RAII guard must clear the flag on drop so the next genuine fault can
+    /// re-claim a restart (otherwise self-healing would block permanently).
+    #[test]
+    fn in_progress_guard_clears_flag_on_drop() {
+        let runtime = Arc::new(Mutex::new(HueRuntimeOwner::default()));
+        let guard = {
+            let mut owner = acquire_hue_runtime(&runtime);
+            let _ = start_with_evidence(
+                &mut owner,
+                &strict_gate_ready(),
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Proceed);
+            assert!(owner.reconnect_in_progress);
+            ReconnectInProgressGuard {
+                runtime: Arc::clone(&runtime),
+            }
+        };
+        // While the guard is alive the flag stays set...
+        assert!(acquire_hue_runtime(&runtime).reconnect_in_progress);
+        // ...and dropping it clears the flag so the next fault can re-claim.
+        drop(guard);
+        assert!(!acquire_hue_runtime(&runtime).reconnect_in_progress);
+    }
+
+    /// Must-preserve (a): a genuinely exhausted `Failed` runtime must STILL
+    /// self-abort — the monitor must never restart a Failed runtime.
+    #[test]
+    fn failed_runtime_self_aborts_and_does_not_claim() {
+        let mut owner = HueRuntimeOwner {
+            state: HueRuntimeState::Failed,
+            ..HueRuntimeOwner::default()
+        };
+
+        assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Abort);
+        assert!(
+            !owner.reconnect_in_progress,
+            "Failed runtime must not claim a restart"
+        );
+    }
+
+    /// Must-preserve (b): a user stop (`user_override_pending`) must win —
+    /// the monitor must abort and never claim a restart.
+    #[test]
+    fn user_stop_wins_over_reconnect_claim() {
+        let mut owner = HueRuntimeOwner::default();
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        owner.user_override_pending = true;
+        owner.state = HueRuntimeState::Stopping;
+
+        assert_eq!(try_claim_reconnect(&mut owner), ReconnectClaim::Abort);
+        assert!(!owner.reconnect_in_progress);
     }
 }

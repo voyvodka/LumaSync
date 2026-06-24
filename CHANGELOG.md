@@ -17,10 +17,18 @@ https://keepachangelog.com/en/1.1.0/
 - Hot-path Rust→JS events (60 Hz edge signals, tray/shell lifecycle) are emitted to the main settings webview only, so calibration-overlay windows are no longer woken on every frame — lower idle CPU whenever an overlay window exists.
 - Hue background readiness refresh migrated from a fixed `setInterval` to a visibility-aware recursive `setTimeout`, pausing while the window is hidden and re-arming on focus, consistent with the rest of the polling discipline.
 - RoomMap template selector migrated to the amber Rev 07 design tokens.
+- Gamma-correction lookup tables are no longer rebuilt every frame (previously once per Hue channel per frame, and once per Adalight/SK6812 serial packet); they are computed once and reused, with the default 2.2 profile borrowing a shared precomputed table — lower idle CPU on the output hot paths with byte-identical output.
+- Hue stream activation and reconnect now reuse a single HTTP client when fetching per-bulb gamut metadata instead of constructing one client per light.
+
+### Fixed
+
+- Hue auto-reconnect could stall permanently in the "Reconnecting" state when a status poll raced the reconnect monitor for the same shutdown signal; the monitor now keys its guard off an explicit in-progress flag, so the restart always proceeds and the stream self-heals.
+- Shutdown hardened: the lighting-worker teardown step is now time-bounded (1.5 s) so a slow worker join can no longer starve the Hue entertainment-mode deactivate under the shutdown watchdog (which previously risked leaving the bridge with a phantom active streamer). On Windows, screen-capture teardown is detached onto its own thread so it no longer briefly freezes the UI when switching lighting modes.
 
 ### Security
 
 - Resolved RUSTSEC-2026-0185 (7.5 high) by bumping the transitive `quinn-proto` dependency to 0.11.15; `memmap2` bumped to 0.9.11 (RUSTSEC-2026-0186). The `cargo audit` CI gate is green again.
+- Bumped the transitive `tar` crate to 0.4.46 (PAX header desynchronization advisory).
 
 ## [1.5.2] — 2026-05-05
 

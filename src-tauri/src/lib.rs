@@ -151,12 +151,40 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
     log::info!("[shutdown] cleanup thread started");
 
-    // 1. Ambilight / serial capture worker.
+    // 1. Ambilight / serial capture worker — bounded to 1.5s on shutdown.
+    //
+    // stop_lighting locks runtime_state.runtime, then apply_mode_change ->
+    // stop_previous -> worker.stop() -> handle.join(). Worst case is ~1.6s when
+    // the lock is held behind an in-flight set_lighting_mode warmup and the
+    // worker join waits on a wedged serial write (OUTPUT_TIMEOUT_MS=500). With
+    // no inner deadline this could starve step 2 (Hue deactivate) under the 4s
+    // watchdog, leaving the bridge in entertainment mode ("phantom active
+    // streamer"). So detach the call and abandon after 1.5s if it hasn't
+    // returned. We BLOCK on recv_timeout here (not fire-and-forget) so step 2
+    // only begins once step 1 returns or is abandoned, preserving the
+    // sequential ordering. process::exit(0) below reaps the orphan thread even
+    // if it is still wedged mid-join holding runtime.lock() -- we do not join it.
     let t1 = std::time::Instant::now();
-    if let Err(e) = stop_lighting(app.state::<LightingRuntimeState>()) {
-        log::warn!("[shutdown] stop_lighting reported: {e}");
+    let app_for_lighting = app.clone();
+    let (tx1, rx1) = std::sync::mpsc::channel::<Result<(), String>>();
+    std::thread::Builder::new()
+        .name("lumasync-shutdown-lighting".into())
+        .spawn(move || {
+            let result =
+                stop_lighting(app_for_lighting.state::<LightingRuntimeState>()).map(|_| ());
+            let _ = tx1.send(result);
+        })
+        .ok();
+    match rx1.recv_timeout(std::time::Duration::from_millis(1500)) {
+        Ok(Ok(())) => {
+            log::info!("[shutdown] step 1 (stop_lighting) took {:?}", t1.elapsed())
+        }
+        Ok(Err(e)) => log::warn!("[shutdown] stop_lighting reported: {e}"),
+        Err(_) => log::warn!(
+            "[shutdown] step 1 (stop_lighting) abandoned after {:?}",
+            t1.elapsed()
+        ),
     }
-    log::info!("[shutdown] step 1 (stop_lighting) took {:?}", t1.elapsed());
 
     // 2. Hue entertainment stream — bounded to 1.5s on shutdown.
     //

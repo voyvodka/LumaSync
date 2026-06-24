@@ -997,11 +997,17 @@ pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightM
     })
 }
 
-/// Fetch `/clip/v2/resource/light/{light_id}` and return the parsed
-/// metadata. Errors propagate as a string so the caller can decide
-/// whether to fall back to `HueGamutType::Other` (loud) or skip the
-/// clipping step (silent).
-pub async fn fetch_light_metadata(
+/// Fetch `/clip/v2/resource/light/{light_id}` and return the parsed metadata,
+/// reusing a caller-supplied `reqwest::Client` so an entire batch of light
+/// fetches (W1-C3a hot path) shares one TLS-configured client instead of
+/// rebuilding one per light. The client MUST carry the same
+/// `danger_accept_invalid_certs(true)` + timeout config as
+/// `async_hue_http_client` (the Hue bridge presents a self-signed cert).
+///
+/// Errors propagate as a string so the caller can decide whether to fall back
+/// to `HueGamutType::Other` (loud) or skip the clipping step (silent).
+async fn fetch_light_metadata_with_client(
+    client: &reqwest::Client,
     bridge_ip: &str,
     username: &str,
     light_id: &str,
@@ -1014,7 +1020,6 @@ pub async fn fetch_light_metadata(
         return Err(format!("Invalid light_id format: {light_id}"));
     }
 
-    let client = async_hue_http_client()?;
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
     let response = client
         .get(endpoint)
@@ -1032,7 +1037,7 @@ pub async fn fetch_light_metadata(
 
 /// Convenience: drain a slice of resolved channels into a flat list of
 /// unique light ids. Used by the runtime to populate the metadata cache
-/// in a single batch (one `fetch_light_metadata` call per light id).
+/// in a single batch (one `fetch_light_metadata_with_client` call per light id).
 pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
     let mut out = Vec::new();
     for ch in channels {
@@ -1048,7 +1053,7 @@ pub fn unique_light_ids(channels: &[HueAreaChannel]) -> Vec<String> {
 /// Pre-fetch per-light metadata for every unique light id referenced by the
 /// provided channels and return it as a ready-to-share `Arc<HashMap>`.
 ///
-/// Failure mode is **graceful**: any single `fetch_light_metadata` error is
+/// Failure mode is **graceful**: any single `fetch_light_metadata_with_client` error is
 /// swallowed (the bridge response shape can vary across firmware versions
 /// and we never want a metadata fetch to abort entertainment-area
 /// activation). The returned map omits the failing light ids; the frame
@@ -1067,8 +1072,23 @@ pub async fn fetch_light_metadata_for_channels(
     channels: &[HueAreaChannel],
 ) -> HashMap<String, HueLightMetadata> {
     let mut out = HashMap::new();
+    // Build the HTTP client ONCE and reuse it across every light fetch, mirroring
+    // how `fetch_area_channels` threads a single client through its fan-out.
+    // Building a fresh `reqwest::Client` per light reran TLS config N times per
+    // area activation (and again on every reconnect). If the client cannot be
+    // built we cannot fetch any metadata — return the empty cache so the frame
+    // builder treats every light as `HueGamutType::Other` (the graceful default).
+    let client = match async_hue_http_client() {
+        Ok(client) => client,
+        Err(err) => {
+            warn!("light metadata HTTP client build failed: {err}; falling back to HueGamutType::Other for all lights");
+            return out;
+        }
+    };
     for light_id in unique_light_ids(channels) {
-        match fetch_light_metadata(bridge_ip, username, &light_id).await {
+        // Per-light graceful failure isolation: a single failed fetch logs and
+        // is omitted from the cache; the others must still succeed. No `?` here.
+        match fetch_light_metadata_with_client(&client, bridge_ip, username, &light_id).await {
             Ok(meta) => {
                 out.insert(meta.light_id.clone(), meta);
             }

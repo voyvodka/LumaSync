@@ -21,8 +21,8 @@ use super::led_calibration::{
     build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
-    apply_color_correction_rgb, encode_packet_for_profile, ColorCorrectionConfig, FirmwareProfile,
-    LedOutputBridge, SerialSink,
+    apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_profile,
+    gamma_luts_for, ColorCorrectionConfig, FirmwareProfile, GammaLuts, LedOutputBridge, SerialSink,
 };
 use super::led_sink::LedSink;
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
@@ -1265,6 +1265,12 @@ fn start_ambilight_worker(
                 // ~100ms hardware interpolation produce smooth gradients.
                 if let Some(context) = hue_output.as_ref() {
                     if !context.channels.is_empty() {
+                        // Build gamma LUTs once per frame (not once per channel).
+                        // color_correction is fixed for the worker's lifetime — any change
+                        // forces a full worker restart (guard at apply_mode_change). So the
+                        // LUT is also stable and only needs building here, not inside the map.
+                        let hue_frame_luts: std::borrow::Cow<'static, GammaLuts> =
+                            gamma_luts_for(&color_correction);
                         let raw_colors: Vec<(u8, u8, u8)> = context
                             .channels
                             .iter()
@@ -1275,7 +1281,11 @@ fn start_ambilight_worker(
                                     ch.position_y,
                                     border_cache.insets(),
                                 );
-                                apply_color_correction_rgb(rgb, &color_correction)
+                                apply_color_correction_rgb_with_luts(
+                                    rgb,
+                                    &color_correction,
+                                    &hue_frame_luts,
+                                )
                             })
                             .collect();
 
