@@ -17,6 +17,12 @@ https://keepachangelog.com/en/1.1.0/
 - Hot-path Rust→JS events (60 Hz edge signals, tray/shell lifecycle) are emitted to the main settings webview only, so calibration-overlay windows are no longer woken on every frame — lower idle CPU whenever an overlay window exists.
 - Hue background readiness refresh migrated from a fixed `setInterval` to a visibility-aware recursive `setTimeout`, pausing while the window is hidden and re-arming on focus, consistent with the rest of the polling discipline.
 - RoomMap template selector migrated to the amber Rev 07 design tokens.
+- The Hue stream-health check now pauses while the tray window is hidden and re-checks immediately on re-focus, trimming needless background bridge traffic — consistent with the rest of the polling discipline.
+
+### Fixed
+
+- Room-map template buttons now expose an explicit accessible name (`aria-label`) for screen readers.
+- Transient USB disconnect / unsupported-port notices no longer leak their auto-dismiss timers if the view unmounts or the effect re-runs first.
 
 ### Security
 
