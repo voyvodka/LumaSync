@@ -98,6 +98,7 @@ export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
             <button
               key={tmpl.id}
               type="button"
+              aria-label={t(tmpl.nameKey)}
               className="flex flex-col items-center gap-1.5 rounded-lg border border-[var(--lm-line)] bg-[var(--lm-panel)] px-3 py-3 hover:bg-[var(--lm-panel-2)] hover:border-[var(--lm-amber)]/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60"
               onClick={() => onSelect(tmpl.config(t))}
             >
