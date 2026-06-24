@@ -615,9 +615,17 @@ function App() {
 
     let active = true;
     let timerId: number | null = null;
+    let inFlight = false;
 
     const poll = async () => {
       if (!active) return;
+      if (inFlight) return;
+      // Visibility-aware: the tray window can be hidden indefinitely with the
+      // React tree mounted. Skip backend polling while hidden and resume with
+      // an immediate tick on `visibilitychange` so a stream that died while
+      // hidden is reflected the moment the user re-opens the window.
+      if (document.visibilityState === "hidden") return;
+      inFlight = true;
       try {
         const result = await getHueStreamStatus();
         if (!active) return;
@@ -634,22 +642,42 @@ function App() {
           setActiveOutputTargets((prev) => prev.filter((t) => t !== "hue"));
           return; // Dead stream detected, stop polling
         }
-      } catch {
-        // Network error polling status — do not remove target on transient fetch failure.
+      } catch (err) {
+        console.warn("[LumaSync] Hue stream health poll failed (transient, keeping target):", err);
+      } finally {
+        inFlight = false;
       }
 
-      if (active) {
-        timerId = window.setTimeout(() => {
-          void poll();
-        }, HUE_STREAM_HEALTH_POLL_MS);
+      scheduleNext();
+    };
+
+    const scheduleNext = () => {
+      if (!active) return;
+      if (document.visibilityState === "hidden") return;
+      if (timerId !== null) return;
+      timerId = window.setTimeout(() => {
+        timerId = null;
+        void poll();
+      }, HUE_STREAM_HEALTH_POLL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (!active) return;
+      if (document.visibilityState === "visible" && timerId === null && !inFlight) {
+        void poll();
       }
     };
 
     void poll();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
-      if (timerId !== null) window.clearTimeout(timerId);
+      if (timerId !== null) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [activeOutputTargets]);
 
@@ -1318,6 +1346,8 @@ function App() {
   useEffect(() => {
     if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
 
+    let disconnectNoticeTimerId: number | null = null;
+
     const wasConnected = prevUsbConnectedRef.current;
 
     if (wasConnected === false && isConnected) {
@@ -1360,7 +1390,7 @@ function App() {
         if (nextTargets.length > 0) {
           void handleOutputTargetsChange(nextTargets);
           setUsbDisconnectNotice(true);
-          window.setTimeout(() => setUsbDisconnectNotice(false), 5_000);
+          disconnectNoticeTimerId = window.setTimeout(() => setUsbDisconnectNotice(false), 5_000);
         }
         // If no targets remain, keep current targets — mode buttons will show disabled via guard
       }
@@ -1368,6 +1398,13 @@ function App() {
     }
 
     prevUsbConnectedRef.current = isConnected;
+
+    return () => {
+      if (disconnectNoticeTimerId !== null) {
+        window.clearTimeout(disconnectNoticeTimerId);
+        disconnectNoticeTimerId = null;
+      }
+    };
   }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
 
   // ---------------------------------------------------------------------------
@@ -1389,6 +1426,7 @@ function App() {
   // — boot path is always at OFF until the user picks a mode).
   // ---------------------------------------------------------------------------
   useEffect(() => {
+    let unsupportedNoticeTimerId: number | null = null;
     const unsubscribe = connectionEvents.subscribe((event) => {
       if (event.connected || !event.unsupportedReason) return;
       const currentTargets = selectedOutputTargetsRef.current;
@@ -1419,9 +1457,15 @@ function App() {
         );
       });
       setUsbUnsupportedNotice(true);
-      window.setTimeout(() => setUsbUnsupportedNotice(false), 6_000);
+      unsupportedNoticeTimerId = window.setTimeout(() => setUsbUnsupportedNotice(false), 6_000);
     });
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (unsupportedNoticeTimerId !== null) {
+        window.clearTimeout(unsupportedNoticeTimerId);
+        unsupportedNoticeTimerId = null;
+      }
+    };
   }, []);
 
   const handleAcceptUsbTarget = useCallback(async () => {
