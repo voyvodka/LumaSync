@@ -48,7 +48,18 @@ openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1.52.3", features = ["rt", "signal"] }
 # v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
 # Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
-keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+#
+# keyring 4 restructured the crate: the classic `Entry`/`Error` API now lives
+# behind the `v1` feature (re-exported at the crate root via `pub use v1::*`,
+# so `keyring::Entry` / `keyring::Error::NoEntry` resolve unchanged), and the
+# v3 backend feature names were replaced by `*-keyring-store` crates.
+# v3 -> v4 backend feature mapping:
+#   apple-native   -> apple-native-keyring-store       (NOT in the v4 default set; added explicitly for macOS Keychain Services)
+#   windows-native -> windows-native-keyring-store     (in v4 default set)
+#   linux-native   -> zbus-secret-service-keyring-store (in v4 default set; Secret Service over D-Bus, same backend as before)
+# The default feature set (`v1` + windows-native + zbus-secret-service) is kept
+# on; we only add the macOS backend that the default set omits.
+keyring = { version = "4", features = ["apple-native-keyring-store"] }
 # v1.5 W2-A3 — pure-Rust mDNS responder for LAN bridge discovery.
 # Used by `_hue._tcp.local.` (Hue) today; the shared `network::mdns` registry
 # also serves the future WLED `_wled._tcp.local.` browser (D5 — single
@@ -69,7 +80,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Wind
 raw-window-handle = "0.6"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-screencapturekit = "1.5.4"
+screencapturekit = "8.0.0"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSWindow", "NSControl", "NSButton", "NSView"] }
 
