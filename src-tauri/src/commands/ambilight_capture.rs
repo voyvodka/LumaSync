@@ -288,8 +288,27 @@ mod platform {
 
     impl Drop for WindowsLiveFrameSource {
         fn drop(&mut self) {
+            // CaptureControl::stop() signals + JOINS the WGC message-loop thread
+            // (indeterminate duration). This Drop runs from
+            // LightingWorkerRuntime::stop() on the Tauri command thread (mode
+            // switch) and the shutdown thread, so calling stop() inline would
+            // freeze the caller -- falsifying the non-blocking contract that the
+            // macOS sibling (MacOSLiveFrameSource::Drop) already honors. Detach
+            // stop() onto a dedicated thread so this Drop returns immediately.
+            //
+            // CaptureControl is moved (not cloned -- unlike macOS's SCStream it is
+            // not Clone) into the closure; it is Send (produced by
+            // start_free_threaded and used cross-thread by design), so no
+            // `unsafe impl Send` is needed. We discard the spawn result so a
+            // spawn failure does not panic. No grace-period sleep is needed here:
+            // the macOS 150ms sleep guards the DispatchQueue sample-handler
+            // ref-count race (SIGBUS), which windows-capture has no equivalent of.
             if let Some(capture_control) = self.capture_control.take() {
-                let _ = capture_control.stop();
+                let _ = std::thread::Builder::new()
+                    .name("wgc-stop".into())
+                    .spawn(move || {
+                        let _ = capture_control.stop();
+                    });
             }
         }
     }
