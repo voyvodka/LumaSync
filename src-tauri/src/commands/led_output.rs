@@ -125,6 +125,7 @@ impl Default for ColorCorrectionConfig {
 /// that each channel can be corrected with a different exponent. The default
 /// tables use gamma 2.2 for all three channels, preserving the existing wire
 /// behaviour until the user selects different values.
+#[derive(Clone)]
 pub struct GammaLuts {
     pub r: [u8; 256],
     pub g: [u8; 256],
@@ -150,6 +151,30 @@ pub fn build_gamma_luts(gamma_r: f32, gamma_g: f32, gamma_b: f32) -> GammaLuts {
 /// `GAMMA_LUT`, kept as a static to avoid re-computing on every frame.
 static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
     std::sync::LazyLock::new(|| build_gamma_luts(2.2, 2.2, 2.2));
+
+/// Return a reference to the pre-computed default 2.2/2.2/2.2 LUT when all
+/// three gamma values equal exactly 2.2, otherwise build and return a new LUT.
+///
+/// The 2.2 comparison is EXACT (`== 2.2_f32`): a near-2.2 user gamma must still
+/// go through `build_gamma_luts` to stay byte-identical with what a full build
+/// would have produced. Do NOT use a tolerance here.
+///
+/// Used by `encode_adalight_packet` and `encode_sk6812_packet` to avoid
+/// rebuilding the LUT every frame when the user has not changed gamma settings.
+pub fn gamma_luts_for(corrections: &ColorCorrectionConfig) -> std::borrow::Cow<'static, GammaLuts> {
+    if corrections.gamma_r == 2.2_f32
+        && corrections.gamma_g == 2.2_f32
+        && corrections.gamma_b == 2.2_f32
+    {
+        std::borrow::Cow::Borrowed(&*DEFAULT_GAMMA_LUTS)
+    } else {
+        std::borrow::Cow::Owned(build_gamma_luts(
+            corrections.gamma_r,
+            corrections.gamma_g,
+            corrections.gamma_b,
+        ))
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Kelvin white-balance
@@ -279,6 +304,42 @@ pub fn apply_color_correction_rgb(
         corrections.gamma_g,
         corrections.gamma_b,
     );
+    (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
+}
+
+/// Apply the full colour-correction pipeline to a single pixel using
+/// pre-computed gamma LUTs.
+///
+/// Identical pipeline to `apply_color_correction_rgb` (saturation → Kelvin →
+/// gamma LUT) but takes the LUTs as a parameter instead of building them.
+///
+/// This is the hot-path variant for the Hue ambilight worker: the worker
+/// builds the LUTs once before the channel `.map()` loop and passes them into
+/// every per-channel call, eliminating 768 `powf` calls per frame at 20 Hz.
+///
+/// The caller is responsible for passing LUTs that correspond to
+/// `corrections.gamma_r / gamma_g / gamma_b`. Use `gamma_luts_for(corrections)`
+/// or `build_gamma_luts(...)` to construct the argument.
+///
+/// All fast-paths (Kelvin == 6500 identity, saturation == 1.0 identity) are
+/// preserved byte-identically with `apply_color_correction_rgb`.
+pub fn apply_color_correction_rgb_with_luts(
+    rgb: (u8, u8, u8),
+    corrections: &ColorCorrectionConfig,
+    luts: &GammaLuts,
+) -> (u8, u8, u8) {
+    // Step 1 — Saturation (BT.601 luminance blend).
+    let [r, g, b] = apply_saturation_to_pixel([rgb.0, rgb.1, rgb.2], corrections.saturation);
+
+    // Step 2 — Kelvin white-balance multipliers.
+    let [r, g, b] = if corrections.kelvin == 6500 {
+        [r, g, b]
+    } else {
+        let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
+        apply_kelvin_to_pixel([r, g, b], &kelvin_muls)
+    };
+
+    // Step 3 — Per-channel gamma LUT (caller-supplied).
     (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
 }
 
@@ -584,11 +645,7 @@ pub fn encode_adalight_packet(
     packet.push(lo);
     packet.push(header_checksum);
 
-    let luts = build_gamma_luts(
-        corrections.gamma_r,
-        corrections.gamma_g,
-        corrections.gamma_b,
-    );
+    let luts = gamma_luts_for(corrections);
     let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
     let kelvin_identity = corrections.kelvin == 6500;
     let sat_identity = (corrections.saturation - 1.0_f32).abs() < f32::EPSILON;
@@ -685,11 +742,7 @@ pub fn encode_sk6812_packet(
     packet.push(clamped_brightness);
     packet.extend_from_slice(&led_count.to_le_bytes());
 
-    let luts = build_gamma_luts(
-        corrections.gamma_r,
-        corrections.gamma_g,
-        corrections.gamma_b,
-    );
+    let luts = gamma_luts_for(corrections);
     let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
     let kelvin_identity = corrections.kelvin == 6500;
     let sat_identity = (corrections.saturation - 1.0_f32).abs() < f32::EPSILON;
