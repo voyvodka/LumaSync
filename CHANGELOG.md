@@ -17,6 +17,7 @@ https://keepachangelog.com/en/1.1.0/
 - Hot-path Rust→JS events (60 Hz edge signals, tray/shell lifecycle) are emitted to the main settings webview only, so calibration-overlay windows are no longer woken on every frame — lower idle CPU whenever an overlay window exists.
 - Hue background readiness refresh migrated from a fixed `setInterval` to a visibility-aware recursive `setTimeout`, pausing while the window is hidden and re-arming on focus, consistent with the rest of the polling discipline.
 - RoomMap template selector migrated to the amber Rev 07 design tokens.
+- The Hue stream-health check now pauses while the tray window is hidden and re-checks immediately on re-focus, trimming needless background bridge traffic — consistent with the rest of the polling discipline.
 - Gamma-correction lookup tables are no longer rebuilt every frame (previously once per Hue channel per frame, and once per Adalight/SK6812 serial packet); they are computed once and reused, with the default 2.2 profile borrowing a shared precomputed table — lower idle CPU on the output hot paths with byte-identical output.
 - Hue stream activation and reconnect now reuse a single HTTP client when fetching per-bulb gamut metadata instead of constructing one client per light.
 
@@ -24,6 +25,8 @@ https://keepachangelog.com/en/1.1.0/
 
 - Hue auto-reconnect could stall permanently in the "Reconnecting" state when a status poll raced the reconnect monitor for the same shutdown signal; the monitor now keys its guard off an explicit in-progress flag, so the restart always proceeds and the stream self-heals.
 - Shutdown hardened: the lighting-worker teardown step is now time-bounded (1.5 s) so a slow worker join can no longer starve the Hue entertainment-mode deactivate under the shutdown watchdog (which previously risked leaving the bridge with a phantom active streamer). On Windows, screen-capture teardown is detached onto its own thread so it no longer briefly freezes the UI when switching lighting modes.
+- Room-map template buttons now expose an explicit accessible name (`aria-label`) for screen readers.
+- Transient USB disconnect / unsupported-port notices no longer leak their auto-dismiss timers if the view unmounts or the effect re-runs first.
 
 ### Security
 
