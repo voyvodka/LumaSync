@@ -21,6 +21,7 @@ https://keepachangelog.com/en/1.1.0/
 - Gamma-correction lookup tables are no longer rebuilt every frame (previously once per Hue channel per frame, and once per Adalight/SK6812 serial packet); they are computed once and reused, with the default 2.2 profile borrowing a shared precomputed table — lower idle CPU on the output hot paths with byte-identical output.
 - Hue stream activation and reconnect now reuse a single HTTP client when fetching per-bulb gamut metadata instead of constructing one client per light.
 - Rust dependencies refreshed to latest stable: `screencapturekit` 1.5.4 → 8.0.0 (macOS capture — the synchronous capture API is source-compatible, so capture code is unchanged) and `keyring` 3 → 4 (OS keychain — classic API retained via its `v1` feature), plus `tauri` 2.11.3 and the remaining tree via `cargo update`.
+- Frontend toolchain refreshed: pnpm 10.33.2 → 11.9.0 (pnpm 11 relocated settings out of `package.json` into a new `pnpm-workspace.yaml`), `vite` 8.0.16 → 8.1.0, `@vitejs/plugin-react` 6.0.2 → 6.0.3.
 
 ### Fixed
 
@@ -33,6 +34,7 @@ https://keepachangelog.com/en/1.1.0/
 
 - Resolved RUSTSEC-2026-0185 (7.5 high) by bumping the transitive `quinn-proto` dependency to 0.11.15; `memmap2` bumped to 0.9.11 (RUSTSEC-2026-0186). The `cargo audit` CI gate is green again.
 - Bumped the transitive `tar` crate to 0.4.46 (PAX header desynchronization advisory).
+- Pinned the transitive `undici` (dev/test only, via jsdom) to ≥7.28.0, clearing the open advisories for SOCKS5 cross-origin request routing and TLS certificate-validation bypass on the 7.23–7.27 line.
 
 ## [1.5.2] — 2026-05-05
 
