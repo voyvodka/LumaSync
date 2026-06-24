@@ -116,7 +116,7 @@ pub trait SecretStore: Send + Sync {
 // KeychainStore — production backend
 // ---------------------------------------------------------------------------
 
-/// Production secret store backed by the OS-native keychain (`keyring` v3).
+/// Production secret store backed by the OS-native keychain (`keyring` v4).
 #[derive(Default)]
 pub struct KeychainStore;
 
