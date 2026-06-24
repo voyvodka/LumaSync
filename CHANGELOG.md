@@ -20,6 +20,7 @@ https://keepachangelog.com/en/1.1.0/
 - The Hue stream-health check now pauses while the tray window is hidden and re-checks immediately on re-focus, trimming needless background bridge traffic — consistent with the rest of the polling discipline.
 - Gamma-correction lookup tables are no longer rebuilt every frame (previously once per Hue channel per frame, and once per Adalight/SK6812 serial packet); they are computed once and reused, with the default 2.2 profile borrowing a shared precomputed table — lower idle CPU on the output hot paths with byte-identical output.
 - Hue stream activation and reconnect now reuse a single HTTP client when fetching per-bulb gamut metadata instead of constructing one client per light.
+- Rust dependencies refreshed to latest stable: `screencapturekit` 1.5.4 → 8.0.0 (macOS capture — the synchronous capture API is source-compatible, so capture code is unchanged) and `keyring` 3 → 4 (OS keychain — classic API retained via its `v1` feature), plus `tauri` 2.11.3 and the remaining tree via `cargo update`.
 
 ### Fixed
 
