@@ -7,6 +7,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.3] — 2026-06-25
+
 ### Added
 
 - Hue active-streamer banner now clears on its own: while an entertainment area is held by another active streamer, readiness is re-probed every 3 s (instead of the 15 s healthy cadence) and the banner dismisses within ~3 s of the foreign session releasing — no manual revalidate needed.
