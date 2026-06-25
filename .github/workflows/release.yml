@@ -5,6 +5,18 @@ on:
     tags:
       - "v*.*.*"
 
+# Pin the macOS deployment target at the workflow level so it is a real OS
+# environment variable inherited by every rustc/swiftc/ld invocation in the
+# universal release build. This is the outermost belt in a belt-and-suspenders
+# guard against the 1.5.2 launch crash (issue #115): linking with a deployment
+# target < 12.0 back-deploys libswift_Concurrency to an `@rpath` that only
+# exists on the build machine, so dyld aborts at launch on users' machines.
+# Tauri's bundler would otherwise inject the 10.13 default; a process-level env
+# var beats both that and any Cargo `[env]` precedence quirk. Harmless on
+# Linux/Windows. A post-build otool guard below verifies the result.
+env:
+  MACOSX_DEPLOYMENT_TARGET: "12.3"
+
 # A tag push must NEVER be cancelled mid-flight (would leave a half-published
 # release on GitHub). The group is per-ref so two concurrent tag pushes
 # serialise rather than racing for the same release artefacts.
@@ -182,3 +194,21 @@ jobs:
           # instead of erroring out.
           allowUpdates: true
           args: ${{ matrix.os == 'macos-latest' && '--target universal-apple-darwin' || '' }}
+
+      # Hard gate against shipping the issue #115 launch crash again. The
+      # universal binary only exists after tauri-action has built it, so the
+      # otool assertion runs here, immediately after, macOS-gated. It fails
+      # the release if the built binary has minos < 12.0 OR references
+      # @rpath/libswift_Concurrency. The release is already published at this
+      # point (allowUpdates upserts), but a failing job is a loud, visible
+      # signal to pull/replace the asset before it reaches the updater feed.
+      - name: Verify macOS Swift runtime linkage (guard against #115 regression)
+        if: matrix.os == 'macos-latest'
+        run: |
+          BIN="src-tauri/target/universal-apple-darwin/release/lumasync"
+          if [ ! -f "$BIN" ]; then
+            echo "Universal binary not found at $BIN; listing candidates:" >&2
+            find src-tauri/target -maxdepth 4 -name lumasync -type f >&2 || true
+            exit 1
+          fi
+          bash scripts/verify/macos-swift-runtime.sh "$BIN"

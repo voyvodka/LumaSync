@@ -25,6 +25,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- macOS: fixed a launch crash (`dyld: Library not loaded: @rpath/libswift_Concurrency.dylib`) that affected every install of 1.5.2 on machines without Xcode. The Swift runtime deployment target is now pinned across all build paths so the screen-capture stack links against the system Swift concurrency library (present on every macOS 12+) instead of a build-machine toolchain path; a release-pipeline guard now blocks any future binary that would regress this.
 - Hue auto-reconnect could stall permanently in the "Reconnecting" state when a status poll raced the reconnect monitor for the same shutdown signal; the monitor now keys its guard off an explicit in-progress flag, so the restart always proceeds and the stream self-heals.
 - Shutdown hardened: the lighting-worker teardown step is now time-bounded (1.5 s) so a slow worker join can no longer starve the Hue entertainment-mode deactivate under the shutdown watchdog (which previously risked leaving the bridge with a phantom active streamer). On Windows, screen-capture teardown is detached onto its own thread so it no longer briefly freezes the UI when switching lighting modes.
 - Room-map template buttons now expose an explicit accessible name (`aria-label`) for screen readers.
