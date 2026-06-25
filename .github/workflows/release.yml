@@ -45,8 +45,9 @@ jobs:
         with:
           workspaces: src-tauri
           # Mirror ci.yml so the release matrix can re-use the per-OS cache
-          # the CI job populated against the same Cargo.lock.
-          prefix-key: v1.5-rust-cache
+          # the CI job populated against the same Cargo.lock. v1.6: busted
+          # alongside ci.yml for the Xcode-26 rebuild of the upgraded deps.
+          prefix-key: v1.6-rust-cache
           shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri bundle + xcap (X11 capture)
@@ -72,6 +73,21 @@ jobs:
       - name: Install macOS universal targets
         if: matrix.os == 'macos-latest'
         run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
+      - name: Select Xcode 26 (macOS 26 SDK for screencapturekit 8 / apple-metal)
+        if: matrix.os == 'macos-latest'
+        run: |
+          # See ci.yml: screencapturekit 8 -> apple-metal 0.8.8 needs the
+          # macOS 26 SDK at compile time (Metal 4 sampler APIs behind an
+          # `#available(macOS 26.0, *)` guard). Select the newest installed
+          # Xcode so the universal release build links the correct SDK; the
+          # availability guard keeps the binary runnable on older macOS.
+          latest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$latest" ]; then latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1); fi
+          echo "Selecting $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+          xcodebuild -version
+          echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
