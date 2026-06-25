@@ -9,6 +9,17 @@ on:
     branches:
       - main
 
+# Pin the macOS deployment target at the workflow level so it is a real OS
+# environment variable inherited by every rustc/swiftc/ld invocation in every
+# step. This is the outermost belt in a belt-and-suspenders guard against the
+# 1.5.2 launch crash (issue #115): linking with a deployment target < 12.0
+# makes libswift_Concurrency back-deploy to an `@rpath` that only exists on the
+# build machine, so dyld aborts at launch on users' machines. Tauri's bundler
+# would otherwise inject the 10.13 default; a process-level env var beats both
+# that and any Cargo `[env]` precedence quirk. Harmless on Linux/Windows.
+env:
+  MACOSX_DEPLOYMENT_TARGET: "12.3"
+
 # Cancel superseded runs when a branch is force-pushed or pushed multiple
 # times in quick succession. Saves ~15-20 minutes of duplicate Rust matrix
 # work per redundant push.
@@ -122,6 +133,19 @@ jobs:
         # ACTIVE_AMBILIGHT_WORKERS AtomicUsize; parallel test execution causes
         # spurious failures when other tests' workers bleed into the count.
         run: cargo test --all-features -- --test-threads=1
+
+      - name: Verify macOS Swift runtime linkage (guard against #115 regression)
+        if: runner.os == 'macOS'
+        working-directory: src-tauri
+        # Build a native-arch binary and assert the link directives that
+        # prevent the 1.5.2 launch crash: (a) LC_BUILD_VERSION minos >= 12.0,
+        # and (b) no load command references @rpath/libswift_Concurrency. This
+        # is the cheap CI mirror of the release.yml guard — it catches a
+        # deployment-target regression on every push, before a tag is cut.
+        run: |
+          cargo build --bin lumasync
+          BIN="target/debug/lumasync"
+          bash ../scripts/verify/macos-swift-runtime.sh "$BIN"
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'

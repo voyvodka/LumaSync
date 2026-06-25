@@ -1,15 +1,25 @@
 # Set macOS deployment target to 12.3 — the minimum for ScreenCaptureKit.
 #
-# Without this, Rust's linker defaults to macOS 11.0 (`minos 11.0`). The
-# Swift SDK's TBD stub for libswift_Concurrency.dylib contains a `$ld$previous`
-# linker directive that, for deployment targets < 12.0, redirects the install
-# name to `@rpath/libswift_Concurrency.dylib`. This @rpath resolves to the
-# Xcode Swift 5.5 copy of the library, while macOS simultaneously pre-loads
-# its own libswift_Concurrency from the dyld shared cache (for ScreenCaptureKit).
-# Two copies → duplicate class registration → spurious crashes.
+# Why this matters (root cause of the 1.5.2 launch crash, issue #115):
+# The Swift SDK's TBD stub for libswift_Concurrency.dylib carries a
+# `$ld$previous` linker directive. When the binary is linked with a
+# deployment target < 12.0, that directive rewrites the dylib's install
+# name to `@rpath/libswift_Concurrency.dylib` (a back-deployment shim).
+# At launch, dyld then has to resolve that `@rpath` against the build
+# machine's Xcode Swift 5.5 toolchain path — which does not exist on a
+# normal user's machine — so dyld aborts with "Library not loaded"
+# before main() ever runs. With a deployment target >= 12.0 the linker
+# instead bakes the absolute system install name
+# (/usr/lib/swift/libswift_Concurrency.dylib), present on every macOS 12+,
+# and the binary loads cleanly.
 #
-# With MACOSX_DEPLOYMENT_TARGET >= 12.0 the linker uses the system install
-# name (/usr/lib/swift/libswift_Concurrency.dylib) — the same instance already
-# in the dyld cache — so only one copy is loaded and the crash is eliminated.
+# `force = true` is deliberate. Tauri's bundler sets MACOSX_DEPLOYMENT_TARGET
+# from `bundle.macOS.minimumSystemVersion` (default 10.13 when unset) as a
+# real process env var during `tauri build`. A non-forced Cargo `[env]` entry
+# only applies when the variable is UNSET, so that bundler-injected 10.13
+# would silently win and reintroduce the crash. `force = true` makes Cargo's
+# 12.3 authoritative regardless of any pre-set value. This is also pinned in
+# tauri.conf.json (minimumSystemVersion) and as a workflow-level env var in
+# CI/release so the floor holds in every build context.
 [env]
-MACOSX_DEPLOYMENT_TARGET = "12.3"
+MACOSX_DEPLOYMENT_TARGET = { value = "12.3", force = true }
