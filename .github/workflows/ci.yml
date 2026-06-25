@@ -47,11 +47,30 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Select Xcode 26 (macOS 26 SDK for screencapturekit 8 / apple-metal)
+        if: runner.os == 'macOS'
+        run: |
+          # screencapturekit 8 pulls apple-metal 0.8.8, whose Swift bridge
+          # references Metal 4 sampler APIs guarded by `if #available(macOS
+          # 26.0, *)`. Swift still needs those symbols defined at COMPILE time,
+          # i.e. the macOS 26 SDK. The macos-15 runner ships Xcode 26.x but
+          # defaults to Xcode 16.4 (no macOS 26 SDK), so select the newest
+          # installed Xcode explicitly. The availability guard keeps the built
+          # binary runnable on older macOS.
+          latest=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$latest" ]; then latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1); fi
+          echo "Selecting $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+          xcodebuild -version
+          echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          prefix-key: v1.5-rust-cache
+          # v1.6: busted to force a cold rebuild of the upgraded Rust deps
+          # (screencapturekit 8 / keyring 4 / tauri 2.11.3) under Xcode 26.
+          prefix-key: v1.6-rust-cache
           shared-key: ${{ matrix.os }}
 
       - name: Install Linux deps for Tauri + xcap (X11 capture)
