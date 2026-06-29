@@ -811,11 +811,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         void updateConfig({ furniture: config.furniture.map((f) => (f.id === fId ? { ...f, x, y } : f)) });
       } else if (id.startsWith("usb-")) {
         const sId = id.replace("usb-", "");
-        const src = config.usbStrips.find((s) => s.stripId === sId);
-        if (!src) return;
-        const dx = x - src.startX;
-        const dy = y - src.startY;
-        void updateConfig({ usbStrips: config.usbStrips.map((s) => (s.stripId === sId ? { ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy } : s)) });
+        void updateConfig({
+          usbStrips: config.usbStrips.map((s) => {
+            if (s.stripId !== sId) return s;
+            const dx = x - s.startX;
+            const dy = y - s.startY;
+            return { ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy };
+          }),
+        });
       } else if (id.startsWith("hue-")) {
         const idx = parseInt(id.replace("hue-", ""), 10);
         void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === idx ? { ...ch, x, y } : ch)) });
