@@ -576,6 +576,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
             <button
               type="button"
               disabled={isSaving}
+              aria-busy={isSaving}
               onClick={() => void handleSave()}
               className="flex-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
             >
