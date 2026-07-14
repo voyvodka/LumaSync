@@ -562,6 +562,20 @@ pub async fn check_hue_stream_readiness(
     username: String,
     area_id: String,
 ) -> HueStreamReadinessResponse {
+    if !is_valid_ipv4(&bridge_ip) {
+        return HueStreamReadinessResponse {
+            status: command_status(
+                "HUE_IP_INVALID",
+                "Bridge IP is not a valid IPv4 address.",
+                Some("Use a value like 192.168.1.50".to_string()),
+            ),
+            readiness: HueStreamReadiness {
+                ready: false,
+                reasons: vec!["Invalid bridge IP address format.".to_string()],
+            },
+        };
+    }
+
     match fetch_hue_entertainment_areas(&bridge_ip, &username).await {
         Ok(areas) => {
             let selected = areas.iter().find(|area| area.id == area_id);
