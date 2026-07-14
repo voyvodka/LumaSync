@@ -93,6 +93,7 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
           key={i}
           type="button"
           role="menuitem"
+          aria-label={action.label}
           className={[
             "lm-context-menu-item",
             action.danger ? "is-danger" : "",
