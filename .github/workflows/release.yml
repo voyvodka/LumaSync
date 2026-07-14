@@ -176,7 +176,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and upload release assets
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -187,12 +187,8 @@ jobs:
           releaseBody: ${{ steps.changelog.outputs.notes }}
           releaseDraft: false
           prerelease: ${{ steps.channel.outputs.is_prerelease }}
-          # Idempotency: when a tag is re-run (CI infrastructure retry, or a
-          # second matrix entry uploading after the first created the release)
-          # `tauri-action` would otherwise fail with "release already exists".
-          # `allowUpdates: true` upserts assets onto the existing release
-          # instead of erroring out.
-          allowUpdates: true
+          # Tag re-runs and the 2nd/3rd matrix entry are safe without an opt-in flag:
+          # the action gets-or-creates by tag and replaces same-named assets.
           args: ${{ matrix.os == 'macos-latest' && '--target universal-apple-darwin' || '' }}
 
       # Hard gate against shipping the issue #115 launch crash again. The
@@ -200,7 +196,7 @@ jobs:
       # otool assertion runs here, immediately after, macOS-gated. It fails
       # the release if the built binary has minos < 12.0 OR references
       # @rpath/libswift_Concurrency. The release is already published at this
-      # point (allowUpdates upserts), but a failing job is a loud, visible
+      # point (the action upserts by tag), but a failing job is a loud, visible
       # signal to pull/replace the asset before it reaches the updater feed.
       - name: Verify macOS Swift runtime linkage (guard against #115 regression)
         if: matrix.os == 'macos-latest'
