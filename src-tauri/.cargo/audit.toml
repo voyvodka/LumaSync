@@ -1,0 +1,8 @@
+# quick-xml <0.41 DoS: all three paths are build-time codegen or toast XML we generate, so none see
+# attacker input; the fix is semver-major for those 0.x parents. Drop when they bump upstream.
+
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
+]
