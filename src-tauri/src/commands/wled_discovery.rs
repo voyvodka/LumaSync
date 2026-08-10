@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 
 use super::device_connection::ActiveSinkRegistry;
 use super::led_sink::LedSink;
-use super::wled_sink::{WledProtocol, WledUdpSink};
+use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -336,7 +336,13 @@ pub fn connect_wled_sink(
     let protocol = parse_protocol(request.protocol.as_deref());
     let port = request.port.unwrap_or_else(|| default_port_for(protocol));
 
-    let mut sink = WledUdpSink::new(ip, port, device.led_count, protocol);
+    let config = WledSinkConfig {
+        ip,
+        port,
+        led_count: device.led_count,
+        protocol,
+    };
+    let mut sink = config.build();
 
     if let Err(e) = sink.start() {
         return WledConnectResponse {
@@ -348,7 +354,10 @@ pub fn connect_wled_sink(
         };
     }
 
-    sink_registry.replace(Box::new(sink));
+    // `sink` only proved the UDP socket could bind; `lighting_mode.rs`
+    // rebuilds a fresh sink per mode-change from `config`, so it sees live
+    // colour-correction settings (mirrors `SerialSink`'s rebuild-from-`port_name`).
+    sink_registry.replace_wled(Box::new(sink), config);
 
     WledConnectResponse {
         status: WledCommandStatus::ok("WLED_CONNECT_OK", "WLED sink connected and registered."),

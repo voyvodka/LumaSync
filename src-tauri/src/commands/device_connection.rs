@@ -9,6 +9,7 @@ use super::led_output::{
     ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
 };
 use super::led_sink::LedSink;
+use super::wled_sink::WledSinkConfig;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
 const DEFAULT_CONNECT_TIMEOUT_MS: u64 = 1_500;
@@ -191,31 +192,66 @@ impl Default for SerialConnectionState {
 /// Tauri app state that holds the currently active `LedSink` handle.
 ///
 /// `None` when no port is connected. Replaced on every successful
-/// `connect_serial_port` call. The sink is stopped and cleared on
-/// disconnect or failed connect.
+/// `connect_serial_port` / `connect_wled_sink` call — connecting one family
+/// evicts the other, so at most one "usb"-channel sink is ever registered at
+/// a time (see `ls-led-protocols` — one active sink per output channel). The
+/// sink is stopped and cleared on disconnect or failed connect.
 pub struct ActiveSinkRegistry {
     pub sink: Mutex<Option<Box<dyn LedSink>>>,
+    /// Snapshot of the config needed to rebuild a fresh `WledUdpSink`,
+    /// populated by `connect_wled_sink` alongside `sink` and cleared
+    /// whenever a non-WLED sink replaces it (or on `clear()`).
+    ///
+    /// `lighting_mode.rs` reads this — never the `sink` field above — to
+    /// decide whether the live output path should target WLED: the stored
+    /// `Box<dyn LedSink>` for WLED, like the one built for serial, is
+    /// otherwise decorative (validated at connect time, then left unused)
+    /// because both the ambilight worker and Solid mode rebuild a fresh sink
+    /// per mode-change so live firmware-profile / colour-correction /
+    /// chip-type settings changes take effect without a reconnect.
+    pub wled_config: Mutex<Option<WledSinkConfig>>,
 }
 
 impl Default for ActiveSinkRegistry {
     fn default() -> Self {
         Self {
             sink: Mutex::new(None),
+            wled_config: Mutex::new(None),
         }
     }
 }
 
 impl ActiveSinkRegistry {
-    /// Replace the stored sink with a new one.
+    /// Replace the stored sink with a new non-WLED one (serial).
     ///
     /// Stops the previous sink (if any) before replacing it, so the serial
-    /// session is always released cleanly.
+    /// session is always released cleanly. Also clears any stale WLED config
+    /// so a serial connect correctly evicts a previously-connected WLED
+    /// device from the "usb" output channel.
     pub fn replace(&self, new_sink: Box<dyn LedSink>) {
         if let Ok(mut guard) = self.sink.lock() {
             if let Some(mut old) = guard.take() {
                 let _ = old.stop();
             }
             *guard = Some(new_sink);
+        }
+        if let Ok(mut cfg) = self.wled_config.lock() {
+            *cfg = None;
+        }
+    }
+
+    /// Replace the stored sink with a new WLED one, recording `config`
+    /// alongside it so `lighting_mode.rs` can rebuild a fresh `WledUdpSink`
+    /// on demand.
+    pub fn replace_wled(&self, new_sink: Box<dyn LedSink>, config: WledSinkConfig) {
+        if let Ok(mut guard) = self.sink.lock() {
+            if let Some(mut old) = guard.take() {
+                let _ = old.stop();
+            }
+            *guard = Some(new_sink);
+        }
+        if let Ok(mut cfg) = self.wled_config.lock() {
+            *cfg = Some(config);
         }
     }
 
@@ -226,6 +262,17 @@ impl ActiveSinkRegistry {
                 let _ = old.stop();
             }
         }
+        if let Ok(mut cfg) = self.wled_config.lock() {
+            *cfg = None;
+        }
+    }
+
+    /// Snapshot of the currently active WLED config, if the most recently
+    /// connected "usb"-channel sink was WLED. `None` when serial is active
+    /// or nothing is connected — callers fall back to `SerialConnectionState`
+    /// in that case.
+    pub fn active_wled_config(&self) -> Option<WledSinkConfig> {
+        self.wled_config.lock().ok().and_then(|guard| *guard)
     }
 }
 

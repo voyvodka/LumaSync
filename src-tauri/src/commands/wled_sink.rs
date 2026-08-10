@@ -8,9 +8,12 @@
 ///  Bytes 4-7: offset    -- big-endian u32 (0x00000000 for full frame)
 ///  Bytes 8-9: length    -- big-endian u16 (led_count * 3)
 ///  Bytes 10+: payload   -- R G B per LED in strip order
-use std::net::{SocketAddrV4, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::sync::atomic::{AtomicU8, Ordering};
 
+use super::led_output::{
+    apply_color_correction_rgb_with_luts, gamma_luts_for, ColorCorrectionConfig, GammaLuts,
+};
 use super::led_sink::LedSink;
 
 const DDP_FLAGS: u8 = 0x41;
@@ -89,6 +92,107 @@ impl LedSink for WledUdpSink {
         self.socket = None;
         self.endpoint = None;
         Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WledSinkConfig — snapshot for rebuilding a fresh WledUdpSink on demand
+// ---------------------------------------------------------------------------
+
+/// Snapshot of the config needed to (re)build a `WledUdpSink`.
+///
+/// `SerialSink` is rebuilt fresh from `port_name` on every worker/Solid-write
+/// start rather than kept alive across mode changes (see `ls-led-protocols`
+/// — sinks are cheap, mostly-stateless per-frame constructs; only the
+/// transient resource, a serial handle or a UDP socket, is short-lived).
+/// `WledSinkConfig` gives the lighting runtime the same option for WLED:
+/// `ActiveSinkRegistry` stores this alongside the live sink it validated at
+/// connect time, so `lighting_mode.rs` can build a fresh `WledUdpSink` per
+/// mode-change without sharing a live trait object across threads or
+/// freezing the config to whatever was true at connect time.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WledSinkConfig {
+    pub ip: Ipv4Addr,
+    pub port: u16,
+    pub led_count: u16,
+    pub protocol: WledProtocol,
+}
+
+impl WledSinkConfig {
+    pub fn build(&self) -> WledUdpSink {
+        WledUdpSink::new(self.ip, self.port, self.led_count, self.protocol)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CorrectedWledSink — LedSink adapter applying the shared correction pipeline
+// ---------------------------------------------------------------------------
+
+/// `LedSink` adapter that applies the shared gamma/Kelvin/saturation
+/// correction pipeline, plus host-side brightness scaling, before forwarding
+/// to a `WledUdpSink`.
+///
+/// `WledUdpSink` stays a pure DDP/WARLS transport with no correction concept,
+/// unlike `SerialSink`, which folds correction AND a brightness byte into its
+/// own `send_frame` (`encode_packet_for_profile`). WLED has no on-wire
+/// brightness field — DDP/WARLS ship raw RGB and the firmware does not scale
+/// it — so this adapter scales brightness into the RGB values host-side
+/// before sending, mirroring the scaling the ambilight worker already
+/// applies for the LED-twin preview buffer.
+pub struct CorrectedWledSink {
+    inner: WledUdpSink,
+    corrections: ColorCorrectionConfig,
+    luts: std::borrow::Cow<'static, GammaLuts>,
+    brightness: f32,
+}
+
+impl CorrectedWledSink {
+    pub fn new(inner: WledUdpSink, corrections: ColorCorrectionConfig) -> Self {
+        let luts = gamma_luts_for(&corrections);
+        Self {
+            inner,
+            corrections,
+            luts,
+            brightness: 1.0,
+        }
+    }
+
+    /// Update brightness without stopping the sink. Mirrors
+    /// `SerialSink::set_brightness` so the ambilight worker can treat both
+    /// sink kinds uniformly.
+    pub fn set_brightness(&mut self, brightness: f32) {
+        self.brightness = brightness.clamp(0.0, 1.0);
+    }
+}
+
+impl LedSink for CorrectedWledSink {
+    fn name(&self) -> &'static str {
+        "wled-udp"
+    }
+
+    fn start(&mut self) -> Result<(), String> {
+        self.inner.start()
+    }
+
+    fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
+        let brightness = self.brightness;
+        let corrected: Vec<[u8; 3]> = colors
+            .iter()
+            .map(|&[r, g, b]| {
+                let (cr, cg, cb) =
+                    apply_color_correction_rgb_with_luts((r, g, b), &self.corrections, &self.luts);
+                [
+                    (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                    (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                    (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                ]
+            })
+            .collect();
+        self.inner.send_frame(&corrected)
+    }
+
+    fn stop(&mut self) -> Result<(), String> {
+        self.inner.stop()
     }
 }
 
