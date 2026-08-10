@@ -889,7 +889,6 @@
         "writeback": {
           "codes": {
             "CHAN_WB_SCHEMA_REJECTED": "Bridge konum formatini reddetti.",
-            "CHAN_WB_STREAM_ACTIVE": "Kaydetmeden once akisi durdurun.",
             "CHAN_WB_NETWORK_ERROR": "Bridge'e ulasilamiyor."
           }
         }

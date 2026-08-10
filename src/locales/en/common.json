@@ -889,7 +889,6 @@
         "writeback": {
           "codes": {
             "CHAN_WB_SCHEMA_REJECTED": "Bridge rejected the position format.",
-            "CHAN_WB_STREAM_ACTIVE": "Stop streaming before saving.",
             "CHAN_WB_NETWORK_ERROR": "Could not reach the bridge."
           }
         }
