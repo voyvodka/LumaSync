@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   HUE_CREDENTIAL_STATUS,
@@ -9,8 +9,9 @@ import {
   type HueRuntimeTargetTelemetryRow,
   type HueCredentialStatus,
 } from "../../shared/contracts/hue";
-import { getHueStreamStatus, restartHue, startHue } from "../mode/modeApi";
+import { restartHue, startHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
+import { readHueStreamReadiness, readHueStreamStatus } from "./hueReadCache";
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
@@ -45,6 +46,10 @@ const ACTIVE_STREAMER_REASON = "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
 // Bridge while the stream is alive. 10 s keeps the Devices-tab badge fresh
 // without piling redundant readiness GETs onto the live DTLS frame stream.
 const RUNTIME_POLL_INTERVAL_MS = 10_000;
+// Floor between two runtime-status reads however they are triggered. Without
+// it every state transition (and every visibility resume) fired an immediate
+// bridge round-trip, so a Idle→Starting→Running burst cost three.
+const RUNTIME_POLL_MIN_INTERVAL_MS = 1_500;
 // Runtime states for which polling makes sense — the stream is alive (or
 // trying to be), so the readiness probe / dead-sender check carry signal.
 // In Idle / Stopping / Failed the backend snapshot is fully owned by the
@@ -336,6 +341,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const [readinessById, setReadinessById] = useState<Map<string, HueAreaReadiness>>(new Map());
   const [readinessCheckedAtById, setReadinessCheckedAtById] = useState<Map<string, number>>(new Map());
   const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatus | null>(null);
+  /** Survives the runtime-loop effect re-running on every state transition. */
+  const lastRuntimePollAtRef = useRef(0);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
   const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
   const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
@@ -815,7 +822,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       if (document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const response = await checkHueStreamReadiness(bridgeIp, username, areaId);
+        const response = await readHueStreamReadiness(bridgeIp, username, areaId);
         if (!mounted) return;
         applyReadinessResult(areaId, response, {
           publishStatus: false,
@@ -971,9 +978,12 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     };
   }, [patchState]);
 
-  const pollRuntimeStatus = useCallback(async () => {
+  // `force` bypasses the shared read cache. Mandatory after a mutation: a
+  // cached pre-mutation status would paint the Devices tab with the state the
+  // user just changed away from.
+  const pollRuntimeStatus = useCallback(async (options?: { force?: boolean }) => {
     try {
-      const result = await getHueStreamStatus();
+      const result = await readHueStreamStatus(options?.force ? 0 : undefined);
       const nextStatus = result.status as HueRuntimeStatus;
       setRuntimeStatus(nextStatus);
       setRuntimeTargets(deriveRuntimeTargets(nextStatus));
@@ -1015,10 +1025,26 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       if (inFlight) return;
       if (document.visibilityState === "hidden") return;
       inFlight = true;
+      lastRuntimePollAtRef.current = Date.now();
       try {
         await pollRuntimeStatus();
       } finally {
         inFlight = false;
+        scheduleNext();
+      }
+    };
+
+    // `runtimeState` sits in the deps but only ever moves because a poll just
+    // returned it, so the unconditional entry tick re-fetched data we already
+    // held — a Idle→Starting→Running burst cost three bridge round-trips.
+    // Nothing is lost by skipping it: mount and visibility-resume both have a
+    // stale enough `lastRuntimePollAt` to tick normally.
+    const tickIfStale = () => {
+      if (!mounted) return;
+      if (timeoutId !== null || inFlight) return;
+      if (Date.now() - lastRuntimePollAtRef.current >= RUNTIME_POLL_MIN_INTERVAL_MS) {
+        void tick();
+      } else {
         scheduleNext();
       }
     };
@@ -1036,12 +1062,10 @@ export function useHueOnboarding(): UseHueOnboardingResult {
 
     const handleVisibilityChange = () => {
       if (!mounted) return;
-      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
-        void tick();
-      }
+      if (document.visibilityState === "visible") tickIfStale();
     };
 
-    void tick();
+    tickIfStale();
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
@@ -1079,7 +1103,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         },
       }));
     } finally {
-      await pollRuntimeStatus();
+      await pollRuntimeStatus({ force: true });
       setIsRuntimeMutating(false);
     }
   }, [channelRegionOverrides, isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId]);
@@ -1112,7 +1136,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
           },
         }));
       } finally {
-        await pollRuntimeStatus();
+        await pollRuntimeStatus({ force: true });
         setIsRuntimeMutating(false);
       }
     },

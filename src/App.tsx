@@ -35,14 +35,17 @@ import {
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import {
-  getHueStreamStatus,
   setHueSolidColor,
   setLightingMode,
-  startHue,
+  startHue as startHueCommand,
   stopLighting,
-  stopHue,
+  stopHue as stopHueCommand,
 } from "./features/mode/modeApi";
 import { validateHueCredentials } from "./features/device/hueOnboardingApi";
+import {
+  invalidateHueStreamStatus,
+  readHueStreamStatus,
+} from "./features/device/hueReadCache";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,
@@ -93,13 +96,27 @@ import {
 } from "./features/preview/previewApi";
 import { i18next } from "./features/i18n/i18n";
 
+// Wrapped at the import so no call site can forget: a Hue mutation must drop
+// the cached stream status, or the health reconciler below can act on a
+// pre-mutation answer and undo the change the user just made.
+const startHue: typeof startHueCommand = (...args) =>
+  startHueCommand(...args).finally(invalidateHueStreamStatus);
+const stopHue: typeof stopHueCommand = (...args) =>
+  stopHueCommand(...args).finally(invalidateHueStreamStatus);
+
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
-/** Interval for polling backend Hue stream health while the stream is alive. */
+/**
+ * Cadence while the stream is alive. NOT a local read: `get_hue_stream_status`
+ * runs a full `check_hue_stream_readiness` round-trip against the bridge on
+ * the alive path (`commands/hue/commands.rs`), so this is real bridge traffic
+ * — hence the shared `readHueStreamStatus` cache.
+ */
 const HUE_STREAM_HEALTH_POLL_MS = 5_000;
 /**
  * Cadence once the stream is dead. Polling continues so the target can be
- * restored without a mode transition; costs one IPC hop, zero bridge traffic.
+ * restored without a mode transition; on THIS path the backend short-circuits
+ * before any network call, so it costs one IPC hop and no bridge traffic.
  */
 const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 /** Interval for checking bridge reachability when configured but stream is not active. */
@@ -685,7 +702,7 @@ function App() {
       inFlight = true;
       let nextDelayMs = HUE_STREAM_HEALTH_POLL_MS;
       try {
-        const result = await getHueStreamStatus();
+        const result = await readHueStreamStatus();
         if (!active) return;
 
         const backendDead =
@@ -858,7 +875,7 @@ function App() {
     if (hueNowActive && !hueSolidSyncedRef.current) {
       // Hue Running'e yeni girdi ve henüz sync yapılmadı
       hueSolidSyncedRef.current = true;
-      void getHueStreamStatus()
+      void readHueStreamStatus()
         .then((result) => {
           const snap = result.lastSolidColor;
           // Guard: only adopt the bridge's lastSolidColor when the UI is
@@ -1218,6 +1235,7 @@ function App() {
   const handleLightingModeChangeRef = useRef<((m: LightingModeConfig) => Promise<void>) | null>(null);
 
   useEffect(() => {
+    let alive = true;
     let unlistenOff: (() => void) | null = null;
     let unlistenResume: (() => void) | null = null;
     let unlistenSolid: (() => void) | null = null;
@@ -1245,13 +1263,26 @@ function App() {
           });
         }
       }),
-    ]).then(([u1, u2, u3]) => {
-      unlistenOff = u1;
-      unlistenResume = u2;
-      unlistenSolid = u3;
-    });
+    ])
+      .then(([u1, u2, u3]) => {
+        // Same unmount-wins-the-race hazard as the effect below: without the
+        // guard StrictMode's double-mount leaks a duplicate handler per tray action.
+        if (alive) {
+          unlistenOff = u1;
+          unlistenResume = u2;
+          unlistenSolid = u3;
+        } else {
+          u1();
+          u2();
+          u3();
+        }
+      })
+      .catch((err) => {
+        console.error("[LumaSync] tray quick-action listeners failed to register:", err);
+      });
 
     return () => {
+      alive = false;
       unlistenOff?.();
       unlistenResume?.();
       unlistenSolid?.();

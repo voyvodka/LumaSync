@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 
 import {
@@ -8,11 +7,9 @@ import {
   type ModeGuardReason,
 } from "../../mode/state/modeGuard";
 import {
-  EDGE_SIGNAL_EVENT,
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
-  type EdgeSignalPayload,
   type LightingModeConfig,
 } from "../../mode/model/contracts";
 import {
@@ -41,25 +38,13 @@ import { useFullTelemetryPoll } from "../../telemetry/hooks/useFullTelemetryPoll
 import { shellStore } from "../../persistence/shellStore";
 import { OnboardingBanner } from "../../../shared/ui/OnboardingBanner";
 
+import { EdgeSignalGrid } from "./EdgeSignalGrid";
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
 
 const TELEMETRY_POLL_INTERVAL_MS = 1000;
-
-function rgbTripletToCss(triplet: [number, number, number]): string {
-  return `rgb(${triplet[0]},${triplet[1]},${triplet[2]})`;
-}
-
-function buildLinearGradient(
-  direction: "to right" | "to bottom",
-  samples: Array<[number, number, number]>,
-): string | undefined {
-  if (samples.length === 0) return undefined;
-  if (samples.length === 1) return rgbTripletToCss(samples[0]);
-  return `linear-gradient(${direction},${samples.map(rgbTripletToCss).join(",")})`;
-}
 
 export interface LightsModeLockState {
   reason: ModeGuardReason | null;
@@ -362,28 +347,6 @@ export function LightsSection({
   const latencyLabel = liveUsb ? `${Math.round(liveUsb.frameLatencyMs)}ms` : "—";
   const fpsLabel = liveUsb ? `${Math.round(liveUsb.sendFps)} fps` : "—";
 
-  // Edge signal preview — streamed from the ambilight worker (~10 Hz).
-  // Subscribe only while Ambilight mode is active to avoid unnecessary IPC traffic.
-  const [edgeSignal, setEdgeSignal] = useState<EdgeSignalPayload | null>(null);
-  useEffect(() => {
-    if (!isAmbilight) {
-      setEdgeSignal(null);
-      return;
-    }
-    let unlisten: UnlistenFn | undefined;
-    let cancelled = false;
-    void listen<EdgeSignalPayload>(EDGE_SIGNAL_EVENT, (event) => {
-      if (!cancelled) setEdgeSignal(event.payload);
-    }).then((fn) => {
-      if (cancelled) fn();
-      else unlisten = fn;
-    });
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [isAmbilight]);
-
   // Primary display info for the edge center tile. Loaded once on mount.
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   useEffect(() => {
@@ -405,13 +368,6 @@ export function LightsSection({
   const resolutionLabel = primaryDisplay
     ? `${primaryDisplay.width} × ${primaryDisplay.height}`
     : null;
-
-  const edgeGradients = useMemo(() => ({
-    top: edgeSignal ? buildLinearGradient("to right", edgeSignal.top) : undefined,
-    bottom: edgeSignal ? buildLinearGradient("to right", edgeSignal.bottom) : undefined,
-    left: edgeSignal ? buildLinearGradient("to bottom", edgeSignal.left) : undefined,
-    right: edgeSignal ? buildLinearGradient("to bottom", edgeSignal.right) : undefined,
-  }), [edgeSignal]);
 
   const counts = calibration?.counts;
 
@@ -551,46 +507,12 @@ export function LightsSection({
                 </span>
               </span>
             </div>
-            <div className="lm-edges" aria-label={t("lightsPage.signal.edgesAria")}>
-              <div
-                className="lm-edge lm-edge-top"
-                style={edgeGradients.top ? { background: edgeGradients.top } : undefined}
-              >
-                <span className="label">
-                  {t("lightsPage.signal.edges.top", { count: counts?.top ?? 0 })}
-                </span>
-              </div>
-              <div
-                className="lm-edge lm-edge-l"
-                style={edgeGradients.left ? { background: edgeGradients.left } : undefined}
-              >
-                <span className="label">
-                  {t("lightsPage.signal.edges.left", { count: counts?.left ?? 0 })}
-                </span>
-              </div>
-              <div className="lm-edge lm-edge-c">
-                <div className="scene">
-                  <b>{t("lightsPage.signal.display.label", { index: displayIndex })}</b>
-                  {resolutionLabel ?? t("lightsPage.signal.display.sub")}
-                </div>
-              </div>
-              <div
-                className="lm-edge lm-edge-r"
-                style={edgeGradients.right ? { background: edgeGradients.right } : undefined}
-              >
-                <span className="label">
-                  {t("lightsPage.signal.edges.right", { count: counts?.right ?? 0 })}
-                </span>
-              </div>
-              <div
-                className="lm-edge lm-edge-bot"
-                style={edgeGradients.bottom ? { background: edgeGradients.bottom } : undefined}
-              >
-                <span className="label">
-                  {t("lightsPage.signal.edges.bot", { count: counts?.bottom ?? 0 })}
-                </span>
-              </div>
-            </div>
+            <EdgeSignalGrid
+              isAmbilight={isAmbilight}
+              counts={counts}
+              displayIndex={displayIndex}
+              resolutionLabel={resolutionLabel}
+            />
             {advancedHydrated && (
               <LightingSmoothingPresetControl
                 initialPreset={initialHueIntensityPreset}

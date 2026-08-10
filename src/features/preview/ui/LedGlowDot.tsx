@@ -12,19 +12,20 @@
 
 import { memo } from "react";
 
+import { packedToCss, type PackedLedColor } from "../ledColor";
+
 export interface LedGlowDotProps {
   /** Normalized 0..1 X across the viewport. */
   x: number;
   /** Normalized 0..1 Y across the viewport. */
   y: number;
-  /** Live RGB triple (0..255). */
-  color: [number, number, number];
+  /**
+   * Live colour as a packed `0xRRGGBB` integer — a primitive so the `memo`
+   * shallow compare bails out on unchanged dots (see `../ledColor`).
+   */
+  color: PackedLedColor;
   /** Dot diameter in px. */
   size: number;
-}
-
-function rgb(c: [number, number, number], alpha = 1): string {
-  return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`;
 }
 
 export const LedGlowDot = memo(function LedGlowDot({ x, y, color, size }: LedGlowDotProps) {
@@ -37,7 +38,7 @@ export const LedGlowDot = memo(function LedGlowDot({ x, y, color, size }: LedGlo
         top: `${y * 100}%`,
         width: `${size}px`,
         height: `${size}px`,
-        background: `radial-gradient(circle, ${rgb(color, 0.95)} 0%, ${rgb(color, 0.55)} 36%, ${rgb(color, 0)} 72%)`,
+        background: `radial-gradient(circle, ${packedToCss(color, 0.95)} 0%, ${packedToCss(color, 0.55)} 36%, ${packedToCss(color, 0)} 72%)`,
       }}
     />
   );

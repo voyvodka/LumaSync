@@ -17,7 +17,7 @@
  * overlay never reads the screen; it only mirrors whatever the worker streams.
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
@@ -26,6 +26,13 @@ import type { LedCalibrationConfig } from "../../calibration/model/contracts";
 import type { LedSegmentKey } from "../../../shared/contracts/calibration";
 import type { TwinScope } from "../../../shared/contracts/preview";
 import { computeTwinLedPositions, type TwinLedPosition } from "../geometry";
+import {
+  EMPTY_PACKED_BUFFER,
+  packLedBuffer,
+  packLedColor,
+  packedToCss,
+  type PackedLedColor,
+} from "../ledColor";
 import { useLedPreviewFrame } from "../state/useLedPreviewFrame";
 import { LedGlowDot } from "./LedGlowDot";
 
@@ -37,33 +44,46 @@ export interface LedTwinOverlayProps {
 }
 
 /** Dim "off" colour shown for an LED when no frame has streamed yet. */
-const OFF_COLOR: [number, number, number] = [16, 18, 24];
+const OFF_COLOR_PACKED = packLedColor([16, 18, 24]);
 const DOT_SIZE_PX = 18;
+const EDGE_ORDER: LedSegmentKey[] = ["top", "right", "bottom", "left"];
 
-function edgeOf(positions: TwinLedPosition[], edge: LedSegmentKey): TwinLedPosition[] {
-  return positions.filter((p) => p.edge === edge);
+/** One edge's LEDs, pre-sorted along the edge and paired with its stop offsets. */
+interface EdgeTrack {
+  edge: LedSegmentKey;
+  direction: "to right" | "to bottom";
+  /** LED buffer index → gradient stop percentage, in along-edge order. */
+  stops: Array<{ index: number; offset: string }>;
 }
 
 /**
- * Build a `linear-gradient` for one edge ribbon from the live LED colours,
- * sorted along the edge. Returns `null` when the edge has no LEDs.
+ * Split positions into per-edge tracks ONCE per calibration — the sort used to
+ * run 4× per frame purely because the colour buffer changed identity.
  */
-function edgeGradient(
-  positions: TwinLedPosition[],
-  edge: LedSegmentKey,
-  colorAt: (index: number) => [number, number, number],
-): string | null {
-  const onEdge = edgeOf(positions, edge);
-  if (onEdge.length === 0) return null;
-  const horizontal = edge === "top" || edge === "bottom";
-  const sorted = [...onEdge].sort((a, b) => (horizontal ? a.x - b.x : a.y - b.y));
-  const stops = sorted.map((p) => {
-    const c = colorAt(p.index);
-    const pct = (horizontal ? p.x : p.y) * 100;
-    return `rgb(${c[0]}, ${c[1]}, ${c[2]}) ${pct.toFixed(1)}%`;
+function buildEdgeTracks(positions: TwinLedPosition[]): EdgeTrack[] {
+  return EDGE_ORDER.flatMap((edge) => {
+    const onEdge = positions.filter((p) => p.edge === edge);
+    if (onEdge.length === 0) return [];
+    const horizontal = edge === "top" || edge === "bottom";
+    const sorted = [...onEdge].sort((a, b) => (horizontal ? a.x - b.x : a.y - b.y));
+    return [
+      {
+        edge,
+        direction: horizontal ? ("to right" as const) : ("to bottom" as const),
+        stops: sorted.map((p) => ({
+          index: p.index,
+          offset: `${((horizontal ? p.x : p.y) * 100).toFixed(1)}%`,
+        })),
+      },
+    ];
   });
-  const dir = horizontal ? "to right" : "to bottom";
-  return `linear-gradient(${dir}, ${stops.join(", ")})`;
+}
+
+function edgeGradient(track: EdgeTrack, packed: readonly PackedLedColor[]): string {
+  const stops = track.stops.map(
+    ({ index, offset }) => `${packedToCss(packed[index] ?? OFF_COLOR_PACKED)} ${offset}`,
+  );
+  return `linear-gradient(${track.direction}, ${stops.join(", ")})`;
 }
 
 export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProps) {
@@ -113,18 +133,23 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
     [calibration],
   );
 
-  const colorAt = (index: number): [number, number, number] => {
-    return frame?.leds[index] ?? OFF_COLOR;
-  };
+  const edgeTracks = useMemo(() => buildEdgeTracks(positions), [positions]);
 
-  const ribbons: Array<{ edge: LedSegmentKey; gradient: string }> = useMemo(() => {
-    if (positions.length === 0) return [];
-    const edges: LedSegmentKey[] = ["top", "right", "bottom", "left"];
-    return edges
-      .map((edge) => ({ edge, gradient: edgeGradient(positions, edge, colorAt) }))
-      .filter((r): r is { edge: LedSegmentKey; gradient: string } => r.gradient !== null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [positions, frame?.seq, frame?.leds]);
+  // Ref-held so an unchanged frame keeps the SAME array reference and every
+  // memo below bails out. Deterministic in (source, previous), so StrictMode's
+  // double render is a no-op rather than a torn value.
+  const packedRef = useRef<readonly PackedLedColor[]>(EMPTY_PACKED_BUFFER);
+  packedRef.current = packLedBuffer(frame?.leds, packedRef.current);
+  const packedLeds = packedRef.current;
+
+  const ribbons = useMemo(
+    () =>
+      edgeTracks.map((track) => ({
+        edge: track.edge,
+        gradient: edgeGradient(track, packedLeds),
+      })),
+    [edgeTracks, packedLeds],
+  );
 
   const ribbonStyle = (edge: LedSegmentKey, gradient: string): CSSProperties => {
     const thickness = "5%";
@@ -158,7 +183,13 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
 
       {/* Per-LED glow dots */}
       {positions.map((p) => (
-        <LedGlowDot key={p.index} x={p.x} y={p.y} color={colorAt(p.index)} size={DOT_SIZE_PX} />
+        <LedGlowDot
+          key={p.index}
+          x={p.x}
+          y={p.y}
+          color={packedLeds[p.index] ?? OFF_COLOR_PACKED}
+          size={DOT_SIZE_PX}
+        />
       ))}
 
       {/* Hue zone markers — sparse, centred along the bottom. */}
