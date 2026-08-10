@@ -1317,8 +1317,11 @@ function harvestCodes(files) {
   const found = new Set();
   for (const file of files) {
     let text = stripComments(readFileSync(file, "utf-8"));
-    if (file.endsWith(".rs")) text = text.split(/\n#\[cfg\(test\)\]/)[0];
-    for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})"/g)) {
+    // The test MODULE, not any `#[cfg(test)]` — four files carry that attribute
+    // on a plain item, which truncated lighting_mode.rs at line 58 of ~3400.
+    if (file.endsWith(".rs")) text = text.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+    // `"CODE: detail"` counts too — Err arms carry the code as a prefix (#42).
+    for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})(?:"|:\s)/g)) {
       const code = m[1];
       // Underscore-required drops CLOCKWISE/TEXTAREA without an allowlist that
       // rots; a trailing one marks a `.startsWith()` prefix, not a code.
@@ -1330,8 +1333,10 @@ function harvestCodes(files) {
 }
 
 const tsSourceFiles = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/);
+// Whole crate, not just `commands/`: `network/mdns.rs` emits the HUE_MDNS_*
+// codes, and a narrower root reports them as phantoms.
 const rustEmitted = harvestCodes(
-  walkSourceFiles(resolve(ROOT, "src-tauri/src/commands"), /\.rs$/)
+  walkSourceFiles(resolve(ROOT, "src-tauri/src"), /\.rs$/)
 );
 const tsReferenced = harvestCodes(
   tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"))
@@ -1369,6 +1374,50 @@ check(
   undeclaredInBoth.length === 0,
   "every code crossing the wire is declared in a contract",
   `${undeclaredInBoth.length} wire codes undeclared (listed above)`
+);
+
+// ---------------------------------------------------------------------------
+// Declared in a contract, emitted by no Rust producer. Ratcheted — the baseline
+// may only shrink. See contract-phantom-baseline.txt.
+// ---------------------------------------------------------------------------
+console.log("\n[ Declared codes with no Rust producer (ratcheted) ]");
+const PHANTOM_BASELINE_FILE = resolve(__dirname, "contract-phantom-baseline.txt");
+const phantomBaseline = new Set(
+  readOrEmpty(PHANTOM_BASELINE_FILE, "phantom baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+
+const declaredWithoutProducer = [...contractDeclared]
+  .filter((code) => !rustEmitted.has(code))
+  .sort();
+
+for (const code of declaredWithoutProducer) {
+  if (phantomBaseline.has(code)) {
+    note(`KNOWN GAP: "${code}" declared with no Rust producer (baselined)`);
+  } else {
+    fail(
+      `NEW PHANTOM "${code}" — declared in a contract but no Rust file emits it. `
+        + `Either wire up the producer or drop the declaration; do not baseline it `
+        + `without establishing which.`
+    );
+  }
+}
+
+// The half that makes it a ratchet rather than a suppression list.
+for (const code of phantomBaseline) {
+  check(
+    !rustEmitted.has(code),
+    `baseline entry "${code}" still has no producer`,
+    `BASELINE STALE: "${code}" now HAS a Rust producer — delete its line from `
+      + `contract-phantom-baseline.txt (the file may only shrink)`
+  );
+}
+check(
+  declaredWithoutProducer.filter((c) => !phantomBaseline.has(c)).length === 0,
+  `no new phantoms beyond the ${phantomBaseline.size} baselined`,
+  "new phantoms found (listed above)"
 );
 
 // ---------------------------------------------------------------------------

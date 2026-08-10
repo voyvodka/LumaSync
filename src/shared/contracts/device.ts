@@ -73,11 +73,10 @@ export type SupportedControllerId = (typeof SUPPORTED_CONTROLLER_IDS)[number];
 
 export const DEVICE_ERROR_CODES = {
   PORT_NOT_FOUND: "PORT_NOT_FOUND",
-  PORT_BUSY: "PORT_BUSY",
-  PERMISSION_DENIED: "PERMISSION_DENIED",
   /** Port is outside `SUPPORTED_USB_DEVICE_ALLOWLIST`. Was long declared here
    * transposed as `UNSUPPORTED_PORT`, a spelling no producer ever emitted. */
   PORT_UNSUPPORTED: "PORT_UNSUPPORTED",
+  /** Frontend fallback minted by `mapModeApiError` — the one member with a TS producer. */
   UNKNOWN: "UNKNOWN",
 } as const;
 
