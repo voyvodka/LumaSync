@@ -185,19 +185,17 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "LumaSync ${{ github.ref_name }}"
           releaseBody: ${{ steps.changelog.outputs.notes }}
-          releaseDraft: false
+          # Draft until the `publish` job below: a draft is excluded from
+          # `/releases/latest/download/latest.json`, so the updater feed never
+          # sees a half-filled `platforms` map while other matrix jobs build.
+          releaseDraft: true
           prerelease: ${{ steps.channel.outputs.is_prerelease }}
           # Tag re-runs and the 2nd/3rd matrix entry are safe without an opt-in flag:
           # the action gets-or-creates by tag and replaces same-named assets.
           args: ${{ matrix.os == 'macos-latest' && '--target universal-apple-darwin' || '' }}
 
-      # Hard gate against shipping the issue #115 launch crash again. The
-      # universal binary only exists after tauri-action has built it, so the
-      # otool assertion runs here, immediately after, macOS-gated. It fails
-      # the release if the built binary has minos < 12.0 OR references
-      # @rpath/libswift_Concurrency. The release is already published at this
-      # point (the action upserts by tag), but a failing job is a loud, visible
-      # signal to pull/replace the asset before it reaches the updater feed.
+      # Issue #115 gate: fails if the binary has minos < 12.0 or references
+      # @rpath/libswift_Concurrency. Failing here keeps the release a draft.
       - name: Verify macOS Swift runtime linkage (guard against #115 regression)
         if: matrix.os == 'macos-latest'
         run: |
@@ -208,3 +206,34 @@ jobs:
             exit 1
           fi
           bash scripts/verify/macos-swift-runtime.sh "$BIN"
+
+  publish:
+    name: Publish release
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # The single point where a build becomes visible to the updater. Assert
+      # every platform is present first — a merge regression in tauri-action
+      # would otherwise ship a feed that silently skips a whole OS.
+      - name: Verify the updater feed covers every platform
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p latest.json -O latest.json
+          for key in darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64; do
+            if ! jq -e --arg k "$key" '.platforms[$k]' latest.json >/dev/null; then
+              echo "::error::latest.json is missing platform '$key'; refusing to publish." >&2
+              jq -r '.platforms | keys[]' latest.json >&2
+              exit 1
+            fi
+          done
+          echo "latest.json covers $(jq -r '.platforms | keys | length' latest.json) platform keys."
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
