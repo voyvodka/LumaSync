@@ -48,6 +48,24 @@ export interface DisplayInfo {
   isPrimary: boolean;
 }
 
+export const DISPLAY_OVERLAY_STATUS = {
+  OPENED: "OVERLAY_OPENED",
+  CLOSED: "OVERLAY_CLOSED",
+  OPEN_FAILED: "OVERLAY_OPEN_FAILED",
+  PREVIEW_SYNCED: "OVERLAY_PREVIEW_SYNCED",
+  PREVIEW_SKIPPED: "OVERLAY_PREVIEW_SKIPPED",
+  PREVIEW_SYNC_FAILED: "OVERLAY_PREVIEW_SYNC_FAILED",
+  /** Frontend-synthesised (`displayTargetState.ts`): no display to target, so no
+   * command was issued. The only member with no Rust producer. */
+  NO_DISPLAY: "OVERLAY_NO_DISPLAY",
+} as const;
+
+export type DisplayOverlayStatusCode =
+  (typeof DISPLAY_OVERLAY_STATUS)[keyof typeof DISPLAY_OVERLAY_STATUS];
+
+/** `code` stays `string` rather than `DisplayOverlayStatusCode` — narrowing it is
+ * a separate, compile-time-breaking change. That looseness is why the union
+ * above drifted undeclared in the first place. */
 export interface DisplayOverlayCommandResult {
   ok: boolean;
   code: string;

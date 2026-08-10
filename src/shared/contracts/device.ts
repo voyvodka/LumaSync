@@ -75,11 +75,23 @@ export const DEVICE_ERROR_CODES = {
   PORT_NOT_FOUND: "PORT_NOT_FOUND",
   PORT_BUSY: "PORT_BUSY",
   PERMISSION_DENIED: "PERMISSION_DENIED",
-  UNSUPPORTED_PORT: "UNSUPPORTED_PORT",
+  /** Port is outside `SUPPORTED_USB_DEVICE_ALLOWLIST`. Was long declared here
+   * transposed as `UNSUPPORTED_PORT`, a spelling no producer ever emitted. */
+  PORT_UNSUPPORTED: "PORT_UNSUPPORTED",
   UNKNOWN: "UNKNOWN",
 } as const;
 
 export type DeviceErrorCode = (typeof DEVICE_ERROR_CODES)[keyof typeof DEVICE_ERROR_CODES];
+
+/** `list_serial_ports` outcome. Separate from {@link DEVICE_ERROR_CODES} because
+ * the success arm is not an error and the pair must stay complete. */
+export const SERIAL_PORT_LIST_STATUS = {
+  OK: "LIST_PORTS_OK",
+  FAILED: "LIST_PORTS_FAILED",
+} as const;
+
+export type SerialPortListStatusCode =
+  (typeof SERIAL_PORT_LIST_STATUS)[keyof typeof SERIAL_PORT_LIST_STATUS];
 
 export const DEVICE_OPERATION = {
   IDLE: "idle",
@@ -399,6 +411,18 @@ export const WLED_STATUS = {
    * before connecting.
    */
   INVALID_LED_COUNT: "WLED_INVALID_LED_COUNT",
+  /** `connect_wled_sink` promoted the instance to the active sink. */
+  CONNECT_OK: "WLED_CONNECT_OK",
+  /** `test_wled_bridge` round-tripped a packet successfully. */
+  TEST_OK: "WLED_TEST_OK",
+  /** The test packet could not be written to the socket. */
+  TEST_SEND_FAILED: "WLED_TEST_SEND_FAILED",
+  /** The scan could not reach the network at all (no interface / socket bind). */
+  DISCOVERY_UNREACHABLE: "WLED_DISCOVERY_UNREACHABLE",
+  /** The HTTP client could not be constructed — a local fault, not a bridge one. */
+  CLIENT_BUILD_FAILED: "WLED_CLIENT_BUILD_FAILED",
+  /** A send was attempted before `connect_wled_sink` established the sink. */
+  SINK_NOT_STARTED: "WLED_SINK_NOT_STARTED",
 } as const;
 
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];

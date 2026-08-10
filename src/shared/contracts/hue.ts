@@ -271,10 +271,23 @@ export const HUE_RUNTIME_STATUS = {
   STOP_TIMEOUT_PARTIAL: "HUE_STOP_TIMEOUT_PARTIAL",
   CHANNEL_POSITIONS_UPDATED: "HUE_CHANNEL_POSITIONS_UPDATED",
   CHANNEL_POSITIONS_FAILED: "HUE_CHANNEL_POSITIONS_FAILED",
+  /** `start_hue_stream` on an already-running stream: idempotent no-op, not an error. */
+  START_NOOP_ALREADY_ACTIVE: "HUE_START_NOOP_ALREADY_ACTIVE",
 } as const;
 
 export type HueRuntimeStatusCode =
   (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
+
+/**
+ * Sentinel inside `HueStreamReadiness.reasons`, which otherwise holds English
+ * prose — compare against it, never display it. Not a `status.code`.
+ */
+export const HUE_READINESS_REASON = {
+  ACTIVE_STREAMER: "HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
+} as const;
+
+export type HueReadinessReason =
+  (typeof HUE_READINESS_REASON)[keyof typeof HUE_READINESS_REASON];
 
 /**
  * `set_hue_solid_color` codes. Only `APPLIED` reached a sender; the rest are

@@ -74,6 +74,7 @@ import {
 } from "./shared/contracts/shell";
 import {
   HUE_RUNTIME_STATES,
+  HUE_RUNTIME_STATUS,
   HUE_SOLID_COLOR_STATUS,
   HUE_STATUS,
   isHueSolidColorUnapplied,
@@ -202,15 +203,15 @@ function toHueStartConfig(state: {
 
 function isHueStartCodeOk(code: string): boolean {
   return (
-    code === "HUE_STREAM_RUNNING" ||
-    code === "HUE_STREAM_RUNNING_DTLS" ||
-    code === "HUE_STREAM_STARTING" ||
-    code === "HUE_START_NOOP_ALREADY_ACTIVE"
+    code === HUE_RUNTIME_STATUS.STREAM_RUNNING ||
+    code === HUE_RUNTIME_STATUS.STREAM_RUNNING_DTLS ||
+    code === HUE_RUNTIME_STATUS.STREAM_STARTING ||
+    code === HUE_RUNTIME_STATUS.START_NOOP_ALREADY_ACTIVE
   );
 }
 
 function isHueStopCodeOk(code: string): boolean {
-  return code === "HUE_STREAM_STOPPED";
+  return code === HUE_RUNTIME_STATUS.STREAM_STOPPED;
 }
 
 function App() {

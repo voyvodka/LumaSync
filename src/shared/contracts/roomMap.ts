@@ -463,6 +463,16 @@ export const HUE_ZONE_STATUS_CODES = {
 export type HueZoneStatusCode =
   (typeof HUE_ZONE_STATUS_CODES)[keyof typeof HUE_ZONE_STATUS_CODES];
 
+/** Channel-position write-back to the bridge (`room_map/save_load.rs`). i18n keys
+ * live under `device.hue.runtime.writeback.codes.*` in both locales. */
+export const CHANNEL_WRITEBACK_STATUS = {
+  SCHEMA_REJECTED: "CHAN_WB_SCHEMA_REJECTED",
+  NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
+} as const;
+
+export type ChannelWritebackStatusCode =
+  (typeof CHANNEL_WRITEBACK_STATUS)[keyof typeof CHANNEL_WRITEBACK_STATUS];
+
 // ---------------------------------------------------------------------------
 // Image Layer
 // ---------------------------------------------------------------------------

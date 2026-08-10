@@ -11,7 +11,7 @@
  * Usage: node scripts/verify/phase01-shell-contracts.mjs
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -1244,6 +1244,102 @@ check(
   rustVidPids.join(",") === tsVidPids.join(","),
   "allowlist entries match Rust SUPPORTED_USB_DEVICE_ALLOWLIST in order",
   `ALLOWLIST DRIFT:\n     Rust: ${rustVidPids.join(" ")}\n     TS  : ${tsVidPids.join(" ")}`
+);
+
+// ---------------------------------------------------------------------------
+// Serial port codes — derived Rust → device.ts parity
+// ---------------------------------------------------------------------------
+console.log("\n[ Serial port codes — Rust → device.ts parity ]");
+const rustPortCodes = [
+  ...new Set(
+    [...stripComments(rustHealthSource).matchAll(/"([A-Z][A-Z0-9_]*(?:PORT|PORTS)[A-Z0-9_]*)"/g)]
+      .map((m) => m[1])
+  ),
+].sort();
+check(
+  rustPortCodes.length > 0,
+  `extracted ${rustPortCodes.length} PORT codes from device_connection.rs`,
+  "EXTRACTION FAILED: no PORT codes found in device_connection.rs"
+);
+for (const code of rustPortCodes) {
+  check(
+    deviceSource.includes(`"${code}"`),
+    `port code "${code}" declared in device.ts`,
+    `UNDECLARED port code "${code}" — device_connection.rs emits it but device.ts `
+      + `does not declare it (this is how "UNSUPPORTED_PORT" survived transposed)`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Highest severity: a code both trees use and neither declares. Both sides
+// believe they own it and neither is authoritative — how a word-swap survives.
+// ---------------------------------------------------------------------------
+console.log("\n[ Status codes present in BOTH trees, declared in NEITHER ]");
+
+function walkSourceFiles(dir, match, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "__tests__") continue;
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) walkSourceFiles(full, match, out);
+    else if (match.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+// A prose mention is not a declaration — the miss that hid DEVICE_NOT_CONNECTED
+// behind three comments. Biased toward false positives on purpose.
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\*)/.test(line))
+    .join("\n");
+}
+
+function harvestCodes(files) {
+  const found = new Set();
+  for (const file of files) {
+    let text = stripComments(readFileSync(file, "utf-8"));
+    if (file.endsWith(".rs")) text = text.split(/\n#\[cfg\(test\)\]/)[0];
+    for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})"/g)) {
+      const code = m[1];
+      // Underscore-required drops CLOCKWISE/TEXTAREA without an allowlist that
+      // rots; a trailing one marks a `.startsWith()` prefix, not a code.
+      if (!code.includes("_") || code.endsWith("_")) continue;
+      found.add(code);
+    }
+  }
+  return found;
+}
+
+const tsSourceFiles = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/);
+const rustEmitted = harvestCodes(
+  walkSourceFiles(resolve(ROOT, "src-tauri/src/commands"), /\.rs$/)
+);
+const tsReferenced = harvestCodes(
+  tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"))
+);
+const contractDeclared = harvestCodes(
+  tsSourceFiles.filter((f) => f.includes("/shared/contracts/"))
+);
+
+const inBothTrees = [...rustEmitted].filter((c) => tsReferenced.has(c)).sort();
+const undeclaredInBoth = inBothTrees.filter((c) => !contractDeclared.has(c));
+check(
+  inBothTrees.length > 0,
+  `${inBothTrees.length} codes cross the wire (Rust emits, TS reads)`,
+  "EXTRACTION FAILED: no codes found in both trees"
+);
+for (const code of undeclaredInBoth) {
+  fail(
+    `BOTH-TREES UNDECLARED "${code}" — Rust emits it and TS reads it, but no `
+      + `contract declares it. Neither side is authoritative.`
+  );
+}
+check(
+  undeclaredInBoth.length === 0,
+  "every code crossing the wire is declared in a contract",
+  `${undeclaredInBoth.length} wire codes undeclared (listed above)`
 );
 
 // ---------------------------------------------------------------------------

@@ -101,7 +101,7 @@ export function WledDevicePicker({
           ...prev,
           [device.ip]: { kind: "result", status: response.status },
         }));
-        if (response.status.code === "WLED_CONNECT_OK" && onConnected) {
+        if (response.status.code === WLED_STATUS.CONNECT_OK && onConnected) {
           onConnected(device);
         }
       } catch (e) {

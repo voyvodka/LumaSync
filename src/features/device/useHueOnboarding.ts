@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
+  HUE_READINESS_REASON,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
   type HueRuntimeTarget,
@@ -38,7 +39,7 @@ const READINESS_BACKGROUND_REFRESH_MS = 15_000;
 // to release, so polling every 3 s keeps the banner from feeling stuck.
 // Once the area becomes free, we fall back to the regular 15 s cadence.
 const READINESS_BLOCKED_REFRESH_MS = 3_000;
-const ACTIVE_STREAMER_REASON = "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
+const ACTIVE_STREAMER_REASON = HUE_READINESS_REASON.ACTIVE_STREAMER;
 // Backend `spawn_reconnect_monitor` (`src-tauri/src/commands/hue/reconnect.rs`)
 // already polls the DTLS sender's shutdown signal every 200 ms and flips the
 // runtime state on its own — this frontend poll is a visual-reflection

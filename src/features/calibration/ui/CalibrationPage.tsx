@@ -35,7 +35,11 @@ import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
 import { LedRoomCanvas } from "./LedRoomCanvas";
 import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
-import type { DisplayInfo, OverlayPreviewPayload } from "../../../shared/contracts/display";
+import {
+  DISPLAY_OVERLAY_STATUS,
+  type DisplayInfo,
+  type OverlayPreviewPayload,
+} from "../../../shared/contracts/display";
 
 function reclaimFocus() {
   void getCurrentWindow().setFocus();
@@ -222,7 +226,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       if (shouldEnable) {
         if (displayTarget.blocked) {
           const reason = displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
-          const code = displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED";
+          const code = displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
           setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
           return;
         }
@@ -231,7 +235,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
         reclaimFocus();
         if (switched.blocked) {
           const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
-          const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
+          const code = switched.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
           setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
           return;
         }
@@ -274,7 +278,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       reclaimFocus();
       if (switched.blocked) {
         const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
-        const code = switched.blockedCode ?? "OVERLAY_OPEN_FAILED";
+        const code = switched.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
         setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
       } else {
         setTestPatternError(null);
@@ -403,7 +407,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
         <div className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-950/60 px-3.5 py-2.5">
           {displayTarget.blocked && (
             <ErrorLine text={t("calibration.overlay.blockedReason", {
-              code: displayTarget.blockedCode ?? "OVERLAY_OPEN_FAILED",
+              code: displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED,
               reason: displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown"),
             })} />
           )}
