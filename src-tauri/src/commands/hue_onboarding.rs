@@ -272,8 +272,11 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
         }
     };
 
-    let endpoint = format!("http://{bridge_ip}/api/config");
-    let outcome = match client.get(endpoint).send().await {
+    let outcome = match send_clip_v1(&client, &bridge_ip, "/api/config", |client, url| {
+        client.get(url)
+    })
+    .await
+    {
         Ok(response) => match classify_hue_response(response).await {
             Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
             Err(fault) => Err(fault.to_string()),
@@ -320,13 +323,16 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         }
     };
 
-    let endpoint = format!("http://{bridge_ip}/api");
     let body = json!({
         "devicetype": "lumasync#desktop",
         "generateclientkey": true,
     });
     let outcome: Result<String, PairingTransportError> =
-        match client.post(endpoint).json(&body).send().await {
+        match send_clip_v1(&client, &bridge_ip, "/api", |client, url| {
+            client.post(url).json(&body)
+        })
+        .await
+        {
             Ok(response) => match classify_hue_response(response).await {
                 Ok(ok) => ok
                     .text()
@@ -464,14 +470,15 @@ pub async fn validate_hue_credentials(
         }
     };
 
-    let endpoint = format!("http://{bridge_ip}/api/{username}/config");
-    let outcome = match client.get(endpoint).send().await {
-        Ok(response) => match classify_hue_response(response).await {
-            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
-            Err(fault) => Err(fault.to_string()),
-        },
-        Err(error) => Err(error.to_string()),
-    };
+    let path = format!("/api/{username}/config");
+    let outcome =
+        match send_clip_v1(&client, &bridge_ip, &path, |client, url| client.get(url)).await {
+            Ok(response) => match classify_hue_response(response).await {
+                Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+                Err(fault) => Err(fault.to_string()),
+            },
+            Err(error) => Err(error.to_string()),
+        };
     match outcome {
         Ok(payload) => {
             let result = parse_credentials_validation_payload(&payload);
@@ -1218,6 +1225,48 @@ fn hue_http_client() -> Result<Client, String> {
         .danger_accept_invalid_certs(true)
         .build()
         .map_err(|error| error.to_string())
+}
+
+/// Send a CLIP v1 request to the bridge, preferring HTTPS and falling back to
+/// plain HTTP.
+///
+/// Hue Bridge Pro (2025) serves the local API on HTTPS/443 only — port 80 is
+/// closed, so the legacy `http://<ip>/api` calls fail at the transport layer
+/// and surface as a bogus `HUE_PAIRING_FAILED` (issue #167). Square v2 bridges
+/// answer on both ports, so HTTPS-first is safe for every generation; the HTTP
+/// retry only exists for older firmware whose TLS stack we cannot reach.
+///
+/// The fallback triggers on transport errors only. Once a bridge answers with
+/// any HTTP status the response is returned untouched so `classify_hue_response`
+/// keeps owning the 403/`error.type` re-pair contract.
+async fn send_clip_v1<F>(
+    client: &Client,
+    bridge_ip: &str,
+    path: &str,
+    build: F,
+) -> Result<reqwest::Response, reqwest::Error>
+where
+    F: Fn(&Client, String) -> reqwest::RequestBuilder,
+{
+    let https_error = match build(client, format!("https://{bridge_ip}{path}"))
+        .send()
+        .await
+    {
+        Ok(response) => return Ok(response),
+        Err(error) => error,
+    };
+
+    match build(client, format!("http://{bridge_ip}{path}"))
+        .send()
+        .await
+    {
+        Ok(response) => {
+            info!("Hue bridge {bridge_ip} answered on plain HTTP after HTTPS failed");
+            Ok(response)
+        }
+        // Surface the HTTPS failure: on a Bridge Pro that is the actionable one.
+        Err(_) => Err(https_error),
+    }
 }
 
 fn is_valid_ipv4(value: &str) -> bool {
