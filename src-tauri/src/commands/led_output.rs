@@ -79,6 +79,17 @@ pub enum LedChipType {
     Sk6812Rgbw,
 }
 
+impl LedChipType {
+    /// Bytes this chip occupies per pixel on the wire. Drives the 115 200-baud
+    /// frame budget — RGBW costs a third more than GRB at the same LED count.
+    pub fn bytes_per_pixel(self) -> usize {
+        match self {
+            Self::Ws2812bGrb => 3,
+            Self::Sk6812Rgbw => 4,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ColorCorrectionConfig — per-channel colour correction parameters
 // ---------------------------------------------------------------------------

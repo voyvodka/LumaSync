@@ -18,7 +18,8 @@ use super::hue_stream_lifecycle::{
     HueActiveOutputContext, HueRuntimeStateStore,
 };
 use super::led_calibration::{
-    build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
+    build_led_sequence, derive_base_interval_ms_for, frame_wire_bytes, frame_wire_time_ms,
+    link_max_fps, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
     apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_profile,
@@ -162,7 +163,7 @@ pub struct LightingModeConfig {
     pub firmware_profile: Option<FirmwareProfile>,
     /// LED chip type (v1.5 G3). Absent ⇒ `LedChipType::default()` (WS2812B GRB).
     /// Changes bytes-per-pixel on the wire, so it also moves the serial timing
-    /// budget — see `derive_base_interval_ms`.
+    /// budget — see `derive_base_interval_ms_for` / `frame_wire_time_ms`.
     #[serde(default)]
     pub chip_type: Option<LedChipType>,
 }
@@ -1071,6 +1072,62 @@ impl HueChannelSmoother {
     }
 }
 
+/// Below this many frames per second the ambient effect visibly steps, so the
+/// serial budget is worth surfacing rather than silently absorbing.
+const LINK_CONSTRAINED_FPS: f32 = 30.0;
+
+/// Resolved 115 200-baud send budget for one calibrated strip.
+///
+/// Exists so the clamp arithmetic is unit-testable away from the worker.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SerialSendBudget {
+    /// Total on-wire size of one frame, header included.
+    bytes_per_frame: usize,
+    /// Interval the LED-count heuristic asks for, before the physical clamp.
+    requested_ms: u64,
+    /// Time the link physically needs to shift one frame — the hard floor.
+    wire_ms: u64,
+    link_max_fps: f32,
+}
+
+impl SerialSendBudget {
+    fn for_strip(total_leds: u16, chip_type: LedChipType) -> Self {
+        let bytes_per_pixel = chip_type.bytes_per_pixel();
+        Self {
+            bytes_per_frame: frame_wire_bytes(total_leds, bytes_per_pixel),
+            requested_ms: derive_base_interval_ms_for(total_leds, bytes_per_pixel) as u64,
+            wire_ms: frame_wire_time_ms(total_leds, bytes_per_pixel),
+            link_max_fps: link_max_fps(total_leds, bytes_per_pixel),
+        }
+    }
+
+    /// True when the LED-count heuristic asks for a rate the link cannot carry.
+    /// Holds even for a 1 ms shortfall, so it drives the clamp, not the log.
+    fn exceeds_link_budget(self) -> bool {
+        self.requested_ms < self.wire_ms
+    }
+
+    /// True when the strip is long enough that 115 200 baud materially degrades
+    /// the effect — worth telling the user about, unlike a 1 ms rounding clamp.
+    /// ~126 LEDs on GRB, ~94 on RGBW.
+    fn is_link_constrained(self) -> bool {
+        self.link_max_fps < LINK_CONSTRAINED_FPS
+    }
+
+    fn into_quality_config(self, smoothing_alpha: f32) -> RuntimeQualityConfig {
+        // `wire_ms` pins BOTH bounds: the 10 fps floor in the derive helper and
+        // the 80 ms default cap each breach the baud budget on a long strip.
+        let default_max_ms = RuntimeQualityConfig::default().max_interval_ms;
+        RuntimeQualityConfig {
+            base_interval_ms: self.requested_ms,
+            min_interval_ms: self.wire_ms,
+            max_interval_ms: default_max_ms.max(self.wire_ms),
+            smoothing_alpha,
+            ..RuntimeQualityConfig::default()
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
@@ -1149,29 +1206,49 @@ fn start_ambilight_worker(
 
     let hue_only = port_name.is_none() && hue_output.is_some();
     let initial_smoothing_alpha = live_settings.read_smoothing_alpha();
-    let quality_config = if hue_only {
-        // Hue bridge enforces 50 ms minimum (20 Hz). Target ~25 FPS capture
-        // to stay just above the send rate without flooding the queue.
-        RuntimeQualityConfig {
-            base_interval_ms: 40,
-            min_interval_ms: 30,
-            max_interval_ms: 100,
-            smoothing_alpha: initial_smoothing_alpha,
-            ..RuntimeQualityConfig::default()
+    // No serial budget on the Hue-only path — there is no link to saturate.
+    let serial_budget = (!hue_only).then(|| SerialSendBudget::for_strip(total_leds, chip_type));
+    let quality_config = match serial_budget {
+        None => {
+            // Hue bridge enforces 50 ms minimum (20 Hz). Target ~25 FPS capture
+            // to stay just above the send rate without flooding the queue.
+            RuntimeQualityConfig {
+                base_interval_ms: 40,
+                min_interval_ms: 30,
+                max_interval_ms: 100,
+                smoothing_alpha: initial_smoothing_alpha,
+                ..RuntimeQualityConfig::default()
+            }
         }
-    } else {
-        // Derive send interval from LED count to stay within 115 200-baud budget.
-        let base_ms = derive_base_interval_ms(total_leds) as u64;
-        RuntimeQualityConfig {
-            base_interval_ms: base_ms,
-            min_interval_ms: base_ms / 2,
-            smoothing_alpha: initial_smoothing_alpha,
-            ..RuntimeQualityConfig::default()
+        Some(budget) => {
+            if budget.is_link_constrained() {
+                warn!(
+                    "[ambilight-worker] strip exceeds the 115 200-baud budget — \
+                     leds={total_leds} chip={chip_type:?} bytes_per_frame={} \
+                     link_max_fps={:.1} (below {LINK_CONSTRAINED_FPS:.0}); \
+                     send interval clamped to {}ms. Shorten the strip or split it \
+                     across controllers for a smoother effect.",
+                    budget.bytes_per_frame, budget.link_max_fps, budget.wire_ms
+                );
+            } else {
+                info!(
+                    "[ambilight-worker] serial budget — leds={total_leds} chip={chip_type:?} \
+                     bytes_per_frame={} link_max_fps={:.1} send_interval={}ms clamped={}",
+                    budget.bytes_per_frame,
+                    budget.link_max_fps,
+                    budget.requested_ms.max(budget.wire_ms),
+                    budget.exceeds_link_budget()
+                );
+            }
+            budget.into_quality_config(initial_smoothing_alpha)
         }
     };
     let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut frame_slot = RuntimeFrameSlot::new();
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
+    if let Some(budget) = serial_budget {
+        telemetry_window.set_link_budget(budget.link_max_fps, budget.is_link_constrained());
+    }
 
     let mut initial_frame_source =
         StaticFrameSource::new(Arc::try_unwrap(initial_frame).unwrap_or_else(|arc| (*arc).clone()));
@@ -1278,6 +1355,10 @@ fn start_ambilight_worker(
         // for the enriched edge-signal (only stamped while a preview is active).
         let mut edge_seq: u64 = 0;
         let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
+        // Hoisted out of the frame loop: a non-2.2 gamma makes `gamma_luts_for`
+        // run 768 `powf`s, and color_correction is fixed for the worker's
+        // lifetime — any change forces a full restart (guard at apply_mode_change).
+        let frame_luts: std::borrow::Cow<'static, GammaLuts> = gamma_luts_for(&color_correction);
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
             let capture_result: Result<(Arc<CapturedFrame>, Vec<[u8; 3]>), String> =
@@ -1368,14 +1449,10 @@ fn start_ambilight_worker(
                 // smoothing, then send every frame to the bridge. Sending every
                 // frame (instead of delta-skipping) lets the bridge's internal
                 // ~100ms hardware interpolation produce smooth gradients.
+                let enrich_preview = preview.as_ref().is_some_and(|ctx| ctx.should_enrich());
+
                 if let Some(context) = hue_output.as_ref() {
                     if !context.channels.is_empty() {
-                        // Build gamma LUTs once per frame (not once per channel).
-                        // color_correction is fixed for the worker's lifetime — any change
-                        // forces a full worker restart (guard at apply_mode_change). So the
-                        // LUT is also stable and only needs building here, not inside the map.
-                        let hue_frame_luts: std::borrow::Cow<'static, GammaLuts> =
-                            gamma_luts_for(&color_correction);
                         let raw_colors: Vec<(u8, u8, u8)> = context
                             .channels
                             .iter()
@@ -1389,7 +1466,7 @@ fn start_ambilight_worker(
                                 apply_color_correction_rgb_with_luts(
                                     rgb,
                                     &color_correction,
-                                    &hue_frame_luts,
+                                    &frame_luts,
                                 )
                             })
                             .collect();
@@ -1405,8 +1482,12 @@ fn start_ambilight_worker(
                                 &smoothed[..smoothed.len().min(3)]
                             );
                         }
-                        last_hue_colors =
-                            Some(smoothed.iter().map(|&(r, g, b)| [r, g, b]).collect());
+                        // Only the enriched edge-signal reads this; allocating it
+                        // unconditionally burned a Vec per frame at up to 60 Hz.
+                        if enrich_preview {
+                            last_hue_colors =
+                                Some(smoothed.iter().map(|&(r, g, b)| [r, g, b]).collect());
+                        }
                         let _ =
                             apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
                         telemetry_window.record_send();
@@ -1436,37 +1517,31 @@ fn start_ambilight_worker(
                         // v1.6 LED Preview — enrich with the full per-LED strip
                         // buffer ONLY while a preview surface wants it; otherwise
                         // emit the lean 4-edge payload exactly as before.
-                        if let Some(ctx) = preview.as_ref() {
-                            if ctx.should_enrich() {
-                                let luts = gamma_luts_for(&color_correction);
-                                let leds: Vec<[u8; 3]> = quality_state
-                                    .last_smoothed()
-                                    .iter()
-                                    .map(|&[r, g, b]| {
-                                        let (cr, cg, cb) = apply_color_correction_rgb_with_luts(
-                                            (r, g, b),
-                                            &color_correction,
-                                            &luts,
-                                        );
-                                        [
-                                            (cr as f32 * brightness).round().clamp(0.0, 255.0)
-                                                as u8,
-                                            (cg as f32 * brightness).round().clamp(0.0, 255.0)
-                                                as u8,
-                                            (cb as f32 * brightness).round().clamp(0.0, 255.0)
-                                                as u8,
-                                        ]
-                                    })
-                                    .collect();
-                                edge_seq = edge_seq.wrapping_add(1);
-                                payload.led_count = Some(leds.len());
-                                payload.leds = Some(leds);
-                                payload.hue_channels = last_hue_colors.clone();
-                                payload.source = Some(ctx.source);
-                                payload.pattern = ctx.pattern;
-                                payload.seq = Some(edge_seq);
-                                payload.display_id = ctx.display_id.clone();
-                            }
+                        if let Some(ctx) = preview.as_ref().filter(|_| enrich_preview) {
+                            let leds: Vec<[u8; 3]> = quality_state
+                                .last_smoothed()
+                                .iter()
+                                .map(|&[r, g, b]| {
+                                    let (cr, cg, cb) = apply_color_correction_rgb_with_luts(
+                                        (r, g, b),
+                                        &color_correction,
+                                        &frame_luts,
+                                    );
+                                    [
+                                        (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                        (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                        (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                    ]
+                                })
+                                .collect();
+                            edge_seq = edge_seq.wrapping_add(1);
+                            payload.led_count = Some(leds.len());
+                            payload.leds = Some(leds);
+                            payload.hue_channels = last_hue_colors.clone();
+                            payload.source = Some(ctx.source);
+                            payload.pattern = ctx.pattern;
+                            payload.seq = Some(edge_seq);
+                            payload.display_id = ctx.display_id.clone();
                         }
 
                         emitter(payload);
@@ -2501,10 +2576,108 @@ mod tests {
 
     use super::{
         apply_mode_change, start_ambilight_worker, stop_previous, AmbilightLiveSettings,
-        AmbilightPayload, AmbilightWorkerQualityState, LightingModeConfig, LightingModeKind,
-        LightingRuntimeOwner, SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
-        AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
+        AmbilightPayload, AmbilightWorkerQualityState, LedChipType, LightingModeConfig,
+        LightingModeKind, LightingRuntimeOwner, SerialSendBudget, SolidColorPayload,
+        ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS,
+        SOLID_OUTPUT_ATTEMPTS,
     };
+
+    // -----------------------------------------------------------------------
+    // SerialSendBudget — the 115 200-baud clamp (F5)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn send_budget_never_sends_faster_than_the_wire() {
+        for leds in [1u16, 30, 60, 100, 200, 320, 1000, 4000] {
+            for chip in [LedChipType::Ws2812bGrb, LedChipType::Sk6812Rgbw] {
+                let config = SerialSendBudget::for_strip(leds, chip).into_quality_config(0.35);
+                let wire_ms = SerialSendBudget::for_strip(leds, chip).wire_ms;
+                let controller = AmbilightWorkerQualityState::new(config.clone());
+                let interval = controller.current_send_interval().as_millis() as u64;
+                assert!(
+                    interval >= wire_ms,
+                    "leds={leds} chip={chip:?}: interval {interval}ms is below the {wire_ms}ms wire floor",
+                );
+                assert!(
+                    config.max_interval_ms >= config.min_interval_ms,
+                    "leds={leds} chip={chip:?}: max cap must never sit below the wire floor",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn send_budget_flags_every_overrun_however_small() {
+        // 60 GRB LEDs: 186 B/frame, 16 ms requested vs 17 ms wire — the 16 ms
+        // hard floor in the derive helper already overruns here.
+        assert!(SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb).exceeds_link_budget());
+        // 100 GRB LEDs: 27 ms requested vs 27 ms wire — exactly at budget.
+        assert!(!SerialSendBudget::for_strip(100, LedChipType::Ws2812bGrb).exceeds_link_budget());
+        let rgbw = SerialSendBudget::for_strip(100, LedChipType::Sk6812Rgbw);
+        assert_eq!(rgbw.bytes_per_frame, 406);
+        assert_eq!(rgbw.wire_ms, 36);
+        // 4000 LEDs: the 10 fps floor asks for 100 ms, the wire needs ~1.04 s.
+        let long = SerialSendBudget::for_strip(4000, LedChipType::Ws2812bGrb);
+        assert!(long.exceeds_link_budget());
+        assert_eq!(long.requested_ms, 100);
+        assert_eq!(long.wire_ms, 1043);
+    }
+
+    #[test]
+    fn link_constrained_reports_degradation_not_rounding() {
+        // A 60-LED strip is clamped by 1 ms (16 → 17) but still runs ~59 fps —
+        // reporting that as a problem would cry wolf on the commonest setup.
+        let common = SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb);
+        assert!(common.exceeds_link_budget());
+        assert!(!common.is_link_constrained());
+
+        // 200 LEDs runs at ~19 fps — genuinely degraded, worth telling the user.
+        assert!(SerialSendBudget::for_strip(200, LedChipType::Ws2812bGrb).is_link_constrained());
+        // Same LED count, opposite verdict: RGBW's extra byte per pixel drops
+        // 100 LEDs from ~37.6 fps to ~28.4 fps.
+        assert!(!SerialSendBudget::for_strip(100, LedChipType::Ws2812bGrb).is_link_constrained());
+        assert!(SerialSendBudget::for_strip(100, LedChipType::Sk6812Rgbw).is_link_constrained());
+    }
+
+    #[test]
+    fn send_budget_lifts_the_default_cap_above_the_wire_floor() {
+        // The 80 ms default `max_interval_ms` would otherwise clamp a long
+        // strip's interval BELOW its physical floor — permanent backpressure
+        // against the 500 ms serial write timeout.
+        let default_cap = RuntimeQualityConfig::default().max_interval_ms;
+        assert_eq!(default_cap, 80);
+
+        let long = SerialSendBudget::for_strip(4000, LedChipType::Ws2812bGrb);
+        let config = long.into_quality_config(0.35);
+        assert_eq!(config.min_interval_ms, 1043);
+        assert_eq!(config.max_interval_ms, 1043);
+
+        let short = SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb);
+        assert_eq!(short.into_quality_config(0.35).max_interval_ms, default_cap);
+    }
+
+    #[test]
+    fn send_budget_widens_for_rgbw_at_the_same_led_count() {
+        let grb = SerialSendBudget::for_strip(150, LedChipType::Ws2812bGrb);
+        let rgbw = SerialSendBudget::for_strip(150, LedChipType::Sk6812Rgbw);
+        assert!(rgbw.wire_ms > grb.wire_ms);
+        assert!(rgbw.link_max_fps < grb.link_max_fps);
+        assert!(
+            rgbw.into_quality_config(0.35).min_interval_ms
+                > grb.into_quality_config(0.35).min_interval_ms
+        );
+    }
+
+    #[test]
+    fn send_budget_floor_holds_when_observed_cost_is_negligible() {
+        // Pressure adaptation only ever widens the interval; the floor is what
+        // stops a cheap capture from driving the link past its budget.
+        let mut controller = AmbilightWorkerQualityState::new(
+            SerialSendBudget::for_strip(200, LedChipType::Ws2812bGrb).into_quality_config(0.35),
+        );
+        controller.observe_capture_and_send_cost(0.1, 0.1);
+        assert_eq!(controller.current_send_interval().as_millis() as u64, 53);
+    }
 
     #[derive(Default)]
     struct FakeLedSender {

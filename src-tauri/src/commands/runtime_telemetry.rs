@@ -24,6 +24,16 @@ pub struct RuntimeTelemetrySnapshot {
     pub queue_health: TelemetryQueueHealth,
     /// EWMA of capture+send cost in milliseconds. 0.0 before the first frame.
     pub frame_latency_ms: f32,
+    /// The serial link **materially degrades** the effect (`link_max_fps < 30`)
+    /// — NOT merely "at capacity". `SerialSendBudget::exceeds_link_budget` is
+    /// the separate, stricter predicate that drives the send-interval clamp; it
+    /// is true even for a 60-LED strip still running ~59 fps, which is why this
+    /// user-facing flag deliberately does not track it.
+    pub link_constrained: bool,
+    /// Frames per second the serial link can physically carry for this strip.
+    /// **0.0 means "no serial link in play"** (Hue-only, or before the first
+    /// worker start), NOT "zero fps" — render it as absent, never as `0 fps`.
+    pub link_max_fps: f32,
 }
 
 impl Default for RuntimeTelemetrySnapshot {
@@ -33,6 +43,8 @@ impl Default for RuntimeTelemetrySnapshot {
             send_fps: 0.0,
             queue_health: TelemetryQueueHealth::Healthy,
             frame_latency_ms: 0.0,
+            link_constrained: false,
+            link_max_fps: 0.0,
         }
     }
 }
@@ -178,6 +190,11 @@ pub struct RuntimeTelemetryWindow {
     /// Last observed frame latency (capture+send EWMA cost) in ms. Updated
     /// every frame via `record_latency`; surfaces on the next window flush.
     latest_latency_ms: f32,
+    /// Serial link budget, fixed for the worker's lifetime. Survives each
+    /// flush — unlike the counters, it is a property of the strip, not the
+    /// window.
+    link_constrained: bool,
+    link_max_fps: f32,
 }
 
 impl RuntimeTelemetryWindow {
@@ -188,7 +205,16 @@ impl RuntimeTelemetryWindow {
             send_count: 0,
             slot_overwrite_count: 0,
             latest_latency_ms: 0.0,
+            link_constrained: false,
+            link_max_fps: 0.0,
         }
+    }
+
+    /// Record the resolved serial budget. Left unset on the Hue-only path,
+    /// where there is no serial link to constrain the frame rate.
+    pub fn set_link_budget(&mut self, link_max_fps: f32, link_constrained: bool) {
+        self.link_max_fps = link_max_fps.max(0.0);
+        self.link_constrained = link_constrained;
     }
 
     pub fn record_capture(&mut self) {
@@ -231,6 +257,8 @@ impl RuntimeTelemetryWindow {
                 send_fps: round_two_decimals(self.send_count as f32 / elapsed_secs),
                 queue_health: queue_health_from_ratio(overwrite_ratio),
                 frame_latency_ms: round_two_decimals(self.latest_latency_ms),
+                link_constrained: self.link_constrained,
+                link_max_fps: round_two_decimals(self.link_max_fps),
             },
         )?;
 
@@ -278,6 +306,68 @@ mod tests {
         assert_eq!(snapshot.send_fps, 0.0);
         assert_eq!(snapshot.queue_health, TelemetryQueueHealth::Healthy);
         assert_eq!(snapshot.frame_latency_ms, 0.0);
+        // A consumer that ignores both link fields must see today's behaviour.
+        assert!(!snapshot.link_constrained);
+        assert_eq!(snapshot.link_max_fps, 0.0);
+    }
+
+    #[test]
+    fn link_budget_defaults_to_absent_when_never_set() {
+        // The Hue-only path never calls `set_link_budget` — there is no serial
+        // link to constrain, so the flush must not claim one is degraded.
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+        window.record_capture();
+
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush should succeed");
+
+        let snapshot = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert!(!snapshot.link_constrained);
+        assert_eq!(snapshot.link_max_fps, 0.0);
+    }
+
+    #[test]
+    fn link_budget_survives_window_resets() {
+        // The counters reset each flush; the link budget is a property of the
+        // strip and must persist for the worker's lifetime.
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+        window.set_link_budget(19.012, true);
+
+        window.record_capture();
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("first flush should succeed");
+        let first = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert!(first.link_constrained);
+        assert_eq!(first.link_max_fps, 19.01);
+
+        window.record_capture();
+        window
+            .flush_if_due(base + Duration::from_secs(2), &metrics)
+            .expect("second flush should succeed");
+        let second = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert!(second.link_constrained);
+        assert_eq!(second.link_max_fps, 19.01);
+    }
+
+    #[test]
+    fn link_max_fps_never_serializes_negative() {
+        let mut window = RuntimeTelemetryWindow::new(Instant::now());
+        window.set_link_budget(-5.0, false);
+        assert_eq!(window.link_max_fps, 0.0);
+    }
+
+    #[test]
+    fn link_fields_serialize_as_camel_case() {
+        let json = serde_json::to_string(&RuntimeTelemetrySnapshot::default())
+            .expect("snapshot should serialize");
+        assert!(json.contains("\"linkConstrained\":false"), "got: {json}");
+        assert!(json.contains("\"linkMaxFps\":0.0"), "got: {json}");
     }
 
     #[test]

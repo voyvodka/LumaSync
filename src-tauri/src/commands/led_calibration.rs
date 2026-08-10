@@ -276,16 +276,48 @@ fn segment_count(segment: LedSegment, counts: &LedSegmentCounts) -> u16 {
 // baud-budget helper
 // ---------------------------------------------------------------------------
 
+/// 115 200 baud, 8N1 → 11 520 bytes/s on the wire.
+pub const SERIAL_LINK_BYTES_PER_SEC: usize = 11_520;
+
+/// Fixed framing overhead of a LumaSync v1 packet, in bytes: 2-byte magic,
+/// 1 brightness, 2-byte count LE, 1-byte XOR checksum. Adalight's 6-byte
+/// header carries no trailing checksum, so its total matches exactly.
+pub const LED_FRAME_HEADER_BYTES: usize = 6;
+
+/// Total on-wire size of one LED frame.
+///
+/// `bytes_per_pixel` is 3 for WS2812B GRB and 4 for SK6812 RGBW — the chip
+/// type changes the budget by a third, so it must never be assumed.
+pub fn frame_wire_bytes(total_leds: u16, bytes_per_pixel: usize) -> usize {
+    (total_leds as usize) * bytes_per_pixel.max(1) + LED_FRAME_HEADER_BYTES
+}
+
+/// Time in ms the serial link needs to physically shift one frame, rounded up.
+///
+/// This is a hard floor: sending faster than this queues frames against the
+/// 500 ms write timeout in `led_output.rs` rather than making the strip
+/// brighter or smoother.
+pub fn frame_wire_time_ms(total_leds: u16, bytes_per_pixel: usize) -> u64 {
+    let bytes = frame_wire_bytes(total_leds, bytes_per_pixel) as u64;
+    bytes
+        .saturating_mul(1000)
+        .div_ceil(SERIAL_LINK_BYTES_PER_SEC as u64)
+        .max(1)
+}
+
+/// Frames per second the link can physically carry for this strip.
+pub fn link_max_fps(total_leds: u16, bytes_per_pixel: usize) -> f32 {
+    SERIAL_LINK_BYTES_PER_SEC as f32 / frame_wire_bytes(total_leds, bytes_per_pixel) as f32
+}
+
 /// Derive a frame interval (ms) that fits within the 115 200-baud serial budget.
 ///
-/// 115 200 baud, 8N1 = 11 520 bytes/s.
-/// Each frame: `total_leds × 3 + 5` bytes (2-byte magic, 1 brightness,
-/// 2-byte count LE, RGB payload, 1-byte XOR checksum).
-/// Target FPS is clamped to [10, 60]; minimum interval is 16 ms.
-pub fn derive_base_interval_ms(total_leds: u16) -> u32 {
-    const BAUD_BYTES_PER_SEC: usize = 11_520;
-    let bytes_per_frame = (total_leds as usize) * 3 + 5;
-    let max_fps = BAUD_BYTES_PER_SEC / bytes_per_frame.max(1);
+/// Target FPS is clamped to [10, 60]; minimum interval is 16 ms. The 10 fps
+/// floor means the result alone does NOT guarantee the budget is met on very
+/// long strips — callers must also clamp against `frame_wire_time_ms`.
+pub fn derive_base_interval_ms_for(total_leds: u16, bytes_per_pixel: usize) -> u32 {
+    let bytes_per_frame = frame_wire_bytes(total_leds, bytes_per_pixel);
+    let max_fps = SERIAL_LINK_BYTES_PER_SEC / bytes_per_frame.max(1);
     let target_fps = max_fps.clamp(10, 60);
     let interval = 1000 / target_fps as u32;
     interval.max(16)
@@ -472,27 +504,80 @@ mod tests {
     // Test 4: derive_base_interval_ms
     #[test]
     fn derive_base_interval_ms_60_leds() {
-        // 60 × 3 + 5 = 185 bytes; max_fps = 11520 / 185 = 62 → clamp 60 → 16ms
-        assert_eq!(derive_base_interval_ms(60), 16);
+        // 60 × 3 + 6 = 186 bytes; max_fps = 11520 / 186 = 61 → clamp 60 → 16ms
+        assert_eq!(derive_base_interval_ms_for(60, 3), 16);
     }
 
     #[test]
     fn derive_base_interval_ms_100_leds() {
-        // 100 × 3 + 5 = 305; max_fps = 11520 / 305 = 37; 1000/37 = 27ms
-        assert_eq!(derive_base_interval_ms(100), 27);
+        // 100 × 3 + 6 = 306; max_fps = 11520 / 306 = 37; 1000/37 = 27ms
+        assert_eq!(derive_base_interval_ms_for(100, 3), 27);
     }
 
     #[test]
     fn derive_base_interval_ms_200_leds() {
-        // 200 × 3 + 5 = 605; max_fps = 11520 / 605 = 19; 1000/19 = 52ms
-        assert_eq!(derive_base_interval_ms(200), 52);
+        // 200 × 3 + 6 = 606; max_fps = 11520 / 606 = 19; 1000/19 = 52ms
+        assert_eq!(derive_base_interval_ms_for(200, 3), 52);
     }
 
     #[test]
     fn derive_base_interval_ms_clamps_slow_strips() {
         // very many LEDs → would be < 10 fps → min 10 fps → 100ms
-        let interval = derive_base_interval_ms(4000);
+        let interval = derive_base_interval_ms_for(4000, 3);
         assert_eq!(interval, 100); // 1000 / 10 = 100
+    }
+
+    // Test 4b: baud-budget wire arithmetic (F5)
+    #[test]
+    fn frame_wire_bytes_counts_header_for_both_chip_widths() {
+        // LumaSync v1: 2 magic + 1 brightness + 2 count LE + payload + 1 XOR.
+        assert_eq!(frame_wire_bytes(60, 3), 186);
+        assert_eq!(frame_wire_bytes(60, 4), 246);
+        assert_eq!(frame_wire_bytes(0, 3), LED_FRAME_HEADER_BYTES);
+    }
+
+    #[test]
+    fn frame_wire_time_rounds_up_never_under_reporting_the_link() {
+        // 186 bytes / 11520 B/s = 16.15 ms → 17 ms. Rounding DOWN to 16 would
+        // reintroduce the exact overrun this helper exists to prevent.
+        assert_eq!(frame_wire_time_ms(60, 3), 17);
+        // 606 / 11520 = 52.6 ms → 53 ms
+        assert_eq!(frame_wire_time_ms(200, 3), 53);
+        // A zero-LED strip still costs the header; never returns 0.
+        assert_eq!(frame_wire_time_ms(0, 3), 1);
+    }
+
+    #[test]
+    fn rgbw_costs_a_third_more_wire_time_than_grb() {
+        let grb = frame_wire_time_ms(100, 3);
+        let rgbw = frame_wire_time_ms(100, 4);
+        assert_eq!(grb, 27); // 306 / 11520 = 26.6 → 27
+        assert_eq!(rgbw, 36); // 406 / 11520 = 35.2 → 36
+        assert!(rgbw > grb, "RGBW must never be budgeted as if it were GRB");
+    }
+
+    #[test]
+    fn derive_base_interval_is_chip_aware() {
+        // SK6812 RGBW at the same LED count must ask for a slower rate.
+        assert!(derive_base_interval_ms_for(100, 4) > derive_base_interval_ms_for(100, 3));
+    }
+
+    #[test]
+    fn derive_base_interval_alone_understates_long_strips() {
+        // Documents WHY the worker clamps against frame_wire_time_ms: the
+        // 10 fps floor caps the derived interval at 100 ms while a 4000-LED
+        // strip physically needs ~1.04 s per frame.
+        assert_eq!(derive_base_interval_ms_for(4000, 3), 100);
+        assert_eq!(frame_wire_time_ms(4000, 3), 1043);
+    }
+
+    #[test]
+    fn link_max_fps_matches_the_wire_budget() {
+        // 11520 / 186 = 61.9 fps for a 60-LED GRB strip.
+        let fps = link_max_fps(60, 3);
+        assert!((fps - 61.94).abs() < 0.05, "unexpected fps ceiling: {fps}");
+        // RGBW at the same count drops the ceiling below 50 fps.
+        assert!(link_max_fps(60, 4) < 50.0);
     }
 
     // Test 5: sample_frame_for_sequence — deterministic pixel averaging

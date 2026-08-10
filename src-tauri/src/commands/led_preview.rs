@@ -123,19 +123,25 @@ impl LedTwinState {
     }
 
     /// Recompute the enrichment gate from the current surface set.
+    ///
+    /// ONLY twin overlays consume the enriched per-LED buffer. The control
+    /// popup renders from `preview://state-changed` and never subscribes to
+    /// `ambilight://edge-signal`, so including `control_visible` here would
+    /// have the popup alone pay for an N-element Vec plus an N×3 JSON payload
+    /// at 10 Hz that nothing reads. If the popup ever starts subscribing, this
+    /// gate must be widened again.
     fn recompute_preview_active(&self) {
         if let Ok(g) = self.inner.lock() {
-            let active = g.control_visible || !g.twin_labels.is_empty();
-            self.preview_active.store(active, Ordering::Relaxed);
+            self.preview_active
+                .store(!g.twin_labels.is_empty(), Ordering::Relaxed);
         }
     }
 
-    /// Set control-popup visibility and recompute the gate in one lock.
+    /// Set control-popup visibility. Does NOT touch the enrichment gate — see
+    /// `recompute_preview_active`; the flag only feeds `LedPreviewStatus`.
     fn set_control_visible(&self, visible: bool) {
         if let Ok(mut g) = self.inner.lock() {
             g.control_visible = visible;
-            let active = g.control_visible || !g.twin_labels.is_empty();
-            self.preview_active.store(active, Ordering::Relaxed);
         }
     }
 
@@ -567,14 +573,13 @@ mod tests {
     }
 
     #[test]
-    fn preview_active_gate_tracks_surfaces() {
+    fn preview_active_gate_tracks_twin_overlays_only() {
         let state = LedTwinState::default();
         assert!(!state.preview_active().load(Ordering::Relaxed));
 
+        // The control popup never subscribes to the edge-signal, so opening it
+        // must NOT switch on per-LED enrichment.
         state.set_control_visible(true);
-        assert!(state.preview_active().load(Ordering::Relaxed));
-
-        state.set_control_visible(false);
         assert!(!state.preview_active().load(Ordering::Relaxed));
 
         {
@@ -584,6 +589,30 @@ mod tests {
         }
         state.recompute();
         assert!(state.preview_active().load(Ordering::Relaxed));
+
+        // Closing the popup while a twin is live must leave enrichment on.
+        state.set_control_visible(false);
+        assert!(state.preview_active().load(Ordering::Relaxed));
+
+        state.forget_twin_label("led-twin-overlay-0");
+        assert!(!state.preview_active().load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn control_visibility_still_surfaces_in_preview_status() {
+        let state = LedTwinState::default();
+        state.set_control_visible(true);
+
+        let status = build_preview_status(
+            PreviewModeSnapshot {
+                test_active: false,
+                source: "live",
+                active_pattern: None,
+            },
+            &state,
+        );
+        assert!(status.popup_visible);
+        assert!(status.twin_displays.is_empty());
     }
 
     #[test]
