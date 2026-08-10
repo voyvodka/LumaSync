@@ -103,6 +103,19 @@ impl RuntimeQualityController {
         self.config.smoothing_alpha = alpha.clamp(0.0, 1.0);
     }
 
+    /// Borrow the most recently smoothed (post-EWMA) per-LED buffer WITHOUT
+    /// consuming it.
+    ///
+    /// `smooth()` updates `previous_frame` in place, so after each
+    /// `queue_processed_frame` this slice holds the exact post-EWMA RGB the
+    /// strip is converging toward — in physical strip order. The v1.6 LED
+    /// Preview twin emit reads this to enrich the edge-signal without
+    /// disturbing the send pipeline (`RuntimeFrameSlot` still owns the copy
+    /// that goes to the sink). Empty before the first frame is smoothed.
+    pub fn last_smoothed(&self) -> &[[u8; 3]] {
+        &self.previous_frame
+    }
+
     /// Current smoothed capture+send cost in milliseconds. Returns 0.0 before
     /// the first observation lands.
     pub fn observed_cost_ms(&self) -> f32 {

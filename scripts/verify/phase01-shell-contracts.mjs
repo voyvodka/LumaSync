@@ -125,6 +125,16 @@ function fail(msg) {
   console.error(`  ✘  ${msg}`);
 }
 
+/**
+ * Informational, non-asserting log line. Unlike pass()/fail() it does NOT
+ * touch the `checks`/`errors` counters, so it can surface a "known-pending"
+ * fact (e.g. a Phase 0 command whose Rust handler lands in Phase 1) without
+ * coloring the run pass or fail.
+ */
+function note(msg) {
+  console.log(`  \u2022  ${msg}`);
+}
+
 function check(condition, passMsg, failMsg) {
   if (condition) {
     pass(passMsg);
@@ -949,6 +959,143 @@ check(
   "parse_ipv4 rejects broadcast (255.255.255.255) via is_broadcast()",
   "MISSING: is_broadcast() check in parse_ipv4"
 );
+
+// ---------------------------------------------------------------------------
+// LED Preview & Test Experience contract (v1.6 — Phase 0, contracts only)
+//
+// Phase 0 lands the TypeScript surface only; the 8 Rust #[tauri::command]
+// handlers arrive in Phase 1. The presence checks below (command strings,
+// status codes, event/window labels, tray id, ShellState fields) are real
+// assertions and pass today. The Rust-parity loop treats the 8 preview
+// commands as a KNOWN-PENDING allowlist: a command not yet registered in
+// `generate_handler!` is surfaced via note() as PENDING (not failed) so
+// Phase 0 stays green, while a command that IS registered passes (and nudges
+// the maintainer to prune the allowlist). When Phase 1 registers all 8,
+// empty PREVIEW_PENDING_RUST_HANDLERS and the loop enforces strict parity
+// exactly like the Hue zone block above.
+// ---------------------------------------------------------------------------
+const PREVIEW_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/preview.ts");
+const previewSource = readOrEmpty(PREVIEW_CONTRACT_FILE, "preview");
+
+console.log("\n[ Preview commands (v1.6) ]");
+const REQUIRED_PREVIEW_COMMANDS = [
+  "start_led_test_pattern",
+  "stop_led_test_pattern",
+  "get_led_preview_status",
+  "open_led_twin_overlay",
+  "close_led_twin_overlay",
+  "open_led_control_popup",
+  "show_led_control_popup",
+  "hide_led_control_popup",
+];
+for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
+  check(
+    previewSource.includes(`"${cmd}"`),
+    `preview command "${cmd}" defined in preview.ts`,
+    `MISSING preview command "${cmd}" in preview.ts > PREVIEW_COMMANDS`
+  );
+}
+
+console.log("\n[ Preview status codes (v1.6) ]");
+const REQUIRED_PREVIEW_STATUS_CODES = [
+  // LED test pattern lifecycle
+  "LED_TEST_PATTERN_STARTED",
+  "LED_TEST_PATTERN_PREVIEW_ONLY",
+  "LED_TEST_PATTERN_STOPPED",
+  "LED_TEST_PATTERN_INVALID_PARAMS",
+  "LED_TEST_PATTERN_NO_CALIBRATION",
+  "LED_TEST_PATTERN_RUNTIME_ERROR",
+  // Twin overlay window
+  "TWIN_OVERLAY_OPENED",
+  "TWIN_OVERLAY_CLOSED",
+  "TWIN_OVERLAY_OPEN_FAILED",
+  "TWIN_OVERLAY_DISPLAY_NOT_FOUND",
+  "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
+  // Control popup window
+  "CONTROL_POPUP_OPENED",
+  "CONTROL_POPUP_SHOWN",
+  "CONTROL_POPUP_HIDDEN",
+  "CONTROL_POPUP_FAILED",
+];
+for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
+  check(
+    previewSource.includes(`"${code}"`),
+    `preview status code "${code}" defined`,
+    `MISSING preview status code "${code}" in preview.ts`
+  );
+}
+
+console.log("\n[ Preview event + window labels (v1.6) ]");
+check(
+  previewSource.includes(`"preview://state-changed"`),
+  "PREVIEW_STATE_CHANGED_EVENT defined",
+  "MISSING PREVIEW_STATE_CHANGED_EVENT in preview.ts"
+);
+check(
+  previewSource.includes(`"led-twin-overlay-"`),
+  "LED_TWIN_OVERLAY_LABEL_PREFIX defined",
+  "MISSING LED_TWIN_OVERLAY_LABEL_PREFIX in preview.ts"
+);
+check(
+  previewSource.includes(`"led-control-popup"`),
+  "LED_CONTROL_POPUP_LABEL defined",
+  "MISSING LED_CONTROL_POPUP_LABEL in preview.ts"
+);
+
+console.log("\n[ Preview tray menu id (v1.6) ]");
+check(
+  source.includes(`"tray-show-led-preview"`),
+  'TRAY_MENU_IDS.SHOW_LED_PREVIEW ("tray-show-led-preview") defined',
+  'MISSING tray id "tray-show-led-preview" in shell.ts'
+);
+
+console.log("\n[ ShellState v1.6 preview additions ]");
+const REQUIRED_V16_STATE_FIELDS = [
+  "ledPreviewPopupVisible",
+  "ledPreviewPopupCenterX",
+  "ledPreviewPopupCenterY",
+  "ledTwinEnabledTest",
+  "ledTwinEnabledLive",
+  "lastLedTestPattern",
+  "ledPreviewHintShown",
+];
+for (const field of REQUIRED_V16_STATE_FIELDS) {
+  check(
+    source.includes(field + "?:"),
+    `ShellState v1.6 field "${field}" declared optional`,
+    `MISSING optional ShellState v1.6 field "${field}"`
+  );
+}
+
+console.log("\n[ Preview — Rust handler parity (v1.6 Phase 0 \u2192 Phase 1) ]");
+// Phase 0 known-pending allowlist. The Rust handlers land in Phase 1; remove
+// an entry the moment its #[tauri::command] is registered in lib.rs. When this
+// array is empty the loop enforces strict parity like the Hue zone block above.
+const PREVIEW_PENDING_RUST_HANDLERS = [];
+for (const fn of REQUIRED_PREVIEW_COMMANDS) {
+  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
+  const registered = re.test(handlerListBlock);
+  const pending = PREVIEW_PENDING_RUST_HANDLERS.includes(fn);
+  if (registered) {
+    pass(`Rust generate_handler! list registers "${fn}"`);
+    if (pending) {
+      note(
+        `"${fn}" is now registered in lib.rs — remove it from `
+          + `PREVIEW_PENDING_RUST_HANDLERS (Phase 1 cleanup)`
+      );
+    }
+  } else if (pending) {
+    note(
+      `PENDING (Phase 1): "${fn}" not yet in generate_handler! — `
+        + `known-pending allowlist, not a failure`
+    );
+  } else {
+    fail(
+      `MISSING Rust generate_handler! entry for "${fn}" — `
+        + `frontend invoke(PREVIEW_COMMANDS.X) will resolve to nothing`
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Summary

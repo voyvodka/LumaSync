@@ -23,6 +23,12 @@ export interface TrayLabels {
   lightsOff: string;
   resumeLastMode: string;
   solidColor: string;
+  /**
+   * v1.6 — "Show LED Preview" tray item label. Opens the interactive control
+   * popup (and, when enabled, the digital-twin overlay). Optional so the Rust
+   * handler keeps its existing default while the label rolls out additively.
+   */
+  showLedPreview?: string;
   quit: string;
 }
 
@@ -81,6 +87,17 @@ export async function listenTraySolidColor(
   onTrigger: () => void
 ): Promise<UnlistenFn> {
   return listen("tray:solid-color", () => onTrigger());
+}
+
+/**
+ * v1.6 — listen for the "Show LED Preview" tray action. The Rust tray handler
+ * emits `tray:show-led-preview`; the app responds by opening (or focusing) the
+ * control popup plus, when enabled, the digital-twin overlay.
+ */
+export async function listenTrayShowLedPreview(
+  onTrigger: () => void
+): Promise<UnlistenFn> {
+  return listen("tray:show-led-preview", () => onTrigger());
 }
 
 /**

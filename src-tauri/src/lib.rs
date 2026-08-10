@@ -41,6 +41,7 @@ mod commands {
     pub mod hue_stream_lifecycle;
     pub mod led_calibration;
     pub mod led_output;
+    pub mod led_preview;
     pub mod led_sink;
     pub mod lighting_mode;
     pub mod notifications;
@@ -48,6 +49,7 @@ mod commands {
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
+    pub mod test_pattern;
     pub mod wled_discovery;
     pub mod wled_sink;
 }
@@ -78,8 +80,13 @@ use commands::hue_stream_lifecycle::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
     simulate_hue_fault, start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
 };
+use commands::led_preview::{
+    close_led_twin_overlay, hide_led_control_popup, open_led_control_popup, open_led_twin_overlay,
+    show_led_control_popup, LedTwinState,
+};
 use commands::lighting_mode::{
-    get_lighting_mode_status, set_lighting_mode, stop_lighting, LightingRuntimeState,
+    get_led_preview_status, get_lighting_mode_status, set_lighting_mode, start_led_test_pattern,
+    stop_led_test_pattern, stop_lighting, LightingRuntimeState,
 };
 use commands::notifications::{request_notification_permission, show_notification};
 use commands::platform::open_log_dir;
@@ -116,6 +123,7 @@ struct TrayState<R: Runtime> {
     lights_off: MenuItem<R>,
     resume_last_mode: MenuItem<R>,
     solid_color: MenuItem<R>,
+    show_led_preview: MenuItem<R>,
     quit: MenuItem<R>,
 }
 
@@ -126,6 +134,7 @@ struct TrayLabels {
     lights_off: String,
     resume_last_mode: String,
     solid_color: String,
+    show_led_preview: String,
     quit: String,
 }
 
@@ -170,8 +179,11 @@ fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
     std::thread::Builder::new()
         .name("lumasync-shutdown-lighting".into())
         .spawn(move || {
-            let result =
-                stop_lighting(app_for_lighting.state::<LightingRuntimeState>()).map(|_| ());
+            let result = stop_lighting(
+                app_for_lighting.clone(),
+                app_for_lighting.state::<LightingRuntimeState>(),
+            )
+            .map(|_| ());
             let _ = tx1.send(result);
         })
         .ok();
@@ -322,6 +334,10 @@ fn update_tray_labels(
         .set_text(&labels.solid_color)
         .map_err(|e| e.to_string())?;
     tray_state
+        .show_led_preview
+        .set_text(&labels.show_led_preview)
+        .map_err(|e| e.to_string())?;
+    tray_state
         .quit
         .set_text(&labels.quit)
         .map_err(|e| e.to_string())?;
@@ -346,6 +362,13 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
     )?;
     let solid_color =
         MenuItem::with_id(app, "tray-solid-color", "Solid Color", true, None::<&str>)?;
+    let show_led_preview = MenuItem::with_id(
+        app,
+        "tray-show-led-preview",
+        "LED Preview",
+        true,
+        None::<&str>,
+    )?;
     let separator3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
@@ -359,6 +382,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
             &lights_off,
             &resume_last,
             &solid_color,
+            &show_led_preview,
             &separator3,
             &quit,
         ],
@@ -369,6 +393,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
         lights_off,
         resume_last_mode: resume_last,
         solid_color,
+        show_led_preview,
         quit,
     };
 
@@ -555,6 +580,7 @@ pub fn run() {
             app.manage(ActiveSinkRegistry::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());
+            app.manage(LedTwinState::default());
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
 
@@ -640,6 +666,13 @@ pub fn run() {
                             (),
                         );
                     }
+                    "tray-show-led-preview" => {
+                        let _ = app.emit_to(
+                            EventTarget::webview_window(MAIN_WINDOW_LABEL),
+                            "tray:show-led-preview",
+                            (),
+                        );
+                    }
                     "quit" => kick_off_shutdown_and_die(app),
                     _ => {}
                 })
@@ -675,12 +708,37 @@ pub fn run() {
         // Cmd+Q the user sees the window vanish (hide_to_tray) and then
         // the process dies via the .run() callback's RunEvent::Exit branch.
         .on_window_event(|window, event| {
-            if window.label() != "main" {
+            let label = window.label();
+            // Main shell: red-X / Cmd+W hides to tray instead of quitting.
+            if label == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    hide_to_tray(window);
+                }
                 return;
             }
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                hide_to_tray(window);
+            // LED control popup: mirror the main-window pattern — hide, never
+            // destroy, so a re-show is cheap (v1.6 LED Preview).
+            if label == commands::led_preview::LED_CONTROL_POPUP_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    if let Some(state) = window.try_state::<commands::led_preview::LedTwinState>() {
+                        state.mark_control_hidden();
+                    }
+                    commands::led_preview::emit_preview_state_changed(window.app_handle());
+                }
+                return;
+            }
+            // A twin destroyed outside `close_led_twin_overlay` (display
+            // unplugged) would otherwise pin the 60 Hz enrichment on forever.
+            if label.starts_with(commands::led_preview::LED_TWIN_OVERLAY_LABEL_PREFIX) {
+                if let tauri::WindowEvent::Destroyed = event {
+                    if let Some(state) = window.try_state::<commands::led_preview::LedTwinState>() {
+                        state.forget_twin_label(label);
+                    }
+                    commands::led_preview::emit_preview_state_changed(window.app_handle());
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -726,6 +784,14 @@ pub fn run() {
             discover_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
+            start_led_test_pattern,
+            stop_led_test_pattern,
+            get_led_preview_status,
+            open_led_twin_overlay,
+            close_led_twin_overlay,
+            open_led_control_popup,
+            show_led_control_popup,
+            hide_led_control_popup,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

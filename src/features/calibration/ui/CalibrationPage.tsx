@@ -3,6 +3,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 
 import { shellStore } from "../../persistence/shellStore";
+import {
+  openLedTwinOverlay,
+  openLedControlPopup,
+  showLedControlPopup,
+} from "../../preview/previewApi";
 import type { LedCalibrationConfig, LedDirection, LedStartAnchor } from "../model/contracts";
 import { buildLedSequence } from "../model/indexMapping";
 import { deriveDefaultCounts, resetToManual } from "../model/templates";
@@ -377,6 +382,20 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   const meterLength = (totalLeds / 60).toFixed(1);
   const powerWatts = (totalLeds * 0.06).toFixed(1); // ~0.06W per LED at medium brightness
 
+  // v1.6 — launch the LED preview surface (click-through digital-twin
+  // overlay + interactive control popup) straight from LED Setup. The
+  // preview API never throws; the try/catch guards the shellStore write.
+  const handleOpenPreview = useCallback(async () => {
+    try {
+      await openLedTwinOverlay({ scope: "test" });
+      await openLedControlPopup();
+      await showLedControlPopup();
+      await shellStore.save({ ledPreviewPopupVisible: true, ledTwinEnabledTest: true });
+    } catch (err) {
+      console.error("[LumaSync] open LED preview from setup failed:", err);
+    }
+  }, []);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Error strip */}
@@ -417,6 +436,20 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
               </span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleOpenPreview()}
+                title={t("ledPreview.entry.ledSetupHint")}
+                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <rect x="3" y="5" width="18" height="12" rx="1.5" />
+                  <circle cx="7" cy="11" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="12" cy="11" r="1.2" fill="currentColor" stroke="none" />
+                  <circle cx="17" cy="11" r="1.2" fill="currentColor" stroke="none" />
+                </svg>
+                {t("ledPreview.entry.ledSetupButton")}
+              </button>
               <button
                 type="button"
                 onClick={handleReset}

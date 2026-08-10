@@ -27,7 +27,7 @@ pub struct CalibrationCommandResponse {
     pub status: CommandStatus,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DisplayInfoPayload {
     pub id: String,
@@ -132,18 +132,23 @@ fn close_overlay_window<R: Runtime>(app: &AppHandle<R>, window_label: &str) -> R
     Ok(())
 }
 
-fn open_overlay_window<R: Runtime>(
+/// Build a transparent, click-through, always-on-top overlay window sized and
+/// positioned to fill `target_display`. Extracted from `open_overlay_window`
+/// so the v1.6 LED-twin overlay can reuse the exact window recipe (transparent
+/// background, ignore-cursor-events, Windows child-HWND clickthrough
+/// propagation) without duplicating it. `init_script` is injected before any
+/// page script runs — mirror of the calibration overlay's
+/// `__LUMASYNC_OVERLAY_PREVIEW__` and the twin's `__LUMASYNC_TWIN_DISPLAY_ID__`.
+pub fn build_transparent_overlay<R: Runtime>(
     app: &AppHandle<R>,
     window_label: &str,
+    url: WebviewUrl,
+    title: &str,
     target_display: &DisplayInfoPayload,
-    preview: Option<&OverlayPreviewPayload>,
-) -> Result<(), String> {
-    let overlay_url = build_overlay_webview_url()?;
-    let preview_json = serialize_overlay_preview_payload(preview)?;
-    let preload_script = format!("window.__LUMASYNC_OVERLAY_PREVIEW__ = {preview_json};");
-
-    let builder = WebviewWindowBuilder::new(app, window_label, overlay_url)
-        .title("Calibration Overlay")
+    init_script: Option<&str>,
+) -> Result<tauri::WebviewWindow<R>, String> {
+    let mut builder = WebviewWindowBuilder::new(app, window_label, url)
+        .title(title)
         .decorations(false)
         .resizable(false)
         .closable(false)
@@ -154,76 +159,73 @@ fn open_overlay_window<R: Runtime>(
         .shadow(false)
         .transparent(true)
         .background_color(Color(0, 0, 0, 0))
-        .visible(true)
-        .initialization_script(preload_script.as_str());
+        .visible(true);
+    if let Some(script) = init_script {
+        builder = builder.initialization_script(script);
+    }
 
     let window = builder
         .build()
         .map_err(|error| format!("OVERLAY_WINDOW_OPEN_FAILED: {error}"))?;
 
-    if cfg!(target_os = "windows") {
-        // Use the display's known scale factor for logical coordinate conversion.
-        // window.scale_factor() is unreliable immediately after build() because the
-        // window may not have moved to the target monitor's DPI context yet.
-        let safe_scale =
-            if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
-                target_display.scale_factor
-            } else {
-                1.0
-            };
-
-        let logical_x = f64::from(target_display.x) / safe_scale;
-        let logical_y = f64::from(target_display.y) / safe_scale;
-        let logical_width = f64::from(target_display.width) / safe_scale;
-        let logical_height = f64::from(target_display.height) / safe_scale;
-
-        window
-            .set_position(Position::Logical(LogicalPosition::new(
-                logical_x, logical_y,
-            )))
-            .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
-        window
-            .set_size(Size::Logical(LogicalSize::new(
-                logical_width,
-                logical_height,
-            )))
-            .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
+    // The display's known scale factor is used for logical coordinate
+    // conversion. window.scale_factor() is unreliable immediately after
+    // build() because the window may not have moved to the target monitor's
+    // DPI context yet. Both platform branches used identical math, so this is
+    // a single unified path now.
+    let safe_scale = if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0
+    {
+        target_display.scale_factor
     } else {
-        let safe_scale =
-            if target_display.scale_factor.is_finite() && target_display.scale_factor > 0.0 {
-                target_display.scale_factor
-            } else {
-                1.0
-            };
+        1.0
+    };
+    let logical_x = f64::from(target_display.x) / safe_scale;
+    let logical_y = f64::from(target_display.y) / safe_scale;
+    let logical_width = f64::from(target_display.width) / safe_scale;
+    let logical_height = f64::from(target_display.height) / safe_scale;
 
-        let logical_x = f64::from(target_display.x) / safe_scale;
-        let logical_y = f64::from(target_display.y) / safe_scale;
-        let logical_width = f64::from(target_display.width) / safe_scale;
-        let logical_height = f64::from(target_display.height) / safe_scale;
-
-        window
-            .set_position(Position::Logical(LogicalPosition::new(
-                logical_x, logical_y,
-            )))
-            .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
-
-        window
-            .set_size(Size::Logical(LogicalSize::new(
-                logical_width,
-                logical_height,
-            )))
-            .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
-    }
-
+    window
+        .set_position(Position::Logical(LogicalPosition::new(
+            logical_x, logical_y,
+        )))
+        .map_err(|error| format!("OVERLAY_WINDOW_POSITION_FAILED: {error}"))?;
+    window
+        .set_size(Size::Logical(LogicalSize::new(
+            logical_width,
+            logical_height,
+        )))
+        .map_err(|error| format!("OVERLAY_WINDOW_SIZE_FAILED: {error}"))?;
     window
         .set_ignore_cursor_events(true)
         .map_err(|error| format!("OVERLAY_WINDOW_CLICKTHROUGH_FAILED: {error}"))?;
 
-    // On Windows, WebView2 creates child windows that do not inherit WS_EX_TRANSPARENT
-    // from the parent. Propagate the flag to all child windows so the overlay is truly
-    // click-through and does not block mouse events for windows behind it.
+    // On Windows, WebView2 creates child windows that do not inherit
+    // WS_EX_TRANSPARENT from the parent. Propagate the flag to all child
+    // windows so the overlay is truly click-through.
     #[cfg(target_os = "windows")]
     propagate_transparent_to_children(&window);
+
+    Ok(window)
+}
+
+fn open_overlay_window<R: Runtime>(
+    app: &AppHandle<R>,
+    window_label: &str,
+    target_display: &DisplayInfoPayload,
+    preview: Option<&OverlayPreviewPayload>,
+) -> Result<(), String> {
+    let overlay_url = build_overlay_webview_url()?;
+    let preview_json = serialize_overlay_preview_payload(preview)?;
+    let preload_script = format!("window.__LUMASYNC_OVERLAY_PREVIEW__ = {preview_json};");
+
+    let window = build_transparent_overlay(
+        app,
+        window_label,
+        overlay_url,
+        "Calibration Overlay",
+        target_display,
+        Some(preload_script.as_str()),
+    )?;
 
     let _ = window.eval(
         "window.dispatchEvent(new CustomEvent('lumasync-overlay-preview', { detail: window.__LUMASYNC_OVERLAY_PREVIEW__ ?? null }));",

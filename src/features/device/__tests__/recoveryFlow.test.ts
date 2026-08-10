@@ -1,7 +1,14 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
 import { createDeviceConnectionController } from "../useDeviceConnection";
+
+// Every test here installs fake timers; without this the patch leaks to whatever
+// Vitest schedules next on the same worker, and `waitFor` there spins on
+// checkRealTimersCallback until it times out.
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
   return {
