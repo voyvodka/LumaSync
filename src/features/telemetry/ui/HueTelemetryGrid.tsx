@@ -38,7 +38,7 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
           <span className={`text-sm ${stateColor}`}>
             {hue.state}
             {hue.uptimeSecs !== null && hue.state === "Running" ? (
-              <span className="ml-2 text-xs text-slate-400 dark:text-zinc-500">
+              <span className="ml-2 inline-block min-w-[7ch] text-right text-xs tabular-nums text-slate-400 dark:text-zinc-500">
                 {formatDuration(hue.uptimeSecs)}
               </span>
             ) : null}
@@ -49,7 +49,7 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("telemetry.hue.packetRate")}
           </span>
-          <span className="text-sm text-slate-900 dark:text-zinc-100">
+          <span className="text-sm tabular-nums text-slate-900 dark:text-zinc-100">
             {hue.packetRate.toFixed(1)} pkt/s
           </span>
         </div>
@@ -58,7 +58,7 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("telemetry.hue.lastError")}
           </span>
-          <span className="text-sm text-slate-900 dark:text-zinc-100">
+          <span className="text-sm tabular-nums text-slate-900 dark:text-zinc-100">
             {hue.lastErrorCode
               ? `${hue.lastErrorCode}${hue.lastErrorAtSecs !== null ? ` \u2014 ${Math.floor(hue.lastErrorAtSecs / 60)}m ago` : ""}`
               : "\u2014"}
@@ -69,7 +69,7 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("telemetry.hue.reconnects")}
           </span>
-          <span className="text-sm text-slate-900 dark:text-zinc-100">
+          <span className="text-sm tabular-nums text-slate-900 dark:text-zinc-100">
             {hue.totalReconnects} ({hue.successfulReconnects} ok, {hue.failedReconnects} fail)
           </span>
         </div>
@@ -87,7 +87,7 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
           <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
             {t("telemetry.hue.connectionAge")}
           </span>
-          <span className="text-sm text-slate-900 dark:text-zinc-100">
+          <span className="inline-block min-w-[7ch] text-right text-sm tabular-nums text-slate-900 dark:text-zinc-100">
             {formatDuration(hue.dtlsConnectedAtSecs)}
           </span>
         </div>

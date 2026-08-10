@@ -256,11 +256,11 @@ function FpsPill({ isCompact, enabled }: FpsPillProps) {
   // inline only in full mode so compact stays within its tight budget.
   const lowFpsLabel = kind === "low" ? t("shell.fpsHud.lowFps") : null;
 
-  // Full-mode latency suffix. Skipped when no latency sample is available
-  // yet (first tick) or when the pipeline is inactive.
+  // Full-mode latency suffix, skipped until the first sample lands. The "·"
+  // rides inside the string so the suffix fits one reserved-width box.
   const latencySuffix =
     !isCompact && latencyRounded !== null
-      ? ` · ${latencyRounded}${t("shell.fpsHud.latencyUnit")}`
+      ? `· ${latencyRounded}${t("shell.fpsHud.latencyUnit")}`
       : "";
 
   // Accessible label: describe both FPS and latency explicitly so screen
@@ -277,9 +277,10 @@ function FpsPill({ isCompact, enabled }: FpsPillProps) {
     <div className="lm-statusbar-pair" aria-label={ariaLabel}>
       <span className="lm-statusbar-label">{label}</span>
       <span className={`lm-statusbar-value is-${kind}`}>
-        <span aria-hidden>●</span> {fpsDisplay}
-        {lowFpsLabel ? <span className="lm-statusbar-lowfps"> {lowFpsLabel}</span> : null}
-        {latencySuffix}
+        <span aria-hidden>●</span>
+        <span className="lm-statusbar-fps">{fpsDisplay}</span>
+        {lowFpsLabel ? <span className="lm-statusbar-lowfps">{lowFpsLabel}</span> : null}
+        {latencySuffix ? <span className="lm-statusbar-latency">{latencySuffix}</span> : null}
       </span>
     </div>
   );
