@@ -64,6 +64,10 @@ mod models {
 // v1.5 W2-A3 — shared LAN-discovery primitives (mDNS responder registry).
 mod network;
 
+// Lives in-crate rather than under `tests/` because `mod commands` is private.
+#[cfg(test)]
+mod ipc_tests;
+
 use commands::calibration::{
     close_display_overlay, list_displays, open_display_overlay, start_calibration_test_pattern,
     stop_calibration_test_pattern, update_display_overlay_preview, OverlayState,
@@ -400,6 +404,13 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
     Ok((menu, tray_state))
 }
 
+/// Wraps `generate_context!` in a function because the macro embeds
+/// `_EMBED_INFO_PLIST` and a second expansion is a duplicate-symbol link error.
+/// `ipc_tests` builds its mock apps from this same context.
+fn app_context<R: Runtime>() -> tauri::Context<R> {
+    tauri::generate_context!()
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
@@ -430,6 +441,13 @@ pub fn run() {
             // Second launch: focus existing main window
             show_and_focus_settings(app);
         }));
+    }
+
+    // 1b. E2E WebDriver server. The env gate matters: the plugin binds 4445 the
+    // moment it is registered, and `cargo test --all-features` turns the feature on.
+    #[cfg(feature = "e2e")]
+    if std::env::var(tauri_plugin_wdio_webdriver::PORT_ENV_VAR).is_ok() {
+        builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
     }
 
     // 2. Autostart
@@ -793,7 +811,7 @@ pub fn run() {
             show_led_control_popup,
             hide_led_control_popup,
         ])
-        .build(tauri::generate_context!())
+        .build(app_context())
         .expect("error while building tauri application");
 
     // .run() with a callback is the only place that sees RunEvent::Exit on

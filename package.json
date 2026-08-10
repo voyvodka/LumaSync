@@ -19,12 +19,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
+    "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
     "lint": "pnpm typecheck",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "check:all": "pnpm lint && pnpm check:rust && pnpm verify:shell-contracts",
+    "check:all": "pnpm lint && pnpm typecheck:e2e && pnpm check:rust && pnpm verify:shell-contracts",
     "preview": "vite preview",
     "tauri": "tauri",
-    "verify:shell-contracts": "node scripts/verify/phase01-shell-contracts.mjs"
+    "verify:shell-contracts": "node scripts/verify/phase01-shell-contracts.mjs",
+    "e2e:build": "tauri build --debug --no-bundle --features e2e",
+    "e2e": "pnpm e2e:build && wdio run wdio.conf.ts",
+    "e2e:run": "wdio run wdio.conf.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
@@ -54,14 +58,23 @@
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
+    "@wdio/cli": "^9.30.1",
+    "@wdio/globals": "^9.29.1",
+    "@wdio/local-runner": "^9.30.1",
+    "@wdio/mocha-framework": "^9.30.1",
+    "@wdio/spec-reporter": "^9.30.1",
+    "@wdio/tauri-service": "^1.3.0",
     "happy-dom": "^20.11.2",
     "jsdom": "^30.0.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
     "vite": "^8.2.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "webdriverio": "^9.30.1"
   }
 }

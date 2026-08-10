@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "mocha", "@wdio/globals/types"],
+    "noEmit": true
+  },
+  "include": ["e2e", "wdio.conf.ts", "src/shared/contracts", "src/features/mode/model"]
+}

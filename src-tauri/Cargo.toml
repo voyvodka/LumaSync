@@ -73,6 +73,8 @@ keyring = { version = "4", features = ["apple-native-keyring-store"] }
 # Dependabot will open a PR for any 0.19.x patch; review before merging.
 mdns-sd = "0.20"
 uuid = { version = "1", features = ["v4"] }
+# Gated behind the `e2e` feature — see [features] below.
+tauri-plugin-wdio-webdriver = { version = "1", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-capture = "2.0.0"
@@ -86,3 +88,15 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 
 [target.'cfg(target_os = "linux")'.dependencies]
 xcap = "0.9.6"
+
+[features]
+# Embeds a W3C WebDriver server in the binary for the `pnpm e2e` suite. Off by
+# default and never enabled by `tauri build`, so release bundles never carry it.
+e2e = ["dep:tauri-plugin-wdio-webdriver"]
+
+[dev-dependencies]
+# MockRuntime for the IPC tests in `src/ipc_tests/`. Dev-only is load-bearing:
+# resolver v2 keeps the `test` feature out of the normal build graph, so the
+# shipped binary never links the mock runtime.
+tauri = { version = "2", features = ["test"] }
+tokio = { version = "1.52.3", features = ["rt", "macros"] }

@@ -127,6 +127,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
               className={`lm-titlebar-tab${id === activeSection ? " is-on" : ""}`}
               aria-selected={id === activeSection}
               onClick={() => onSectionChange(id)}
+              data-testid={`section-tab-${id}`}
             >
               {t(`settings.sections.${id}`)}
             </button>
@@ -146,6 +147,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
           title={toggleTitle}
           aria-label={toggleTitle}
           className="lm-titlebar-toggle"
+          data-testid="ui-mode-toggle"
         >
           {toggleVariant === "to-full" ? <ExpandIcon /> : <CollapseIcon />}
         </button>

@@ -194,7 +194,7 @@ export function CompactLayout({
   const ambilightBrightnessPct = Math.round(ambilightConfig.brightness * 100);
 
   return (
-    <div className="lm-compact">
+    <div className="lm-compact" data-testid="compact-layout">
       <div className="lm-compact-body">
         {/* ── Offline banner (v1.5 W2-B1) ───────────────────────────
             Compact-friendly inline message + deep-link into DEVICES.
@@ -341,6 +341,7 @@ function ModeButton({ kind, active, disabled, label, icon, onClick }: ModeButton
       onClick={() => onClick(kind)}
       className={`lm-compact-mbtn ${active ? "is-on" : ""}`}
       aria-pressed={active}
+      data-testid={`mode-button-${kind}`}
     >
       <span className="ico">{icon}</span>
       <span className="tn">{label}</span>

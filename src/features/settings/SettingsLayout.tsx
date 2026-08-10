@@ -107,9 +107,9 @@ export const SettingsLayout = memo(function SettingsLayout({
 
   // ── Full mode ─────────────────────────────────────────────────────────
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden" style={{ background: "var(--lm-bg)", color: "var(--lm-ink)" }}>
+    <div className="relative flex h-full w-full flex-col overflow-hidden" data-testid="full-layout" style={{ background: "var(--lm-bg)", color: "var(--lm-ink)" }}>
       {/* Main content */}
-      <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main">
+      <main className="min-h-0 min-w-0 flex-1 overflow-hidden" role="main" data-testid={`section-panel-${activeSection}`}>
         {activeSection === SECTION_IDS.LIGHTS && (
           <div className="h-full overflow-hidden">
             <LightsSection

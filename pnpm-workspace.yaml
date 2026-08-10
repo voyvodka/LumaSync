@@ -1,3 +1,9 @@
+# All three arrive with @wdio/cli. The E2E suite uses the embedded WebDriver
+# provider, so the Edge/Gecko driver downloads are dead weight.
+allowBuilds:
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
 # pnpm 11 relocated settings out of package.json's "pnpm" field into this file.
 # overrides: force the transitive `undici` (jsdom -> vitest test environment,
 # dev-only) to a patched version, clearing GitHub advisories GHSA for undici
