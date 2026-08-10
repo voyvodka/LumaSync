@@ -36,8 +36,8 @@ use super::frame::HueColorSender;
 use super::retry::register_transient_fault;
 use super::sender::{
     apply_channel_region_overrides, build_hue_sender_with_counter, deactivate_with_token,
-    fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled,
-    new_shutdown_signal, no_op_sender, DeactivateToken, HueLightMetadata, ShutdownSignal,
+    fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, wait_for_shutdown,
+    DeactivateToken, HueLightMetadata, ShutdownSignal,
 };
 use super::state_store::{
     acquire_hue_runtime, flush_pending_solid_color, make_result, status_with,
@@ -236,6 +236,38 @@ fn try_claim_reconnect(owner: &mut HueRuntimeOwner) -> ReconnectClaim {
     ReconnectClaim::Proceed
 }
 
+/// Should the monitor stop waiting on a shutdown signal that may never fire?
+/// Mirrors [`try_claim_reconnect`]'s abort set, so bailing here only ever
+/// short-circuits a wait whose claim would have been refused anyway.
+fn monitor_wait_is_pointless(owner: &HueRuntimeOwner) -> bool {
+    owner.user_override_pending
+        || matches!(
+            owner.state,
+            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
+        )
+}
+
+/// How long each blocking chunk of the shutdown wait lasts. Only bounds how
+/// often the liveness re-check runs; the condvar still wakes instantly on a
+/// real signal.
+const MONITOR_WAIT_CHUNK: Duration = Duration::from_secs(5);
+
+/// Outcome of one `internal_restart_stream` attempt.
+///
+/// The distinction is the point: `Retryable` must re-arm the monitor (a
+/// readiness blip that heals on its own used to dead-end self-healing after a
+/// single attempt), while `Abandoned` must not (a user stop or a terminal
+/// runtime state is a decision, not a failure).
+#[derive(Debug)]
+enum RestartOutcome {
+    /// A fresh sender is running and has armed its own monitor.
+    Restarted,
+    /// Failed for a reason that may clear; consume another retry-budget slot.
+    Retryable(String),
+    /// User stop or terminal runtime state — exit without re-arming.
+    Abandoned,
+}
+
 // ---------------------------------------------------------------------------
 // Reconnect monitor (HUE-08) — detects sender thread exit and triggers retry
 // ---------------------------------------------------------------------------
@@ -254,12 +286,24 @@ pub(crate) fn spawn_reconnect_monitor(
     request: StartHueStreamRequest,
 ) {
     tokio::spawn(async move {
-        // Poll shutdown signal with 200ms interval.
-        loop {
-            tokio::time::sleep(Duration::from_millis(200)).await;
-            if is_shutdown_signaled(&shutdown_signal) {
-                break;
-            }
+        // Block on the condvar the signal was built around instead of polling
+        // it five times a second. Chunked so a signal that can never fire
+        // cannot pin a blocking-pool thread for the life of the process.
+        let signalled = {
+            let signal = Arc::clone(&shutdown_signal);
+            let probe = Arc::clone(&runtime);
+            tokio::task::spawn_blocking(move || loop {
+                if wait_for_shutdown(&signal, MONITOR_WAIT_CHUNK) {
+                    return true;
+                }
+                if monitor_wait_is_pointless(&acquire_hue_runtime(&probe)) {
+                    return false;
+                }
+            })
+            .await
+        };
+        if !matches!(signalled, Ok(true)) {
+            return;
         }
 
         // Sender thread has exited — check if this is an intentional stop and,
@@ -283,59 +327,55 @@ pub(crate) fn spawn_reconnect_monitor(
             }
         };
 
-        // Register transient fault and get backoff delay.
-        let backoff_ms = {
-            let mut owner = acquire_hue_runtime(&runtime);
-            let result = register_transient_fault(
-                &mut owner,
-                "DTLS sender thread exited unexpectedly",
-                HueRuntimeTriggerSource::System,
-            );
-            owner.session_reconnect_total += 1;
-
-            if owner.state == HueRuntimeState::Failed {
-                // Retry budget exhausted (D-02).
-                info!("Reconnect monitor: retry budget exhausted, entering Failed state.");
-                return;
-            }
-
-            result.status.next_attempt_ms.unwrap_or(400)
-        };
-
-        // Wait for backoff.
-        info!(
-            "Reconnect monitor: waiting {}ms before reconnect attempt.",
-            backoff_ms
-        );
-        tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
-
-        // Check state again before attempting reconnect.
-        {
-            let owner = acquire_hue_runtime(&runtime);
-            if owner.user_override_pending
-                || matches!(
-                    owner.state,
-                    HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
-                )
-            {
-                return;
-            }
-        }
-
-        // Attempt restart using internal logic.
-        info!("Reconnect monitor: attempting stream restart.");
-        let restart_result = internal_restart_stream(&runtime, &request).await;
-
-        match restart_result {
-            Ok(true) => {
+        // Bounded by `register_transient_fault`, which owns the budget and
+        // exits the ladder through `Failed`.
+        let mut fault_detail = "DTLS sender thread exited unexpectedly".to_string();
+        loop {
+            let backoff_ms = {
                 let mut owner = acquire_hue_runtime(&runtime);
-                owner.session_reconnect_success += 1;
-                info!("Reconnect monitor: stream restarted successfully.");
-                // New monitor is spawned by the restart flow.
+                let result = register_transient_fault(
+                    &mut owner,
+                    &fault_detail,
+                    HueRuntimeTriggerSource::System,
+                );
+                owner.session_reconnect_total += 1;
+
+                if owner.state == HueRuntimeState::Failed {
+                    // Retry budget exhausted (D-02).
+                    info!("Reconnect monitor: retry budget exhausted, entering Failed state.");
+                    return;
+                }
+
+                result.status.next_attempt_ms.unwrap_or(400)
+            };
+
+            // Wait for backoff.
+            info!("Reconnect monitor: waiting {backoff_ms}ms before reconnect attempt.");
+            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+
+            // Check state again before attempting reconnect.
+            if monitor_wait_is_pointless(&acquire_hue_runtime(&runtime)) {
+                return;
             }
-            Ok(false) | Err(_) => {
-                info!("Reconnect monitor: restart failed.");
-                // The restart flow itself handles state transitions.
+
+            // Attempt restart using internal logic.
+            info!("Reconnect monitor: attempting stream restart.");
+            match internal_restart_stream(&runtime, &request).await {
+                RestartOutcome::Restarted => {
+                    let mut owner = acquire_hue_runtime(&runtime);
+                    owner.session_reconnect_success += 1;
+                    info!("Reconnect monitor: stream restarted successfully.");
+                    // New monitor is spawned by the restart flow.
+                    return;
+                }
+                RestartOutcome::Abandoned => {
+                    info!("Reconnect monitor: restart abandoned — user stop or terminal state.");
+                    return;
+                }
+                RestartOutcome::Retryable(detail) => {
+                    info!("Reconnect monitor: restart attempt failed ({detail}); re-arming.");
+                    fault_detail = detail;
+                }
             }
         }
     });
@@ -344,10 +384,13 @@ pub(crate) fn spawn_reconnect_monitor(
 /// Internal stream restart logic for the reconnect monitor.
 /// Replicates the core logic of restart_hue_stream but accepts
 /// Arc<Mutex<HueRuntimeOwner>> directly instead of Tauri State<>.
+///
+/// Fault registration belongs to the caller: this fn reports *why* an attempt
+/// ended and the monitor decides whether that spends a retry-budget slot.
 async fn internal_restart_stream(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     request: &StartHueStreamRequest,
-) -> Result<bool, String> {
+) -> RestartOutcome {
     use super::frame::HueColorUpdate;
 
     // 1. Extract current stream info + dedupe token, then clear state.
@@ -397,16 +440,13 @@ async fn internal_restart_stream(
     .await;
 
     if !readiness.readiness.ready {
-        let mut owner = acquire_hue_runtime(runtime);
-        let _ = register_transient_fault(
-            &mut owner,
-            &format!(
-                "Readiness check failed during reconnect: {}",
-                readiness.status.message
-            ),
-            HueRuntimeTriggerSource::System,
-        );
-        return Ok(false);
+        // Deliberately NOT relaxed for `ACTIVE_STREAMER` the way the health
+        // poll is: our own stream is already deactivated by this point, so a
+        // busy area means a foreign client owns it and we must not hijack.
+        return RestartOutcome::Retryable(format!(
+            "Readiness check failed during reconnect: {}",
+            readiness.status.message
+        ));
     }
 
     // 3. Set state to Starting.
@@ -415,7 +455,7 @@ async fn internal_restart_stream(
         if owner.user_override_pending
             || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
         {
-            return Ok(false);
+            return RestartOutcome::Abandoned;
         }
         owner.state = HueRuntimeState::Starting;
     }
@@ -443,20 +483,18 @@ async fn internal_restart_stream(
         let owner = acquire_hue_runtime(runtime);
         Arc::clone(&owner.packet_send_count)
     };
-    let (color_sender, uses_dtls, shutdown_signal, cipher_name, deactivate_token) =
+    // A panicked spawn must not be stored as a live context: its shutdown
+    // signal would never fire and the next monitor would wait on it forever.
+    let Ok((color_sender, uses_dtls, shutdown_signal, cipher_name, deactivate_token)) =
         tokio::task::spawn_blocking(move || {
             build_hue_sender_with_counter(&req, ch, meta_for_sender, packet_counter)
         })
         .await
-        .unwrap_or_else(|_| {
-            (
-                no_op_sender(),
-                false,
-                new_shutdown_signal(),
-                None,
-                DeactivateToken::new(),
-            )
-        });
+    else {
+        return RestartOutcome::Retryable(
+            "Sender spawn task panicked during reconnect".to_string(),
+        );
+    };
 
     // Suppress unused-import warning; HueColorUpdate is referenced indirectly
     // through HueColorSender's mpsc::SyncSender<HueColorUpdate> generic.
@@ -468,7 +506,7 @@ async fn internal_restart_stream(
         if owner.user_override_pending
             || matches!(owner.state, HueRuntimeState::Idle | HueRuntimeState::Failed)
         {
-            return Ok(false);
+            return RestartOutcome::Abandoned;
         }
 
         let stream_ctx = HueActiveStreamContext {
@@ -523,7 +561,7 @@ async fn internal_restart_stream(
     // Spawn new monitor for the new connection.
     spawn_reconnect_monitor(shutdown_signal, Arc::clone(runtime), request.clone());
 
-    Ok(true)
+    RestartOutcome::Restarted
 }
 
 // `make_result` is re-imported to silence "unused" warnings if some retry
@@ -717,6 +755,36 @@ mod tests {
             !owner.reconnect_in_progress,
             "Failed runtime must not claim a restart"
         );
+    }
+
+    /// F12: the monitor now blocks on the condvar instead of polling it, so
+    /// its bail-out predicate must not be wider than the claim it protects —
+    /// otherwise a wait would abandon a runtime that could still be healed.
+    #[test]
+    fn monitor_wait_bail_out_never_outruns_the_reconnect_claim() {
+        for state in [
+            HueRuntimeState::Idle,
+            HueRuntimeState::Stopping,
+            HueRuntimeState::Failed,
+            HueRuntimeState::Starting,
+            HueRuntimeState::Running,
+            HueRuntimeState::Reconnecting,
+        ] {
+            for user_override_pending in [false, true] {
+                let mut owner = HueRuntimeOwner {
+                    state: state.clone(),
+                    user_override_pending,
+                    ..HueRuntimeOwner::default()
+                };
+                let bails = monitor_wait_is_pointless(&owner);
+                let aborts = try_claim_reconnect(&mut owner) == ReconnectClaim::Abort;
+                assert!(
+                    !bails || aborts,
+                    "monitor abandons {state:?} (override={user_override_pending}) \
+                     but the claim would have proceeded"
+                );
+            }
+        }
     }
 
     /// Must-preserve (b): a user stop (`user_override_pending`) must win —

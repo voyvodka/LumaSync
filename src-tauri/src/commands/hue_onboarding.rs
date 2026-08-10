@@ -428,7 +428,7 @@ enum PairingTransportError {
 impl PairingTransportError {
     fn from_fault(fault: HueHttpFault) -> Self {
         match fault {
-            HueHttpFault::Transient { status: 429, .. } => Self::RateLimited,
+            HueHttpFault::RateLimited { .. } => Self::RateLimited,
             HueHttpFault::Transient { status, body } if (500..=599).contains(&status) => {
                 Self::BridgeBusy {
                     detail: format!("HTTP {status} — {body}"),
