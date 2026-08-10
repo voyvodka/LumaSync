@@ -1098,6 +1098,152 @@ for (const fn of REQUIRED_PREVIEW_COMMANDS) {
 }
 
 // ---------------------------------------------------------------------------
+// Lighting-mode status codes — derived Rust → TS parity. Only literal first
+// args count; the preview call sites pass a constant and belong to preview.ts.
+// ---------------------------------------------------------------------------
+const LIGHTING_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/lighting.ts");
+const RUST_LIGHTING_MODE_FILE = resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs");
+const lightingSource = readOrEmpty(LIGHTING_CONTRACT_FILE, "lighting");
+const rustLightingSource = readOrEmpty(RUST_LIGHTING_MODE_FILE, "rust lighting_mode");
+
+console.log("\n[ Lighting-mode status codes — Rust → lighting.ts parity ]");
+const rustLightingProduction = rustLightingSource.split(/\nmod tests\s*\{/)[0];
+const emittedLightingCodes = [
+  ...new Set(
+    [...rustLightingProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)]
+      .map((m) => m[1])
+  ),
+].sort();
+check(
+  emittedLightingCodes.length > 0,
+  `extracted ${emittedLightingCodes.length} command_status codes from lighting_mode.rs`,
+  "EXTRACTION FAILED: no command_status literals found in lighting_mode.rs"
+);
+for (const code of emittedLightingCodes) {
+  check(
+    lightingSource.includes(`"${code}"`),
+    `lighting status code "${code}" declared in lighting.ts`,
+    `UNDECLARED lighting status code "${code}" — Rust emits it but `
+      + `lighting.ts > LIGHTING_MODE_STATUS does not declare it`
+  );
+}
+
+// The two gate codes carry an extra behavioural contract (`mode` reports the
+// running mode, not the requested one), so they must stay separately addressable.
+check(
+  lightingSource.includes("LIGHTING_MODE_GATE_STATUS")
+    && lightingSource.includes("isLightingModeGateCode"),
+  "LIGHTING_MODE_GATE_STATUS + isLightingModeGateCode exported",
+  "MISSING LIGHTING_MODE_GATE_STATUS / isLightingModeGateCode in lighting.ts"
+);
+
+// ---------------------------------------------------------------------------
+// Runtime telemetry — derived Rust → TS field parity
+// ---------------------------------------------------------------------------
+const TELEMETRY_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/telemetry.ts");
+const RUST_TELEMETRY_FILE = resolve(ROOT, "src-tauri/src/commands/runtime_telemetry.rs");
+const telemetrySource = readOrEmpty(TELEMETRY_CONTRACT_FILE, "telemetry");
+const rustTelemetrySource = readOrEmpty(RUST_TELEMETRY_FILE, "rust runtime_telemetry");
+
+function rustStructFields(source, structName) {
+  const block = source.match(
+    new RegExp(`pub struct ${structName}\\s*\\{([\\s\\S]*?)\\n\\}`)
+  );
+  if (!block) return null;
+  return [...block[1].matchAll(/^\s*pub\s+([a-z0-9_]+)\s*:/gm)].map((m) =>
+    m[1].replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
+  );
+}
+
+console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
+for (const structName of [
+  "RuntimeTelemetrySnapshot",
+  "HueTelemetrySnapshot",
+  "FullTelemetrySnapshot",
+]) {
+  const fields = rustStructFields(rustTelemetrySource, structName);
+  if (!fields || fields.length === 0) {
+    fail(`EXTRACTION FAILED: no fields found on Rust struct "${structName}"`);
+    continue;
+  }
+  const tsBlock = telemetrySource.match(
+    new RegExp(`export interface ${structName}\\s*\\{([\\s\\S]*?)\\n\\}`)
+  );
+  if (!tsBlock) {
+    fail(`MISSING interface "${structName}" in telemetry.ts`);
+    continue;
+  }
+  for (const field of fields) {
+    check(
+      new RegExp(`^\\s*${field}\\??\\s*:`, "m").test(tsBlock[1]),
+      `${structName}.${field} declared in telemetry.ts`,
+      `MISSING ${structName}.${field} in telemetry.ts — Rust serializes it `
+        + `(#[serde(rename_all = "camelCase")]) but the contract drops it`
+    );
+  }
+}
+
+// Both semantics are invisible in the types: 0 means "no serial link", and
+// `linkConstrained` tracks material degradation, not the stricter send-clamp.
+console.log("\n[ Runtime telemetry — link-budget semantics ]");
+check(
+  telemetrySource.includes("LINK_MAX_FPS_ABSENT"),
+  "LINK_MAX_FPS_ABSENT sentinel exported (0 ≠ zero fps)",
+  "MISSING LINK_MAX_FPS_ABSENT in telemetry.ts — nothing stops a consumer "
+    + "rendering a Hue-only session as \"0 fps\""
+);
+const rustLinkThreshold = rustLightingSource.match(
+  /const\s+LINK_CONSTRAINED_FPS\s*:\s*f32\s*=\s*([0-9.]+)/
+);
+const tsLinkThreshold = telemetrySource.match(
+  /LINK_CONSTRAINED_FPS_THRESHOLD\s*=\s*([0-9.]+)/
+);
+check(
+  rustLinkThreshold !== null
+    && tsLinkThreshold !== null
+    && Number(rustLinkThreshold[1]) === Number(tsLinkThreshold[1]),
+  `link-constrained threshold matches Rust LINK_CONSTRAINED_FPS `
+    + `(${rustLinkThreshold ? rustLinkThreshold[1] : "?"})`,
+  `THRESHOLD DRIFT: Rust LINK_CONSTRAINED_FPS=${rustLinkThreshold ? rustLinkThreshold[1] : "?"} `
+    + `vs telemetry.ts LINK_CONSTRAINED_FPS_THRESHOLD=${tsLinkThreshold ? tsLinkThreshold[1] : "?"}`
+);
+
+// ---------------------------------------------------------------------------
+// USB VID/PID allowlist parity. `SUPPORTED_CONTROLLER_IDS` already mirrors the
+// Rust allowlist with no consumer and nothing asserting agreement until now.
+// ---------------------------------------------------------------------------
+console.log("\n[ USB VID/PID allowlist — Rust ↔ device.ts parity ]");
+const rustAllowlistBlock = rustHealthSource.match(
+  /SUPPORTED_USB_DEVICE_ALLOWLIST[^=]*=\s*&\[([\s\S]*?)\n\];/
+);
+const tsAllowlistBlock = deviceSource.match(
+  /SUPPORTED_CONTROLLER_IDS\s*=\s*\[([\s\S]*?)\n\]/
+);
+const rustVidPids = rustAllowlistBlock
+  ? [...rustAllowlistBlock[1].matchAll(/\(\s*0x([0-9A-Fa-f]{4})\s*,\s*0x([0-9A-Fa-f]{4})\s*\)/g)]
+      .map((m) => `${m[1]}:${m[2]}`.toUpperCase())
+  : [];
+const tsVidPids = tsAllowlistBlock
+  ? [...tsAllowlistBlock[1].matchAll(/"([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})"/g)]
+      .map((m) => `${m[1]}:${m[2]}`.toUpperCase())
+  : [];
+check(
+  rustVidPids.length > 0 && tsVidPids.length > 0,
+  `extracted ${rustVidPids.length} Rust / ${tsVidPids.length} TS allowlist entries`,
+  "EXTRACTION FAILED: could not read one or both VID/PID allowlists"
+);
+check(
+  rustVidPids.length === tsVidPids.length,
+  `allowlist length matches (${rustVidPids.length} entries)`,
+  `ALLOWLIST LENGTH DRIFT: Rust has ${rustVidPids.length}, device.ts has ${tsVidPids.length}`
+);
+check(
+  rustVidPids.join(",") === tsVidPids.join(","),
+  "allowlist entries match Rust SUPPORTED_USB_DEVICE_ALLOWLIST in order",
+  `ALLOWLIST DRIFT:\n     Rust: ${rustVidPids.join(" ")}\n     TS  : ${tsVidPids.join(" ")}`
+);
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n====================================`);
