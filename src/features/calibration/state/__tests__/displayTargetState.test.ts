@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { DisplayOverlayCommandResult } from "../../../../shared/contracts/display";
+import {
+  DISPLAY_OVERLAY_STATUS,
+  type DisplayOverlayCommandResult,
+  type DisplayOverlayStatusCode,
+} from "../../../../shared/contracts/display";
 import { createDisplayTargetState } from "../displayTargetState";
 
-function okResult(code = "OVERLAY_OPENED"): DisplayOverlayCommandResult {
+function okResult(
+  code: DisplayOverlayStatusCode = DISPLAY_OVERLAY_STATUS.OPENED,
+): DisplayOverlayCommandResult {
   return {
     ok: true,
     code,

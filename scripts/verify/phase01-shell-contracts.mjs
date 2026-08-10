@@ -1117,10 +1117,16 @@ const emittedLightingCodes = [
       .map((m) => m[1])
   ),
 ].sort();
+// Pinned, not `> 0`: the harvest sees string literals only, so hoisting a code
+// to a `const` (the shape preview.rs already uses) would silently drop it while
+// the other nine still matched. Bump this deliberately when a code is added.
+const EXPECTED_LIGHTING_CODE_COUNT = 10;
 check(
-  emittedLightingCodes.length > 0,
-  `extracted ${emittedLightingCodes.length} command_status codes from lighting_mode.rs`,
-  "EXTRACTION FAILED: no command_status literals found in lighting_mode.rs"
+  emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
+  `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_LIGHTING_CODE_COUNT} lighting codes, got `
+    + `${emittedLightingCodes.length} [${emittedLightingCodes.join(", ")}] — a code was added, `
+    + `removed, or refactored from a string literal into a constant (which this harvest cannot see)`
 );
 for (const code of emittedLightingCodes) {
   check(
@@ -1159,16 +1165,25 @@ function rustStructFields(source, structName) {
 }
 
 console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
-for (const structName of [
-  "RuntimeTelemetrySnapshot",
-  "HueTelemetrySnapshot",
-  "FullTelemetrySnapshot",
-]) {
+// Same degradation shape as the lighting harvest: a removed Rust field silently
+// stops being checked. Pin the count so the loop cannot quietly narrow.
+const EXPECTED_TELEMETRY_FIELD_COUNTS = {
+  RuntimeTelemetrySnapshot: 6,
+  HueTelemetrySnapshot: 11,
+  FullTelemetrySnapshot: 2,
+};
+for (const [structName, expectedCount] of Object.entries(EXPECTED_TELEMETRY_FIELD_COUNTS)) {
   const fields = rustStructFields(rustTelemetrySource, structName);
   if (!fields || fields.length === 0) {
     fail(`EXTRACTION FAILED: no fields found on Rust struct "${structName}"`);
     continue;
   }
+  check(
+    fields.length === expectedCount,
+    `${structName} harvested exactly ${expectedCount} fields`,
+    `HARVEST COUNT DRIFT: expected ${expectedCount} fields on ${structName}, got `
+      + `${fields.length} [${fields.join(", ")}] — update the pin deliberately`
+  );
   const tsBlock = telemetrySource.match(
     new RegExp(`export interface ${structName}\\s*\\{([\\s\\S]*?)\\n\\}`)
   );
@@ -1256,10 +1271,12 @@ const rustPortCodes = [
       .map((m) => m[1])
   ),
 ].sort();
+const EXPECTED_PORT_CODE_COUNT = 4;
 check(
-  rustPortCodes.length > 0,
-  `extracted ${rustPortCodes.length} PORT codes from device_connection.rs`,
-  "EXTRACTION FAILED: no PORT codes found in device_connection.rs"
+  rustPortCodes.length === EXPECTED_PORT_CODE_COUNT,
+  `harvested exactly ${EXPECTED_PORT_CODE_COUNT} PORT codes from device_connection.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_PORT_CODE_COUNT} PORT codes, got `
+    + `${rustPortCodes.length} [${rustPortCodes.join(", ")}] — update the pin deliberately`
 );
 for (const code of rustPortCodes) {
   check(
@@ -1325,11 +1342,23 @@ const contractDeclared = harvestCodes(
 
 const inBothTrees = [...rustEmitted].filter((c) => tsReferenced.has(c)).sort();
 const undeclaredInBoth = inBothTrees.filter((c) => !contractDeclared.has(c));
+// Floor the two harvests that only grow. NOT the intersection: replacing a raw
+// TS literal with an imported constant is the fix we want, and it removes that
+// code from `tsReferenced` — so the intersection shrinks as the tree improves.
+const MIN_RUST_EMITTED_CODES = 130;
+const MIN_CONTRACT_DECLARED_CODES = 120;
 check(
-  inBothTrees.length > 0,
-  `${inBothTrees.length} codes cross the wire (Rust emits, TS reads)`,
-  "EXTRACTION FAILED: no codes found in both trees"
+  rustEmitted.size >= MIN_RUST_EMITTED_CODES,
+  `harvested ${rustEmitted.size} Rust codes (floor ${MIN_RUST_EMITTED_CODES})`,
+  `HARVEST DEGRADED: only ${rustEmitted.size} Rust codes seen — the regex or the `
+    + `walk stopped matching; every check below is now weaker than it looks`
 );
+check(
+  contractDeclared.size >= MIN_CONTRACT_DECLARED_CODES,
+  `harvested ${contractDeclared.size} declared codes (floor ${MIN_CONTRACT_DECLARED_CODES})`,
+  `HARVEST DEGRADED: only ${contractDeclared.size} declared codes seen in contracts/`
+);
+note(`${inBothTrees.length} codes still cross the wire as raw TS literals`);
 for (const code of undeclaredInBoth) {
   fail(
     `BOTH-TREES UNDECLARED "${code}" — Rust emits it and TS reads it, but no `

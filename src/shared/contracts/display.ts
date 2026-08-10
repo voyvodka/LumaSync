@@ -48,6 +48,8 @@ export interface DisplayInfo {
   isPrimary: boolean;
 }
 
+/** Closed set — every `overlay_result` / `overlay_error_result` call in
+ * `calibration.rs`. Do not add a frontend-only code here. */
 export const DISPLAY_OVERLAY_STATUS = {
   OPENED: "OVERLAY_OPENED",
   CLOSED: "OVERLAY_CLOSED",
@@ -55,20 +57,24 @@ export const DISPLAY_OVERLAY_STATUS = {
   PREVIEW_SYNCED: "OVERLAY_PREVIEW_SYNCED",
   PREVIEW_SKIPPED: "OVERLAY_PREVIEW_SKIPPED",
   PREVIEW_SYNC_FAILED: "OVERLAY_PREVIEW_SYNC_FAILED",
-  /** Frontend-synthesised (`displayTargetState.ts`): no display to target, so no
-   * command was issued. The only member with no Rust producer. */
-  NO_DISPLAY: "OVERLAY_NO_DISPLAY",
 } as const;
 
 export type DisplayOverlayStatusCode =
   (typeof DISPLAY_OVERLAY_STATUS)[keyof typeof DISPLAY_OVERLAY_STATUS];
 
-/** `code` stays `string` rather than `DisplayOverlayStatusCode` — narrowing it is
- * a separate, compile-time-breaking change. That looseness is why the union
- * above drifted undeclared in the first place. */
+/** Frontend-synthesised: no display to target, so no command was issued. Kept
+ * out of {@link DISPLAY_OVERLAY_STATUS} so that union stays exactly the wire set. */
+export const OVERLAY_NO_DISPLAY = "OVERLAY_NO_DISPLAY" as const;
+
+/** What `DisplayTargetSnapshot.blockedCode` can hold: a wire code, or the
+ * frontend's own "there was nothing to open". */
+export type DisplayTargetBlockedCode =
+  | DisplayOverlayStatusCode
+  | typeof OVERLAY_NO_DISPLAY;
+
 export interface DisplayOverlayCommandResult {
   ok: boolean;
-  code: string;
+  code: DisplayOverlayStatusCode;
   message: string;
   reason?: string;
 }

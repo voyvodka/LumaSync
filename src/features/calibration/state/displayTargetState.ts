@@ -1,5 +1,6 @@
 import {
   DISPLAY_OVERLAY_STATUS,
+  OVERLAY_NO_DISPLAY,
   type DisplayId,
   type DisplayInfo,
   type DisplayOverlayCommandResult,
@@ -121,7 +122,7 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
           ...snapshot,
           activeDisplayId: null,
           blocked: true,
-          blockedCode: DISPLAY_OVERLAY_STATUS.NO_DISPLAY,
+          blockedCode: OVERLAY_NO_DISPLAY,
           blockedReason: "No display available for calibration overlay.",
           isSwitching: false,
         };
