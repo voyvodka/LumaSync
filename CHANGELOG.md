@@ -7,6 +7,29 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.4] — 2026-08-10
+
+### Fixed
+
+- Hue Bridge Pro can now be paired. The bridge serves its local API over HTTPS only, so LumaSync's pairing, IP verification, and credential-validation calls — which were still on plain HTTP — never reached it, and the failure surfaced as a generic "Pairing failed" on a bridge that discovery had found without trouble. These calls now try HTTPS first and fall back to HTTP for older bridges, which are unaffected.
+- A rejected link button is no longer reported as "Auth error — your credentials have expired". Pairing without pressing the bridge button now shows the awaiting-link-button state it always should have.
+- Room-map template buttons and the calibration save button expose proper accessible names and busy state to screen readers.
+
+### Changed
+
+- Room-map drag handling collapses a redundant find+map pass into a single traversal.
+
+### Security
+
+- Resolved RUSTSEC-2026-0235 (`rkyv` out-of-bounds read): the advisory reached LumaSync through an unused optional dependency of `tauri-plugin-log`, whose 2.9 release drops that chain entirely. The `cargo audit` CI gate is green again.
+- Fixed an SSRF in the Hue stream-readiness check.
+
+### Internal
+
+- Release pipeline migrated to `tauri-action` v1.
+- Branch protection now requires the CI checks that actually run; the previously required `typecheck` context no longer existed, so every pull request was permanently blocked.
+- Dependencies refreshed across all three ecosystems (Rust, frontend, GitHub Actions), including TypeScript 6 → 7 for the build toolchain.
+
 ## [1.5.3] — 2026-06-25
 
 ### Added
