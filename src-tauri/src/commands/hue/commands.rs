@@ -31,10 +31,10 @@ use super::sender::{
     settled_shutdown_signal, signal_shutdown_complete, wait_for_shutdown, DeactivateToken,
 };
 use super::state_store::{
-    acquire_hue_runtime, channels_to_info_via_owner, flush_pending_solid_color, make_result,
-    status_with, HueRuntimeActionHint, HueRuntimeCommandResult, HueRuntimeGateEvidence,
-    HueRuntimeState, HueRuntimeStateStore, HueRuntimeStatus, HueRuntimeTriggerSource,
-    HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
+    acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
+    make_result, queue_solid_color, status_with, HueRuntimeActionHint, HueRuntimeCommandResult,
+    HueRuntimeGateEvidence, HueRuntimeState, HueRuntimeStateStore, HueRuntimeStatus,
+    HueRuntimeTriggerSource, HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -548,10 +548,19 @@ pub fn set_hue_solid_color(
         .unwrap_or(HueRuntimeTriggerSource::ModeControl);
 
     let brightness = request.brightness.unwrap_or(1.0).clamp(0.0, 1.0);
+    let snapshot = HueSolidColorSnapshot {
+        r: request.r,
+        g: request.g,
+        b: request.b,
+        brightness,
+    };
 
     // Fast path: active stream -- use the pre-warmed background sender.
     if let Some(active_stream) = owner.active_stream.as_ref() {
         if active_stream.channels.is_empty() {
+            // Queue rather than drop: a Revalidate + restart resolves the
+            // channel mapping and the flush replays this color.
+            queue_solid_color(&mut owner, snapshot);
             owner.last_status = status_with(
                 HueRuntimeState::Running,
                 "HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS",
@@ -566,12 +575,7 @@ pub fn set_hue_solid_color(
         active_stream
             .color_sender
             .try_send(request.r, request.g, request.b, brightness);
-        owner.last_solid_color = Some(HueSolidColorSnapshot {
-            r: request.r,
-            g: request.g,
-            b: request.b,
-            brightness,
-        });
+        commit_solid_color(&mut owner, snapshot);
         owner.last_status = status_with(
             HueRuntimeState::Running,
             "HUE_COLOR_APPLIED",
@@ -590,12 +594,7 @@ pub fn set_hue_solid_color(
             persistent
                 .sender
                 .try_send(request.r, request.g, request.b, brightness);
-            owner.last_solid_color = Some(HueSolidColorSnapshot {
-                r: request.r,
-                g: request.g,
-                b: request.b,
-                brightness,
-            });
+            commit_solid_color(&mut owner, snapshot);
             owner.last_status = status_with(
                 owner.state.clone(),
                 "HUE_COLOR_APPLIED",
@@ -607,20 +606,17 @@ pub fn set_hue_solid_color(
         }
     }
 
-    // Stream context not ready — differentiate between "starting" and truly idle.
+    // No sender could take the color. Record it in EVERY branch so the next
+    // usable stream context replays it — a dropped request is invisible.
+    let state_for_status = owner.state.clone();
+    queue_solid_color(&mut owner, snapshot);
+
     if matches!(
-        owner.state,
+        state_for_status,
         HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
     ) {
-        // Stream is starting but context not ready yet — record the color for later flush
-        owner.last_solid_color = Some(HueSolidColorSnapshot {
-            r: request.r,
-            g: request.g,
-            b: request.b,
-            brightness,
-        });
         owner.last_status = status_with(
-            owner.state.clone(),
+            state_for_status,
             "HUE_COLOR_QUEUED_PENDING_STREAM",
             "Color queued — stream context not ready yet, will be flushed when stream starts.",
             None,
@@ -630,10 +626,11 @@ pub fn set_hue_solid_color(
         owner.last_status = status_with(
             HueRuntimeState::Idle,
             "HUE_COLOR_APPLY_SKIPPED",
-            "Hue color apply skipped because stream context is not active.",
+            "Hue color not applied — the runtime is not streaming. Color is queued and will be sent when the stream comes back.",
             Some("Start Hue runtime before sending color updates.".to_string()),
             trigger,
         );
+        owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
     }
     Ok(make_result(&owner))
 }

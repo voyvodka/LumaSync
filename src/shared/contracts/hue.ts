@@ -276,6 +276,31 @@ export const HUE_RUNTIME_STATUS = {
 export type HueRuntimeStatusCode =
   (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
 
+/**
+ * `set_hue_solid_color` codes. Only `APPLIED` reached a sender; the rest are
+ * queued for replay by `flush_pending_solid_color` and must be surfaced.
+ */
+export const HUE_SOLID_COLOR_STATUS = {
+  APPLIED: "HUE_COLOR_APPLIED",
+  QUEUED_PENDING_STREAM: "HUE_COLOR_QUEUED_PENDING_STREAM",
+  APPLY_SKIPPED: "HUE_COLOR_APPLY_SKIPPED",
+  APPLY_SKIPPED_NO_LIGHTS: "HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS",
+} as const;
+
+export type HueSolidColorStatusCode =
+  (typeof HUE_SOLID_COLOR_STATUS)[keyof typeof HUE_SOLID_COLOR_STATUS];
+
+/**
+ * True when the bridge did NOT receive the colour — the picker swatch and the
+ * bulbs disagree, so the caller must surface a notice.
+ */
+export function isHueSolidColorUnapplied(code: string): boolean {
+  return (
+    code === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED ||
+    code === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
+  );
+}
+
 export const HUE_RUNTIME_STATUS_FAMILY = {
   TRANSIENT: "TRANSIENT_*",
   AUTH_INVALID: "AUTH_INVALID_*",

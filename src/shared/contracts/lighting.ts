@@ -47,3 +47,20 @@ export const LIGHTING_SMOOTHING_PRESET_COEFFICIENTS: Readonly<
 
 /** Default preset applied when `ShellState.lightingIntensityPreset` is absent. */
 export const DEFAULT_LIGHTING_SMOOTHING_PRESET: LightingSmoothingPreset = "moderate";
+
+// ---------------------------------------------------------------------------
+// Lighting-mode command status codes
+// ---------------------------------------------------------------------------
+
+/**
+ * `set_lighting_mode` codes the frontend discriminates on. `..._HUE_OUTPUT_SKIPPED`
+ * replaces the old `SOLID_MODE_APPLIED` lie when the Hue leg sent nothing.
+ */
+export const LIGHTING_MODE_STATUS = {
+  SOLID_MODE_APPLIED: "SOLID_MODE_APPLIED",
+  SOLID_MODE_HUE_OUTPUT_SKIPPED: "SOLID_MODE_HUE_OUTPUT_SKIPPED",
+  SOLID_MODE_APPLY_FAILED: "SOLID_MODE_APPLY_FAILED",
+} as const;
+
+export type LightingModeStatusCode =
+  (typeof LIGHTING_MODE_STATUS)[keyof typeof LIGHTING_MODE_STATUS];

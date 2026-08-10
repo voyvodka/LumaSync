@@ -39,6 +39,7 @@ vi.mock("../features/tray/trayController", () => ({
   listenTrayLightsOff: () => Promise.resolve(() => {}),
   listenTrayResumeLastMode: () => Promise.resolve(() => {}),
   listenTraySolidColor: () => Promise.resolve(() => {}),
+  listenTrayShowLedPreview: () => Promise.resolve(() => {}),
   listenStartupToggle: () => Promise.resolve(() => {}),
   updateTrayLabels: () => Promise.resolve(),
 }));
@@ -1132,4 +1133,117 @@ describe("App mode orchestration", () => {
       expect(screen.getByTestId("output-targets").textContent).toBe("usb");
     },
   );
+  // ---------------------------------------------------------------------
+  // Hue health reconciler — the one-way strip regression.
+  //
+  // The poll used to `return` on the first Failed/Idle reading, so "hue"
+  // left `activeOutputTargets` permanently. In a Hue-only Solid setup that
+  // made every subsequent colour change a no-op: neither the USB branch nor
+  // the Hue branch of the quick-adjustment path fired, while the swatch and
+  // the persisted state still moved.
+  // ---------------------------------------------------------------------
+  describe("Hue health reconciler", () => {
+    const hueOnlySolidShellState = {
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: { kind: "solid", solid: { r: 1, g: 2, b: 3, brightness: 0.5 } },
+      lastOutputTargets: ["hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    };
+
+    const deadStatus = {
+      active: false,
+      lastSolidColor: null,
+      status: { state: "Idle", code: "HUE_STREAM_IDLE", message: "Hue runtime is idle.", details: null },
+    };
+    const liveStatus = {
+      active: true,
+      lastSolidColor: null,
+      status: {
+        state: "Running",
+        code: "HUE_STREAM_RUNNING_DTLS",
+        message: "Hue entertainment stream active via DTLS.",
+        details: null,
+      },
+    };
+
+    it("keeps pushing Solid colour changes to Hue after the poll strips the target", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      loadShellStateMock.mockResolvedValue(hueOnlySolidShellState);
+      getHueStreamStatusMock.mockResolvedValue(deadStatus);
+      setHueSolidColorMock.mockResolvedValue({
+        active: false,
+        status: { state: "Idle", code: "HUE_COLOR_APPLY_SKIPPED", message: "queued", details: null },
+      });
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(
+          warnSpy.mock.calls.some((call) =>
+            String(call[0]).includes('Removing "hue" from active targets'),
+          ),
+        ).toBe(true);
+      });
+
+      setHueSolidColorMock.mockClear();
+      await act(async () => {
+        screen.getByRole("button", { name: "set-solid" }).click();
+      });
+
+      expect(setHueSolidColorMock).toHaveBeenCalledWith(
+        expect.objectContaining({ r: 10, g: 20, b: 30 }),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("restores \"hue\" as an active target once the backend reports a live stream", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+      try {
+        loadShellStateMock.mockResolvedValue(hueOnlySolidShellState);
+        getHueStreamStatusMock.mockResolvedValue(deadStatus);
+        setHueSolidColorMock.mockResolvedValue({
+          active: false,
+          status: { state: "Idle", code: "HUE_COLOR_APPLY_SKIPPED", message: "queued", details: null },
+        });
+
+        render(<App />);
+
+        await waitFor(() => {
+          expect(
+            warnSpy.mock.calls.some((call) =>
+              String(call[0]).includes('Removing "hue" from active targets'),
+            ),
+          ).toBe(true);
+        });
+
+        getHueStreamStatusMock.mockResolvedValue(liveStatus);
+        setLightingModeMock.mockClear();
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(20_000);
+        });
+
+        await waitFor(() => {
+          expect(
+            infoSpy.mock.calls.some((call) => String(call[0]).includes('Restoring "hue"')),
+          ).toBe(true);
+        });
+        // The running worker captured hue_output=None while the stream was
+        // down; recovery must force a re-apply so it picks up the live context.
+        expect(setLightingModeMock).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: "solid", targets: ["hue"] }),
+        );
+      } finally {
+        warnSpy.mockRestore();
+        infoSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
 });

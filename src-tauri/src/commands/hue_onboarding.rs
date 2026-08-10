@@ -1,6 +1,6 @@
 use std::{net::Ipv4Addr, str::FromStr, time::Duration};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -628,8 +628,17 @@ pub async fn check_hue_stream_readiness(
             }
 
             let ready = reasons.is_empty();
+            let only_active_streamer =
+                reasons.len() == 1 && reasons[0] == "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
             if ready {
                 info!("Hue stream readiness gate passed for area {area_id}");
+            } else if only_active_streamer {
+                // Expected every ~5 s on the health poll: the active streamer is
+                // usually us. `get_hue_stream_status` relaxes the gate for that
+                // case, so logging it at info level was pure noise.
+                debug!(
+                    "Hue stream readiness gate blocked by an active streamer for area {area_id}"
+                );
             } else {
                 info!("Hue stream readiness gate failed for area {area_id}: {reasons:?}");
             }

@@ -40,9 +40,9 @@ use super::sender::{
     new_shutdown_signal, no_op_sender, DeactivateToken, HueLightMetadata, ShutdownSignal,
 };
 use super::state_store::{
-    acquire_hue_runtime, make_result, status_with, HueActiveStreamContext, HuePersistentSender,
-    HueRuntimeActionHint, HueRuntimeOwner, HueRuntimeState, HueRuntimeTriggerSource,
-    StartHueStreamRequest,
+    acquire_hue_runtime, flush_pending_solid_color, make_result, status_with,
+    HueActiveStreamContext, HuePersistentSender, HueRuntimeActionHint, HueRuntimeOwner,
+    HueRuntimeState, HueRuntimeTriggerSource, StartHueStreamRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -517,6 +517,7 @@ async fn internal_restart_stream(
                 HueRuntimeTriggerSource::System,
             );
         }
+        flush_pending_solid_color(&mut owner);
     }
 
     // Spawn new monitor for the new connection.
