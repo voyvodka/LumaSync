@@ -17,7 +17,11 @@
 import { fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DRAG_COMMIT_MIN_INTERVAL_MS, HsvColorPicker } from "../HsvColorPicker";
+import {
+  DRAG_COMMIT_MIN_INTERVAL_MS,
+  HsvColorPicker,
+  sanitizeHexInput,
+} from "../HsvColorPicker";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -146,5 +150,113 @@ describe("HsvColorPicker drag throttle", () => {
     // Keyboard nudges are deliberate user actions — each one fires onChange
     // synchronously. No throttle queue.
     expect(onChange).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("sanitizeHexInput", () => {
+  it("caps at six digits", () => {
+    expect(sanitizeHexInput("1A2B3C4D5E")).toBe("1A2B3C");
+  });
+
+  it("drops non-hex characters", () => {
+    expect(sanitizeHexInput("zz12gg34xx56")).toBe("123456");
+  });
+
+  it("strips a leading # and surrounding whitespace", () => {
+    expect(sanitizeHexInput("  #1a2b3c  ")).toBe("1A2B3C");
+  });
+
+  it("filters before capping so a #-prefixed value keeps all six digits", () => {
+    expect(sanitizeHexInput("#1A2B3C")).toBe("1A2B3C");
+  });
+
+  it("returns an empty string for input with no hex characters", () => {
+    expect(sanitizeHexInput("#!! zz")).toBe("");
+  });
+});
+
+describe("HsvColorPicker hex input", () => {
+  function renderPicker(onChange = vi.fn()) {
+    const utils = render(
+      <HsvColorPicker value="#ffffff" onChange={onChange} hideRecent />,
+    );
+    const input = utils.container.querySelector("input[type='text']") as HTMLInputElement;
+    expect(input).toBeTruthy();
+    return { ...utils, input, onChange };
+  }
+
+  it("renders the draft without a # — the prefix is static chrome", () => {
+    const { input } = renderPicker();
+    expect(input.value).toBe("FFFFFF");
+    expect(input.maxLength).toBe(6);
+  });
+
+  it("caps typed input at six hex digits", () => {
+    const { input } = renderPicker();
+    fireEvent.change(input, { target: { value: "1A2B3C4D5E" } });
+    expect(input.value).toBe("1A2B3C");
+  });
+
+  it("never shows a non-hex keystroke in the field", () => {
+    const { input } = renderPicker();
+    fireEvent.change(input, { target: { value: "FFzz!!" } });
+    expect(input.value).toBe("FF");
+  });
+
+  it("sanitises a pasted #-prefixed value over the whole selection", () => {
+    const { input } = renderPicker();
+    input.setSelectionRange(0, input.value.length);
+    fireEvent.paste(input, { clipboardData: { getData: () => "#1A2B3C" } });
+    expect(input.value).toBe("1A2B3C");
+  });
+
+  it("sanitises a pasted value padded with whitespace", () => {
+    const { input } = renderPicker();
+    input.setSelectionRange(0, input.value.length);
+    fireEvent.paste(input, { clipboardData: { getData: () => "  #1a2b3c  " } });
+    expect(input.value).toBe("1A2B3C");
+  });
+
+  it("truncates an over-long paste to six digits", () => {
+    const { input } = renderPicker();
+    input.setSelectionRange(0, input.value.length);
+    fireEvent.paste(input, { clipboardData: { getData: () => "1A2B3C4D5E6F" } });
+    expect(input.value).toBe("1A2B3C");
+  });
+
+  it("commits a complete draft on Enter", () => {
+    const { input, onChange } = renderPicker();
+    fireEvent.change(input, { target: { value: "1a2b3c" } });
+    onChange.mockClear();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledWith("#1a2b3c");
+  });
+
+  it("resets the draft on Escape without committing", () => {
+    const { input, onChange } = renderPicker();
+    fireEvent.change(input, { target: { value: "1a2b3c" } });
+    onChange.mockClear();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("FFFFFF");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("reverts an incomplete draft on blur without committing", () => {
+    const { input, onChange } = renderPicker();
+    fireEvent.change(input, { target: { value: "1a2" } });
+    expect(input.value).toBe("1A2");
+    onChange.mockClear();
+    fireEvent.blur(input);
+    expect(input.value).toBe("FFFFFF");
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("marks an incomplete draft aria-invalid and a complete one valid", () => {
+    const { input } = renderPicker();
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    fireEvent.change(input, { target: { value: "1a2" } });
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(input, { target: { value: "1a2b3c" } });
+    expect(input.getAttribute("aria-invalid")).toBe("false");
   });
 });

@@ -8,8 +8,9 @@
  *     base hue.
  *   - Inner saturation/value square: drag the handle inside to pick
  *     S and V at the chosen hue.
- *   - Hex text field: bidirectional sync with the picker; rejects
- *     invalid hex strings on commit.
+ *   - Hex text field: bidirectional sync with the picker; the `#` is a
+ *     static prefix and the input itself only ever holds up to six
+ *     uppercase hex digits (see `sanitizeHexInput`).
  *   - Recent colors strip: persists the last 8 distinct hex values to
  *     `localStorage` under `lm-recent-colors`.
  *
@@ -21,7 +22,9 @@
  * A11y:
  *   - Both handles are `role="slider"` with `aria-valuemin/max/now` and
  *     a localized `aria-label`.
- *   - The hex input is a normal text input (announces type-to-edit).
+ *   - The hex input is a normal text input (announces type-to-edit) and
+ *     carries `aria-invalid` whenever the draft is not yet six digits,
+ *     so the "this will not commit" state is not colour-only.
  *   - Tap target floor: ≥ 32 px on every interactive surface.
  *   - Reduced-motion: no animations are used; only static SVG transforms.
  *   - Forced-colors: handles fall back to `CanvasText` outlines so the
@@ -56,6 +59,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -90,6 +94,14 @@ function hexPair(value: number): string {
 
 export function rgbToHex({ r, g, b }: Rgb): string {
   return `#${hexPair(r)}${hexPair(g)}${hexPair(b)}`;
+}
+
+/** Digits the hex field accepts — `#` lives outside the input. */
+export const HEX_DIGITS = 6;
+
+/** Filter before capping, so `#1A2B3C` keeps six digits instead of losing one to the `#`. */
+export function sanitizeHexInput(raw: string): string {
+  return raw.replace(/[^0-9a-fA-F]/g, "").slice(0, HEX_DIGITS).toUpperCase();
 }
 
 export function parseHex(value: string): Rgb | null {
@@ -229,6 +241,7 @@ export function HsvColorPicker({
   compact = false,
 }: HsvColorPickerProps) {
   const { t } = useTranslation("common");
+  const hexInputId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);
   const squareRef = useRef<SVGRectElement>(null);
@@ -251,8 +264,8 @@ export function HsvColorPicker({
     }
   }, [parsedHsv]);
 
-  const [hexDraft, setHexDraft] = useState<string>(value.toUpperCase());
-  useEffect(() => setHexDraft(value.toUpperCase()), [value]);
+  const [hexDraft, setHexDraft] = useState<string>(() => sanitizeHexInput(value));
+  useEffect(() => setHexDraft(sanitizeHexInput(value)), [value]);
 
   const [recent, setRecent] = useState<string[]>(() => loadRecent());
 
@@ -309,7 +322,7 @@ export function HsvColorPicker({
     const hex = rgbToHex(rgb);
     lastParsedHex.current = hex.toLowerCase();
     setHsv(next);
-    setHexDraft(hex.toUpperCase());
+    setHexDraft(sanitizeHexInput(hex));
     pendingCommitRef.current = { hex, hsv: next };
 
     const now = Date.now();
@@ -334,7 +347,7 @@ export function HsvColorPicker({
     const hex = rgbToHex(rgb);
     lastParsedHex.current = hex.toLowerCase();
     setHsv(next);
-    setHexDraft(hex.toUpperCase());
+    setHexDraft(sanitizeHexInput(hex));
 
     if (dispatchTimerRef.current !== null) {
       window.clearTimeout(dispatchTimerRef.current);
@@ -489,13 +502,13 @@ export function HsvColorPicker({
     const rgb = parseHex(hexDraft);
     if (!rgb) {
       // Reset visible draft to last good value.
-      setHexDraft(value.toUpperCase());
+      setHexDraft(sanitizeHexInput(value));
       return;
     }
     const hex = rgbToHex(rgb);
     lastParsedHex.current = hex.toLowerCase();
     setHsv(rgbToHsv(rgb));
-    setHexDraft(hex.toUpperCase());
+    setHexDraft(sanitizeHexInput(hex));
     pushRecent(hex);
     if (dispatchTimerRef.current !== null) {
       window.clearTimeout(dispatchTimerRef.current);
@@ -505,6 +518,20 @@ export function HsvColorPicker({
     lastDispatchAtRef.current = Date.now();
     onChangeRef.current(hex);
   }, [hexDraft, value, pushRecent]);
+
+  // `maxLength` would truncate a pasted `#1A2B3C` (or a whitespace-padded one)
+  // before the sanitiser ever saw it, so paste is merged by hand instead.
+  const handleHexPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = e.clipboardData?.getData("text") ?? "";
+    if (!pasted) return;
+    e.preventDefault();
+    const input = e.currentTarget;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    setHexDraft(sanitizeHexInput(input.value.slice(0, start) + pasted + input.value.slice(end)));
+  }, []);
+
+  const hexDraftComplete = hexDraft.length === HEX_DIGITS;
 
   // ── Compute handle positions ──────────────────────────────────────────
   const ringHandleAngleRad = (hsv.h * Math.PI) / 180;
@@ -677,39 +704,64 @@ export function HsvColorPicker({
       {/* Hex input — single line, tighter in compact so the row fits
           the 160 px picker frame without wrapping the label. */}
       {!hideHex && (
-        <label className="flex items-center gap-2">
-          <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+        <div className="flex items-center gap-2">
+          {/* `htmlFor` rather than a wrapping label: the static `#` must not
+              leak into the input's accessible name. */}
+          <label
+            htmlFor={hexInputId}
+            className="text-[10px] uppercase tracking-wide text-[color:var(--lm-ink-dim)]"
+          >
             {t("ui.colorPicker.hexLabel")}
-          </span>
-          <input
-            type="text"
-            value={hexDraft}
-            disabled={disabled}
-            spellCheck={false}
+          </label>
+          <span
             className={[
-              "flex-1 rounded border border-zinc-700 bg-transparent [font-family:var(--lm-mono)] text-zinc-100 focus:border-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
+              "flex flex-1 items-center gap-0.5 rounded border border-[color:var(--lm-line-2)] [font-family:var(--lm-mono)]",
+              "focus-within:border-[color:var(--lm-amber)]",
+              "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[var(--lm-amber)]/60",
+              "forced-colors:border-[color:CanvasText]",
               compact ? "min-w-0 px-1.5 py-0.5 text-[10.5px]" : "max-w-[120px] px-2 py-1 text-[11px]",
             ].join(" ")}
-            onChange={(e) => setHexDraft(e.target.value)}
-            onBlur={commitHexDraft}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commitHexDraft();
-              }
-              if (e.key === "Escape") {
-                setHexDraft(value.toUpperCase());
-              }
-            }}
-          />
-        </label>
+          >
+            <span aria-hidden="true" className="select-none text-[color:var(--lm-ink-faint)]">
+              #
+            </span>
+            <input
+              id={hexInputId}
+              type="text"
+              value={hexDraft}
+              disabled={disabled}
+              spellCheck={false}
+              autoComplete="off"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              inputMode="text"
+              maxLength={HEX_DIGITS}
+              pattern="[0-9A-Fa-f]{6}"
+              placeholder={t("ui.colorPicker.hexPlaceholder")}
+              aria-invalid={!hexDraftComplete}
+              className="w-full min-w-0 flex-1 border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] text-[color:var(--lm-ink)] focus:outline-none"
+              onChange={(e) => setHexDraft(sanitizeHexInput(e.target.value))}
+              onPaste={handleHexPaste}
+              onBlur={commitHexDraft}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitHexDraft();
+                }
+                if (e.key === "Escape") {
+                  setHexDraft(sanitizeHexInput(value));
+                }
+              }}
+            />
+          </span>
+        </div>
       )}
 
       {/* Recent colors — horizontal scroll in compact (single row, no
           vertical bloat), free-wrap in full mode where space is plenty. */}
       {!hideRecent && recent.length > 0 && (
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+          <span className="text-[10px] uppercase tracking-wide text-[color:var(--lm-ink-dim)]">
             {t("ui.colorPicker.recentColors")}
           </span>
           <div
@@ -729,7 +781,7 @@ export function HsvColorPicker({
                 aria-label={t("ui.colorPicker.recentItemAriaLabel", { hex })}
                 title={hex.toUpperCase()}
                 className={[
-                  "shrink-0 rounded border border-zinc-700 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60",
+                  "shrink-0 rounded border border-[color:var(--lm-line-2)] transition-transform hover:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60",
                   compact ? "h-5 w-5" : "h-6 w-6",
                 ].join(" ")}
                 style={{ background: hex }}
@@ -737,7 +789,7 @@ export function HsvColorPicker({
                   const rgb = parseHex(hex);
                   if (rgb) {
                     setHsv(rgbToHsv(rgb));
-                    setHexDraft(hex.toUpperCase());
+                    setHexDraft(sanitizeHexInput(hex));
                     if (dispatchTimerRef.current !== null) {
                       window.clearTimeout(dispatchTimerRef.current);
                       dispatchTimerRef.current = null;
