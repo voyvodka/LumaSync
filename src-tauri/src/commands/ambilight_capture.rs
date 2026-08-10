@@ -274,6 +274,12 @@ mod platform {
             GraphicsCaptureApiError::GraphicsCaptureApiError(_) => {
                 "AMBILIGHT_CAPTURE_SESSION_START_FAILED"
             }
+            GraphicsCaptureApiError::FailedToRunMessageLoop => {
+                "AMBILIGHT_CAPTURE_MESSAGE_LOOP_FAILED"
+            }
+            GraphicsCaptureApiError::FailedToStartCaptureThread => {
+                "AMBILIGHT_CAPTURE_THREAD_START_FAILED"
+            }
             GraphicsCaptureApiError::NewHandlerError(code)
             | GraphicsCaptureApiError::FrameHandlerError(code) => code,
         };
