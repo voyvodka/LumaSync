@@ -855,13 +855,18 @@ pub(crate) async fn fetch_area_channels(
         rid: &str,
     ) -> Result<Value, String> {
         let endpoint = format!("https://{bridge_ip}/clip/v2/resource/{rtype}/{rid}");
+        // Same classifier bypass the outer `fetch_area_channels` GET had: bare
+        // `error_for_status` collapses a Hue 403 into a generic status error,
+        // so an expired application key can never promote to AuthInvalid.
         let response = client
             .get(endpoint)
             .header("hue-application-key", username)
             .send()
             .await
-            .and_then(|r| r.error_for_status())
             .map_err(|error| error.to_string())?;
+        let response = classify_hue_response(response)
+            .await
+            .map_err(|fault| fault.to_string())?;
         let payload = response.text().await.map_err(|error| error.to_string())?;
         serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
     }
@@ -1318,13 +1323,17 @@ async fn fetch_light_metadata_with_client(
     }
 
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
+    // Classified, not `error_for_status`-ed, so an expired key is named as such
+    // rather than surfacing as a bare 403. Fail-soft contract is unchanged.
     let response = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
         .await
-        .and_then(|r| r.error_for_status())
         .map_err(|error| error.to_string())?;
+    let response = classify_hue_response(response)
+        .await
+        .map_err(|fault| fault.to_string())?;
     let body = response.text().await.map_err(|error| error.to_string())?;
     let value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
     parse_light_metadata(light_id, &value).ok_or_else(|| {
