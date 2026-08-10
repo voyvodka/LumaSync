@@ -1,0 +1,35 @@
+# Full-tree license gate. `dependency-review` only sees dependencies that CHANGE
+# in a PR and silently passes crates whose license string it cannot parse — how
+# unescaper's GPL arm went unnoticed. cargo-deny parses all of Cargo.lock.
+
+[licenses]
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  # Root CA bundle (webpki-root-certs via reqwest). Permissive data licence,
+  # no copyleft — the deny-list check never saw it because it is not GPL-shaped.
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"
+
+[advisories]
+# `cargo audit` already owns the advisory gate in ci.yml with its own ignore
+# list; duplicating it here would mean two places to keep in sync.
+ignore = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

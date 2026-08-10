@@ -1,0 +1,68 @@
+name: License Scan
+
+# Weekly rather than per-PR: `dependency-review` already gates changed
+# dependencies on every PR. This is the full-tree backstop for what that check
+# structurally cannot see.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src-tauri/Cargo.lock"
+      - "src-tauri/deny.toml"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/license-scan.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo:
+    name: Cargo licenses (full tree)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Check licenses
+        working-directory: src-tauri
+        run: cargo deny check licenses
+
+  npm:
+    name: npm licenses (full tree)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check licenses
+        run: |
+          # OFL-1.1 covers the bundled IBM Plex fonts — a font licence, not an
+          # application one; it never reaches the compiled bundle's terms.
+          pnpm dlx license-checker-rseidelsohn \
+            --production \
+            --onlyAllow "MIT;MIT-0;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;BlueOak-1.0.0;CC0-1.0;Unlicense;Python-2.0;OFL-1.1" \
+            --excludePrivatePackages
