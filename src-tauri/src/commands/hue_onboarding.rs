@@ -133,7 +133,7 @@ pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
 /// Returned `Result` mirrors the previous `outcome` variable so the
 /// merge step can preserve the cloud-only status code on the empty path.
 async fn run_cloud_discovery() -> Result<HueDiscoveryResponse, String> {
-    let client = hue_http_client().map_err(|e| format!("CLIENT_INIT: {e}"))?;
+    let client = hue_cloud_http_client().map_err(|e| format!("CLIENT_INIT: {e}"))?;
     let response = client
         .get("https://discovery.meethue.com/")
         .send()
@@ -272,7 +272,7 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
         }
     };
 
-    let outcome = match send_clip_v1(&client, &bridge_ip, "/api/config", |client, url| {
+    let outcome = match send_clip_v1(&client, &bridge_ip, "/api/config", true, |client, url| {
         client.get(url)
     })
     .await
@@ -328,7 +328,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
         "generateclientkey": true,
     });
     let outcome: Result<String, PairingTransportError> =
-        match send_clip_v1(&client, &bridge_ip, "/api", |client, url| {
+        match send_clip_v1(&client, &bridge_ip, "/api", false, |client, url| {
             client.post(url).json(&body)
         })
         .await
@@ -471,14 +471,31 @@ pub async fn validate_hue_credentials(
     };
 
     let path = format!("/api/{username}/config");
-    let outcome =
-        match send_clip_v1(&client, &bridge_ip, &path, |client, url| client.get(url)).await {
-            Ok(response) => match classify_hue_response(response).await {
-                Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
-                Err(fault) => Err(fault.to_string()),
-            },
-            Err(error) => Err(error.to_string()),
-        };
+    let outcome = match send_clip_v1(&client, &bridge_ip, &path, false, |client, url| {
+        client.get(url)
+    })
+    .await
+    {
+        Ok(response) => match classify_hue_response(response).await {
+            Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
+            // A bridge that explicitly rejected the key is not unreachable.
+            // Collapsing this into the transport arm made the frontend
+            // render "bridge offline" for an expired application key.
+            Err(HueHttpFault::AuthInvalid) => {
+                error!("Hue credentials rejected by bridge {bridge_ip}");
+                return HueValidateCredentialsResponse {
+                    status: command_status(
+                        "HUE_CREDENTIAL_INVALID",
+                        "Bridge rejected the stored application key. Re-pair required.",
+                        None,
+                    ),
+                    valid: false,
+                };
+            }
+            Err(fault) => Err(fault.to_string()),
+        },
+        Err(error) => Err(error.to_string()),
+    };
     match outcome {
         Ok(payload) => {
             let result = parse_credentials_validation_payload(&payload);
@@ -1219,10 +1236,22 @@ fn parse_bridge_config_payload(bridge_ip: &str, payload: &str) -> HueVerifyBridg
     }
 }
 
+/// Client for bridge-local HTTPS. Certificate verification is off because the
+/// bridge presents a self-signed certificate we have no way to anchor.
 fn hue_http_client() -> Result<Client, String> {
     Client::builder()
         .timeout(Duration::from_secs(5))
         .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+/// Client for `discovery.meethue.com`. That is a public CA-signed endpoint, so
+/// verification stays ON — the bridge's self-signed exemption must not leak to
+/// the internet call that tells us which IP to trust in the first place.
+fn hue_cloud_http_client() -> Result<Client, String> {
+    Client::builder()
+        .timeout(Duration::from_secs(5))
         .build()
         .map_err(|error| error.to_string())
 }
@@ -1239,10 +1268,16 @@ fn hue_http_client() -> Result<Client, String> {
 /// The fallback triggers on transport errors only. Once a bridge answers with
 /// any HTTP status the response is returned untouched so `classify_hue_response`
 /// keeps owning the 403/`error.type` re-pair contract.
+/// `allow_http_fallback` must be `false` for any request whose response carries
+/// a secret. The pairing POST returns the DTLS `clientkey`, so an attacker who
+/// blackholes TCP/443 could otherwise force the downgrade and read the PSK off
+/// the wire. Only connect-level failures fall back — a TLS handshake failure is
+/// exactly the signal an attacker would manufacture, so it stays fatal.
 async fn send_clip_v1<F>(
     client: &Client,
     bridge_ip: &str,
     path: &str,
+    allow_http_fallback: bool,
     build: F,
 ) -> Result<reqwest::Response, reqwest::Error>
 where
@@ -1255,6 +1290,10 @@ where
         Ok(response) => return Ok(response),
         Err(error) => error,
     };
+
+    if !allow_http_fallback || !https_error.is_connect() {
+        return Err(https_error);
+    }
 
     match build(client, format!("http://{bridge_ip}{path}"))
         .send()

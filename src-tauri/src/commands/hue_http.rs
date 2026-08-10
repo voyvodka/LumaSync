@@ -78,13 +78,40 @@ pub(crate) fn is_hue_unauthorized_body(body: &str) -> bool {
         return false;
     };
 
-    value
+    let v1_unauthorized = value
         .as_array()
         .and_then(|items| items.first())
         .and_then(|entry| entry.get("error"))
         .and_then(|error| error.get("type"))
         .and_then(|kind| kind.as_i64())
-        .is_some_and(|kind| kind == 1)
+        .is_some_and(|kind| kind == 1);
+
+    v1_unauthorized || is_clip_v2_unauthorized(&value)
+}
+
+/// CLIP v2 replaced the v1 array envelope with
+/// `{"errors":[{"description":"..."}]}` and dropped the numeric `type`, so the
+/// v1 whitelist above can never match a v2 body — which left every `/clip/v2/*`
+/// caller unable to reach `AuthInvalid` and reporting a revoked key as a
+/// retryable transient fault.
+///
+/// The description string is the only auth signal v2 gives us, so the match
+/// stays narrow: a body must be Hue-shaped (`errors` array of objects) AND say
+/// it is an authentication problem. Anything else stays `Transient`, preserving
+/// the "never nudge the user into an unnecessary re-pair" rule.
+fn is_clip_v2_unauthorized(value: &Value) -> bool {
+    value
+        .get("errors")
+        .and_then(|errors| errors.as_array())
+        .and_then(|items| items.first())
+        .and_then(|entry| entry.get("description"))
+        .and_then(|description| description.as_str())
+        .is_some_and(|description| {
+            let lowered = description.to_lowercase();
+            lowered.contains("unauthorized")
+                || lowered.contains("authenticat")
+                || lowered.contains("application key")
+        })
 }
 
 /// Classify a Hue async HTTP response.
@@ -129,7 +156,9 @@ pub(crate) fn classify_hue_response_blocking(
 /// sites. Kept free of I/O so it is trivially testable.
 fn classify_status(status: u16, body: &str) -> HueHttpFault {
     match status {
-        403 if is_hue_unauthorized_body(body) => HueHttpFault::AuthInvalid,
+        // CLIP v2 documents 401 alongside 403 for a rejected application key;
+        // v1 only ever used 403. Both still require a Hue-shaped auth body.
+        401 | 403 if is_hue_unauthorized_body(body) => HueHttpFault::AuthInvalid,
         404 => HueHttpFault::NotFound,
         500..=599 => HueHttpFault::ServerError { status },
         _ => HueHttpFault::Transient {
@@ -184,6 +213,35 @@ mod tests {
     fn classify_status_maps_403_non_hue_body_to_transient() {
         match classify_status(403, "<html>proxy denied</html>") {
             HueHttpFault::Transient { status, .. } => assert_eq!(status, 403),
+            other => panic!("expected Transient, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn clip_v2_unauthorized_body_is_recognised() {
+        let body = r#"{"errors":[{"description":"Requested resource is unauthorized"}]}"#;
+        assert!(is_hue_unauthorized_body(body));
+    }
+
+    #[test]
+    fn clip_v2_non_auth_error_is_not_unauthorized() {
+        let body = r#"{"errors":[{"description":"resource not available"}]}"#;
+        assert!(!is_hue_unauthorized_body(body));
+    }
+
+    #[test]
+    fn classify_status_maps_401_clip_v2_to_auth_invalid() {
+        let body = r#"{"errors":[{"description":"unauthorized user"}]}"#;
+        assert!(matches!(
+            classify_status(401, body),
+            HueHttpFault::AuthInvalid
+        ));
+    }
+
+    #[test]
+    fn classify_status_maps_401_non_hue_body_to_transient() {
+        match classify_status(401, "<html>proxy auth required</html>") {
+            HueHttpFault::Transient { status, .. } => assert_eq!(status, 401),
             other => panic!("expected Transient, got {other:?}"),
         }
     }

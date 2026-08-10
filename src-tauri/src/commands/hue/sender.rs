@@ -310,8 +310,23 @@ pub(crate) fn spawn_hue_dtls_sender(
     // Activate entertainment mode via HTTPS before starting DTLS.
     activate_entertainment_config(&client, &bridge_ip, &username, &area_id)?;
 
-    // Establish DTLS connection.
-    let mut dtls_stream = connect_dtls(&bridge_ip, &username, &client_key)?;
+    // Establish DTLS connection. On failure the area is already activated and
+    // the sender thread that owns cleanup never spawns, so roll the activation
+    // back here or the bridge keeps `active_streamer` until it is restarted.
+    let mut dtls_stream = match connect_dtls(&bridge_ip, &username, &client_key) {
+        Ok(stream) => stream,
+        Err(err) => {
+            if let Err(cleanup_err) =
+                deactivate_with_token(&deactivate_token, &client, &bridge_ip, &username, &area_id)
+            {
+                warn!(
+                    "DTLS bring-up failed and the rollback deactivate also failed \
+                     ({cleanup_err}) — bridge may hold active_streamer for area {area_id}"
+                );
+            }
+            return Err(err);
+        }
+    };
 
     // Extract cipher name from the established handshake.
     let cipher_name = dtls_stream
