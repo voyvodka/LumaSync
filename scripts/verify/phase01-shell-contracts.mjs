@@ -5,6 +5,9 @@
  * Fails (exit 1) if required exports, section IDs, error codes, or
  * command strings drift across `src/shared/contracts/*.ts`.
  *
+ * Green means DECLARED, not sound: no grep can tell you a code sits in the right
+ * union, is wired to a result type, or is handled by any consumer.
+ *
  * Usage: node scripts/verify/phase01-shell-contracts.mjs
  */
 
