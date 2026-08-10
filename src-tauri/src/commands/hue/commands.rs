@@ -27,8 +27,8 @@ use super::retry::{
 };
 use super::sender::{
     apply_channel_region_overrides, build_hue_sender, deactivate_with_token, fetch_area_channels,
-    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, new_shutdown_signal,
-    no_op_sender, signal_shutdown_complete, wait_for_shutdown, DeactivateToken,
+    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, no_op_sender,
+    settled_shutdown_signal, signal_shutdown_complete, wait_for_shutdown, DeactivateToken,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, flush_pending_solid_color, make_result,
@@ -164,7 +164,7 @@ pub async fn start_hue_stream(
                 (
                     no_op_sender(),
                     false,
-                    new_shutdown_signal(),
+                    settled_shutdown_signal(),
                     DeactivateToken::new(),
                 )
             })
@@ -172,7 +172,7 @@ pub async fn start_hue_stream(
         (
             no_op_sender(),
             false,
-            new_shutdown_signal(),
+            settled_shutdown_signal(),
             DeactivateToken::new(),
         )
     };
@@ -452,7 +452,7 @@ pub async fn restart_hue_stream(
                 (
                     no_op_sender(),
                     false,
-                    new_shutdown_signal(),
+                    settled_shutdown_signal(),
                     DeactivateToken::new(),
                 )
             })
@@ -460,7 +460,7 @@ pub async fn restart_hue_stream(
         (
             no_op_sender(),
             false,
-            new_shutdown_signal(),
+            settled_shutdown_signal(),
             DeactivateToken::new(),
         )
     };

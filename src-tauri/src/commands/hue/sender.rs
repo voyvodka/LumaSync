@@ -22,7 +22,7 @@ use log::{error, info, warn};
 use reqwest::blocking::Client as BlockingClient;
 use serde_json::{json, Value};
 
-use super::super::hue_http::classify_hue_response_blocking;
+use super::super::hue_http::{classify_hue_response, classify_hue_response_blocking};
 use super::dtls::connect_dtls;
 use super::frame::{
     build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
@@ -571,13 +571,17 @@ pub(crate) async fn fetch_area_channels(
     let client = async_hue_http_client()?;
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
+    // `error_for_status` bypassed the 403 classifier, so an expired key
+    // surfaced as "this area has no channels" instead of a re-pair prompt.
     let response = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
         .await
-        .and_then(|r| r.error_for_status())
         .map_err(|error| error.to_string())?;
+    let response = classify_hue_response(response)
+        .await
+        .map_err(|fault| fault.to_string())?;
     let payload = response.text().await.map_err(|error| error.to_string())?;
 
     let parsed: Value = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
@@ -772,6 +776,16 @@ pub(crate) fn no_op_sender() -> HueColorSender {
     }
 }
 
+/// Shutdown signal for a sender that never spawned a thread. Pre-signalled,
+/// because nothing else can fire it — a fresh signal here made every later
+/// `stop_hue_stream` burn the full timeout and report `HUE_STOP_TIMEOUT_PARTIAL`
+/// for a stream that was never running.
+pub(crate) fn settled_shutdown_signal() -> ShutdownSignal {
+    let signal = new_shutdown_signal();
+    signal_shutdown_complete(&signal);
+    signal
+}
+
 /// Spawn the Hue color sender (DTLS or HTTP fallback) **outside** any mutex
 /// lock.  This function performs blocking network I/O (DTLS handshake, HTTP
 /// activate) and must never be called while the `HueRuntimeOwner` lock is held.
@@ -897,7 +911,7 @@ pub(crate) fn build_hue_sender_with_counter(
                 (
                     no_op_sender(),
                     false,
-                    new_shutdown_signal(),
+                    settled_shutdown_signal(),
                     None,
                     deactivate_token,
                 )
@@ -920,7 +934,7 @@ pub(crate) fn build_hue_sender_with_counter(
                 (
                     no_op_sender(),
                     false,
-                    new_shutdown_signal(),
+                    settled_shutdown_signal(),
                     None,
                     deactivate_token,
                 )
