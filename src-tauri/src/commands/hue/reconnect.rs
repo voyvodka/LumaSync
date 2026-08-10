@@ -30,7 +30,8 @@ use std::time::{Duration, Instant};
 
 use log::info;
 
-use super::super::hue_onboarding::check_hue_stream_readiness;
+use super::super::hue_onboarding::check_hue_stream_readiness_with_freshness;
+use super::area_cache::HueReadFreshness;
 use super::frame::HueAreaChannel;
 use super::frame::HueColorSender;
 use super::retry::register_transient_fault;
@@ -431,11 +432,13 @@ async fn internal_restart_stream(
         .await;
     }
 
-    // 2. Readiness check (async, no lock held).
-    let readiness = check_hue_stream_readiness(
+    // 2. Readiness check (async, no lock held). Forced: this is the
+    // pre-restart gate and the deactivate above just mutated the area.
+    let readiness = check_hue_stream_readiness_with_freshness(
         request.bridge_ip.clone(),
         request.username.clone(),
         request.area_id.clone(),
+        HueReadFreshness::Force,
     )
     .await;
 

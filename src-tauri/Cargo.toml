@@ -45,7 +45,10 @@ openssl = { version = "0.10", features = ["vendored"] }
 # `signal` enables tokio::signal::ctrl_c() / unix SIGTERM handling, used by the
 # debug-only orderly-shutdown hook in lib.rs (dev terminal Ctrl+C should run
 # safe_quit drop guards instead of orphaning the NSApplication run loop).
-tokio = { version = "1.52.3", features = ["rt", "signal"] }
+#
+# `sync` backs the single-flight slot lock in `commands::hue::area_cache`
+# (an async mutex is required — the guard is held across the bridge fetch).
+tokio = { version = "1.52.3", features = ["rt", "signal", "sync"] }
 # v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
 # Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
 #
@@ -99,4 +102,4 @@ e2e = ["dep:tauri-plugin-wdio-webdriver"]
 # resolver v2 keeps the `test` feature out of the normal build graph, so the
 # shipped binary never links the mock runtime.
 tauri = { version = "2", features = ["test"] }
-tokio = { version = "1.52.3", features = ["rt", "macros"] }
+tokio = { version = "1.52.3", features = ["rt", "macros", "sync", "time"] }

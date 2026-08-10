@@ -5,6 +5,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use super::hue::area_cache::{invalidate_hue_area_cache, read_area_snapshot, HueReadFreshness};
 use super::hue_http::{classify_hue_response, HueHttpFault};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -345,6 +346,9 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
     match outcome {
         Ok(payload) => {
             let mut result = parse_pairing_payload(&payload);
+            // A re-pair issues a new application key, so nothing cached under
+            // the previous one may survive into the post-pair session.
+            invalidate_hue_area_cache();
             match result.status.code.as_str() {
                 "HUE_PAIRING_OK" => info!("Hue bridge pairing succeeded at {bridge_ip}"),
                 "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED" => {
@@ -533,7 +537,9 @@ pub async fn list_hue_entertainment_areas(
         };
     }
 
-    match fetch_hue_entertainment_areas(&bridge_ip, &username).await {
+    // User-initiated listing (area picker / refresh) — always a real trip so a
+    // freshly created Entertainment Area shows up immediately.
+    match load_hue_entertainment_areas(&bridge_ip, &username, HueReadFreshness::Force).await {
         Ok(areas) if areas.is_empty() => HueEntertainmentAreaListResponse {
             status: command_status(
                 "HUE_AREA_LIST_EMPTY",
@@ -580,11 +586,33 @@ pub async fn list_hue_entertainment_areas(
     }
 }
 
+/// Frontend-facing readiness poll. Runs off the shared area-snapshot cache:
+/// the Devices-tab loop and the App health reconciler (via
+/// `get_hue_stream_status`) ask the same question seconds apart, and only one
+/// of them needs to reach the bridge.
 #[tauri::command]
 pub async fn check_hue_stream_readiness(
     bridge_ip: String,
     username: String,
     area_id: String,
+) -> HueStreamReadinessResponse {
+    check_hue_stream_readiness_with_freshness(
+        bridge_ip,
+        username,
+        area_id,
+        HueReadFreshness::Cached,
+    )
+    .await
+}
+
+/// Readiness with an explicit freshness policy. Anything that is about to
+/// start, restart, or reconnect a stream passes `Force` — a gate decision must
+/// never be taken on a snapshot that predates the mutation it is gating.
+pub(crate) async fn check_hue_stream_readiness_with_freshness(
+    bridge_ip: String,
+    username: String,
+    area_id: String,
+    freshness: HueReadFreshness,
 ) -> HueStreamReadinessResponse {
     if !is_valid_ipv4(&bridge_ip) {
         return HueStreamReadinessResponse {
@@ -600,7 +628,7 @@ pub async fn check_hue_stream_readiness(
         };
     }
 
-    match fetch_hue_entertainment_areas(&bridge_ip, &username).await {
+    match load_hue_entertainment_areas(&bridge_ip, &username, freshness).await {
         Ok(areas) => {
             let selected = areas.iter().find(|area| area.id == area_id);
             let Some(area) = selected else {
@@ -946,6 +974,23 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
     }
 }
 
+/// Cache-aware front door to `fetch_hue_entertainment_areas`.
+///
+/// `check_hue_stream_readiness` and `get_hue_stream_status`'s internal
+/// readiness chain both land here from independent frontend polling loops;
+/// routing them through `hue::area_cache` collapses the overlapping polls
+/// into one bridge round-trip. Callers that gate a mutation pass `Force`.
+async fn load_hue_entertainment_areas(
+    bridge_ip: &str,
+    username: &str,
+    freshness: HueReadFreshness,
+) -> Result<Vec<HueEntertainmentArea>, AreaListError> {
+    read_area_snapshot(bridge_ip, username, freshness, || {
+        fetch_hue_entertainment_areas(bridge_ip, username)
+    })
+    .await
+}
+
 async fn fetch_hue_entertainment_areas(
     bridge_ip: &str,
     username: &str,
@@ -1032,7 +1077,11 @@ async fn fetch_room_payload(
 /// `AuthInvalid` distinguishable from generic transient failures so the
 /// public commands can collapse it onto the uniform
 /// `AUTH_INVALID_RE_PAIR_REQUIRED` status code without string matching.
-enum AreaListError {
+///
+/// `Clone` so `hue::area_cache` can hand the same failure to every coalesced
+/// caller instead of letting each one re-issue the round-trip.
+#[derive(Clone, Debug)]
+pub(crate) enum AreaListError {
     AuthInvalid,
     Other(String),
 }

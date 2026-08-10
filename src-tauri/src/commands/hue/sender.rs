@@ -23,6 +23,7 @@ use reqwest::blocking::Client as BlockingClient;
 use serde_json::{json, Value};
 
 use super::super::hue_http::{classify_hue_response, classify_hue_response_blocking};
+use super::area_cache::invalidate_hue_area_cache;
 use super::dtls::connect_dtls;
 use super::frame::{
     build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
@@ -165,12 +166,18 @@ fn activate_entertainment_config(
 ) -> Result<(), String> {
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
-    let response = client
+    let sent = client
         .put(&endpoint)
         .header("hue-application-key", username)
         .json(&json!({ "action": "start" }))
-        .send()
-        .map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
+        .send();
+
+    // The area's `status.active` just changed (or may have, on a transport
+    // error where the bridge still processed the PUT). Any snapshot taken
+    // before this point now describes a state that no longer exists.
+    invalidate_hue_area_cache();
+
+    let response = sent.map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
 
     classify_hue_response_blocking(response)
         .map(|_| ())
@@ -193,12 +200,15 @@ pub(crate) fn deactivate_entertainment_config(
 ) -> Result<(), String> {
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
-    let response = client
+    let sent = client
         .put(&endpoint)
         .header("hue-application-key", username)
         .json(&json!({ "action": "stop" }))
-        .send()
-        .map_err(|e| format!("ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {e}"))?;
+        .send();
+
+    invalidate_hue_area_cache();
+
+    let response = sent.map_err(|e| format!("ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {e}"))?;
 
     let status = response.status();
     if !status.is_success() {

@@ -19,7 +19,10 @@ use std::time::Duration;
 use log::{error, info};
 use tauri::State;
 
-use super::super::hue_onboarding::{check_hue_stream_readiness, CommandStatus};
+use super::super::hue_onboarding::{
+    check_hue_stream_readiness, check_hue_stream_readiness_with_freshness, CommandStatus,
+};
+use super::area_cache::HueReadFreshness;
 use super::frame::HueAreaChannelInfo;
 use super::reconnect::{spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard};
 use super::retry::{
@@ -82,10 +85,13 @@ pub async fn start_hue_stream(
         .unwrap_or(HueRuntimeTriggerSource::ModeControl);
 
     // 1. Async readiness check -- no lock held during network I/O.
-    let readiness = check_hue_stream_readiness(
+    // Forced: this gates a start, so it must not run off a snapshot taken
+    // before whatever the user did to get here.
+    let readiness = check_hue_stream_readiness_with_freshness(
         request.bridge_ip.clone(),
         request.username.clone(),
         request.area_id.clone(),
+        HueReadFreshness::Force,
     )
     .await;
 
@@ -378,11 +384,13 @@ pub async fn restart_hue_stream(
         .await;
     }
 
-    // 2. Async readiness check -- no lock held.
-    let readiness = check_hue_stream_readiness(
+    // 2. Async readiness check -- no lock held. Forced: the deactivate above
+    // just changed the area's state.
+    let readiness = check_hue_stream_readiness_with_freshness(
         request.bridge_ip.clone(),
         request.username.clone(),
         request.area_id.clone(),
+        HueReadFreshness::Force,
     )
     .await;
 
