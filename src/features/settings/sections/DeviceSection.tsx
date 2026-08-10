@@ -245,6 +245,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         if (runtimeStatus?.state === "Reconnecting" || runtimeStatus?.code?.startsWith("TRANSIENT_")) return "reconnecting" as const;
         if (bridgeUnreachable) return "offline" as const;
         if (credentialState === "needs_repair" && !isHuePairing) {
+          // A rejected link button is a pairing step the user can still complete —
+          // never surface it as "credentials expired" (#167).
+          if (hueStatus?.code === "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED") return "pairingLinkButton" as const;
           return hueStatus?.code === "HUE_PAIRING_FAILED" ? "pairingFailed" as const : "authError" as const;
         }
         if (isHuePairing) {

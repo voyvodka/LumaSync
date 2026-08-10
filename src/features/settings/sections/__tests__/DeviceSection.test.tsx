@@ -175,6 +175,43 @@ describe("HueReadySummaryCard", () => {
       expect(pill).toBeTruthy();
     });
   });
+
+  it("shows the awaiting-link-button pill instead of auth error when the link button was not pressed", async () => {
+    await renderHueTab(createHueHookState({
+      credentialState: "needs_repair",
+      selectedAreaId: null,
+      selectedArea: null,
+      canStartHue: false,
+      status: {
+        code: "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED",
+        message: "Press the bridge link button and retry within 30 seconds.",
+        details: null,
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByText("devicesPage.hue.pill.awaiting")).toBeInTheDocument();
+      expect(screen.queryByText("devicesPage.hue.pill.authError")).not.toBeInTheDocument();
+    });
+  });
+
+  it("still shows auth error when credentials genuinely expired", async () => {
+    await renderHueTab(createHueHookState({
+      credentialState: "needs_repair",
+      selectedAreaId: null,
+      selectedArea: null,
+      canStartHue: false,
+      status: {
+        code: "AUTH_INVALID_RE_PAIR_REQUIRED",
+        message: "Bridge rejected the stored application key.",
+        details: null,
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByText("devicesPage.hue.pill.authError")).toBeInTheDocument();
+    });
+  });
 });
 
 describe("DeviceSection hue runtime controls", () => {
