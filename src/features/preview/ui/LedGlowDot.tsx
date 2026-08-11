@@ -3,7 +3,7 @@
  *
  * Positioned absolutely by its parent via normalized 0..1 coordinates. The
  * glow is a radial gradient from the live LED colour outward to transparent,
- * set entirely through inline style so it can update at the ~10 Hz stream
+ * set entirely through inline style so it can update at the ~30 Hz stream
  * cadence. There is deliberately NO CSS color transition (see `.lm-twin-dot`)
  * — a transition would lag the dot behind the stream and smear fast patterns
  * like `chase`. The element is `aria-hidden` because the overlay is a purely

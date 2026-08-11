@@ -47,6 +47,17 @@ export interface LedTwinOverlayProps {
 const OFF_COLOR_PACKED = packLedColor([16, 18, 24]);
 const DOT_SIZE_PX = 18;
 const EDGE_ORDER: LedSegmentKey[] = ["top", "right", "bottom", "left"];
+/** Ribbon depth, and the corner inset the horizontal ribbons give up. */
+const RIBBON_THICKNESS = 0.05;
+
+/**
+ * Viewport X → the horizontal ribbon's own 0..1 span. Those ribbons inset by
+ * `RIBBON_THICKNESS` each side, so a raw offset drifts inboard of its dot.
+ */
+function horizontalOffset(x: number): number {
+  const span = 1 - RIBBON_THICKNESS * 2;
+  return Math.min(1, Math.max(0, (x - RIBBON_THICKNESS) / span));
+}
 
 /** One edge's LEDs, pre-sorted along the edge and paired with its stop offsets. */
 interface EdgeTrack {
@@ -72,7 +83,7 @@ function buildEdgeTracks(positions: TwinLedPosition[]): EdgeTrack[] {
         direction: horizontal ? ("to right" as const) : ("to bottom" as const),
         stops: sorted.map((p) => ({
           index: p.index,
-          offset: `${((horizontal ? p.x : p.y) * 100).toFixed(1)}%`,
+          offset: `${((horizontal ? horizontalOffset(p.x) : p.y) * 100).toFixed(1)}%`,
         })),
       },
     ];
@@ -152,7 +163,7 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
   );
 
   const ribbonStyle = (edge: LedSegmentKey, gradient: string): CSSProperties => {
-    const thickness = "5%";
+    const thickness = `${RIBBON_THICKNESS * 100}%`;
     // Corner ownership: the vertical (left/right) ribbons run the full height
     // and OWN the four corners; the horizontal (top/bottom) ribbons inset by
     // `thickness` on each side so the two never cross — that crossing was what

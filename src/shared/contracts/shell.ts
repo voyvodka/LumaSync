@@ -111,9 +111,9 @@ export const SECTION_ORDER: SectionId[] = [
  * and drops the corner shape; restore now computes the corner from the
  * saved center plus the current outer size.
  *
- * v1.6 (LED Preview & Test Experience) adds seven OPTIONAL preview fields
+ * v1.6 (LED Preview & Test Experience) adds six OPTIONAL preview fields
  * (`ledPreviewPopupVisible` / `ledPreviewPopupCenterX` /
- * `ledPreviewPopupCenterY` / `ledTwinEnabledTest` / `ledTwinEnabledLive` /
+ * `ledPreviewPopupCenterY` / `ledTwinEnabledTest` /
  * `lastLedTestPattern` / `ledPreviewHintShown`). All are optional with
  * absence-defaults, so NO schema bump is required — the version MUST stay
  * `3` and the legacy spread-merge handles upgrading on-disk v3 states.
@@ -351,12 +351,6 @@ export interface ShellState {
    * Absent ⇒ `false` (overlay off until the user opts in).
    */
   ledTwinEnabledTest?: boolean;
-  /**
-   * Whether the digital-twin overlay is enabled for live ambilight capture.
-   * Absent ⇒ `false`. Honoured only where `LedPreviewStatus.liveTwinSupported`
-   * is `true` (gated off on Linux until the live-twin path is validated).
-   */
-  ledTwinEnabledLive?: boolean;
   /**
    * Last synthetic test pattern the user ran, restored as the default
    * selection next time the control popup opens. Absent ⇒ the UI picks its

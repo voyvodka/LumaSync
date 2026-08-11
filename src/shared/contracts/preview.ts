@@ -229,6 +229,9 @@ export const TWIN_OVERLAY_STATUS = {
   CLOSED: "TWIN_OVERLAY_CLOSED",
   /** Window creation / show failed at the webview layer. */
   OPEN_FAILED: "TWIN_OVERLAY_OPEN_FAILED",
+  /** Destroy failed; `reason` lists the labels. A surviving twin is
+   * click-through and undecorated, so the user cannot dismiss it. */
+  CLOSE_FAILED: "TWIN_OVERLAY_CLOSE_FAILED",
   /** The requested `displayId` did not match any enumerated display. */
   DISPLAY_NOT_FOUND: "TWIN_OVERLAY_DISPLAY_NOT_FOUND",
   /**

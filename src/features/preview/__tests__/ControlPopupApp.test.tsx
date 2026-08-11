@@ -54,6 +54,24 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 
+/** Captured `onMoved` handler so a test can simulate the user dragging the popup. */
+let movedHandler: (() => void) | null = null;
+const unlistenMoved = vi.fn();
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({
+    onMoved: (handler: () => void) => {
+      movedHandler = handler;
+      return Promise.resolve(unlistenMoved);
+    },
+    // Physical 400,200 at scale 2 with a 640×920 physical inner size ⇒ a
+    // logical centre of (200 + 160, 100 + 230) = (360, 330).
+    scaleFactor: () => Promise.resolve(2),
+    outerPosition: () => Promise.resolve({ x: 400, y: 200 }),
+    innerSize: () => Promise.resolve({ width: 640, height: 920 }),
+  }),
+}));
+
 let syncState: {
   mode: { kind: string; solid?: { r: number; g: number; b: number; brightness: number } } | null;
   active: boolean;
@@ -92,6 +110,7 @@ function lastStart() {
 }
 
 beforeEach(() => {
+  movedHandler = null;
   storeState = { lastLedTestPattern: { kind: "rainbow" }, lastOutputTargets: ["usb"] };
   storeSave.mockResolvedValue(undefined);
   startLedTestPattern.mockResolvedValue(startResult());
@@ -137,7 +156,7 @@ describe("ControlPopupApp auto-start", () => {
 
     syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
     rerender(<ControlPopupApp />);
-    await waitFor(() => expect(screen.getByText("ledPreview.test.stop")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("ledPreview.status.test")).toBeInTheDocument());
 
     expect(startLedTestPattern).toHaveBeenCalledTimes(1);
   });
@@ -192,24 +211,36 @@ describe("ControlPopupApp immediate apply", () => {
 });
 
 describe("ControlPopupApp run controls", () => {
-  it("has no Run button in the body — the footer owns start/stop", async () => {
-    syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
-    render(<ControlPopupApp />);
+  // The window is undecorated, always-on-top and absent from the taskbar, so
+  // Close must be reachable in EVERY state — including after a mode-strip
+  // click drops `testActive`, which used to leave no exit at all.
+  it("exposes Close as the only run control, in both states", async () => {
+    const { rerender } = render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
 
-    expect(screen.queryByRole("button", { name: "ledPreview.test.run" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "ledPreview.test.stop" })).toBeInTheDocument();
+    const assertOnlyClose = () => {
+      expect(screen.queryByRole("button", { name: "ledPreview.test.run" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "ledPreview.test.stop" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "ledPreview.control.close" })).toBeInTheDocument();
+    };
+
+    assertOnlyClose();
+
+    syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
+    rerender(<ControlPopupApp />);
+    await waitFor(() => expect(screen.getByText("ledPreview.status.test")).toBeInTheDocument());
+    assertOnlyClose();
   });
 
-  it("offers a Start button once the test is idle, and it re-runs the selection", async () => {
+  it("keeps starting under the pattern tiles now that Run is gone", async () => {
     const user = userEvent.setup();
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    expect(screen.getByText("ledPreview.test.idle")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "ledPreview.test.run" }));
+    await user.click(screen.getByRole("radio", { name: /ledPreview\.pattern\.chase/ }));
 
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
+    expect(lastStart().pattern.kind).toBe("chase");
   });
 
   it("Close stops the test, drops the twin and clears the persisted flags", async () => {
@@ -229,6 +260,26 @@ describe("ControlPopupApp run controls", () => {
         ledTwinEnabledTest: false,
       }),
     );
+  });
+
+  // `stop_led_test_pattern` restores the captured prior mode, and a mode-strip
+  // click already consumed it — so stopping a test that is not running lands
+  // on `LightingModeConfig::default()` (Off) and kills the user's lighting.
+  it("does not touch the lighting when closing with no test engaged", async () => {
+    const user = userEvent.setup();
+    render(<ControlPopupApp />);
+    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
+
+    // Hand the light back to a real mode, which disengages the test.
+    await user.click(screen.getByRole("radio", { name: /general\.mode\.options\.ambilight/ }));
+    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "ledPreview.control.close" }));
+
+    await waitFor(() => expect(hideLedControlPopup).toHaveBeenCalledTimes(1));
+    expect(stopLedTestPattern).not.toHaveBeenCalled();
+    // The twin still has to go — it is click-through and undismissable alone.
+    expect(closeLedTwinOverlay).toHaveBeenCalledTimes(1);
   });
 
   it("the first close teaches how to reopen, not that it kept running", async () => {
@@ -262,5 +313,41 @@ describe("ControlPopupApp run controls", () => {
 
     await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
     expect(startLedTestPattern).not.toHaveBeenCalled();
+  });
+});
+
+/** Every `shellStore.save` call that carried a persisted popup centre. */
+function centreWrites() {
+  return storeSave.mock.calls.filter(
+    (call) => (call[0] as Record<string, unknown>)?.ledPreviewPopupCenterX !== undefined,
+  );
+}
+
+describe("ControlPopupApp position persistence", () => {
+  it("stores the logical centre after the popup is dragged", async () => {
+    render(<ControlPopupApp />);
+    await waitFor(() => expect(movedHandler).not.toBeNull());
+
+    movedHandler?.();
+
+    await waitFor(
+      () =>
+        expect(storeSave).toHaveBeenCalledWith({
+          ledPreviewPopupCenterX: 360,
+          ledPreviewPopupCenterY: 330,
+        }),
+      { timeout: 3000 },
+    );
+  });
+
+  it("coalesces a burst of move events into a single write", async () => {
+    render(<ControlPopupApp />);
+    await waitFor(() => expect(movedHandler).not.toBeNull());
+
+    movedHandler?.();
+    movedHandler?.();
+    movedHandler?.();
+
+    await waitFor(() => expect(centreWrites()).toHaveLength(1), { timeout: 3000 });
   });
 });

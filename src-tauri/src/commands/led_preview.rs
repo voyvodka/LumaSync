@@ -58,6 +58,7 @@ pub const PREVIEW_STATE_CHANGED_EVENT: &str = "preview://state-changed";
 
 const TWIN_OVERLAY_OPENED: &str = "TWIN_OVERLAY_OPENED";
 const TWIN_OVERLAY_CLOSED: &str = "TWIN_OVERLAY_CLOSED";
+const TWIN_OVERLAY_CLOSE_FAILED: &str = "TWIN_OVERLAY_CLOSE_FAILED";
 const TWIN_OVERLAY_OPEN_FAILED: &str = "TWIN_OVERLAY_OPEN_FAILED";
 const TWIN_OVERLAY_DISPLAY_NOT_FOUND: &str = "TWIN_OVERLAY_DISPLAY_NOT_FOUND";
 const TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE: &str = "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE";
@@ -403,21 +404,19 @@ pub fn close_led_twin_overlay<R: Runtime>(
     twin_state: State<'_, LedTwinState>,
     payload: CloseLedTwinOverlayPayload,
 ) -> Result<TwinOverlayResult, String> {
+    // A destroy that fails leaves a click-through, undecorated window over the
+    // whole display with no way to dismiss it — never swallow it.
+    let mut failures: Vec<String> = Vec::new();
     {
         let mut rt = twin_state.runtime()?;
-        match payload.display_id.as_ref() {
-            Some(id) => {
-                if let Some(label) = rt.twin_labels.remove(id) {
-                    if let Some(window) = app.get_webview_window(&label) {
-                        let _ = window.destroy();
-                    }
-                }
-            }
-            None => {
-                for (_, label) in rt.twin_labels.drain() {
-                    if let Some(window) = app.get_webview_window(&label) {
-                        let _ = window.destroy();
-                    }
+        let labels: Vec<String> = match payload.display_id.as_ref() {
+            Some(id) => rt.twin_labels.remove(id).into_iter().collect(),
+            None => rt.twin_labels.drain().map(|(_, label)| label).collect(),
+        };
+        for label in labels {
+            if let Some(window) = app.get_webview_window(&label) {
+                if let Err(error) = window.destroy() {
+                    failures.push(format!("{label}: {error}"));
                 }
             }
         }
@@ -425,6 +424,15 @@ pub fn close_led_twin_overlay<R: Runtime>(
 
     twin_state.recompute_preview_active();
     emit_preview_state_changed(&app);
+
+    if !failures.is_empty() {
+        return Ok(TwinOverlayResult {
+            ok: false,
+            code: TWIN_OVERLAY_CLOSE_FAILED.to_string(),
+            message: "Could not close every twin overlay.".to_string(),
+            reason: Some(failures.join("; ")),
+        });
+    }
 
     Ok(TwinOverlayResult {
         ok: true,

@@ -1061,7 +1061,6 @@ const REQUIRED_V16_STATE_FIELDS = [
   "ledPreviewPopupCenterX",
   "ledPreviewPopupCenterY",
   "ledTwinEnabledTest",
-  "ledTwinEnabledLive",
   "lastLedTestPattern",
   "ledPreviewHintShown",
 ];

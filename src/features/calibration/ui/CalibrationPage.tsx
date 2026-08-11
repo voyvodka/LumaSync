@@ -391,7 +391,12 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   // preview API never throws; the try/catch guards the shellStore write.
   const handleOpenPreview = useCallback(async () => {
     try {
-      await openLedTwinOverlay({ scope: "test" });
+      // Without an explicit id Rust falls back to the primary display, which
+      // strands the overlay on the wrong monitor for a non-primary selection.
+      await openLedTwinOverlay({
+        scope: "test",
+        displayId: displayTargetRef.current.getSnapshot().selectedDisplayId ?? undefined,
+      });
       await openLedControlPopup();
       await showLedControlPopup();
       await shellStore.save({ ledPreviewPopupVisible: true, ledTwinEnabledTest: true });

@@ -93,14 +93,9 @@ export async function stopLedTestPattern(
     return await invoker<LedTestPatternResult>(PREVIEW_COMMANDS.STOP_TEST_PATTERN);
   } catch (error) {
     console.error("[LumaSync] stop_led_test_pattern failed:", error);
-    return {
-      active: false,
-      previewOnly: false,
-      status: {
-        code: LED_TEST_STATUS.PATTERN_STOPPED,
-        message: transportMessage(error),
-      },
-    };
+    // A transport rejection means the test may still be running — reporting
+    // PATTERN_STOPPED here would claim a stop that never happened.
+    return failedTestResult(error);
   }
 }
 
@@ -148,7 +143,7 @@ export async function closeLedTwinOverlay(
     console.error("[LumaSync] close_led_twin_overlay failed:", error);
     return {
       ok: false,
-      code: TWIN_OVERLAY_STATUS.OPEN_FAILED,
+      code: TWIN_OVERLAY_STATUS.CLOSE_FAILED,
       message: transportMessage(error),
     };
   }

@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { shellStore } from "../../persistence/shellStore";
 import { HsvColorPicker } from "../../../shared/ui/HsvColorPicker";
@@ -51,6 +53,9 @@ const COLOR_PATTERNS: ReadonlySet<LedTestPatternKind> = new Set(["solid", "chase
 
 /** Trailing window for `lastLedTestPattern` writes so a colour drag hits disk once. */
 const PERSIST_PATTERN_DEBOUNCE_MS = 600;
+
+/** Trailing window for popup-centre writes so a window drag hits disk once. */
+const PERSIST_CENTER_DEBOUNCE_MS = 400;
 
 interface SolidDraft {
   r: number;
@@ -136,6 +141,53 @@ export function ControlPopupApp() {
       });
     return () => {
       alive = false;
+    };
+  }, []);
+
+  // ── Persist the popup centre so it reopens where the user left it ────────
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let alive = true;
+    let timer: number | null = null;
+    let unlisten: UnlistenFn | null = null;
+
+    const persist = () => {
+      if (timer !== null) return;
+      timer = window.setTimeout(() => {
+        timer = null;
+        void (async () => {
+          try {
+            // Rust restores through LogicalPosition, so store logical px —
+            // unlike the main window, whose centre is persisted in physical px.
+            const scale = await win.scaleFactor();
+            const pos = await win.outerPosition();
+            const size = await win.innerSize();
+            if (!alive) return;
+            await shellStore.save({
+              ledPreviewPopupCenterX: Math.round((pos.x + size.width / 2) / scale),
+              ledPreviewPopupCenterY: Math.round((pos.y + size.height / 2) / scale),
+            });
+          } catch (error) {
+            console.error("[LumaSync] ControlPopupApp persist popup centre failed:", error);
+          }
+        })();
+      }, PERSIST_CENTER_DEBOUNCE_MS);
+    };
+
+    void win
+      .onMoved(persist)
+      .then((fn) => {
+        if (alive) unlisten = fn;
+        else fn();
+      })
+      .catch((error) => {
+        console.error("[LumaSync] ControlPopupApp move listener failed:", error);
+      });
+
+    return () => {
+      alive = false;
+      if (timer !== null) window.clearTimeout(timer);
+      unlisten?.();
     };
   }, []);
 
@@ -300,15 +352,6 @@ export function ControlPopupApp() {
     [runner, withStamps, draft.r, draft.g, draft.b, draft.brightness],
   );
 
-  const handleStop = useCallback(() => {
-    setTestDesired(false);
-    void (async () => {
-      await runner.stop();
-      setRunError(null);
-      setPreviewOnly(false);
-    })();
-  }, [runner]);
-
   // ── Auto-start ───────────────────────────────────────────────────────────
   // Keep the latest selection reachable from the reveal effect without making
   // that effect depend on (and therefore re-fire on) every draft keystroke.
@@ -324,7 +367,7 @@ export function ControlPopupApp() {
     const revealed = popupVisible && !gate.wasVisible;
     gate.wasVisible = popupVisible;
     // Not suppressed when the mode strip reads Off: testing a strip with the
-    // room lighting off is the normal case, and Stop restores the prior mode.
+    // room lighting off is the normal case, and closing restores the prior mode.
     if (!gate.armed && !revealed) return;
     gate.armed = false;
     startSelectedRef.current();
@@ -345,7 +388,15 @@ export function ControlPopupApp() {
         console.error("[LumaSync] ControlPopupApp hint flag read failed:", error);
       }
 
-      await runner.stop();
+      if (testEngaged) {
+        await runner.stop();
+      } else {
+        // `stop_led_test_pattern` restores the captured prior mode, and a
+        // mode-strip click already consumed it — stopping a test that is not
+        // running would restore `Off` and kill the user's lighting.
+        runner.cancel();
+        await runner.settled();
+      }
       setRunError(null);
       setPreviewOnly(false);
 
@@ -380,7 +431,7 @@ export function ControlPopupApp() {
         }
       }
     })();
-  }, [runner, t]);
+  }, [runner, t, testEngaged]);
 
   // ── Status chip ──────────────────────────────────────────────────────────
   const chip = testActive
@@ -405,15 +456,6 @@ export function ControlPopupApp() {
             {chip.label}
           </span>
         )}
-        <button
-          type="button"
-          className="lm-control-close"
-          onClick={handleClose}
-          aria-label={t("ledPreview.control.close")}
-          title={t("ledPreview.control.closeHint")}
-        >
-          {t("ledPreview.control.close")}
-        </button>
       </header>
 
       <div className="lm-control-body">
@@ -510,7 +552,8 @@ export function ControlPopupApp() {
         <p className="lm-control-drag-hint">{t("ledPreview.control.dragHint")}</p>
       </div>
 
-      {/* Test footer — the only run control; Stop while live, Start once idle */}
+      {/* Test footer — status readout plus the window's only exit. Starting is
+          owned by the pattern tiles, so there is no separate Run control. */}
       <footer className={`lm-test-footer ${testActive ? "" : "is-idle"}`}>
         {testActive ? (
           <span className="lm-test-pulse" aria-hidden="true" />
@@ -524,15 +567,14 @@ export function ControlPopupApp() {
               ? `${t("ledPreview.test.running")} · ${t(`ledPreview.pattern.${preview.activePattern.kind}`)}`
               : t("ledPreview.test.running")}
         </span>
-        {testActive ? (
-          <button type="button" className="lm-control-stop" onClick={handleStop}>
-            {t("ledPreview.test.stop")}
-          </button>
-        ) : (
-          <button type="button" className="lm-control-start" onClick={handleStart}>
-            {t("ledPreview.test.run")}
-          </button>
-        )}
+        <button
+          type="button"
+          className="lm-control-close"
+          onClick={handleClose}
+          title={t("ledPreview.control.closeHint")}
+        >
+          {t("ledPreview.control.close")}
+        </button>
       </footer>
     </div>
   );

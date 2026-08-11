@@ -1,7 +1,8 @@
 /**
  * useLedPreviewFrame — subscribe to the enriched edge-signal stream.
  *
- * The ambilight worker emits `ambilight://edge-signal` at ~10 Hz. When a
+ * The ambilight worker emits `ambilight://edge-signal` at ~10 Hz, rising to
+ * ~30 Hz while a twin is open so a moving pattern stays gap-free. When a
  * preview surface is subscribed, the worker enriches the payload ADDITIVELY
  * with the full per-LED buffer (`leds`), the calibrated `ledCount`, sparse
  * `hueChannels`, the frame `source`/`pattern`, a `seq` counter, and the

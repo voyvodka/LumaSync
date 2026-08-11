@@ -11,6 +11,7 @@ use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
     BlackBorderInsets, CapturedFrame, StaticFrameSource,
 };
+use super::calibration::list_displays;
 use super::device_connection::{ActiveSinkRegistry, CommandStatus, SerialConnectionState};
 use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use super::hue_stream_lifecycle::{
@@ -37,6 +38,7 @@ use super::runtime_telemetry::{
 };
 use super::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternSpeed,
+    DEFAULT_DISPLAY_ASPECT,
 };
 use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 
@@ -73,6 +75,8 @@ pub struct AmbilightCaptureRequest {
     /// v1.6 LED Preview — when `Some`, the frame-source factory builds a
     /// `SyntheticFrameSource` (test mode) instead of live screen capture.
     pub test_pattern: Option<TestPatternConfig>,
+    /// Animation phase carried across the worker rebuild a pattern tweak forces.
+    pub pattern_phase: Option<Arc<AtomicU32>>,
 }
 
 type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
@@ -324,6 +328,10 @@ struct PreviewRuntime {
     /// so a twin overlay opened *after* the worker starts can flip enrichment
     /// on without a worker restart.
     preview_gate: Option<Arc<AtomicBool>>,
+    /// Animation phase (f32 bits) shared with the running `SyntheticFrameSource`.
+    /// Every pattern tweak rebuilds the worker, so without carrying the phase a
+    /// colour or speed change restarts the animation from zero.
+    pattern_phase: Arc<AtomicU32>,
 }
 
 /// Per-worker enrichment context — decides whether and how the ~10 Hz
@@ -369,7 +377,11 @@ impl Default for LightingRuntimeOwner {
             preview: Default::default(),
             frame_source_factory: Arc::new(|req: AmbilightCaptureRequest| {
                 if let Some(test) = req.test_pattern {
-                    Ok(create_synthetic_frame_source(test, req.led_calibration))
+                    Ok(create_synthetic_frame_source(
+                        test,
+                        req.led_calibration,
+                        req.pattern_phase,
+                    ))
                 } else {
                     create_live_frame_source(req.display_id.as_deref())
                 }
@@ -567,6 +579,101 @@ fn maybe_hydrate_ambilight_settings<R: Runtime>(
         );
         payload.ambilight = Some(persisted);
     }
+}
+
+/// Output stamps the frontend attaches to every `set_lighting_mode` payload
+/// (see `App.tsx > withColorCorrectionAndFirmwareProfile`). Commands that
+/// build a mode config server-side have no such payload to inherit from.
+#[derive(Default)]
+struct PersistedOutputStamps {
+    color_correction: Option<ColorCorrectionConfig>,
+    firmware_profile: Option<FirmwareProfile>,
+    chip_type: Option<LedChipType>,
+}
+
+fn parse_output_stamps_from_shell_state(raw: &str) -> PersistedOutputStamps {
+    let Ok(root) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return PersistedOutputStamps::default();
+    };
+    let Some(state) = root.get("shell-state") else {
+        return PersistedOutputStamps::default();
+    };
+    let read = |key: &str| state.get(key).cloned();
+    PersistedOutputStamps {
+        color_correction: read("colorCorrection").and_then(|v| serde_json::from_value(v).ok()),
+        firmware_profile: read("firmwareProfile").and_then(|v| serde_json::from_value(v).ok()),
+        // The chip picker persists under `selectedChipType`, not `chipType`.
+        chip_type: read("selectedChipType").and_then(|v| serde_json::from_value(v).ok()),
+    }
+}
+
+/// Fill any output stamp the caller left unset from the persisted shell state
+/// (caller-wins: a stamp already on the payload is never overwritten).
+///
+/// Without this a synthetic test drives an SK6812 RGBW strip through the
+/// WS2812B encoder and an Adalight controller through the LumaSync v1 header,
+/// and drops the user's colour correction entirely — so the test lights
+/// nothing, or the wrong colours, on exactly the hardware it exists to verify.
+/// Aspect (width / height) of the display the strip surrounds, used to weight
+/// the synthetic frame's perimeter. Prefers the user's selected display so it
+/// matches the twin overlay, then the primary one; falls back to 16:9.
+fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
+    let Ok(displays) = list_displays(app.clone()) else {
+        return DEFAULT_DISPLAY_ASPECT;
+    };
+    let selected = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| std::fs::read_to_string(dir.join("shell-state.json")).ok())
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|root| {
+            root.get("shell-state")?
+                .get("selectedDisplayId")?
+                .as_str()
+                .map(str::to_string)
+        });
+
+    let target = selected
+        .and_then(|id| displays.iter().find(|d| d.id == id))
+        .or_else(|| displays.iter().find(|d| d.is_primary))
+        .or_else(|| displays.first());
+
+    match target {
+        Some(d) if d.height > 0 => d.width as f32 / d.height as f32,
+        _ => DEFAULT_DISPLAY_ASPECT,
+    }
+}
+
+fn maybe_hydrate_output_stamps<R: Runtime>(app: &AppHandle<R>, payload: &mut LightingModeConfig) {
+    if payload.color_correction.is_some()
+        && payload.firmware_profile.is_some()
+        && payload.chip_type.is_some()
+    {
+        return;
+    }
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let Ok(raw) = std::fs::read_to_string(dir.join("shell-state.json")) else {
+        return;
+    };
+    let stamps = parse_output_stamps_from_shell_state(&raw);
+    if payload.color_correction.is_none() {
+        payload.color_correction = stamps.color_correction;
+    }
+    if payload.firmware_profile.is_none() {
+        payload.firmware_profile = stamps.firmware_profile;
+    }
+    if payload.chip_type.is_none() {
+        payload.chip_type = stamps.chip_type;
+    }
+    info!(
+        "[preview] output stamps hydrated — correction={} profile={:?} chip={:?}",
+        payload.color_correction.is_some(),
+        payload.firmware_profile,
+        payload.chip_type,
+    );
 }
 
 fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
@@ -836,7 +943,19 @@ fn sample_screen_position_avg(
 
 pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";
 pub const EDGE_SIGNAL_MIN_INTERVAL_MS: u64 = 100;
+/// Cadence while a twin overlay is mirroring the strip. 10 Hz is plenty for the
+/// 4-edge settings grid but not for a moving comet: at the top speed the head
+/// travels further per frame than its own tail, leaving visible gaps. ~30 Hz
+/// brings one frame's travel back under the tail at every speed.
+pub const EDGE_SIGNAL_PREVIEW_INTERVAL_MS: u64 = 33;
 pub const EDGE_SIGNAL_SAMPLES_PER_EDGE: usize = 16;
+
+/// Sampling box for live capture — deliberately wide so screen noise averages out.
+pub const LIVE_SAMPLE_WINDOW: f32 = 0.05;
+/// Sampling box for synthetic test frames. Must stay NARROWER than one LED's
+/// pitch or neighbouring LEDs blend into each other and no LED can reach the
+/// intensity the pattern asked for.
+pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
 /// How far inside the screen edges the preview samples. 0.92 picks up the
 /// dominant fringe color without dipping too deep into the center.
 const EDGE_SIGNAL_AXIS_OFFSET: f32 = 0.92;
@@ -1334,7 +1453,15 @@ fn start_ambilight_worker(
         .capture_frame()
         .map_err(|e| e.as_reason())?;
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-    let initial_sampled = sample_frame_for_sequence(&initial_raw, &led_sequence, &led_counts, 0.05);
+    // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
+    // than the whole comet, so it averaged in unlit screen and dimmed the head.
+    let sample_window = if preview.as_ref().is_some_and(|ctx| ctx.source == "test") {
+        SYNTHETIC_SAMPLE_WINDOW
+    } else {
+        LIVE_SAMPLE_WINDOW
+    };
+    let initial_sampled =
+        sample_frame_for_sequence(&initial_raw, &led_sequence, &led_counts, sample_window);
     telemetry_window.record_capture();
     if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
         telemetry_window.record_slot_overwrite();
@@ -1444,8 +1571,12 @@ fn start_ambilight_worker(
                     Ok(mut src) => {
                         AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                         src.capture_frame().map_err(|e| e.as_reason()).map(|frame| {
-                            let colors =
-                                sample_frame_for_sequence(&frame, &led_sequence, &led_counts, 0.05);
+                            let colors = sample_frame_for_sequence(
+                                &frame,
+                                &led_sequence,
+                                &led_counts,
+                                sample_window,
+                            );
                             (frame, colors)
                         })
                     }
@@ -1579,11 +1710,13 @@ fn start_ambilight_worker(
                 // Edge signal preview — throttled to ~10 Hz.
                 if let Some(emitter) = edge_signal_emitter.as_ref() {
                     let now = Instant::now();
+                    let interval_ms = if enrich_preview {
+                        EDGE_SIGNAL_PREVIEW_INTERVAL_MS
+                    } else {
+                        EDGE_SIGNAL_MIN_INTERVAL_MS
+                    };
                     let due = last_edge_emit_at
-                        .map(|prev| {
-                            now.duration_since(prev)
-                                >= Duration::from_millis(EDGE_SIGNAL_MIN_INTERVAL_MS)
-                        })
+                        .map(|prev| now.duration_since(prev) >= Duration::from_millis(interval_ms))
                         .unwrap_or(true);
                     if due {
                         let mut payload = compute_edge_signal(&raw_frame, border_cache.insets());
@@ -2023,6 +2156,7 @@ fn apply_mode_change(
                     display_id: normalized_next.display_id.clone(),
                     led_calibration: normalized_next.led_calibration.clone(),
                     test_pattern: test_pattern.clone(),
+                    pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
                 };
                 match (owner.frame_source_factory)(req) {
                     Ok(source) => {
@@ -2370,7 +2504,12 @@ fn build_preview_emit_context(
 ) -> Option<PreviewEmitContext> {
     if is_test {
         Some(PreviewEmitContext {
-            gate: PreviewGate::Always,
+            // Only twin overlays read the enriched buffer, so a test with no
+            // twin open must not pay for an N-LED Vec + JSON at 10 Hz.
+            gate: match preview_gate {
+                Some(flag) => PreviewGate::Shared(flag),
+                None => PreviewGate::Always,
+            },
             source: "test",
             pattern: test_pattern.map(|cfg| cfg.kind.tag()),
             // Synthetic frames are display-agnostic — no per-display filter.
@@ -2399,9 +2538,13 @@ fn apply_and_broadcast<R: Runtime>(
     telemetry_state: &RuntimeTelemetryState,
     twin_state: &LedTwinState,
     test_pattern: Option<TestPatternConfig>,
+    // Without this snapshot the "usb" channel collapses to the serial one, so a
+    // WLED-only session runs preview-only and its restore is gated on stop.
+    wled_sink: Option<WledSinkConfig>,
 ) -> Result<LightingModeCommandResult, String> {
     maybe_hydrate_led_calibration(app, &mut payload);
     maybe_hydrate_ambilight_settings(app, &mut payload);
+    maybe_hydrate_output_stamps(app, &mut payload);
 
     let connection_snapshot = connection_state
         .last_status
@@ -2424,7 +2567,7 @@ fn apply_and_broadcast<R: Runtime>(
             payload,
             connection_snapshot.connected,
             connection_snapshot.port_name.as_deref(),
-            None,
+            wled_sink,
             hue_output,
             Some(telemetry_state.shared_snapshot()),
             edge_emitter,
@@ -2488,6 +2631,8 @@ pub struct LedTestPatternResult {
     pub status: CommandStatus,
 }
 
+// Arg count is Tauri's managed-state injection, not a bundling opportunity.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn start_led_test_pattern<R: Runtime>(
     app: AppHandle<R>,
@@ -2497,6 +2642,7 @@ pub fn start_led_test_pattern<R: Runtime>(
     hue_runtime_state: State<'_, HueRuntimeStateStore>,
     telemetry_state: State<'_, RuntimeTelemetryState>,
     led_twin_state: State<'_, LedTwinState>,
+    sink_registry: State<'_, ActiveSinkRegistry>,
 ) -> Result<LedTestPatternResult, String> {
     if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
         return Ok(LedTestPatternResult {
@@ -2514,6 +2660,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         kind: payload.pattern.clone(),
         brightness: payload.brightness,
         speed: payload.speed.unwrap_or_default(),
+        display_aspect: resolve_display_aspect(&app),
     };
 
     // Resolve sink availability up front to choose targets + report
@@ -2523,6 +2670,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         .lock()
         .map(|status| status.connected)
         .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
+    let wled_sink = sink_registry.active_wled_config();
     let hue_available = snapshot_hue_output_context(hue_runtime_state.inner())?
         .map(|ctx| !ctx.channels.is_empty())
         .unwrap_or(false);
@@ -2530,7 +2678,8 @@ pub fn start_led_test_pattern<R: Runtime>(
     let requested = payload.targets.clone().unwrap_or_default();
     let want_usb = requested.is_empty() || requested.iter().any(|t| t == "usb");
     let want_hue = requested.iter().any(|t| t == "hue");
-    let use_usb = device_connected && want_usb;
+    // A registered WLED sink IS the "usb" channel — see `UsbOutputPlan`.
+    let use_usb = (device_connected || wled_sink.is_some()) && want_usb;
     let use_hue = hue_available && want_hue;
     let preview_only = !use_usb && !use_hue;
 
@@ -2547,6 +2696,10 @@ pub fn start_led_test_pattern<R: Runtime>(
         solid: None,
         ambilight: Some(AmbilightPayload {
             brightness: payload.brightness,
+            // Unsmoothed, unsaturated: the default 0.35 EWMA smears the chase
+            // band across neighbours, which is the ordering it exists to prove.
+            smoothing_alpha: Some(1.0),
+            saturation: Some(1.0),
             ..AmbilightPayload::default()
         }),
         targets: Some(targets),
@@ -2592,6 +2745,12 @@ pub fn start_led_test_pattern<R: Runtime>(
             if owner.preview.active_test_pattern.is_some() {
                 None
             } else {
+                // Fresh run — rewind the animation. A tweak to an already
+                // running pattern keeps its phase instead.
+                owner
+                    .preview
+                    .pattern_phase
+                    .store(0f32.to_bits(), Ordering::Relaxed);
                 Some(owner.active_mode.clone())
             }
         };
@@ -2609,6 +2768,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         telemetry_state.inner(),
         led_twin_state.inner(),
         Some(test_config),
+        wled_sink,
     )?;
 
     emit_preview_state_changed(&app);
@@ -2646,9 +2806,11 @@ pub fn stop_led_test_pattern<R: Runtime>(
     hue_runtime_state: State<'_, HueRuntimeStateStore>,
     telemetry_state: State<'_, RuntimeTelemetryState>,
     led_twin_state: State<'_, LedTwinState>,
+    sink_registry: State<'_, ActiveSinkRegistry>,
 ) -> Result<LedTestPatternResult, String> {
+    let wled_sink = sink_registry.active_wled_config();
     let restore = led_twin_state.take_prior_mode().unwrap_or_default();
-    let result = apply_and_broadcast(
+    let mut result = apply_and_broadcast(
         &app,
         restore,
         runtime_state.inner(),
@@ -2657,7 +2819,30 @@ pub fn stop_led_test_pattern<R: Runtime>(
         telemetry_state.inner(),
         led_twin_state.inner(),
         None,
+        wled_sink,
     )?;
+
+    // A gated restore (DEVICE_NOT_CONNECTED / HUE_NOT_READY) returns before
+    // `apply_mode_change` tears the previous worker down, so the synthetic
+    // pattern would keep running with no way to stop it. Fall back to Off.
+    if runtime_state.preview_snapshot().test_active {
+        warn!(
+            "[stop_led_test_pattern] restore gated ({}) — forcing Off so the synthetic worker stops",
+            result.status.code
+        );
+        result = apply_and_broadcast(
+            &app,
+            LightingModeConfig::default(),
+            runtime_state.inner(),
+            connection_state.inner(),
+            hue_runtime_state.inner(),
+            telemetry_state.inner(),
+            led_twin_state.inner(),
+            None,
+            wled_sink,
+        )?;
+    }
+
     led_twin_state.recompute();
     emit_preview_state_changed(&app);
     Ok(LedTestPatternResult {
@@ -3127,6 +3312,7 @@ mod tests {
                         display_id: None,
                         led_calibration: None,
                         test_pattern: None,
+                        pattern_phase: None,
                     })
                     .expect("frame source should be available"),
                     shared_runtime_telemetry(),
@@ -4820,5 +5006,84 @@ mod lighting_mode_tests {
             serialised.contains("\"lightingSmoothingPreset\":\"moderate\""),
             "Rust -> JSON must preserve camelCase lightingSmoothingPreset; got: {serialised}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // v1.6 LED Preview — output-stamp hydration + enrichment gating
+    // -----------------------------------------------------------------------
+
+    /// The synthetic-test commands build their mode config server-side, so the
+    /// encoder settings can only come off disk. Reading the wrong key drops an
+    /// SK6812 strip onto the WS2812B encoder without any visible error.
+    #[test]
+    fn output_stamps_read_the_keys_the_frontend_actually_writes() {
+        let raw = r#"{
+            "shell-state": {
+                "colorCorrection": {
+                    "gammaR": 2.6, "gammaG": 2.4, "gammaB": 2.2,
+                    "kelvin": 4000, "saturation": 1.2
+                },
+                "firmwareProfile": "adalight",
+                "selectedChipType": "sk6812-rgbw"
+            }
+        }"#;
+        let stamps = super::parse_output_stamps_from_shell_state(raw);
+        assert_eq!(stamps.chip_type, Some(super::LedChipType::Sk6812Rgbw));
+        assert_eq!(
+            stamps.firmware_profile,
+            Some(super::FirmwareProfile::Adalight)
+        );
+        assert_eq!(stamps.color_correction.map(|c| c.kelvin), Some(4000));
+    }
+
+    /// `chipType` is NOT the persisted key — only `selectedChipType` is.
+    #[test]
+    fn output_stamps_ignore_the_non_persisted_chip_key() {
+        let raw = r#"{"shell-state":{"chipType":"sk6812-rgbw"}}"#;
+        assert_eq!(
+            super::parse_output_stamps_from_shell_state(raw).chip_type,
+            None
+        );
+    }
+
+    #[test]
+    fn output_stamps_degrade_to_empty_on_malformed_state() {
+        assert!(super::parse_output_stamps_from_shell_state("not json")
+            .chip_type
+            .is_none());
+        assert!(super::parse_output_stamps_from_shell_state("{}")
+            .firmware_profile
+            .is_none());
+    }
+
+    /// Only twin overlays read the enriched buffer, so a running test with no
+    /// twin open must not build an N-LED Vec + JSON payload every tick.
+    #[test]
+    fn test_source_enrichment_follows_the_twin_gate() {
+        let gate = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ctx = super::build_preview_emit_context(
+            true,
+            None,
+            Some(Arc::clone(&gate)),
+            Some("display-1".to_string()),
+        )
+        .expect("a test always yields an emit context");
+
+        assert_eq!(ctx.source, "test");
+        // Synthetic frames are display-agnostic — never filtered per display.
+        assert_eq!(ctx.display_id, None);
+        assert!(!ctx.should_enrich(), "no twin open ⇒ no enrichment");
+
+        gate.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(ctx.should_enrich(), "twin opened mid-run ⇒ enrichment on");
+    }
+
+    /// With no gate wired (unit-test / legacy path) a test still enriches, so
+    /// the twin is never left dark by a missing registration.
+    #[test]
+    fn test_source_enriches_unconditionally_without_a_gate() {
+        let ctx = super::build_preview_emit_context(true, None, None, None)
+            .expect("a test always yields an emit context");
+        assert!(ctx.should_enrich());
     }
 }

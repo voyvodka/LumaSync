@@ -180,4 +180,27 @@ describe("LedTwinOverlay dot memoization", () => {
 
     expect(ribbonOf()).toContain("rgb(1, 2, 3)");
   });
+
+  // The horizontal ribbons are inset 5% each side so the vertical ones own the
+  // corners. Feeding them raw viewport offsets shifted every colour inboard of
+  // the dot it mirrors — 4.5% of the display width at the corners.
+  it("spans horizontal ribbon gradients across the inset element, not the viewport", async () => {
+    const view = await mountWithFirstFrame();
+    const ribbons = view.container.querySelectorAll<HTMLElement>(".lm-twin-ribbon");
+
+    // EDGE_ORDER renders top first, then right.
+    const top = ribbons[0].style.background;
+    expect(top).toContain("to right");
+    // First stop pinned to the element's own 0%, last to its 100%.
+    expect(top).toMatch(/to right,\s*rgb\([^)]*\)\s*0\.0%/);
+    expect(top).toMatch(/rgb\([^)]*\)\s*100\.0%\)$/);
+
+    // The vertical ribbons run the full height, so their stops stay in
+    // viewport space and must NOT be remapped.
+    const right = ribbons[1].style.background;
+    expect(right).toContain("to bottom");
+    expect(right).toContain("5.0%");
+    expect(right).toContain("95.0%");
+    expect(right).not.toContain("100.0%");
+  });
 });
