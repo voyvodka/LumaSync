@@ -939,7 +939,7 @@ function App() {
                     },
                   },
                 );
-                if (result.status !== "ok") {
+                if (result.status !== "shown") {
                   console.info(
                     "[LumaSync] tray hint notification not delivered:",
                     result.code ?? "unknown",

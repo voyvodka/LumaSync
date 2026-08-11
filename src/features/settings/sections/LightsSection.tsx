@@ -243,7 +243,9 @@ export function LightsSection({
         roomMapVersion: (state.roomMapVersion ?? 0) + 1,
       });
       try {
-        await invoke(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, { zone: newZone });
+        await invoke(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, {
+          request: { zone: newZone, existingZones: existing },
+        });
       } catch (invokeErr) {
         console.error("[LumaSync] create_hue_zone failed", invokeErr);
       }
