@@ -41,8 +41,7 @@ export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
  * Re-export of the canonical Hue zone command map from `roomMap.ts`.
  *
  * v1.5 W4-F2 rolled the W4-F generic `ZONE_COMMANDS` map back to a
- * Hue-only `HUE_ZONE_COMMANDS` after the direction reversal — see
- * `.planning/RFCs/v1.5-w4-f-zone-unification.md` "Direction reversal".
+ * Hue-only `HUE_ZONE_COMMANDS` after the direction reversal.
  * The map is owned by `roomMap.ts` (zones are persisted on
  * `RoomMapConfig`); the alias here keeps existing imports
  * (`LightsSection`, `RoomMapEditor`) working without source churn.
