@@ -100,7 +100,7 @@ pnpm verify:shell-contracts   # Validate shell contract compatibility
 # Rust gates (mirrored in CI — run from src-tauri/)
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test -- --test-threads=1                  # default features: see note below
+cargo test --all-features -- --test-threads=1   # single-threaded: see note below
 cargo audit                                     # advisory scan; ignores live in .cargo/audit.toml
 ```
 
@@ -110,10 +110,10 @@ mutex shared by both test modules, so the suite passes at default parallelism.
 The flag predates that guard and is now belt-and-braces. Reproduce CI exactly if
 you are chasing a CI-only failure; otherwise plain `cargo test` is fine.
 
-`cargo test` runs on **default features**, unlike clippy and check. Enabling
-`e2e` links the WebDriver plugin into the test binary, which then dies at load
-on Windows with `STATUS_ENTRYPOINT_NOT_FOUND`. No test exercises the feature,
-and clippy/check still compile it on all three OSes.
+`build.rs` embeds `windows-app-manifest.xml` into **every** linked target rather
+than letting tauri-build attach it to the bin alone. Test binaries reference
+comctl32 v6 through tauri's tray/menu stack, and without the manifest Windows
+refuses to load them (`STATUS_ENTRYPOINT_NOT_FOUND`).
 
 ## Architecture
 
