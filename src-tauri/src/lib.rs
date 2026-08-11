@@ -564,8 +564,12 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
-            // Build tray menu
+            // TEMPORARY probes (Windows CI launch hang, PR #180) — remove once
+            // resolved. Rust logging is synchronous, so they land even if the
+            // event loop never pumps.
+            log::info!("[startup] setup: entered");
             let (menu, tray_state) = build_tray_menu(app.handle())?;
+            log::info!("[startup] setup: tray menu built");
             let app_handle = app.handle().clone();
 
             // On non-macOS platforms, disable native window decorations so the
@@ -590,7 +594,9 @@ pub fn run() {
             // from the WebView context menu each launch.
             #[cfg(debug_assertions)]
             if let Some(main_window) = app.get_webview_window("main") {
+                log::info!("[startup] setup: opening devtools");
                 main_window.open_devtools();
+                log::info!("[startup] setup: devtools returned");
             }
 
             app.manage(tray_state);
@@ -695,6 +701,7 @@ pub fn run() {
                     _ => {}
                 })
                 .build(&app_handle)?;
+            log::info!("[startup] setup: tray icon built");
 
             // Dev-only: catch SIGINT (Ctrl+C in the terminal that ran
             // `pnpm tauri dev`) and run the same orderly shutdown path
@@ -714,6 +721,7 @@ pub fn run() {
                 });
             }
 
+            log::info!("[startup] setup: returning");
             Ok(())
         })
         // Close-to-tray interception (main window only — overlay windows must close freely).
@@ -813,6 +821,7 @@ pub fn run() {
         ])
         .build(app_context())
         .expect("error while building tauri application");
+    log::info!("[startup] builder returned; entering the event loop");
 
     // .run() with a callback is the only place that sees RunEvent::Exit on
     // macOS Cmd+Q (tao 0.35 surfaces applicationWillTerminate as
