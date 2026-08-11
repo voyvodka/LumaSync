@@ -171,10 +171,48 @@ jobs:
         # the tray against instead of leaving it to GDBus autolaunch.
         run: xvfb-run -a dbus-run-session -- node scripts/verify/launch-smoke.mjs
 
-      - name: Launch smoke test (macOS / Windows)
-        # Both runners provide a real desktop session, so the app launches as-is.
-        if: runner.os != 'Linux'
+      - name: Launch smoke test (macOS)
+        # The runner provides a real desktop session, so the app launches as-is.
+        if: runner.os == 'macOS'
         run: node scripts/verify/launch-smoke.mjs
+
+      - name: Launch smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = 'src-tauri\target\debug\lumasync.exe'
+          # A GUI-subsystem binary gets no console, which is the leading
+          # explanation for stdout arriving empty here while macOS and Linux
+          # see it. Read the field rather than infer it from the profile.
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          Write-Host "PE subsystem = $([BitConverter]::ToUInt16($bytes, $pe + 0x5C)) (2 = GUI, 3 = console)"
+
+          node scripts/verify/launch-smoke.mjs `
+            --binary $exe `
+            --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
+
+      # TEMPORARY (diagnosing the Windows launch failure on PR #180). Runs on
+      # success too, so a green run has to show the marker with a fresh
+      # timestamp rather than being taken on trust. Remove once resolved.
+      - name: Dump Windows launch diagnostics
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($dir in @("$env:LOCALAPPDATA\com.lumasync.app", "$env:APPDATA\com.lumasync.app")) {
+            Write-Host "=== $dir ==="
+            if (Test-Path $dir) {
+              Get-ChildItem $dir -Recurse -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Host "  $($_.FullName) ($($_.Length) bytes)" }
+            } else { Write-Host '  (absent)' }
+          }
+          Write-Host '=== every lumasync*.log under the user profile ==='
+          Get-ChildItem $env:USERPROFILE -Filter 'lumasync*.log' -Recurse -Depth 5 `
+              -ErrorAction SilentlyContinue |
+            ForEach-Object {
+              Write-Host "--- $($_.FullName) ($($_.Length) bytes) ---"
+              Get-Content $_.FullName -Tail 60 -ErrorAction SilentlyContinue | Write-Host
+            }
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'

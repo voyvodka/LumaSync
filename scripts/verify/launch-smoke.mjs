@@ -4,7 +4,7 @@
 // --debug --no-bundle`; plain `cargo build` writes a dev-URL binary there.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -81,6 +81,35 @@ function readStartupMarker() {
   return match[1];
 }
 
+// Any cargo command overwrites the same path with a dev-URL binary, which then
+// launches, stays alive and logs nothing — a timeout indistinguishable from a
+// broken app. The hashed entry chunk is only present when dist is embedded.
+function assertFrontendIsEmbedded(binary) {
+  let indexHtml;
+  try {
+    indexHtml = readFileSync(path.join(REPO_ROOT, "dist", "index.html"), "utf8");
+  } catch {
+    return;
+  }
+  const asset = /assets\/index-[A-Za-z0-9_-]+\.js/.exec(indexHtml);
+  if (asset === null) return;
+  if (!readFileSync(binary).includes(asset[0])) {
+    fail(
+      `${binary} does not embed ${asset[0]}: this is a dev-URL build, not a\n` +
+        "       `tauri build --debug --no-bundle` one, and would time out silently",
+    );
+  }
+}
+
+function describeLog(logFile) {
+  if (logFile === null) return "";
+  try {
+    return `, and ${logFile} held ${statSync(logFile).size} bytes`;
+  } catch {
+    return `, and ${logFile} was never created`;
+  }
+}
+
 function removeQuietly(target) {
   try {
     rmSync(target, { force: true });
@@ -96,8 +125,11 @@ async function main() {
   if (!existsSync(opts.binary)) {
     fail(`binary not found: ${opts.binary}\n       build it: pnpm tauri build --debug --no-bundle`);
   }
-  // A leftover log from an earlier run would match the marker without the app
-  // ever having started, so the sink starts empty.
+  // Cargo output path only: a bundle is a container, so the string search would
+  // miss the chunk even when it is correctly embedded.
+  if (opts.binary === DEFAULT_BINARY) assertFrontendIsEmbedded(opts.binary);
+
+  // A leftover log would match the marker without the app ever having started.
   if (opts.logFile !== null) removeQuietly(opts.logFile);
   if (!IS_WINDOWS) removeQuietly(SINGLE_INSTANCE_SOCKET);
 
@@ -164,8 +196,14 @@ async function main() {
         );
       }
       if (Date.now() - startedAt > READY_TIMEOUT_MS) {
+        // Whether it was wedged or gone is the whole diagnosis when this fires.
+        const state = closed === null ? "still running" : "already gone";
         forceKill();
-        fail(`timed out after ${READY_TIMEOUT_MS} ms waiting for: ${marker}`, everything());
+        fail(
+          `timed out after ${READY_TIMEOUT_MS} ms waiting for: ${marker}\n` +
+            `       the app was ${state} at the deadline${describeLog(opts.logFile)}`,
+          everything(),
+        );
       }
       await sleep(POLL_INTERVAL_MS);
     }
