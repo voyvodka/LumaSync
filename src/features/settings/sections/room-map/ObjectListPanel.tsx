@@ -7,6 +7,7 @@ import type {
 } from "@/shared/contracts/roomMap";
 import { getZoneColor } from "./ZoneListPanel";
 import { HueZoneListPanel } from "./HueZoneListPanel";
+import { SectionLabel } from "@/shared/ui/SectionLabel";
 
 type ObjectEntry = {
   id: string;
@@ -364,11 +365,7 @@ function renderObjectsWithHueGrouping(
           const zoneRows = buckets.get(zone.id) ?? [];
           return (
             <li key={`zone-group-${zone.id}`} className="mt-1.5">
-              <div
-                className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--lm-ink-faint)]"
-                role="heading"
-                aria-level={3}
-              >
+              <SectionLabel as="div" tone="heading" role="heading" aria-level={3}>
                 <span
                   className="h-1.5 w-1.5 shrink-0 rounded-full"
                   style={{ background: zone.borderColor ?? "var(--lm-zone-1)" }}
@@ -376,7 +373,7 @@ function renderObjectsWithHueGrouping(
                 />
                 <span className="flex-1 truncate">{zone.name}</span>
                 <span className="text-[9px] text-[var(--lm-ink-faint)]">{zoneRows.length}</span>
-              </div>
+              </SectionLabel>
               <ul className="ml-2 border-l border-[var(--lm-line)]/60 pl-1">
                 {zoneRows.length === 0 ? (
                   <li className="px-1.5 py-0.5 text-[9px] italic text-[var(--lm-ink-faint)]">
@@ -403,15 +400,11 @@ function renderObjectsWithHueGrouping(
       {/* Unassigned hue channels */}
       {hueObjects.length > 0 && unassigned.length > 0 && (
         <li className="mt-1.5">
-          <div
-            className="flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--lm-ink-faint)]"
-            role="heading"
-            aria-level={3}
-          >
+          <SectionLabel as="div" tone="heading" role="heading" aria-level={3}>
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--lm-ink-faint)]" aria-hidden />
             <span className="flex-1 truncate">{t("roomMap.hueZones.unassignedTitle")}</span>
             <span className="text-[9px] text-[var(--lm-ink-faint)]">{unassigned.length}</span>
-          </div>
+          </SectionLabel>
           <ul className="ml-2 border-l border-[var(--lm-line)]/60 pl-1">
             {unassigned.map((entry) => (
               <ObjectRow

@@ -66,6 +66,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "@/shared/lib/math";
+import { SectionLabel } from "@/shared/ui/SectionLabel";
 
 // ---------------------------------------------------------------------------
 // Color math
@@ -704,12 +705,9 @@ export function HsvColorPicker({
         <div className="flex items-center gap-2">
           {/* `htmlFor` rather than a wrapping label: the static `#` must not
               leak into the input's accessible name. */}
-          <label
-            htmlFor={hexInputId}
-            className="text-[10px] uppercase tracking-wide text-[color:var(--lm-ink-dim)]"
-          >
+          <SectionLabel as="label" tone="dim" htmlFor={hexInputId}>
             {t("ui.colorPicker.hexLabel")}
-          </label>
+          </SectionLabel>
           <span
             className={[
               "flex flex-1 items-center gap-0.5 rounded border border-[color:var(--lm-line-2)] [font-family:var(--lm-mono)]",
@@ -758,9 +756,7 @@ export function HsvColorPicker({
           vertical bloat), free-wrap in full mode where space is plenty. */}
       {!hideRecent && recent.length > 0 && (
         <div className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-[color:var(--lm-ink-dim)]">
-            {t("ui.colorPicker.recentColors")}
-          </span>
+          <SectionLabel tone="dim">{t("ui.colorPicker.recentColors")}</SectionLabel>
           <div
             className={
               compact
