@@ -601,11 +601,15 @@ pub fn run() {
             // Debug builds: auto-open WebView devtools in a detached window so
             // frontend `console.log` is visible without manually toggling it
             // from the WebView context menu each launch.
+            // A headless CI desktop has nobody to read a DevTools window, and on
+            // Windows opening one is a candidate for wedging the webview.
             #[cfg(debug_assertions)]
-            if let Some(main_window) = app.get_webview_window("main") {
-                log::info!("[startup] setup: opening devtools");
-                main_window.open_devtools();
-                log::info!("[startup] setup: devtools returned");
+            if std::env::var_os("LUMASYNC_NO_DEVTOOLS").is_none() {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    log::info!("[startup] setup: opening devtools");
+                    main_window.open_devtools();
+                    log::info!("[startup] setup: devtools returned");
+                }
             }
 
             app.manage(tray_state);

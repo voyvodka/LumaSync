@@ -180,9 +180,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          # TEMPORARY (PR #180): setup ran at T+17 s here versus T+0 elsewhere,
-          # so give it room to tell a merely slow runner from a wedged one.
-          LAUNCH_SMOKE_READY_TIMEOUT_MS: "300000"
+          # TEMPORARY (PR #180): the webview loads the bundle and then goes
+          # silent forever. DevTools is the only Windows-specific, debug-only
+          # step in that path, so test it with everything else unchanged.
+          LUMASYNC_NO_DEVTOOLS: "1"
         run: |
           $exe = 'src-tauri\target\debug\lumasync.exe'
           # A GUI-subsystem binary gets no console, which is the leading
