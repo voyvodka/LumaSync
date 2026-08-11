@@ -14,7 +14,7 @@ import React from "react";
 import { render, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { RoomMapEditor } from "../../RoomMapEditor";
+import { RoomMapEditor } from "@/features/settings/sections/RoomMapEditor";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks
@@ -32,7 +32,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("../../../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn().mockResolvedValue({
       roomMap: null,
@@ -44,7 +44,7 @@ vi.mock("../../../../persistence/shellStore", () => ({
   },
 }));
 
-vi.mock("../../../../device/useUsbConnectionStatus", () => ({
+vi.mock("@/features/device/useUsbConnectionStatus", () => ({
   useUsbConnectionStatus: () => ({ ready: false }),
 }));
 

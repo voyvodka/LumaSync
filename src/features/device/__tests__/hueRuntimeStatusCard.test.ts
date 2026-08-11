@@ -4,7 +4,7 @@ import {
   HUE_RUNTIME_ACTION_HINT,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
-} from "../../../shared/contracts/hue";
+} from "@/shared/contracts/hue";
 import { buildHueRuntimeStatusCard, deriveFamilyActionHints } from "../hueRuntimeStatusCard";
 
 function createStatus(partial: Partial<HueRuntimeStatus>): HueRuntimeStatus {

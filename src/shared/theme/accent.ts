@@ -14,6 +14,8 @@
  *                    the mode should NOT apply a header gradient (Off mode).
  */
 
+import { clamp } from "@/shared/lib/math";
+
 export interface AccentTheme {
   /** rgb() string — opaque accent for strokes, rings, slider track. */
   color: string;
@@ -40,10 +42,9 @@ export const OFF_ACCENT: AccentTheme = {
 
 /** Build a solid-mode accent from the current RGB selection. */
 export function solidAccent(r: number, g: number, b: number): AccentTheme {
-  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
-  const cr = clamp(r);
-  const cg = clamp(g);
-  const cb = clamp(b);
+  const cr = clamp(Math.round(r), 0, 255);
+  const cg = clamp(Math.round(g), 0, 255);
+  const cb = clamp(Math.round(b), 0, 255);
   return {
     color: `rgb(${cr}, ${cg}, ${cb})`,
     colorSoft: `rgba(${cr}, ${cg}, ${cb}, 0.22)`,

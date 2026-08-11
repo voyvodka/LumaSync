@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildLedSequence, resolveLedSequenceItem } from "../../model/indexMapping";
-import type { LedCalibrationConfig } from "../../model/contracts";
+import { buildLedSequence, resolveLedSequenceItem } from "@/features/calibration/model/indexMapping";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { createDefaultTestPatternFlow, createTestPatternFlow } from "../testPatternFlow";
 
-vi.mock("../../calibrationApi", () => ({
+vi.mock("@/features/calibration/calibrationApi", () => ({
   startCalibrationTestPattern: vi.fn(async () => undefined),
   stopCalibrationTestPattern: vi.fn(async () => undefined),
 }));
 
-const calibrationApiModule = await import("../../calibrationApi");
+const calibrationApiModule = await import("@/features/calibration/calibrationApi");
 
 const startCalibrationTestPatternMock = vi.mocked(calibrationApiModule.startCalibrationTestPattern);
 const stopCalibrationTestPatternMock = vi.mocked(calibrationApiModule.stopCalibrationTestPattern);

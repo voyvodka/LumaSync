@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS } from "../../../shared/contracts/hue";
+import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
 
 const getHueStreamStatusMock = vi.fn();
 const restartHueMock = vi.fn();
@@ -12,13 +12,13 @@ const validateCredentialsMock = vi.fn();
 const checkReadinessMock = vi.fn();
 const getAreaChannelsMock = vi.fn();
 
-vi.mock("../../mode/modeApi", () => ({
+vi.mock("@/features/mode/modeApi", () => ({
   getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
   restartHue: (...args: unknown[]) => restartHueMock(...args),
   startHue: vi.fn(),
 }));
 
-vi.mock("../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => shellLoadMock(),
     save: (...args: unknown[]) => shellSaveMock(...args),

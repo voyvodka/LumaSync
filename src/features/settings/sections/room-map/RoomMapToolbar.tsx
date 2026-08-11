@@ -1,69 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
-function IconGear() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="8" cy="8" r="2.5" />
-      <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" />
-    </svg>
-  );
-}
-
-function IconGrid() {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      className="h-4 w-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="1" y="1" width="6" height="6" rx="0.5" />
-      <rect x="9" y="1" width="6" height="6" rx="0.5" />
-      <rect x="1" y="9" width="6" height="6" rx="0.5" />
-      <rect x="9" y="9" width="6" height="6" rx="0.5" />
-    </svg>
-  );
-}
-
-function IconUndo() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h7a3 3 0 1 1 0 6H9" />
-      <path d="M6 3L3 6l3 3" />
-    </svg>
-  );
-}
-
-function IconRedo() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 6H6a3 3 0 1 0 0 6h1" />
-      <path d="M10 3l3 3-3 3" />
-    </svg>
-  );
-}
-
-function IconInfo() {
-  return (
-    <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6.5" />
-      <path d="M8 7v4" />
-      <circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
+import { IconGear, IconGrid, IconUndo, IconRedo, IconInfoAlt } from "@/shared/ui/icons";
 
 interface RoomMapToolbarProps {
   settingsOpen: boolean;
@@ -222,7 +160,7 @@ function ShortcutsHelpButton() {
         aria-expanded={open}
         title={t("roomMap.shortcuts.title")}
       >
-        <IconInfo />
+        <IconInfoAlt />
       </button>
       {open && (
         <div

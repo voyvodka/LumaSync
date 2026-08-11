@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import type { LedCalibrationConfig } from "../../../calibration/model/contracts";
-import { DEVICE_COMMANDS } from "../../../../shared/contracts/device";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
+import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   HUE_RUNTIME_ACTION_HINT,
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
   type HueRuntimeTelemetry,
-} from "../../../../shared/contracts/hue";
-import { type ShellState } from "../../../../shared/contracts/shell";
+} from "@/shared/contracts/hue";
+import { type ShellState } from "@/shared/contracts/shell";
 import {
   LIGHTING_MODE_KIND,
   isLightingModeKind,

@@ -30,8 +30,9 @@ import {
   KELVIN_RANGE_K,
   SATURATION_RANGE,
   type ColorCorrectionConfig,
-} from "../../../../shared/contracts/device";
-import { shellStore } from "../../../persistence/shellStore";
+} from "@/shared/contracts/device";
+import { shellStore } from "@/features/persistence/shellStore";
+import { clamp } from "@/shared/lib/math";
 
 const PERSIST_DEBOUNCE_MS = 200;
 
@@ -49,10 +50,6 @@ function isDefaultCorrection(config: ColorCorrectionConfig): boolean {
     Math.abs(config.kelvin - DEFAULT_COLOR_CORRECTION.kelvin) < 1 &&
     Math.abs(config.saturation - DEFAULT_COLOR_CORRECTION.saturation) < 1e-3
   );
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 interface SliderRowProps {

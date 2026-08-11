@@ -2,7 +2,7 @@ import type { LedCalibrationConfig } from "./calibration";
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
-import type { LightingModeConfig } from "../../features/mode/model/contracts";
+import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import type {
   HueBridgeSummary,
   HueCredentialBackend,

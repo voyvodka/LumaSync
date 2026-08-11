@@ -49,9 +49,9 @@ import { useTranslation } from "react-i18next";
 import {
   FIRMWARE_PROFILE,
   type FirmwareProfile,
-} from "../../../../shared/contracts/device";
-import { useDeviceConnection } from "../../../device/useDeviceConnection";
-import { shellStore } from "../../../persistence/shellStore";
+} from "@/shared/contracts/device";
+import { useDeviceConnection } from "@/features/device/useDeviceConnection";
+import { shellStore } from "@/features/persistence/shellStore";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 

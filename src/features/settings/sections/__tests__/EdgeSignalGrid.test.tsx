@@ -15,7 +15,7 @@
 import { render, act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EdgeSignalPayload } from "../../../mode/model/contracts";
+import type { EdgeSignalPayload } from "@/features/mode/model/contracts";
 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn() }));
 

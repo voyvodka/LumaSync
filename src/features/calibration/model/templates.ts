@@ -1,6 +1,6 @@
 import type { CalibrationTemplate, LedCalibrationConfig } from "./contracts";
 import { sumSegmentCounts } from "./contracts";
-import type { DisplayInfo } from "../../../shared/contracts/display";
+import type { DisplayInfo } from "@/shared/contracts/display";
 
 const MANUAL_COUNTS = {
   top: 0,

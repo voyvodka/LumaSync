@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { LedCalibrationConfig } from "../../model/contracts";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import {
   deriveCalibrationOverlayEntry,
   shouldAutoOpenCalibrationOnConnection,
@@ -14,11 +14,11 @@ import {
 import {
   MODE_GUARD_REASONS,
   resolveLedModeEnableAttempt,
-} from "../../../mode/state/modeGuard";
+} from "@/features/mode/state/modeGuard";
 import {
   getLightsModeLockState,
   triggerCalibrationFromLock,
-} from "../../../settings/sections/LightsSection";
+} from "@/features/settings/sections/LightsSection";
 
 const EXISTING_CALIBRATION: LedCalibrationConfig = {
   templateId: "monitor-27-16-9",

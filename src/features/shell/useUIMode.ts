@@ -19,7 +19,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import type { UIMode } from "../../shared/contracts/shell";
+import type { UIMode } from "@/shared/contracts/shell";
 import { resizeToMode } from "./windowLifecycle";
 
 /** Fade-out / fade-in duration. Kept short so total transition feels snappy. */

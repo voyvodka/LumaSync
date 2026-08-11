@@ -5,14 +5,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LED_TEST_STATUS, type LedPreviewStatus } from "../../../shared/contracts/preview";
-import { LIGHTING_MODE_KIND } from "../../mode/model/contracts";
+import { LED_TEST_STATUS, type LedPreviewStatus } from "@/shared/contracts/preview";
+import { LIGHTING_MODE_KIND } from "@/features/mode/model/contracts";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../../shared/ui/HsvColorPicker", () => ({
+vi.mock("@/shared/ui/HsvColorPicker", () => ({
   HsvColorPicker: ({ ariaLabel }: { ariaLabel: string }) => (
     <div data-testid="hsv-picker" aria-label={ariaLabel} />
   ),
@@ -33,7 +33,7 @@ vi.mock("../previewApi", () => ({
 const setLightingMode = vi.fn();
 const stopLighting = vi.fn();
 
-vi.mock("../../mode/modeApi", () => ({
+vi.mock("@/features/mode/modeApi", () => ({
   setLightingMode: (...args: unknown[]) => setLightingMode(...args),
   stopLighting: (...args: unknown[]) => stopLighting(...args),
 }));
@@ -41,7 +41,7 @@ vi.mock("../../mode/modeApi", () => ({
 const storeSave = vi.fn();
 let storeState: Record<string, unknown> = {};
 
-vi.mock("../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => Promise.resolve(storeState),
     save: (...args: unknown[]) => storeSave(...args),

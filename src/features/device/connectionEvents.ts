@@ -42,7 +42,7 @@
  * `PORT_NOT_FOUND` — port name no longer enumerates (cable unplugged
  *   before launch).
  */
-import { DEVICE_ERROR_CODES } from "../../shared/contracts/device";
+import { DEVICE_ERROR_CODES } from "@/shared/contracts/device";
 
 export type ConnectionRejectionCode =
   | typeof DEVICE_ERROR_CODES.PORT_UNSUPPORTED

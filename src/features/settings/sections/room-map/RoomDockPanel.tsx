@@ -49,7 +49,8 @@ import type {
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-} from "../../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
+import { IconLockClosed, IconLockOpen, IconDragHandle, IconMoveTo } from "@/shared/ui/icons";
 import { HueZoneInspector } from "./HueZoneInspector";
 import {
   FurnitureInspector,
@@ -227,25 +228,6 @@ function buildObjectList(
     });
   }
   return rows;
-}
-
-/* ── inline icons ───────────────────────────────────────────────── */
-
-function IconLockClosed() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2.5" y="5" width="7" height="5.5" rx="1" />
-      <path d="M4 5V3.5a2 2 0 0 1 4 0V5" />
-    </svg>
-  );
-}
-function IconLockOpen() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2.5" y="5" width="7" height="5.5" rx="1" />
-      <path d="M4 5V3.5a2 2 0 0 1 4 0" />
-    </svg>
-  );
 }
 
 /* ── object row ─────────────────────────────────────────────────── */
@@ -656,28 +638,6 @@ function MovePopover({
         </button>
       ))}
     </div>
-  );
-}
-
-function IconDragHandle() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="currentColor" aria-hidden>
-      <circle cx="3.5" cy="3" r="0.9" />
-      <circle cx="3.5" cy="6" r="0.9" />
-      <circle cx="3.5" cy="9" r="0.9" />
-      <circle cx="8.5" cy="3" r="0.9" />
-      <circle cx="8.5" cy="6" r="0.9" />
-      <circle cx="8.5" cy="9" r="0.9" />
-    </svg>
-  );
-}
-
-function IconMoveTo() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M2 6h7" />
-      <path d="M6 3l3 3-3 3" />
-    </svg>
   );
 }
 

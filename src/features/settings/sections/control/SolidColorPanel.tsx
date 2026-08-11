@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { useSolidColorDraft } from "./useSolidColorDraft";
 
 function toHexPair(value: number): string {

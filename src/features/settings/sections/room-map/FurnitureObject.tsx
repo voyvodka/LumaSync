@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { FurniturePlacement } from "../../../../shared/contracts/roomMap";
+import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
 import type { SnapResult } from "./useSnapGuides";
 

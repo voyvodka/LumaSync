@@ -1,8 +1,8 @@
-import type { HueIntensityPreset, HueRuntimeTarget } from "../../../shared/contracts/hue";
-import type { LightingSmoothingPreset } from "../../../shared/contracts/lighting";
-import type { DisplayId } from "../../../shared/contracts/display";
-import type { LedCalibrationConfig } from "../../../shared/contracts/calibration";
-import type { LedTestPatternKind } from "../../../shared/contracts/preview";
+import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { LightingSmoothingPreset } from "@/shared/contracts/lighting";
+import type { DisplayId } from "@/shared/contracts/display";
+import type { LedCalibrationConfig } from "@/shared/contracts/calibration";
+import type { LedTestPatternKind } from "@/shared/contracts/preview";
 import {
   DEFAULT_COLOR_CORRECTION,
   FIRMWARE_PROFILE,
@@ -13,7 +13,7 @@ import {
   type FirmwareProfile,
   LED_CHIP_TYPE,
   type LedChipType,
-} from "../../../shared/contracts/device";
+} from "@/shared/contracts/device";
 
 export const LIGHTING_MODE_KIND = {
   OFF: "off",

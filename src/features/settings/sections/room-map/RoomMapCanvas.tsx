@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { readFile } from "@tauri-apps/plugin-fs";
-import type { RoomMapConfig, ImageLayer } from "../../../../shared/contracts/roomMap";
+import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
 
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
 

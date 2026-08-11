@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock the persistence layer so tests don't require a running Tauri runtime
 // ---------------------------------------------------------------------------
 
-vi.mock("../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn(),
     save: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock("../../persistence/shellStore", () => ({
   },
 }));
 
-import { shellStore } from "../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 import { resolveInitialLanguage } from "../languagePolicy";
 
 describe("resolveInitialLanguage()", () => {

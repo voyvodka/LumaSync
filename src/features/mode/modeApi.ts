@@ -1,14 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { DEVICE_COMMANDS } from "../../shared/contracts/device";
+import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   HUE_COMMANDS,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeActionHint,
   type HueRuntimeState,
   type HueRuntimeTriggerSource,
-} from "../../shared/contracts/hue";
-import type { LightingModeStatusCode } from "../../shared/contracts/lighting";
+} from "@/shared/contracts/hue";
+import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
 import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
 
 export interface ModeApiError {

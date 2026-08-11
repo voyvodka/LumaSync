@@ -14,7 +14,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 
 const readHueStreamStatusMock = vi.fn();
 
@@ -24,13 +24,13 @@ vi.mock("../hueReadCache", () => ({
   invalidateHueStreamStatus: vi.fn(),
 }));
 
-vi.mock("../../mode/modeApi", () => ({
+vi.mock("@/features/mode/modeApi", () => ({
   getHueStreamStatus: vi.fn(),
   restartHue: vi.fn(),
   startHue: vi.fn(),
 }));
 
-vi.mock("../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { load: vi.fn().mockResolvedValue({}), save: vi.fn().mockResolvedValue(undefined) },
 }));
 

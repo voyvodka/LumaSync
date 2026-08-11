@@ -8,7 +8,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import type { TvAnchorPlacement } from "../../../../shared/contracts/roomMap";
+import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import type { ZoneDeriveResult } from "./deriveZones";
 
 // ---------------------------------------------------------------------------

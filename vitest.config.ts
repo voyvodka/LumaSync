@@ -10,12 +10,18 @@
 
 import { defineConfig } from "vitest/config";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const { version } = JSON.parse(readFileSync("./package.json", "utf-8")) as { version: string };
 
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
+  },
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
   },
   test: {
     environment: "happy-dom",

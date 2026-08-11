@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 
-import { shellStore } from "../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 import {
   openLedTwinOverlay,
   openLedControlPopup,
   showLedControlPopup,
-} from "../../preview/previewApi";
+} from "@/features/preview/previewApi";
 import type { LedCalibrationConfig, LedDirection, LedStartAnchor } from "../model/contracts";
 import { buildLedSequence } from "../model/indexMapping";
 import { deriveDefaultCounts, resetToManual } from "../model/templates";
@@ -34,12 +34,13 @@ import {
 import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
 import { LedRoomCanvas } from "./LedRoomCanvas";
-import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
+import { getSerialConnectionStatus } from "@/features/device/deviceConnectionApi";
 import {
   DISPLAY_OVERLAY_STATUS,
   type DisplayInfo,
   type OverlayPreviewPayload,
-} from "../../../shared/contracts/display";
+} from "@/shared/contracts/display";
+import { clamp } from "@/shared/lib/math";
 
 function reclaimFocus() {
   void getCurrentWindow().setFocus();
@@ -297,7 +298,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   // typo (e.g. an extra trailing digit) from blowing up the editor state.
   const handleCountChange = useCallback((segment: "top" | "right" | "bottom" | "left", nextValue: number) => {
     setEditorState((prev) => {
-      const clamped = Math.max(0, Math.min(1000, Math.floor(nextValue)));
+      const clamped = clamp(Math.floor(nextValue), 0, 1000);
       return updateEditorConfig(prev, { counts: { [segment]: clamped } });
     });
     setValidationErrors(null);
@@ -843,7 +844,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
       setDraft(String(value));
       return;
     }
-    const clamped = Math.max(0, Math.min(max, parsed));
+    const clamped = clamp(parsed, 0, max);
     if (clamped === value) {
       setDraft(String(value));
       return;

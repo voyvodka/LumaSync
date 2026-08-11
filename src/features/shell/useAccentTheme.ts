@@ -23,7 +23,7 @@ import {
   OFF_ACCENT,
   solidAccent,
   type AccentTheme,
-} from "../../shared/theme/accent";
+} from "@/shared/theme/accent";
 
 interface SolidOverride {
   r: number;

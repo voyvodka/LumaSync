@@ -27,8 +27,8 @@ import {
   LED_CHIP_TYPE,
   type FirmwareProfile,
   type LedChipType,
-} from "../../../../shared/contracts/device";
-import { shellStore } from "../../../persistence/shellStore";
+} from "@/shared/contracts/device";
+import { shellStore } from "@/features/persistence/shellStore";
 
 const DEFAULT_CHIP_TYPE: LedChipType = LED_CHIP_TYPE.WS2812B_GRB;
 

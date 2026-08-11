@@ -1,12 +1,12 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SECTION_IDS } from "../../../../shared/contracts/shell";
-import { SettingsLayout } from "../../../settings/SettingsLayout";
+import { SECTION_IDS } from "@/shared/contracts/shell";
+import { SettingsLayout } from "@/features/settings/SettingsLayout";
 
 const getFullTelemetrySnapshotMock = vi.fn();
 
-vi.mock("../../telemetryApi", () => ({
+vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
 }));
 
@@ -176,20 +176,20 @@ describe("TelemetrySection", () => {
   });
 });
 
-vi.mock("../../../tray/trayController", () => ({
+vi.mock("@/features/tray/trayController", () => ({
   getStartupEnabled: vi.fn().mockResolvedValue(false),
   listenStartupToggle: vi.fn().mockResolvedValue(() => {}),
   setStartupTrayChecked: vi.fn().mockResolvedValue(undefined),
   toggleStartup: vi.fn().mockResolvedValue(true),
 }));
 
-vi.mock("../../../i18n/i18n", () => ({
+vi.mock("@/features/i18n/i18n", () => ({
   I18N_SUPPORTED_LANGUAGES: ["en", "tr"],
   I18N_LANGUAGE_NAMES: { en: "English", tr: "Türkçe" },
   changeLanguage: vi.fn(),
 }));
 
-vi.mock("../../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { save: vi.fn() },
 }));
 

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { HUE_COMMANDS } from "../../shared/contracts/hue";
+import { HUE_COMMANDS } from "@/shared/contracts/hue";
 
 export interface CommandStatus {
   code: string;

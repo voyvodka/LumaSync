@@ -9,7 +9,7 @@ import {
   type HueRuntimeTarget,
   type HueRuntimeTargetTelemetryRow,
   type HueCredentialStatus,
-} from "../../shared/contracts/hue";
+} from "@/shared/contracts/hue";
 import { restartHue, startHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
 import { readHueStreamReadiness, readHueStreamStatus } from "./hueReadCache";

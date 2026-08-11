@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LightingModeConfig } from "../../model/contracts";
+import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import { resolveModeTransition } from "../modeRuntimeFlow";
 
 const AMBILIGHT_MODE: LightingModeConfig = {

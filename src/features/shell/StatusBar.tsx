@@ -31,13 +31,13 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
-import { APP_VERSION } from "../../shared/constants/app";
+import { APP_VERSION } from "@/shared/constants/app";
 import {
   KEYBIND_ACTIONS,
   type KeybindAction,
   getKeybindDefinition,
   resolveKeybindPlatform,
-} from "../../shared/contracts/shell";
+} from "@/shared/contracts/shell";
 import { useRuntimeTelemetry } from "../telemetry/hooks/useRuntimeTelemetry";
 
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;

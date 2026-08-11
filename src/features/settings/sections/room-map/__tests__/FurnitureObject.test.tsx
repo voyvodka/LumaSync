@@ -13,7 +13,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { FurnitureObject } from "../FurnitureObject";
-import type { FurniturePlacement } from "../../../../../shared/contracts/roomMap";
+import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 
 // jsdom does not implement setPointerCapture / releasePointerCapture
 beforeEach(() => {

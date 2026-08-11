@@ -1,40 +1,14 @@
 import { useTranslation, Trans } from "react-i18next";
 import type { Update } from "@tauri-apps/plugin-updater";
 import type { UpdaterState } from "./useAutoUpdater";
+import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
+import { clamp } from "@/shared/lib/math";
 
 interface UpdateModalProps {
   state: UpdaterState;
   onInstall: (update: Update) => void;
   onDismiss: () => void;
   onRetry: () => void;
-}
-
-// Download arrow (used for available + downloading)
-function IconDownload() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v13M6 10l6 6 6-6M4 21h16" />
-    </svg>
-  );
-}
-
-// Plus/cross install icon
-function IconInstall() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v20M2 12h20" />
-    </svg>
-  );
-}
-
-// Error alert icon
-function IconError() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 8v4M12 16h.01" />
-    </svg>
-  );
 }
 
 function formatBytes(bytes: number): string {
@@ -245,7 +219,7 @@ function DownloadingContent({
   onBackground: () => void;
   t: TFn;
 }) {
-  const clamped = Math.max(0, Math.min(100, progress));
+  const clamped = clamp(progress, 0, 100);
   return (
     <>
       <div className="lm-updater-head">

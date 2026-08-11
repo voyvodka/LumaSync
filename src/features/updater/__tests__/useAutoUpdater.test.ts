@@ -27,7 +27,7 @@ vi.mock("@tauri-apps/plugin-updater", () => ({
 // (relative to src/features/updater/). From the test in __tests__/ the
 // equivalent path is "../../persistence/shellStore". Vitest resolves vi.mock
 // paths relative to the test file, so we must use the test-relative path.
-vi.mock("../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn().mockResolvedValue({ updateChannel: "stable" }),
   },
@@ -37,7 +37,7 @@ vi.mock("../../persistence/shellStore", () => ({
 // Imports (after mock declarations)
 // ---------------------------------------------------------------------------
 import { check } from "@tauri-apps/plugin-updater";
-import { shellStore } from "../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 import { useAutoUpdater } from "../useAutoUpdater";
 
 // ---------------------------------------------------------------------------

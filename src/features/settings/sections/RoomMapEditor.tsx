@@ -28,12 +28,12 @@ import type {
   HueChannelPlacement,
   HueZone,
   RoomDimensions,
-} from "../../../shared/contracts/roomMap";
-import type { LedSegmentCounts } from "../../calibration/model/contracts";
+} from "@/shared/contracts/roomMap";
+import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
-import { shellStore } from "../../persistence/shellStore";
-import { HUE_ZONE_COMMANDS } from "../../../shared/contracts/hue";
-import { useUsbConnectionStatus } from "../../device/useUsbConnectionStatus";
+import { shellStore } from "@/features/persistence/shellStore";
+import { HUE_ZONE_COMMANDS } from "@/shared/contracts/hue";
+import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;

@@ -17,7 +17,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { LED_TEST_PATTERN_KIND } from "../../../shared/contracts/preview";
+import { LED_TEST_PATTERN_KIND } from "@/shared/contracts/preview";
 import { PatternPicker } from "../ui/PatternPicker";
 
 // ---------------------------------------------------------------------------

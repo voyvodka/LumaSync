@@ -30,8 +30,8 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { HueZone } from "../../../../shared/contracts/roomMap";
-import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
+import type { HueZone } from "@/shared/contracts/roomMap";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 
 interface HueZonePropertiesPanelProps {
   zone: HueZone;

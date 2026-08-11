@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { FurniturePlacement } from "../../../../shared/contracts/roomMap";
+import type { FurniturePlacement } from "@/shared/contracts/roomMap";
+import { IconTv, IconFurniture, IconLed, IconHue, IconImage } from "@/shared/ui/icons";
 
 const FURNITURE_TYPES: FurniturePlacement["type"][] = ["sofa", "table", "chair", "other"];
 
@@ -11,54 +12,6 @@ interface LeftToolbarProps {
   onAddUsb: () => void;
   onAddHue: () => void;
   onAddImage: () => void;
-}
-
-function IconTv() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="16" height="11" rx="1.5" />
-      <path d="M7 17h6M10 14v3" />
-    </svg>
-  );
-}
-
-function IconFurniture() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 10v5h14v-5" />
-      <path d="M5 10V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v3" />
-      <path d="M3 15v2M17 15v2" />
-    </svg>
-  );
-}
-
-function IconLed() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 10h14" strokeDasharray="2 3" />
-      <circle cx="3" cy="10" r="1.5" fill="currentColor" />
-      <circle cx="17" cy="10" r="1.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-function IconHue() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="10" cy="10" r="4" />
-      <path d="M10 2v3M10 15v3M2 10h3M15 10h3" />
-    </svg>
-  );
-}
-
-function IconImage() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="16" height="14" rx="1.5" />
-      <circle cx="7" cy="8" r="1.5" />
-      <path d="M18 14l-4-4-3 3-2-2-7 6" />
-    </svg>
-  );
 }
 
 function ToolChip({

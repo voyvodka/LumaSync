@@ -21,21 +21,22 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
-import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
   type LightingModeKind,
-} from "../../../mode/model/contracts";
+} from "@/features/mode/model/contracts";
 import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
-} from "../../../mode/state/modeGuard";
-import type { HueIntensityPreset, HueRuntimeTarget } from "../../../../shared/contracts/hue";
-import { FIRMWARE_PROFILE, type FirmwareProfile } from "../../../../shared/contracts/device";
-import { SCENE_PRESETS, type ScenePreset } from "../../../mode/model/scenePresets";
+} from "@/features/mode/state/modeGuard";
+import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
+import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
-import { shellStore } from "../../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
@@ -346,33 +347,6 @@ function ModeButton({ kind, active, disabled, label, icon, onClick }: ModeButton
       <span className="ico">{icon}</span>
       <span className="tn">{label}</span>
     </button>
-  );
-}
-
-function IconOff() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="9" />
-      <line x1="5" y1="5" x2="19" y2="19" />
-    </svg>
-  );
-}
-
-function IconAmbilight() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="3" y="5.5" width="18" height="12" rx="1.5" />
-      <path d="M2 9l2-2M22 9l-2-2M2 14l2 2M22 14l-2 2" />
-    </svg>
-  );
-}
-
-function IconSolid() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="5" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
-    </svg>
   );
 }
 

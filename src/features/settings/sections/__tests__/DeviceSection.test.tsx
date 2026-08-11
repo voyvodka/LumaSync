@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../../shared/contracts/hue";
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import { DeviceSection } from "../DeviceSection";
 
 const stopHueMock = vi.fn();
@@ -16,19 +16,19 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("../../../mode/modeApi", () => ({
+vi.mock("@/features/mode/modeApi", () => ({
   stopHue: (...args: unknown[]) => stopHueMock(...args),
 }));
 
-vi.mock("../../../device/useDeviceConnection", () => ({
+vi.mock("@/features/device/useDeviceConnection", () => ({
   useDeviceConnection: () => useDeviceConnectionMock(),
 }));
 
-vi.mock("../../../device/useHueOnboarding", () => ({
+vi.mock("@/features/device/useHueOnboarding", () => ({
   useHueOnboarding: () => useHueOnboardingMock(),
 }));
 
-vi.mock("../../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn().mockResolvedValue({ roomMap: null }),
     save: vi.fn().mockResolvedValue(undefined),
@@ -36,7 +36,7 @@ vi.mock("../../../persistence/shellStore", () => ({
 }));
 
 // Stub calibrationApi.listDisplays so DeviceSection mounts without a Tauri backend.
-vi.mock("../../../calibration/calibrationApi", () => ({
+vi.mock("@/features/calibration/calibrationApi", () => ({
   listDisplays: vi.fn().mockResolvedValue([]),
 }));
 
@@ -327,7 +327,7 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
   });
 
   it("shows persist error banner when shellStore.save rejects during USB strip add", async () => {
-    const { shellStore } = await import("../../../persistence/shellStore");
+    const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();
@@ -351,7 +351,7 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
   });
 
   it("persist error banner auto-dismisses after 3 seconds", async () => {
-    const { shellStore } = await import("../../../persistence/shellStore");
+    const { shellStore } = await import("@/features/persistence/shellStore");
     vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
 
     const user = userEvent.setup();

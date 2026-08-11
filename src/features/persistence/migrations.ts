@@ -37,11 +37,11 @@ import {
   migrateLegacyHueZone,
   type HueZone,
   type LegacyHueZone,
-} from "../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
 import {
   SHELL_STATE_SCHEMA_VERSION,
   type ShellState,
-} from "../../shared/contracts/shell";
+} from "@/shared/contracts/shell";
 
 // ---------------------------------------------------------------------------
 // Legacy ShellState shape — used by the v2 → v3 migration step to read the

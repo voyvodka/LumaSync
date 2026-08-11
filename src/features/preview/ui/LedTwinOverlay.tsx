@@ -20,11 +20,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 
-import { shellStore } from "../../persistence/shellStore";
-import { normalizeLedCalibrationConfig } from "../../calibration/model/contracts";
-import type { LedCalibrationConfig } from "../../calibration/model/contracts";
-import type { LedSegmentKey } from "../../../shared/contracts/calibration";
-import type { TwinScope } from "../../../shared/contracts/preview";
+import { shellStore } from "@/features/persistence/shellStore";
+import { normalizeLedCalibrationConfig } from "@/features/calibration/model/contracts";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
+import type { LedSegmentKey } from "@/shared/contracts/calibration";
+import type { TwinScope } from "@/shared/contracts/preview";
 import { computeTwinLedPositions, type TwinLedPosition } from "../geometry";
 import {
   EMPTY_PACKED_BUFFER,

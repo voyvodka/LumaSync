@@ -1,4 +1,4 @@
-import type { HueCredentialStatus } from "../../shared/contracts/hue";
+import type { HueCredentialStatus } from "@/shared/contracts/hue";
 import type { CommandStatus } from "./hueOnboardingApi";
 
 export interface HueStatusCardModel {

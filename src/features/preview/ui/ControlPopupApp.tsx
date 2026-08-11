@@ -8,26 +8,27 @@ import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { shellStore } from "../../persistence/shellStore";
-import { HsvColorPicker } from "../../../shared/ui/HsvColorPicker";
-import { setLightingMode, stopLighting } from "../../mode/modeApi";
+import { shellStore } from "@/features/persistence/shellStore";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
+import { setLightingMode, stopLighting } from "@/features/mode/modeApi";
 import {
   LIGHTING_MODE_KIND,
   type AmbilightPayload,
   type LightingModeConfig,
   type LightingModeKind,
-} from "../../mode/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile } from "../../../shared/contracts/device";
-import type { DisplayId } from "../../../shared/contracts/display";
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+} from "@/features/mode/model/contracts";
+import type { ColorCorrectionConfig, FirmwareProfile } from "@/shared/contracts/device";
+import type { DisplayId } from "@/shared/contracts/display";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
   LED_TEST_STATUS,
   type LedTestPattern,
   type LedTestPatternKind,
   type LedTestPatternResult,
   type TestPatternSpeed,
-} from "../../../shared/contracts/preview";
-import { useSolidColorDraft } from "../../settings/sections/control/useSolidColorDraft";
+} from "@/shared/contracts/preview";
+import { useSolidColorDraft } from "@/features/settings/sections/control/useSolidColorDraft";
 import { closeLedTwinOverlay, hideLedControlPopup } from "../previewApi";
 import { useLightingModeSync } from "../state/useLightingModeSync";
 import {
@@ -481,7 +482,7 @@ export function ControlPopupApp() {
               kind={LIGHTING_MODE_KIND.SOLID}
               active={!testActive && isSolid}
               label={t("general.mode.options.solid")}
-              icon={<IconSolid />}
+              icon={<IconSolidDot />}
               onClick={handleModeClick}
             />
           </div>
@@ -607,26 +608,3 @@ function ModeButton({ kind, active, label, icon, onClick }: ModeButtonProps) {
   );
 }
 
-function IconOff() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="9" />
-      <line x1="5" y1="5" x2="19" y2="19" />
-    </svg>
-  );
-}
-function IconAmbilight() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="3" y="5.5" width="18" height="12" rx="1.5" />
-      <path d="M2 9l2-2M22 9l-2-2M2 14l2 2M22 14l-2 2" />
-    </svg>
-  );
-}
-function IconSolid() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="8" />
-    </svg>
-  );
-}

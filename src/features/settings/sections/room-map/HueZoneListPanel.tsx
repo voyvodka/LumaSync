@@ -25,7 +25,8 @@ import { useTranslation } from "react-i18next";
 import type {
   HueChannelPlacement,
   HueZone,
-} from "../../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
+import { SectionLabel } from "@/shared/ui/SectionLabel";
 
 interface HueZoneListPanelProps {
   /** All Hue zones authored on the active room map. */
@@ -109,9 +110,7 @@ export function HueZoneListPanel({
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {/* Header row with + Add zone CTA */}
       <div className="mb-1 flex items-center justify-between px-1">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-          {t("roomMap.hueZones.title")}
-        </span>
+        <SectionLabel tone="muted">{t("roomMap.hueZones.title")}</SectionLabel>
         <button
           type="button"
           className={`${btnBase} ${
@@ -266,10 +265,10 @@ export function HueZoneListPanel({
           {/* Unassigned channels group */}
           {unassigned.length > 0 && (
             <li className="mt-2 rounded border border-dashed border-zinc-800/60 px-2 py-1">
-              <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+              <SectionLabel as="div" tone="muted" className="mb-1 flex items-center gap-1.5">
                 {t("roomMap.hueZones.unassignedTitle")}
                 <span className="text-[9px] text-zinc-600">({unassigned.length})</span>
-              </div>
+              </SectionLabel>
               <ul>
                 {unassigned.map((ch) => (
                   <li

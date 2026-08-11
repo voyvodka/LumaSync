@@ -1,4 +1,4 @@
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 const TARGET_ORDER: HueRuntimeTarget[] = ["usb", "hue"];
 

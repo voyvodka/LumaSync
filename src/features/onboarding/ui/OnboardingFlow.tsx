@@ -31,7 +31,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { OnboardingBanner } from "../../../shared/ui/OnboardingBanner";
+import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import {
   INITIAL_ONBOARDING_STEP,
   ONBOARDING_STEPS,

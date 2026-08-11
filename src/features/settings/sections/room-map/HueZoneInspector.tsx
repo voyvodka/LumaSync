@@ -48,8 +48,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { HueZone } from "../../../../shared/contracts/roomMap";
-import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
+import type { HueZone } from "@/shared/contracts/roomMap";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { clamp } from "@/shared/lib/math";
 
 interface HueZoneInspectorProps {
   zone: HueZone;
@@ -99,7 +100,7 @@ const SCALE_MAX = 1;
 
 function clampScale(value: number): number {
   if (!Number.isFinite(value)) return SCALE_MIN;
-  return Math.max(SCALE_MIN, Math.min(SCALE_MAX, value));
+  return clamp(value, SCALE_MIN, SCALE_MAX);
 }
 
 /**
@@ -159,7 +160,7 @@ export function HueZoneInspector({
   const setEdgeM = useCallback(
     (rawMetres: number) => {
       if (maxEdgeM <= 0) return;
-      const clampedM = Math.max(minEdgeM, Math.min(maxEdgeM, rawMetres));
+      const clampedM = clamp(rawMetres, minEdgeM, maxEdgeM);
       const sx = clampScale(clampedM / safeWidthM);
       const sy = clampScale(clampedM / safeDepthM);
       onUpdate({ scaleX: sx, scaleY: sy });
@@ -187,7 +188,7 @@ export function HueZoneInspector({
       setEdgeDraft(currentEdgeM.toFixed(2));
       return;
     }
-    const clampedM = Math.max(minEdgeM, Math.min(maxEdgeM, parsed));
+    const clampedM = clamp(parsed, minEdgeM, maxEdgeM);
     setEdgeDraft(clampedM.toFixed(2));
     setEdgeM(clampedM);
   }, [edgeDraft, maxEdgeM, minEdgeM, currentEdgeM, setEdgeM]);

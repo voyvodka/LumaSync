@@ -20,7 +20,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, cleanup, screen } from "@testing-library/react";
 
 import { HueZoneInspector } from "../HueZoneInspector";
-import type { HueZone } from "../../../../../shared/contracts/roomMap";
+import type { HueZone } from "@/shared/contracts/roomMap";
 
 // Mirror the production locale `roomMap.inspector` keys we reference so
 // vars get interpolated identically to a real i18n run. Anything not
@@ -53,7 +53,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 // Trim the picker dependency — irrelevant to scale-axis assertions.
-vi.mock("../../../../shared/ui/HsvColorPicker", () => ({
+vi.mock("@/shared/ui/HsvColorPicker", () => ({
   HsvColorPicker: () => <div data-testid="hsv-stub" />,
 }));
 

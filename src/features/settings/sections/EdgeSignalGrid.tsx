@@ -11,8 +11,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   EDGE_SIGNAL_EVENT,
   type EdgeSignalPayload,
-} from "../../mode/model/contracts";
-import type { LedSegmentCounts } from "../../../shared/contracts/calibration";
+} from "@/features/mode/model/contracts";
+import type { LedSegmentCounts } from "@/shared/contracts/calibration";
 
 function rgbTripletToCss(triplet: [number, number, number]): string {
   return `rgb(${triplet[0]},${triplet[1]},${triplet[2]})`;

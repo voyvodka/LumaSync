@@ -33,8 +33,8 @@ import { useTranslation } from "react-i18next";
 import {
   DEFAULT_LIGHTING_SMOOTHING_PRESET,
   type LightingSmoothingPreset,
-} from "../../../../shared/contracts/lighting";
-import { shellStore } from "../../../persistence/shellStore";
+} from "@/shared/contracts/lighting";
+import { shellStore } from "@/features/persistence/shellStore";
 
 const PRESET_ORDER: LightingSmoothingPreset[] = ["subtle", "moderate", "intense"];
 

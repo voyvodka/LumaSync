@@ -1,22 +1,22 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { TelemetrySection } from "../../telemetry/ui/TelemetrySection";
+import { TelemetrySection } from "@/features/telemetry/ui/TelemetrySection";
 import {
   changeLanguage,
   I18N_LANGUAGE_NAMES,
   I18N_SUPPORTED_LANGUAGES,
   type I18nLanguage,
-} from "../../i18n/i18n";
-import { shellStore } from "../../persistence/shellStore";
+} from "@/features/i18n/i18n";
+import { shellStore } from "@/features/persistence/shellStore";
 import {
   getStartupEnabled,
   listenStartupToggle,
   setStartupTrayChecked,
   toggleStartup,
-} from "../../tray/trayController";
-import { APP_NAME, APP_VERSION } from "../../../shared/constants/app";
-import type { UpdaterState } from "../../updater/useAutoUpdater";
-import { DevUpdaterMenu } from "../../updater/DevUpdaterMenu";
+} from "@/features/tray/trayController";
+import { APP_NAME, APP_VERSION } from "@/shared/constants/app";
+import type { UpdaterState } from "@/features/updater/useAutoUpdater";
+import { DevUpdaterMenu } from "@/features/updater/DevUpdaterMenu";
 
 interface SystemSectionProps {
   onCheckForUpdates: () => void;

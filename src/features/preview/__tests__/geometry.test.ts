@@ -23,8 +23,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { LedCalibrationConfig } from "../../calibration/model/contracts";
-import { buildLedSequence } from "../../calibration/model/indexMapping";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
+import { buildLedSequence } from "@/features/calibration/model/indexMapping";
 import { computeTwinLedPositions } from "../geometry";
 
 // ---------------------------------------------------------------------------

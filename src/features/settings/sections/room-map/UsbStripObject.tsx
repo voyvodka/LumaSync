@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { UsbStripPlacement } from "../../../../shared/contracts/roomMap";
+import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+import { clamp } from "@/shared/lib/math";
 
 interface UsbStripObjectProps {
   placement: UsbStripPlacement;
@@ -188,7 +189,7 @@ export function UsbStripObject({
 
   const handleLedCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
-    const clamped = isNaN(val) ? 1 : Math.max(1, Math.min(1000, val));
+    const clamped = isNaN(val) ? 1 : clamp(val, 1, 1000);
     setLocalLedCount(clamped);
     onChange({ ...placement, ledCount: clamped });
   };
