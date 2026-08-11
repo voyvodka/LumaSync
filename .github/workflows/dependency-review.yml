@@ -29,7 +29,8 @@ jobs:
           # stays faithful to the DNA rule (MIT/Apache/BSD/ISC only — GPL/
           # EUPL/AGPL rejected) without tripping on parser quirks.
           deny-licenses: GPL-1.0, GPL-2.0, GPL-3.0, LGPL-2.0, LGPL-2.1, LGPL-3.0, AGPL-1.0, AGPL-3.0, EUPL-1.1, EUPL-1.2, SSPL-1.0
-          # unescaper (via serialport) is dual "MIT OR GPL-3.0-only" — we take
-          # the MIT arm; the action matches inside OR and cannot see that.
-          allow-dependencies-licenses: pkg:cargo/unescaper
+          # unescaper (via serialport) and jszip (via webdriverio) are dual
+          # "MIT OR GPL-3.0-*" — we take the MIT arm; the action matches inside
+          # OR and cannot see that.
+          allow-dependencies-licenses: pkg:cargo/unescaper, pkg:npm/jszip
           comment-summary-in-pr: on-failure
