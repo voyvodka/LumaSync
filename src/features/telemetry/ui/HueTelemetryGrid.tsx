@@ -7,91 +7,68 @@ interface HueTelemetryGridProps {
 }
 
 function formatDuration(secs: number | null): string {
-  if (secs === null || secs < 0) return "\u2014";
+  if (secs === null || secs < 0) return "—";
   const minutes = Math.floor(secs / 60);
   const seconds = Math.round(secs % 60);
   return `${minutes}m ${seconds}s`;
 }
 
+/** Rev 07 status tint for a stream state. */
+function stateTint(state: string): string {
+  if (state === "Running") return "is-ok";
+  if (state === "Reconnecting") return "is-warn";
+  if (state === "Failed") return "is-crit";
+  return "";
+}
+
 export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
   const { t } = useTranslation("common");
 
-  const stateColor =
-    hue.state === "Running"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : hue.state === "Reconnecting"
-        ? "text-amber-600 dark:text-amber-400"
-        : hue.state === "Failed"
-          ? "text-rose-600 dark:text-rose-400"
-          : "text-slate-900 dark:text-zinc-100";
-
   return (
-    <div className="mt-6">
-      <h3 className="text-sm font-semibold tracking-tight">
-        {t("telemetry.hue.title")}
-      </h3>
-      <div className="mt-3 space-y-2">
-        <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("telemetry.hue.status")}
-          </span>
-          <span className={`text-sm ${stateColor}`}>
+    <>
+      <div className="lm-tele-sub-title">{t("telemetry.hue.title")}</div>
+      <div className="lm-tele-rows">
+        <div className="lm-tele-row">
+          <span className="k">{t("telemetry.hue.status")}</span>
+          <span className={`v ${stateTint(hue.state)}`}>
             {hue.state}
             {hue.uptimeSecs !== null && hue.state === "Running" ? (
-              <span className="ml-2 inline-block min-w-[7ch] text-right text-xs tabular-nums text-slate-400 dark:text-zinc-500">
-                {formatDuration(hue.uptimeSecs)}
-              </span>
+              <span className="age">{formatDuration(hue.uptimeSecs)}</span>
             ) : null}
           </span>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("telemetry.hue.packetRate")}
-          </span>
-          <span className="text-sm tabular-nums text-slate-900 dark:text-zinc-100">
-            {hue.packetRate.toFixed(1)} pkt/s
-          </span>
+        <div className="lm-tele-row">
+          <span className="k">{t("telemetry.hue.packetRate")}</span>
+          <span className="v">{hue.packetRate.toFixed(1)} pkt/s</span>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("telemetry.hue.lastError")}
-          </span>
-          <span className="text-sm tabular-nums text-slate-900 dark:text-zinc-100">
+        <div className="lm-tele-row">
+          <span className="k">{t("telemetry.hue.lastError")}</span>
+          <span className={`v ${hue.lastErrorCode ? "is-crit" : ""}`}>
             {hue.lastErrorCode
-              ? `${hue.lastErrorCode}${hue.lastErrorAtSecs !== null ? ` \u2014 ${Math.floor(hue.lastErrorAtSecs / 60)}m ago` : ""}`
-              : "\u2014"}
+              ? `${hue.lastErrorCode}${hue.lastErrorAtSecs !== null ? ` — ${Math.floor(hue.lastErrorAtSecs / 60)}m ago` : ""}`
+              : "—"}
           </span>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("telemetry.hue.reconnects")}
-          </span>
-          <span className="text-sm tabular-nums text-slate-900 dark:text-zinc-100">
+        <div className="lm-tele-row">
+          <span className="k">{t("telemetry.hue.reconnects")}</span>
+          <span className="v">
             {hue.totalReconnects} ({hue.successfulReconnects} ok, {hue.failedReconnects} fail)
           </span>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("telemetry.hue.dtlsCipher")}
-          </span>
-          <span className="text-sm text-slate-900 dark:text-zinc-100">
-            {hue.dtlsCipher ?? "\u2014"}
-          </span>
+        <div className="lm-tele-row">
+          <span className="k">{t("telemetry.hue.dtlsCipher")}</span>
+          <span className="v">{hue.dtlsCipher ?? "—"}</span>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-4 py-2 dark:border-zinc-800 dark:bg-zinc-800/40">
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-            {t("telemetry.hue.connectionAge")}
-          </span>
-          <span className="inline-block min-w-[7ch] text-right text-sm tabular-nums text-slate-900 dark:text-zinc-100">
-            {formatDuration(hue.dtlsConnectedAtSecs)}
-          </span>
+        <div className="lm-tele-row">
+          <span className="k">{t("telemetry.hue.connectionAge")}</span>
+          <span className="v">{formatDuration(hue.dtlsConnectedAtSecs)}</span>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -373,6 +373,10 @@
       "about": {
         "title": "Hakkında",
         "sub": "Build · lisans"
+      },
+      "telemetry": {
+        "title": "Çalışma telemetrisi",
+        "sub": "Canlı akış"
       }
     },
     "language": {

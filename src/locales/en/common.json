@@ -381,6 +381,10 @@
       "about": {
         "title": "About",
         "sub": "Build · license"
+      },
+      "telemetry": {
+        "title": "Runtime telemetry",
+        "sub": "Live throughput"
       }
     },
     "language": {

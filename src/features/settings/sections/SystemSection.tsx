@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TelemetrySection } from "../../telemetry/ui/TelemetrySection";
-import { changeLanguage, I18N_SUPPORTED_LANGUAGES, type I18nLanguage } from "../../i18n/i18n";
+import {
+  changeLanguage,
+  I18N_LANGUAGE_NAMES,
+  I18N_SUPPORTED_LANGUAGES,
+  type I18nLanguage,
+} from "../../i18n/i18n";
 import { shellStore } from "../../persistence/shellStore";
 import {
   getStartupEnabled,
@@ -117,23 +122,18 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
             <div className="lm-settings-row-desc">{t("settingsPage.language.description")}</div>
           </div>
           <div className="lm-settings-row-r">
-            <div className="lm-settings-seg" role="radiogroup" aria-label={t("settingsPage.language.label")}>
-              {I18N_SUPPORTED_LANGUAGES.map((lang) => {
-                const active = currentLanguage === lang;
-                return (
-                  <button
-                    key={lang}
-                    type="button"
-                    className={active ? "is-on" : ""}
-                    onClick={() => { void handleLanguageChange(lang); }}
-                    role="radio"
-                    aria-checked={active}
-                  >
-                    {lang.toUpperCase()}
-                  </button>
-                );
-              })}
-            </div>
+            <select
+              className="lm-settings-select"
+              aria-label={t("settingsPage.language.label")}
+              value={currentLanguage}
+              onChange={(e) => { void handleLanguageChange(e.target.value as I18nLanguage); }}
+            >
+              {I18N_SUPPORTED_LANGUAGES.map((lang) => (
+                <option key={lang} value={lang}>
+                  {I18N_LANGUAGE_NAMES[lang]}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </section>
