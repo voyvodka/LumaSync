@@ -563,22 +563,9 @@ pub fn run() {
     }
 
     let app = builder
-        // TEMPORARY probe (PR #180): does the webview reach our bundle at all?
-        .on_page_load(|webview, payload| {
-            log::info!(
-                "[startup] page-load {:?} in {} at {}",
-                payload.event(),
-                webview.label(),
-                payload.url()
-            );
-        })
         .setup(|app| {
-            // TEMPORARY probes (Windows CI launch hang, PR #180) — remove once
-            // resolved. Rust logging is synchronous, so they land even if the
-            // event loop never pumps.
-            log::info!("[startup] setup: entered");
+            // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
-            log::info!("[startup] setup: tray menu built");
             let app_handle = app.handle().clone();
 
             // On non-macOS platforms, disable native window decorations so the
@@ -601,15 +588,9 @@ pub fn run() {
             // Debug builds: auto-open WebView devtools in a detached window so
             // frontend `console.log` is visible without manually toggling it
             // from the WebView context menu each launch.
-            // A headless CI desktop has nobody to read a DevTools window, and on
-            // Windows opening one is a candidate for wedging the webview.
             #[cfg(debug_assertions)]
-            if std::env::var_os("LUMASYNC_NO_DEVTOOLS").is_none() {
-                if let Some(main_window) = app.get_webview_window("main") {
-                    log::info!("[startup] setup: opening devtools");
-                    main_window.open_devtools();
-                    log::info!("[startup] setup: devtools returned");
-                }
+            if let Some(main_window) = app.get_webview_window("main") {
+                main_window.open_devtools();
             }
 
             app.manage(tray_state);
@@ -714,7 +695,6 @@ pub fn run() {
                     _ => {}
                 })
                 .build(&app_handle)?;
-            log::info!("[startup] setup: tray icon built");
 
             // Dev-only: catch SIGINT (Ctrl+C in the terminal that ran
             // `pnpm tauri dev`) and run the same orderly shutdown path
@@ -734,7 +714,6 @@ pub fn run() {
                 });
             }
 
-            log::info!("[startup] setup: returning");
             Ok(())
         })
         // Close-to-tray interception (main window only — overlay windows must close freely).
@@ -834,7 +813,6 @@ pub fn run() {
         ])
         .build(app_context())
         .expect("error while building tauri application");
-    log::info!("[startup] builder returned; entering the event loop");
 
     // .run() with a callback is the only place that sees RunEvent::Exit on
     // macOS Cmd+Q (tao 0.35 surfaces applicationWillTerminate as
