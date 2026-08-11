@@ -40,6 +40,7 @@ import {
   type DisplayInfo,
   type OverlayPreviewPayload,
 } from "@/shared/contracts/display";
+import { clamp } from "@/shared/lib/math";
 
 function reclaimFocus() {
   void getCurrentWindow().setFocus();
@@ -297,7 +298,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   // typo (e.g. an extra trailing digit) from blowing up the editor state.
   const handleCountChange = useCallback((segment: "top" | "right" | "bottom" | "left", nextValue: number) => {
     setEditorState((prev) => {
-      const clamped = Math.max(0, Math.min(1000, Math.floor(nextValue)));
+      const clamped = clamp(Math.floor(nextValue), 0, 1000);
       return updateEditorConfig(prev, { counts: { [segment]: clamped } });
     });
     setValidationErrors(null);
@@ -843,7 +844,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
       setDraft(String(value));
       return;
     }
-    const clamped = Math.max(0, Math.min(max, parsed));
+    const clamped = clamp(parsed, 0, max);
     if (clamped === value) {
       setDraft(String(value));
       return;

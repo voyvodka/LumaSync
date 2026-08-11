@@ -2,6 +2,7 @@ import { useTranslation, Trans } from "react-i18next";
 import type { Update } from "@tauri-apps/plugin-updater";
 import type { UpdaterState } from "./useAutoUpdater";
 import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
+import { clamp } from "@/shared/lib/math";
 
 interface UpdateModalProps {
   state: UpdaterState;
@@ -218,7 +219,7 @@ function DownloadingContent({
   onBackground: () => void;
   t: TFn;
 }) {
-  const clamped = Math.max(0, Math.min(100, progress));
+  const clamped = clamp(progress, 0, 100);
   return (
     <>
       <div className="lm-updater-head">

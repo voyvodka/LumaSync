@@ -65,6 +65,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { clamp } from "@/shared/lib/math";
 
 // ---------------------------------------------------------------------------
 // Color math
@@ -82,10 +83,6 @@ interface Hsv {
   h: number;
   s: number;
   v: number;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 function hexPair(value: number): string {

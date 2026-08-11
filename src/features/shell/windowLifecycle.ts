@@ -20,6 +20,7 @@ import {
   type UIMode,
 } from "@/shared/contracts/shell";
 import { migrateShellState } from "../persistence/migrations";
+import { clamp } from "@/shared/lib/math";
 
 // ---------------------------------------------------------------------------
 // Store helpers
@@ -501,7 +502,7 @@ export async function getTargetModeSize(mode: UIMode): Promise<{ width: number; 
 
 /** easeOutCubic — fast start, gentle settle. */
 function easeOutCubic(t: number): number {
-  const clamped = Math.max(0, Math.min(1, t));
+  const clamped = clamp(t, 0, 1);
   return 1 - Math.pow(1 - clamped, 3);
 }
 

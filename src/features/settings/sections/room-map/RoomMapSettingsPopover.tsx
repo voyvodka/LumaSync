@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
+import { clamp } from "@/shared/lib/math";
 
 /** Numeric input that holds local string state and commits a clamped number on blur/Enter */
 function NumericField({
@@ -33,7 +34,7 @@ function NumericField({
       setLocal(String(value));
       return;
     }
-    const clamped = Math.max(min, Math.min(max, num));
+    const clamped = clamp(num, min, max);
     onChange(clamped);
     setLocal(String(clamped));
   }, [local, value, min, max, onChange]);

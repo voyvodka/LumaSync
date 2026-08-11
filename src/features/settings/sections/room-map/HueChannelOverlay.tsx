@@ -1,6 +1,7 @@
 import { useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import { clamp } from "@/shared/lib/math";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
@@ -68,10 +69,6 @@ interface HueChannelOverlayProps {
  */
 function hueToMetres(hueVal: number, roomSizeM: number): number {
   return ((hueVal + 1) / 2) * roomSizeM;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
 
 /**
