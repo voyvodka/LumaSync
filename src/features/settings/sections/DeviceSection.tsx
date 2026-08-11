@@ -19,6 +19,18 @@ import { stopHue } from "@/features/mode/modeApi";
 import { HueChannelMapPanel } from "./HueChannelMapPanel";
 import { WledDevicePicker } from "./WledDevicePicker";
 import { LedChipTypePicker } from "./control/LedChipTypePicker";
+import {
+  IconCheck,
+  IconInfo,
+  IconWifi,
+  IconBridge,
+  IconUsb,
+  IconHueBridgeGlyph,
+  IconDisplayGlyph,
+  IconWledGlyph,
+  IconPencil,
+  IconRefresh,
+} from "@/shared/ui/icons";
 
 type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
 
@@ -36,104 +48,6 @@ function portDisplayName(portName: string, product?: string, manufacturer?: stri
   }
 
   return portName;
-}
-
-/* ── Inline SVG icons ─────────────────────────────────── */
-
-function IconCheck() {
-  return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 6l3 3 5-5" />
-    </svg>
-  );
-}
-
-
-function IconInfo() {
-  return (
-    <svg viewBox="0 0 16 16" className="mt-0.5 h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 5v3.5M8 11v.5" />
-    </svg>
-  );
-}
-
-function IconWifi() {
-  return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 7.5a12.5 12.5 0 0116 0" />
-      <path d="M5 11a8 8 0 0110 0" />
-      <path d="M8 14.5a4 4 0 014 0" />
-      <circle cx="10" cy="17" r="0.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-function IconBridge() {
-  return (
-    <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="14" height="10" rx="3" />
-      <circle cx="10" cy="10" r="2" />
-      <path d="M10 5v-2M10 17v-2" />
-    </svg>
-  );
-}
-
-function IconUsb() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="9" width="18" height="10" rx="2" />
-      <path d="M8 9V6a2 2 0 012-2h4a2 2 0 012 2v3" />
-      <circle cx="12" cy="14" r="1.3" fill="currentColor" />
-    </svg>
-  );
-}
-
-function IconHueBridgeGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 3v18M3 12h18" />
-    </svg>
-  );
-}
-
-function IconDisplayGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="13" rx="1.5" />
-      <path d="M8 21h8M12 18v3" />
-    </svg>
-  );
-}
-
-function IconWledGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 8c5 5 15 5 20 0" />
-      <path d="M5 12c3.5 3.5 10.5 3.5 14 0" />
-      <path d="M8 16c2 2 6 2 8 0" />
-      <circle cx="12" cy="20" r="1" fill="currentColor" />
-    </svg>
-  );
-}
-
-function IconPencil() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 113 3L7 19l-4 1 1-4z" />
-    </svg>
-  );
-}
-
-function IconRefresh() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12a9 9 0 11-3-6.7L21 8" />
-      <path d="M21 3v5h-5" />
-    </svg>
-  );
 }
 
 export interface DeviceSectionProps {

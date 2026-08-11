@@ -37,6 +37,7 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
 import { shellStore } from "@/features/persistence/shellStore";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
+import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
 
 import { EdgeSignalGrid } from "./EdgeSignalGrid";
 import { SolidColorPanel } from "./control/SolidColorPanel";
@@ -104,33 +105,6 @@ interface LightsSectionProps {
 
 function toHexPair(value: number): string {
   return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
-}
-
-function IconOff() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-      <circle cx="12" cy="12" r="9" />
-      <line x1="5" y1="5" x2="19" y2="19" />
-    </svg>
-  );
-}
-
-function IconAmbilight() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5.5" width="18" height="12" rx="1.5" />
-      <path d="M2 9l2-2M22 9l-2-2M2 14l2 2M22 14l-2 2" />
-    </svg>
-  );
-}
-
-function IconSolid() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="5" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
-    </svg>
-  );
 }
 
 /**

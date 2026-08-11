@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { IconLock, IconUnlock, IconOpacity } from "@/shared/ui/icons";
 
 interface PropertyBarProps {
   config: RoomMapConfig;
@@ -119,34 +120,6 @@ function NumberInput({
         onKeyDown={(e) => { e.stopPropagation(); if (e.key === "Enter") commit(); }}
       />
     </label>
-  );
-}
-
-function IconLock() {
-  return (
-    <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="7" width="10" height="7" rx="1" />
-      <path d="M5 7V5a3 3 0 0 1 6 0v2" />
-    </svg>
-  );
-}
-
-function IconUnlock() {
-  return (
-    <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="7" width="10" height="7" rx="1" />
-      <path d="M5 7V5a3 3 0 0 1 6 0" />
-    </svg>
-  );
-}
-
-function IconOpacity() {
-  return (
-    <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="8" cy="8" r="6" />
-      <path d="M8 2v12" />
-      <path d="M8 2a6 6 0 0 1 0 12" fill="currentColor" opacity="0.3" />
-    </svg>
   );
 }
 

@@ -10,6 +10,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { shellStore } from "@/features/persistence/shellStore";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
 import { setLightingMode, stopLighting } from "@/features/mode/modeApi";
 import {
   LIGHTING_MODE_KIND,
@@ -481,7 +482,7 @@ export function ControlPopupApp() {
               kind={LIGHTING_MODE_KIND.SOLID}
               active={!testActive && isSolid}
               label={t("general.mode.options.solid")}
-              icon={<IconSolid />}
+              icon={<IconSolidDot />}
               onClick={handleModeClick}
             />
           </div>
@@ -607,26 +608,3 @@ function ModeButton({ kind, active, label, icon, onClick }: ModeButtonProps) {
   );
 }
 
-function IconOff() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="9" />
-      <line x1="5" y1="5" x2="19" y2="19" />
-    </svg>
-  );
-}
-function IconAmbilight() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <rect x="3" y="5.5" width="18" height="12" rx="1.5" />
-      <path d="M2 9l2-2M22 9l-2-2M2 14l2 2M22 14l-2 2" />
-    </svg>
-  );
-}
-function IconSolid() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="8" />
-    </svg>
-  );
-}
