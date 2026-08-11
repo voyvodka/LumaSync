@@ -132,7 +132,9 @@ jobs:
         # --test-threads=1 is required: lighting_mode tests share a global
         # ACTIVE_AMBILIGHT_WORKERS AtomicUsize; parallel test execution causes
         # spurious failures when other tests' workers bleed into the count.
-        run: cargo test --all-features -- --test-threads=1
+        # Default features, not --all-features: linking the `e2e` WebDriver plugin
+        # into the test binary kills it at load on Windows (STATUS_ENTRYPOINT_NOT_FOUND).
+        run: cargo test -- --test-threads=1
 
       - name: Verify macOS Swift runtime linkage (guard against #115 regression)
         if: runner.os == 'macOS'

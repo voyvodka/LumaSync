@@ -100,7 +100,7 @@ pnpm verify:shell-contracts   # Validate shell contract compatibility
 # Rust gates (mirrored in CI — run from src-tauri/)
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features -- --test-threads=1   # single-threaded: see note below
+cargo test -- --test-threads=1                  # default features: see note below
 cargo audit                                     # advisory scan; ignores live in .cargo/audit.toml
 ```
 
@@ -109,6 +109,11 @@ worker-touching `lighting_mode` tests serialise themselves on a `WORKER_TEST_GUA
 mutex shared by both test modules, so the suite passes at default parallelism.
 The flag predates that guard and is now belt-and-braces. Reproduce CI exactly if
 you are chasing a CI-only failure; otherwise plain `cargo test` is fine.
+
+`cargo test` runs on **default features**, unlike clippy and check. Enabling
+`e2e` links the WebDriver plugin into the test binary, which then dies at load
+on Windows with `STATUS_ENTRYPOINT_NOT_FOUND`. No test exercises the feature,
+and clippy/check still compile it on all three OSes.
 
 ## Architecture
 
@@ -262,7 +267,7 @@ Run after any change, lightest checks first:
 2. `pnpm vitest run <changed-test-or-folder>`
 3. `pnpm verify:shell-contracts` (if contracts/commands touched)
 4. `pnpm check:rust` (if Rust touched)
-5. `cargo fmt --all -- --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test --all-features -- --test-threads=1` (if Rust touched — CI enforces all three, clippy at deny level)
+5. `cargo fmt --all -- --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test -- --test-threads=1` (if Rust touched — CI enforces all three, clippy at deny level)
 6. `pnpm build` (integration confidence)
 
 ## Debugging: Live Log Analysis
