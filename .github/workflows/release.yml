@@ -67,6 +67,8 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # xvfb + dbus-x11 are for the AppImage smoke test, not the bundle: the
+          # app needs a display to open its window and a session bus for the tray.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
@@ -80,7 +82,9 @@ jobs:
             libxrandr-dev \
             libpipewire-0.3-dev \
             libdbus-1-dev \
-            libgbm-dev
+            libgbm-dev \
+            xvfb \
+            dbus-x11
 
       - name: Install macOS universal targets
         if: matrix.os == 'macos-latest'
@@ -206,6 +210,100 @@ jobs:
             exit 1
           fi
           bash scripts/verify/macos-swift-runtime.sh "$BIN"
+
+      # These run post-upload like the guard above — safe, because the upload
+      # went into a draft that `publish` only undrafts if this job is green.
+      # --hard-kill: the SIGINT shutdown hook is debug-only (ci.yml covers it).
+      - name: Launch smoke test on the mounted .dmg
+        if: matrix.os == 'macos-latest'
+        run: |
+          set -euo pipefail
+          DMGDIR=src-tauri/target/universal-apple-darwin/release/bundle/dmg
+          DMG=$(ls "$DMGDIR"/*.dmg 2>/dev/null | head -1 || true)
+          [ -n "$DMG" ] || { echo "::error::no .dmg under $DMGDIR"; exit 1; }
+          MNT="$(mktemp -d)"
+          # Detach even on failure, or the volume stays busy for later steps.
+          trap 'hdiutil detach "$MNT" -force >/dev/null 2>&1 || true' EXIT
+          hdiutil attach "$DMG" -mountpoint "$MNT" -nobrowse -readonly -quiet
+          APP=$(ls -d "$MNT"/*.app | head -1)
+          # Globbed, not hardcoded: the inner executable is named after the cargo
+          # package (`lumasync`), not after productName.
+          EXE=$(ls "$APP"/Contents/MacOS/* | head -1)
+          node scripts/verify/launch-smoke.mjs \
+            --binary "$EXE" \
+            --log-file "$HOME/Library/Logs/com.lumasync.app/lumasync.log" \
+            --hard-kill
+
+      - name: Launch smoke test on the AppImage
+        if: matrix.os == 'ubuntu-24.04'
+        env:
+          # ubuntu-24.04 ships FUSE 3 only and the AppImage runtime wants FUSE 2.
+          # Extracting runs the same shipped payload without coupling the release
+          # to whether the runner can mount; the FUSE path is the runtime's
+          # problem, not ours.
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          # Xvfb has no GPU, and WebKit's accelerated compositor and DMA-BUF
+          # renderer both abort without one, taking the webview down with them.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        run: |
+          set -euo pipefail
+          IMGDIR=src-tauri/target/release/bundle/appimage
+          APPIMAGE=$(ls "$IMGDIR"/*.AppImage 2>/dev/null | head -1 || true)
+          [ -n "$APPIMAGE" ] || { echo "::error::no .AppImage under $IMGDIR"; exit 1; }
+          chmod +x "$APPIMAGE"
+          xvfb-run -a dbus-run-session -- node scripts/verify/launch-smoke.mjs \
+            --binary "$APPIMAGE" \
+            --log-file "$HOME/.local/share/com.lumasync.app/logs/lumasync.log" \
+            --hard-kill
+
+      - name: Launch smoke test on the installed .msi
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Get-ChildItem src-tauri\target\release\bundle\msi\*.msi `
+                   -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $msi) { throw 'no .msi under src-tauri\target\release\bundle\msi' }
+
+          $installLog = Join-Path $env:RUNNER_TEMP 'msi-install.log'
+          $run = Start-Process msiexec -Wait -PassThru -ArgumentList `
+            '/i', "`"$($msi.FullName)`"", '/qn', '/norestart', '/l*v', "`"$installLog`""
+          if ($run.ExitCode -ne 0) {
+            Get-Content $installLog -Tail 40
+            throw "silent install failed with exit code $($run.ExitCode)"
+          }
+
+          # Discover rather than assume the WiX template's Program Files layout.
+          # msiexec always writes an uninstall key, which also carries the product
+          # code needed to remove it again.
+          # -ErrorAction SilentlyContinue throughout: one unreadable sibling key
+          # would otherwise abort the whole step under $ErrorActionPreference.
+          $key = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+                               'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' `
+                   -ErrorAction SilentlyContinue |
+                 ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } |
+                 Where-Object { $_.DisplayName -eq 'LumaSync' } | Select-Object -First 1
+          if (-not $key) { throw 'LumaSync has no uninstall key after a successful install' }
+
+          $roots = @($key.InstallLocation, $env:ProgramFiles, ${env:ProgramFiles(x86)},
+                     "$env:LOCALAPPDATA\Programs") | Where-Object { $_ -and (Test-Path $_) }
+          $exe = Get-ChildItem -Path $roots -Filter 'LumaSync.exe' -Recurse -Depth 2 `
+                   -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "installed LumaSync.exe not found under: $($roots -join ', ')" }
+          Write-Host "installed at $($exe.FullName)"
+
+          try {
+            # A release build is linked as a GUI subsystem app, so stdout may not
+            # survive; --log-file gives the marker a second, certain route.
+            node scripts/verify/launch-smoke.mjs `
+              --binary "$($exe.FullName)" `
+              --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync.log" `
+              --hard-kill
+            if ($LASTEXITCODE -ne 0) { throw 'launch smoke test failed' }
+          } finally {
+            Start-Process msiexec -Wait -ArgumentList '/x', $key.PSChildName, '/qn', '/norestart'
+          }
 
   publish:
     name: Publish release
