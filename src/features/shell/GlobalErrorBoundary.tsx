@@ -15,7 +15,7 @@
  *    and Hue streams are all reinitialized cleanly. Falls back to a
  *    `window.location.reload()` on platforms or test environments where
  *    the plugin is not available.
- *  - "Show logs" → `invoke("open_log_dir")`. Reveals the LumaSync log
+ *  - "Show logs" → `platformApi.openLogDir()`. Reveals the LumaSync log
  *    directory in Finder / Explorer / xdg-open so the user can attach
  *    log files to a bug report. Backed by the v1.4 W3-O platform
  *    command; hidden until that command succeeds during a probe call,
@@ -36,9 +36,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 
-import { PLATFORM_COMMANDS } from "@/shared/contracts/platform";
+import { openLogDir } from "@/features/platform/platformApi";
 
 import "./GlobalErrorBoundary.css";
 
@@ -116,7 +115,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
   private handleShowLogs = async () => {
     try {
-      await invoke(PLATFORM_COMMANDS.OPEN_LOG_DIR);
+      await openLogDir();
     } catch (err) {
       console.error("[LumaSync] open_log_dir failed:", err);
     }

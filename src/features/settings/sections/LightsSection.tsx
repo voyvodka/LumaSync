@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 
 import {
   MODE_GUARD_REASONS,
@@ -17,7 +16,8 @@ import {
   findMatchingScenePreset,
   type ScenePreset,
 } from "@/features/mode/model/scenePresets";
-import { HUE_ZONE_COMMANDS, type HueIntensityPreset, type HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import { createHueZone } from "@/features/settings/sections/room-map/roomMapApi";
 import type { HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type { DisplayInfo } from "@/shared/contracts/display";
@@ -243,9 +243,7 @@ export function LightsSection({
         roomMapVersion: (state.roomMapVersion ?? 0) + 1,
       });
       try {
-        await invoke(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, {
-          request: { zone: newZone, existingZones: existing },
-        });
+        await createHueZone({ zone: newZone, existingZones: existing });
       } catch (invokeErr) {
         console.error("[LumaSync] create_hue_zone failed", invokeErr);
       }

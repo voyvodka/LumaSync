@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
 import { useRoomMapPersist } from "./room-map/useRoomMapPersist";
 import { RoomMapCanvas } from "./room-map/RoomMapCanvas";
 import { RoomMapToolbar } from "./room-map/RoomMapToolbar";
@@ -32,8 +31,14 @@ import type {
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
 import { shellStore } from "@/features/persistence/shellStore";
-import { HUE_ZONE_COMMANDS } from "@/shared/contracts/hue";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
+import {
+  assignChannelToHueZone,
+  copyBackgroundImage,
+  createHueZone,
+  deleteHueZone,
+  updateHueZone,
+} from "./room-map/roomMapApi";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
@@ -376,7 +381,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
     });
     if (selected && typeof selected === "string") {
-      const destPath = await invoke<string>("copy_background_image", { srcPath: selected });
+      const destPath = await copyBackgroundImage(selected);
       const fileName = destPath.split("/").pop() ?? "Image";
       const label = fileName.replace(/\.[^.]+$/, "");
       const id = crypto.randomUUID();
@@ -662,9 +667,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     setObjectPanelOpen(true);
 
     // Mirror to backend; never throw — silent-catch ban → log only.
-    void invoke(HUE_ZONE_COMMANDS.CREATE_HUE_ZONE, {
-      request: { zone: newZone, existingZones: hueZones },
-    }).catch((e) => {
+    void createHueZone({ zone: newZone, existingZones: hueZones }).catch((e) => {
       console.error("[LumaSync] create_hue_zone failed", e);
     });
   }, [hueAreaId, hueZones, config.zones, updateConfig, t]);
@@ -681,9 +684,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       void updateConfig({ zones: nextZones, hueChannels: nextChannels });
       if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
 
-      void invoke(HUE_ZONE_COMMANDS.DELETE_HUE_ZONE, {
-        request: { zoneId, existingZones: hueZones, channels: config.hueChannels },
-      }).catch((e) => {
+      void deleteHueZone({ zoneId, existingZones: hueZones, channels: config.hueChannels }).catch((e) => {
         console.error("[LumaSync] delete_hue_zone failed", e);
       });
     },
@@ -702,9 +703,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
       void updateConfig({ zones: next });
       if (renamed) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
-          request: { zone: renamed, existingZones: next },
-        }).catch((e) => {
+        void updateHueZone({ zone: renamed, existingZones: next }).catch((e) => {
           console.error("[LumaSync] update_hue_zone (rename) failed", e);
         });
       }
@@ -785,15 +784,13 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
       void updateConfig({ hueChannels: nextChannels, zones: nextZones });
 
-      void invoke(HUE_ZONE_COMMANDS.ASSIGN_CHANNEL_TO_HUE_ZONE, {
-        request: {
-          channelIndex,
-          zoneId: targetZoneId,
-          zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
-          entertainmentAreaId,
-          existingZones: nextZones,
-          channels: nextChannels,
-        },
+      void assignChannelToHueZone({
+        channelIndex,
+        zoneId: targetZoneId,
+        zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
+        entertainmentAreaId,
+        existingZones: nextZones,
+        channels: nextChannels,
       }).catch((e) => {
         console.error("[LumaSync] assign_channel_to_hue_zone failed", e);
       });
@@ -990,12 +987,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
       void updateConfig({ zones: next });
       if (updated) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
-          request: {
-            zone: updated,
-            existingZones: next,
-          },
-        }).catch((e) => {
+        void updateHueZone({ zone: updated, existingZones: next }).catch((e) => {
           console.error("[LumaSync] update_hue_zone (center) failed", e);
         });
       }
@@ -1028,12 +1020,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
       void updateConfig({ zones: next });
       if (updated) {
-        void invoke(HUE_ZONE_COMMANDS.UPDATE_HUE_ZONE, {
-          request: {
-            zone: updated,
-            existingZones: next,
-          },
-        }).catch((e) => {
+        void updateHueZone({ zone: updated, existingZones: next }).catch((e) => {
           console.error("[LumaSync] update_hue_zone (props) failed", e);
         });
       }

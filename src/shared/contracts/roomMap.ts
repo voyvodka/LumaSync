@@ -30,6 +30,7 @@
 export const ROOM_MAP_COMMANDS = {
   SAVE: "save_room_map",
   LOAD: "load_room_map",
+  COPY_BACKGROUND_IMAGE: "copy_background_image",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,13 @@ export const ROOM_MAP_COMMANDS = {
  * v1.5 W4-F2: `zoneId` references a `HueZone` (the only surviving zone
  * kind after the direction reversal — logical zones were dropped).
  */
+/** Zone-relative coordinate in `[-1, 1]` per axis — mirrors Rust's `ZoneRelativePosition`. */
+export interface ZoneRelativePosition {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface HueChannelPlacement {
   /** Channel index within the entertainment area (0-based) */
   channelIndex: number;
@@ -73,11 +81,7 @@ export interface HueChannelPlacement {
    * The world-space `x/y/z` above are derived from this via
    * `HueZone.center + HueZone.scale * zoneRelativePosition`.
    */
-  zoneRelativePosition?: {
-    x: number;
-    y: number;
-    z: number;
-  };
+  zoneRelativePosition?: ZoneRelativePosition;
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +466,54 @@ export const HUE_ZONE_STATUS_CODES = {
 
 export type HueZoneStatusCode =
   (typeof HUE_ZONE_STATUS_CODES)[keyof typeof HUE_ZONE_STATUS_CODES];
+
+// ---------------------------------------------------------------------------
+// Hue Zone command payloads (mirrors `commands/room_map/hue_zone.rs`)
+// ---------------------------------------------------------------------------
+
+/** Generic coded command result — mirrors Rust's `CommandStatus`. */
+export interface CommandStatus {
+  code: string;
+  message: string;
+  details: string | null;
+}
+
+/** Response for the four Hue zone authoring commands; `zones`/`channels` are echoed back for the next `save_room_map`. */
+export interface HueZoneCommandResult {
+  status: {
+    code: HueZoneStatusCode;
+    message: string;
+    details: string | null;
+  };
+  zones: HueZone[];
+  channels: HueChannelPlacement[];
+}
+
+export interface CreateHueZoneRequest {
+  zone: HueZone;
+  existingZones?: HueZone[];
+}
+
+export interface UpdateHueZoneRequest {
+  zone: HueZone;
+  existingZones?: HueZone[];
+}
+
+export interface DeleteHueZoneRequest {
+  zoneId: string;
+  existingZones?: HueZone[];
+  channels?: HueChannelPlacement[];
+}
+
+export interface AssignChannelRequest {
+  channelIndex: number;
+  /** `null` detaches the channel back to legacy absolute placement. */
+  zoneId: string | null;
+  zoneRelativePosition: ZoneRelativePosition | null;
+  entertainmentAreaId: string;
+  existingZones?: HueZone[];
+  channels?: HueChannelPlacement[];
+}
 
 /** Channel-position write-back to the bridge (`room_map/save_load.rs`). i18n keys
  * live under `device.hue.runtime.writeback.codes.*` in both locales. */
