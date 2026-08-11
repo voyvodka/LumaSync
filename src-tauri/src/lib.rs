@@ -563,6 +563,15 @@ pub fn run() {
     }
 
     let app = builder
+        // TEMPORARY probe (PR #180): does the webview reach our bundle at all?
+        .on_page_load(|webview, payload| {
+            log::info!(
+                "[startup] page-load {:?} in {} at {}",
+                payload.event(),
+                webview.label(),
+                payload.url()
+            );
+        })
         .setup(|app| {
             // TEMPORARY probes (Windows CI launch hang, PR #180) — remove once
             // resolved. Rust logging is synchronous, so they land even if the

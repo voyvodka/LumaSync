@@ -683,14 +683,19 @@ export async function initWindowLifecycle(opts?: {
       // with `skip_initial_state("main")` so it does NOT auto-restore size
       // or visibility — only position is restored here, from our own
       // shellStore, which means the user never sees a big→compact flash.
+      // TEMPORARY probes (PR #180) — remove with the ones in main.tsx.
+      console.info("[LumaSync] [probe] lifecycle entered");
       const win = getCurrentWindow();
       // Launch always starts in compact (see comment above) — enforce its
       // floor so OS resize handles respect the compact min from frame 0.
       // If the user toggles to full later, `resizeToMode` will raise the
       // floor to full's min when that transition completes.
       await applyModeMinSize(win, "compact");
+      console.info("[LumaSync] [probe] min size applied");
       await restoreWindowState();
+      console.info("[LumaSync] [probe] window state restored");
       await win.show();
+      console.info("[LumaSync] [probe] window shown");
       // Force the window to the front on launch. Without this, on some
       // window managers (notably macOS after a cold launch with other
       // apps already in focus) `show()` reveals the window below the

@@ -103,6 +103,8 @@ function bridgeConsoleToTauri() {
 }
 
 bridgeConsoleToTauri();
+// TEMPORARY probes (PR #180) — remove once the Windows launch hang is resolved.
+console.info("[LumaSync] [probe] module evaluated");
 
 /**
  * FE-2 fix — neutralize the opaque global app background on the twin overlay
@@ -195,12 +197,15 @@ function renderRoot() {
 async function bootstrap() {
   // 1. Resolve language (honours I18N-02: English default on first launch)
   const language = await resolveInitialLanguage();
+  console.info("[LumaSync] [probe] language resolved");
 
   // 2. Initialise i18next with resolved language
   await initI18n(language);
+  console.info("[LumaSync] [probe] i18n ready");
 
   // 3. Mount React (window-label routing happens inside resolveRootTree)
   renderRoot();
+  console.info("[LumaSync] [probe] react rendered");
 }
 
 bootstrap().catch((err) => {

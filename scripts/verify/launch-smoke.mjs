@@ -20,8 +20,10 @@ const DEFAULT_BINARY = path.join(
 );
 
 // Generous but bounded. A cold webview init on a loaded CI runner is the slow
-// case; anything past this is a hang, not slowness.
-const READY_TIMEOUT_MS = 120_000;
+// case; anything past this is a hang, not slowness. Overridable so a suspected
+// slow runner can be told apart from a wedged one without editing the script.
+const READY_TIMEOUT_MS =
+  Number.parseInt(process.env.LAUNCH_SMOKE_READY_TIMEOUT_MS ?? "", 10) || 120_000;
 // The Rust shutdown watchdog hard-exits at 4s, so a healthy quit is well inside.
 const SHUTDOWN_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 250;
