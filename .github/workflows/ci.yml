@@ -34,7 +34,9 @@ jobs:
   verify:
     name: Build and Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Windows needs ~30 min on a cold cache (vendored openssl + aws-lc-rs), and the
+    # cache save that follows was being cut off mid-write at the old 30.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:

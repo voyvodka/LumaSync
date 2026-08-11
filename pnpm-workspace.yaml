@@ -1,6 +1,15 @@
+# All three arrive with @wdio/cli. The E2E suite uses the embedded WebDriver
+# provider, so the Edge/Gecko driver downloads are dead weight.
+allowBuilds:
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
 # pnpm 11 relocated settings out of package.json's "pnpm" field into this file.
 # overrides: force the transitive `undici` (jsdom -> vitest test environment,
 # dev-only) to a patched version, clearing GitHub advisories GHSA for undici
 # < 7.29.0 (SOCKS5 cross-origin routing, TLS cert validation bypass, et al.).
+# serialize-javascript: mocha still pins ^6.0.2 as of 11.8.0, which GHSA-5c6j-r48x-rmvq
+# (RCE) and GHSA-qj8w-gfj5-8c6v both cover; 7.0.5 is the first release clear of the pair.
 overrides:
   undici: "^7.29.0"
+  serialize-javascript: "^7.1.0"

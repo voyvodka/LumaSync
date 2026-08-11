@@ -3,17 +3,12 @@
 @source "./**/*.{ts,tsx}";
 
 /* ─────────────────────────────────────────────────────────────────────
-   Self-hosted IBM Plex (Rev 07 typography). Loaded via @fontsource so
-   the app stays offline-safe and the existing CSP `font-src 'self'`
-   stays unchanged.
+   Self-hosted IBM Plex (Rev 07 typography). The woff2 files still come
+   from @fontsource so the app stays offline-safe and the existing CSP
+   `font-src 'self'` stays unchanged, but the faces are declared in
+   fonts.css to get `font-display: block` — see that file for why.
    ───────────────────────────────────────────────────────────────────── */
-@import "@fontsource/ibm-plex-mono/400.css";
-@import "@fontsource/ibm-plex-mono/500.css";
-@import "@fontsource/ibm-plex-mono/600.css";
-@import "@fontsource/ibm-plex-sans/400.css";
-@import "@fontsource/ibm-plex-sans/500.css";
-@import "@fontsource/ibm-plex-sans/600.css";
-@import "@fontsource/ibm-plex-sans/700.css";
+@import "./fonts.css";
 
 :root {
   font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
@@ -243,6 +238,22 @@
   font-weight: 500;
   letter-spacing: 0.06em;
   color: var(--lm-red);
+}
+
+/* Reserved boxes for the two 1 Hz readings. Without them the latency suffix
+   slides left every time FPS drops a digit. StatusBar is mono, so 1ch is one
+   glyph: 3ch fits "144"/"—", 7ch fits "· 144ms". */
+.lm-statusbar-fps {
+  display: inline-block;
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.lm-statusbar-latency {
+  display: inline-block;
+  min-width: 7ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* v1.5 W2-B1 — inline Reconnect button rendered next to an offline chip's
@@ -705,6 +716,11 @@
   letter-spacing: 0;
   text-transform: none;
   color: var(--lm-ink);
+  /* Same reserved-box rule as `.lm-psl .row b` — 4ch fits "100%" so the
+     live readout does not slide while the slider is dragged. */
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .lm-compact-slider {
   -webkit-appearance: none;
@@ -1559,6 +1575,28 @@
 }
 
 /* Segmented (2-up for language) */
+.lm-settings-select {
+  min-height: 32px;
+  min-width: 132px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--lm-line-2);
+  background: #0a0c0f;
+  color: var(--lm-ink);
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  outline: none;
+}
+.lm-settings-select:hover {
+  border-color: rgba(255, 176, 32, 0.32);
+}
+.lm-settings-select:focus-visible {
+  border-color: rgba(255, 176, 32, 0.55);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+
 .lm-settings-seg {
   display: flex;
   background: #0a0c0f;
@@ -3001,6 +3039,15 @@
 .lm-signal-head .meta-pill b {
   color: #ffb020;
   font-weight: 500;
+  /* Δ latency / Σ fps tick ~1 Hz, and `.lm-signal-head` is a wrapping
+     space-between flex row — an unreserved value box makes the whole pill
+     slide sideways on every tick and, at narrow widths, wrap onto a second
+     line and back. Reserve the widest realistic reading ("144 fps") so the
+     box never resizes. The pill is mono, so 1ch is exactly one glyph. */
+  display: inline-block;
+  min-width: 7ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .lm-edges {
   display: grid;
@@ -3159,6 +3206,11 @@
   font-size: 10.5px;
   flex-shrink: 0;
   white-space: nowrap;
+  /* Percentage readout under a live slider: 4ch fits "100%" so the value
+     stops sliding as the user drags through 9 → 10 → 100. */
+  min-width: 4ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .lm-psl .tr {
   position: relative;
@@ -6385,5 +6437,501 @@ body {
     border-color: CanvasText;
     background: Canvas;
     color: CanvasText;
+  }
+}
+
+/* ===========================================================================
+   v1.6 — LED Preview & Test Experience
+   ---------------------------------------------------------------------------
+   Two surfaces live in dedicated webview windows:
+     - the click-through digital-twin overlay (`.lm-twin-*`)
+     - the interactive control popup (`.lm-control-*`)
+   Both honour the amber Rev 07 tokens, ship a forced-colors fallback, and
+   guard every >120 ms animation behind prefers-reduced-motion. The twin dots
+   deliberately carry NO color transition so they track the live stream 1:1.
+   =========================================================================== */
+
+/* ── Digital-twin overlay ────────────────────────────────────────────────── */
+.lm-twin-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  /* Click-through is enforced at the OS window layer in Phase 2; we also drop
+     pointer events defensively so the overlay never steals input today. */
+  pointer-events: none;
+  /* Keep our own color math under Windows High Contrast — the whole point of
+     the overlay is to mirror exact LED colour. */
+  forced-color-adjust: none;
+}
+
+.lm-twin-dot {
+  position: absolute;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  forced-color-adjust: none;
+  /* NO color/background transition — the dot must snap to each ~10 Hz frame. */
+}
+
+.lm-twin-ribbon {
+  position: absolute;
+  pointer-events: none;
+  forced-color-adjust: none;
+  filter: blur(6px);
+  opacity: 0.55;
+}
+
+.lm-twin-hue-row {
+  position: absolute;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.lm-twin-hue-chip {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  forced-color-adjust: none;
+}
+
+.lm-twin-scope {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(7, 8, 10, 0.62);
+  border: 1px solid var(--lm-line-2);
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  backdrop-filter: blur(4px);
+}
+
+@media (forced-colors: active) {
+  .lm-twin-scope {
+    background: Canvas;
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+}
+
+/* ── Control popup ───────────────────────────────────────────────────────── */
+.lm-control-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  background: var(--lm-bg);
+  color: var(--lm-ink);
+  font-family: var(--lm-sans);
+  overflow: hidden;
+}
+
+.lm-control-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+}
+
+.lm-control-title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--lm-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lm-control-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--lm-line-2);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-control-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--lm-ink-faint);
+}
+.lm-control-chip.is-test { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.4); }
+.lm-control-chip.is-test .dot { background: var(--lm-amber); }
+.lm-control-chip.is-live { color: var(--lm-green); border-color: rgba(74, 222, 128, 0.4); }
+.lm-control-chip.is-live .dot { background: var(--lm-green); }
+
+.lm-control-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel-2);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.lm-control-close:hover { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.4); }
+.lm-control-close:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); color: var(--lm-amber); }
+
+.lm-control-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+}
+
+.lm-control-section-title {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+  margin-bottom: 6px;
+}
+
+/* Reserved box for the live brightness readout: it is the right-hand item of a
+   space-between row, so an unreserved value slides the hex prefix sideways as
+   it crosses 9→10→100. Already inside a mono span — no tabular-nums needed. */
+.lm-control-readout-num {
+  display: inline-block;
+  min-width: 4ch;
+  text-align: right;
+}
+
+.lm-control-mode-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.lm-control-mbtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 7px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+.lm-control-mbtn:hover:not(:disabled) { color: var(--lm-ink); border-color: var(--lm-line-2); }
+.lm-control-mbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.lm-control-mbtn:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+.lm-control-mbtn.is-on { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
+.lm-control-mbtn svg { width: 18px; height: 18px; }
+
+/* ── Pattern picker ──────────────────────────────────────────────────────── */
+.lm-pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.lm-pattern-tile {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink-dim);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.lm-pattern-tile:hover:not(:disabled) { color: var(--lm-ink); }
+.lm-pattern-tile:disabled { opacity: 0.4; cursor: not-allowed; }
+.lm-pattern-tile:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+.lm-pattern-tile.is-on { color: var(--lm-ink); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
+.lm-pattern-tile .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid var(--lm-line-2);
+}
+
+.lm-pattern-speed {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.lm-pattern-speed button {
+  flex: 1;
+  min-height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.lm-pattern-speed button:hover:not(:disabled) { color: var(--lm-ink); }
+.lm-pattern-speed button:disabled { opacity: 0.4; cursor: not-allowed; }
+.lm-pattern-speed button:focus-visible { outline: none; box-shadow: var(--lm-focus-ring); }
+.lm-pattern-speed button.is-on { color: var(--lm-amber); border-color: rgba(255, 176, 32, 0.5); background: rgba(255, 176, 32, 0.08); }
+
+/* ── Preview-only info note (FE-3) ───────────────────────────────────────
+   A PATTERN_PREVIEW_ONLY run is a success (the test ran into the twin /
+   edge-signal stream) — NOT an error. Distinct from the red runError
+   alert: a neutral amber-tinted note with a leading dot so colour is not
+   the sole status signal. role="status" (polite), never role="alert". */
+.lm-control-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.08);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.lm-control-info-dot {
+  flex-shrink: 0;
+  margin-top: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--lm-amber);
+}
+
+/* ── Running-test footer ─────────────────────────────────────────────────── */
+.lm-test-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 9px 12px;
+  border-top: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+}
+.lm-test-footer-text {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--lm-amber);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lm-test-footer.is-idle .lm-test-footer-text { color: var(--lm-ink-dim); }
+.lm-test-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--lm-ink-faint);
+  flex-shrink: 0;
+}
+.lm-test-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--lm-amber);
+  flex-shrink: 0;
+  animation: lm-test-pulse-kf 1.4s ease-in-out infinite;
+}
+@keyframes lm-test-pulse-kf {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-test-pulse { animation: none; }
+}
+/* ── Runtime telemetry (Settings) ────────────────────────────────────────── */
+.lm-tele-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px 14px;
+}
+.lm-tele-desc {
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  color: var(--lm-ink-faint);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+.lm-tele-note {
+  padding: 9px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--lm-line-2);
+  background: rgba(255, 255, 255, 0.015);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  color: var(--lm-ink-dim);
+}
+.lm-tele-note.is-error {
+  border-color: rgba(239, 91, 91, 0.4);
+  background: rgba(239, 91, 91, 0.08);
+  color: var(--lm-red);
+}
+
+.lm-tele-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .lm-tele-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.lm-tele-tile {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel-2);
+}
+.lm-tele-tile .k {
+  display: block;
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-tele-tile .v {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--lm-mono);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lm-ink);
+  letter-spacing: -0.01em;
+}
+.lm-tele-tile .v.is-ok { color: var(--lm-green); }
+.lm-tele-tile .v.is-warn { color: var(--lm-amber); }
+.lm-tele-tile .v.is-crit { color: var(--lm-red); }
+
+.lm-tele-sub-title {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+}
+.lm-tele-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  overflow: hidden;
+}
+.lm-tele-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 12px;
+  background: var(--lm-panel-2);
+}
+.lm-tele-row .k {
+  font-family: var(--lm-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lm-ink-faint);
+}
+.lm-tele-row .v {
+  font-family: var(--lm-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lm-ink);
+  text-align: right;
+}
+.lm-tele-row .v.is-ok { color: var(--lm-green); }
+.lm-tele-row .v.is-warn { color: var(--lm-amber); }
+.lm-tele-row .v.is-crit { color: var(--lm-red); }
+.lm-tele-row .age {
+  margin-left: 8px;
+  color: var(--lm-ink-faint);
+}
+
+@media (forced-colors: active) {
+  .lm-tele-tile,
+  .lm-tele-rows,
+  .lm-tele-note {
+    border-color: CanvasText;
+  }
+}
+
+.lm-control-drag-hint {
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--lm-ink-faint);
+  text-align: center;
+}
+
+@media (forced-colors: active) {
+  .lm-control-mbtn,
+  .lm-pattern-tile,
+  .lm-pattern-speed button,
+  .lm-control-close,
+  .lm-control-chip,
+  .lm-control-start,
+  .lm-control-stop,
+  .lm-control-info {
+    border-color: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-test-dot {
+    background: CanvasText;
+  }
+  .lm-control-mbtn.is-on,
+  .lm-pattern-tile.is-on,
+  .lm-pattern-speed button.is-on {
+    outline: 2px solid Highlight;
   }
 }

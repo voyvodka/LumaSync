@@ -202,9 +202,20 @@ pub(crate) struct HueRuntimeOwner {
     /// still perform the restart in that case.
     pub(crate) reconnect_in_progress: bool,
     pub(crate) last_status: HueRuntimeStatus,
-    /// Most recent solid color successfully sent to the bridge.
-    /// Persists across reconnects so the UI can restore the last applied color.
+    /// Most recent solid color the user asked for. Persists across reconnects
+    /// so the UI can restore it; set on every `set_hue_solid_color` call,
+    /// whether or not the color actually reached the bridge.
     pub(crate) last_solid_color: Option<HueSolidColorSnapshot>,
+    /// Set whenever a solid-color request could NOT be delivered (no stream
+    /// context, no resolved lights, runtime idle/failed). Cleared the moment
+    /// the color is handed to a sender. Drives `flush_pending_solid_color`.
+    ///
+    /// Deliberately separate from `last_solid_color`: the previous
+    /// implementation gated the flush on `last_status.code`, which every
+    /// subsequent status write (e.g. `HUE_STREAM_RUNNING_DTLS` on start, or
+    /// `status_refresh_with_evidence` on each health poll) silently
+    /// invalidated — so a queued color was never flushed on the DTLS path.
+    pub(crate) pending_solid_color: Option<HueSolidColorSnapshot>,
     #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) retry_policy: HueRetryPolicy,
     /// Instant when the current stream session started (for uptime calculation).
@@ -280,6 +291,7 @@ impl Default for HueRuntimeOwner {
                 HueRuntimeTriggerSource::System,
             ),
             last_solid_color: None,
+            pending_solid_color: None,
             retry_policy: HueRetryPolicy::default(),
             stream_started_at: None,
             session_reconnect_total: 0,
@@ -359,30 +371,52 @@ pub(crate) fn make_result(owner: &HueRuntimeOwner) -> HueRuntimeCommandResult {
     }
 }
 
+/// Record a solid-color request that could not be delivered so
+/// `flush_pending_solid_color` can replay it once the stream is usable.
+pub(crate) fn queue_solid_color(owner: &mut HueRuntimeOwner, color: HueSolidColorSnapshot) {
+    owner.last_solid_color = Some(color.clone());
+    owner.pending_solid_color = Some(color);
+}
+
+/// Record a solid-color request that WAS handed to a sender.
+pub(crate) fn commit_solid_color(owner: &mut HueRuntimeOwner, color: HueSolidColorSnapshot) {
+    owner.last_solid_color = Some(color);
+    owner.pending_solid_color = None;
+}
+
 /// If a solid color was queued while the stream context was not ready, attempt
 /// to flush it now.  Called whenever we hold the lock and the context may have
-/// just become available (e.g. after status_refresh_with_evidence confirms the
-/// stream is healthy, or on a periodic get_hue_stream_status poll).
-pub(crate) fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) {
-    if owner.last_status.code != "HUE_COLOR_QUEUED_PENDING_STREAM" {
-        return;
+/// just become available (stream start, stream restart, reconnect, or a
+/// periodic `get_hue_stream_status` poll).
+///
+/// Returns `true` when a queued color was handed to the sender.
+pub(crate) fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) -> bool {
+    let Some(color) = owner.pending_solid_color.clone() else {
+        return false;
+    };
+    let Some(stream) = owner.active_stream.as_ref() else {
+        return false;
+    };
+    if stream.channels.is_empty() {
+        return false;
     }
-    if let (Some(color), Some(stream)) =
-        (owner.last_solid_color.clone(), owner.active_stream.as_ref())
-    {
-        if !stream.channels.is_empty() {
-            stream
-                .color_sender
-                .try_send(color.r, color.g, color.b, color.brightness);
-            owner.last_status = status_with(
-                owner.state.clone(),
-                "HUE_COLOR_APPLIED",
-                "Queued solid color flushed after stream context became ready.",
-                None,
-                HueRuntimeTriggerSource::System,
-            );
-        }
+    stream
+        .color_sender
+        .try_send(color.r, color.g, color.b, color.brightness);
+    owner.pending_solid_color = None;
+    owner.last_solid_color = Some(color);
+    // Never clobber a stream-lifecycle code: the frontend's `isHueStartCodeOk`
+    // keys off it, so overwriting would make a good start read as "not started".
+    if owner.last_status.code.starts_with("HUE_COLOR_") {
+        owner.last_status = status_with(
+            owner.state.clone(),
+            "HUE_COLOR_APPLIED",
+            "Queued solid color flushed after stream context became ready.",
+            None,
+            HueRuntimeTriggerSource::System,
+        );
     }
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -520,5 +554,151 @@ pub(crate) mod test_helpers {
             light_metadata: Arc::new(std::collections::HashMap::new()),
             deactivate_token: DeactivateToken::new(),
         }
+    }
+
+    /// Same as `dummy_active_stream_context` but hands back the receiver so a
+    /// test can assert what actually reached the sender thread.
+    pub(crate) fn observable_active_stream_context() -> (
+        HueActiveStreamContext,
+        std::sync::mpsc::Receiver<HueColorUpdate>,
+    ) {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(4);
+        let mut ctx = dummy_active_stream_context();
+        ctx.color_sender = HueColorSender {
+            tx: Arc::new(tx),
+            channel_count: 1,
+        };
+        (ctx, rx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_helpers::observable_active_stream_context;
+    use super::*;
+
+    fn snapshot(r: u8) -> HueSolidColorSnapshot {
+        HueSolidColorSnapshot {
+            r,
+            g: 0,
+            b: 0,
+            brightness: 1.0,
+        }
+    }
+
+    #[test]
+    fn queue_records_pending_and_last_color() {
+        let mut owner = HueRuntimeOwner::default();
+        queue_solid_color(&mut owner, snapshot(10));
+
+        assert_eq!(owner.pending_solid_color.as_ref().map(|c| c.r), Some(10));
+        assert_eq!(owner.last_solid_color.as_ref().map(|c| c.r), Some(10));
+    }
+
+    #[test]
+    fn commit_clears_pending() {
+        let mut owner = HueRuntimeOwner::default();
+        queue_solid_color(&mut owner, snapshot(10));
+        commit_solid_color(&mut owner, snapshot(20));
+
+        assert!(owner.pending_solid_color.is_none());
+        assert_eq!(owner.last_solid_color.as_ref().map(|c| c.r), Some(20));
+    }
+
+    #[test]
+    fn flush_is_a_no_op_without_a_pending_color() {
+        let mut owner = HueRuntimeOwner::default();
+        let (ctx, rx) = observable_active_stream_context();
+        owner.active_stream = Some(ctx);
+
+        assert!(!flush_pending_solid_color(&mut owner));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn flush_sends_the_queued_color_once_a_stream_exists() {
+        let mut owner = HueRuntimeOwner::default();
+        queue_solid_color(&mut owner, snapshot(42));
+
+        // No stream yet -- nothing to flush into, color stays pending.
+        assert!(!flush_pending_solid_color(&mut owner));
+        assert!(owner.pending_solid_color.is_some());
+
+        let (ctx, rx) = observable_active_stream_context();
+        owner.active_stream = Some(ctx);
+        owner.state = HueRuntimeState::Running;
+
+        assert!(flush_pending_solid_color(&mut owner));
+        let update = rx.try_recv().expect("color reached the sender");
+        assert_eq!(update.channel_colors[0], (42, 0, 0));
+        assert!(owner.pending_solid_color.is_none());
+        assert_eq!(owner.last_solid_color.as_ref().map(|c| c.r), Some(42));
+
+        // Second flush must not re-send.
+        assert!(!flush_pending_solid_color(&mut owner));
+        assert!(rx.try_recv().is_err());
+    }
+
+    /// Regression: the flush used to be gated on
+    /// `last_status.code == "HUE_COLOR_QUEUED_PENDING_STREAM"`, which every
+    /// stream-lifecycle status write invalidated -- so a color queued during
+    /// startup was never delivered on the DTLS path.
+    #[test]
+    fn flush_survives_an_intervening_stream_lifecycle_status_write() {
+        let mut owner = HueRuntimeOwner::default();
+        queue_solid_color(&mut owner, snapshot(7));
+        owner.last_status = status_with(
+            HueRuntimeState::Running,
+            "HUE_STREAM_RUNNING_DTLS",
+            "Hue entertainment stream active via DTLS.",
+            None,
+            HueRuntimeTriggerSource::System,
+        );
+
+        let (ctx, rx) = observable_active_stream_context();
+        owner.active_stream = Some(ctx);
+        owner.state = HueRuntimeState::Running;
+
+        assert!(flush_pending_solid_color(&mut owner));
+        assert_eq!(
+            rx.try_recv()
+                .expect("color reached the sender")
+                .channel_colors[0],
+            (7, 0, 0)
+        );
+        // The lifecycle code must survive: `isHueStartCodeOk` keys off it.
+        assert_eq!(owner.last_status.code, "HUE_STREAM_RUNNING_DTLS");
+    }
+
+    #[test]
+    fn flush_promotes_a_color_status_to_applied() {
+        let mut owner = HueRuntimeOwner::default();
+        queue_solid_color(&mut owner, snapshot(3));
+        owner.last_status = status_with(
+            HueRuntimeState::Idle,
+            "HUE_COLOR_APPLY_SKIPPED",
+            "skipped",
+            None,
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        let (ctx, _rx) = observable_active_stream_context();
+        owner.active_stream = Some(ctx);
+
+        assert!(flush_pending_solid_color(&mut owner));
+        assert_eq!(owner.last_status.code, "HUE_COLOR_APPLIED");
+    }
+
+    #[test]
+    fn flush_skips_a_stream_with_no_channels() {
+        let mut owner = HueRuntimeOwner::default();
+        queue_solid_color(&mut owner, snapshot(5));
+        let (mut ctx, rx) = observable_active_stream_context();
+        ctx.channels.clear();
+        owner.active_stream = Some(ctx);
+
+        assert!(!flush_pending_solid_color(&mut owner));
+        assert!(owner.pending_solid_color.is_some());
+        assert!(rx.try_recv().is_err());
     }
 }

@@ -1,5 +1,22 @@
 fn main() {
-    tauri_build::build();
+    // tauri-build embeds the app manifest as a bin-only resource, so test binaries
+    // get none and die at load on comctl32 v6 imports (STATUS_ENTRYPOINT_NOT_FOUND).
+    // Embedding it ourselves below covers every linked target with one manifest.
+    tauri_build::try_build(
+        tauri_build::Attributes::new()
+            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest()),
+    )
+    .expect("failed to run tauri-build");
+
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
+    {
+        let manifest = std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("windows-app-manifest.xml");
+        println!("cargo:rerun-if-changed={}", manifest.display());
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());
+    }
 
     // On macOS, add Swift stdlib rpath so screencapturekit can find
     // libswift_Concurrency.dylib at runtime.

@@ -14,6 +14,8 @@
 //! - `reconnect` — StartAbortGuard, store_active_stream_context,
 //!   spawn_reconnect_monitor + internal_restart_stream
 //! - `commands` — the seven `#[tauri::command]` entry points
+//! - `area_cache` — single-flight, generation-invalidated cache for the
+//!   entertainment-area snapshot both readiness callers depend on
 //! - `credential_store` — v1.5 W2-A1 OS-keychain abstraction (macOS
 //!   Keychain / Windows CredMan / Linux Secret Service) used by W2-A2
 //!   to migrate Hue credentials off the plaintext shellStore fields.
@@ -29,6 +31,7 @@
 //! `runtime_telemetry.rs`) can continue to import from
 //! `super::hue_stream_lifecycle::*` without churn.
 
+pub mod area_cache;
 pub mod commands;
 pub mod credential_store;
 pub mod dtls;

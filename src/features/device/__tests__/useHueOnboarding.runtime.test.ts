@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_CREDENTIAL_STATUS, HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
+import { __resetHueReadCacheForTests } from "../hueReadCache";
 
 const getHueStreamStatusMock = vi.fn();
 const restartHueMock = vi.fn();
@@ -71,6 +72,9 @@ describe("useHueOnboarding runtime wiring", () => {
     shellSaveMock.mockReset();
     listAreasMock.mockReset();
     validateCredentialsMock.mockReset();
+    // The hook reads status through the shared cache, whose entries outlive a
+    // single test.
+    __resetHueReadCacheForTests();
 
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);

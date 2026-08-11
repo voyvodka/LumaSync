@@ -11,24 +11,36 @@ use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
     BlackBorderInsets, CapturedFrame, StaticFrameSource,
 };
-use super::device_connection::{CommandStatus, SerialConnectionState};
+use super::calibration::list_displays;
+use super::device_connection::{ActiveSinkRegistry, CommandStatus, SerialConnectionState};
 use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use super::hue_stream_lifecycle::{
     apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
     HueActiveOutputContext, HueRuntimeStateStore,
 };
 use super::led_calibration::{
-    build_led_sequence, derive_base_interval_ms, sample_frame_for_sequence, LedCalibrationConfig,
+    build_led_sequence, derive_base_interval_ms_for, frame_wire_bytes, frame_wire_time_ms,
+    link_max_fps, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
     apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_profile,
-    gamma_luts_for, ColorCorrectionConfig, FirmwareProfile, GammaLuts, LedOutputBridge, SerialSink,
+    gamma_luts_for, ColorCorrectionConfig, FirmwareProfile, GammaLuts, LedChipType,
+    LedOutputBridge, SerialSink,
+};
+use super::led_preview::{
+    build_preview_status, emit_preview_state_changed, LedPreviewStatus, LedTwinState,
+    PreviewModeSnapshot,
 };
 use super::led_sink::LedSink;
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
 };
+use super::test_pattern::{
+    create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternSpeed,
+    DEFAULT_DISPLAY_ASPECT,
+};
+use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -60,6 +72,11 @@ pub struct AmbilightCaptureRequest {
     /// from `LightingModeConfig.led_calibration`.
     #[allow(dead_code)]
     pub led_calibration: Option<LedCalibrationConfig>,
+    /// v1.6 LED Preview — when `Some`, the frame-source factory builds a
+    /// `SyntheticFrameSource` (test mode) instead of live screen capture.
+    pub test_pattern: Option<TestPatternConfig>,
+    /// Animation phase carried across the worker rebuild a pattern tweak forces.
+    pub pattern_phase: Option<Arc<AtomicU32>>,
 }
 
 type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
@@ -149,6 +166,11 @@ pub struct LightingModeConfig {
     /// setting; never switched silently.
     #[serde(default)]
     pub firmware_profile: Option<FirmwareProfile>,
+    /// LED chip type (v1.5 G3). Absent ⇒ `LedChipType::default()` (WS2812B GRB).
+    /// Changes bytes-per-pixel on the wire, so it also moves the serial timing
+    /// budget — see `derive_base_interval_ms_for` / `frame_wire_time_ms`.
+    #[serde(default)]
+    pub chip_type: Option<LedChipType>,
 }
 
 impl Default for LightingModeConfig {
@@ -162,6 +184,7 @@ impl Default for LightingModeConfig {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 }
@@ -289,6 +312,58 @@ struct LightingRuntimeOwner {
     ambilight_live: Option<Arc<AmbilightLiveSettings>>,
     output_bridge: LedOutputBridge,
     frame_source_factory: Arc<AmbilightFrameSourceFactory>,
+    /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
+    preview: PreviewRuntime,
+}
+
+/// v1.6 LED Preview runtime state carried alongside the lighting worker.
+#[derive(Default)]
+struct PreviewRuntime {
+    /// Synthetic test-pattern request consumed by the frame-source factory on
+    /// the next ambilight (re)start. `Some` ⇒ build a `SyntheticFrameSource`.
+    pending_test_pattern: Option<TestPatternConfig>,
+    /// The synthetic pattern currently driving the worker (status reporting).
+    active_test_pattern: Option<TestPatternConfig>,
+    /// Shared `LedTwinState` preview-active flag. Cloned into each LIVE worker
+    /// so a twin overlay opened *after* the worker starts can flip enrichment
+    /// on without a worker restart.
+    preview_gate: Option<Arc<AtomicBool>>,
+    /// Animation phase (f32 bits) shared with the running `SyntheticFrameSource`.
+    /// Every pattern tweak rebuilds the worker, so without carrying the phase a
+    /// colour or speed change restarts the animation from zero.
+    pattern_phase: Arc<AtomicU32>,
+}
+
+/// Per-worker enrichment context — decides whether and how the ~10 Hz
+/// edge-signal emit is enriched with the full per-LED buffer.
+#[derive(Clone)]
+pub struct PreviewEmitContext {
+    pub gate: PreviewGate,
+    /// `"test"` (synthetic) or `"live"` (real capture).
+    pub source: &'static str,
+    /// Active synthetic pattern tag when `source == "test"`.
+    pub pattern: Option<&'static str>,
+    /// Display the frame belongs to (live only; synthetic is display-agnostic).
+    pub display_id: Option<String>,
+}
+
+/// Gate deciding whether the worker enriches the edge-signal each tick.
+#[derive(Clone)]
+pub enum PreviewGate {
+    /// Always enrich — the synthetic test pattern is itself the preview.
+    Always,
+    /// Enrich only while the shared flag is set (live twin opened/closed at
+    /// runtime).
+    Shared(Arc<AtomicBool>),
+}
+
+impl PreviewEmitContext {
+    fn should_enrich(&self) -> bool {
+        match &self.gate {
+            PreviewGate::Always => true,
+            PreviewGate::Shared(flag) => flag.load(Ordering::Relaxed),
+        }
+    }
 }
 
 impl Default for LightingRuntimeOwner {
@@ -299,8 +374,17 @@ impl Default for LightingRuntimeOwner {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::default(),
+            preview: Default::default(),
             frame_source_factory: Arc::new(|req: AmbilightCaptureRequest| {
-                create_live_frame_source(req.display_id.as_deref())
+                if let Some(test) = req.test_pattern {
+                    Ok(create_synthetic_frame_source(
+                        test,
+                        req.led_calibration,
+                        req.pattern_phase,
+                    ))
+                } else {
+                    create_live_frame_source(req.display_id.as_deref())
+                }
             }),
         }
     }
@@ -497,18 +581,115 @@ fn maybe_hydrate_ambilight_settings<R: Runtime>(
     }
 }
 
+/// Output stamps the frontend attaches to every `set_lighting_mode` payload
+/// (see `App.tsx > withColorCorrectionAndFirmwareProfile`). Commands that
+/// build a mode config server-side have no such payload to inherit from.
+#[derive(Default)]
+struct PersistedOutputStamps {
+    color_correction: Option<ColorCorrectionConfig>,
+    firmware_profile: Option<FirmwareProfile>,
+    chip_type: Option<LedChipType>,
+}
+
+fn parse_output_stamps_from_shell_state(raw: &str) -> PersistedOutputStamps {
+    let Ok(root) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return PersistedOutputStamps::default();
+    };
+    let Some(state) = root.get("shell-state") else {
+        return PersistedOutputStamps::default();
+    };
+    let read = |key: &str| state.get(key).cloned();
+    PersistedOutputStamps {
+        color_correction: read("colorCorrection").and_then(|v| serde_json::from_value(v).ok()),
+        firmware_profile: read("firmwareProfile").and_then(|v| serde_json::from_value(v).ok()),
+        // The chip picker persists under `selectedChipType`, not `chipType`.
+        chip_type: read("selectedChipType").and_then(|v| serde_json::from_value(v).ok()),
+    }
+}
+
+/// Fill any output stamp the caller left unset from the persisted shell state
+/// (caller-wins: a stamp already on the payload is never overwritten).
+///
+/// Without this a synthetic test drives an SK6812 RGBW strip through the
+/// WS2812B encoder and an Adalight controller through the LumaSync v1 header,
+/// and drops the user's colour correction entirely — so the test lights
+/// nothing, or the wrong colours, on exactly the hardware it exists to verify.
+/// Aspect (width / height) of the display the strip surrounds, used to weight
+/// the synthetic frame's perimeter. Prefers the user's selected display so it
+/// matches the twin overlay, then the primary one; falls back to 16:9.
+fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
+    let Ok(displays) = list_displays(app.clone()) else {
+        return DEFAULT_DISPLAY_ASPECT;
+    };
+    let selected = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| std::fs::read_to_string(dir.join("shell-state.json")).ok())
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|root| {
+            root.get("shell-state")?
+                .get("selectedDisplayId")?
+                .as_str()
+                .map(str::to_string)
+        });
+
+    let target = selected
+        .and_then(|id| displays.iter().find(|d| d.id == id))
+        .or_else(|| displays.iter().find(|d| d.is_primary))
+        .or_else(|| displays.first());
+
+    match target {
+        Some(d) if d.height > 0 => d.width as f32 / d.height as f32,
+        _ => DEFAULT_DISPLAY_ASPECT,
+    }
+}
+
+fn maybe_hydrate_output_stamps<R: Runtime>(app: &AppHandle<R>, payload: &mut LightingModeConfig) {
+    if payload.color_correction.is_some()
+        && payload.firmware_profile.is_some()
+        && payload.chip_type.is_some()
+    {
+        return;
+    }
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let Ok(raw) = std::fs::read_to_string(dir.join("shell-state.json")) else {
+        return;
+    };
+    let stamps = parse_output_stamps_from_shell_state(&raw);
+    if payload.color_correction.is_none() {
+        payload.color_correction = stamps.color_correction;
+    }
+    if payload.firmware_profile.is_none() {
+        payload.firmware_profile = stamps.firmware_profile;
+    }
+    if payload.chip_type.is_none() {
+        payload.chip_type = stamps.chip_type;
+    }
+    info!(
+        "[preview] output stamps hydrated — correction={} profile={:?} chip={:?}",
+        payload.color_correction.is_some(),
+        payload.firmware_profile,
+        payload.chip_type,
+    );
+}
+
 fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
     let targets = config.targets.clone();
     let display_id = config.display_id.clone();
     let led_calibration = config.led_calibration.clone();
     let color_correction = config.color_correction.clone();
     let firmware_profile = config.firmware_profile;
+    let chip_type = config.chip_type;
     match config.kind {
         LightingModeKind::Off => LightingModeConfig {
             targets,
             display_id,
             color_correction,
             firmware_profile,
+            chip_type,
             ..LightingModeConfig::default()
         },
         LightingModeKind::Ambilight => {
@@ -529,6 +710,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 led_calibration,
                 color_correction,
                 firmware_profile,
+                chip_type,
             }
         }
         LightingModeKind::Solid => {
@@ -552,6 +734,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 led_calibration,
                 color_correction,
                 firmware_profile,
+                chip_type,
             }
         }
     }
@@ -760,18 +943,48 @@ fn sample_screen_position_avg(
 
 pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";
 pub const EDGE_SIGNAL_MIN_INTERVAL_MS: u64 = 100;
+/// Cadence while a twin overlay is mirroring the strip. 10 Hz is plenty for the
+/// 4-edge settings grid but not for a moving comet: at the top speed the head
+/// travels further per frame than its own tail, leaving visible gaps. ~30 Hz
+/// brings one frame's travel back under the tail at every speed.
+pub const EDGE_SIGNAL_PREVIEW_INTERVAL_MS: u64 = 33;
 pub const EDGE_SIGNAL_SAMPLES_PER_EDGE: usize = 16;
+
+/// Sampling box for live capture — deliberately wide so screen noise averages out.
+pub const LIVE_SAMPLE_WINDOW: f32 = 0.05;
+/// Sampling box for synthetic test frames. Must stay NARROWER than one LED's
+/// pitch or neighbouring LEDs blend into each other and no LED can reach the
+/// intensity the pattern asked for.
+pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
 /// How far inside the screen edges the preview samples. 0.92 picks up the
 /// dominant fringe color without dipping too deep into the center.
 const EDGE_SIGNAL_AXIS_OFFSET: f32 = 0.92;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EdgeSignalPayload {
     pub top: Vec<[u8; 3]>,
     pub bottom: Vec<[u8; 3]>,
     pub left: Vec<[u8; 3]>,
     pub right: Vec<[u8; 3]>,
+    // v1.6 LED Preview — additive enrichment. Every field is omitted from the
+    // wire when `None`, so the existing 4-edge consumer (LightsSection) is
+    // byte-unaffected; they are populated only while a preview surface wants
+    // them (see the worker enrich block).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub leds: Option<Vec<[u8; 3]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub led_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hue_channels: Option<Vec<[u8; 3]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_id: Option<String>,
 }
 
 /// Thread-safe emitter the worker calls to surface edge previews. Thin
@@ -857,6 +1070,7 @@ pub fn compute_edge_signal(frame: &CapturedFrame, insets: &BlackBorderInsets) ->
         bottom,
         left,
         right,
+        ..Default::default()
     }
 }
 
@@ -910,6 +1124,10 @@ impl AmbilightWorkerQualityState {
 
     fn observed_cost_ms(&self) -> f32 {
         self.controller.observed_cost_ms()
+    }
+
+    fn last_smoothed(&self) -> &[[u8; 3]] {
+        self.controller.last_smoothed()
     }
 
     fn current_send_interval(&self) -> Duration {
@@ -974,10 +1192,174 @@ impl HueChannelSmoother {
     }
 }
 
+/// Below this many frames per second the ambient effect visibly steps, so the
+/// serial budget is worth surfacing rather than silently absorbing.
+const LINK_CONSTRAINED_FPS: f32 = 30.0;
+
+/// Resolved 115 200-baud send budget for one calibrated strip.
+///
+/// Exists so the clamp arithmetic is unit-testable away from the worker.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SerialSendBudget {
+    /// Total on-wire size of one frame, header included.
+    bytes_per_frame: usize,
+    /// Interval the LED-count heuristic asks for, before the physical clamp.
+    requested_ms: u64,
+    /// Time the link physically needs to shift one frame — the hard floor.
+    wire_ms: u64,
+    link_max_fps: f32,
+}
+
+impl SerialSendBudget {
+    fn for_strip(total_leds: u16, chip_type: LedChipType) -> Self {
+        let bytes_per_pixel = chip_type.bytes_per_pixel();
+        Self {
+            bytes_per_frame: frame_wire_bytes(total_leds, bytes_per_pixel),
+            requested_ms: derive_base_interval_ms_for(total_leds, bytes_per_pixel) as u64,
+            wire_ms: frame_wire_time_ms(total_leds, bytes_per_pixel),
+            link_max_fps: link_max_fps(total_leds, bytes_per_pixel),
+        }
+    }
+
+    /// True when the LED-count heuristic asks for a rate the link cannot carry.
+    /// Holds even for a 1 ms shortfall, so it drives the clamp, not the log.
+    fn exceeds_link_budget(self) -> bool {
+        self.requested_ms < self.wire_ms
+    }
+
+    /// True when the strip is long enough that 115 200 baud materially degrades
+    /// the effect — worth telling the user about, unlike a 1 ms rounding clamp.
+    /// ~126 LEDs on GRB, ~94 on RGBW.
+    fn is_link_constrained(self) -> bool {
+        self.link_max_fps < LINK_CONSTRAINED_FPS
+    }
+
+    fn into_quality_config(self, smoothing_alpha: f32) -> RuntimeQualityConfig {
+        // `wire_ms` pins BOTH bounds: the 10 fps floor in the derive helper and
+        // the 80 ms default cap each breach the baud budget on a long strip.
+        let default_max_ms = RuntimeQualityConfig::default().max_interval_ms;
+        RuntimeQualityConfig {
+            base_interval_ms: self.requested_ms,
+            min_interval_ms: self.wire_ms,
+            max_interval_ms: default_max_ms.max(self.wire_ms),
+            smoothing_alpha,
+            ..RuntimeQualityConfig::default()
+        }
+    }
+}
+
+/// Worker-side handle for the resolved `UsbOutputPlan` — dispatches to
+/// whichever concrete sink is active. `SerialSink` keeps applying colour
+/// correction + brightness inside its own `send_frame` (wire header owns
+/// brightness); `CorrectedWledSink` does the equivalent host-side since
+/// DDP/WARLS have no brightness field.
+enum ActiveUsbSink {
+    Serial(SerialSink),
+    // Boxed: `CorrectedWledSink` carries a `GammaLuts` (768 bytes) inline,
+    // which would otherwise bloat every `ActiveUsbSink` (including the much
+    // more common `Serial` variant) to match its size.
+    Wled(Box<CorrectedWledSink>),
+}
+
+impl ActiveUsbSink {
+    fn start(&mut self) -> Result<(), String> {
+        match self {
+            Self::Serial(s) => s.start(),
+            Self::Wled(s) => s.start(),
+        }
+    }
+
+    fn set_brightness(&mut self, brightness: f32) {
+        match self {
+            Self::Serial(s) => s.set_brightness(brightness),
+            Self::Wled(s) => s.set_brightness(brightness),
+        }
+    }
+
+    fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
+        match self {
+            Self::Serial(s) => s.send_frame(colors),
+            Self::Wled(s) => s.send_frame(colors),
+        }
+    }
+
+    fn stop(&mut self) -> Result<(), String> {
+        match self {
+            Self::Serial(s) => s.stop(),
+            Self::Wled(s) => s.stop(),
+        }
+    }
+}
+
+/// Resolve the worker's send cadence for its resolved USB-channel sink.
+///
+/// Pure and side-effect free (besides logging) so the WLED-vs-serial budget
+/// divergence is unit-testable without spinning up a worker thread: only a
+/// real serial link is bound by the 115 200-baud budget; WLED rides UDP and
+/// gets the same capture-paced defaults as a Hue-only session, and the
+/// returned `SerialSendBudget` is `None` in both non-serial cases so the
+/// caller's telemetry `link_max_fps` stays at its `0.0` "no serial link"
+/// default.
+fn resolve_quality_config(
+    usb_plan: &Option<UsbOutputPlan>,
+    total_leds: u16,
+    chip_type: LedChipType,
+    smoothing_alpha: f32,
+) -> (RuntimeQualityConfig, Option<SerialSendBudget>) {
+    match usb_plan {
+        Some(UsbOutputPlan::Serial(_)) => {
+            let budget = SerialSendBudget::for_strip(total_leds, chip_type);
+            if budget.is_link_constrained() {
+                warn!(
+                    "[ambilight-worker] strip exceeds the 115 200-baud budget — \
+                     leds={total_leds} chip={chip_type:?} bytes_per_frame={} \
+                     link_max_fps={:.1} (below {LINK_CONSTRAINED_FPS:.0}); \
+                     send interval clamped to {}ms. Shorten the strip or split it \
+                     across controllers for a smoother effect.",
+                    budget.bytes_per_frame, budget.link_max_fps, budget.wire_ms
+                );
+            } else {
+                info!(
+                    "[ambilight-worker] serial budget — leds={total_leds} chip={chip_type:?} \
+                     bytes_per_frame={} link_max_fps={:.1} send_interval={}ms clamped={}",
+                    budget.bytes_per_frame,
+                    budget.link_max_fps,
+                    budget.requested_ms.max(budget.wire_ms),
+                    budget.exceeds_link_budget()
+                );
+            }
+            (budget.into_quality_config(smoothing_alpha), Some(budget))
+        }
+        Some(UsbOutputPlan::Wled(_)) => {
+            // No baud budget to clamp against -- let capture-cost pacing
+            // govern the rate via the plain defaults (~60 fps target).
+            info!("[ambilight-worker] wled sink — unconstrained by a serial link budget");
+            let config = RuntimeQualityConfig {
+                smoothing_alpha,
+                ..RuntimeQualityConfig::default()
+            };
+            (config, None)
+        }
+        None => {
+            // Hue-only path. Bridge enforces 50 ms minimum (20 Hz); target
+            // ~25 FPS capture to stay just above the send rate without
+            // flooding the queue.
+            let config = RuntimeQualityConfig {
+                base_interval_ms: 40,
+                min_interval_ms: 30,
+                max_interval_ms: 100,
+                smoothing_alpha,
+                ..RuntimeQualityConfig::default()
+            };
+            (config, None)
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn start_ambilight_worker(
     output_bridge: LedOutputBridge,
-    port_name: Option<String>,
+    usb_plan: Option<UsbOutputPlan>,
     led_calibration: Option<LedCalibrationConfig>,
     live_settings: Arc<AmbilightLiveSettings>,
     frame_source: Box<dyn AmbilightFrameSource>,
@@ -986,6 +1368,8 @@ fn start_ambilight_worker(
     edge_signal_emitter: Option<EdgeSignalEmitter>,
     color_correction: ColorCorrectionConfig,
     firmware_profile: FirmwareProfile,
+    chip_type: LedChipType,
+    preview: Option<PreviewEmitContext>,
 ) -> Result<LightingWorkerRuntime, String> {
     let mut frame_source = frame_source;
     // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
@@ -1048,31 +1432,19 @@ fn start_ambilight_worker(
         led_calibration.is_some()
     );
 
-    let hue_only = port_name.is_none() && hue_output.is_some();
+    let hue_only = usb_plan.is_none() && hue_output.is_some();
     let initial_smoothing_alpha = live_settings.read_smoothing_alpha();
-    let quality_config = if hue_only {
-        // Hue bridge enforces 50 ms minimum (20 Hz). Target ~25 FPS capture
-        // to stay just above the send rate without flooding the queue.
-        RuntimeQualityConfig {
-            base_interval_ms: 40,
-            min_interval_ms: 30,
-            max_interval_ms: 100,
-            smoothing_alpha: initial_smoothing_alpha,
-            ..RuntimeQualityConfig::default()
-        }
-    } else {
-        // Derive send interval from LED count to stay within 115 200-baud budget.
-        let base_ms = derive_base_interval_ms(total_leds) as u64;
-        RuntimeQualityConfig {
-            base_interval_ms: base_ms,
-            min_interval_ms: base_ms / 2,
-            smoothing_alpha: initial_smoothing_alpha,
-            ..RuntimeQualityConfig::default()
-        }
-    };
+    let (quality_config, serial_budget) =
+        resolve_quality_config(&usb_plan, total_leds, chip_type, initial_smoothing_alpha);
     let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut frame_slot = RuntimeFrameSlot::new();
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
+    // Deliberately gated on `serial_budget`, not `usb_plan` -- a WLED-only
+    // session must report `link_max_fps: 0.0` / unconstrained, the same as
+    // a Hue-only session (see contract note on `RuntimeTelemetrySnapshot`).
+    if let Some(budget) = serial_budget {
+        telemetry_window.set_link_budget(budget.link_max_fps, budget.is_link_constrained());
+    }
 
     let mut initial_frame_source =
         StaticFrameSource::new(Arc::try_unwrap(initial_frame).unwrap_or_else(|arc| (*arc).clone()));
@@ -1081,25 +1453,35 @@ fn start_ambilight_worker(
         .capture_frame()
         .map_err(|e| e.as_reason())?;
     AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
-    let initial_sampled = sample_frame_for_sequence(&initial_raw, &led_sequence, &led_counts, 0.05);
+    // A synthetic test paints exact per-LED blocks; the live 0.05 box is wider
+    // than the whole comet, so it averaged in unlit screen and dimmed the head.
+    let sample_window = if preview.as_ref().is_some_and(|ctx| ctx.source == "test") {
+        SYNTHETIC_SAMPLE_WINDOW
+    } else {
+        LIVE_SAMPLE_WINDOW
+    };
+    let initial_sampled =
+        sample_frame_for_sequence(&initial_raw, &led_sequence, &led_counts, sample_window);
     telemetry_window.record_capture();
     if quality_state.queue_processed_frame(&mut frame_slot, initial_sampled.as_slice()) {
         telemetry_window.record_slot_overwrite();
     }
 
-    // Build the USB sink once at worker start. The sink holds the LedOutputBridge
-    // and encodes frames via the active FirmwareProfile + ColorCorrectionConfig.
-    // Brightness is synced each iteration via SerialSink::set_brightness before
-    // calling send_frame — this avoids circular module dependencies while keeping
-    // the hot path allocation-free.
-    let mut usb_sink: Option<SerialSink> = port_name.as_ref().map(|p| {
-        SerialSink::with_profile_and_corrections(
+    // Built once at worker start; brightness is synced each iteration via
+    // `set_brightness` before `send_frame`.
+    let mut usb_sink: Option<ActiveUsbSink> = usb_plan.as_ref().map(|plan| match plan {
+        UsbOutputPlan::Serial(port) => ActiveUsbSink::Serial(SerialSink::with_chip_type(
             output_bridge.clone(),
-            Some(p.clone()),
+            Some(port.clone()),
             live_settings.read_brightness(),
             firmware_profile,
             color_correction.clone(),
-        )
+            chip_type,
+        )),
+        UsbOutputPlan::Wled(cfg) => ActiveUsbSink::Wled(Box::new(CorrectedWledSink::new(
+            cfg.build(),
+            color_correction.clone(),
+        ))),
     });
     if let Some(ref mut sink) = usb_sink {
         sink.start()?;
@@ -1148,8 +1530,9 @@ fn start_ambilight_worker(
             .map(|c| !c.channels.is_empty())
             .unwrap_or(false);
         info!(
-            "[ambilight-worker] started — port={:?} hue={} channels={}",
-            port_name,
+            "[ambilight-worker] started — sink={:?} chip={:?} hue={} channels={}",
+            usb_plan,
+            chip_type,
             has_hue,
             hue_output.as_ref().map(|c| c.channels.len()).unwrap_or(0)
         );
@@ -1173,6 +1556,14 @@ fn start_ambilight_worker(
 
         let mut capture_fail_count = 0u32;
         let mut last_edge_emit_at: Option<Instant> = None;
+        // v1.6 LED Preview — monotonic frame seq + last per-Hue-channel colours
+        // for the enriched edge-signal (only stamped while a preview is active).
+        let mut edge_seq: u64 = 0;
+        let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
+        // Hoisted out of the frame loop: a non-2.2 gamma makes `gamma_luts_for`
+        // run 768 `powf`s, and color_correction is fixed for the worker's
+        // lifetime — any change forces a full restart (guard at apply_mode_change).
+        let frame_luts: std::borrow::Cow<'static, GammaLuts> = gamma_luts_for(&color_correction);
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
             let capture_result: Result<(Arc<CapturedFrame>, Vec<[u8; 3]>), String> =
@@ -1180,8 +1571,12 @@ fn start_ambilight_worker(
                     Ok(mut src) => {
                         AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                         src.capture_frame().map_err(|e| e.as_reason()).map(|frame| {
-                            let colors =
-                                sample_frame_for_sequence(&frame, &led_sequence, &led_counts, 0.05);
+                            let colors = sample_frame_for_sequence(
+                                &frame,
+                                &led_sequence,
+                                &led_counts,
+                                sample_window,
+                            );
                             (frame, colors)
                         })
                     }
@@ -1263,14 +1658,10 @@ fn start_ambilight_worker(
                 // smoothing, then send every frame to the bridge. Sending every
                 // frame (instead of delta-skipping) lets the bridge's internal
                 // ~100ms hardware interpolation produce smooth gradients.
+                let enrich_preview = preview.as_ref().is_some_and(|ctx| ctx.should_enrich());
+
                 if let Some(context) = hue_output.as_ref() {
                     if !context.channels.is_empty() {
-                        // Build gamma LUTs once per frame (not once per channel).
-                        // color_correction is fixed for the worker's lifetime — any change
-                        // forces a full worker restart (guard at apply_mode_change). So the
-                        // LUT is also stable and only needs building here, not inside the map.
-                        let hue_frame_luts: std::borrow::Cow<'static, GammaLuts> =
-                            gamma_luts_for(&color_correction);
                         let raw_colors: Vec<(u8, u8, u8)> = context
                             .channels
                             .iter()
@@ -1284,7 +1675,7 @@ fn start_ambilight_worker(
                                 apply_color_correction_rgb_with_luts(
                                     rgb,
                                     &color_correction,
-                                    &hue_frame_luts,
+                                    &frame_luts,
                                 )
                             })
                             .collect();
@@ -1300,6 +1691,12 @@ fn start_ambilight_worker(
                                 &smoothed[..smoothed.len().min(3)]
                             );
                         }
+                        // Only the enriched edge-signal reads this; allocating it
+                        // unconditionally burned a Vec per frame at up to 60 Hz.
+                        if enrich_preview {
+                            last_hue_colors =
+                                Some(smoothed.iter().map(|&(r, g, b)| [r, g, b]).collect());
+                        }
                         let _ =
                             apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
                         telemetry_window.record_send();
@@ -1313,11 +1710,13 @@ fn start_ambilight_worker(
                 // Edge signal preview — throttled to ~10 Hz.
                 if let Some(emitter) = edge_signal_emitter.as_ref() {
                     let now = Instant::now();
+                    let interval_ms = if enrich_preview {
+                        EDGE_SIGNAL_PREVIEW_INTERVAL_MS
+                    } else {
+                        EDGE_SIGNAL_MIN_INTERVAL_MS
+                    };
                     let due = last_edge_emit_at
-                        .map(|prev| {
-                            now.duration_since(prev)
-                                >= Duration::from_millis(EDGE_SIGNAL_MIN_INTERVAL_MS)
-                        })
+                        .map(|prev| now.duration_since(prev) >= Duration::from_millis(interval_ms))
                         .unwrap_or(true);
                     if due {
                         let mut payload = compute_edge_signal(&raw_frame, border_cache.insets());
@@ -1325,6 +1724,37 @@ fn start_ambilight_worker(
                         apply_saturation_inplace(&mut payload.bottom, saturation);
                         apply_saturation_inplace(&mut payload.left, saturation);
                         apply_saturation_inplace(&mut payload.right, saturation);
+
+                        // v1.6 LED Preview — enrich with the full per-LED strip
+                        // buffer ONLY while a preview surface wants it; otherwise
+                        // emit the lean 4-edge payload exactly as before.
+                        if let Some(ctx) = preview.as_ref().filter(|_| enrich_preview) {
+                            let leds: Vec<[u8; 3]> = quality_state
+                                .last_smoothed()
+                                .iter()
+                                .map(|&[r, g, b]| {
+                                    let (cr, cg, cb) = apply_color_correction_rgb_with_luts(
+                                        (r, g, b),
+                                        &color_correction,
+                                        &frame_luts,
+                                    );
+                                    [
+                                        (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                        (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                        (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                    ]
+                                })
+                                .collect();
+                            edge_seq = edge_seq.wrapping_add(1);
+                            payload.led_count = Some(leds.len());
+                            payload.leds = Some(leds);
+                            payload.hue_channels = last_hue_colors.clone();
+                            payload.source = Some(ctx.source);
+                            payload.pattern = ctx.pattern;
+                            payload.seq = Some(edge_seq);
+                            payload.display_id = ctx.display_id.clone();
+                        }
+
                         emitter(payload);
                         last_edge_emit_at = Some(now);
                     }
@@ -1360,17 +1790,31 @@ fn start_ambilight_worker(
     })
 }
 
-// Central state machine transition. 8-arg signature is retained to avoid
-// disturbing the 16 existing call sites (several of which live in lib-tests
-// that carry other outstanding compilation issues). Bundling these into a
-// struct is tracked as a follow-up refactor rather than part of the clippy
-// cleanup pass.
+/// Resolved output for the "usb" channel — serial and WLED are alternate
+/// transports for the same logical LED-strip output, not separate targets
+/// (see `ls-led-protocols`). Whichever sink `ActiveSinkRegistry` currently
+/// holds wins; `None` falls back to `SerialConnectionState`.
+#[derive(Clone, Debug)]
+enum UsbOutputPlan {
+    Serial(String),
+    Wled(WledSinkConfig),
+}
+
+// Central state machine transition. 9-arg signature is retained to avoid
+// disturbing the many existing call sites (several of which live in
+// lib-tests that carry other outstanding compilation issues). Bundling
+// these into a struct is tracked as a follow-up refactor rather than part
+// of the clippy cleanup pass.
 #[allow(clippy::too_many_arguments)]
 fn apply_mode_change(
     owner: &mut LightingRuntimeOwner,
     next_mode: LightingModeConfig,
     device_connected: bool,
     connected_port: Option<&str>,
+    // Snapshot of `ActiveSinkRegistry::active_wled_config()`. `Some` means a
+    // WLED device is the most recently connected "usb"-channel sink and
+    // takes priority over `connected_port` for this mode change.
+    wled_sink: Option<WledSinkConfig>,
     hue_output: Option<HueActiveOutputContext>,
     telemetry_snapshot: Option<SharedRuntimeTelemetry>,
     edge_signal_emitter: Option<EdgeSignalEmitter>,
@@ -1402,9 +1846,21 @@ fn apply_mode_change(
     let requested_targets = normalized_next.targets.clone().unwrap_or_default();
     let needs_usb = requested_targets.is_empty() || requested_targets.iter().any(|t| t == "usb");
     let needs_hue = requested_targets.iter().any(|t| t == "hue");
+    // v1.6 LED Preview — a synthetic test request bypasses the device/Hue
+    // gates so it can run preview-only (twin + edge stream) with no sink.
+    let is_test = owner.preview.pending_test_pattern.is_some();
+
+    // Resolve the "usb" channel once. A registered WLED sink takes priority
+    // over the raw serial-connection snapshot (see `UsbOutputPlan`); a pure
+    // serial session collapses to exactly the old `connected_port` behavior.
+    let usb_plan: Option<UsbOutputPlan> = match wled_sink {
+        Some(cfg) => Some(UsbOutputPlan::Wled(cfg)),
+        None => connected_port.map(|p| UsbOutputPlan::Serial(p.to_string())),
+    };
+    let usb_available = device_connected || usb_plan.is_some();
 
     // USB gate: only applies when USB is a required target (per D-01).
-    if normalized_next.kind != LightingModeKind::Off && needs_usb && !device_connected {
+    if normalized_next.kind != LightingModeKind::Off && needs_usb && !usb_available && !is_test {
         log::warn!(
             "[apply_mode_change] gated DEVICE_NOT_CONNECTED — kind={:?} requested_targets={:?} device_connected={device_connected}",
             normalized_next.kind, requested_targets,
@@ -1420,7 +1876,11 @@ fn apply_mode_change(
     }
 
     // Hue gate: when Hue target requested, Hue output context must be available (per D-03).
-    if normalized_next.kind != LightingModeKind::Off && needs_hue && hue_output.is_none() {
+    if normalized_next.kind != LightingModeKind::Off
+        && needs_hue
+        && hue_output.is_none()
+        && !is_test
+    {
         return make_result(
             owner.active_mode.clone(),
             command_status(
@@ -1446,6 +1906,8 @@ fn apply_mode_change(
         && normalized_next.led_calibration == owner.active_mode.led_calibration
         && normalized_next.color_correction == owner.active_mode.color_correction
         && normalized_next.firmware_profile == owner.active_mode.firmware_profile
+        && owner.preview.pending_test_pattern.is_none()
+        && owner.preview.active_test_pattern.is_none()
     {
         if let Some(live) = &owner.ambilight_live {
             let cfg = normalized_next
@@ -1494,6 +1956,7 @@ fn apply_mode_change(
     match normalized_next.kind {
         LightingModeKind::Off => {
             owner.active_mode = LightingModeConfig::default();
+            owner.preview.active_test_pattern = None;
             make_result(
                 owner.active_mode.clone(),
                 command_status("LIGHTING_MODE_STOPPED", "Lighting runtime stopped.", None),
@@ -1508,9 +1971,10 @@ fn apply_mode_change(
                 brightness: 1.0,
             });
 
-            // USB solid output (only if USB target requested and port available)
+            // USB solid output (only if USB target requested and a sink -- serial
+            // or WLED -- is available)
             if needs_usb {
-                let Some(port_name) = connected_port else {
+                let Some(plan) = usb_plan.clone() else {
                     owner.active_mode = LightingModeConfig::default();
                     return make_result(
                         owner.active_mode.clone(),
@@ -1528,15 +1992,9 @@ fn apply_mode_change(
                     normalized_next.color_correction.clone().unwrap_or_default();
                 let solid_profile = normalized_next.firmware_profile.unwrap_or_default();
 
-                // Solid USB output must paint EVERY LED on the strip, not just
-                // LED #0. Prior to this fix the encoder received a 1-element
-                // slice (`&[[r, g, b]]`) and emitted a 9-byte frame with
-                // count=1 — leaving 58/59 LEDs dark on a typical strip.
-                //
-                // Source the LED count from the calibration payload. When the
-                // frontend has not yet stamped `ledCalibration` (e.g. user has
-                // not run the calibration flow) the legacy 1-LED single-zone
-                // behaviour is preserved so older firmware images keep working.
+                // Must paint EVERY LED, not just LED #0 (historical bug: a
+                // 1-element slice left 58/59 LEDs dark). Falls back to a
+                // 1-LED frame when no calibration is on record yet.
                 log::info!(
                     "[apply_mode_change] solid led_calibration={}",
                     normalized_next
@@ -1553,12 +2011,6 @@ fn apply_mode_change(
                     .unwrap_or(1);
                 let solid_triplets: Vec<[u8; 3]> =
                     vec![[payload.r, payload.g, payload.b]; solid_led_count];
-                let solid_packet = encode_packet_for_profile(
-                    solid_profile,
-                    payload.brightness,
-                    &solid_triplets,
-                    &solid_corrections,
-                );
 
                 // Diagnostic: dump the post-correction RGB triplet that
                 // actually goes onto the wire. Useful when investigating
@@ -1571,14 +2023,34 @@ fn apply_mode_change(
                 );
                 let brightness_byte = (payload.brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
 
-                if let Err(reason) = owner
-                    .output_bridge
-                    .send_packet_to_port(port_name, &solid_packet)
-                    .map_err(|error| error.as_reason())
-                {
+                // WLED has no on-wire brightness field, so `CorrectedWledSink`
+                // scales it into the RGB values host-side; the serial path
+                // keeps encoding brightness into the packet header as before.
+                let send_result: Result<(), String> = match &plan {
+                    UsbOutputPlan::Serial(port_name) => {
+                        let solid_packet = encode_packet_for_profile(
+                            solid_profile,
+                            payload.brightness,
+                            &solid_triplets,
+                            &solid_corrections,
+                        );
+                        owner
+                            .output_bridge
+                            .send_packet_to_port(port_name, &solid_packet)
+                            .map_err(|error| error.as_reason())
+                    }
+                    UsbOutputPlan::Wled(cfg) => {
+                        let mut sink = CorrectedWledSink::new(cfg.build(), solid_corrections);
+                        sink.set_brightness(payload.brightness);
+                        let result = sink.start().and_then(|_| sink.send_frame(&solid_triplets));
+                        let _ = sink.stop();
+                        result
+                    }
+                };
+
+                if let Err(reason) = send_result {
                     warn!(
-                        "[apply_mode_change] solid USB send FAILED — port={port_name} bytes={} led_count={solid_led_count} reason={reason}",
-                        solid_packet.len()
+                        "[apply_mode_change] solid USB send FAILED — sink={plan:?} led_count={solid_led_count} reason={reason}"
                     );
                     owner.active_mode = LightingModeConfig::default();
                     return make_result(
@@ -1592,41 +2064,65 @@ fn apply_mode_change(
                 }
 
                 info!(
-                    "[apply_mode_change] solid USB packet sent — port={port_name} bytes={} led_count={solid_led_count} brightness_byte={brightness_byte} input=({}, {}, {}) corrected=({corrected_r}, {corrected_g}, {corrected_b})",
-                    solid_packet.len(),
+                    "[apply_mode_change] solid USB frame sent — sink={plan:?} led_count={solid_led_count} brightness_byte={brightness_byte} input=({}, {}, {}) corrected=({corrected_r}, {corrected_g}, {corrected_b})",
                     payload.r,
                     payload.g,
                     payload.b,
                 );
 
-                owner.active_port = Some(port_name.to_string());
+                if let UsbOutputPlan::Serial(port_name) = &plan {
+                    owner.active_port = Some(port_name.clone());
+                }
             }
 
             // Hue solid output (if hue target requested and context available)
+            let mut hue_skip_reason: Option<String> = None;
             if needs_hue {
-                if let Some(context) = hue_output.as_ref() {
-                    let hue_corrections =
-                        normalized_next.color_correction.clone().unwrap_or_default();
-                    let (hr, hg, hb) = apply_color_correction_rgb(
-                        (payload.r, payload.g, payload.b),
-                        &hue_corrections,
-                    );
-                    let _ = apply_hue_color_with_context(context, hr, hg, hb, payload.brightness);
+                match hue_output.as_ref() {
+                    Some(context) => {
+                        let hue_corrections =
+                            normalized_next.color_correction.clone().unwrap_or_default();
+                        let (hr, hg, hb) = apply_color_correction_rgb(
+                            (payload.r, payload.g, payload.b),
+                            &hue_corrections,
+                        );
+                        if let Err(reason) =
+                            apply_hue_color_with_context(context, hr, hg, hb, payload.brightness)
+                        {
+                            warn!("[apply_mode_change] solid Hue send SKIPPED — reason={reason}");
+                            hue_skip_reason = Some(reason);
+                        }
+                    }
+                    None => {
+                        // Only reachable on the preview/test path; the Hue gate
+                        // above rejects a missing context for real modes.
+                        warn!("[apply_mode_change] solid Hue send SKIPPED — no output context");
+                        hue_skip_reason = Some("HUE_OUTPUT_CONTEXT_MISSING".to_string());
+                    }
                 }
             }
 
             owner.active_mode = normalized_next;
-            make_result(
-                owner.active_mode.clone(),
-                command_status(
+            owner.preview.active_test_pattern = None;
+            let status = match hue_skip_reason {
+                Some(reason) => command_status(
+                    "SOLID_MODE_HUE_OUTPUT_SKIPPED",
+                    "Solid mode applied, but the Hue output was skipped.",
+                    Some(reason),
+                ),
+                None => command_status(
                     "SOLID_MODE_APPLIED",
                     "Solid mode applied successfully.",
                     None,
                 ),
-            )
+            };
+            make_result(owner.active_mode.clone(), status)
         }
         LightingModeKind::Ambilight => {
             push_trace(&mut trace, "start_ambilight");
+
+            // v1.6 LED Preview — consume any pending synthetic-test request.
+            let test_pattern = owner.preview.pending_test_pattern.take();
 
             let ambilight_cfg = normalized_next
                 .ambilight
@@ -1659,6 +2155,8 @@ fn apply_mode_change(
                 let req = AmbilightCaptureRequest {
                     display_id: normalized_next.display_id.clone(),
                     led_calibration: normalized_next.led_calibration.clone(),
+                    test_pattern: test_pattern.clone(),
+                    pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
                 };
                 match (owner.frame_source_factory)(req) {
                     Ok(source) => {
@@ -1683,10 +2181,13 @@ fn apply_mode_change(
                 }
             };
 
-            // Resolve port for worker: only pass port if USB is a required target
-            let port_for_worker: Option<String> = if needs_usb {
-                match connected_port {
-                    Some(p) => Some(p.to_string()),
+            // Resolve the sink for the worker: only pass one if USB is a required target
+            let usb_plan_for_worker: Option<UsbOutputPlan> = if needs_usb {
+                match usb_plan.clone() {
+                    Some(plan) => Some(plan),
+                    // v1.6 LED Preview: a synthetic test runs preview-only (no
+                    // USB sink) when no device is connected — no gate.
+                    None if is_test => None,
                     None => {
                         owner.active_mode = LightingModeConfig::default();
                         return make_result(
@@ -1705,10 +2206,17 @@ fn apply_mode_change(
 
             let corrections = normalized_next.color_correction.clone().unwrap_or_default();
             let profile = normalized_next.firmware_profile.unwrap_or_default();
+            let chip = normalized_next.chip_type.unwrap_or_default();
+            let preview_ctx = build_preview_emit_context(
+                is_test,
+                test_pattern.as_ref(),
+                owner.preview.preview_gate.clone(),
+                normalized_next.display_id.clone(),
+            );
 
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
-                port_for_worker,
+                usb_plan_for_worker,
                 normalized_next.led_calibration.clone(),
                 Arc::clone(&live_settings),
                 frame_source,
@@ -1718,11 +2226,14 @@ fn apply_mode_change(
                 edge_signal_emitter,
                 corrections,
                 profile,
+                chip,
+                preview_ctx,
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
                     owner.ambilight_live = Some(live_settings);
                     owner.active_mode = normalized_next;
+                    owner.preview.active_test_pattern = test_pattern;
                     if let Some(p) = connected_port {
                         owner.active_port = Some(p.to_string());
                     }
@@ -1752,13 +2263,16 @@ fn apply_mode_change(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn set_lighting_mode<R: Runtime>(
     app: AppHandle<R>,
     mut payload: LightingModeConfig,
     runtime_state: State<'_, LightingRuntimeState>,
     connection_state: State<'_, SerialConnectionState>,
+    sink_registry: State<'_, ActiveSinkRegistry>,
     hue_runtime_state: State<'_, HueRuntimeStateStore>,
     telemetry_state: State<'_, RuntimeTelemetryState>,
+    led_twin_state: State<'_, LedTwinState>,
 ) -> Result<LightingModeCommandResult, String> {
     let t_cmd = std::time::Instant::now();
     let incoming_total_leds = payload
@@ -1816,31 +2330,51 @@ pub fn set_lighting_mode<R: Runtime>(
 
     let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
 
-    let edge_emitter: Option<EdgeSignalEmitter> = {
-        let app_handle = app.clone();
-        Some(Arc::new(move |payload: EdgeSignalPayload| {
-            // Hot path: 60 Hz frame rate. Target the main shell webview only
-            // so calibration-overlay windows (separate WebView2/WKWebView
-            // instances) are not woken on every frame. See
-            // `MAIN_WINDOW_LABEL` in `crate::lib`.
-            let _ = app_handle.emit_to(
-                EventTarget::webview_window(crate::MAIN_WINDOW_LABEL),
-                EDGE_SIGNAL_EVENT,
-                payload,
-            );
-        }))
-    };
+    // v1.6 LED Preview — clear any stale synthetic-test request, wire the
+    // shared enrichment gate so a twin opened mid-run starts enriching without
+    // a worker restart, and fan the edge-signal out to every active twin
+    // overlay (not just the main shell).
+    owner.preview.pending_test_pattern = None;
+    owner.preview.preview_gate = Some(led_twin_state.preview_active());
+    // v1.6 LED Preview — record whether a synthetic test was running
+    // BEFORE apply_mode_change clears it, so a live mode change that
+    // supersedes the test can drop the captured prior mode below.
+    let superseded_test = owner.preview.active_test_pattern.is_some();
+    let edge_emitter = Some(build_edge_emitter(&app));
+    let wled_sink = sink_registry.active_wled_config();
 
     let result = apply_mode_change(
         &mut owner,
         payload,
         connection_snapshot.connected,
         connection_snapshot.port_name.as_deref(),
+        wled_sink,
         hue_output,
         Some(telemetry_state.shared_snapshot()),
         edge_emitter,
         None,
     );
+    // Release the runtime lock before broadcasting so a re-entrant
+    // mode-change listener cannot deadlock on it.
+    drop(owner);
+    let _ = app.emit(
+        LIGHTING_MODE_CHANGED_EVENT,
+        LightingModeChangedPayload {
+            config: result.mode.clone(),
+            active: result.active,
+        },
+    );
+    // v1.6 LED Preview — a live mode change supersedes any active synthetic
+    // test (apply_mode_change just cleared it). Drop the captured prior mode
+    // so a late/racing Stop cannot revive the pre-test mode over the user's
+    // new selection.
+    if superseded_test {
+        let _ = led_twin_state.take_prior_mode();
+    }
+    // The control popup + twin overlays derive `testActive` / `source`
+    // SOLELY from preview://state-changed, so broadcast the refreshed
+    // preview snapshot on every mode change — not just on test start/stop.
+    emit_preview_state_changed(&app);
     info!(
         "[set_lighting_mode] completed in {}ms",
         t_cmd.elapsed().as_millis()
@@ -1849,24 +2383,51 @@ pub fn set_lighting_mode<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn stop_lighting(
+pub fn stop_lighting<R: Runtime>(
+    app: AppHandle<R>,
     runtime_state: State<'_, LightingRuntimeState>,
 ) -> Result<LightingModeCommandResult, String> {
-    let mut owner = runtime_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
-
-    Ok(apply_mode_change(
-        &mut owner,
-        LightingModeConfig::default(),
-        true,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ))
+    let (result, superseded_test) = {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        // v1.6 LED Preview — capture whether a synthetic test was running
+        // BEFORE apply_mode_change clears it.
+        let superseded_test = owner.preview.active_test_pattern.is_some();
+        let result = apply_mode_change(
+            &mut owner,
+            LightingModeConfig::default(),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        (result, superseded_test)
+    };
+    let _ = app.emit(
+        LIGHTING_MODE_CHANGED_EVENT,
+        LightingModeChangedPayload {
+            config: result.mode.clone(),
+            active: result.active,
+        },
+    );
+    // v1.6 LED Preview — stopping all lighting supersedes any active test;
+    // drop the captured prior mode so a late Stop cannot revive it. This
+    // command is also called from the shutdown path, so resolve the twin
+    // state best-effort via the AppHandle rather than a State<'_, _> arg.
+    if superseded_test {
+        if let Some(twin_state) = app.try_state::<LedTwinState>() {
+            let _ = twin_state.take_prior_mode();
+        }
+    }
+    // Keep the control popup + twin overlays in sync — they derive
+    // `testActive` / `source` solely from preview://state-changed.
+    emit_preview_state_changed(&app);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1888,6 +2449,418 @@ pub fn get_lighting_mode_status(
     ))
 }
 
+// ---------------------------------------------------------------------------
+// v1.6 LED Preview — mode-change broadcast + synthetic test pattern commands
+// ---------------------------------------------------------------------------
+
+/// Tauri event broadcast app-wide whenever the active lighting mode changes,
+/// so preview surfaces (and any window other than the issuer) reconcile.
+pub const LIGHTING_MODE_CHANGED_EVENT: &str = "lighting://mode-changed";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LightingModeChangedPayload {
+    pub config: LightingModeConfig,
+    pub active: bool,
+}
+
+const LED_TEST_PATTERN_STARTED: &str = "LED_TEST_PATTERN_STARTED";
+const LED_TEST_PATTERN_PREVIEW_ONLY: &str = "LED_TEST_PATTERN_PREVIEW_ONLY";
+const LED_TEST_PATTERN_STOPPED: &str = "LED_TEST_PATTERN_STOPPED";
+const LED_TEST_PATTERN_INVALID_PARAMS: &str = "LED_TEST_PATTERN_INVALID_PARAMS";
+const LED_TEST_PATTERN_NO_CALIBRATION: &str = "LED_TEST_PATTERN_NO_CALIBRATION";
+const LED_TEST_PATTERN_RUNTIME_ERROR: &str = "LED_TEST_PATTERN_RUNTIME_ERROR";
+
+/// Build the ~10 Hz edge-signal emitter. Fans the payload out to the main
+/// shell webview AND every active twin-overlay window (read from
+/// `LedTwinState` each tick) so newly-opened twins start receiving frames
+/// without a worker restart.
+fn build_edge_emitter<R: Runtime>(app: &AppHandle<R>) -> EdgeSignalEmitter {
+    let app_handle = app.clone();
+    Arc::new(move |payload: EdgeSignalPayload| {
+        let _ = app_handle.emit_to(
+            EventTarget::webview_window(crate::MAIN_WINDOW_LABEL),
+            EDGE_SIGNAL_EVENT,
+            payload.clone(),
+        );
+        if let Some(twin_state) = app_handle.try_state::<LedTwinState>() {
+            for label in twin_state.twin_labels_snapshot() {
+                let _ = app_handle.emit_to(
+                    EventTarget::webview_window(label.as_str()),
+                    EDGE_SIGNAL_EVENT,
+                    payload.clone(),
+                );
+            }
+        }
+    })
+}
+
+/// Decide whether — and how — the worker enriches the edge-signal.
+fn build_preview_emit_context(
+    is_test: bool,
+    test_pattern: Option<&TestPatternConfig>,
+    preview_gate: Option<Arc<AtomicBool>>,
+    display_id: Option<String>,
+) -> Option<PreviewEmitContext> {
+    if is_test {
+        Some(PreviewEmitContext {
+            // Only twin overlays read the enriched buffer, so a test with no
+            // twin open must not pay for an N-LED Vec + JSON at 10 Hz.
+            gate: match preview_gate {
+                Some(flag) => PreviewGate::Shared(flag),
+                None => PreviewGate::Always,
+            },
+            source: "test",
+            pattern: test_pattern.map(|cfg| cfg.kind.tag()),
+            // Synthetic frames are display-agnostic — no per-display filter.
+            display_id: None,
+        })
+    } else {
+        preview_gate.map(|flag| PreviewEmitContext {
+            gate: PreviewGate::Shared(flag),
+            source: "live",
+            pattern: None,
+            display_id,
+        })
+    }
+}
+
+/// Apply a mode transition and broadcast `lighting://mode-changed`. Shared by
+/// the synthetic-test start/stop commands; `set_lighting_mode` inlines the
+/// equivalent flow with its own hydration logging.
+#[allow(clippy::too_many_arguments)]
+fn apply_and_broadcast<R: Runtime>(
+    app: &AppHandle<R>,
+    mut payload: LightingModeConfig,
+    runtime_state: &LightingRuntimeState,
+    connection_state: &SerialConnectionState,
+    hue_runtime_state: &HueRuntimeStateStore,
+    telemetry_state: &RuntimeTelemetryState,
+    twin_state: &LedTwinState,
+    test_pattern: Option<TestPatternConfig>,
+    // Without this snapshot the "usb" channel collapses to the serial one, so a
+    // WLED-only session runs preview-only and its restore is gated on stop.
+    wled_sink: Option<WledSinkConfig>,
+) -> Result<LightingModeCommandResult, String> {
+    maybe_hydrate_led_calibration(app, &mut payload);
+    maybe_hydrate_ambilight_settings(app, &mut payload);
+    maybe_hydrate_output_stamps(app, &mut payload);
+
+    let connection_snapshot = connection_state
+        .last_status
+        .lock()
+        .map(|status| status.clone())
+        .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
+
+    let edge_emitter = Some(build_edge_emitter(app));
+
+    let result = {
+        let mut owner = runtime_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+        let hue_output = snapshot_hue_output_context(hue_runtime_state)?;
+        owner.preview.pending_test_pattern = test_pattern;
+        owner.preview.preview_gate = Some(twin_state.preview_active());
+        apply_mode_change(
+            &mut owner,
+            payload,
+            connection_snapshot.connected,
+            connection_snapshot.port_name.as_deref(),
+            wled_sink,
+            hue_output,
+            Some(telemetry_state.shared_snapshot()),
+            edge_emitter,
+            None,
+        )
+    };
+
+    let _ = app.emit(
+        LIGHTING_MODE_CHANGED_EVENT,
+        LightingModeChangedPayload {
+            config: result.mode.clone(),
+            active: result.active,
+        },
+    );
+
+    Ok(result)
+}
+
+impl LightingRuntimeState {
+    /// Snapshot the lighting-side preview status. Recovers from a poisoned
+    /// lock rather than propagating (status reads must not fail).
+    pub fn preview_snapshot(&self) -> PreviewModeSnapshot {
+        let owner = self.runtime.lock().unwrap_or_else(|e| e.into_inner());
+        let active_pattern = owner
+            .preview
+            .active_test_pattern
+            .as_ref()
+            .map(|cfg| cfg.kind.clone());
+        let test_active = active_pattern.is_some();
+        let source = if test_active {
+            "test"
+        } else if owner.active_mode.kind == LightingModeKind::Ambilight && owner.worker.is_some() {
+            "live"
+        } else {
+            "idle"
+        };
+        PreviewModeSnapshot {
+            test_active,
+            source,
+            active_pattern,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartLedTestPatternPayload {
+    pub pattern: TestPatternKind,
+    pub brightness: f32,
+    #[serde(default)]
+    pub speed: Option<TestPatternSpeed>,
+    #[serde(default)]
+    pub targets: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LedTestPatternResult {
+    pub active: bool,
+    pub preview_only: bool,
+    pub status: CommandStatus,
+}
+
+// Arg count is Tauri's managed-state injection, not a bundling opportunity.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+pub fn start_led_test_pattern<R: Runtime>(
+    app: AppHandle<R>,
+    payload: StartLedTestPatternPayload,
+    runtime_state: State<'_, LightingRuntimeState>,
+    connection_state: State<'_, SerialConnectionState>,
+    hue_runtime_state: State<'_, HueRuntimeStateStore>,
+    telemetry_state: State<'_, RuntimeTelemetryState>,
+    led_twin_state: State<'_, LedTwinState>,
+    sink_registry: State<'_, ActiveSinkRegistry>,
+) -> Result<LedTestPatternResult, String> {
+    if !payload.brightness.is_finite() || !(0.0..=1.0).contains(&payload.brightness) {
+        return Ok(LedTestPatternResult {
+            active: false,
+            preview_only: false,
+            status: command_status(
+                LED_TEST_PATTERN_INVALID_PARAMS,
+                "Test pattern brightness must be within 0..1.",
+                None,
+            ),
+        });
+    }
+
+    let test_config = TestPatternConfig {
+        kind: payload.pattern.clone(),
+        brightness: payload.brightness,
+        speed: payload.speed.unwrap_or_default(),
+        display_aspect: resolve_display_aspect(&app),
+    };
+
+    // Resolve sink availability up front to choose targets + report
+    // preview-only without re-deriving it from apply_mode_change.
+    let device_connected = connection_state
+        .last_status
+        .lock()
+        .map(|status| status.connected)
+        .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
+    let wled_sink = sink_registry.active_wled_config();
+    let hue_available = snapshot_hue_output_context(hue_runtime_state.inner())?
+        .map(|ctx| !ctx.channels.is_empty())
+        .unwrap_or(false);
+
+    let requested = payload.targets.clone().unwrap_or_default();
+    let want_usb = requested.is_empty() || requested.iter().any(|t| t == "usb");
+    let want_hue = requested.iter().any(|t| t == "hue");
+    // A registered WLED sink IS the "usb" channel — see `UsbOutputPlan`.
+    let use_usb = (device_connected || wled_sink.is_some()) && want_usb;
+    let use_hue = hue_available && want_hue;
+    let preview_only = !use_usb && !use_hue;
+
+    let mut targets: Vec<String> = Vec::new();
+    if use_usb {
+        targets.push("usb".to_string());
+    }
+    if use_hue {
+        targets.push("hue".to_string());
+    }
+
+    let mut config = LightingModeConfig {
+        kind: LightingModeKind::Ambilight,
+        solid: None,
+        ambilight: Some(AmbilightPayload {
+            brightness: payload.brightness,
+            // Unsmoothed, unsaturated: the default 0.35 EWMA smears the chase
+            // band across neighbours, which is the ordering it exists to prove.
+            smoothing_alpha: Some(1.0),
+            saturation: Some(1.0),
+            ..AmbilightPayload::default()
+        }),
+        targets: Some(targets),
+        display_id: None,
+        led_calibration: None,
+        color_correction: None,
+        firmware_profile: None,
+        chip_type: None,
+    };
+
+    // A synthetic test needs a real strip layout to size its frame. Resolve
+    // the effective calibration up front: with no usable calibration the
+    // worker would silently degrade to a single-LED twin (one dot) while the
+    // chase band is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
+    // preview. Route the user to the calibration flow with a coded status
+    // instead. (Never throws — coded status on the Ok result.)
+    maybe_hydrate_led_calibration(&app, &mut config);
+    let effective_total_leds = config
+        .led_calibration
+        .as_ref()
+        .map(|cal| cal.total_leds)
+        .unwrap_or(0);
+    if effective_total_leds <= 1 {
+        return Ok(LedTestPatternResult {
+            active: false,
+            preview_only: false,
+            status: command_status(
+                LED_TEST_PATTERN_NO_CALIBRATION,
+                "No LED calibration is available to size the test pattern.",
+                None,
+            ),
+        });
+    }
+
+    // Capture the live mode to restore on stop — but never overwrite a real
+    // prior mode with a test mode if we are already previewing.
+    {
+        let prior = {
+            let owner = runtime_state
+                .runtime
+                .lock()
+                .map_err(|error| format!("LIGHTING_RUNTIME_STATE_LOCK_FAILED: {error}"))?;
+            if owner.preview.active_test_pattern.is_some() {
+                None
+            } else {
+                // Fresh run — rewind the animation. A tweak to an already
+                // running pattern keeps its phase instead.
+                owner
+                    .preview
+                    .pattern_phase
+                    .store(0f32.to_bits(), Ordering::Relaxed);
+                Some(owner.active_mode.clone())
+            }
+        };
+        if let Some(prior_mode) = prior {
+            led_twin_state.set_prior_mode(prior_mode);
+        }
+    }
+
+    let result = apply_and_broadcast(
+        &app,
+        config,
+        runtime_state.inner(),
+        connection_state.inner(),
+        hue_runtime_state.inner(),
+        telemetry_state.inner(),
+        led_twin_state.inner(),
+        Some(test_config),
+        wled_sink,
+    )?;
+
+    emit_preview_state_changed(&app);
+
+    let outcome = if result.status.code == "AMBILIGHT_MODE_STARTED" {
+        let code = if preview_only {
+            LED_TEST_PATTERN_PREVIEW_ONLY
+        } else {
+            LED_TEST_PATTERN_STARTED
+        };
+        LedTestPatternResult {
+            active: true,
+            preview_only,
+            status: command_status(code, "LED test pattern started.", None),
+        }
+    } else {
+        LedTestPatternResult {
+            active: false,
+            preview_only,
+            status: command_status(
+                LED_TEST_PATTERN_RUNTIME_ERROR,
+                "LED test pattern could not start.",
+                Some(format!("{}: {}", result.status.code, result.status.message)),
+            ),
+        }
+    };
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub fn stop_led_test_pattern<R: Runtime>(
+    app: AppHandle<R>,
+    runtime_state: State<'_, LightingRuntimeState>,
+    connection_state: State<'_, SerialConnectionState>,
+    hue_runtime_state: State<'_, HueRuntimeStateStore>,
+    telemetry_state: State<'_, RuntimeTelemetryState>,
+    led_twin_state: State<'_, LedTwinState>,
+    sink_registry: State<'_, ActiveSinkRegistry>,
+) -> Result<LedTestPatternResult, String> {
+    let wled_sink = sink_registry.active_wled_config();
+    let restore = led_twin_state.take_prior_mode().unwrap_or_default();
+    let mut result = apply_and_broadcast(
+        &app,
+        restore,
+        runtime_state.inner(),
+        connection_state.inner(),
+        hue_runtime_state.inner(),
+        telemetry_state.inner(),
+        led_twin_state.inner(),
+        None,
+        wled_sink,
+    )?;
+
+    // A gated restore (DEVICE_NOT_CONNECTED / HUE_NOT_READY) returns before
+    // `apply_mode_change` tears the previous worker down, so the synthetic
+    // pattern would keep running with no way to stop it. Fall back to Off.
+    if runtime_state.preview_snapshot().test_active {
+        warn!(
+            "[stop_led_test_pattern] restore gated ({}) — forcing Off so the synthetic worker stops",
+            result.status.code
+        );
+        result = apply_and_broadcast(
+            &app,
+            LightingModeConfig::default(),
+            runtime_state.inner(),
+            connection_state.inner(),
+            hue_runtime_state.inner(),
+            telemetry_state.inner(),
+            led_twin_state.inner(),
+            None,
+            wled_sink,
+        )?;
+    }
+
+    led_twin_state.recompute();
+    emit_preview_state_changed(&app);
+    Ok(LedTestPatternResult {
+        active: result.active,
+        preview_only: false,
+        status: command_status(LED_TEST_PATTERN_STOPPED, "LED test pattern stopped.", None),
+    })
+}
+
+#[tauri::command]
+pub fn get_led_preview_status(
+    runtime_state: State<'_, LightingRuntimeState>,
+    led_twin_state: State<'_, LedTwinState>,
+) -> Result<LedPreviewStatus, String> {
+    let snapshot = runtime_state.preview_snapshot();
+    Ok(build_preview_status(snapshot, led_twin_state.inner()))
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
@@ -1902,13 +2875,112 @@ mod tests {
     use crate::commands::led_output::{LedOutputBridge, LedOutputError, LedPacketSender};
     use crate::commands::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig};
     use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
+    use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 
     use super::{
-        apply_mode_change, start_ambilight_worker, stop_previous, AmbilightLiveSettings,
-        AmbilightPayload, AmbilightWorkerQualityState, LightingModeConfig, LightingModeKind,
-        LightingRuntimeOwner, SolidColorPayload, ACTIVE_AMBILIGHT_WORKERS,
-        AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
+        apply_mode_change, resolve_quality_config, start_ambilight_worker, stop_previous,
+        AmbilightLiveSettings, AmbilightPayload, AmbilightWorkerQualityState, LedChipType,
+        LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SerialSendBudget,
+        SolidColorPayload, UsbOutputPlan, ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS,
+        AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
+
+    // -----------------------------------------------------------------------
+    // SerialSendBudget — the 115 200-baud clamp (F5)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn send_budget_never_sends_faster_than_the_wire() {
+        for leds in [1u16, 30, 60, 100, 200, 320, 1000, 4000] {
+            for chip in [LedChipType::Ws2812bGrb, LedChipType::Sk6812Rgbw] {
+                let config = SerialSendBudget::for_strip(leds, chip).into_quality_config(0.35);
+                let wire_ms = SerialSendBudget::for_strip(leds, chip).wire_ms;
+                let controller = AmbilightWorkerQualityState::new(config.clone());
+                let interval = controller.current_send_interval().as_millis() as u64;
+                assert!(
+                    interval >= wire_ms,
+                    "leds={leds} chip={chip:?}: interval {interval}ms is below the {wire_ms}ms wire floor",
+                );
+                assert!(
+                    config.max_interval_ms >= config.min_interval_ms,
+                    "leds={leds} chip={chip:?}: max cap must never sit below the wire floor",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn send_budget_flags_every_overrun_however_small() {
+        // 60 GRB LEDs: 186 B/frame, 16 ms requested vs 17 ms wire — the 16 ms
+        // hard floor in the derive helper already overruns here.
+        assert!(SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb).exceeds_link_budget());
+        // 100 GRB LEDs: 27 ms requested vs 27 ms wire — exactly at budget.
+        assert!(!SerialSendBudget::for_strip(100, LedChipType::Ws2812bGrb).exceeds_link_budget());
+        let rgbw = SerialSendBudget::for_strip(100, LedChipType::Sk6812Rgbw);
+        assert_eq!(rgbw.bytes_per_frame, 406);
+        assert_eq!(rgbw.wire_ms, 36);
+        // 4000 LEDs: the 10 fps floor asks for 100 ms, the wire needs ~1.04 s.
+        let long = SerialSendBudget::for_strip(4000, LedChipType::Ws2812bGrb);
+        assert!(long.exceeds_link_budget());
+        assert_eq!(long.requested_ms, 100);
+        assert_eq!(long.wire_ms, 1043);
+    }
+
+    #[test]
+    fn link_constrained_reports_degradation_not_rounding() {
+        // A 60-LED strip is clamped by 1 ms (16 → 17) but still runs ~59 fps —
+        // reporting that as a problem would cry wolf on the commonest setup.
+        let common = SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb);
+        assert!(common.exceeds_link_budget());
+        assert!(!common.is_link_constrained());
+
+        // 200 LEDs runs at ~19 fps — genuinely degraded, worth telling the user.
+        assert!(SerialSendBudget::for_strip(200, LedChipType::Ws2812bGrb).is_link_constrained());
+        // Same LED count, opposite verdict: RGBW's extra byte per pixel drops
+        // 100 LEDs from ~37.6 fps to ~28.4 fps.
+        assert!(!SerialSendBudget::for_strip(100, LedChipType::Ws2812bGrb).is_link_constrained());
+        assert!(SerialSendBudget::for_strip(100, LedChipType::Sk6812Rgbw).is_link_constrained());
+    }
+
+    #[test]
+    fn send_budget_lifts_the_default_cap_above_the_wire_floor() {
+        // The 80 ms default `max_interval_ms` would otherwise clamp a long
+        // strip's interval BELOW its physical floor — permanent backpressure
+        // against the 500 ms serial write timeout.
+        let default_cap = RuntimeQualityConfig::default().max_interval_ms;
+        assert_eq!(default_cap, 80);
+
+        let long = SerialSendBudget::for_strip(4000, LedChipType::Ws2812bGrb);
+        let config = long.into_quality_config(0.35);
+        assert_eq!(config.min_interval_ms, 1043);
+        assert_eq!(config.max_interval_ms, 1043);
+
+        let short = SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb);
+        assert_eq!(short.into_quality_config(0.35).max_interval_ms, default_cap);
+    }
+
+    #[test]
+    fn send_budget_widens_for_rgbw_at_the_same_led_count() {
+        let grb = SerialSendBudget::for_strip(150, LedChipType::Ws2812bGrb);
+        let rgbw = SerialSendBudget::for_strip(150, LedChipType::Sk6812Rgbw);
+        assert!(rgbw.wire_ms > grb.wire_ms);
+        assert!(rgbw.link_max_fps < grb.link_max_fps);
+        assert!(
+            rgbw.into_quality_config(0.35).min_interval_ms
+                > grb.into_quality_config(0.35).min_interval_ms
+        );
+    }
+
+    #[test]
+    fn send_budget_floor_holds_when_observed_cost_is_negligible() {
+        // Pressure adaptation only ever widens the interval; the floor is what
+        // stops a cheap capture from driving the link past its budget.
+        let mut controller = AmbilightWorkerQualityState::new(
+            SerialSendBudget::for_strip(200, LedChipType::Ws2812bGrb).into_quality_config(0.35),
+        );
+        controller.observe_capture_and_send_cost(0.1, 0.1);
+        assert_eq!(controller.current_send_interval().as_millis() as u64, 53);
+    }
 
     #[derive(Default)]
     struct FakeLedSender {
@@ -1950,6 +3022,7 @@ mod tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -1970,6 +3043,7 @@ mod tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -1996,6 +3070,7 @@ mod tests {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -2014,6 +3089,7 @@ mod tests {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -2041,6 +3117,184 @@ mod tests {
         Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
     }
 
+    /// Mirrors `owner_with_fake_sender` but exposes the recorder `Arc` so a
+    /// test can inspect (or assert the absence of) serial writes.
+    fn owner_with_recording_sender() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
+        let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
+        let owner = LightingRuntimeOwner {
+            active_mode: LightingModeConfig::default(),
+            active_port: None,
+            worker: None,
+            ambilight_live: None,
+            output_bridge: LedOutputBridge::from_sender(recorder.clone()),
+            preview: Default::default(),
+            frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
+                Ok(Box::new(FakeFrameSource {
+                    frame: CapturedFrame {
+                        width: 2,
+                        height: 2,
+                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    },
+                    fail_with_unavailable: false,
+                }))
+            }),
+        };
+        (owner, recorder)
+    }
+
+    /// Loopback would fail `connect_wled_sink`'s SSRF guard, but these tests
+    /// exercise dispatch logic downstream of it -- a real `send_to` against
+    /// loopback still succeeds with no listener.
+    fn wled_config_fixture(led_count: u16) -> WledSinkConfig {
+        WledSinkConfig {
+            ip: "127.0.0.1".parse().expect("valid IPv4"),
+            port: 4048,
+            led_count,
+            protocol: WledProtocol::Ddp,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // resolve_quality_config — WLED-vs-serial budget divergence (D-04)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn resolve_quality_config_serial_link_gets_a_baud_budget() {
+        let plan = Some(UsbOutputPlan::Serial("COM1".to_string()));
+        let (_, budget) = resolve_quality_config(&plan, 60, LedChipType::Ws2812bGrb, 0.35);
+        assert!(budget.is_some(), "a serial link must report a baud budget");
+    }
+
+    #[test]
+    fn resolve_quality_config_wled_never_gets_a_serial_budget_even_when_led_count_is_large() {
+        // 300 LEDs at GRB would be link_constrained on a real serial link;
+        // WLED must stay unconstrained regardless of LED count.
+        let plan = Some(UsbOutputPlan::Wled(wled_config_fixture(300)));
+        let (config, budget) = resolve_quality_config(&plan, 300, LedChipType::Ws2812bGrb, 0.35);
+        assert!(
+            budget.is_none(),
+            "WLED must never report a serial send budget"
+        );
+        let defaults = RuntimeQualityConfig::default();
+        assert_eq!(
+            config.base_interval_ms, defaults.base_interval_ms,
+            "WLED must use the capture-paced defaults, not the serial clamp"
+        );
+        assert_eq!(config.min_interval_ms, defaults.min_interval_ms);
+        assert_eq!(config.max_interval_ms, defaults.max_interval_ms);
+        assert_eq!(config.smoothing_alpha, 0.35);
+    }
+
+    #[test]
+    fn resolve_quality_config_hue_only_reports_no_serial_budget() {
+        let (config, budget) = resolve_quality_config(&None, 0, LedChipType::Ws2812bGrb, 0.35);
+        assert!(budget.is_none());
+        assert_eq!(config.base_interval_ms, 40);
+        assert_eq!(config.min_interval_ms, 30);
+        assert_eq!(config.max_interval_ms, 100);
+    }
+
+    // -----------------------------------------------------------------------
+    // apply_mode_change — registry-selection: WLED vs serial vs neither
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn solid_mode_routes_to_wled_sink_and_never_touches_the_serial_bridge() {
+        let (mut owner, recorder) = owner_with_recording_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM1"), // stale/irrelevant serial connection
+            Some(wled_config_fixture(30)),
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+        // Proof the registered WLED sink was used, not serial, even though a
+        // serial port was also nominally connected.
+        let writes = recorder.writes.lock().expect("writes lock poisoned");
+        assert!(
+            writes.is_empty(),
+            "the serial bridge must see zero writes when a WLED sink is registered"
+        );
+    }
+
+    #[test]
+    fn solid_mode_usb_gate_passes_when_only_a_wled_sink_is_registered() {
+        // No serial device connected this session; only WLED is registered.
+        // Before the registry was wired in, this combination hit the
+        // DEVICE_NOT_CONNECTED gate and silently blocked WLED-only setups.
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            false,
+            None,
+            Some(wled_config_fixture(10)),
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+        assert!(result.active);
+    }
+
+    #[test]
+    fn solid_mode_falls_back_to_serial_when_no_wled_sink_is_registered() {
+        // wled_sink=None must reproduce the pre-WLED-wiring behavior exactly.
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_mode(),
+            true,
+            Some("COM9"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+    }
+
+    #[test]
+    fn ambilight_mode_wled_only_starts_and_sends_frames_with_no_serial_connection() {
+        let _guard = acquire_worker_test_guard();
+        AMBILIGHT_FRAME_ATTEMPTS.store(0, Ordering::SeqCst);
+        AMBILIGHT_CAPTURE_ATTEMPTS.store(0, Ordering::SeqCst);
+
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            ambilight_mode(),
+            false,
+            None,
+            Some(wled_config_fixture(10)),
+            None,
+            Some(shared_runtime_telemetry()),
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
+        thread::sleep(Duration::from_millis(20));
+        assert!(
+            AMBILIGHT_FRAME_ATTEMPTS.load(Ordering::SeqCst) > 0,
+            "wled-only ambilight must still attempt frame sends"
+        );
+
+        let mut cleanup_trace = None;
+        stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_worker_count(0);
+    }
+
     #[test]
     fn set_ambilight_stops_previous_then_starts_new_runtime() {
         let _guard = acquire_worker_test_guard();
@@ -2051,12 +3305,14 @@ mod tests {
             worker: Some(
                 start_ambilight_worker(
                     owner.output_bridge.clone(),
-                    Some("COM1".to_string()),
+                    Some(UsbOutputPlan::Serial("COM1".to_string())),
                     None,
                     AmbilightLiveSettings::new(0.8, false, 0.35, 1.0),
                     (owner.frame_source_factory)(super::AmbilightCaptureRequest {
                         display_id: None,
                         led_calibration: None,
+                        test_pattern: None,
+                        pattern_phase: None,
                     })
                     .expect("frame source should be available"),
                     shared_runtime_telemetry(),
@@ -2064,12 +3320,15 @@ mod tests {
                     None,
                     super::ColorCorrectionConfig::default(),
                     super::FirmwareProfile::default(),
+                    super::LedChipType::default(),
+                    None,
                 )
                 .expect("worker start should succeed"),
             ),
             ambilight_live: None,
             output_bridge: owner.output_bridge,
             frame_source_factory: owner.frame_source_factory,
+            preview: Default::default(),
         };
         let mut trace = Vec::new();
 
@@ -2078,6 +3337,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM1"),
+            None,
             None,
             Some(shared_runtime_telemetry()),
             None,
@@ -2107,6 +3367,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
@@ -2131,6 +3392,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM7"),
+            None,
             None,
             Some(shared_runtime_telemetry()),
             None,
@@ -2164,6 +3426,7 @@ mod tests {
             true,
             Some("COM2"),
             None,
+            None,
             Some(shared_runtime_telemetry()),
             None,
             None,
@@ -2178,6 +3441,7 @@ mod tests {
             true,
             Some("COM2"),
             None,
+            None,
             Some(shared_runtime_telemetry()),
             None,
             None,
@@ -2191,6 +3455,7 @@ mod tests {
             solid_mode(),
             true,
             Some("COM2"),
+            None,
             None,
             None,
             None,
@@ -2222,6 +3487,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
         assert_eq!(s1.status.code, "SOLID_MODE_APPLIED");
         wait_for_worker_count(0);
@@ -2235,6 +3501,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM-EX"),
+            None,
             None,
             Some(shared_runtime_telemetry()),
             None,
@@ -2252,6 +3519,7 @@ mod tests {
             solid_mode(),
             true,
             Some("COM-EX"),
+            None,
             None,
             None,
             None,
@@ -2287,12 +3555,14 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         let denied = apply_mode_change(
             &mut owner,
             ambilight_mode(),
             false,
+            None,
             None,
             None,
             Some(shared_runtime_telemetry()),
@@ -2313,6 +3583,7 @@ mod tests {
             ambilight_mode(),
             true,
             Some("COM1"),
+            None,
             None,
             Some(shared_runtime_telemetry()),
             None,
@@ -2342,6 +3613,7 @@ mod tests {
         let error = match (owner.frame_source_factory)(super::AmbilightCaptureRequest {
             display_id: None,
             led_calibration: None,
+            test_pattern: None,
         }) {
             Ok(_) => panic!("default frame source must not fall back to static source"),
             Err(error) => error,
@@ -2472,6 +3744,7 @@ mod tests {
             led_calibration: Some(ambilight_calibration_with_total_leds(total_leds)),
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -2486,6 +3759,7 @@ mod tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
+            preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -2524,6 +3798,7 @@ mod tests {
             ambilight_mode_with_calibration(30),
             true,
             Some("COM-AMB-30"),
+            None,
             None,
             Some(shared_runtime_telemetry()),
             None,
@@ -2583,6 +3858,10 @@ mod lighting_mode_tests {
         apply_mode_change, normalize_mode_config, AmbilightPayload, LightingModeConfig,
         LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
     };
+    use crate::commands::hue::frame::{
+        HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
+    };
+    use crate::commands::hue::state_store::HueActiveOutputContext;
     use crate::commands::led_output::{ColorCorrectionConfig, FirmwareProfile};
 
     #[derive(Default)]
@@ -2619,6 +3898,7 @@ mod lighting_mode_tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -2670,6 +3950,7 @@ mod lighting_mode_tests {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -2688,6 +3969,7 @@ mod lighting_mode_tests {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -2700,9 +3982,13 @@ mod lighting_mode_tests {
         let result = apply_mode_change(
             &mut owner,
             solid_with_targets(Some(vec!["hue".to_string()])),
-            false, // device not connected
-            None,  // no serial port
-            None,  // hue_output=None triggers HUE_NOT_READY gate
+            false,
+            // device not connected
+            None,
+            None,
+            // no serial port
+            None,
+            // hue_output=None triggers HUE_NOT_READY gate
             None,
             None,
             None,
@@ -2724,7 +4010,9 @@ mod lighting_mode_tests {
         let result = apply_mode_change(
             &mut owner,
             solid_with_targets(Some(vec!["usb".to_string()])),
-            false, // device not connected
+            false,
+            // device not connected
+            None,
             None,
             None,
             None,
@@ -2742,7 +4030,9 @@ mod lighting_mode_tests {
         let result = apply_mode_change(
             &mut owner,
             solid_with_targets(None),
-            false, // device not connected
+            false,
+            // device not connected
+            None,
             None,
             None,
             None,
@@ -2762,6 +4052,7 @@ mod lighting_mode_tests {
             ambilight_with_targets(Some(vec!["hue".to_string()])),
             false, // device not connected (irrelevant for hue-only)
             None,
+            None, // wled_sink
             None, // no hue output -> HUE_NOT_READY
             Some(shared_telemetry()),
             None,
@@ -2769,6 +4060,91 @@ mod lighting_mode_tests {
         );
 
         assert_eq!(result.status.code, "HUE_NOT_READY");
+    }
+
+    fn solid_hue_only() -> LightingModeConfig {
+        LightingModeConfig {
+            kind: LightingModeKind::Solid,
+            solid: Some(SolidColorPayload {
+                r: 200,
+                g: 10,
+                b: 40,
+                brightness: 1.0,
+            }),
+            ambilight: None,
+            targets: Some(vec!["hue".to_string()]),
+            display_id: None,
+            led_calibration: None,
+            color_correction: None,
+            firmware_profile: None,
+            chip_type: None,
+        }
+    }
+
+    fn hue_context_with_channels(channel_count: usize) -> HueActiveOutputContext {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(4);
+        // Keep the receiver alive for the duration of the test process so
+        // `try_send` mirrors a live sender thread rather than a closed channel.
+        std::mem::forget(rx);
+        HueActiveOutputContext {
+            channels: (0..channel_count)
+                .map(|i| HueAreaChannel {
+                    channel_id: i as u8,
+                    light_ids: vec![format!("light-{i}")],
+                    screen_region: HueScreenRegion::Center,
+                    position_x: 0.0,
+                    position_y: 0.0,
+                })
+                .collect(),
+            color_sender: HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: channel_count.max(1),
+            },
+        }
+    }
+
+    #[test]
+    fn solid_hue_only_reports_applied_when_the_color_reaches_the_sender() {
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_hue_only(),
+            false,
+            None,
+            None,
+            Some(hue_context_with_channels(2)),
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+    }
+
+    /// Regression: an empty-channel Hue context made `apply_hue_color_with_context`
+    /// return `HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS`, which was discarded with
+    /// `let _ =` while the command still reported `SOLID_MODE_APPLIED` — a
+    /// success status for a mode where no packet reached any sink.
+    #[test]
+    fn solid_hue_only_reports_skipped_when_no_lights_resolve() {
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_hue_only(),
+            false,
+            None,
+            None,
+            Some(hue_context_with_channels(0)),
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "SOLID_MODE_HUE_OUTPUT_SKIPPED");
+        assert_eq!(
+            result.status.details.as_deref(),
+            Some("HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS")
+        );
     }
 
     // ---------------------------------------------------------------------------
@@ -2798,6 +4174,7 @@ mod lighting_mode_tests {
             led_calibration: None,
             color_correction: Some(corrections.clone()),
             firmware_profile: Some(profile),
+            chip_type: None,
         };
 
         let normalized = normalize_mode_config(input);
@@ -2828,6 +4205,7 @@ mod lighting_mode_tests {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         };
 
         let normalized = normalize_mode_config(input);
@@ -2858,6 +4236,7 @@ mod lighting_mode_tests {
             led_calibration: None,
             color_correction: Some(ColorCorrectionConfig::default()),
             firmware_profile: None,
+            chip_type: None,
         };
 
         let changed = LightingModeConfig {
@@ -2978,6 +4357,7 @@ mod lighting_mode_tests {
             led_calibration: None,
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -2996,6 +4376,7 @@ mod lighting_mode_tests {
             }),
             true,
             Some("COM-FP1"),
+            None,
             None,
             Some(shared_telemetry()),
             None,
@@ -3020,6 +4401,7 @@ mod lighting_mode_tests {
             }),
             true,
             Some("COM-FP1"),
+            None,
             None,
             Some(shared_telemetry()),
             None,
@@ -3060,6 +4442,7 @@ mod lighting_mode_tests {
             true,
             Some("COM-FP2"),
             None,
+            None,
             Some(shared_telemetry()),
             None,
             None,
@@ -3075,6 +4458,7 @@ mod lighting_mode_tests {
             }),
             true,
             Some("COM-FP2"),
+            None,
             None,
             Some(shared_telemetry()),
             None,
@@ -3111,6 +4495,7 @@ mod lighting_mode_tests {
             true,
             Some("COM-FP3"),
             None,
+            None,
             Some(shared_telemetry()),
             None,
             None,
@@ -3125,6 +4510,7 @@ mod lighting_mode_tests {
             }),
             true,
             Some("COM-FP3"),
+            None,
             None,
             Some(shared_telemetry()),
             None,
@@ -3164,6 +4550,7 @@ mod lighting_mode_tests {
             worker: None,
             ambilight_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
+            preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
                 Ok(Box::new(FakeFrameSource {
                     frame: CapturedFrame {
@@ -3219,6 +4606,7 @@ mod lighting_mode_tests {
             led_calibration: Some(calibration_with_total_leds(total_leds)),
             color_correction: None,
             firmware_profile: None,
+            chip_type: None,
         }
     }
 
@@ -3234,6 +4622,7 @@ mod lighting_mode_tests {
             solid_with_calibration(59),
             true,
             Some("COM-FULL"),
+            None,
             None,
             None,
             None,
@@ -3300,6 +4689,7 @@ mod lighting_mode_tests {
             None,
             None,
             None,
+            None,
         );
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
@@ -3321,6 +4711,7 @@ mod lighting_mode_tests {
             solid_with_calibration(30),
             true,
             Some("COM-30"),
+            None,
             None,
             None,
             None,
@@ -3348,6 +4739,7 @@ mod lighting_mode_tests {
             solid_with_calibration(59),
             true,
             Some("COM-XOR"),
+            None,
             None,
             None,
             None,
@@ -3614,5 +5006,84 @@ mod lighting_mode_tests {
             serialised.contains("\"lightingSmoothingPreset\":\"moderate\""),
             "Rust -> JSON must preserve camelCase lightingSmoothingPreset; got: {serialised}"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // v1.6 LED Preview — output-stamp hydration + enrichment gating
+    // -----------------------------------------------------------------------
+
+    /// The synthetic-test commands build their mode config server-side, so the
+    /// encoder settings can only come off disk. Reading the wrong key drops an
+    /// SK6812 strip onto the WS2812B encoder without any visible error.
+    #[test]
+    fn output_stamps_read_the_keys_the_frontend_actually_writes() {
+        let raw = r#"{
+            "shell-state": {
+                "colorCorrection": {
+                    "gammaR": 2.6, "gammaG": 2.4, "gammaB": 2.2,
+                    "kelvin": 4000, "saturation": 1.2
+                },
+                "firmwareProfile": "adalight",
+                "selectedChipType": "sk6812-rgbw"
+            }
+        }"#;
+        let stamps = super::parse_output_stamps_from_shell_state(raw);
+        assert_eq!(stamps.chip_type, Some(super::LedChipType::Sk6812Rgbw));
+        assert_eq!(
+            stamps.firmware_profile,
+            Some(super::FirmwareProfile::Adalight)
+        );
+        assert_eq!(stamps.color_correction.map(|c| c.kelvin), Some(4000));
+    }
+
+    /// `chipType` is NOT the persisted key — only `selectedChipType` is.
+    #[test]
+    fn output_stamps_ignore_the_non_persisted_chip_key() {
+        let raw = r#"{"shell-state":{"chipType":"sk6812-rgbw"}}"#;
+        assert_eq!(
+            super::parse_output_stamps_from_shell_state(raw).chip_type,
+            None
+        );
+    }
+
+    #[test]
+    fn output_stamps_degrade_to_empty_on_malformed_state() {
+        assert!(super::parse_output_stamps_from_shell_state("not json")
+            .chip_type
+            .is_none());
+        assert!(super::parse_output_stamps_from_shell_state("{}")
+            .firmware_profile
+            .is_none());
+    }
+
+    /// Only twin overlays read the enriched buffer, so a running test with no
+    /// twin open must not build an N-LED Vec + JSON payload every tick.
+    #[test]
+    fn test_source_enrichment_follows_the_twin_gate() {
+        let gate = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let ctx = super::build_preview_emit_context(
+            true,
+            None,
+            Some(Arc::clone(&gate)),
+            Some("display-1".to_string()),
+        )
+        .expect("a test always yields an emit context");
+
+        assert_eq!(ctx.source, "test");
+        // Synthetic frames are display-agnostic — never filtered per display.
+        assert_eq!(ctx.display_id, None);
+        assert!(!ctx.should_enrich(), "no twin open ⇒ no enrichment");
+
+        gate.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(ctx.should_enrich(), "twin opened mid-run ⇒ enrichment on");
+    }
+
+    /// With no gate wired (unit-test / legacy path) a test still enriches, so
+    /// the twin is never left dark by a missing registration.
+    #[test]
+    fn test_source_enriches_unconditionally_without_a_gate() {
+        let ctx = super::build_preview_emit_context(true, None, None, None)
+            .expect("a test always yields an emit context");
+        assert!(ctx.should_enrich());
     }
 }

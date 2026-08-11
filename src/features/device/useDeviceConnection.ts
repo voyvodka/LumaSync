@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  DEVICE_ERROR_CODES,
   DEVICE_OPERATION,
   DEVICE_STATUS,
+  SERIAL_PORT_LIST_STATUS,
   type DeviceOperation,
   type DeviceStatus,
   type LedChipType,
@@ -509,7 +511,7 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
         isScanning: false,
         statusCard: {
           variant: "error",
-          code: "LIST_PORTS_FAILED",
+          code: SERIAL_PORT_LIST_STATUS.FAILED,
           message: "Could not scan serial ports.",
           details: error instanceof Error ? error.message : String(error),
         },
@@ -642,7 +644,8 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
       // persisted output mix.
       if (
         connectionEventsBus &&
-        (rejectionCode === "PORT_UNSUPPORTED" || rejectionCode === "PORT_NOT_FOUND")
+        (rejectionCode === DEVICE_ERROR_CODES.PORT_UNSUPPORTED ||
+          rejectionCode === DEVICE_ERROR_CODES.PORT_NOT_FOUND)
       ) {
         connectionEventsBus.emit({
           portName: targetPort,

@@ -9,25 +9,27 @@ function formatFps(value: number): string {
   return value.toFixed(2);
 }
 
-function queueHealthColor(health: string): string {
-  if (health === "healthy") return "text-emerald-600 dark:text-emerald-400";
-  if (health === "warning") return "text-amber-600 dark:text-amber-400";
-  if (health === "critical") return "text-rose-600 dark:text-rose-400";
-  return "text-slate-900 dark:text-zinc-100";
+/** Rev 07 status tint for a queue-health bucket. */
+function queueHealthTint(health: string): string {
+  if (health === "healthy") return "is-ok";
+  if (health === "warning") return "is-warn";
+  if (health === "critical") return "is-crit";
+  return "";
 }
 
 interface TelemetrySectionProps {
   usbConnected: boolean;
 }
 
+/**
+ * Renders the CONTENTS of a `lm-settings-group` — the caller owns the section
+ * element, so this matches the Language / Updates / About cards around it.
+ */
 export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
   const { t } = useTranslation("common");
   const { snapshot, error, isLoading } = useFullTelemetryPoll(usbConnected, POLL_INTERVAL_MS);
-  // The diagnostic surface only flags an error when the most recent tick
-  // failed AND we never received a successful snapshot — once a good
-  // snapshot is on screen, a single transient failure should not yank the
-  // values out from under the user. They will see the next successful
-  // tick within `POLL_INTERVAL_MS`.
+  // Only an error once a tick failed AND no snapshot ever landed: a transient
+  // failure must not yank live values off screen for one poll interval.
   const hasError = error !== null && snapshot === null;
 
   const showEmpty =
@@ -39,60 +41,46 @@ export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
     && snapshot.hue === null;
 
   return (
-    <section className="w-full rounded-xl border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/80">
-      <h2 className="text-sm font-semibold tracking-tight">{t("telemetry.title")}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-300">{t("telemetry.description")}</p>
+    <>
+      <div className="lm-settings-group-h">
+        <span className="t">{t("telemetry.title")}</span>
+        <span className="sub">{t("settingsPage.groups.telemetry.sub")}</span>
+      </div>
 
-      {isLoading ? (
-        <p className="mt-6 rounded-lg border border-slate-200 bg-slate-50/80 px-4 py-3 text-sm text-slate-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-300">
-          {t("telemetry.states.loading")}
-        </p>
-      ) : null}
+      <div className="lm-tele-body">
+        <p className="lm-tele-desc">{t("telemetry.description")}</p>
 
-      {!isLoading && hasError ? (
-        <p className="mt-6 rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-700 dark:border-rose-500/40 dark:bg-rose-900/20 dark:text-rose-300">
-          {t("telemetry.states.error")}
-        </p>
-      ) : null}
+        {isLoading ? <p className="lm-tele-note">{t("telemetry.states.loading")}</p> : null}
 
-      {!isLoading && !hasError && snapshot ? (
-        <div className="mt-6 space-y-3">
-          {/* FPS metrics side by side (P3-2) */}
-          <div className="grid grid-cols-2 gap-3">
-            <article className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-                {t("telemetry.metrics.captureFps")}
-              </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-900 dark:text-zinc-100">{formatFps(snapshot.usb.captureFps)}</p>
+        {!isLoading && hasError ? (
+          <p className="lm-tele-note is-error" role="alert">
+            {t("telemetry.states.error")}
+          </p>
+        ) : null}
+
+        {!isLoading && !hasError && snapshot ? (
+          <div className="lm-tele-grid">
+            <article className="lm-tele-tile">
+              <span className="k">{t("telemetry.metrics.captureFps")}</span>
+              <span className="v">{formatFps(snapshot.usb.captureFps)}</span>
             </article>
-
-            <article className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-                {t("telemetry.metrics.sendFps")}
-              </p>
-              <p className="mt-2 text-2xl font-semibold tabular-nums text-slate-900 dark:text-zinc-100">{formatFps(snapshot.usb.sendFps)}</p>
+            <article className="lm-tele-tile">
+              <span className="k">{t("telemetry.metrics.sendFps")}</span>
+              <span className="v">{formatFps(snapshot.usb.sendFps)}</span>
+            </article>
+            <article className="lm-tele-tile">
+              <span className="k">{t("telemetry.metrics.queueHealth")}</span>
+              <span className={`v ${queueHealthTint(snapshot.usb.queueHealth)}`}>
+                {t(`telemetry.queueHealth.${snapshot.usb.queueHealth}`)}
+              </span>
             </article>
           </div>
+        ) : null}
 
-          {/* Queue health full width with color coding (P3-2) */}
-          <article className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-800/40">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-              {t("telemetry.metrics.queueHealth")}
-            </p>
-            <p className={`mt-2 text-2xl font-semibold capitalize ${queueHealthColor(snapshot.usb.queueHealth)}`}>
-              {t(`telemetry.queueHealth.${snapshot.usb.queueHealth}`)}
-            </p>
-          </article>
-        </div>
-      ) : null}
+        {!isLoading && !hasError && snapshot?.hue ? <HueTelemetryGrid hue={snapshot.hue} /> : null}
 
-      {!isLoading && !hasError && snapshot?.hue ? (
-        <HueTelemetryGrid hue={snapshot.hue} />
-      ) : null}
-
-      {showEmpty ? (
-        <p className="mt-4 text-sm text-slate-600 dark:text-zinc-300">{t("telemetry.states.empty")}</p>
-      ) : null}
-    </section>
+        {showEmpty ? <p className="lm-tele-note">{t("telemetry.states.empty")}</p> : null}
+      </div>
+    </>
   );
 }

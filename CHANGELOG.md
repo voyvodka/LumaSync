@@ -7,6 +7,21 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Fixed
+
+- LED test patterns now run with the output settings the rest of the app uses. They ignored the configured chip type, firmware profile, and colour correction entirely, so an SK6812 RGBW strip was driven through the WS2812B encoder and an Adalight controller through the LumaSync v1 header — the test lit nothing, or the wrong colours, on exactly the hardware it exists to verify.
+- Test patterns reach a WLED strip, and stopping one restores the previous mode. On a WLED-only setup the test was reported as preview-only and never lit the strip, and Stop was silently rejected, leaving the pattern running with no way to end it.
+- The chase pattern is a comet: a full-brightness head with a trailing fade, holding its speed and size the whole way round. It previously skipped LEDs at the medium and fast speeds, ran nearly three times faster along the long edges than the short ones, and reached the strip at a fraction of the requested brightness.
+- Changing a test pattern's colour or speed no longer restarts its animation from the beginning.
+- Closing the LED preview no longer switches the lights off when the test is not what is driving them.
+- The digital-twin overlay opens on the selected display when launched from LED Setup, and its edge ribbons line up with the LED dots they mirror.
+
+### Changed
+
+- The LED preview popup has one always-available close control, and reopens where it was last dragged.
+- Runtime telemetry in Settings adopts the amber Rev 07 design language it had been left out of.
+- The interface language picker is a dropdown that lists each language by its own name.
+
 ## [1.5.4] — 2026-08-10
 
 ### Fixed

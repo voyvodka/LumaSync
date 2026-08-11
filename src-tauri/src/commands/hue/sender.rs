@@ -23,6 +23,7 @@ use reqwest::blocking::Client as BlockingClient;
 use serde_json::{json, Value};
 
 use super::super::hue_http::{classify_hue_response, classify_hue_response_blocking};
+use super::area_cache::invalidate_hue_area_cache;
 use super::dtls::connect_dtls;
 use super::frame::{
     build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
@@ -165,12 +166,18 @@ fn activate_entertainment_config(
 ) -> Result<(), String> {
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
-    let response = client
+    let sent = client
         .put(&endpoint)
         .header("hue-application-key", username)
         .json(&json!({ "action": "start" }))
-        .send()
-        .map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
+        .send();
+
+    // The area's `status.active` just changed (or may have, on a transport
+    // error where the bridge still processed the PUT). Any snapshot taken
+    // before this point now describes a state that no longer exists.
+    invalidate_hue_area_cache();
+
+    let response = sent.map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
 
     classify_hue_response_blocking(response)
         .map(|_| ())
@@ -193,12 +200,15 @@ pub(crate) fn deactivate_entertainment_config(
 ) -> Result<(), String> {
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
-    let response = client
+    let sent = client
         .put(&endpoint)
         .header("hue-application-key", username)
         .json(&json!({ "action": "stop" }))
-        .send()
-        .map_err(|e| format!("ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {e}"))?;
+        .send();
+
+    invalidate_hue_area_cache();
+
+    let response = sent.map_err(|e| format!("ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {e}"))?;
 
     let status = response.status();
     if !status.is_success() {
@@ -211,71 +221,318 @@ pub(crate) fn deactivate_entertainment_config(
 }
 
 // ---------------------------------------------------------------------------
-// HTTP-fallback per-light PUT helpers
+// HTTP-fallback request budget
 // ---------------------------------------------------------------------------
 
-/// Connection handle bundling the reqwest client with bridge IP + app key so helper
-/// fns don't need to carry three correlated arguments through every call.
-struct HueBridgeConnection<'a> {
-    client: &'a BlockingClient,
-    bridge_ip: &'a str,
-    username: &'a str,
+/// Ceiling on `PUT /clip/v2/resource/light/{id}` calls the HTTP fallback may
+/// issue in any one-second window.
+///
+/// Signify's published guidance is ~10 commands/s to `/lights` for the **whole
+/// bridge** (ZigBee tops out near 25/s in practice), and 1/s to `/groups`. We
+/// spend the light budget, as an app-wide total rather than a per-light one.
+pub(super) const HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC: u32 = 10;
+
+/// Widest the pacer may stretch under sustained throttling. Past this the
+/// fallback is visibly broken anyway and stretching further only delays the
+/// recovery once the bridge frees up.
+const HUE_HTTP_FALLBACK_MAX_INTERVAL_MS: u64 = 4_000;
+
+/// How long the loop parks when every light is already up to date. Only
+/// bounds the idle wakeup rate — a channel disconnect wakes `recv_timeout`
+/// immediately regardless.
+const HUE_HTTP_FALLBACK_IDLE_WAIT: Duration = Duration::from_millis(500);
+
+/// Fault-aware request pacer: hands out one send slot at a time and widens
+/// its own interval when the bridge says it is being pushed too hard.
+///
+/// The interval is the whole budget — callers must take exactly one slot per
+/// request, never per batch. That is the difference between this and the
+/// per-iteration sleep it replaced.
+#[derive(Debug)]
+pub(super) struct RequestPacer {
+    /// Fastest the pacer will ever go — the documented bridge budget.
+    floor: Duration,
+    ceiling: Duration,
+    interval: Duration,
+    next_slot: Instant,
 }
 
-/// Send to all lights via HTTP. For a single light: direct call. For multiple: parallel
-/// threads via `thread::scope` so each HTTPS round-trip happens concurrently.
-fn send_color_to_lights(
-    conn: &HueBridgeConnection<'_>,
-    light_ids: &[String],
+impl RequestPacer {
+    pub(super) fn new(max_requests_per_sec: u32) -> Self {
+        let floor = Duration::from_micros(1_000_000 / u64::from(max_requests_per_sec.max(1)));
+        Self {
+            floor,
+            ceiling: Duration::from_millis(HUE_HTTP_FALLBACK_MAX_INTERVAL_MS),
+            interval: floor,
+            next_slot: Instant::now(),
+        }
+    }
+
+    fn time_until_slot(&self, now: Instant) -> Duration {
+        self.next_slot.saturating_duration_since(now)
+    }
+
+    fn slot_due(&self, now: Instant) -> bool {
+        now >= self.next_slot
+    }
+
+    /// Take the current slot. Anchoring on `max(now, next_slot)` is what
+    /// makes the budget a real ceiling: without it, a request that overran
+    /// its slot would leave `next_slot` in the past and let the loop fire a
+    /// catch-up burst that blows the one-second window wide open.
+    fn consume(&mut self, now: Instant) {
+        self.next_slot = now.max(self.next_slot) + self.interval;
+    }
+
+    fn on_success(&mut self) {
+        if self.interval > self.floor {
+            self.interval = (self.interval * 9 / 10).max(self.floor);
+        }
+    }
+
+    /// Widen after a throttle signal, honouring a bridge-supplied
+    /// `Retry-After` when it asks for more than our own doubling would.
+    fn on_throttle(&mut self, retry_after_ms: Option<u64>) {
+        let doubled = self.interval * 2;
+        let requested = retry_after_ms
+            .map(Duration::from_millis)
+            .unwrap_or(Duration::ZERO);
+        self.interval = doubled.max(requested).clamp(self.floor, self.ceiling);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HTTP-fallback per-light PUT sink
+// ---------------------------------------------------------------------------
+
+/// Result of one per-light PUT, reduced to the three outcomes the pacing loop
+/// reacts to differently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum LightPutOutcome {
+    Ok,
+    /// The bridge asked us to slow down (429, or a 5xx from a saturated
+    /// ZigBee queue). Carries `Retry-After` in ms when supplied.
+    Throttled(Option<u64>),
+    /// Anything else. The light is left alone until its colour changes
+    /// again — retrying a request the bridge rejected on its merits would
+    /// just burn budget the other lights need.
+    Failed,
+}
+
+/// Injection seam for [`run_http_fallback_loop`] so the request-budget
+/// invariant is testable without a bridge.
+pub(super) trait LightPutSink {
+    fn put_light(&self, light_id: &str, x: f64, y: f64, dimming: f64) -> LightPutOutcome;
+}
+
+/// Real sink: one `PUT /clip/v2/resource/light/{id}` per call, classified
+/// through the shared response classifier so the 403 re-pair contract and the
+/// 429 throttle signal both survive the trip.
+struct BridgeLightSink {
+    client: Arc<BlockingClient>,
+    bridge_ip: String,
+    username: String,
+}
+
+impl LightPutSink for BridgeLightSink {
+    fn put_light(&self, light_id: &str, x: f64, y: f64, dimming: f64) -> LightPutOutcome {
+        let endpoint = format!(
+            "https://{}/clip/v2/resource/light/{light_id}",
+            self.bridge_ip
+        );
+        let response = match self
+            .client
+            .put(endpoint)
+            .header("hue-application-key", &self.username)
+            .json(&json!({
+                "on": { "on": true },
+                "dimming": { "brightness": dimming },
+                "color": { "xy": { "x": x, "y": y } }
+            }))
+            .send()
+        {
+            Ok(response) => response,
+            Err(err) => {
+                warn!("Hue HTTP fallback: PUT light {light_id} failed to send: {err}");
+                return LightPutOutcome::Failed;
+            }
+        };
+
+        match classify_hue_response_blocking(response) {
+            Ok(_) => LightPutOutcome::Ok,
+            Err(fault) => match fault.throttle_hint() {
+                Some(retry_after_ms) => {
+                    warn!("Hue HTTP fallback: bridge is throttling ({fault}); widening interval.");
+                    LightPutOutcome::Throttled(retry_after_ms)
+                }
+                None => {
+                    warn!("Hue HTTP fallback: PUT light {light_id} rejected: {fault}");
+                    LightPutOutcome::Failed
+                }
+            },
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// HTTP-fallback pacing loop
+// ---------------------------------------------------------------------------
+
+/// One addressable light plus the entertainment channel whose colour drives
+/// it. The HTTP fallback writes lights individually, so the channel grouping
+/// survives only as a colour lookup index.
+#[derive(Debug, Clone)]
+pub(super) struct LightSlot {
+    channel_index: usize,
+    light_id: String,
+}
+
+/// Colour a light should be showing, quantised so equality is exact and a
+/// light already displaying the target never costs a request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LightState {
     r: u8,
     g: u8,
     b: u8,
-    brightness: f32,
-) {
-    if light_ids.is_empty() {
-        return;
-    }
-
-    let (x, y, _big_y) = super::frame::rgb_to_xy(r, g, b);
-    let dimming = f64::from(brightness.clamp(0.0, 1.0) * 100.0);
-
-    if light_ids.len() == 1 {
-        let _ = send_light_put(conn, &light_ids[0], x, y, dimming);
-        return;
-    }
-
-    thread::scope(|s| {
-        for light_id in light_ids {
-            s.spawn(|| {
-                let _ = send_light_put(conn, light_id, x, y, dimming);
-            });
-        }
-    });
+    brightness_q: u8,
 }
 
-fn send_light_put(
-    conn: &HueBridgeConnection<'_>,
-    light_id: &str,
-    x: f64,
-    y: f64,
-    dimming: f64,
-) -> Result<(), String> {
-    let endpoint = format!(
-        "https://{}/clip/v2/resource/light/{light_id}",
-        conn.bridge_ip
-    );
-    conn.client
-        .put(endpoint)
-        .header("hue-application-key", conn.username)
-        .json(&json!({
-            "on": { "on": true },
-            "dimming": { "brightness": dimming },
-            "color": { "xy": { "x": x, "y": y } }
-        }))
-        .send()
-        .map_err(|e| e.to_string())
-        .and_then(|r| classify_hue_response_blocking(r).map_err(|f| f.to_string()))
-        .map(|_| ())
+impl LightState {
+    fn new(color: (u8, u8, u8), brightness: f32) -> Self {
+        let (r, g, b) = color;
+        Self {
+            r,
+            g,
+            b,
+            brightness_q: (brightness.clamp(0.0, 1.0) * 255.0).round() as u8,
+        }
+    }
+
+    fn to_put_args(self) -> (f64, f64, f64) {
+        let (x, y, _big_y) = super::frame::rgb_to_xy(self.r, self.g, self.b);
+        (x, y, f64::from(self.brightness_q) / 255.0 * 100.0)
+    }
+}
+
+/// Flatten channels into per-light slots, first channel wins for a light
+/// listed in more than one. A duplicate would otherwise consume two slots
+/// per round and fight itself for the light's colour.
+pub(super) fn flatten_light_slots(channels: &[HueAreaChannel]) -> Vec<LightSlot> {
+    let mut slots: Vec<LightSlot> = Vec::new();
+    for (channel_index, channel) in channels.iter().enumerate() {
+        for light_id in &channel.light_ids {
+            if slots.iter().any(|slot| &slot.light_id == light_id) {
+                continue;
+            }
+            slots.push(LightSlot {
+                channel_index,
+                light_id: light_id.clone(),
+            });
+        }
+    }
+    slots
+}
+
+/// Round-robin scan for the next slot whose desired colour differs from what
+/// the bridge was last told. Round-robin (rather than "lowest index first")
+/// is what stops a single always-dirty light from starving the rest of the
+/// area out of the budget.
+fn next_dirty_slot(
+    desired: &[Option<LightState>],
+    sent: &[Option<LightState>],
+    cursor: &mut usize,
+) -> Option<usize> {
+    let len = desired.len();
+    for offset in 0..len {
+        let index = (*cursor + offset) % len;
+        if desired[index].is_some() && desired[index] != sent[index] {
+            *cursor = (index + 1) % len;
+            return Some(index);
+        }
+    }
+    None
+}
+
+/// The HTTP-fallback sender loop: absorbs colour updates at whatever rate
+/// they arrive and spends **one** request per pacer slot, so the load the
+/// bridge sees is bounded by the budget and not by the light count.
+pub(super) fn run_http_fallback_loop<S: LightPutSink>(
+    sink: &S,
+    slots: &[LightSlot],
+    rx: &std::sync::mpsc::Receiver<HueColorUpdate>,
+    pacer: &mut RequestPacer,
+) {
+    if slots.is_empty() {
+        // Nothing addressable, but the channel must still be drained so the
+        // sender's disconnect is observed and shutdown can be signalled.
+        while rx.recv().is_ok() {}
+        return;
+    }
+
+    let mut desired: Vec<Option<LightState>> = vec![None; slots.len()];
+    let mut sent: Vec<Option<LightState>> = vec![None; slots.len()];
+    let mut cursor = 0usize;
+
+    loop {
+        let has_work = desired
+            .iter()
+            .zip(sent.iter())
+            .any(|(want, have)| want.is_some() && want != have);
+        let wait = if has_work {
+            pacer.time_until_slot(Instant::now())
+        } else {
+            HUE_HTTP_FALLBACK_IDLE_WAIT
+        };
+
+        match rx.recv_timeout(wait) {
+            Ok(update) => {
+                // Coalesce: only the newest frame matters, the rest are
+                // already stale by the time a slot frees up.
+                let mut latest = update;
+                while let Ok(newer) = rx.try_recv() {
+                    latest = newer;
+                }
+                for (index, slot) in slots.iter().enumerate() {
+                    if let Some(color) = latest.channel_colors.get(slot.channel_index) {
+                        desired[index] = Some(LightState::new(*color, latest.brightness));
+                    }
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+
+        let now = Instant::now();
+        if !pacer.slot_due(now) {
+            continue;
+        }
+        let Some(index) = next_dirty_slot(&desired, &sent, &mut cursor) else {
+            continue;
+        };
+        let Some(state) = desired[index] else {
+            continue;
+        };
+
+        pacer.consume(now);
+        let (x, y, dimming) = state.to_put_args();
+        match sink.put_light(&slots[index].light_id, x, y, dimming) {
+            LightPutOutcome::Ok => {
+                sent[index] = Some(state);
+                pacer.on_success();
+            }
+            LightPutOutcome::Throttled(retry_after_ms) => {
+                // Deliberately leave the slot dirty: the write never landed,
+                // and the wider interval is what stops us re-flooding.
+                pacer.on_throttle(retry_after_ms);
+            }
+            LightPutOutcome::Failed => {
+                // Mark clean so a light the bridge keeps rejecting cannot
+                // hold a permanent claim on the budget. The next colour
+                // change re-dirties it and we try again.
+                sent[index] = Some(state);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +559,7 @@ pub(crate) fn spawn_hue_dtls_sender(
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
     deactivate_token: Arc<DeactivateToken>,
+    abandoned: Arc<AtomicBool>,
 ) -> Result<(HueColorSender, ShutdownSignal, Option<String>), String> {
     let channel_count = channels.len();
     let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
@@ -327,6 +585,18 @@ pub(crate) fn spawn_hue_dtls_sender(
             return Err(err);
         }
     };
+
+    // A handshake landing after the caller's 8 s deadline has no owner: nothing
+    // would ever stop the sender it spawns, and that sender's cleanup would PUT
+    // `action: stop` on an area a LATER session may already have claimed.
+    if abandoned.load(AtomicOrdering::Acquire) {
+        use openssl::ssl::ShutdownState;
+        warn!("DTLS handshake completed after the caller abandoned it; tearing the session down.");
+        dtls_stream.set_shutdown(ShutdownState::RECEIVED);
+        let _ = dtls_stream.shutdown();
+        drop(dtls_stream);
+        return Err("DTLS_HANDSHAKE_ABANDONED".to_string());
+    }
 
     // Extract cipher name from the established handshake.
     let cipher_name = dtls_stream
@@ -462,7 +732,9 @@ pub(crate) fn spawn_hue_dtls_sender(
 }
 
 /// Fallback HTTP sender for when DTLS is not available (e.g. missing clientkey).
-/// This uses the legacy per-light PUT approach.
+/// Per-light PUTs, issued one at a time from this single thread under
+/// [`RequestPacer`] — the old shape fanned out `channels + lights` scoped
+/// threads per frame and paced iterations rather than requests.
 ///
 /// Returns the color sender handle and a shutdown signal that fires when the
 /// thread exits.
@@ -480,43 +752,19 @@ pub(crate) fn spawn_hue_http_sender(
     let shutdown_inner = Arc::clone(&shutdown);
 
     thread::spawn(move || {
-        let min_interval = Duration::from_millis(HUE_SENDER_MIN_INTERVAL_MS);
-        let mut last_sent_at = Instant::now()
-            .checked_sub(min_interval)
-            .unwrap_or_else(Instant::now);
-
-        while let Ok(update) = rx.recv() {
-            // Drain stale updates: keep only the latest.
-            let mut latest = update;
-            while let Ok(newer) = rx.try_recv() {
-                latest = newer;
-            }
-
-            // Honour the minimum interval so we don't slam the bridge.
-            let elapsed = Instant::now().saturating_duration_since(last_sent_at);
-            if elapsed < min_interval {
-                thread::sleep(min_interval - elapsed);
-            }
-
-            let brightness = latest.brightness;
-            let conn = HueBridgeConnection {
-                client: &client,
-                bridge_ip: &bridge_ip,
-                username: &username,
-            };
-            let conn_ref = &conn;
-            thread::scope(|s| {
-                for (channel, color) in channels.iter().zip(latest.channel_colors.iter()) {
-                    let (r, g, b) = *color;
-                    let light_ids: &[String] = &channel.light_ids;
-                    s.spawn(move || {
-                        send_color_to_lights(conn_ref, light_ids, r, g, b, brightness);
-                    });
-                }
-            });
-
-            last_sent_at = Instant::now();
-        }
+        let slots = flatten_light_slots(&channels);
+        info!(
+            "Hue HTTP fallback sender: {} light(s), budget {} req/s.",
+            slots.len(),
+            HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC
+        );
+        let sink = BridgeLightSink {
+            client,
+            bridge_ip,
+            username,
+        };
+        let mut pacer = RequestPacer::new(HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC);
+        run_http_fallback_loop(&sink, &slots, &rx, &mut pacer);
 
         // Signal that this thread has completed shutdown.
         signal_shutdown_complete(&shutdown_inner);
@@ -607,13 +855,18 @@ pub(crate) async fn fetch_area_channels(
         rid: &str,
     ) -> Result<Value, String> {
         let endpoint = format!("https://{bridge_ip}/clip/v2/resource/{rtype}/{rid}");
+        // Same classifier bypass the outer `fetch_area_channels` GET had: bare
+        // `error_for_status` collapses a Hue 403 into a generic status error,
+        // so an expired application key can never promote to AuthInvalid.
         let response = client
             .get(endpoint)
             .header("hue-application-key", username)
             .send()
             .await
-            .and_then(|r| r.error_for_status())
             .map_err(|error| error.to_string())?;
+        let response = classify_hue_response(response)
+            .await
+            .map_err(|fault| fault.to_string())?;
         let payload = response.text().await.map_err(|error| error.to_string())?;
         serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
     }
@@ -858,6 +1111,8 @@ pub(crate) fn build_hue_sender_with_counter(
                 let light_metadata_t = Arc::clone(&light_metadata);
                 let counter_t = Arc::clone(&packet_counter);
                 let token_t = Arc::clone(&deactivate_token);
+                let abandoned = Arc::new(AtomicBool::new(false));
+                let abandoned_t = Arc::clone(&abandoned);
 
                 std::thread::spawn(move || {
                     let result = spawn_hue_dtls_sender(
@@ -870,6 +1125,7 @@ pub(crate) fn build_hue_sender_with_counter(
                         light_metadata_t,
                         counter_t,
                         token_t,
+                        abandoned_t,
                     );
                     let _ = tx_result.send(result);
                 });
@@ -896,6 +1152,23 @@ pub(crate) fn build_hue_sender_with_counter(
                             "DTLS handshake timed out after {}s, falling back to HTTP.",
                             super::dtls::DTLS_CONNECT_TIMEOUT_SECS
                         );
+                        // Flag first, then take the token: the handshake thread
+                        // already ran `activate_...`, and winning the token is
+                        // what stops it deactivating a later session's area.
+                        abandoned.store(true, AtomicOrdering::Release);
+                        if let Err(err) = deactivate_with_token(
+                            &deactivate_token,
+                            &client,
+                            &request.bridge_ip,
+                            &resolved_username,
+                            &request.area_id,
+                        ) {
+                            warn!(
+                                "Rollback deactivate after the abandoned DTLS handshake failed \
+                                 ({err}) — bridge may hold active_streamer for area {}",
+                                request.area_id
+                            );
+                        }
                         let (sender, shutdown) = spawn_hue_http_sender(
                             client,
                             request.bridge_ip.clone(),
@@ -1050,13 +1323,17 @@ async fn fetch_light_metadata_with_client(
     }
 
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/light/{light_id}");
+    // Classified, not `error_for_status`-ed, so an expired key is named as such
+    // rather than surfacing as a bare 403. Fail-soft contract is unchanged.
     let response = client
         .get(endpoint)
         .header("hue-application-key", username)
         .send()
         .await
-        .and_then(|r| r.error_for_status())
         .map_err(|error| error.to_string())?;
+    let response = classify_hue_response(response)
+        .await
+        .map_err(|fault| fault.to_string())?;
     let body = response.text().await.map_err(|error| error.to_string())?;
     let value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
     parse_light_metadata(light_id, &value).ok_or_else(|| {
@@ -1155,6 +1432,282 @@ mod tests {
         let signal = new_shutdown_signal();
         let completed = wait_for_shutdown(&signal, Duration::from_millis(100));
         assert!(!completed, "should have timed out");
+    }
+
+    // -----------------------------------------------------------------------
+    // HTTP-fallback request budget (F1/F2)
+    // -----------------------------------------------------------------------
+
+    /// Recording sink: timestamps every PUT so the pacing invariant can be
+    /// asserted without a bridge, and can be scripted to reply with throttles.
+    #[derive(Default)]
+    struct RecordingSink {
+        sent_at: Mutex<Vec<(Instant, String)>>,
+        throttle_first_n: std::sync::atomic::AtomicUsize,
+        latency: Option<Duration>,
+    }
+
+    impl LightPutSink for RecordingSink {
+        fn put_light(&self, light_id: &str, _x: f64, _y: f64, _dimming: f64) -> LightPutOutcome {
+            self.sent_at
+                .lock()
+                .unwrap()
+                .push((Instant::now(), light_id.to_string()));
+            if let Some(latency) = self.latency {
+                thread::sleep(latency);
+            }
+            if self
+                .throttle_first_n
+                .fetch_update(AtomicOrdering::AcqRel, AtomicOrdering::Acquire, |n| {
+                    if n > 0 {
+                        Some(n - 1)
+                    } else {
+                        None
+                    }
+                })
+                .is_ok()
+            {
+                return LightPutOutcome::Throttled(None);
+            }
+            LightPutOutcome::Ok
+        }
+    }
+
+    impl RecordingSink {
+        fn timestamps(&self) -> Vec<Instant> {
+            self.sent_at
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(at, _)| *at)
+                .collect()
+        }
+
+        fn light_ids(&self) -> Vec<String> {
+            self.sent_at
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|(_, id)| id.clone())
+                .collect()
+        }
+    }
+
+    fn channel_with_lights(channel_id: u8, light_ids: &[&str]) -> HueAreaChannel {
+        HueAreaChannel {
+            channel_id,
+            light_ids: light_ids.iter().map(|id| (*id).to_string()).collect(),
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }
+    }
+
+    /// Assert no sliding one-second window holds more than `budget` sends.
+    fn assert_within_budget(timestamps: &[Instant], budget: usize) {
+        for (index, start) in timestamps.iter().enumerate() {
+            let window_end = *start + Duration::from_secs(1);
+            let count = timestamps[index..]
+                .iter()
+                .take_while(|at| **at < window_end)
+                .count();
+            assert!(
+                count <= budget,
+                "window starting at index {index} held {count} requests, budget is {budget}"
+            );
+        }
+    }
+
+    /// Drive the loop with a firehose of updates for `duration`, then drop the
+    /// sender so the loop exits.
+    fn run_loop_under_load(
+        channels: &[HueAreaChannel],
+        budget: u32,
+        duration: Duration,
+        sink: &RecordingSink,
+    ) {
+        let slots = flatten_light_slots(channels);
+        let channel_count = channels.len();
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
+
+        let feeder = thread::spawn(move || {
+            let deadline = Instant::now() + duration;
+            let mut tick: u8 = 0;
+            while Instant::now() < deadline {
+                tick = tick.wrapping_add(7);
+                let _ = tx.try_send(HueColorUpdate {
+                    channel_colors: vec![(tick, tick, tick); channel_count],
+                    brightness: 1.0,
+                });
+                thread::sleep(Duration::from_millis(5));
+            }
+        });
+
+        let mut pacer = RequestPacer::new(budget);
+        run_http_fallback_loop(sink, &slots, &rx, &mut pacer);
+        feeder.join().expect("feeder thread did not panic");
+    }
+
+    /// F1: the pre-fix loop issued one PUT per light per iteration at 20 Hz —
+    /// ~200 req/s for a ten-light area against a bridge documented to take 10.
+    /// The budget must hold no matter how many lights the area carries.
+    #[test]
+    fn http_fallback_never_exceeds_the_request_budget_in_any_one_second_window() {
+        let channels: Vec<HueAreaChannel> = (0..5)
+            .map(|c| {
+                let ids: Vec<String> = (0..5).map(|l| format!("light-{c}-{l}")).collect();
+                channel_with_lights(c, &ids.iter().map(String::as_str).collect::<Vec<_>>())
+            })
+            .collect();
+        assert_eq!(flatten_light_slots(&channels).len(), 25);
+
+        let budget = 10u32;
+        let sink = RecordingSink::default();
+        run_loop_under_load(&channels, budget, Duration::from_millis(1_500), &sink);
+
+        let timestamps = sink.timestamps();
+        assert!(
+            timestamps.len() >= 8,
+            "expected the loop to keep sending, got {} requests",
+            timestamps.len()
+        );
+        assert_within_budget(&timestamps, budget as usize);
+    }
+
+    /// Round-robin, not lowest-index-first: with a permanent firehose every
+    /// light is always dirty, and a naive scan would starve every light but
+    /// the first out of the budget.
+    #[test]
+    fn http_fallback_spreads_the_budget_across_every_light() {
+        let channels = vec![channel_with_lights(0, &["a", "b", "c", "d"])];
+        let sink = RecordingSink::default();
+        run_loop_under_load(&channels, 40, Duration::from_millis(400), &sink);
+
+        let ids = sink.light_ids();
+        for expected in ["a", "b", "c", "d"] {
+            assert!(
+                ids.iter().any(|id| id == expected),
+                "light {expected} never got a slot: {ids:?}"
+            );
+        }
+    }
+
+    /// A light listed by two channels must not consume two slots per round.
+    #[test]
+    fn flatten_light_slots_dedupes_lights_shared_between_channels() {
+        let channels = vec![
+            channel_with_lights(0, &["a", "b"]),
+            channel_with_lights(1, &["b", "c"]),
+        ];
+        let slots = flatten_light_slots(&channels);
+        assert_eq!(
+            slots
+                .iter()
+                .map(|s| s.light_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a", "b", "c"]
+        );
+        // First channel wins the shared light.
+        assert_eq!(slots[1].channel_index, 0);
+    }
+
+    #[test]
+    fn http_fallback_loop_exits_when_the_color_channel_disconnects() {
+        let channels = vec![channel_with_lights(0, &["a"])];
+        let slots = flatten_light_slots(&channels);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        drop(tx);
+
+        let sink = RecordingSink::default();
+        let mut pacer = RequestPacer::new(10);
+        // Would hang forever if disconnect were not an exit condition.
+        run_http_fallback_loop(&sink, &slots, &rx, &mut pacer);
+        assert!(sink.timestamps().is_empty());
+    }
+
+    /// An area with no addressable lights must still drain the channel, or
+    /// `stop_hue_stream` would burn its full timeout waiting for shutdown.
+    #[test]
+    fn http_fallback_loop_with_no_lights_still_observes_disconnect() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        drop(tx);
+        let sink = RecordingSink::default();
+        let mut pacer = RequestPacer::new(10);
+        run_http_fallback_loop(&sink, &[], &rx, &mut pacer);
+    }
+
+    /// A request that overruns its slot leaves `next_slot` in the past. Without
+    /// the `max(now, next_slot)` anchor the loop would fire a catch-up burst and
+    /// blow the window — the exact failure the per-iteration pace had.
+    #[test]
+    fn pacer_does_not_burst_to_catch_up_after_an_overrunning_request() {
+        let channels = vec![channel_with_lights(0, &["a", "b", "c"])];
+        let sink = RecordingSink {
+            latency: Some(Duration::from_millis(120)),
+            ..RecordingSink::default()
+        };
+        run_loop_under_load(&channels, 20, Duration::from_millis(900), &sink);
+
+        let timestamps = sink.timestamps();
+        assert!(timestamps.len() >= 3);
+        assert_within_budget(&timestamps, 20);
+        for pair in timestamps.windows(2) {
+            let gap = pair[1].saturating_duration_since(pair[0]);
+            assert!(
+                gap >= Duration::from_millis(110),
+                "catch-up burst detected: {gap:?} between consecutive requests"
+            );
+        }
+    }
+
+    #[test]
+    fn pacer_widens_on_throttle_and_decays_back_toward_the_floor() {
+        let mut pacer = RequestPacer::new(10);
+        let floor = pacer.floor;
+        assert_eq!(pacer.interval, floor);
+
+        pacer.on_throttle(None);
+        assert_eq!(pacer.interval, floor * 2);
+        pacer.on_throttle(None);
+        assert_eq!(pacer.interval, floor * 4);
+
+        // A bridge-supplied Retry-After wins when it asks for longer.
+        pacer.on_throttle(Some(3_000));
+        assert_eq!(pacer.interval, Duration::from_millis(3_000));
+
+        // Never past the ceiling, never below the floor.
+        for _ in 0..10 {
+            pacer.on_throttle(Some(u64::MAX / 2));
+        }
+        assert_eq!(
+            pacer.interval,
+            Duration::from_millis(HUE_HTTP_FALLBACK_MAX_INTERVAL_MS)
+        );
+        for _ in 0..500 {
+            pacer.on_success();
+        }
+        assert_eq!(pacer.interval, floor);
+    }
+
+    /// A 429 must actually slow the loop down. Before the fix every fault was
+    /// discarded with `let _ =`, so a throttling bridge had no way to reach us.
+    #[test]
+    fn http_fallback_slows_down_when_the_bridge_throttles() {
+        let channels = vec![channel_with_lights(0, &["a", "b"])];
+        let sink = RecordingSink {
+            throttle_first_n: std::sync::atomic::AtomicUsize::new(4),
+            ..RecordingSink::default()
+        };
+        run_loop_under_load(&channels, 100, Duration::from_millis(700), &sink);
+
+        let timestamps = sink.timestamps();
+        assert!(timestamps.len() >= 6, "got {} requests", timestamps.len());
+        let first_gap = timestamps[1].saturating_duration_since(timestamps[0]);
+        let late_gap = timestamps[5].saturating_duration_since(timestamps[4]);
+        assert!(
+            late_gap > first_gap * 4,
+            "interval did not widen under throttling: {first_gap:?} then {late_gap:?}"
+        );
     }
 
     // -----------------------------------------------------------------------

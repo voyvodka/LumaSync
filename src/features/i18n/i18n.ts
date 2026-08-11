@@ -22,6 +22,13 @@ import trCommon from "../../locales/tr/common.json";
 export const I18N_SUPPORTED_LANGUAGES = ["en", "tr"] as const;
 export type I18nLanguage = (typeof I18N_SUPPORTED_LANGUAGES)[number];
 
+/** Endonyms — a language names itself, so the picker reads to its own speaker
+ * whatever locale the interface is currently in. */
+export const I18N_LANGUAGE_NAMES: Record<I18nLanguage, string> = {
+  en: "English",
+  tr: "Türkçe",
+};
+
 /** Default/fallback language — always English per I18N-02 */
 export const I18N_DEFAULT_LANGUAGE: I18nLanguage = "en";
 

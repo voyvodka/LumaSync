@@ -96,7 +96,24 @@ pnpm vitest             # Watch mode
 
 # Validation
 pnpm verify:shell-contracts   # Validate shell contract compatibility
+
+# Rust gates (mirrored in CI — run from src-tauri/)
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features -- --test-threads=1   # single-threaded: see note below
+cargo audit                                     # advisory scan; ignores live in .cargo/audit.toml
 ```
+
+CI passes `--test-threads=1` to `cargo test`. It is **not** required: the
+worker-touching `lighting_mode` tests serialise themselves on a `WORKER_TEST_GUARD`
+mutex shared by both test modules, so the suite passes at default parallelism.
+The flag predates that guard and is now belt-and-braces. Reproduce CI exactly if
+you are chasing a CI-only failure; otherwise plain `cargo test` is fine.
+
+`build.rs` embeds `windows-app-manifest.xml` into **every** linked target rather
+than letting tauri-build attach it to the bin alone. Test binaries reference
+comctl32 v6 through tauri's tray/menu stack, and without the manifest Windows
+refuses to load them (`STATUS_ENTRYPOINT_NOT_FOUND`).
 
 ## Architecture
 
@@ -108,16 +125,24 @@ Frontend (React/TS)  →  Tauri Commands (Rust)  →  Device Layer (Serial/HTTP)
 
 - **Frontend** (`src/`): React 19, TypeScript strict, Tailwind CSS 4, i18next
 - **Tauri Runtime** (`src-tauri/src/`): Rust 2021 edition, tray, window state, auto-updates
-- **Device Layer**: Serial port (USB microcontrollers at 115200 baud) + Philips Hue CLIP v2 API
+- **Device Layer**: Serial port (USB microcontrollers at 115200 baud), WLED over UDP (DDP/WARLS), and the Philips Hue CLIP v2 API
 
 ### Contract-First Design
 
-All frontend–backend communication is defined in `src/shared/contracts/` **before** implementation:
+All frontend–backend communication is defined in `src/shared/contracts/` **before**
+implementation. The directory is the source of truth — list it rather than
+trusting any summary, including this one:
 
-- `device.ts` — Serial port commands and status codes
-- `hue.ts` — Hue bridge commands, streaming states
-- `shell.ts` — Tray menu IDs, section IDs, persisted state shape
-- `display.ts` — Display enumeration
+| File | Owns |
+|---|---|
+| `device.ts` | Serial commands + status codes, VID/PID support flags, firmware profile, LED chip type, `LedSinkConfig`, WLED UDP sink config + discovery |
+| `hue.ts` | Bridge commands, pairing/auth status codes, streaming states, stream telemetry |
+| `shell.ts` | Tray menu IDs, section IDs, `ShellState` persisted shape, `UI_MODE_SIZES` / `UI_MODE_MIN_SIZES`, keybind registry |
+| `lighting.ts` | Lighting mode kinds and payloads |
+| `calibration.ts` | LED calibration layout shapes |
+| `display.ts` | Display enumeration and metadata |
+| `roomMap.ts` | Room-map objects, Hue zones, channel positions |
+| `platform.ts` | Notification + log-directory surface |
 
 The `scripts/verify/phase01-shell-contracts.mjs` script validates that Rust handlers match frontend contract definitions. Run `pnpm verify:shell-contracts` after modifying contracts or Rust command handlers.
 
@@ -129,32 +154,61 @@ Each feature follows a consistent internal structure:
 - `model/` — Domain types and contracts
 - `*Api.ts` — Tauri `invoke()` bridge
 
-Key modules:
+Not every module uses all four; small ones are a flat file or two. Modules come
+and go — `ls src/features/` is authoritative, the table below is orientation:
+
 | Module | Purpose |
 |--------|---------|
-| `device` | USB controller discovery, connection health |
+| `shell` | App chrome — TitleBar, StatusBar, window lifecycle, global keybinds, accent theme, `GlobalErrorBoundary` |
+| `device` | USB controller discovery, connection health, WLED sink |
 | `calibration` | LED layout editor, display mapping, test patterns |
 | `mode` | Lighting mode state machine (Off/Ambilight/Solid) |
-| `settings` | Multi-tab settings UI |
-| `hue` | Hue bridge pairing, entertainment area, streaming |
+| `settings` | Section-routed settings UI (`sections/`, incl. `room-map/`, `control/`, `compact/`) |
+| `onboarding` | First-run flow |
+| `telemetry` | Runtime telemetry surfaces (FPS, Hue stream grid) |
 | `tray` | Tray menu state sync |
 | `updater` | Auto-update modal |
-| `persistence` | Tauri plugin-store facade |
+| `persistence` | Tauri plugin-store facade + store migrations |
+| `i18n` | i18next bootstrap, language policy, locale-parity test |
+
+Hue has no `src/features/hue/` module — its UI lives in
+`settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`, and its
+contract in `src/shared/contracts/hue.ts`.
 
 ### Rust Command Modules (`src-tauri/src/commands/`)
 
-| File | Commands |
-|------|---------|
-| `device_connection.rs` | `list_serial_ports`, `connect_serial_port`, `get_serial_connection_status`, `run_serial_health_check` |
-| `hue_onboarding.rs` | `discover_hue_bridges`, `pair_hue_bridge`, `validate_hue_credentials`, `list_hue_entertainment_areas` |
-| `hue_stream_lifecycle.rs` | `start_hue_stream`, `stop_hue_stream`, `set_hue_solid_color`, `get_hue_stream_status` |
-| `lighting_mode.rs` | `set_lighting_mode`, `stop_lighting`, `get_lighting_mode_status` |
-| `calibration.rs` | `start_calibration_test_pattern`, `list_displays`, `open_display_overlay` |
-| `runtime_telemetry.rs` | `get_runtime_telemetry` |
+Roughly twenty files plus the `hue/` and `room_map/` subdirectories — too many
+to mirror accurately here. **List the directory and grep for
+`#[tauri::command]`**; `src-tauri/src/lib.rs`'s `generate_handler![]` block is
+the authoritative registration list. Orientation only:
+
+| Area | Files |
+|---|---|
+| Serial / LED output | `device_connection.rs`, `device_handshake.rs`, `led_output.rs`, `led_sink.rs`, `led_calibration.rs` |
+| Network LED | `wled_discovery.rs`, `wled_sink.rs` |
+| Hue | `hue_onboarding.rs`, `hue_http.rs`, `hue_intensity.rs`, `hue/` (commands, dtls, frame, sender, reconnect, retry, state_store, credential_store) |
+| Capture + lighting | `ambilight_capture.rs`, `lighting_mode.rs`, `runtime_quality.rs`, `runtime_telemetry.rs` |
+| Calibration / preview | `calibration.rs`, `test_pattern.rs`, `led_preview.rs` |
+| Room map | `room_map/` (save_load, hue_zone) |
+| Platform | `platform.rs`, `notifications.rs` |
+
+`hue_stream_lifecycle.rs` is a re-export shim only — the implementation moved
+under `commands::hue::*`. Import paths still resolve through it; do not add new
+code there.
 
 ### State Persistence
 
-Tauri `plugin-store` persists state to `~/.config/lumasync/app.json`. The `shellStore.ts` facade wraps all read/write operations. Stored keys follow the shape defined in `src/shared/contracts/shell.ts`.
+Tauri `plugin-store` writes `shell-state.json` into the app data directory —
+on macOS `~/Library/Application Support/com.lumasync.app/shell-state.json`
+(Windows `%APPDATA%\com.lumasync.app\`, Linux `~/.local/share/com.lumasync.app/`).
+The store key is `SHELL_STORE_KEY` in `src/shared/contracts/shell.ts`; the Rust
+side reads the same file via `app.path().app_data_dir()`. The `shellStore.ts`
+facade wraps all frontend read/write operations, and `migrations.ts` handles
+shape changes. Stored keys follow `ShellState` in `shell.ts`.
+
+Hue PSK credentials do **not** live here — they are in the OS keychain via
+`commands/hue/credential_store.rs` (macOS Keychain / Windows CredMan / Linux
+Secret Service).
 
 ### Auto-Update
 
@@ -213,109 +267,69 @@ Run after any change, lightest checks first:
 2. `pnpm vitest run <changed-test-or-folder>`
 3. `pnpm verify:shell-contracts` (if contracts/commands touched)
 4. `pnpm check:rust` (if Rust touched)
-5. `pnpm build` (integration confidence)
+5. `cargo fmt --all -- --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test -- --test-threads=1` (if Rust touched — CI enforces all three, clippy at deny level)
+6. `pnpm build` (integration confidence)
 
 ## Debugging: Live Log Analysis
 
-When a bug cannot be reproduced or diagnosed from code alone, run the app and observe runtime logs:
+Prefer the `debug-runtime` skill — it encodes the clean-restart, capture, and
+classify sequence below. The manual path:
 
 ```bash
-# Kill any running instance, then start fresh
-pkill -f "target/debug/lumasync" 2>/dev/null; pkill -f "pnpm tauri dev" 2>/dev/null; sleep 2
-pnpm tauri dev 2>&1 &
-sleep <seconds> && echo "--- timeout ---"
+# Kill any running instance, clear the leaked single-instance socket, start fresh
+pkill -9 -f "tauri dev" 2>/dev/null; pkill -9 -f "target/debug/lumasync" 2>/dev/null; sleep 2
+rm -f /tmp/com_lumasync_app_si.sock
+pnpm tauri dev > /tmp/lumasync-debug-stdout.log 2>&1 &
 ```
 
-- Rust logs (`log::info!`, `log::warn!`) appear in terminal stdout. Frontend `console.log` does NOT appear in terminal — it goes to WebView devtools only.
-- To trace frontend→backend flow, add temporary `log::info!` calls in Rust command handlers.
-- Each Rust log line appears **twice** (dual log sinks) — this is normal, not duplicate execution.
-- Use `timeout` parameter (in ms) on the Bash tool to capture enough log output.
+- **One log file holds everything.** `src/main.tsx` wraps `console.log/info/warn/error`
+  and forwards them into `tauri-plugin-log`, so frontend output lands in the same
+  sink as Rust's `log::info!`/`log::warn!`. On macOS that file is
+  `~/Library/Logs/com.lumasync.app/lumasync-dev.log` (dev) /
+  `LumaSync.log` (release). Read the file first; terminal stdout only helps for
+  crashes before the sink initialises.
+- Frontend lines carry the `[LumaSync]` prefix by convention.
+- Two sinks are configured (Stdout + LogDir), so a line seen in both places is
+  not duplicate execution.
+- Dev logging is `Debug` for `lumasync_lib` and `Info` for the `webview` target;
+  release is `Info` globally. Log rotation: 5 MB per file, `KeepAll` in dev,
+  `KeepOne` in release.
 - After diagnosing, remove temporary debug logs before committing.
 
 Key log patterns to watch for:
 - `[apply_mode_change]` — lighting mode activation
 - `[ambilight-worker]` — screen capture worker lifecycle
+- `[shutdown]` — quit path; expect `cleanup complete, exiting`, not `watchdog fired`
 - `DTLS entertainment stream established` — Hue streaming connected
 - `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` — bridge has stale session
 - `AMBILIGHT_CAPTURE_PERMISSION_DENIED` — macOS screen recording permission missing
 
 ## Release Workflow
 
-When the user says they want to release a new version (e.g. "1.0.5 atacağım", "yeni versiyon", "release hazırla"), follow these steps **in order**:
+Triggered by "X.Y.Z atacağım" / "yeni versiyon" / "release hazırla" → spawn
+`release-manager`, which owns the full procedure. The `ls-ci-release-standards`
+skill is the single source for CI steps, the readiness checklist, and how
+publication works. Do not re-derive either here.
 
-### 1. Open Source Audit (opensource-guardian agent)
+What must stay true regardless of who does the work:
 
-Run the `opensource-guardian` agent to scan the entire project. Fix all blocker and high-priority issues before proceeding.
-
-### 2. Version Bump
-
-Update the version string in **all three** locations — they must match:
-
-- `src-tauri/Cargo.toml` → `version = "X.Y.Z"`
-- `package.json` → `"version": "X.Y.Z"`
-- `SECURITY.md` → update the supported versions table
-
-Run `cargo check` in `src-tauri/` after bumping to update `Cargo.lock`.
-
-### 3. CHANGELOG Entry
-
-Add a new section under `## [Unreleased]` in `CHANGELOG.md`:
-
-```markdown
-## [X.Y.Z] — YYYY-MM-DD
-
-### Added
-- ...
-
-### Changed
-- ...
-
-### Fixed
-- ...
-```
-
-Populate from git log since the last release tag. Group changes by type (Added/Changed/Fixed/Removed).
-
-**Style: prefer high-level summaries over per-item enumeration.** CHANGELOG is a reader-facing release note, not an audit log. The commit history is the audit log.
-
-- Good: `i18n: localize remaining static labels across Device, Updater, RoomMap, and StatusBar (EN + TR in sync)`
-- Avoid: listing every translation key, every renamed file path, every internal refactor, every dependency point release
-- Group dependency bumps into one line per ecosystem (Rust / frontend / GitHub Actions) — only call out a bump individually when it is a **major version** or has user-visible implications.
-- Omit purely internal changes (dead-constant removal, test file relocations, gitignore tweaks) unless they affect contributors or downstream consumers.
-- Rule of thumb: each bullet should be meaningful to a user reading the release note cold. If it reads like a commit message, collapse it into the nearest theme.
-
-### 4. Validation
-
-Run these checks and confirm all pass:
-
-```bash
-pnpm typecheck
-pnpm check:rust       # or cargo check in src-tauri/
-pnpm verify:shell-contracts
-pnpm vitest run
-```
-
-### 5. Final Verification
-
-Run the `opensource-guardian` agent one more time to confirm:
-- Version numbers are aligned across all files
-- CHANGELOG entry exists and is well-formed
-- No secrets or sensitive data in the diff
-- CI/CD workflows include all required validation steps
-
-### 6. Report
-
-Present a summary to the user:
-- Version: old → new
-- Files changed
-- Validation results (all pass/fail)
-- Reminder: commit, tag (`vX.Y.Z`), and push when ready
-
-**Do NOT commit, tag, or push unless the user explicitly asks.**
+- **Three version locations move in lockstep**: `src-tauri/Cargo.toml`, `package.json`, `SECURITY.md`. Then `cargo check` to refresh `Cargo.lock`. `tauri.conf.json` has no version field — it inherits from Cargo.toml.
+- **CHANGELOG is a reader-facing release note, not an audit log.** High-level summaries grouped by theme; the commit history is the audit log.
+  - Good: `i18n: localize remaining static labels across Device, Updater, RoomMap, and StatusBar (EN + TR in sync)`
+  - Avoid: every translation key, every renamed path, every internal refactor, every dependency point release
+  - Group dependency bumps one line per ecosystem (Rust / frontend / GitHub Actions); call one out individually only for a **major version** or user-visible impact
+  - Omit purely internal changes unless they affect contributors or downstream consumers
+  - If a bullet reads like a commit message, collapse it into the nearest theme
+  - No duplicate `## [X.Y.Z]` headings — `release.yml` extracts notes with `awk` and stops at the first match
+- **Work lands on `main` through pull requests.** Branch protection requires four checks: `Build and Check (ubuntu-24.04)`, `Build and Check (macos-latest)`, `Build and Check (windows-latest)`, `Analyze (javascript-typescript)`. Renaming a workflow job renames its status context — a required context no job produces blocks every PR until an admin overrides it.
+- **Tagging publishes in two stages.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the updater feed never sees a platform-incomplete `latest.json`; a `publish` job then asserts all four platform keys before undrafting. A `-` in the tag (e.g. `-rc.1`) marks it prerelease.
+- **Do NOT commit, tag, or push unless the user explicitly asks.**
 
 ## Key Constraints
 
 - **macOS private API** is enabled (`macos-private-api: true`) for fullscreen calibration overlays across all displays.
-- Hue streaming interval: minimum 50ms (20 Hz) — do not exceed this or the bridge will throttle.
-- Supported USB chip IDs: CH340 (0x1A86:0x7523), FTDI (0x0403:0x6001).
+- Hue streaming interval: minimum 50 ms (20 Hz) — `HUE_SENDER_MIN_INTERVAL_MS` in `src-tauri/src/commands/hue/sender.rs`. Going faster makes the bridge throttle and drop the stream.
+- USB serial is gated by a **9-entry VID/PID allowlist** (`SUPPORTED_USB_DEVICE_ALLOWLIST` in `src-tauri/src/commands/device_connection.rs`): CH340, FTDI FT232R, CP2102, Arduino Uno R3+, Arduino Uno (early), PL2303, CH341, CP2104, FT232H. All ports are enumerated with `isSupported`; connect is blocked with `PORT_UNSUPPORTED` for the rest. Never hardcode the list elsewhere — read the constant.
+- Serial link: 115 200 baud, 8N1.
 - Window size: per-mode (see `UI_MODE_SIZES` / `UI_MODE_MIN_SIZES` in `src/shared/contracts/shell.ts`): full 900×620 (min 800×560), compact 320×480 (min 300×420).
+- `MACOSX_DEPLOYMENT_TARGET` is pinned to `12.3` at workflow level in both CI and release. Lowering it reintroduces the 1.5.2 dyld launch crash (issue #115).

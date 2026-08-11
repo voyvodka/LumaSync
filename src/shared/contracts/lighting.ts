@@ -47,3 +47,49 @@ export const LIGHTING_SMOOTHING_PRESET_COEFFICIENTS: Readonly<
 
 /** Default preset applied when `ShellState.lightingIntensityPreset` is absent. */
 export const DEFAULT_LIGHTING_SMOOTHING_PRESET: LightingSmoothingPreset = "moderate";
+
+// ---------------------------------------------------------------------------
+// Lighting-mode command status codes
+// ---------------------------------------------------------------------------
+
+/**
+ * Refusal codes from `apply_mode_change`. Invariant: on a gate, `mode` reports
+ * the mode *actually running*, never an echo of the request, and the runtime is
+ * untouched. Absent `targets` still means USB-required (legacy D-10).
+ */
+export const LIGHTING_MODE_GATE_STATUS = {
+  DEVICE_NOT_CONNECTED: "DEVICE_NOT_CONNECTED",
+  HUE_NOT_READY: "HUE_NOT_READY",
+} as const;
+
+export type LightingModeGateStatusCode =
+  (typeof LIGHTING_MODE_GATE_STATUS)[keyof typeof LIGHTING_MODE_GATE_STATUS];
+
+/**
+ * Exhaustive `ModeCommandResult.status.code` set — `verify:shell-contracts` derives
+ * the Rust `command_status(...)` literals and fails on an undeclared one. Preview
+ * codes stay in `preview.ts` even though `lighting_mode.rs` emits them.
+ */
+export const LIGHTING_MODE_STATUS = {
+  ...LIGHTING_MODE_GATE_STATUS,
+  SOLID_MODE_APPLIED: "SOLID_MODE_APPLIED",
+  SOLID_MODE_HUE_OUTPUT_SKIPPED: "SOLID_MODE_HUE_OUTPUT_SKIPPED",
+  SOLID_MODE_APPLY_FAILED: "SOLID_MODE_APPLY_FAILED",
+  AMBILIGHT_MODE_STARTED: "AMBILIGHT_MODE_STARTED",
+  AMBILIGHT_MODE_UPDATED: "AMBILIGHT_MODE_UPDATED",
+  AMBILIGHT_MODE_START_FAILED: "AMBILIGHT_MODE_START_FAILED",
+  LIGHTING_MODE_STOPPED: "LIGHTING_MODE_STOPPED",
+  LIGHTING_MODE_STATUS_OK: "LIGHTING_MODE_STATUS_OK",
+} as const;
+
+export type LightingModeStatusCode =
+  (typeof LIGHTING_MODE_STATUS)[keyof typeof LIGHTING_MODE_STATUS];
+
+/**
+ * True when the command was refused before touching any sink — so `mode` in
+ * the same result is the running mode, not the requested one.
+ */
+export function isLightingModeGateCode(code: string): code is LightingModeGateStatusCode {
+  return code === LIGHTING_MODE_GATE_STATUS.DEVICE_NOT_CONNECTED
+    || code === LIGHTING_MODE_GATE_STATUS.HUE_NOT_READY;
+}

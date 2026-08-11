@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { getFullTelemetrySnapshot } from "../telemetryApi";
+import { subscribeTelemetry } from "../telemetrySource";
 import type { FullTelemetrySnapshot } from "../model/contracts";
 
 /**
@@ -54,22 +54,10 @@ function projectSnapshot(dto: FullTelemetrySnapshot): RuntimeTelemetrySnapshot {
 }
 
 /**
- * Polling hook that surfaces the runtime telemetry snapshot every
- * `pollIntervalMs` (default 1 Hz). Uses the recursive-setTimeout pattern so
- * a slow `invoke()` round-trip never queues overlapping calls — the next
- * timer is only armed after the previous response resolves.
- *
- * - Pauses automatically while `document.visibilityState === "hidden"` so
- *   the tray window does not burn CPU while the user is focused elsewhere.
- *   Resumes on the next `visibilitychange` event.
- * - When `enabled === false` the hook holds the `INITIAL_SNAPSHOT` and
- *   issues no `invoke()` calls. Flipping `enabled` back to `true` re-mounts
- *   the effect (it lives in the dependency array) which kicks off a fresh
- *   immediate tick — useful when the lighting mode is OFF and there is no
- *   possibility of meaningful frames flowing yet.
- * - Every mount/unmount cleans up both the pending timeout and the
- *   visibility listener; a re-mount therefore starts a single fresh poll
- *   loop, matching the TelemetrySection StrictMode guarantee.
+ * StatusBar-facing projection of the shared telemetry loop in
+ * `../telemetrySource` (cadence, visibility pausing and the in-flight guard
+ * all live there). With `enabled === false` the hook holds `INITIAL_SNAPSHOT`
+ * and contributes no polling — flipping it back re-subscribes.
  */
 export function useRuntimeTelemetry(
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
@@ -86,70 +74,11 @@ export function useRuntimeTelemetry(
       return;
     }
 
-    let mounted = true;
-    // Pending re-arm timer. Non-null means "a poll is scheduled"; `inFlight`
-    // means "a poll is currently awaiting its invoke()". At most one of the
-    // two can be true at any moment — together they make re-entrancy safe.
-    let timeoutId: number | null = null;
-    let inFlight = false;
-
-    const scheduleNext = () => {
-      if (!mounted) return;
-      // Do not re-arm while hidden — resume handler will kick off a fresh
-      // tick once the page becomes visible again.
-      if (document.visibilityState === "hidden") return;
-      if (timeoutId !== null) return;
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        void tick();
-      }, pollIntervalMs);
-    };
-
-    const tick = async () => {
-      if (!mounted) return;
-      if (inFlight) return;
-      if (document.visibilityState === "hidden") return;
-      inFlight = true;
-      try {
-        const next = await getFullTelemetrySnapshot();
-        if (!mounted) return;
-        setSnapshot(projectSnapshot(next));
-      } catch (error) {
-        if (!mounted) return;
-        // Do not zero the snapshot on transient failure — a single missed
-        // poll should not flicker the pill. Log so silent-catch is not
-        // smuggled in.
-        console.error("[LumaSync] useRuntimeTelemetry poll failed:", error);
-      } finally {
-        inFlight = false;
-        scheduleNext();
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (!mounted) return;
-      if (document.visibilityState === "visible") {
-        // Resume only when no timer is armed and no request is pending.
-        // `scheduleNext` will re-arm on its own once the in-flight request
-        // resolves; kicking off a second tick here would queue overlapping
-        // invokes.
-        if (timeoutId === null && !inFlight) {
-          void tick();
-        }
-      }
-    };
-
-    void tick();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      mounted = false;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    return subscribeTelemetry(pollIntervalMs, (next) => {
+      // A failed tick keeps the previous snapshot on screen rather than
+      // flickering the pill to zero.
+      if (next.snapshot) setSnapshot(projectSnapshot(next.snapshot));
+    });
   }, [pollIntervalMs, enabled]);
 
   return snapshot;

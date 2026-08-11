@@ -1,0 +1,31 @@
+# Codes declared in src/shared/contracts/** with no Rust producer.
+#
+# Ratchet, not a suppression list. This file may only SHRINK: a listed code that
+# gains a producer (or is removed) FAILS the verifier until the line is deleted.
+# A new undeclared-producer code that is not listed here fails immediately.
+#
+# Blank lines and `#` comments ignored. One code per line, sorted.
+
+# Legitimate: minted by the frontend, never on the wire. `displayTargetState.ts`
+# reports "no display to target, so no command was issued".
+OVERLAY_NO_DISPLAY
+
+# MISSING PRODUCER — DeviceSection.tsx:254 branches on this to show the
+# "press the link button" card while pairing is in flight. Nothing emits it, so
+# that branch is dead and the prompt only appears after pairing FAILS with
+# HUE_PAIRING_LINK_BUTTON_NOT_PRESSED (line 250). Reported, not fixed.
+HUE_PAIRING_PENDING_LINK_BUTTON
+
+# MISSING PRODUCER — WledDevicePicker.tsx:206,338 style a neutral "no devices
+# found" card and translate `discoveryEmpty` for it. `discover_wled_devices` is
+# a single-IP probe, not the LAN scan its contract JSDoc describes, so it has no
+# empty-result path. Reported, not fixed.
+WLED_DISCOVERY_EMPTY
+
+# No producer, but EN+TR strings exist under device.health.codes.*. The handshake
+# emits OK / WORKER_PANIC / PROTOCOL_ERROR / HANDSHAKE_TIMEOUT only.
+SERIAL_HEALTH_FIRMWARE_MISMATCH
+SERIAL_HEALTH_VERSION_MISMATCH
+
+# No producer and no consumer. Its sibling HUE_CHANNEL_POSITIONS_UPDATED is real.
+HUE_CHANNEL_POSITIONS_FAILED

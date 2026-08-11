@@ -79,6 +79,17 @@ pub enum LedChipType {
     Sk6812Rgbw,
 }
 
+impl LedChipType {
+    /// Bytes this chip occupies per pixel on the wire. Drives the 115 200-baud
+    /// frame budget — RGBW costs a third more than GRB at the same LED count.
+    pub fn bytes_per_pixel(self) -> usize {
+        match self {
+            Self::Ws2812bGrb => 3,
+            Self::Sk6812Rgbw => 4,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ColorCorrectionConfig — per-channel colour correction parameters
 // ---------------------------------------------------------------------------
@@ -845,25 +856,6 @@ impl SerialSink {
         }
     }
 
-    /// Create a sink with an explicit firmware profile and colour correction config.
-    /// Chip type defaults to `WS2812B_GRB` (backward compat).
-    pub fn with_profile_and_corrections(
-        bridge: LedOutputBridge,
-        port_name: Option<String>,
-        brightness: f32,
-        profile: FirmwareProfile,
-        corrections: ColorCorrectionConfig,
-    ) -> Self {
-        Self {
-            bridge,
-            port_name,
-            brightness,
-            profile,
-            corrections,
-            chip_type: LedChipType::default(),
-        }
-    }
-
     /// Create a sink with an explicit firmware profile, colour correction config,
     /// and chip type. (v1.5 G3)
     ///
@@ -1521,12 +1513,13 @@ mod tests {
     fn serial_sink_adalight_profile_encodes_correct_header() {
         let sender = Arc::new(FakeSender::successful());
         let bridge = LedOutputBridge::from_sender(sender.clone());
-        let mut sink = SerialSink::with_profile_and_corrections(
+        let mut sink = SerialSink::with_chip_type(
             bridge,
             Some("COM5".to_string()),
             1.0,
             FirmwareProfile::Adalight,
             ColorCorrectionConfig::default(),
+            LedChipType::default(),
         );
 
         sink.start().unwrap();
@@ -1768,13 +1761,13 @@ mod tests {
     fn serial_sink_ws2812b_chip_type_default_is_backward_compat() {
         let sender = Arc::new(FakeSender::successful());
         let bridge = LedOutputBridge::from_sender(sender.clone());
-        // with_profile_and_corrections defaults to WS2812B_GRB
-        let mut sink = SerialSink::with_profile_and_corrections(
+        let mut sink = SerialSink::with_chip_type(
             bridge,
             Some("COM6".to_string()),
             1.0,
             FirmwareProfile::LumaSyncV1,
             ColorCorrectionConfig::default(),
+            LedChipType::default(),
         );
 
         sink.start().unwrap();

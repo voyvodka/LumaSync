@@ -5,10 +5,16 @@
  * Fails (exit 1) if required exports, section IDs, error codes, or
  * command strings drift across `src/shared/contracts/*.ts`.
  *
+ * Green means DECLARED, not sound: no grep can tell you a code sits in the right
+ * union, is wired to a result type, or is handled by any consumer.
+ *
+ * The check count is not a coverage score: derived Rust parity covers one emit
+ * surface of roughly seven, and the PORT block four codes of one file.
+ *
  * Usage: node scripts/verify/phase01-shell-contracts.mjs
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -123,6 +129,16 @@ function fail(msg) {
   errors++;
   checks++;
   console.error(`  ✘  ${msg}`);
+}
+
+/**
+ * Informational, non-asserting log line. Unlike pass()/fail() it does NOT
+ * touch the `checks`/`errors` counters, so it can surface a "known-pending"
+ * fact (e.g. a Phase 0 command whose Rust handler lands in Phase 1) without
+ * coloring the run pass or fail.
+ */
+function note(msg) {
+  console.log(`  \u2022  ${msg}`);
 }
 
 function check(condition, passMsg, failMsg) {
@@ -948,6 +964,462 @@ check(
   wledRustSource.includes("is_broadcast()"),
   "parse_ipv4 rejects broadcast (255.255.255.255) via is_broadcast()",
   "MISSING: is_broadcast() check in parse_ipv4"
+);
+
+// ---------------------------------------------------------------------------
+// LED Preview & Test Experience contract (v1.6 — Phase 0, contracts only)
+//
+// Phase 0 lands the TypeScript surface only; the 8 Rust #[tauri::command]
+// handlers arrive in Phase 1. The presence checks below (command strings,
+// status codes, event/window labels, tray id, ShellState fields) are real
+// assertions and pass today. The Rust-parity loop treats the 8 preview
+// commands as a KNOWN-PENDING allowlist: a command not yet registered in
+// `generate_handler!` is surfaced via note() as PENDING (not failed) so
+// Phase 0 stays green, while a command that IS registered passes (and nudges
+// the maintainer to prune the allowlist). When Phase 1 registers all 8,
+// empty PREVIEW_PENDING_RUST_HANDLERS and the loop enforces strict parity
+// exactly like the Hue zone block above.
+// ---------------------------------------------------------------------------
+const PREVIEW_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/preview.ts");
+const previewSource = readOrEmpty(PREVIEW_CONTRACT_FILE, "preview");
+
+console.log("\n[ Preview commands (v1.6) ]");
+const REQUIRED_PREVIEW_COMMANDS = [
+  "start_led_test_pattern",
+  "stop_led_test_pattern",
+  "get_led_preview_status",
+  "open_led_twin_overlay",
+  "close_led_twin_overlay",
+  "open_led_control_popup",
+  "show_led_control_popup",
+  "hide_led_control_popup",
+];
+for (const cmd of REQUIRED_PREVIEW_COMMANDS) {
+  check(
+    previewSource.includes(`"${cmd}"`),
+    `preview command "${cmd}" defined in preview.ts`,
+    `MISSING preview command "${cmd}" in preview.ts > PREVIEW_COMMANDS`
+  );
+}
+
+console.log("\n[ Preview status codes (v1.6) ]");
+const REQUIRED_PREVIEW_STATUS_CODES = [
+  // LED test pattern lifecycle
+  "LED_TEST_PATTERN_STARTED",
+  "LED_TEST_PATTERN_PREVIEW_ONLY",
+  "LED_TEST_PATTERN_STOPPED",
+  "LED_TEST_PATTERN_INVALID_PARAMS",
+  "LED_TEST_PATTERN_NO_CALIBRATION",
+  "LED_TEST_PATTERN_RUNTIME_ERROR",
+  // Twin overlay window
+  "TWIN_OVERLAY_OPENED",
+  "TWIN_OVERLAY_CLOSED",
+  "TWIN_OVERLAY_OPEN_FAILED",
+  "TWIN_OVERLAY_DISPLAY_NOT_FOUND",
+  "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
+  // Control popup window
+  "CONTROL_POPUP_OPENED",
+  "CONTROL_POPUP_SHOWN",
+  "CONTROL_POPUP_HIDDEN",
+  "CONTROL_POPUP_FAILED",
+];
+for (const code of REQUIRED_PREVIEW_STATUS_CODES) {
+  check(
+    previewSource.includes(`"${code}"`),
+    `preview status code "${code}" defined`,
+    `MISSING preview status code "${code}" in preview.ts`
+  );
+}
+
+console.log("\n[ Preview event + window labels (v1.6) ]");
+check(
+  previewSource.includes(`"preview://state-changed"`),
+  "PREVIEW_STATE_CHANGED_EVENT defined",
+  "MISSING PREVIEW_STATE_CHANGED_EVENT in preview.ts"
+);
+check(
+  previewSource.includes(`"led-twin-overlay-"`),
+  "LED_TWIN_OVERLAY_LABEL_PREFIX defined",
+  "MISSING LED_TWIN_OVERLAY_LABEL_PREFIX in preview.ts"
+);
+check(
+  previewSource.includes(`"led-control-popup"`),
+  "LED_CONTROL_POPUP_LABEL defined",
+  "MISSING LED_CONTROL_POPUP_LABEL in preview.ts"
+);
+
+console.log("\n[ Preview tray menu id (v1.6) ]");
+check(
+  source.includes(`"tray-show-led-preview"`),
+  'TRAY_MENU_IDS.SHOW_LED_PREVIEW ("tray-show-led-preview") defined',
+  'MISSING tray id "tray-show-led-preview" in shell.ts'
+);
+
+console.log("\n[ ShellState v1.6 preview additions ]");
+const REQUIRED_V16_STATE_FIELDS = [
+  "ledPreviewPopupVisible",
+  "ledPreviewPopupCenterX",
+  "ledPreviewPopupCenterY",
+  "ledTwinEnabledTest",
+  "lastLedTestPattern",
+  "ledPreviewHintShown",
+];
+for (const field of REQUIRED_V16_STATE_FIELDS) {
+  check(
+    source.includes(field + "?:"),
+    `ShellState v1.6 field "${field}" declared optional`,
+    `MISSING optional ShellState v1.6 field "${field}"`
+  );
+}
+
+console.log("\n[ Preview — Rust handler parity (v1.6 Phase 0 \u2192 Phase 1) ]");
+// Phase 0 known-pending allowlist. The Rust handlers land in Phase 1; remove
+// an entry the moment its #[tauri::command] is registered in lib.rs. When this
+// array is empty the loop enforces strict parity like the Hue zone block above.
+const PREVIEW_PENDING_RUST_HANDLERS = [];
+for (const fn of REQUIRED_PREVIEW_COMMANDS) {
+  const re = new RegExp(`(^|[\\s,])${fn}([\\s,]|$)`, "m");
+  const registered = re.test(handlerListBlock);
+  const pending = PREVIEW_PENDING_RUST_HANDLERS.includes(fn);
+  if (registered) {
+    pass(`Rust generate_handler! list registers "${fn}"`);
+    if (pending) {
+      note(
+        `"${fn}" is now registered in lib.rs — remove it from `
+          + `PREVIEW_PENDING_RUST_HANDLERS (Phase 1 cleanup)`
+      );
+    }
+  } else if (pending) {
+    note(
+      `PENDING (Phase 1): "${fn}" not yet in generate_handler! — `
+        + `known-pending allowlist, not a failure`
+    );
+  } else {
+    fail(
+      `MISSING Rust generate_handler! entry for "${fn}" — `
+        + `frontend invoke(PREVIEW_COMMANDS.X) will resolve to nothing`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lighting-mode status codes — derived Rust → TS parity. Only literal first
+// args count; the preview call sites pass a constant and belong to preview.ts.
+// ---------------------------------------------------------------------------
+const LIGHTING_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/lighting.ts");
+const RUST_LIGHTING_MODE_FILE = resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs");
+const lightingSource = readOrEmpty(LIGHTING_CONTRACT_FILE, "lighting");
+const rustLightingSource = readOrEmpty(RUST_LIGHTING_MODE_FILE, "rust lighting_mode");
+
+console.log("\n[ Lighting-mode status codes — Rust → lighting.ts parity ]");
+const rustLightingProduction = rustLightingSource.split(/\nmod tests\s*\{/)[0];
+const emittedLightingCodes = [
+  ...new Set(
+    [...rustLightingProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)]
+      .map((m) => m[1])
+  ),
+].sort();
+// Pinned, not `> 0`: the harvest sees string literals only, so hoisting a code
+// to a `const` (the shape preview.rs already uses) would silently drop it while
+// the other nine still matched. Bump this deliberately when a code is added.
+const EXPECTED_LIGHTING_CODE_COUNT = 10;
+check(
+  emittedLightingCodes.length === EXPECTED_LIGHTING_CODE_COUNT,
+  `harvested exactly ${EXPECTED_LIGHTING_CODE_COUNT} command_status codes from lighting_mode.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_LIGHTING_CODE_COUNT} lighting codes, got `
+    + `${emittedLightingCodes.length} [${emittedLightingCodes.join(", ")}] — a code was added, `
+    + `removed, or refactored from a string literal into a constant (which this harvest cannot see)`
+);
+for (const code of emittedLightingCodes) {
+  check(
+    lightingSource.includes(`"${code}"`),
+    `lighting status code "${code}" declared in lighting.ts`,
+    `UNDECLARED lighting status code "${code}" — Rust emits it but `
+      + `lighting.ts > LIGHTING_MODE_STATUS does not declare it`
+  );
+}
+
+// The two gate codes carry an extra behavioural contract (`mode` reports the
+// running mode, not the requested one), so they must stay separately addressable.
+check(
+  lightingSource.includes("LIGHTING_MODE_GATE_STATUS")
+    && lightingSource.includes("isLightingModeGateCode"),
+  "LIGHTING_MODE_GATE_STATUS + isLightingModeGateCode exported",
+  "MISSING LIGHTING_MODE_GATE_STATUS / isLightingModeGateCode in lighting.ts"
+);
+
+// ---------------------------------------------------------------------------
+// Runtime telemetry — derived Rust → TS field parity
+// ---------------------------------------------------------------------------
+const TELEMETRY_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/telemetry.ts");
+const RUST_TELEMETRY_FILE = resolve(ROOT, "src-tauri/src/commands/runtime_telemetry.rs");
+const telemetrySource = readOrEmpty(TELEMETRY_CONTRACT_FILE, "telemetry");
+const rustTelemetrySource = readOrEmpty(RUST_TELEMETRY_FILE, "rust runtime_telemetry");
+
+function rustStructFields(source, structName) {
+  const block = source.match(
+    new RegExp(`pub struct ${structName}\\s*\\{([\\s\\S]*?)\\n\\}`)
+  );
+  if (!block) return null;
+  return [...block[1].matchAll(/^\s*pub\s+([a-z0-9_]+)\s*:/gm)].map((m) =>
+    m[1].replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase())
+  );
+}
+
+console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
+// Same degradation shape as the lighting harvest: a removed Rust field silently
+// stops being checked. Pin the count so the loop cannot quietly narrow.
+const EXPECTED_TELEMETRY_FIELD_COUNTS = {
+  RuntimeTelemetrySnapshot: 6,
+  HueTelemetrySnapshot: 11,
+  FullTelemetrySnapshot: 2,
+};
+for (const [structName, expectedCount] of Object.entries(EXPECTED_TELEMETRY_FIELD_COUNTS)) {
+  const fields = rustStructFields(rustTelemetrySource, structName);
+  if (!fields || fields.length === 0) {
+    fail(`EXTRACTION FAILED: no fields found on Rust struct "${structName}"`);
+    continue;
+  }
+  check(
+    fields.length === expectedCount,
+    `${structName} harvested exactly ${expectedCount} fields`,
+    `HARVEST COUNT DRIFT: expected ${expectedCount} fields on ${structName}, got `
+      + `${fields.length} [${fields.join(", ")}] — update the pin deliberately`
+  );
+  const tsBlock = telemetrySource.match(
+    new RegExp(`export interface ${structName}\\s*\\{([\\s\\S]*?)\\n\\}`)
+  );
+  if (!tsBlock) {
+    fail(`MISSING interface "${structName}" in telemetry.ts`);
+    continue;
+  }
+  for (const field of fields) {
+    check(
+      new RegExp(`^\\s*${field}\\??\\s*:`, "m").test(tsBlock[1]),
+      `${structName}.${field} declared in telemetry.ts`,
+      `MISSING ${structName}.${field} in telemetry.ts — Rust serializes it `
+        + `(#[serde(rename_all = "camelCase")]) but the contract drops it`
+    );
+  }
+}
+
+// Both semantics are invisible in the types: 0 means "no serial link", and
+// `linkConstrained` tracks material degradation, not the stricter send-clamp.
+console.log("\n[ Runtime telemetry — link-budget semantics ]");
+check(
+  telemetrySource.includes("LINK_MAX_FPS_ABSENT"),
+  "LINK_MAX_FPS_ABSENT sentinel exported (0 ≠ zero fps)",
+  "MISSING LINK_MAX_FPS_ABSENT in telemetry.ts — nothing stops a consumer "
+    + "rendering a Hue-only session as \"0 fps\""
+);
+const rustLinkThreshold = rustLightingSource.match(
+  /const\s+LINK_CONSTRAINED_FPS\s*:\s*f32\s*=\s*([0-9.]+)/
+);
+const tsLinkThreshold = telemetrySource.match(
+  /LINK_CONSTRAINED_FPS_THRESHOLD\s*=\s*([0-9.]+)/
+);
+check(
+  rustLinkThreshold !== null
+    && tsLinkThreshold !== null
+    && Number(rustLinkThreshold[1]) === Number(tsLinkThreshold[1]),
+  `link-constrained threshold matches Rust LINK_CONSTRAINED_FPS `
+    + `(${rustLinkThreshold ? rustLinkThreshold[1] : "?"})`,
+  `THRESHOLD DRIFT: Rust LINK_CONSTRAINED_FPS=${rustLinkThreshold ? rustLinkThreshold[1] : "?"} `
+    + `vs telemetry.ts LINK_CONSTRAINED_FPS_THRESHOLD=${tsLinkThreshold ? tsLinkThreshold[1] : "?"}`
+);
+
+// ---------------------------------------------------------------------------
+// USB VID/PID allowlist parity. `SUPPORTED_CONTROLLER_IDS` already mirrors the
+// Rust allowlist with no consumer and nothing asserting agreement until now.
+// ---------------------------------------------------------------------------
+console.log("\n[ USB VID/PID allowlist — Rust ↔ device.ts parity ]");
+const rustAllowlistBlock = rustHealthSource.match(
+  /SUPPORTED_USB_DEVICE_ALLOWLIST[^=]*=\s*&\[([\s\S]*?)\n\];/
+);
+const tsAllowlistBlock = deviceSource.match(
+  /SUPPORTED_CONTROLLER_IDS\s*=\s*\[([\s\S]*?)\n\]/
+);
+const rustVidPids = rustAllowlistBlock
+  ? [...rustAllowlistBlock[1].matchAll(/\(\s*0x([0-9A-Fa-f]{4})\s*,\s*0x([0-9A-Fa-f]{4})\s*\)/g)]
+      .map((m) => `${m[1]}:${m[2]}`.toUpperCase())
+  : [];
+const tsVidPids = tsAllowlistBlock
+  ? [...tsAllowlistBlock[1].matchAll(/"([0-9A-Fa-f]{4}):([0-9A-Fa-f]{4})"/g)]
+      .map((m) => `${m[1]}:${m[2]}`.toUpperCase())
+  : [];
+check(
+  rustVidPids.length > 0 && tsVidPids.length > 0,
+  `extracted ${rustVidPids.length} Rust / ${tsVidPids.length} TS allowlist entries`,
+  "EXTRACTION FAILED: could not read one or both VID/PID allowlists"
+);
+check(
+  rustVidPids.length === tsVidPids.length,
+  `allowlist length matches (${rustVidPids.length} entries)`,
+  `ALLOWLIST LENGTH DRIFT: Rust has ${rustVidPids.length}, device.ts has ${tsVidPids.length}`
+);
+check(
+  rustVidPids.join(",") === tsVidPids.join(","),
+  "allowlist entries match Rust SUPPORTED_USB_DEVICE_ALLOWLIST in order",
+  `ALLOWLIST DRIFT:\n     Rust: ${rustVidPids.join(" ")}\n     TS  : ${tsVidPids.join(" ")}`
+);
+
+// ---------------------------------------------------------------------------
+// Serial port codes — derived Rust → device.ts parity
+// ---------------------------------------------------------------------------
+console.log("\n[ Serial port codes — Rust → device.ts parity ]");
+const rustPortCodes = [
+  ...new Set(
+    [...stripComments(rustHealthSource).matchAll(/"([A-Z][A-Z0-9_]*(?:PORT|PORTS)[A-Z0-9_]*)"/g)]
+      .map((m) => m[1])
+  ),
+].sort();
+const EXPECTED_PORT_CODE_COUNT = 4;
+check(
+  rustPortCodes.length === EXPECTED_PORT_CODE_COUNT,
+  `harvested exactly ${EXPECTED_PORT_CODE_COUNT} PORT codes from device_connection.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_PORT_CODE_COUNT} PORT codes, got `
+    + `${rustPortCodes.length} [${rustPortCodes.join(", ")}] — update the pin deliberately`
+);
+for (const code of rustPortCodes) {
+  check(
+    deviceSource.includes(`"${code}"`),
+    `port code "${code}" declared in device.ts`,
+    `UNDECLARED port code "${code}" — device_connection.rs emits it but device.ts `
+      + `does not declare it (this is how "UNSUPPORTED_PORT" survived transposed)`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Highest severity: a code both trees use and neither declares. Both sides
+// believe they own it and neither is authoritative — how a word-swap survives.
+// ---------------------------------------------------------------------------
+console.log("\n[ Status codes present in BOTH trees, declared in NEITHER ]");
+
+function walkSourceFiles(dir, match, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name === "__tests__") continue;
+    const full = resolve(dir, entry.name);
+    if (entry.isDirectory()) walkSourceFiles(full, match, out);
+    else if (match.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+// A prose mention is not a declaration — the miss that hid DEVICE_NOT_CONNECTED
+// behind three comments. Biased toward false positives on purpose.
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\*)/.test(line))
+    .join("\n");
+}
+
+function harvestCodes(files) {
+  const found = new Set();
+  for (const file of files) {
+    let text = stripComments(readFileSync(file, "utf-8"));
+    // The test MODULE, not any `#[cfg(test)]` — four files carry that attribute
+    // on a plain item, which truncated lighting_mode.rs at line 58 of ~3400.
+    if (file.endsWith(".rs")) text = text.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+    // `"CODE: detail"` counts too — Err arms carry the code as a prefix (#42).
+    for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})(?:"|:\s)/g)) {
+      const code = m[1];
+      // Underscore-required drops CLOCKWISE/TEXTAREA without an allowlist that
+      // rots; a trailing one marks a `.startsWith()` prefix, not a code.
+      if (!code.includes("_") || code.endsWith("_")) continue;
+      found.add(code);
+    }
+  }
+  return found;
+}
+
+const tsSourceFiles = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/);
+// Whole crate, not just `commands/`: `network/mdns.rs` emits the HUE_MDNS_*
+// codes, and a narrower root reports them as phantoms.
+const rustEmitted = harvestCodes(
+  walkSourceFiles(resolve(ROOT, "src-tauri/src"), /\.rs$/)
+);
+const tsReferenced = harvestCodes(
+  tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"))
+);
+const contractDeclared = harvestCodes(
+  tsSourceFiles.filter((f) => f.includes("/shared/contracts/"))
+);
+
+const inBothTrees = [...rustEmitted].filter((c) => tsReferenced.has(c)).sort();
+const undeclaredInBoth = inBothTrees.filter((c) => !contractDeclared.has(c));
+// Floor the two harvests that only grow. NOT the intersection: replacing a raw
+// TS literal with an imported constant is the fix we want, and it removes that
+// code from `tsReferenced` — so the intersection shrinks as the tree improves.
+const MIN_RUST_EMITTED_CODES = 130;
+const MIN_CONTRACT_DECLARED_CODES = 120;
+check(
+  rustEmitted.size >= MIN_RUST_EMITTED_CODES,
+  `harvested ${rustEmitted.size} Rust codes (floor ${MIN_RUST_EMITTED_CODES})`,
+  `HARVEST DEGRADED: only ${rustEmitted.size} Rust codes seen — the regex or the `
+    + `walk stopped matching; every check below is now weaker than it looks`
+);
+check(
+  contractDeclared.size >= MIN_CONTRACT_DECLARED_CODES,
+  `harvested ${contractDeclared.size} declared codes (floor ${MIN_CONTRACT_DECLARED_CODES})`,
+  `HARVEST DEGRADED: only ${contractDeclared.size} declared codes seen in contracts/`
+);
+note(`${inBothTrees.length} codes still cross the wire as raw TS literals`);
+for (const code of undeclaredInBoth) {
+  fail(
+    `BOTH-TREES UNDECLARED "${code}" — Rust emits it and TS reads it, but no `
+      + `contract declares it. Neither side is authoritative.`
+  );
+}
+check(
+  undeclaredInBoth.length === 0,
+  "every code crossing the wire is declared in a contract",
+  `${undeclaredInBoth.length} wire codes undeclared (listed above)`
+);
+
+// ---------------------------------------------------------------------------
+// Declared in a contract, emitted by no Rust producer. Ratcheted — the baseline
+// may only shrink. See contract-phantom-baseline.txt.
+// ---------------------------------------------------------------------------
+console.log("\n[ Declared codes with no Rust producer (ratcheted) ]");
+const PHANTOM_BASELINE_FILE = resolve(__dirname, "contract-phantom-baseline.txt");
+const phantomBaseline = new Set(
+  readOrEmpty(PHANTOM_BASELINE_FILE, "phantom baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+
+const declaredWithoutProducer = [...contractDeclared]
+  .filter((code) => !rustEmitted.has(code))
+  .sort();
+
+for (const code of declaredWithoutProducer) {
+  if (phantomBaseline.has(code)) {
+    note(`KNOWN GAP: "${code}" declared with no Rust producer (baselined)`);
+  } else {
+    fail(
+      `NEW PHANTOM "${code}" — declared in a contract but no Rust file emits it. `
+        + `Either wire up the producer or drop the declaration; do not baseline it `
+        + `without establishing which.`
+    );
+  }
+}
+
+// The half that makes it a ratchet rather than a suppression list.
+for (const code of phantomBaseline) {
+  check(
+    !rustEmitted.has(code),
+    `baseline entry "${code}" still has no producer`,
+    `BASELINE STALE: "${code}" now HAS a Rust producer — delete its line from `
+      + `contract-phantom-baseline.txt (the file may only shrink)`
+  );
+}
+check(
+  declaredWithoutProducer.filter((c) => !phantomBaseline.has(c)).length === 0,
+  `no new phantoms beyond the ${phantomBaseline.size} baselined`,
+  "new phantoms found (listed above)"
 );
 
 // ---------------------------------------------------------------------------

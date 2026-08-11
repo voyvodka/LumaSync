@@ -8,6 +8,7 @@ import {
   type HueRuntimeState,
   type HueRuntimeTriggerSource,
 } from "../../shared/contracts/hue";
+import type { LightingModeStatusCode } from "../../shared/contracts/lighting";
 import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
 
 export interface ModeApiError {
@@ -20,7 +21,7 @@ export interface ModeCommandResult {
   active: boolean;
   mode: LightingModeConfig;
   status: {
-    code: string;
+    code: LightingModeStatusCode;
     message: string;
     details: string | null;
   };

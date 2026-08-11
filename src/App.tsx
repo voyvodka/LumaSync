@@ -35,14 +35,17 @@ import {
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import {
-  getHueStreamStatus,
   setHueSolidColor,
   setLightingMode,
-  startHue,
+  startHue as startHueCommand,
   stopLighting,
-  stopHue,
+  stopHue as stopHueCommand,
 } from "./features/mode/modeApi";
 import { validateHueCredentials } from "./features/device/hueOnboardingApi";
+import {
+  invalidateHueStreamStatus,
+  readHueStreamStatus,
+} from "./features/device/hueReadCache";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,
@@ -69,21 +72,54 @@ import {
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
-import { HUE_RUNTIME_STATES, HUE_STATUS, type HueRuntimeTarget } from "./shared/contracts/hue";
+import {
+  HUE_RUNTIME_STATES,
+  HUE_RUNTIME_STATUS,
+  HUE_SOLID_COLOR_STATUS,
+  HUE_STATUS,
+  isHueSolidColorUnapplied,
+  type HueRuntimeTarget,
+  type HueSolidColorStatusCode,
+} from "./shared/contracts/hue";
 import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
-import { DEVICE_COMMANDS, type ColorCorrectionConfig, type FirmwareProfile } from "./shared/contracts/device";
+import { DEVICE_COMMANDS, type ColorCorrectionConfig, type FirmwareProfile, type LedChipType } from "./shared/contracts/device";
 import {
   listenTrayLightsOff,
   listenTrayResumeLastMode,
   listenTraySolidColor,
+  listenTrayShowLedPreview,
   updateTrayLabels,
 } from "./features/tray/trayController";
+import {
+  openLedControlPopup,
+  showLedControlPopup,
+  openLedTwinOverlay,
+} from "./features/preview/previewApi";
 import { i18next } from "./features/i18n/i18n";
+
+// Wrapped at the import so no call site can forget: a Hue mutation must drop
+// the cached stream status, or the health reconciler below can act on a
+// pre-mutation answer and undo the change the user just made.
+const startHue: typeof startHueCommand = (...args) =>
+  startHueCommand(...args).finally(invalidateHueStreamStatus);
+const stopHue: typeof stopHueCommand = (...args) =>
+  stopHueCommand(...args).finally(invalidateHueStreamStatus);
 
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
-/** Interval for polling backend Hue stream health when "hue" is an active output target. */
+/**
+ * Cadence while the stream is alive. NOT a local read: `get_hue_stream_status`
+ * runs a full `check_hue_stream_readiness` round-trip against the bridge on
+ * the alive path (`commands/hue/commands.rs`), so this is real bridge traffic
+ * — hence the shared `readHueStreamStatus` cache.
+ */
 const HUE_STREAM_HEALTH_POLL_MS = 5_000;
+/**
+ * Cadence once the stream is dead. Polling continues so the target can be
+ * restored without a mode transition; on THIS path the backend short-circuits
+ * before any network call, so it costs one IPC hop and no bridge traffic.
+ */
+const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 /** Interval for checking bridge reachability when configured but stream is not active. */
 const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 /**
@@ -167,15 +203,15 @@ function toHueStartConfig(state: {
 
 function isHueStartCodeOk(code: string): boolean {
   return (
-    code === "HUE_STREAM_RUNNING" ||
-    code === "HUE_STREAM_RUNNING_DTLS" ||
-    code === "HUE_STREAM_STARTING" ||
-    code === "HUE_START_NOOP_ALREADY_ACTIVE"
+    code === HUE_RUNTIME_STATUS.STREAM_RUNNING ||
+    code === HUE_RUNTIME_STATUS.STREAM_RUNNING_DTLS ||
+    code === HUE_RUNTIME_STATUS.STREAM_STARTING ||
+    code === HUE_RUNTIME_STATUS.START_NOOP_ALREADY_ACTIVE
   );
 }
 
 function isHueStopCodeOk(code: string): boolean {
-  return code === "HUE_STREAM_STOPPED";
+  return code === HUE_RUNTIME_STATUS.STREAM_STOPPED;
 }
 
 function App() {
@@ -217,6 +253,9 @@ function App() {
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
   const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
+  /** Set when a Solid colour was accepted by the runtime but never reached the bridge. */
+  const [hueColorNotice, setHueColorNotice] = useState<HueSolidColorStatusCode | null>(null);
+  const hueColorNoticeTimeoutRef = useRef<number | null>(null);
 
   // v1.5 W2-B4 — first-run onboarding state. The flag is hydrated from
   // shellStore on bootstrap; a fresh user (`undefined` / `false`) sees
@@ -264,6 +303,11 @@ function App() {
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
   const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
   const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
+  // Lets the Hue health reconciler re-apply the mode without taking
+  // `dispatchSetLightingMode` as a dep (which would restart the poll loop).
+  const dispatchLightingModeRef = useRef<
+    ((next: LightingModeConfig, options?: { force?: boolean }) => Promise<unknown>) | null
+  >(null);
   // Capture display chosen by the user (v1.4 Platform GAP 2). Cached in a
   // ref so every set_lighting_mode call can inject it without awaiting
   // shellStore on the hot path. Hydrated on bootstrap and refreshed when
@@ -283,6 +327,9 @@ function App() {
   // Firmware encoding profile (v1.4 G11). Same caching rationale as
   // colorCorrectionRef — injected into every outgoing LightingModeConfig.
   const firmwareProfileRef = useRef<FirmwareProfile | undefined>(undefined);
+  // LED chip type (v1.5 G3). Same caching rationale — the worker sizes its
+  // wire packets from this, so it must ride along on every outgoing config.
+  const chipTypeRef = useRef<LedChipType | undefined>(undefined);
   // Persisted LED calibration (v1.4 USB per-LED sampling anchor). Same
   // caching rationale as colorCorrectionRef — every outgoing
   // set_lighting_mode payload stamps it onto `ledCalibration` so the
@@ -370,6 +417,7 @@ function App() {
       ...mode,
       colorCorrection: colorCorrectionRef.current,
       firmwareProfile: firmwareProfileRef.current,
+      chipType: chipTypeRef.current,
     }),
     [],
   );
@@ -548,6 +596,35 @@ function App() {
     },
     [hydrateModePayload],
   );
+  dispatchLightingModeRef.current = dispatchSetLightingMode;
+
+  // Surfaces the one outcome the user cannot otherwise see: the picker moved,
+  // the bulbs did not. Queued-pending-stream stays silent — it self-resolves.
+  const reportHueSolidColorStatus = useCallback((code: string) => {
+    if (hueColorNoticeTimeoutRef.current !== null) {
+      window.clearTimeout(hueColorNoticeTimeoutRef.current);
+      hueColorNoticeTimeoutRef.current = null;
+    }
+    if (!isHueSolidColorUnapplied(code)) {
+      setHueColorNotice(null);
+      return;
+    }
+    console.warn(`[LumaSync] Hue solid color not applied: ${code}`);
+    setHueColorNotice(code as HueSolidColorStatusCode);
+    hueColorNoticeTimeoutRef.current = window.setTimeout(() => {
+      hueColorNoticeTimeoutRef.current = null;
+      setHueColorNotice(null);
+    }, 5_000);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (hueColorNoticeTimeoutRef.current !== null) {
+        window.clearTimeout(hueColorNoticeTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
     lastPendingModeRef.current = mode;
@@ -605,13 +682,12 @@ function App() {
     activeOutputTargetsRef.current = activeOutputTargets;
   }, [activeOutputTargets]);
 
-  // ---------------------------------------------------------------------------
-  // B2 fix: Poll backend Hue stream health while "hue" is an active target.
-  // When the backend reports Failed or Idle, remove "hue" from activeOutputTargets
-  // so the frontend chip stops pulsing and accurately reflects the dead stream.
-  // ---------------------------------------------------------------------------
+  // Two-way Hue health reconciler. The restore direction is the fix: the poll
+  // used to `return` on the first dead reading, stranding "hue" out of
+  // `activeOutputTargets` forever so every Solid colour change was dropped.
+  const hueTargetSelected = selectedOutputTargets.includes("hue");
   useEffect(() => {
-    if (!activeOutputTargets.includes("hue")) return;
+    if (!hueTargetSelected) return;
 
     let active = true;
     let timerId: number | null = null;
@@ -622,25 +698,46 @@ function App() {
       if (inFlight) return;
       // Visibility-aware: the tray window can be hidden indefinitely with the
       // React tree mounted. Skip backend polling while hidden and resume with
-      // an immediate tick on `visibilitychange` so a stream that died while
-      // hidden is reflected the moment the user re-opens the window.
+      // an immediate tick on `visibilitychange`.
       if (document.visibilityState === "hidden") return;
       inFlight = true;
+      let nextDelayMs = HUE_STREAM_HEALTH_POLL_MS;
       try {
-        const result = await getHueStreamStatus();
+        const result = await readHueStreamStatus();
         if (!active) return;
 
         const backendDead =
           result.status.state === HUE_RUNTIME_STATES.FAILED ||
           result.status.state === HUE_RUNTIME_STATES.IDLE;
+        const targetActive = activeOutputTargetsRef.current.includes("hue");
+        nextDelayMs = backendDead
+          ? HUE_STREAM_HEALTH_RECOVERY_POLL_MS
+          : HUE_STREAM_HEALTH_POLL_MS;
 
-        if (backendDead) {
+        if (backendDead && targetActive) {
           console.warn(
             `[LumaSync] Hue stream health check: backend reported ${result.status.state}. ` +
               `Message: ${result.status.message}. Removing "hue" from active targets.`,
           );
           setActiveOutputTargets((prev) => prev.filter((t) => t !== "hue"));
-          return; // Dead stream detected, stop polling
+        } else if (!backendDead && !targetActive) {
+          const mode = lightingModeRef.current;
+          if (mode.kind !== LIGHTING_MODE_KIND.OFF) {
+            console.info(
+              `[LumaSync] Hue stream recovered (${result.status.state}). Restoring "hue" as an active target.`,
+            );
+            setActiveOutputTargets((prev) =>
+              prev.includes("hue") ? prev : [...prev, "hue" as HueRuntimeTarget],
+            );
+            // The running ambilight worker captured `hue_output=None` when the
+            // stream was down; only a forced re-apply hands it the live context.
+            void dispatchLightingModeRef.current?.(
+              { ...mode, targets: selectedOutputTargetsRef.current },
+              { force: true },
+            ).catch((error) => {
+              console.error("[LumaSync] Hue recovery mode re-apply failed:", error);
+            });
+          }
         }
       } catch (err) {
         console.warn("[LumaSync] Hue stream health poll failed (transient, keeping target):", err);
@@ -648,17 +745,17 @@ function App() {
         inFlight = false;
       }
 
-      scheduleNext();
+      scheduleNext(nextDelayMs);
     };
 
-    const scheduleNext = () => {
+    const scheduleNext = (delayMs: number) => {
       if (!active) return;
       if (document.visibilityState === "hidden") return;
       if (timerId !== null) return;
       timerId = window.setTimeout(() => {
         timerId = null;
         void poll();
-      }, HUE_STREAM_HEALTH_POLL_MS);
+      }, delayMs);
     };
 
     const handleVisibilityChange = () => {
@@ -679,7 +776,7 @@ function App() {
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activeOutputTargets]);
+  }, [hueTargetSelected]);
 
   // ---------------------------------------------------------------------------
   // Bridge reachability poll: validate credentials every 30 s when hue is
@@ -779,7 +876,7 @@ function App() {
     if (hueNowActive && !hueSolidSyncedRef.current) {
       // Hue Running'e yeni girdi ve henüz sync yapılmadı
       hueSolidSyncedRef.current = true;
-      void getHueStreamStatus()
+      void readHueStreamStatus()
         .then((result) => {
           const snap = result.lastSolidColor;
           // Guard: only adopt the bridge's lastSolidColor when the UI is
@@ -912,6 +1009,7 @@ function App() {
         // Absent in persisted state ⇒ refs stay undefined; backend defaults apply.
         colorCorrectionRef.current = state.colorCorrection;
         firmwareProfileRef.current = state.firmwareProfile;
+        chipTypeRef.current = state.selectedChipType;
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         // v1.5 H1 — prime savedAmbilightRef synchronously so any same-tick
@@ -1017,12 +1115,13 @@ function App() {
                   restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
                   restoredMode.solid
                 ) {
-                  await setHueSolidColor({
+                  const colorResult = await setHueSolidColor({
                     r: restoredMode.solid.r,
                     g: restoredMode.solid.g,
                     b: restoredMode.solid.b,
                     brightness: restoredMode.solid.brightness,
                   });
+                  reportHueSolidColorStatus(colorResult.status.code);
                 } else if (restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
                   await setLightingMode(hydrateModePayload({
                     ...restoredMode,
@@ -1075,8 +1174,14 @@ function App() {
           lightsOff: i18next.t("tray.lightsOff"),
           resumeLastMode: i18next.t("tray.resumeLastMode"),
           solidColor: i18next.t("tray.solidColor"),
+          showLedPreview: i18next.t("ledPreview.tray.show"),
           quit: i18next.t("tray.quit"),
         });
+
+        // v1.6 — the LED preview surfaces are NEVER auto-opened on boot. They
+        // open only when the user explicitly asks (LED Setup "Test & Preview"
+        // button or the tray "Show LED Preview" item). Persisted visibility is
+        // intentionally not acted on here.
 
         // Mark bootstrap complete — hot-plug useEffect may now run
         setBootstrapDone(true);
@@ -1119,6 +1224,7 @@ function App() {
         lightsOff: i18next.t("tray.lightsOff"),
         resumeLastMode: i18next.t("tray.resumeLastMode"),
         solidColor: i18next.t("tray.solidColor"),
+        showLedPreview: i18next.t("ledPreview.tray.show"),
         quit: i18next.t("tray.quit"),
       });
     };
@@ -1130,6 +1236,7 @@ function App() {
   const handleLightingModeChangeRef = useRef<((m: LightingModeConfig) => Promise<void>) | null>(null);
 
   useEffect(() => {
+    let alive = true;
     let unlistenOff: (() => void) | null = null;
     let unlistenResume: (() => void) | null = null;
     let unlistenSolid: (() => void) | null = null;
@@ -1157,16 +1264,68 @@ function App() {
           });
         }
       }),
-    ]).then(([u1, u2, u3]) => {
-      unlistenOff = u1;
-      unlistenResume = u2;
-      unlistenSolid = u3;
-    });
+    ])
+      .then(([u1, u2, u3]) => {
+        // Same unmount-wins-the-race hazard as the effect below: without the
+        // guard StrictMode's double-mount leaks a duplicate handler per tray action.
+        if (alive) {
+          unlistenOff = u1;
+          unlistenResume = u2;
+          unlistenSolid = u3;
+        } else {
+          u1();
+          u2();
+          u3();
+        }
+      })
+      .catch((err) => {
+        console.error("[LumaSync] tray quick-action listeners failed to register:", err);
+      });
 
     return () => {
+      alive = false;
       unlistenOff?.();
       unlistenResume?.();
       unlistenSolid?.();
+    };
+  }, []);
+
+  // v1.6 — tray "Show LED Preview" opens (or focuses) the control popup
+  // and, when enabled, the digital-twin overlay. Registered once.
+  useEffect(() => {
+    let alive = true;
+    let unlisten: (() => void) | null = null;
+    void listenTrayShowLedPreview(() => {
+      void (async () => {
+        try {
+          await openLedControlPopup();
+          await showLedControlPopup();
+          await saveShellState({ ledPreviewPopupVisible: true });
+          const state = await loadShellState();
+          if (state.ledTwinEnabledTest) {
+            await openLedTwinOverlay({ scope: "test", displayId: selectedDisplayIdRef.current });
+          }
+        } catch (err) {
+          console.error("[LumaSync] tray show-led-preview handler failed:", err);
+        }
+      })();
+    })
+      .then((fn) => {
+        // Unmount can win the race against listen(); without the guard the
+        // handler registers after cleanup ran and never comes off — which
+        // StrictMode's double-mount hits on every dev launch.
+        if (alive) {
+          unlisten = fn;
+        } else {
+          fn();
+        }
+      })
+      .catch((err) => {
+        console.error("[LumaSync] listenTrayShowLedPreview failed:", err);
+      });
+    return () => {
+      alive = false;
+      unlisten?.();
     };
   }, []);
 
@@ -1320,12 +1479,13 @@ function App() {
             }
             if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
               try {
-                await setHueSolidColor({
+                const colorResult = await setHueSolidColor({
                   r: lightingMode.solid.r,
                   g: lightingMode.solid.g,
                   b: lightingMode.solid.b,
                   brightness: lightingMode.solid.brightness,
                 });
+                reportHueSolidColorStatus(colorResult.status.code);
               } catch (err) {
                 console.error("[LumaSync] Hue solid push on delta-start non-fatal failure:", err);
               }
@@ -1337,7 +1497,7 @@ function App() {
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus]);
 
   // ---------------------------------------------------------------------------
   // Hot-plug detection: USB plug/unplug target management (D-07, D-08)
@@ -1542,15 +1702,22 @@ function App() {
           });
         }
 
-        if (activeOutputTargets.includes("hue")) {
+        // Gated on the *selected* target: "hue" can be out of
+        // `activeOutputTargets` while the user still wants Hue output, and the
+        // backend queues the colour rather than dropping it.
+        if (selectedOutputTargets.includes("hue") || activeOutputTargets.includes("hue")) {
           void setHueSolidColor({
             r: normalizedNextMode.solid.r,
             g: normalizedNextMode.solid.g,
             b: normalizedNextMode.solid.b,
             brightness: normalizedNextMode.solid.brightness,
-          }).catch((error) => {
-            console.error("[LumaSync] Failed to push Hue solid update:", error);
-          });
+          })
+            .then((result) => {
+              reportHueSolidColorStatus(result.status.code);
+            })
+            .catch((error) => {
+              console.error("[LumaSync] Failed to push Hue solid update:", error);
+            });
         }
         return;
       }
@@ -1731,12 +1898,13 @@ function App() {
           normalizedNextMode.solid
         ) {
           try {
-            await setHueSolidColor({
+            const colorResult = await setHueSolidColor({
               r: normalizedNextMode.solid.r,
               g: normalizedNextMode.solid.g,
               b: normalizedNextMode.solid.b,
               brightness: normalizedNextMode.solid.brightness,
             });
+            reportHueSolidColorStatus(colorResult.status.code);
           } catch (err) {
             console.error("[LumaSync] Hue solid push after mode change non-fatal failure:", err);
           }
@@ -1771,6 +1939,7 @@ function App() {
       lightingMode.ambilight,
       lightingMode.kind,
       lightingMode.solid,
+      reportHueSolidColorStatus,
       savedCalibration,
       scheduleLightingModePersist,
       selectedOutputTargets,
@@ -2126,6 +2295,29 @@ function App() {
                 .map((target) => t(`hotplug.targetLabel.${target}` as const))
                 .join(", "),
             })}
+          </span>
+        </div>
+      )}
+      {hueColorNotice && (
+        <div
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-amber)",
+            color: "var(--lm-ink)",
+            transform:
+              usbDisconnectNotice || (stopFailedNotice && stopFailedNotice.length > 0)
+                ? "translateY(-3.5rem)"
+                : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+            {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
+              ? t("hue.colorNotApplied.noLights")
+              : t("hue.colorNotApplied.streamOffline")}
           </span>
         </div>
       )}

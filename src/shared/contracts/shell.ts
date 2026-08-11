@@ -1,6 +1,7 @@
 import type { LedCalibrationConfig } from "./calibration";
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./device";
 import type { DisplayId } from "./display";
+import type { LedTestPattern } from "./preview";
 import type { LightingModeConfig } from "../../features/mode/model/contracts";
 import type {
   HueBridgeSummary,
@@ -43,6 +44,12 @@ export const TRAY_MENU_IDS = {
   LIGHTS_OFF: "tray-lights-off",
   RESUME_LAST_MODE: "tray-resume-last-mode",
   SOLID_COLOR: "tray-solid-color",
+  /**
+   * v1.6 — opens (or focuses) the LED preview surface: the interactive
+   * control popup plus, when enabled, the digital-twin overlay. Lets the
+   * user reach the preview/test experience without opening full settings.
+   */
+  SHOW_LED_PREVIEW: "tray-show-led-preview",
   QUIT: "quit",
 } as const;
 
@@ -103,6 +110,13 @@ export const SECTION_ORDER: SectionId[] = [
  * `persistence/migrations.ts` derives the center from the legacy fields
  * and drops the corner shape; restore now computes the corner from the
  * saved center plus the current outer size.
+ *
+ * v1.6 (LED Preview & Test Experience) adds six OPTIONAL preview fields
+ * (`ledPreviewPopupVisible` / `ledPreviewPopupCenterX` /
+ * `ledPreviewPopupCenterY` / `ledTwinEnabledTest` /
+ * `lastLedTestPattern` / `ledPreviewHintShown`). All are optional with
+ * absence-defaults, so NO schema bump is required — the version MUST stay
+ * `3` and the legacy spread-merge handles upgrading on-disk v3 states.
  */
 export const SHELL_STATE_SCHEMA_VERSION = 3 as const;
 
@@ -313,6 +327,41 @@ export interface ShellState {
    * degrades to `"stable"` which matches v1.4 behaviour exactly.
    */
   updateChannel?: UpdateChannel;
+  // -------------------------------------------------------------------------
+  // v1.6 — LED Preview & Test Experience (all OPTIONAL / additive; no schema
+  // bump — absence degrades to the documented default below).
+  // -------------------------------------------------------------------------
+  /**
+   * Whether the interactive control popup was visible when the app last
+   * closed, so it can be re-shown on next launch. Absent ⇒ `false`
+   * (popup starts hidden).
+   */
+  ledPreviewPopupVisible?: boolean;
+  /**
+   * Persisted control-popup window center (logical pixels, screen
+   * coordinates). Mirrors the `windowCenterX`/`windowCenterY` rationale so
+   * the popup re-opens where the user left it. `null` ⇒ no persisted center
+   * (fresh launch / never moved); the shell uses a default placement near
+   * the main window. Absent ⇒ treated as `null`.
+   */
+  ledPreviewPopupCenterX?: number | null;
+  ledPreviewPopupCenterY?: number | null;
+  /**
+   * Whether the digital-twin overlay is enabled for synthetic test patterns.
+   * Absent ⇒ `false` (overlay off until the user opts in).
+   */
+  ledTwinEnabledTest?: boolean;
+  /**
+   * Last synthetic test pattern the user ran, restored as the default
+   * selection next time the control popup opens. Absent ⇒ the UI picks its
+   * own first-run default (e.g. `gamut`).
+   */
+  lastLedTestPattern?: LedTestPattern;
+  /**
+   * Whether the one-time "LED preview" discovery hint has been shown.
+   * Absent ⇒ `false` (hint shows once, then this flips to `true`).
+   */
+  ledPreviewHintShown?: boolean;
 }
 
 /** Default shell state for first launch */

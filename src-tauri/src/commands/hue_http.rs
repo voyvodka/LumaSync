@@ -32,6 +32,16 @@ pub(crate) enum HueHttpFault {
     /// 4xx except 404, 5xx without a server-error flag, etc.) where the
     /// caller should retry rather than re-pair.
     Transient { status: u16, body: String },
+    /// 429 Too Many Requests. Distinct from `Transient` because the
+    /// correct response is not "retry" but "send *less*": the bridge is
+    /// telling us we exceeded its command budget. Callers that pace
+    /// requests must widen their interval on this variant, otherwise a
+    /// throttling bridge can never slow the client down. `retry_after_ms`
+    /// carries the `Retry-After` header when the bridge supplies one.
+    RateLimited {
+        status: u16,
+        retry_after_ms: Option<u64>,
+    },
     /// 404 Not Found. Kept distinct so callers can surface "resource
     /// removed" (e.g. entertainment area deleted bridge-side) without a
     /// retry loop.
@@ -49,6 +59,9 @@ impl std::fmt::Display for HueHttpFault {
             HueHttpFault::AuthInvalid => write!(f, "AUTH_INVALID_RE_PAIR_REQUIRED"),
             HueHttpFault::Transient { status, body } => {
                 write!(f, "HUE_TRANSIENT: HTTP {status} — {body}")
+            }
+            HueHttpFault::RateLimited { status, .. } => {
+                write!(f, "HUE_RATE_LIMITED: HTTP {status}")
             }
             HueHttpFault::NotFound => write!(f, "HUE_NOT_FOUND"),
             HueHttpFault::ServerError { status } => {
@@ -114,6 +127,50 @@ fn is_clip_v2_unauthorized(value: &Value) -> bool {
         })
 }
 
+impl HueHttpFault {
+    /// Attach a `Retry-After` hint parsed from the response headers. A
+    /// no-op for every variant except `RateLimited`, so the pure
+    /// [`classify_status`] mapping stays header-blind and trivially
+    /// testable while the I/O wrappers still surface the hint.
+    fn with_retry_after(self, retry_after_ms: Option<u64>) -> Self {
+        match self {
+            HueHttpFault::RateLimited { status, .. } => HueHttpFault::RateLimited {
+                status,
+                retry_after_ms,
+            },
+            other => other,
+        }
+    }
+
+    /// Does this fault mean "you are sending too much"? `429` is the
+    /// explicit signal; `503` (and the rest of 5xx) is the Hue bridge's
+    /// usual reply when its ZigBee queue is saturated, which is the same
+    /// instruction wearing a different status code. Paced callers must
+    /// widen their request interval on `Some(_)`; the payload is the
+    /// bridge-supplied `Retry-After`, when it sent one.
+    pub(crate) fn throttle_hint(&self) -> Option<Option<u64>> {
+        match self {
+            HueHttpFault::RateLimited { retry_after_ms, .. } => Some(*retry_after_ms),
+            HueHttpFault::ServerError { .. } => Some(None),
+            _ => None,
+        }
+    }
+}
+
+/// Parse the `Retry-After` header into milliseconds. Only the delta-seconds
+/// form is honoured — the HTTP-date form is legal but the Hue bridge does not
+/// emit it, and guessing wrong here would stall the sender for hours.
+fn parse_retry_after_ms(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(|seconds| seconds.saturating_mul(1_000))
+}
+
 /// Classify a Hue async HTTP response.
 ///
 /// On success (2xx) returns the response untouched so the caller can
@@ -129,10 +186,11 @@ pub(crate) async fn classify_hue_response(
     }
 
     let status_code = status.as_u16();
+    let retry_after_ms = parse_retry_after_ms(response.headers());
     // Body drain must succeed-or-fail-closed: if we cannot read the body
     // we cannot prove unauthorized, so fall through to `Transient`.
     let body = response.text().await.unwrap_or_default();
-    Err(classify_status(status_code, &body))
+    Err(classify_status(status_code, &body).with_retry_after(retry_after_ms))
 }
 
 /// Blocking variant used by `hue_stream_lifecycle.rs` (the HTTP-fallback
@@ -148,8 +206,9 @@ pub(crate) fn classify_hue_response_blocking(
     }
 
     let status_code = status.as_u16();
+    let retry_after_ms = parse_retry_after_ms(response.headers());
     let body = response.text().unwrap_or_default();
-    Err(classify_status(status_code, &body))
+    Err(classify_status(status_code, &body).with_retry_after(retry_after_ms))
 }
 
 /// Pure status→fault mapping shared between async and blocking call
@@ -160,6 +219,12 @@ fn classify_status(status: u16, body: &str) -> HueHttpFault {
         // v1 only ever used 403. Both still require a Hue-shaped auth body.
         401 | 403 if is_hue_unauthorized_body(body) => HueHttpFault::AuthInvalid,
         404 => HueHttpFault::NotFound,
+        // Rate limiting is its own class: it is the bridge asking for a
+        // *wider* interval, which a plain retry would not deliver.
+        429 => HueHttpFault::RateLimited {
+            status,
+            retry_after_ms: None,
+        },
         500..=599 => HueHttpFault::ServerError { status },
         _ => HueHttpFault::Transient {
             status,
@@ -249,6 +314,67 @@ mod tests {
     #[test]
     fn classify_status_maps_404_to_not_found() {
         assert!(matches!(classify_status(404, ""), HueHttpFault::NotFound));
+    }
+
+    #[test]
+    fn classify_status_maps_429_to_rate_limited() {
+        match classify_status(429, r#"{"errors":[{"description":"rate limit"}]}"#) {
+            HueHttpFault::RateLimited {
+                status,
+                retry_after_ms,
+            } => {
+                assert_eq!(status, 429);
+                assert_eq!(
+                    retry_after_ms, None,
+                    "header hint is attached by the wrapper"
+                );
+            }
+            other => panic!("expected RateLimited, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rate_limited_and_server_error_are_throttle_signals() {
+        assert_eq!(classify_status(429, "").throttle_hint(), Some(None));
+        assert_eq!(classify_status(503, "").throttle_hint(), Some(None));
+        // A 429 is a throttle instruction, never a re-pair one.
+        assert!(!matches!(
+            classify_status(429, r#"[{"error":{"type":1}}]"#),
+            HueHttpFault::AuthInvalid
+        ));
+        // Everything else must leave a paced sender's interval alone.
+        assert_eq!(classify_status(400, "").throttle_hint(), None);
+        assert_eq!(classify_status(404, "").throttle_hint(), None);
+        assert_eq!(HueHttpFault::AuthInvalid.throttle_hint(), None);
+    }
+
+    #[test]
+    fn with_retry_after_only_enriches_the_rate_limited_variant() {
+        match classify_status(429, "").with_retry_after(Some(2_000)) {
+            HueHttpFault::RateLimited { retry_after_ms, .. } => {
+                assert_eq!(retry_after_ms, Some(2_000));
+            }
+            other => panic!("expected RateLimited, got {other:?}"),
+        }
+        assert!(matches!(
+            classify_status(404, "").with_retry_after(Some(2_000)),
+            HueHttpFault::NotFound
+        ));
+    }
+
+    #[test]
+    fn parse_retry_after_ms_reads_delta_seconds_and_ignores_http_dates() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        assert_eq!(parse_retry_after_ms(&headers), None);
+
+        headers.insert(reqwest::header::RETRY_AFTER, "3".parse().unwrap());
+        assert_eq!(parse_retry_after_ms(&headers), Some(3_000));
+
+        headers.insert(
+            reqwest::header::RETRY_AFTER,
+            "Wed, 21 Oct 2015 07:28:00 GMT".parse().unwrap(),
+        );
+        assert_eq!(parse_retry_after_ms(&headers), None);
     }
 
     #[test]

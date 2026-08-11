@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SECTION_IDS } from "../../../../shared/contracts/shell";
@@ -46,6 +46,7 @@ vi.mock("react-i18next", () => ({
         "general.mode.options.solid": "Solid",
         "general.mode.brightness": "Brightness",
         "general.mode.solidColor": "Solid color",
+        "settingsPage.language.label": "Interface language",
       };
 
       return dict[key] ?? key;
@@ -184,6 +185,7 @@ vi.mock("../../../tray/trayController", () => ({
 
 vi.mock("../../../i18n/i18n", () => ({
   I18N_SUPPORTED_LANGUAGES: ["en", "tr"],
+  I18N_LANGUAGE_NAMES: { en: "English", tr: "Türkçe" },
   changeLanguage: vi.fn(),
 }));
 
@@ -217,4 +219,31 @@ describe("Settings telemetry wiring", () => {
     });
   });
 
+  // The picker moved from a two-button segmented control to a dropdown so more
+  // locales can be added without the row outgrowing its width.
+  it("offers every supported language by endonym in a dropdown", async () => {
+    render(
+      <SettingsLayout
+        uiMode="full"
+        activeSection={SECTION_IDS.SYSTEM}
+        onSectionChange={vi.fn()}
+        lightingMode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        usbConnected={true}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onLightingModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onCalibrationSaved={vi.fn()}
+        onCheckForUpdates={vi.fn()}
+        isCheckingForUpdates={false}
+      />,
+    );
+
+    const picker = await screen.findByRole("combobox", { name: "Interface language" });
+    const options = within(picker).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["English", "Türkçe"]);
+    expect(screen.queryByRole("radio", { name: "EN" })).not.toBeInTheDocument();
+  });
 });

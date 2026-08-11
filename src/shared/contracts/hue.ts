@@ -271,10 +271,48 @@ export const HUE_RUNTIME_STATUS = {
   STOP_TIMEOUT_PARTIAL: "HUE_STOP_TIMEOUT_PARTIAL",
   CHANNEL_POSITIONS_UPDATED: "HUE_CHANNEL_POSITIONS_UPDATED",
   CHANNEL_POSITIONS_FAILED: "HUE_CHANNEL_POSITIONS_FAILED",
+  /** `start_hue_stream` on an already-running stream: idempotent no-op, not an error. */
+  START_NOOP_ALREADY_ACTIVE: "HUE_START_NOOP_ALREADY_ACTIVE",
 } as const;
 
 export type HueRuntimeStatusCode =
   (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
+
+/**
+ * Sentinel inside `HueStreamReadiness.reasons`, which otherwise holds English
+ * prose — compare against it, never display it. Not a `status.code`.
+ */
+export const HUE_READINESS_REASON = {
+  ACTIVE_STREAMER: "HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
+} as const;
+
+export type HueReadinessReason =
+  (typeof HUE_READINESS_REASON)[keyof typeof HUE_READINESS_REASON];
+
+/**
+ * `set_hue_solid_color` codes. Only `APPLIED` reached a sender; the rest are
+ * queued for replay by `flush_pending_solid_color` and must be surfaced.
+ */
+export const HUE_SOLID_COLOR_STATUS = {
+  APPLIED: "HUE_COLOR_APPLIED",
+  QUEUED_PENDING_STREAM: "HUE_COLOR_QUEUED_PENDING_STREAM",
+  APPLY_SKIPPED: "HUE_COLOR_APPLY_SKIPPED",
+  APPLY_SKIPPED_NO_LIGHTS: "HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS",
+} as const;
+
+export type HueSolidColorStatusCode =
+  (typeof HUE_SOLID_COLOR_STATUS)[keyof typeof HUE_SOLID_COLOR_STATUS];
+
+/**
+ * True when the bridge did NOT receive the colour — the picker swatch and the
+ * bulbs disagree, so the caller must surface a notice.
+ */
+export function isHueSolidColorUnapplied(code: string): boolean {
+  return (
+    code === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED ||
+    code === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
+  );
+}
 
 export const HUE_RUNTIME_STATUS_FAMILY = {
   TRANSIENT: "TRANSIENT_*",

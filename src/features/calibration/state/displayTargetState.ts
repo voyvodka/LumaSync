@@ -1,8 +1,10 @@
-import type {
-  DisplayId,
-  DisplayInfo,
-  DisplayOverlayCommandResult,
-  OverlayPreviewPayload,
+import {
+  DISPLAY_OVERLAY_STATUS,
+  OVERLAY_NO_DISPLAY,
+  type DisplayId,
+  type DisplayInfo,
+  type DisplayOverlayCommandResult,
+  type OverlayPreviewPayload,
 } from "../../../shared/contracts/display";
 
 interface CreateDisplayTargetStateDeps {
@@ -54,7 +56,7 @@ function toBlockedSnapshot(
     ...snapshot,
     activeDisplayId: null,
     blocked: true,
-    blockedCode: result?.code ?? "OVERLAY_OPEN_FAILED",
+    blockedCode: result?.code ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED,
     blockedReason: result?.reason ?? result?.message ?? fallbackReason ?? null,
     isSwitching: false,
   };
@@ -120,7 +122,7 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
           ...snapshot,
           activeDisplayId: null,
           blocked: true,
-          blockedCode: "OVERLAY_NO_DISPLAY",
+          blockedCode: OVERLAY_NO_DISPLAY,
           blockedReason: "No display available for calibration overlay.",
           isSwitching: false,
         };

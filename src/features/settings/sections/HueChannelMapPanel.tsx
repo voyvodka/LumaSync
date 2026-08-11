@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { HueAreaChannelInfo } from "../../device/hueOnboardingApi";
-import type { HueChannelPlacement } from "../../../shared/contracts/roomMap";
+import {
+  CHANNEL_WRITEBACK_STATUS,
+  type HueChannelPlacement,
+} from "../../../shared/contracts/roomMap";
 import { HUE_COMMANDS, HUE_RUNTIME_STATUS } from "../../../shared/contracts/hue";
 
 const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
@@ -363,7 +366,11 @@ export function HueChannelMapPanel({
       }
     } catch (err) {
       console.error("[LumaSync] Hue channel-position write-back failed:", err);
-      setSaveResult({ ok: false, code: "CHAN_WB_NETWORK_ERROR", message: String(err) });
+      setSaveResult({
+        ok: false,
+        code: CHANNEL_WRITEBACK_STATUS.NETWORK_ERROR,
+        message: String(err),
+      });
     } finally {
       setIsSaving(false);
     }

@@ -22,6 +22,39 @@ mod hue_http;
 // crate. None of the parser tests call into these surfaces — the stubs
 // are presence-only.
 mod hue {
+    /// Presence-only stub for `commands::hue::area_cache`. The parser tests
+    /// never reach the bridge, so the stub is a pass-through: it must keep
+    /// `hue_onboarding.rs` compiling without pulling the real cache's global
+    /// state (and its own `#[cfg(test)]` suite) into this crate. The cache's
+    /// behaviour is covered by its unit tests in `src/commands/hue/area_cache.rs`.
+    pub mod area_cache {
+        use std::future::Future;
+
+        #[allow(dead_code)]
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        pub enum HueReadFreshness {
+            Cached,
+            Force,
+        }
+
+        #[allow(dead_code)]
+        pub fn invalidate_hue_area_cache() {}
+
+        #[allow(dead_code)]
+        pub async fn read_area_snapshot<T, F, Fut>(
+            _bridge_ip: &str,
+            _username: &str,
+            _freshness: HueReadFreshness,
+            fetch: F,
+        ) -> T
+        where
+            F: FnOnce() -> Fut,
+            Fut: Future<Output = T>,
+        {
+            fetch().await
+        }
+    }
+
     pub mod credential_store {
         #[allow(dead_code)]
         pub struct StubStore;
