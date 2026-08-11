@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { shellStore } from "../../../persistence/shellStore";
-import type { RoomMapConfig } from "../../../../shared/contracts/roomMap";
-import { DEFAULT_ROOM_MAP } from "../../../../shared/contracts/roomMap";
+import { shellStore } from "@/features/persistence/shellStore";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
 const MAX_HISTORY = 50;
 

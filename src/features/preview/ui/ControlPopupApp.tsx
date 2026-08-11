@@ -8,26 +8,26 @@ import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { shellStore } from "../../persistence/shellStore";
-import { HsvColorPicker } from "../../../shared/ui/HsvColorPicker";
-import { setLightingMode, stopLighting } from "../../mode/modeApi";
+import { shellStore } from "@/features/persistence/shellStore";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { setLightingMode, stopLighting } from "@/features/mode/modeApi";
 import {
   LIGHTING_MODE_KIND,
   type AmbilightPayload,
   type LightingModeConfig,
   type LightingModeKind,
-} from "../../mode/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile } from "../../../shared/contracts/device";
-import type { DisplayId } from "../../../shared/contracts/display";
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+} from "@/features/mode/model/contracts";
+import type { ColorCorrectionConfig, FirmwareProfile } from "@/shared/contracts/device";
+import type { DisplayId } from "@/shared/contracts/display";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
   LED_TEST_STATUS,
   type LedTestPattern,
   type LedTestPatternKind,
   type LedTestPatternResult,
   type TestPatternSpeed,
-} from "../../../shared/contracts/preview";
-import { useSolidColorDraft } from "../../settings/sections/control/useSolidColorDraft";
+} from "@/shared/contracts/preview";
+import { useSolidColorDraft } from "@/features/settings/sections/control/useSolidColorDraft";
 import { closeLedTwinOverlay, hideLedControlPopup } from "../previewApi";
 import { useLightingModeSync } from "../state/useLightingModeSync";
 import {

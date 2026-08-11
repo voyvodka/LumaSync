@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { HueChannelPlacement, HueZone } from "../../../../shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];

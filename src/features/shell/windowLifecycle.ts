@@ -18,7 +18,7 @@ import {
   UI_MODE_MIN_SIZES,
   type ShellState,
   type UIMode,
-} from "../../shared/contracts/shell";
+} from "@/shared/contracts/shell";
 import { migrateShellState } from "../persistence/migrations";
 
 // ---------------------------------------------------------------------------

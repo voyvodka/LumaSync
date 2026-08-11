@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 
-import { shellStore } from "../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 import {
   openLedTwinOverlay,
   openLedControlPopup,
   showLedControlPopup,
-} from "../../preview/previewApi";
+} from "@/features/preview/previewApi";
 import type { LedCalibrationConfig, LedDirection, LedStartAnchor } from "../model/contracts";
 import { buildLedSequence } from "../model/indexMapping";
 import { deriveDefaultCounts, resetToManual } from "../model/templates";
@@ -34,12 +34,12 @@ import {
 import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
 import { LedRoomCanvas } from "./LedRoomCanvas";
-import { getSerialConnectionStatus } from "../../device/deviceConnectionApi";
+import { getSerialConnectionStatus } from "@/features/device/deviceConnectionApi";
 import {
   DISPLAY_OVERLAY_STATUS,
   type DisplayInfo,
   type OverlayPreviewPayload,
-} from "../../../shared/contracts/display";
+} from "@/shared/contracts/display";
 
 function reclaimFocus() {
   void getCurrentWindow().setFocus();

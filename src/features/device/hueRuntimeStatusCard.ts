@@ -2,7 +2,7 @@ import {
   HUE_RUNTIME_ACTION_HINT,
   type HueRuntimeActionHint,
   type HueRuntimeStatus,
-} from "../../shared/contracts/hue";
+} from "@/shared/contracts/hue";
 
 export interface HueRuntimeStatusCardRetry {
   remainingAttempts?: number;

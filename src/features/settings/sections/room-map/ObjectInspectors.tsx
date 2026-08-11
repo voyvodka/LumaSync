@@ -53,7 +53,7 @@ import type {
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-} from "../../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
 
 /* ── shared helpers ─────────────────────────────────────────────── */
 

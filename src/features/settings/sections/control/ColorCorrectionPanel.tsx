@@ -30,8 +30,8 @@ import {
   KELVIN_RANGE_K,
   SATURATION_RANGE,
   type ColorCorrectionConfig,
-} from "../../../../shared/contracts/device";
-import { shellStore } from "../../../persistence/shellStore";
+} from "@/shared/contracts/device";
+import { shellStore } from "@/features/persistence/shellStore";
 
 const PERSIST_DEBOUNCE_MS = 200;
 

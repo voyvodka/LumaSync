@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { DEVICE_COMMANDS } from "../../shared/contracts/device";
+import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   TELEMETRY_QUEUE_HEALTH,
   type FullTelemetrySnapshot,

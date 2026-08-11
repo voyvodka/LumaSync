@@ -17,7 +17,7 @@ export type {
   LedSegmentCounts,
   LedCalibrationConfig,
   CalibrationTemplate,
-} from "../../../shared/contracts/calibration";
+} from "@/shared/contracts/calibration";
 
 import type {
   LedDirection,
@@ -27,7 +27,7 @@ import type {
   LedStartAnchor,
   LedSegmentCounts,
   LedCalibrationConfig,
-} from "../../../shared/contracts/calibration";
+} from "@/shared/contracts/calibration";
 
 type LegacyLedStartAnchor =
   | "bottom-left-start"

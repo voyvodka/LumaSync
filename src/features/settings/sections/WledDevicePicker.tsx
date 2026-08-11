@@ -24,13 +24,13 @@ import { useTranslation } from "react-i18next";
 import {
   WLED_STATUS,
   type WledDeviceInfo,
-} from "../../../shared/contracts/device";
+} from "@/shared/contracts/device";
 import {
   connectWledSink,
   discoverWledDevices,
   testWledBridge,
   type WledCommandStatus,
-} from "../../device/wledApi";
+} from "@/features/device/wledApi";
 
 interface WledDevicePickerProps {
   /** Currently active sink reference (used to highlight the connected card). */

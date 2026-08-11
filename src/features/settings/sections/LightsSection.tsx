@@ -5,38 +5,38 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
-} from "../../mode/state/modeGuard";
+} from "@/features/mode/state/modeGuard";
 import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
   normalizeAmbilightPayload,
   type LightingModeConfig,
-} from "../../mode/model/contracts";
+} from "@/features/mode/model/contracts";
 import {
   SCENE_PRESETS,
   findMatchingScenePreset,
   type ScenePreset,
-} from "../../mode/model/scenePresets";
-import { HUE_ZONE_COMMANDS, type HueIntensityPreset, type HueRuntimeTarget } from "../../../shared/contracts/hue";
-import type { HueZone, RoomMapConfig } from "../../../shared/contracts/roomMap";
-import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
-import type { DisplayInfo } from "../../../shared/contracts/display";
+} from "@/features/mode/model/scenePresets";
+import { HUE_ZONE_COMMANDS, type HueIntensityPreset, type HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import type { DisplayInfo } from "@/shared/contracts/display";
 import {
   FIRMWARE_PROFILE,
   type ColorCorrectionConfig,
   type FirmwareProfile,
-} from "../../../shared/contracts/device";
+} from "@/shared/contracts/device";
 import {
   KEYBIND_ACTIONS,
   type KeybindAction,
   getKeybindDefinition,
   resolveKeybindPlatform,
-} from "../../../shared/contracts/shell";
-import { listDisplays } from "../../calibration/calibrationApi";
-import type { LedCalibrationConfig } from "../../calibration/model/contracts";
-import { useFullTelemetryPoll } from "../../telemetry/hooks/useFullTelemetryPoll";
-import { shellStore } from "../../persistence/shellStore";
-import { OnboardingBanner } from "../../../shared/ui/OnboardingBanner";
+} from "@/shared/contracts/shell";
+import { listDisplays } from "@/features/calibration/calibrationApi";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
+import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
+import { shellStore } from "@/features/persistence/shellStore";
+import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 
 import { EdgeSignalGrid } from "./EdgeSignalGrid";
 import { SolidColorPanel } from "./control/SolidColorPanel";

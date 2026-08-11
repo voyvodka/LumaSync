@@ -1,11 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FullTelemetrySnapshot } from "../../model/contracts";
+import type { FullTelemetrySnapshot } from "@/features/telemetry/model/contracts";
 
 const getFullTelemetrySnapshotMock = vi.fn();
 
-vi.mock("../../telemetryApi", () => ({
+vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
 }));
 

@@ -17,8 +17,8 @@ import {
   type ZoneDeriveResult,
   type DerivedSegment,
 } from "../deriveZones";
-import type { UsbStripPlacement } from "../../../../../shared/contracts/roomMap";
-import type { TvAnchorPlacement } from "../../../../../shared/contracts/roomMap";
+import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
+import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 
 // TV anchor used across many tests:
 // center (2.5, 0.5), size 2m x 0.1m → edges: top y=0.45, bottom y=0.55, left x=1.5, right x=3.5

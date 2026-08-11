@@ -2,8 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { HueAreaChannelInfo } from "../../../device/hueOnboardingApi";
-import type { HueChannelPlacement } from "../../../../shared/contracts/roomMap";
+import type { HueAreaChannelInfo } from "@/features/device/hueOnboardingApi";
+import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 import { HueChannelMapPanel } from "../HueChannelMapPanel";
 
 // Mock i18n — return key as value (with interpolation support)

@@ -10,8 +10,8 @@ import {
   type LedTestPatternResult,
   type LedTestStatusCode,
   type TestPatternSpeed,
-} from "../../../shared/contracts/preview";
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+} from "@/shared/contracts/preview";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import { startLedTestPattern, stopLedTestPattern } from "../previewApi";
 
 /**

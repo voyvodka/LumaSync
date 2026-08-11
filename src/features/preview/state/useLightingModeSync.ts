@@ -23,12 +23,12 @@ import {
   LIGHTING_MODE_CHANGED_EVENT,
   type LightingModeChangedPayload,
   type LightingModeConfig,
-} from "../../mode/model/contracts";
+} from "@/features/mode/model/contracts";
 import {
   PREVIEW_STATE_CHANGED_EVENT,
   type LedPreviewStatus,
-} from "../../../shared/contracts/preview";
-import { getLightingModeStatus } from "../../mode/modeApi";
+} from "@/shared/contracts/preview";
+import { getLightingModeStatus } from "@/features/mode/modeApi";
 import { getLedPreviewStatus } from "../previewApi";
 
 export interface LightingModeSyncState {

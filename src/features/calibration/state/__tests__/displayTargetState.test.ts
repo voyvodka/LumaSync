@@ -4,7 +4,7 @@ import {
   DISPLAY_OVERLAY_STATUS,
   type DisplayOverlayCommandResult,
   type DisplayOverlayStatusCode,
-} from "../../../../shared/contracts/display";
+} from "@/shared/contracts/display";
 import { createDisplayTargetState } from "../displayTargetState";
 
 function okResult(

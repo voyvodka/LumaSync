@@ -1,5 +1,5 @@
-import type { LedCalibrationConfig } from "../../calibration/model/contracts";
-import type { HueRuntimeTarget } from "../../../shared/contracts/hue";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 export const MODE_GUARD_REASONS = {
   CALIBRATION_REQUIRED: "CALIBRATION_REQUIRED",

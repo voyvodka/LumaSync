@@ -49,7 +49,7 @@ import type {
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
-} from "../../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
 import { HueZoneInspector } from "./HueZoneInspector";
 import {
   FurnitureInspector,

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { RoomMapConfig } from "../../../../shared/contracts/roomMap";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 export interface ObjectRect {
   id: string;

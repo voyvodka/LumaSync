@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { LedCalibrationConfig } from "../../../calibration/model/contracts";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { canEnableLedMode } from "../modeGuard";
 
 const CALIBRATION: LedCalibrationConfig = {

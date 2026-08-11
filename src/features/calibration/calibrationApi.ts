@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { DEVICE_COMMANDS } from "../../shared/contracts/device";
+import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   DISPLAY_OVERLAY_COMMANDS,
   type DisplayId,
   type DisplayInfo,
   type DisplayOverlayCommandResult,
   type OverlayPreviewPayload,
-} from "../../shared/contracts/display";
+} from "@/shared/contracts/display";
 
 export interface CalibrationTestPatternStartPayload {
   ledIndexes: number[];

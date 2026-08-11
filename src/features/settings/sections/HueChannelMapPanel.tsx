@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { HueAreaChannelInfo } from "../../device/hueOnboardingApi";
+import type { HueAreaChannelInfo } from "@/features/device/hueOnboardingApi";
 import {
   CHANNEL_WRITEBACK_STATUS,
   type HueChannelPlacement,
-} from "../../../shared/contracts/roomMap";
-import { HUE_COMMANDS, HUE_RUNTIME_STATUS } from "../../../shared/contracts/hue";
+} from "@/shared/contracts/roomMap";
+import { HUE_COMMANDS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 
 const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
 type Region = (typeof REGIONS)[number];

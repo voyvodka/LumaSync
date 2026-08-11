@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { FurniturePlacement } from "../../../../shared/contracts/roomMap";
+import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 
 const FURNITURE_TYPES: FurniturePlacement["type"][] = ["sofa", "table", "chair", "other"];
 

@@ -5,7 +5,7 @@ import {
   type DisplayInfo,
   type DisplayOverlayCommandResult,
   type OverlayPreviewPayload,
-} from "../../../shared/contracts/display";
+} from "@/shared/contracts/display";
 
 interface CreateDisplayTargetStateDeps {
   openDisplayOverlay: (

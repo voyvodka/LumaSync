@@ -22,8 +22,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   EDGE_SIGNAL_EVENT,
   type EdgeSignalPayload,
-} from "../../mode/model/contracts";
-import type { LedTestPatternKind } from "../../../shared/contracts/preview";
+} from "@/features/mode/model/contracts";
+import type { LedTestPatternKind } from "@/shared/contracts/preview";
 
 export interface LedPreviewFrame {
   /** Full per-LED RGB buffer, ordered along the calibrated strip path. */

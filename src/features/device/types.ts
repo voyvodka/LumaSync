@@ -1,4 +1,4 @@
-import type { DeviceErrorCode, DeviceStatus } from "../../shared/contracts/device";
+import type { DeviceErrorCode, DeviceStatus } from "@/shared/contracts/device";
 
 export interface DevicePort {
   portName: string;

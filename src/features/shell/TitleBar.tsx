@@ -19,7 +19,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { SECTION_ORDER, type SectionId } from "../../shared/contracts/shell";
+import { SECTION_ORDER, type SectionId } from "@/shared/contracts/shell";
 
 type Platform = "macos" | "windows" | "linux";
 

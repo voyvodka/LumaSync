@@ -38,7 +38,7 @@ import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 
-import { PLATFORM_COMMANDS } from "../../shared/contracts/platform";
+import { PLATFORM_COMMANDS } from "@/shared/contracts/platform";
 
 import "./GlobalErrorBoundary.css";
 

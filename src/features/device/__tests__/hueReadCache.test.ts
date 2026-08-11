@@ -17,7 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const getHueStreamStatusMock = vi.fn();
 const checkHueStreamReadinessMock = vi.fn();
 
-vi.mock("../../mode/modeApi", () => ({
+vi.mock("@/features/mode/modeApi", () => ({
   getHueStreamStatus: () => getHueStreamStatusMock(),
 }));
 

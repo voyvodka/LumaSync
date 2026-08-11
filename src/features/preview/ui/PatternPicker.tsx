@@ -17,7 +17,7 @@ import {
   LED_TEST_PATTERN_KIND,
   type LedTestPatternKind,
   type TestPatternSpeed,
-} from "../../../shared/contracts/preview";
+} from "@/shared/contracts/preview";
 
 /** Representative swatch gradient per pattern kind. */
 const SWATCH: Record<LedTestPatternKind, string> = {

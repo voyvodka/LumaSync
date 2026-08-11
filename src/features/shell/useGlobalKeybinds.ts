@@ -33,7 +33,7 @@ import {
   type KeybindPlatform,
   getKeybindDefinition,
   resolveKeybindPlatform,
-} from "../../shared/contracts/shell";
+} from "@/shared/contracts/shell";
 
 /**
  * Callback map — each action in `KEYBIND_ACTIONS` maps to a handler the

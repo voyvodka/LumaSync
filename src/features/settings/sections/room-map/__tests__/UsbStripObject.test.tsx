@@ -12,7 +12,7 @@ import { render } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { UsbStripObject } from "../UsbStripObject";
-import type { UsbStripPlacement } from "../../../../../shared/contracts/roomMap";
+import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),

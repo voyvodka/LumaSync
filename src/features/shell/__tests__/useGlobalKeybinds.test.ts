@@ -15,7 +15,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useGlobalKeybinds, type KeybindHandlers } from "../useGlobalKeybinds";
-import { KEYBIND_ACTIONS } from "../../../shared/contracts/shell";
+import { KEYBIND_ACTIONS } from "@/shared/contracts/shell";
 
 function dispatchKey(
   init: Partial<KeyboardEventInit> & { code: string; key?: string },

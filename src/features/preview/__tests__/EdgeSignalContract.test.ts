@@ -27,8 +27,8 @@ import { describe, expect, it } from "vitest";
 import {
   EDGE_SIGNAL_SAMPLES_PER_EDGE,
   type EdgeSignalPayload,
-} from "../../mode/model/contracts";
-import { PREVIEW_COMMANDS } from "../../../shared/contracts/preview";
+} from "@/features/mode/model/contracts";
+import { PREVIEW_COMMANDS } from "@/shared/contracts/preview";
 
 // ---------------------------------------------------------------------------
 // Helpers

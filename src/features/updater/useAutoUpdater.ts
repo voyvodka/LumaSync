@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 
 import { shellStore } from "../persistence/shellStore";
-import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "../../shared/contracts/shell";
+import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/shell";
 
 export type UpdaterState =
   | { status: "idle" }

@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { MODE_GUARD_REASONS } from "../../../mode/state/modeGuard";
-import type { LightingModeConfig } from "../../../mode/model/contracts";
+import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
+import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import { LightsSection } from "../LightsSection";
 
 vi.mock("react-i18next", () => ({

@@ -1,9 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ShellState } from "../../../../../shared/contracts/shell";
-import type { RoomMapConfig } from "../../../../../shared/contracts/roomMap";
-import { DEFAULT_ROOM_MAP } from "../../../../../shared/contracts/roomMap";
+import type { ShellState } from "@/shared/contracts/shell";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import { useRoomMapPersist } from "../useRoomMapPersist";
 
 // ---------------------------------------------------------------------------
@@ -13,7 +13,7 @@ import { useRoomMapPersist } from "../useRoomMapPersist";
 const mockLoad = vi.fn();
 const mockSave = vi.fn();
 
-vi.mock("../../../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: () => mockLoad(),
     save: (partial: Partial<ShellState>) => mockSave(partial),

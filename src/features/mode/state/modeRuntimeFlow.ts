@@ -1,4 +1,4 @@
-import type { ShellState } from "../../../shared/contracts/shell";
+import type { ShellState } from "@/shared/contracts/shell";
 import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,

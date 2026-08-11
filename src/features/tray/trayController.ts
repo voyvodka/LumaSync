@@ -12,7 +12,7 @@
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { TRAY_MENU_IDS, SHELL_COMMANDS } from "../../shared/contracts/shell";
+import { TRAY_MENU_IDS, SHELL_COMMANDS } from "@/shared/contracts/shell";
 
 // ---------------------------------------------------------------------------
 // Tray label i18n

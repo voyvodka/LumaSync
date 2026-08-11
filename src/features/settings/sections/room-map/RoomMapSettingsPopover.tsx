@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import type { RoomDimensions } from "../../../../shared/contracts/roomMap";
+import type { RoomDimensions } from "@/shared/contracts/roomMap";
 
 /** Numeric input that holds local string state and commits a clamped number on blur/Enter */
 function NumericField({

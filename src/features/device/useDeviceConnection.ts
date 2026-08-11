@@ -7,7 +7,7 @@ import {
   type DeviceOperation,
   type DeviceStatus,
   type LedChipType,
-} from "../../shared/contracts/device";
+} from "@/shared/contracts/device";
 import { shellStore } from "../persistence/shellStore";
 import {
   canConnectSelectedPort,

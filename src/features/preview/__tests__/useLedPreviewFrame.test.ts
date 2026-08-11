@@ -17,8 +17,8 @@
 import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EdgeSignalPayload } from "../../mode/model/contracts";
-import { EDGE_SIGNAL_EVENT } from "../../mode/model/contracts";
+import type { EdgeSignalPayload } from "@/features/mode/model/contracts";
+import { EDGE_SIGNAL_EVENT } from "@/features/mode/model/contracts";
 
 // ---------------------------------------------------------------------------
 // Mock @tauri-apps/api/event BEFORE the imports that depend on it.

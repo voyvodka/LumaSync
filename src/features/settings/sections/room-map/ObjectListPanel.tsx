@@ -4,7 +4,7 @@ import type {
   HueZone,
   RoomMapConfig,
   ZoneDefinition,
-} from "../../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
 import { getZoneColor } from "./ZoneListPanel";
 import { HueZoneListPanel } from "./HueZoneListPanel";
 

@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { HUE_RUNTIME_TRIGGER_SOURCE } from "../../../shared/contracts/hue";
-import type { DisplayInfo } from "../../../shared/contracts/display";
-import { DEFAULT_ROOM_MAP } from "../../../shared/contracts/roomMap";
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
+import type { DisplayInfo } from "@/shared/contracts/display";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type {
   HueChannelPlacement,
   RoomMapConfig,
   UsbStripPlacement,
-} from "../../../shared/contracts/roomMap";
-import { shellStore } from "../../persistence/shellStore";
-import { listDisplays } from "../../calibration/calibrationApi";
-import { buildDeviceStatusCard } from "../../device/deviceStatusCard";
-import { buildHueRuntimeStatusCard } from "../../device/hueRuntimeStatusCard";
-import { useDeviceConnection } from "../../device/useDeviceConnection";
-import { useHueOnboarding } from "../../device/useHueOnboarding";
-import { stopHue } from "../../mode/modeApi";
+} from "@/shared/contracts/roomMap";
+import { shellStore } from "@/features/persistence/shellStore";
+import { listDisplays } from "@/features/calibration/calibrationApi";
+import { buildDeviceStatusCard } from "@/features/device/deviceStatusCard";
+import { buildHueRuntimeStatusCard } from "@/features/device/hueRuntimeStatusCard";
+import { useDeviceConnection } from "@/features/device/useDeviceConnection";
+import { useHueOnboarding } from "@/features/device/useHueOnboarding";
+import { stopHue } from "@/features/mode/modeApi";
 import { HueChannelMapPanel } from "./HueChannelMapPanel";
 import { WledDevicePicker } from "./WledDevicePicker";
 import { LedChipTypePicker } from "./control/LedChipTypePicker";

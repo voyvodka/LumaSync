@@ -7,8 +7,8 @@
  * ZONE-01 — Phase 19 Plan 01
  */
 
-import type { UsbStripPlacement, TvAnchorPlacement } from "../../../../shared/contracts/roomMap";
-import type { LedSegmentCounts } from "../../../calibration/model/contracts";
+import type { UsbStripPlacement, TvAnchorPlacement } from "@/shared/contracts/roomMap";
+import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 
 // ---------------------------------------------------------------------------
 // Exported types

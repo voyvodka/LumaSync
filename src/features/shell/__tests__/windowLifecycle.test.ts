@@ -127,7 +127,7 @@ import { restoreWindowState, persistWindowState } from "../windowLifecycle";
 import {
   DEFAULT_SHELL_STATE,
   type ShellState,
-} from "../../../shared/contracts/shell";
+} from "@/shared/contracts/shell";
 
 /**
  * Build a persisted shell state object that storeGetMock returns when

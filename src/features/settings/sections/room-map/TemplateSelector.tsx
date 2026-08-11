@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import type { RoomMapConfig, FurniturePlacement, UsbStripPlacement, TvAnchorPlacement } from "../../../../shared/contracts/roomMap";
-import { DEFAULT_ROOM_MAP } from "../../../../shared/contracts/roomMap";
+import type { RoomMapConfig, FurniturePlacement, UsbStripPlacement, TvAnchorPlacement } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
 interface TemplateSelectorProps {
   onSelect: (config: RoomMapConfig) => void;

@@ -15,8 +15,8 @@
  */
 
 import { loadShellState, saveShellState } from "../shell/windowLifecycle";
-import type { ShellState } from "../../shared/contracts/shell";
-import { DEFAULT_SHELL_STATE } from "../../shared/contracts/shell";
+import type { ShellState } from "@/shared/contracts/shell";
+import { DEFAULT_SHELL_STATE } from "@/shared/contracts/shell";
 
 // ---------------------------------------------------------------------------
 // Public API

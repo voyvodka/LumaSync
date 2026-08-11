@@ -4,7 +4,7 @@ import {
   type DeviceHealthStep,
   type FirmwareProfile,
   type LedChipType,
-} from "../../shared/contracts/device";
+} from "@/shared/contracts/device";
 
 export interface CommandStatus {
   code: string;

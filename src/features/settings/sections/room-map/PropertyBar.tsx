@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import type { RoomMapConfig } from "../../../../shared/contracts/roomMap";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 interface PropertyBarProps {
   config: RoomMapConfig;

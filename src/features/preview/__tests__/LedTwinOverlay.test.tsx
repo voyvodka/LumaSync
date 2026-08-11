@@ -20,8 +20,8 @@ import { render, act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { memo } from "react";
 
-import type { EdgeSignalPayload } from "../../mode/model/contracts";
-import type { LedCalibrationConfig } from "../../calibration/model/contracts";
+import type { EdgeSignalPayload } from "@/features/mode/model/contracts";
+import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 
 let dotRenderCount = 0;
 
@@ -31,7 +31,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: { load: vi.fn() },
 }));
 
@@ -51,7 +51,7 @@ vi.mock("../ui/LedGlowDot", () => ({
 }));
 
 import { listen } from "@tauri-apps/api/event";
-import { shellStore } from "../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 import { LedTwinOverlay } from "../ui/LedTwinOverlay";
 
 type ListenCallback = (event: { payload: EdgeSignalPayload }) => void;

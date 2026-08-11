@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { TvAnchorPlacement } from "../../../../shared/contracts/roomMap";
+import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
 import type { SnapResult } from "./useSnapGuides";
 

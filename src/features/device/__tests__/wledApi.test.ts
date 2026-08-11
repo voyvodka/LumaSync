@@ -16,7 +16,7 @@ import {
   DEVICE_COMMANDS,
   WLED_STATUS,
   type WledDeviceInfo,
-} from "../../../shared/contracts/device";
+} from "@/shared/contracts/device";
 import {
   connectWledSink,
   discoverWledDevices,

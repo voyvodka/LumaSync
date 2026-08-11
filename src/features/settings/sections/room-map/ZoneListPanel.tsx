@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ZoneDefinition } from "../../../../shared/contracts/roomMap";
+import type { ZoneDefinition } from "@/shared/contracts/roomMap";
 
 interface ZoneListPanelProps {
   zones: ZoneDefinition[];

@@ -4,7 +4,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LED_TEST_STATUS, type LedTestPatternResult } from "../../../shared/contracts/preview";
+import { LED_TEST_STATUS, type LedTestPatternResult } from "@/shared/contracts/preview";
 import {
   isTestPatternErrorCode,
   useTestPatternRunner,

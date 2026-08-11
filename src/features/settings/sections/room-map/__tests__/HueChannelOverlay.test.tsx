@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, cleanup } from "@testing-library/react";
 
 import { HueChannelOverlay } from "../HueChannelOverlay";
-import type { HueChannelPlacement, HueZone } from "../../../../../shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 
 // jsdom does not implement setPointerCapture; stub it so React stays happy.
 beforeEach(() => {

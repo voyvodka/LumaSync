@@ -25,7 +25,7 @@ import { useTranslation } from "react-i18next";
 import type {
   HueChannelPlacement,
   HueZone,
-} from "../../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
 
 interface HueZoneListPanelProps {
   /** All Hue zones authored on the active room map. */

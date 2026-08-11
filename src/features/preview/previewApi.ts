@@ -30,7 +30,7 @@ import {
   type OpenLedTwinOverlayPayload,
   type StartLedTestPatternPayload,
   type TwinOverlayResult,
-} from "../../shared/contracts/preview";
+} from "@/shared/contracts/preview";
 
 export type PreviewInvoker = <T>(
   command: string,

@@ -15,8 +15,8 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 
-import enCommon from "../../locales/en/common.json";
-import trCommon from "../../locales/tr/common.json";
+import enCommon from "@/locales/en/common.json";
+import trCommon from "@/locales/tr/common.json";
 
 /** Supported language codes (must match languagePolicy.SUPPORTED_LANGUAGES) */
 export const I18N_SUPPORTED_LANGUAGES = ["en", "tr"] as const;

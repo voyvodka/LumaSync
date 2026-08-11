@@ -21,21 +21,21 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
-import { HsvColorPicker } from "../../../../shared/ui/HsvColorPicker";
+import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
   type LightingModeKind,
-} from "../../../mode/model/contracts";
+} from "@/features/mode/model/contracts";
 import {
   MODE_GUARD_REASONS,
   type ModeGuardReason,
-} from "../../../mode/state/modeGuard";
-import type { HueIntensityPreset, HueRuntimeTarget } from "../../../../shared/contracts/hue";
-import { FIRMWARE_PROFILE, type FirmwareProfile } from "../../../../shared/contracts/device";
-import { SCENE_PRESETS, type ScenePreset } from "../../../mode/model/scenePresets";
+} from "@/features/mode/state/modeGuard";
+import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/device";
+import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
-import { shellStore } from "../../../persistence/shellStore";
+import { shellStore } from "@/features/persistence/shellStore";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;

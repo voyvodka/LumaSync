@@ -38,13 +38,13 @@ import { migrateShellState } from "../migrations";
 import {
   SHELL_STATE_SCHEMA_VERSION,
   type ShellState,
-} from "../../../shared/contracts/shell";
+} from "@/shared/contracts/shell";
 import {
   DEFAULT_ROOM_DIMENSIONS,
   type HueZone,
   type LegacyHueZone,
   type ZoneDefinition,
-} from "../../../shared/contracts/roomMap";
+} from "@/shared/contracts/roomMap";
 
 // ---------------------------------------------------------------------------
 // Fixtures

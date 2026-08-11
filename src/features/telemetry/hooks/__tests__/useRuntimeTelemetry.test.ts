@@ -1,13 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FullTelemetrySnapshot } from "../../model/contracts";
+import type { FullTelemetrySnapshot } from "@/features/telemetry/model/contracts";
 
 // Mock the telemetryApi module — the hook only calls `getFullTelemetrySnapshot`
 // so that is the single dependency the tests drive.
 const getFullTelemetrySnapshotMock = vi.fn();
 
-vi.mock("../../telemetryApi", () => ({
+vi.mock("@/features/telemetry/telemetryApi", () => ({
   getFullTelemetrySnapshot: () => getFullTelemetrySnapshotMock(),
 }));
 

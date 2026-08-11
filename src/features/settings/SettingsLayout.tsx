@@ -1,14 +1,14 @@
 import { useState, memo } from "react";
-import { SECTION_IDS, type SectionId, type UIMode } from "../../shared/contracts/shell";
+import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { LightsSection } from "./sections/LightsSection";
 import { CalibrationPage } from "../calibration/ui/CalibrationPage";
 import { DeviceSection } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile } from "../../shared/contracts/device";
+import type { ColorCorrectionConfig, FirmwareProfile } from "@/shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
-import type { HueIntensityPreset, HueRuntimeTarget } from "../../shared/contracts/hue";
+import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
 import { RoomMapEditor } from "./sections/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";

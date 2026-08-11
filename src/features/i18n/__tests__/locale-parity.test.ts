@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import enCommon from "../../../locales/en/common.json";
-import trCommon from "../../../locales/tr/common.json";
+import enCommon from "@/locales/en/common.json";
+import trCommon from "@/locales/tr/common.json";
 
 function flattenKeys(node: unknown, prefix = ""): string[] {
   if (node === null || typeof node !== "object" || Array.isArray(node)) {

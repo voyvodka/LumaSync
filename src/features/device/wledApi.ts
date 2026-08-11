@@ -11,7 +11,7 @@ import {
   DEVICE_COMMANDS,
   type WledDeviceInfo,
   type WledStatusCode,
-} from "../../shared/contracts/device";
+} from "@/shared/contracts/device";
 
 export interface WledCommandStatus {
   code: WledStatusCode | string;

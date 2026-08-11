@@ -18,7 +18,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FIRMWARE_PROFILE } from "../../../../../shared/contracts/device";
+import { FIRMWARE_PROFILE } from "@/shared/contracts/device";
 import { FirmwareProfilePicker } from "../FirmwareProfilePicker";
 
 // ---- i18n stub ----------------------------------------------------------
@@ -43,7 +43,7 @@ const mockState = {
 };
 const mockSave = vi.fn(async (_partial: Record<string, unknown>) => undefined);
 
-vi.mock("../../../../persistence/shellStore", () => ({
+vi.mock("@/features/persistence/shellStore", () => ({
   shellStore: {
     load: vi.fn(async () => ({ ...mockState })),
     save: (partial: Record<string, unknown>) => mockSave(partial),
@@ -55,7 +55,7 @@ vi.mock("../../../../persistence/shellStore", () => ({
 // `latestHealthCheck.advertisedFirmwareProfile` field. Tests bypass the
 // hook by passing the prop directly, but the hook still gets called so
 // it must return a state shape with `latestHealthCheck`.
-vi.mock("../../../../device/useDeviceConnection", () => ({
+vi.mock("@/features/device/useDeviceConnection", () => ({
   useDeviceConnection: () => ({ latestHealthCheck: null }),
 }));
 

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { UsbStripPlacement } from "../../../../shared/contracts/roomMap";
+import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 
 interface UsbStripObjectProps {
   placement: UsbStripPlacement;
