@@ -110,7 +110,7 @@ export function HueZoneListPanel({
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {/* Header row with + Add zone CTA */}
       <div className="mb-1 flex items-center justify-between px-1">
-        <SectionLabel>{t("roomMap.hueZones.title")}</SectionLabel>
+        <SectionLabel tone="muted">{t("roomMap.hueZones.title")}</SectionLabel>
         <button
           type="button"
           className={`${btnBase} ${
@@ -265,7 +265,7 @@ export function HueZoneListPanel({
           {/* Unassigned channels group */}
           {unassigned.length > 0 && (
             <li className="mt-2 rounded border border-dashed border-zinc-800/60 px-2 py-1">
-              <SectionLabel as="div" className="mb-1 flex items-center gap-1.5">
+              <SectionLabel as="div" tone="muted" className="mb-1 flex items-center gap-1.5">
                 {t("roomMap.hueZones.unassignedTitle")}
                 <span className="text-[9px] text-zinc-600">({unassigned.length})</span>
               </SectionLabel>

@@ -135,7 +135,7 @@ export function IconOpacity() {
 
 export function IconOff() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <line x1="5" y1="5" x2="19" y2="19" />
     </svg>
@@ -144,7 +144,7 @@ export function IconOff() {
 
 export function IconAmbilight() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="5.5" width="18" height="12" rx="1.5" />
       <path d="M2 9l2-2M22 9l-2-2M2 14l2 2M22 14l-2 2" />
     </svg>
@@ -153,7 +153,7 @@ export function IconAmbilight() {
 
 export function IconSolid() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="5" />
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
     </svg>
@@ -162,7 +162,7 @@ export function IconSolid() {
 
 export function IconSolidDot() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="8" />
     </svg>
   );
@@ -318,6 +318,7 @@ export function IconDownload() {
   );
 }
 
+// Plus sign — "install this update"
 export function IconInstall() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

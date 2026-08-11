@@ -53,7 +53,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 // Trim the picker dependency — irrelevant to scale-axis assertions.
-vi.mock("@/features/shared/ui/HsvColorPicker", () => ({
+vi.mock("@/shared/ui/HsvColorPicker", () => ({
   HsvColorPicker: () => <div data-testid="hsv-stub" />,
 }));
 
