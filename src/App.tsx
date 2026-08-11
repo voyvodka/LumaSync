@@ -11,7 +11,6 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx, type StatusItem } from "./features/shell/StatusBar";
@@ -23,6 +22,7 @@ import {
   startCalibrationFromSettings,
 } from "./features/calibration/state/entryFlow";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
+import { getSerialConnectionStatus } from "./features/device/deviceConnectionApi";
 import { connectionEvents } from "./features/device/connectionEvents";
 import {
   canEnableLedMode,
@@ -75,6 +75,7 @@ import {
 import {
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_STATUS,
+  HUE_RUNTIME_TRIGGER_SOURCE,
   HUE_SOLID_COLOR_STATUS,
   HUE_STATUS,
   isHueSolidColorUnapplied,
@@ -82,7 +83,7 @@ import {
   type HueSolidColorStatusCode,
 } from "./shared/contracts/hue";
 import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
-import { DEVICE_COMMANDS, type ColorCorrectionConfig, type FirmwareProfile, type LedChipType } from "./shared/contracts/device";
+import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./shared/contracts/device";
 import {
   listenTrayLightsOff,
   listenTrayResumeLastMode,
@@ -95,6 +96,7 @@ import {
   showLedControlPopup,
   openLedTwinOverlay,
 } from "./features/preview/previewApi";
+import { showNotification } from "./features/platform/platformApi";
 import { i18next } from "./features/i18n/i18n";
 
 // Wrapped at the import so no call site can forget: a Hue mutation must drop
@@ -929,20 +931,15 @@ function App() {
           onFirstCloseToTray: () => {
             void (async () => {
               try {
-                const result = await invoke<{ status: string; code?: string; message?: string }>(
-                  "show_notification",
-                  {
-                    payload: {
-                      title: t("trayHint.title"),
-                      body: t("trayHint.body"),
-                      kind: "info",
-                    },
-                  },
-                );
-                if (result.status !== "ok") {
+                const result = await showNotification({
+                  title: t("trayHint.title"),
+                  body: t("trayHint.body"),
+                  kind: "info",
+                });
+                if (result.status !== "shown") {
                   console.info(
                     "[LumaSync] tray hint notification not delivered:",
-                    result.code ?? "unknown",
+                    result.code,
                     result.message ?? "",
                   );
                 }
@@ -1050,9 +1047,7 @@ function App() {
         // artifact, not a correctness bug, and is out of scope for H3.
         let bootstrapUsbAvailable = false;
         try {
-          const connectionStatus = await invoke<{ connected: boolean }>(
-            DEVICE_COMMANDS.GET_CONNECTION_STATUS,
-          );
+          const connectionStatus = await getSerialConnectionStatus();
           bootstrapUsbAvailable = connectionStatus.connected;
         } catch {
           // Status check failed — leave bootstrapUsbAvailable=false; we
@@ -1406,10 +1401,15 @@ function App() {
     const stopResults = await Promise.allSettled(
       removedTargets.map(async (target): Promise<StopOutcome> => {
         if (!currentActive.includes(target)) return { target, ok: true };
-        const command = target === "usb" ? "stop_lighting" : target === "hue" ? "stop_hue_stream" : null;
-        if (!command) return { target, ok: true };
+        if (target !== "usb" && target !== "hue") return { target, ok: true };
         try {
-          await invoke(command);
+          if (target === "usb") {
+            await stopLighting();
+          } else {
+            // System-attributed, not MODE_CONTROL default — this stop is a side
+            // effect of the target-set change, not a direct user mode toggle.
+            await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+          }
           return { target, ok: true };
         } catch (err) {
           console.error(

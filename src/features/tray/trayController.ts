@@ -11,30 +11,10 @@
 
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
-import { TRAY_MENU_IDS, SHELL_COMMANDS } from "@/shared/contracts/shell";
+import { TRAY_MENU_IDS } from "@/shared/contracts/shell";
 
-// ---------------------------------------------------------------------------
-// Tray label i18n
-// ---------------------------------------------------------------------------
-
-export interface TrayLabels {
-  openSettings: string;
-  lightsOff: string;
-  resumeLastMode: string;
-  solidColor: string;
-  /**
-   * v1.6 — "Show LED Preview" tray item label. Opens the interactive control
-   * popup (and, when enabled, the digital-twin overlay). Optional so the Rust
-   * handler keeps its existing default while the label rolls out additively.
-   */
-  showLedPreview?: string;
-  quit: string;
-}
-
-export async function updateTrayLabels(labels: TrayLabels): Promise<void> {
-  await invoke(SHELL_COMMANDS.UPDATE_TRAY_LABELS, { labels });
-}
+// Tray label i18n moved to trayApi.ts; re-exported to avoid consumer churn.
+export { type TrayLabels, updateTrayLabels } from "./trayApi";
 
 // ---------------------------------------------------------------------------
 // Startup toggle (no tray checkbox — managed in System settings only)

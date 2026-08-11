@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import type { LightingModeConfig } from "../features/mode/model/contracts";
+import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 
 const loadShellStateMock = vi.fn();
 const saveShellStateMock = vi.fn();
@@ -92,7 +93,7 @@ vi.mock("../features/mode/modeApi", () => ({
   setLightingMode: (payload: LightingModeConfig) => setLightingModeMock(payload),
   stopLighting: () => stopLightingMock(),
   startHue: (payload: { bridgeIp: string; username: string; clientKey: string; areaId: string }) => startHueMock(payload),
-  stopHue: () => stopHueMock(),
+  stopHue: (...args: unknown[]) => stopHueMock(...args),
   getHueStreamStatus: () => getHueStreamStatusMock(),
   setHueSolidColor: (payload: unknown) => setHueSolidColorMock(payload),
 }));
@@ -745,7 +746,7 @@ describe("App mode orchestration", () => {
     });
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("stop_lighting");
+      expect(stopLightingMock).toHaveBeenCalledOnce();
     });
   });
 
@@ -827,6 +828,67 @@ describe("App mode orchestration", () => {
     expect(stopLightingMock).toHaveBeenCalledTimes(1);
     expect(stopHueMock).toHaveBeenCalledTimes(1);
     expect(startHueMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("handleOutputTargetsChange delta-stop: removing hue while usb active stops hue with the system trigger", async () => {
+    // The suite default reports the stream Idle, which makes the health
+    // reconciler strip "hue" from active targets before the delta can fire.
+    getHueStreamStatusMock.mockResolvedValue({
+      active: true,
+      lastSolidColor: null,
+      status: { state: "Running", code: "HUE_STREAM_RUNNING", message: "Running", details: null },
+    });
+    setHueSolidColorMock.mockResolvedValue({
+      active: true,
+      status: { state: "Running", code: "HUE_SOLID_COLOR_APPLIED", message: "ok", details: null },
+    });
+    loadShellStateMock.mockResolvedValue({
+      lastSection: "general",
+      ledCalibration: {
+        templateId: "monitor-27-16-9",
+        counts: { top: 10, right: 10, bottom: 10, left: 10 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "subtle",
+        startAnchor: "top-start",
+        direction: "cw",
+        totalLeds: 40,
+      },
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastOutputTargets: ["usb", "hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "set-both-targets" }).click();
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "set-solid" }).click();
+    });
+
+    stopHueMock.mockClear();
+
+    // Remove hue target (keep only usb)
+    await act(async () => {
+      screen.getByRole("button", { name: "set-usb-target" }).click();
+    });
+
+    await waitFor(() => {
+      expect(stopHueMock).toHaveBeenCalledOnce();
+    });
+    // System, not the MODE_CONTROL default — a bare stopHue() here would
+    // silently reattribute the stop event in runtime telemetry.
+    expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
   });
 
   // The slow-path Ambilight transition asserts on `active-mode` after

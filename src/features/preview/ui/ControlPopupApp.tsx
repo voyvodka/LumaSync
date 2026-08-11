@@ -4,11 +4,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { shellStore } from "@/features/persistence/shellStore";
+import { showNotification } from "@/features/platform/platformApi";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
 import { setLightingMode, stopLighting } from "@/features/mode/modeApi";
@@ -415,12 +415,10 @@ export function ControlPopupApp() {
 
       if (!hintAlreadyShown) {
         try {
-          await invoke("show_notification", {
-            payload: {
-              title: t("ledPreview.title"),
-              body: t("ledPreview.control.reopenHint"),
-              kind: "info",
-            },
+          await showNotification({
+            title: t("ledPreview.title"),
+            body: t("ledPreview.control.reopenHint"),
+            kind: "info",
           });
         } catch (error) {
           console.warn("[LumaSync] ControlPopupApp reopen-hint notification failed:", error);

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { invoke } from "@tauri-apps/api/core";
 
 import type { HueAreaChannelInfo } from "@/features/device/hueOnboardingApi";
 import {
   CHANNEL_WRITEBACK_STATUS,
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
-import { HUE_COMMANDS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { updateHueChannelPositions } from "@/features/settings/sections/room-map/roomMapApi";
 
 const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
 type Region = (typeof REGIONS)[number];
@@ -351,10 +351,12 @@ export function HueChannelMapPanel({
     }
 
     try {
-      const response = await invoke<{ code: string; message: string }>(
-        HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS,
-        { channels: channelPlacements, bridgeIp, username, areaId },
-      );
+      const response = await updateHueChannelPositions({
+        channels: channelPlacements,
+        bridgeIp,
+        username,
+        areaId,
+      });
       if (response.code === HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED) {
         setSaveResult({ ok: true });
         saveResultTimerRef.current = setTimeout(() => {
