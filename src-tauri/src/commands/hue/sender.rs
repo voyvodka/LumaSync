@@ -1691,22 +1691,37 @@ mod tests {
 
     /// A 429 must actually slow the loop down. Before the fix every fault was
     /// discarded with `let _ =`, so a throttling bridge had no way to reach us.
+    ///
+    /// Anchored on the pacer's own `floor` rather than a measured `first_gap`:
+    /// a wall-clock baseline inflates under a loaded runner just like every
+    /// other gap, but the inflation is proportionally worst on the smallest
+    /// measurement, so multiplying it out as a threshold chases a moving
+    /// target (observed CI failure: missed a `* 4` threshold by 1.7ms).
     #[test]
     fn http_fallback_slows_down_when_the_bridge_throttles() {
         let channels = vec![channel_with_lights(0, &["a", "b"])];
+        let throttle_count: u32 = 4;
         let sink = RecordingSink {
-            throttle_first_n: std::sync::atomic::AtomicUsize::new(4),
+            throttle_first_n: std::sync::atomic::AtomicUsize::new(throttle_count as usize),
             ..RecordingSink::default()
         };
-        run_loop_under_load(&channels, 100, Duration::from_millis(700), &sink);
+        let budget = 100;
+        run_loop_under_load(&channels, budget, Duration::from_millis(700), &sink);
 
         let timestamps = sink.timestamps();
         assert!(timestamps.len() >= 6, "got {} requests", timestamps.len());
-        let first_gap = timestamps[1].saturating_duration_since(timestamps[0]);
+
+        let floor = RequestPacer::new(budget).floor;
         let late_gap = timestamps[5].saturating_duration_since(timestamps[4]);
+        // 4 throttles double the interval 4 times: floor * 2^4. Require half
+        // of that — comfortably above floor-only scheduler noise, comfortably
+        // below the fully-widened interval.
+        let expected_widened = floor * (1u32 << throttle_count);
+        let min_widened_gap = expected_widened / 2;
         assert!(
-            late_gap > first_gap * 4,
-            "interval did not widen under throttling: {first_gap:?} then {late_gap:?}"
+            late_gap >= min_widened_gap,
+            "interval did not widen under throttling: expected at least {min_widened_gap:?} \
+             (half of floor {floor:?} * 2^{throttle_count}), got {late_gap:?}"
         );
     }
 
