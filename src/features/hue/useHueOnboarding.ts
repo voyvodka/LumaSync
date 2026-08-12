@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   HUE_CREDENTIAL_BACKENDS,
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
-  HUE_RUNTIME_TRIGGER_SOURCE,
-  type HueRuntimeStatus,
-  type HueRuntimeTarget,
-  type HueRuntimeTargetTelemetryRow,
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
-import { restartHue, startHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
-import { readHueStreamReadiness, readHueStreamStatus } from "./hueReadCache";
+import { readHueStreamReadiness } from "./hueReadCache";
 import {
   applyAreaReadinessSnapshot,
   flattenAreaGroups,
@@ -32,18 +27,17 @@ import {
   READINESS_BACKGROUND_REFRESH_MS,
   READINESS_BLOCKED_REFRESH_MS,
   READINESS_STALE_MS,
-  RUNTIME_POLL_INTERVAL_MS,
-  RUNTIME_POLL_MIN_INTERVAL_MS,
-  STREAMING_RUNTIME_STATES,
 } from "./model/pollingCadence";
 import { deriveRuntimeTargets } from "./model/runtimeTargets";
 import { useHueAreaChannels } from "./state/useHueAreaChannels";
+import { useHueRuntimeStatus } from "./state/useHueRuntimeStatus";
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
   listHueEntertainmentAreas,
   migrateHueCredentials,
   pairHueBridge,
+  type CommandStatus,
   type HuePairingCredentials,
   validateHueCredentials,
   verifyHueBridgeIp,
@@ -93,11 +87,6 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const [state, setState] = useState<HueOnboardingState>(DEFAULT_STATE);
   const [readinessById, setReadinessById] = useState<Map<string, HueAreaReadiness>>(new Map());
   const [readinessCheckedAtById, setReadinessCheckedAtById] = useState<Map<string, number>>(new Map());
-  const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatus | null>(null);
-  /** Survives the runtime-loop effect re-running on every state transition. */
-  const lastRuntimePollAtRef = useRef(0);
-  const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
-  const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
 
   const selectedBridge = useMemo(
     () => state.bridges.find((bridge) => bridge.id === state.selectedBridgeId) ?? null,
@@ -147,8 +136,24 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     });
   }, []);
 
+  const publishStatus = useCallback(
+    (status: CommandStatus) => {
+      patchState((prev) => ({ ...prev, status }));
+    },
+    [patchState],
+  );
+
   const { areaChannels, isLoadingChannels, channelRegionOverrides, setChannelRegion } =
     useHueAreaChannels(selectedBridge, state.credentials, state.selectedAreaId);
+
+  const { runtimeStatus, runtimeTargets, isRuntimeMutating, startRuntime, retryRuntimeTarget } =
+    useHueRuntimeStatus({
+      bridge: selectedBridge,
+      credentials: state.credentials,
+      areaId: state.selectedAreaId,
+      channelRegionOverrides,
+      onError: publishStatus,
+    });
 
   const applyReadinessResult = useCallback(
     (
@@ -671,171 +676,6 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       cancelled = true;
     };
   }, [patchState]);
-
-  // `force` bypasses the shared read cache. Mandatory after a mutation: a
-  // cached pre-mutation status would paint the Devices tab with the state the
-  // user just changed away from.
-  const pollRuntimeStatus = useCallback(async (options?: { force?: boolean }) => {
-    try {
-      const result = await readHueStreamStatus(options?.force ? 0 : undefined);
-      const nextStatus = result.status as HueRuntimeStatus;
-      setRuntimeStatus(nextStatus);
-      setRuntimeTargets(deriveRuntimeTargets(nextStatus));
-    } catch (error) {
-      const details = error instanceof Error ? error.message : String(error);
-      const fallbackStatus: HueRuntimeStatus = {
-        state: "Failed",
-        code: CODE.STREAM_STATUS_UNAVAILABLE,
-        message: "Could not fetch Hue runtime status.",
-        details,
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM,
-      };
-      setRuntimeStatus(fallbackStatus);
-      setRuntimeTargets(deriveRuntimeTargets(fallbackStatus));
-    }
-  }, []);
-
-  // Runtime-status loop. Two concerns share one effect:
-  //   1) "What's the bridge doing right now?" — fired on mount and on every
-  //      runtime-state change so the Devices tab always opens with a fresh
-  //      answer without a polling delay.
-  //   2) Streaming health watch — recursive setTimeout at
-  //      `RUNTIME_POLL_INTERVAL_MS` cadence, but ONLY while the runtime is
-  //      `Starting` / `Running` / `Reconnecting`. Idle / Stopping / Failed
-  //      get the mount tick and then go silent.
-  // Visibility-aware: the loop pauses while `document.visibilityState` is
-  // `hidden` (tray window collapsed / minimised) and re-arms with an
-  // immediate tick on `visibilitychange`, mirroring `useRuntimeTelemetry`.
-  const runtimeState = runtimeStatus?.state ?? null;
-  useEffect(() => {
-    let mounted = true;
-    let timeoutId: number | null = null;
-    let inFlight = false;
-
-    const isStreaming = runtimeState !== null && STREAMING_RUNTIME_STATES.has(runtimeState);
-
-    const tick = async () => {
-      if (!mounted) return;
-      if (inFlight) return;
-      if (document.visibilityState === "hidden") return;
-      inFlight = true;
-      lastRuntimePollAtRef.current = Date.now();
-      try {
-        await pollRuntimeStatus();
-      } finally {
-        inFlight = false;
-        scheduleNext();
-      }
-    };
-
-    // `runtimeState` sits in the deps but only ever moves because a poll just
-    // returned it, so the unconditional entry tick re-fetched data we already
-    // held — a Idle→Starting→Running burst cost three bridge round-trips.
-    // Nothing is lost by skipping it: mount and visibility-resume both have a
-    // stale enough `lastRuntimePollAt` to tick normally.
-    const tickIfStale = () => {
-      if (!mounted) return;
-      if (timeoutId !== null || inFlight) return;
-      if (Date.now() - lastRuntimePollAtRef.current >= RUNTIME_POLL_MIN_INTERVAL_MS) {
-        void tick();
-      } else {
-        scheduleNext();
-      }
-    };
-
-    const scheduleNext = () => {
-      if (!mounted) return;
-      if (!isStreaming) return;
-      if (document.visibilityState === "hidden") return;
-      if (timeoutId !== null) return;
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        void tick();
-      }, RUNTIME_POLL_INTERVAL_MS);
-    };
-
-    const handleVisibilityChange = () => {
-      if (!mounted) return;
-      if (document.visibilityState === "visible") tickIfStale();
-    };
-
-    tickIfStale();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      mounted = false;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [pollRuntimeStatus, runtimeState]);
-
-  const startRuntime = useCallback(async () => {
-    if (isRuntimeMutating || !selectedBridge || !state.credentials || !state.selectedAreaId) {
-      return;
-    }
-
-    setIsRuntimeMutating(true);
-    try {
-      await startHue({
-        bridgeIp: selectedBridge.ip,
-        username: state.credentials.username,
-        clientKey: state.credentials.clientKey,
-        areaId: state.selectedAreaId,
-        triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-        channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
-      });
-    } catch (error) {
-      patchState((prev) => ({
-        ...prev,
-        status: {
-          code: CODE.STREAM_START_FAILED,
-          message: "Could not start Hue stream.",
-          details: toErrorDetails(error),
-        },
-      }));
-    } finally {
-      await pollRuntimeStatus({ force: true });
-      setIsRuntimeMutating(false);
-    }
-  }, [channelRegionOverrides, isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId]);
-
-  const retryRuntimeTarget = useCallback(
-    async (target: HueRuntimeTarget) => {
-      if (isRuntimeMutating || target !== "hue") {
-        return;
-      }
-
-      setIsRuntimeMutating(true);
-      try {
-        if (selectedBridge && state.credentials && state.selectedAreaId) {
-          await restartHue({
-            bridgeIp: selectedBridge.ip,
-            username: state.credentials.username,
-            clientKey: state.credentials.clientKey,
-            areaId: state.selectedAreaId,
-            triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-            channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
-          });
-        }
-      } catch (error) {
-        patchState((prev) => ({
-          ...prev,
-          status: {
-            code: CODE.STREAM_RECOVERY_FAILED,
-            message: "Could not recover Hue stream.",
-            details: toErrorDetails(error),
-          },
-        }));
-      } finally {
-        await pollRuntimeStatus({ force: true });
-        setIsRuntimeMutating(false);
-      }
-    },
-    [channelRegionOverrides, isRuntimeMutating, patchState, pollRuntimeStatus, selectedBridge, state.credentials, state.selectedAreaId],
-  );
 
   return {
     step: state.step,
