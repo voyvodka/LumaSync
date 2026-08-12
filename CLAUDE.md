@@ -6,30 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **LumaSync** is a native desktop application (Tauri 2 + React 19) that mirrors the screen to WS2812B LED strips and Philips Hue entertainment areas in real time, with per-edge room-map calibration and fully local processing. Package name: `lumasync`, identifier: `com.lumasync.app`.
 
-## Working documents
+## Where the reasoning lives
 
-Local working documents live under `devdocs/`, excluded from git. **Never committed, unignored,
-or distributed.** Assume collaborators, CI, and sandboxed agents do not see it.
+Two sets, and the split is what is shareable. Each one keeps its own index; this file points at
+them and holds neither map, so it does not go stale when a note is added.
 
-| File | Answers |
-|---|---|
-| `devdocs/product/00-state.md` | Where things stand, what is open, standing assumptions. **Read first.** |
-| `devdocs/product/01-brief.md` | Problem, audience, primary flow, success criterion, constraints |
-| `devdocs/product/02-decisions.md` | Why it is built this way — each decision with what was rejected and what it cost |
-| `devdocs/product/03-mvp.md` | What is in and out of the current push, and what is parked |
-| `devdocs/product/04-roadmap.md` | The current push as increments; also the progress ledger |
-| `devdocs/backlog.md` | Long-horizon feature backlog |
-| `devdocs/research/` | Evidence with sources. Dated, and goes stale. |
-| `devdocs/competitive-research/` | Per-product analysis of the ambient-lighting field |
-| `devdocs/RFCs/` | Design notes for specific changes |
+- **`docs/architecture/README.md` — public, committed.** Technical decisions, gotchas, and the reasoning behind them. This is where a long explanation belongs instead of a twenty-line comment above a function: **write the reason there and keep the comment short.** Committed source may link to it freely.
+- **`devdocs/README.md` — private, excluded from git.** Product direction, goals, roadmap, research. **Never committed, unignored, or distributed**; assume collaborators, CI, and sandboxed agents cannot see it. **Never reference a `devdocs/` path from committed source, commit messages, PRs, or release notes** — it is a dead reference for every other reader. Put the reasoning in `docs/architecture/` instead, or inline it.
 
-Read `00-state.md` before proposing any implementation plan, then check `02-decisions.md` —
-several obvious-looking ideas are already settled there, with the reason and the accepted cost.
+`docs/architecture/` is split by area — Hue, device output, capture, contracts, build, UI — so
+reading about one does not mean loading all of them. Its README routes by task.
 
-**Never reference a `devdocs/` path from committed source, commit messages, PRs, or release
-notes.** These files exist on one machine; a pointer to them in a public file is a dead
-reference for every reader, and the code comment is the easiest place to do it by accident.
-Put the reasoning in the comment instead of a link to it.
+Before changing anything: the area file for whether the thing you find odd is deliberate, and
+`devdocs/product/00-state.md` for where the project stands.
 
 ## Deliberately not built
 
@@ -44,6 +33,8 @@ Reasons and accepted costs are in `devdocs/product/02-decisions.md`.
 ## Agent Routing
 
 This project uses specialist agents in `.claude/agents/`. They are the primary authority for their domains. The main assistant is an **orchestrator**, not an inline worker.
+
+**`.claude/` is not committed.** The agents and skills named below exist on the maintainer's machine only, so a fresh clone has none of them and this section describes nothing it can reach. If you are working without them, the routing below is still a useful map of which domains need care — just do the work directly, and treat the constraints in `docs/architecture/` as the authority the agents would have cited.
 
 ### Routing rules
 
@@ -62,7 +53,7 @@ For multi-domain work, **spawn relevant agents in parallel**, then synthesize th
 
 - One-line clarifications or factual questions answered from a single file read
 - Typo fixes, identifier renames, pure string edits
-- Conversational back-and-forth during the **design discussion phase** (user preference — see `ls-design-language` and user memory `feedback_uiux_approach.md`), before any code is written
+- Conversational back-and-forth during the **design discussion phase**, before any code is written. The maintainer prefers to settle a UI direction in conversation first; jumping straight to an implementation means discarding it.
 
 If in doubt, spawn the agent. The token cost of a redundant spawn is trivial compared to the cost of missing an expert-flagged blind spot.
 
@@ -115,26 +106,9 @@ already have wastes a warm-up cycle.
 Tauri runtime. Everything else is in `package.json` — read it there. The verification sequence is
 below under **Verification Flow**; `cargo audit` ignores live in `.cargo/audit.toml`.
 
-`cargo build` and `pnpm tauri build --debug` write **the same path**
-(`src-tauri/target/debug/lumasync`) but produce different binaries. The cargo one
-loads the frontend from the Vite dev server, so launching it without `pnpm dev`
-running gives a blank window and `Could not connect to localhost:1420` in the Web
-Inspector — an intact app with no content. Nothing about the path reveals which
-one is there. Use `pnpm tauri dev`, or rebuild with `--debug --no-bundle` to embed
-the frontend.
-
-Two things about the test setup that cost real time to discover:
-
-CI passes `--test-threads=1` to `cargo test`. It is **not** required: the
-worker-touching `lighting_mode` tests serialise themselves on a `WORKER_TEST_GUARD`
-mutex shared by both test modules, so the suite passes at default parallelism.
-The flag predates that guard and is now belt-and-braces. Reproduce CI exactly if
-you are chasing a CI-only failure; otherwise plain `cargo test` is fine.
-
-`build.rs` embeds `windows-app-manifest.xml` into **every** linked target rather
-than letting tauri-build attach it to the bin alone. Test binaries reference
-comctl32 v6 through tauri's tray/menu stack, and without the manifest Windows
-refuses to load them (`STATUS_ENTRYPOINT_NOT_FOUND`).
+Three traps live in the build and test setup, including one where `cargo build` and
+`pnpm tauri build --debug` write the same path and produce different binaries — read
+`docs/architecture/build-and-release.md` before losing an afternoon to any of them.
 
 ## Architecture
 
@@ -199,18 +173,14 @@ GitHub Releases with minisign verification. The updater checks on startup and su
 The surrounding code is the style guide. What follows is only what a reader would not infer from it.
 
 **Rust / Tauri.** Command payloads are typed `struct`s with `#[derive(Serialize)]` and
-`#[serde(rename_all = "camelCase")]`. Return stable machine-readable status codes alongside the
-human-readable message — never a bare string error, and never an ad-hoc code invented at the call
-site.
+`#[serde(rename_all = "camelCase")]`.
 
-**Error handling.** Never swallow a failure silently; an empty `catch {}` is a defect in this
-project, not a shortcut. Log with the `[LumaSync]` prefix. In Rust return coded context via a
-status object or `Result<_, String>`. Prefer an explicit fallback value for invalid external
-input over a silent default.
+**Comments.** Comment a non-obvious *why* — a gotcha, a workaround, an invariant, a subtle edge
+case — and nothing else. When the explanation runs long, it belongs in `docs/architecture/`, with
+the comment reduced to a line and a pointer. Never restate what the code plainly does.
 
-**Contracts and i18n.** `src/shared/contracts/**` is the source of truth for cross-layer shapes;
-preserve command and status-code semantics. i18n keys stay stable and scoped by feature, and
-EN + TR move together — a locale-parity test enforces it.
+Coded errors, never swallowing a failure, contracts as the source of truth, and EN + TR moving
+together are decisions rather than style — see `docs/architecture/contracts-and-state.md`.
 
 **Testing.** **Test execution is permitted in this project** — the global "do not run tests
 unless explicitly asked" rule does NOT apply here. `pnpm vitest run`, `cargo test`, and
@@ -293,9 +263,9 @@ Four things must stay true regardless of who does the work:
 
 ## Key Constraints
 
-- **macOS private API** is enabled (`macos-private-api: true`) for fullscreen calibration overlays across all displays.
-- Hue streaming interval: minimum 50 ms (20 Hz) — `HUE_SENDER_MIN_INTERVAL_MS` in `src-tauri/src/commands/hue/sender.rs`. Going faster makes the bridge throttle and drop the stream.
-- USB serial is gated by a **9-entry VID/PID allowlist** (`SUPPORTED_USB_DEVICE_ALLOWLIST` in `src-tauri/src/commands/device_connection.rs`): CH340, FTDI FT232R, CP2102, Arduino Uno R3+, Arduino Uno (early), PL2303, CH341, CP2104, FT232H. All ports are enumerated with `isSupported`; connect is blocked with `PORT_UNSUPPORTED` for the rest. Never hardcode the list elsewhere — read the constant.
-- Serial link: 115 200 baud, 8N1.
-- Window size: per-mode (see `UI_MODE_SIZES` / `UI_MODE_MIN_SIZES` in `src/shared/contracts/shell.ts`): full 900×620 (min 800×560), compact 320×480 (min 300×420).
-- `MACOSX_DEPLOYMENT_TARGET` is pinned to `12.3` at workflow level in both CI and release. Lowering it reintroduces the 1.5.2 dyld launch crash (issue #115).
+The ones that bite most often. Each is explained where it applies, under `docs/architecture/`:
+
+- **Hue streaming floor is 50 ms** — a protocol limit, not a tuning knob. Faster and the bridge throttles and drops the stream. (`hue.md`)
+- **USB serial is gated by a 9-entry VID/PID allowlist** — `SUPPORTED_USB_DEVICE_ALLOWLIST` in `src-tauri/src/commands/device_connection.rs`. Read the constant; never hardcode the list elsewhere. (`device-output.md`)
+- **`MACOSX_DEPLOYMENT_TARGET` is pinned to 12.3** — lowering it reintroduces the v1.5.2 launch crash. (`build-and-release.md`)
+- **The capture-to-output path has a per-frame budget** — a regression in it is a defect, not a tuning matter. (`capture-and-pipeline.md`)
