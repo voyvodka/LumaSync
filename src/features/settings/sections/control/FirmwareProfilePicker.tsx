@@ -51,7 +51,7 @@ import {
   FIRMWARE_PROFILE,
   type FirmwareProfile,
 } from "@/shared/contracts/device";
-import { useDeviceConnection } from "@/features/device/useDeviceConnection";
+import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
@@ -408,9 +408,9 @@ export interface FirmwareProfilePickerProps {
   initialProfile?: FirmwareProfile;
   /**
    * Override hook: when supplied, the picker uses this advertised profile
-   * instead of subscribing to `useDeviceConnection`. Tests use this to
-   * keep the controller singleton out of the render tree; production
-   * mounts leave it `undefined` so the picker subscribes itself.
+   * instead of subscribing to `useAdvertisedFirmwareProfile`. Tests use
+   * this to bypass the event bus; production mounts leave it `undefined`
+   * so the picker subscribes itself.
    */
   advertisedFirmwareProfile?: FirmwareProfile;
   /**
@@ -447,13 +447,11 @@ export function FirmwareProfilePicker({
     FirmwareProfile | null
   >(null);
 
-  // Subscribe to the device-connection controller so health-check updates
-  // re-render the picker. Tests pass `advertisedFromProp` to bypass this.
-  const deviceConnection = useDeviceConnection();
-  const advertised: FirmwareProfile | undefined =
-    advertisedFromProp ??
-    deviceConnection.latestHealthCheck?.advertisedFirmwareProfile ??
-    undefined;
+  // Read-only subscription to the last completed health check anywhere in
+  // the app — no controller mount, no port scan. Tests pass
+  // `advertisedFromProp` to bypass this.
+  const advertisedFromBus = useAdvertisedFirmwareProfile();
+  const advertised: FirmwareProfile | undefined = advertisedFromProp ?? advertisedFromBus;
 
   const v1Ref = useRef<HTMLButtonElement | null>(null);
   const adalightRef = useRef<HTMLButtonElement | null>(null);

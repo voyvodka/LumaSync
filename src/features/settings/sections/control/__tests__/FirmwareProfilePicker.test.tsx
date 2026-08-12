@@ -3,8 +3,8 @@
  *
  * The picker reads `advertisedFirmwareProfile` (forwarded by the parent
  * via the `advertisedFirmwareProfile` prop in tests; production flow
- * subscribes to `useDeviceConnection`) and disables the mismatched tile
- * with a localized tooltip. A power-user "Use anyway" toggle re-enables
+ * subscribes to `useAdvertisedFirmwareProfile`) and disables the mismatched
+ * tile with a localized tooltip. A power-user "Use anyway" toggle re-enables
  * the disabled tile, and committing a mismatched profile surfaces a
  * confirmation dialog with a "Don't ask again" checkbox.
  *
@@ -50,13 +50,11 @@ vi.mock("@/features/persistence/shellStore", () => ({
   },
 }));
 
-// ---- useDeviceConnection stub -------------------------------------------
-// The picker subscribes to the device-connection controller for the
-// `latestHealthCheck.advertisedFirmwareProfile` field. Tests bypass the
-// hook by passing the prop directly, but the hook still gets called so
-// it must return a state shape with `latestHealthCheck`.
-vi.mock("@/features/device/useDeviceConnection", () => ({
-  useDeviceConnection: () => ({ latestHealthCheck: null }),
+// ---- useAdvertisedFirmwareProfile stub -----------------------------------
+// Tests bypass the bus subscription by passing `advertisedFirmwareProfile`
+// directly, but the hook still gets called on every render.
+vi.mock("@/features/device/useAdvertisedFirmwareProfile", () => ({
+  useAdvertisedFirmwareProfile: () => undefined,
 }));
 
 beforeEach(() => {
