@@ -397,7 +397,6 @@ export const HUE_ZONE_COMMANDS = {
   ASSIGN_CHANNEL_TO_HUE_ZONE: "assign_channel_to_hue_zone",
 } as const;
 
-/** Union of the ids in {@link HUE_ZONE_COMMANDS}. */
 export type HueZoneCommandId =
   (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
 
@@ -448,7 +447,6 @@ export const HUE_ZONE_STATUS_CODES = {
   HUE_ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
 } as const;
 
-/** Union of the codes in {@link HUE_ZONE_STATUS_CODES}. */
 export type HueZoneStatusCode =
   (typeof HUE_ZONE_STATUS_CODES)[keyof typeof HUE_ZONE_STATUS_CODES];
 
@@ -511,7 +509,6 @@ export const CHANNEL_WRITEBACK_STATUS = {
   NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
 } as const;
 
-/** Union of the codes in {@link CHANNEL_WRITEBACK_STATUS}. */
 export type ChannelWritebackStatusCode =
   (typeof CHANNEL_WRITEBACK_STATUS)[keyof typeof CHANNEL_WRITEBACK_STATUS];
 

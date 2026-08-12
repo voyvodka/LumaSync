@@ -33,7 +33,6 @@ export const HUE_COMMANDS = {
   MIGRATE_CREDENTIALS: "migrate_hue_credentials",
 } as const;
 
-/** Union of the Hue command ids in {@link HUE_COMMANDS}. */
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
 
 // ---------------------------------------------------------------------------
@@ -180,7 +179,6 @@ export const HUE_STATUS = {
   MDNS_UNSUPPORTED: "HUE_MDNS_UNSUPPORTED",
 } as const;
 
-/** Union of the status codes in {@link HUE_STATUS}. */
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
 
 /** Coarse pairing-credential health used to decide whether to prompt a re-pair. */
@@ -190,7 +188,6 @@ export const HUE_CREDENTIAL_STATUS = {
   UNKNOWN: "unknown",
 } as const;
 
-/** Union of the values in {@link HUE_CREDENTIAL_STATUS}. */
 export type HueCredentialStatus =
   (typeof HUE_CREDENTIAL_STATUS)[keyof typeof HUE_CREDENTIAL_STATUS];
 
@@ -202,7 +199,6 @@ export const HUE_ONBOARDING_STEP = {
   READY: "ready",
 } as const;
 
-/** Union of the steps in {@link HUE_ONBOARDING_STEP}. */
 export type HueOnboardingStep =
   (typeof HUE_ONBOARDING_STEP)[keyof typeof HUE_ONBOARDING_STEP];
 
@@ -223,7 +219,6 @@ export const HUE_RUNTIME_STATES = {
   FAILED: "Failed",
 } as const;
 
-/** Union of the states in {@link HUE_RUNTIME_STATES}. */
 export type HueRuntimeState =
   (typeof HUE_RUNTIME_STATES)[keyof typeof HUE_RUNTIME_STATES];
 
@@ -236,7 +231,6 @@ export const HUE_RUNTIME_ACTION_HINT = {
   ADJUST_AREA: "adjust_area",
 } as const;
 
-/** Union of the hints in {@link HUE_RUNTIME_ACTION_HINT}. */
 export type HueRuntimeActionHint =
   (typeof HUE_RUNTIME_ACTION_HINT)[keyof typeof HUE_RUNTIME_ACTION_HINT];
 
@@ -247,7 +241,6 @@ export const HUE_RUNTIME_TRIGGER_SOURCE = {
   SYSTEM: "system",
 } as const;
 
-/** Union of the sources in {@link HUE_RUNTIME_TRIGGER_SOURCE}. */
 export type HueRuntimeTriggerSource =
   (typeof HUE_RUNTIME_TRIGGER_SOURCE)[keyof typeof HUE_RUNTIME_TRIGGER_SOURCE];
 
@@ -280,7 +273,6 @@ export const HUE_RUNTIME_STATUS = {
   START_NOOP_ALREADY_ACTIVE: "HUE_START_NOOP_ALREADY_ACTIVE",
 } as const;
 
-/** Union of the codes in {@link HUE_RUNTIME_STATUS}. */
 export type HueRuntimeStatusCode =
   (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
 
@@ -292,7 +284,6 @@ export const HUE_READINESS_REASON = {
   ACTIVE_STREAMER: "HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
 } as const;
 
-/** Union of the reasons in {@link HUE_READINESS_REASON}. */
 export type HueReadinessReason =
   (typeof HUE_READINESS_REASON)[keyof typeof HUE_READINESS_REASON];
 
@@ -307,7 +298,6 @@ export const HUE_SOLID_COLOR_STATUS = {
   APPLY_SKIPPED_NO_LIGHTS: "HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS",
 } as const;
 
-/** Union of the codes in {@link HUE_SOLID_COLOR_STATUS}. */
 export type HueSolidColorStatusCode =
   (typeof HUE_SOLID_COLOR_STATUS)[keyof typeof HUE_SOLID_COLOR_STATUS];
 
@@ -350,7 +340,6 @@ export const HUE_FAULT_CODES = {
   CFG_BRIDGE_IP_CHANGED: "HUE-CFG-02",
 } as const;
 
-/** Union of the codes in {@link HUE_FAULT_CODES}. */
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
 
 // ---------------------------------------------------------------------------
@@ -376,7 +365,6 @@ export const HUE_CREDENTIAL_BACKENDS = {
   PLAINTEXT_LEGACY: "plaintext-legacy",
 } as const;
 
-/** Union of the backends in {@link HUE_CREDENTIAL_BACKENDS}. */
 export type HueCredentialBackend =
   (typeof HUE_CREDENTIAL_BACKENDS)[keyof typeof HUE_CREDENTIAL_BACKENDS];
 
@@ -438,7 +426,6 @@ export const HUE_ROOM_ARCHETYPES = [
   "other",
 ] as const;
 
-/** Union of the archetypes in {@link HUE_ROOM_ARCHETYPES}. */
 export type HueRoomArchetype = (typeof HUE_ROOM_ARCHETYPES)[number];
 
 /** Sentinel returned when the bridge advertises an archetype the whitelist does not know. */

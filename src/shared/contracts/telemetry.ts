@@ -8,7 +8,6 @@ export const TELEMETRY_QUEUE_HEALTH = {
   CRITICAL: "critical",
 } as const;
 
-/** Union of the levels in {@link TELEMETRY_QUEUE_HEALTH}. */
 export type TelemetryQueueHealth =
   (typeof TELEMETRY_QUEUE_HEALTH)[keyof typeof TELEMETRY_QUEUE_HEALTH];
 

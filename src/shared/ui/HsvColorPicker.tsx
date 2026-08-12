@@ -212,7 +212,6 @@ export const DRAG_COMMIT_MIN_INTERVAL_MS = 50;
 // Component
 // ---------------------------------------------------------------------------
 
-/** Props for {@link HsvColorPicker}. */
 export interface HsvColorPickerProps {
   /** Hex color, e.g. `"#ffb020"`. */
   value: string;

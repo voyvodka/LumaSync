@@ -66,7 +66,6 @@ export const DISPLAY_OVERLAY_STATUS = {
   PREVIEW_SYNC_FAILED: "OVERLAY_PREVIEW_SYNC_FAILED",
 } as const;
 
-/** Union of the codes in {@link DISPLAY_OVERLAY_STATUS}. */
 export type DisplayOverlayStatusCode =
   (typeof DISPLAY_OVERLAY_STATUS)[keyof typeof DISPLAY_OVERLAY_STATUS];
 

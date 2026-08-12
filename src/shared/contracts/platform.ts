@@ -30,7 +30,6 @@ export const PLATFORM_COMMANDS = {
   OPEN_LOG_DIR: "open_log_dir",
 } as const;
 
-/** Union of the command ids in {@link PLATFORM_COMMANDS}. */
 export type PlatformCommandId =
   (typeof PLATFORM_COMMANDS)[keyof typeof PLATFORM_COMMANDS];
 
@@ -77,7 +76,6 @@ export const NOTIFICATION_RESULT_CODES = {
   UNSUPPORTED_OS: "NOTIF_UNSUPPORTED_OS",
 } as const;
 
-/** Union of the codes in {@link NOTIFICATION_RESULT_CODES}. */
 export type NotificationResultCode =
   (typeof NOTIFICATION_RESULT_CODES)[keyof typeof NOTIFICATION_RESULT_CODES];
 

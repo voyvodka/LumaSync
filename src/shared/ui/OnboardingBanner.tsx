@@ -48,7 +48,6 @@ export interface OnboardingBannerAction {
   ariaLabel?: string;
 }
 
-/** Props for {@link OnboardingBanner}. */
 export interface OnboardingBannerProps {
   /** Uppercase amber heading — short, e.g. "Calibration required". */
   title: string;

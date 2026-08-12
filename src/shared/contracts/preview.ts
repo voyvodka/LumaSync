@@ -43,7 +43,6 @@ export const PREVIEW_COMMANDS = {
   HIDE_CONTROL_POPUP: "hide_led_control_popup",
 } as const;
 
-/** Union of the ids in {@link PREVIEW_COMMANDS}. */
 export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_COMMANDS];
 
 // ---------------------------------------------------------------------------
@@ -63,7 +62,6 @@ export const LED_TEST_PATTERN_KIND = [
   "gamut",
 ] as const;
 
-/** Union of the kinds in {@link LED_TEST_PATTERN_KIND}. */
 export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
 
 /**
@@ -220,7 +218,6 @@ export const LED_TEST_STATUS = {
   PATTERN_RUNTIME_ERROR: "LED_TEST_PATTERN_RUNTIME_ERROR",
 } as const;
 
-/** Union of the codes in {@link LED_TEST_STATUS}. */
 export type LedTestStatusCode = (typeof LED_TEST_STATUS)[keyof typeof LED_TEST_STATUS];
 
 /** Status codes returned by the twin overlay open/close commands. */
@@ -244,7 +241,6 @@ export const TWIN_OVERLAY_STATUS = {
   UNSUPPORTED_PLATFORM_LIVE: "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
 } as const;
 
-/** Union of the codes in {@link TWIN_OVERLAY_STATUS}. */
 export type TwinOverlayStatusCode =
   (typeof TWIN_OVERLAY_STATUS)[keyof typeof TWIN_OVERLAY_STATUS];
 
@@ -260,7 +256,6 @@ export const CONTROL_POPUP_STATUS = {
   FAILED: "CONTROL_POPUP_FAILED",
 } as const;
 
-/** Union of the codes in {@link CONTROL_POPUP_STATUS}. */
 export type ControlPopupStatusCode =
   (typeof CONTROL_POPUP_STATUS)[keyof typeof CONTROL_POPUP_STATUS];
 
