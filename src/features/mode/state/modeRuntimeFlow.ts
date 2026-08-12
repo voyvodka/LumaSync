@@ -6,14 +6,12 @@ import {
   type LightingModeKind,
 } from "../model/contracts";
 
-/** Ordered plan for transitioning between lighting modes: whether to stop the current mode and what to start next. */
 export interface ModeTransitionResult {
   stopPrevious: boolean;
   startNext: Exclude<LightingModeKind, "off"> | null;
   steps: string[];
 }
 
-/** Always stops the previous mode first; starts the next mode unless it normalizes to "off". */
 export function resolveModeTransition(
   _current: LightingModeConfig | undefined,
   next: LightingModeConfig,
@@ -35,7 +33,6 @@ export function resolveModeTransition(
   };
 }
 
-/** Merges a mode change into shell state, keeping the previous solid/ambilight payloads when the new mode omits them. */
 export function mergeLightingModeIntoShellState(
   state: ShellState,
   nextMode: LightingModeConfig,

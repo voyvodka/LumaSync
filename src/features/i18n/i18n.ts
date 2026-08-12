@@ -21,7 +21,6 @@ import { I18N_DEFAULT_NS, I18N_NAMESPACES } from "./namespaces";
 
 /** Supported language codes (must match languagePolicy.SUPPORTED_LANGUAGES) */
 export const I18N_SUPPORTED_LANGUAGES = ["en", "tr"] as const;
-/** One value from {@link I18N_SUPPORTED_LANGUAGES}. */
 export type I18nLanguage = (typeof I18N_SUPPORTED_LANGUAGES)[number];
 
 /** Endonyms — a language names itself, so the picker reads to its own speaker

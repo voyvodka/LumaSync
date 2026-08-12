@@ -2,10 +2,8 @@ import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 const TARGET_ORDER: HueRuntimeTarget[] = ["usb", "hue"];
 
-/** Whether a runtime plan is starting or stopping output targets. */
 export type HueRuntimeAction = "start" | "stop";
 
-/** Inputs used to decide which USB/Hue targets to start or stop. */
 export interface HueRuntimePlanInput {
   action: HueRuntimeAction;
   selectedTargets: HueRuntimeTarget[];
@@ -15,7 +13,6 @@ export interface HueRuntimePlanInput {
   reconnectingTargets?: HueRuntimeTarget[];
 }
 
-/** Resolved start/stop plan: which targets to start, which to stop, and the ordered steps to execute. */
 export interface HueRuntimePlan {
   action: HueRuntimeAction;
   selectedTargets: HueRuntimeTarget[];
@@ -26,14 +23,12 @@ export interface HueRuntimePlan {
   steps: string[];
 }
 
-/** Outcome of a single start/stop command issued against one runtime target. */
 export interface HueTargetCommandResult {
   ok: boolean;
   code?: string;
   message?: string;
 }
 
-/** Aggregated result of applying a runtime plan's per-target command results. */
 export interface HueRuntimeTargetOutcome {
   outcome: "start_success" | "partial_start" | "start_failed" | "stop_success" | "stop_partial";
   activeTargets: HueRuntimeTarget[];
@@ -46,7 +41,6 @@ function normalizeTargets(targets: HueRuntimeTarget[]): HueRuntimeTarget[] {
   return TARGET_ORDER.filter((target) => targetSet.has(target));
 }
 
-/** Decides which targets to start or stop, and whether stopped targets are allowed to auto-reconnect later. */
 export function resolveHueRuntimePlan(input: HueRuntimePlanInput): HueRuntimePlan {
   const selectedTargets = normalizeTargets(input.selectedTargets);
   const activeBefore = normalizeTargets(input.activeTargets);
@@ -87,7 +81,6 @@ export function resolveHueRuntimePlan(input: HueRuntimePlanInput): HueRuntimePla
   };
 }
 
-/** Folds per-target command results into the plan to produce the new active-target set and an outcome code. */
 export function applyRuntimeResultToTargets(
   plan: HueRuntimePlan,
   resultByTarget: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>>,

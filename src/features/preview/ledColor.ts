@@ -14,22 +14,18 @@ function clampChannel(value: number): number {
   return value | 0;
 }
 
-/** Packs an `[r, g, b]` triple into a single `0xRRGGBB` integer, clamping each channel to `[0, 255]`. */
 export function packLedColor(rgb: readonly [number, number, number]): PackedLedColor {
   return (clampChannel(rgb[0]) << 16) | (clampChannel(rgb[1]) << 8) | clampChannel(rgb[2]);
 }
 
-/** Extracts the red channel from a packed colour. */
 export function unpackRed(packed: PackedLedColor): number {
   return (packed >> 16) & 0xff;
 }
 
-/** Extracts the green channel from a packed colour. */
 export function unpackGreen(packed: PackedLedColor): number {
   return (packed >> 8) & 0xff;
 }
 
-/** Extracts the blue channel from a packed colour. */
 export function unpackBlue(packed: PackedLedColor): number {
   return packed & 0xff;
 }
@@ -42,7 +38,6 @@ export function packedToCss(packed: PackedLedColor, alpha?: number): string {
   return alpha === undefined ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** Shared empty buffer instance so an empty frame keeps a stable reference. */
 export const EMPTY_PACKED_BUFFER: readonly PackedLedColor[] = Object.freeze([]);
 
 /**

@@ -25,7 +25,6 @@ interface SystemSectionProps {
   usbConnected: boolean;
 }
 
-/** System settings page: launch-at-login, language, updates, and about/telemetry. */
 export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetUpdaterState, usbConnected }: SystemSectionProps) {
   const { t, i18n } = useTranslation();
   const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";

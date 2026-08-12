@@ -47,14 +47,12 @@ import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPrese
 
 const TELEMETRY_POLL_INTERVAL_MS = 1000;
 
-/** Derived from a mode-guard reason: what the Lights UI should show/lock. */
 export interface LightsModeLockState {
   reason: ModeGuardReason | null;
   showReason: boolean;
   showOpenCalibrationAction: boolean;
 }
 
-/** Maps a mode-guard reason to the Lights section's lock/banner state. */
 export function getLightsModeLockState(reason: ModeGuardReason | null): LightsModeLockState {
   const calibrationRequired = reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
   return {
@@ -64,7 +62,6 @@ export function getLightsModeLockState(reason: ModeGuardReason | null): LightsMo
   };
 }
 
-/** Opens calibration when the lock state indicates that action is available. */
 export function triggerCalibrationFromLock(
   lockState: LightsModeLockState,
   openCalibration: () => void,
@@ -124,7 +121,6 @@ function ModeKeybindBadge({ action }: { action: KeybindAction }) {
   return <span className="kb">{definition.badge.join("")}</span>;
 }
 
-/** Lights settings page: mode selector, edge signal preview, scenes, and output dock. */
 export function LightsSection({
   mode,
   outputTargets,

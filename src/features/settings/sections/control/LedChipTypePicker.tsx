@@ -115,7 +115,6 @@ function ChipTile({
   );
 }
 
-/** Props for {@link LedChipTypePicker}. */
 export interface LedChipTypePickerProps {
   /** Initial chip type from shellStore — parent hydrates before first paint. */
   initialChipType?: LedChipType;
@@ -128,7 +127,6 @@ export interface LedChipTypePickerProps {
   onChipTypeChange?: (next: LedChipType) => void;
 }
 
-/** Radio picker for the LED chip type (WS2812B GRB vs SK6812 RGBW). */
 export function LedChipTypePicker({
   initialChipType,
   firmwareProfile,

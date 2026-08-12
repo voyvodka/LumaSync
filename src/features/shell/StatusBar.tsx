@@ -40,20 +40,15 @@ import {
 } from "@/shared/contracts/shell";
 import { useRuntimeTelemetry } from "../telemetry/hooks/useRuntimeTelemetry";
 
-/** Status bar height in pixels for full mode. */
 export const STATUS_BAR_HEIGHT_FULL_PX = 24;
-/** Status bar height in pixels for compact mode. */
 export const STATUS_BAR_HEIGHT_COMPACT_PX = 22;
 
-/** Status bar height in pixels for the given UI mode. */
 export function statusBarHeightPx(uiMode: "full" | "compact"): number {
   return uiMode === "compact" ? STATUS_BAR_HEIGHT_COMPACT_PX : STATUS_BAR_HEIGHT_FULL_PX;
 }
 
-/** Color/urgency class driving a status pill's dot + value styling. */
 export type StatusKind = "ok" | "active" | "idle" | "off";
 
-/** One status pill rendered in the StatusBar (CAP / USB / HUE / …). */
 export interface StatusItem {
   /** Short uppercase label, e.g. "CAP", "USB", "HUE". */
   label: string;
@@ -93,7 +88,6 @@ interface StatusBarProps {
 const FPS_GREEN_THRESHOLD = 45;
 const FPS_AMBER_THRESHOLD = 25;
 
-/** Bottom chrome row showing subsystem status pills, keybind hints, and version. */
 export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarProps) {
   const { t } = useTranslation();
   const isCompact = uiMode === "compact";

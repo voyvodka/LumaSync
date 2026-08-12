@@ -31,7 +31,6 @@ interface SolidOverride {
   b: number;
 }
 
-/** Maps a lighting mode config to its accent theme (color/gradient tokens). */
 export function resolveAccent(
   lightingMode: LightingModeConfig,
   solidOverride?: SolidOverride,
@@ -46,7 +45,6 @@ export function resolveAccent(
   return solidAccent(source.r, source.g, source.b);
 }
 
-/** Writes the resolved accent theme onto document root CSS variables and returns it. */
 export function useAccentTheme(
   lightingMode: LightingModeConfig,
   solidOverride?: SolidOverride,

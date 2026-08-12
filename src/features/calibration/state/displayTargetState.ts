@@ -15,7 +15,6 @@ interface CreateDisplayTargetStateDeps {
   closeDisplayOverlay: (displayId: DisplayId) => Promise<DisplayOverlayCommandResult>;
 }
 
-/** Point-in-time view of the calibration overlay's display selection and connection health. */
 export interface DisplayTargetSnapshot {
   displays: DisplayInfo[];
   selectedDisplayId: DisplayId | null;
@@ -26,7 +25,6 @@ export interface DisplayTargetSnapshot {
   isSwitching: boolean;
 }
 
-/** Controller that tracks the selected/active calibration display and opens or closes its fullscreen overlay. */
 export interface DisplayTargetState {
   getSnapshot: () => DisplayTargetSnapshot;
   setDisplays: (displays: DisplayInfo[]) => DisplayTargetSnapshot;
@@ -64,7 +62,6 @@ function toBlockedSnapshot(
   };
 }
 
-/** Builds the display target controller, serializing overlay switches so concurrent calls share one in-flight transition. */
 export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): DisplayTargetState {
   let snapshot: DisplayTargetSnapshot = { ...DEFAULT_SNAPSHOT };
   let inFlightSwitch: Promise<DisplayTargetSnapshot> | null = null;

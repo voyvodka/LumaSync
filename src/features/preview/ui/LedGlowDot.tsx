@@ -14,7 +14,6 @@ import { memo } from "react";
 
 import { packedToCss, type PackedLedColor } from "../ledColor";
 
-/** Props for `LedGlowDot`. */
 export interface LedGlowDotProps {
   /** Normalized 0..1 X across the viewport. */
   x: number;
@@ -29,7 +28,6 @@ export interface LedGlowDotProps {
   size: number;
 }
 
-/** A single glowing dot on the digital-twin overlay, positioned by normalized coordinates. */
 export const LedGlowDot = memo(function LedGlowDot({ x, y, color, size }: LedGlowDotProps) {
   return (
     <span

@@ -33,12 +33,10 @@ const ERROR_CODES: ReadonlySet<string> = new Set<LedTestErrorCode>([
   LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
 ]);
 
-/** Narrows a status code to the subset that represents a genuine test-pattern failure. */
 export function isTestPatternErrorCode(code: string): code is LedTestErrorCode {
   return ERROR_CODES.has(code);
 }
 
-/** One test-pattern start request: pattern, brightness, speed, and output targets. */
 export interface TestPatternRunRequest {
   pattern: LedTestPattern;
   brightness: number;
@@ -46,7 +44,6 @@ export interface TestPatternRunRequest {
   targets?: HueRuntimeTarget[];
 }
 
-/** Options for `useTestPatternRunner`. */
 export interface UseTestPatternRunnerOptions {
   /** Called after every resolved start, with the request that produced it. */
   onResult: (result: LedTestPatternResult, request: TestPatternRunRequest) => void;
@@ -57,7 +54,6 @@ export interface UseTestPatternRunnerOptions {
   minIntervalMs?: number;
 }
 
-/** Controller returned by `useTestPatternRunner`. */
 export interface TestPatternRunner {
   /** Discrete gesture — dispatch now, clearing any error latch. */
   apply: (request: TestPatternRunRequest) => void;
@@ -71,7 +67,6 @@ export interface TestPatternRunner {
   settled: () => Promise<void>;
 }
 
-/** Serialised, throttled driver for starting/stopping LED test patterns. */
 export function useTestPatternRunner({
   onResult,
   start = startLedTestPattern,

@@ -36,7 +36,6 @@ import {
 import { useLedPreviewFrame } from "../state/useLedPreviewFrame";
 import { LedGlowDot } from "./LedGlowDot";
 
-/** Props for `LedTwinOverlay`. */
 export interface LedTwinOverlayProps {
   /** Display this overlay mirrors. Threaded from the Rust-injected global. */
   displayId?: string;
@@ -98,7 +97,6 @@ function edgeGradient(track: EdgeTrack, packed: readonly PackedLedColor[]): stri
   return `linear-gradient(${track.direction}, ${stops.join(", ")})`;
 }
 
-/** Renders the click-through digital-twin overlay window — see module docs above for the correctness contract. */
 export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProps) {
   const { t } = useTranslation();
   const [calibration, setCalibration] = useState<LedCalibrationConfig | null>(null);

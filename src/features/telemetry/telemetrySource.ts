@@ -10,14 +10,12 @@
 import { getFullTelemetrySnapshot } from "./telemetryApi";
 import type { FullTelemetrySnapshot } from "./model/contracts";
 
-/** Shared poll loop's current snapshot, error, and loading state. */
 export interface TelemetrySourceState {
   snapshot: FullTelemetrySnapshot | null;
   error: Error | null;
   isLoading: boolean;
 }
 
-/** Callback invoked with the latest state on every telemetry tick. */
 export type TelemetrySourceListener = (state: TelemetrySourceState) => void;
 
 const INITIAL_STATE: TelemetrySourceState = {

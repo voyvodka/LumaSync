@@ -51,21 +51,18 @@ export async function setStartupTrayChecked(_checked: boolean): Promise<void> {}
 // Tray quick action event listeners
 // ---------------------------------------------------------------------------
 
-/** Listen for the tray "Lights off" quick action. */
 export async function listenTrayLightsOff(
   onTrigger: () => void
 ): Promise<UnlistenFn> {
   return listen("tray:lights-off", () => onTrigger());
 }
 
-/** Listen for the tray "Resume last mode" quick action. */
 export async function listenTrayResumeLastMode(
   onTrigger: () => void
 ): Promise<UnlistenFn> {
   return listen("tray:resume-last-mode", () => onTrigger());
 }
 
-/** Listen for the tray "Solid color" quick action. */
 export async function listenTraySolidColor(
   onTrigger: () => void
 ): Promise<UnlistenFn> {

@@ -42,7 +42,6 @@ import {
   stepIndex,
 } from "../state/onboardingState";
 
-/** Props for {@link OnboardingFlow}. */
 export interface OnboardingFlowProps {
   /** True ⇒ flow does not render at all (persisted-flag short-circuit). */
   hasCompleted: boolean;
@@ -56,7 +55,6 @@ export interface OnboardingFlowProps {
   onComplete: () => void;
 }
 
-/** Drives the first-run inline onboarding banner through its 3-step guard sequence. */
 export function OnboardingFlow({
   hasCompleted,
   guards,

@@ -69,7 +69,6 @@ function parseReleaseNotes(body: string | undefined): Note[] {
   return notes;
 }
 
-/** Modal dialog for the auto-updater: available/downloading/installing/error states. */
 export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModalProps) {
   const { t } = useTranslation();
 

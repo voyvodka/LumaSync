@@ -39,7 +39,6 @@ const EDGE_INSET = 0.022;
 /** Padding from each corner so adjacent edges do not collide visually. */
 const CORNER_INSET = 0.05;
 
-/** One strip LED's normalized perimeter position on the twin overlay. */
 export interface TwinLedPosition {
   /**
    * Strip index — `twin LED #N === strip LED #N`. Indexes directly into the

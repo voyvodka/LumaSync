@@ -22,7 +22,6 @@ import { DEFAULT_SHELL_STATE } from "@/shared/contracts/shell";
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Public read/write/reset API for persisted shell state. */
 export const shellStore = {
   /**
    * Load the full persisted shell state.

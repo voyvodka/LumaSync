@@ -93,7 +93,6 @@ function fromHex(hex: string): { r: number; g: number; b: number } {
   };
 }
 
-/** Root of the `led-control-popup` webview — mode strip, colour editor, and test-pattern picker. */
 export function ControlPopupApp() {
   const { t } = useTranslation();
   const { mode, preview } = useLightingModeSync();

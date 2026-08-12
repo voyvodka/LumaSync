@@ -43,7 +43,6 @@ interface LegacyLedSegmentCounts {
   bottomRight: number;
 }
 
-/** Total LED count across all four edges. */
 export function sumSegmentCounts(counts: LedSegmentCounts): number {
   return counts.top + counts.right + counts.bottom + counts.left;
 }
@@ -68,7 +67,6 @@ function toVisualPreset(value: unknown): LedVisualPreset {
   return value === "subtle" ? "subtle" : "vivid";
 }
 
-// Migrates legacy bottomLeft/bottomRight fields into the unified `bottom` count.
 function normalizeCounts(value: unknown): LedSegmentCounts {
   const source = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
@@ -95,7 +93,6 @@ function normalizeCounts(value: unknown): LedSegmentCounts {
   };
 }
 
-/** Maps a raw/legacy start-anchor value onto the current `LedStartAnchor` union, defaulting to `top-start`. */
 export function normalizeStartAnchor(value: unknown): LedStartAnchor {
   if (typeof value !== "string") {
     return "top-start";
@@ -144,8 +141,6 @@ function firstNonZeroEdge(counts: LedSegmentCounts): LedSegmentKey | null {
   return null;
 }
 
-// Redirects an anchor to a populated edge if its own edge count dropped to
-// zero, and collapses a stale bottom-gap anchor once the gap is closed.
 function healStartAnchor(
   anchor: LedStartAnchor,
   counts: LedSegmentCounts,
@@ -166,7 +161,6 @@ function healStartAnchor(
   return anchor;
 }
 
-/** Parses and normalizes an unknown/persisted value into a `LedCalibrationConfig`, or `undefined` if not object-shaped. */
 export function normalizeLedCalibrationConfig(input?: unknown): LedCalibrationConfig | undefined {
   if (!input || typeof input !== "object") {
     return undefined;

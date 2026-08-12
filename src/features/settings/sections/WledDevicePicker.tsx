@@ -45,7 +45,6 @@ type RowState =
   | { kind: "busy"; action: "connect" | "test" }
   | { kind: "result"; status: WledCommandStatus };
 
-/** Discovers and connects to WLED network-LED devices for the active sink. */
 export function WledDevicePicker({
   activeWledIp = null,
   onConnected,

@@ -73,7 +73,6 @@ const MOCK_AREA_GROUPS: MockAreaGroup[] = [
   },
 ];
 
-/** DEV-only mock harness for the Hue area/channel-map step UI — see file header. */
 export function HueAreaPreview() {
   const { t } = useTranslation();
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);

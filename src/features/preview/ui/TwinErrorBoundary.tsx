@@ -27,7 +27,6 @@ interface TwinErrorBoundaryState {
   hasError: boolean;
 }
 
-/** Error boundary for the twin overlay that degrades to an invisible window instead of an opaque fallback card. */
 export class TwinErrorBoundary extends Component<
   TwinErrorBoundaryProps,
   TwinErrorBoundaryState

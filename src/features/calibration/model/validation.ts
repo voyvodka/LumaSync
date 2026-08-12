@@ -1,7 +1,6 @@
 import type { LedCalibrationConfig } from "./contracts";
 import { sumSegmentCounts } from "./contracts";
 
-/** Machine-readable reasons a calibration config fails validation. */
 export type CalibrationValidationCode =
   | "COUNTS_REQUIRED"
   | "SEGMENT_NEGATIVE"
@@ -10,19 +9,16 @@ export type CalibrationValidationCode =
   | "BOTTOM_MISSING_EXCEEDS_BOTTOM"
   | "NO_LEDS_CONFIGURED";
 
-/** A single validation failure, naming the offending field. */
 export interface CalibrationValidationError {
   code: CalibrationValidationCode;
   field: string;
 }
 
-/** Outcome of validating a calibration config, with all accumulated errors (not just the first). */
 export interface CalibrationValidationResult {
   ok: boolean;
   errors: CalibrationValidationError[];
 }
 
-/** Checks a calibration config's segment counts, stand-gap, and total for consistency before save. */
 export function validateCalibrationConfig(_config: LedCalibrationConfig): CalibrationValidationResult {
   const errors: CalibrationValidationError[] = [];
 

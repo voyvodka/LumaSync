@@ -69,7 +69,6 @@ const FALLBACK_COPY = {
   hideDetails: "Hide details",
 } as const;
 
-/** Catches uncaught render errors and shows a recovery card instead of a white screen. */
 export class GlobalErrorBoundary extends Component<Props, State> {
   state: State = {
     hasError: false,

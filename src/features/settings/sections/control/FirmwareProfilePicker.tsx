@@ -403,7 +403,6 @@ function OverrideWarningDialog({
   );
 }
 
-/** Props for {@link FirmwareProfilePicker}. */
 export interface FirmwareProfilePickerProps {
   /** Initial profile from shellStore — parent hydrates before first paint. */
   initialProfile?: FirmwareProfile;
@@ -430,7 +429,6 @@ export interface FirmwareProfilePickerProps {
   onProfileChange?: (next: FirmwareProfile) => void;
 }
 
-/** Radio picker for the serial protocol (LumaSync v1 vs Adalight), with firmware-mismatch guard. */
 export function FirmwareProfilePicker({
   initialProfile,
   advertisedFirmwareProfile: advertisedFromProp,

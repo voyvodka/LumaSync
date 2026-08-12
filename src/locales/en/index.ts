@@ -11,7 +11,6 @@ import telemetry from "./telemetry";
 import tray from "./tray";
 import updater from "./updater";
 
-/** English translation resources, keyed by i18next namespace. */
 export const en = {
   calibration,
   common,

@@ -33,7 +33,6 @@ import { shellStore } from "../persistence/shellStore";
 /** Languages shipped in Phase 1 locale bundles */
 export const SUPPORTED_LANGUAGES = ["en", "tr"] as const;
 
-/** One value from {@link SUPPORTED_LANGUAGES}. */
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 /** Default language enforced by I18N-02 for first launch */

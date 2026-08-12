@@ -15,7 +15,6 @@ import {
   type LedChipType,
 } from "@/shared/contracts/device";
 
-/** The three top-level lighting modes the app can be in. */
 export const LIGHTING_MODE_KIND = {
   OFF: "off",
   AMBILIGHT: "ambilight",
@@ -71,10 +70,8 @@ export interface EdgeSignalPayload {
   displayId?: DisplayId;
 }
 
-/** Union of the kinds in {@link LIGHTING_MODE_KIND}. */
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
 
-/** RGB + brightness payload driving Solid mode. */
 export interface SolidColorPayload {
   r: number;
   g: number;
@@ -82,7 +79,6 @@ export interface SolidColorPayload {
   brightness: number;
 }
 
-/** Tuning payload driving Ambilight mode's capture-to-light pipeline. */
 export interface AmbilightPayload {
   brightness: number;
   blackBorderDetection?: boolean;
@@ -110,7 +106,6 @@ export interface AmbilightPayload {
   hueIntensityPreset?: HueIntensityPreset;
 }
 
-/** Full lighting mode state persisted to the shell store and sent to the Rust worker. */
 export interface LightingModeConfig {
   kind: LightingModeKind;
   solid?: SolidColorPayload;
@@ -169,7 +164,6 @@ export interface LightingModeChangedPayload {
   active: boolean;
 }
 
-/** Type guard for the three valid `LightingModeKind` values. */
 export function isLightingModeKind(value: unknown): value is LightingModeKind {
   return value === LIGHTING_MODE_KIND.OFF
     || value === LIGHTING_MODE_KIND.AMBILIGHT
@@ -188,7 +182,6 @@ function clampFloat(value: unknown, min: number, max: number, fallback: number):
   return Math.max(min, Math.min(max, toFiniteNumber(value, fallback)));
 }
 
-/** Clamps a partial solid-color payload into a fully valid one, defaulting to full white at full brightness. */
 export function normalizeSolidColorPayload(input?: Partial<SolidColorPayload>): SolidColorPayload {
   return {
     r: clampInt(input?.r, 0, 255, 255),
@@ -206,7 +199,6 @@ function normalizeLightingSmoothingPreset(
     : undefined;
 }
 
-/** Clamps a partial ambilight payload into a fully valid one, resolving the smoothing preset from either field. */
 export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): AmbilightPayload {
   // Resolve the preset from either the new or the deprecated field so
   // legacy persisted payloads continue to survive normalization without
@@ -255,7 +247,6 @@ function normalizeChipType(value: unknown): LedChipType | undefined {
     : undefined;
 }
 
-/** Normalizes a partial/persisted lighting mode config into a fully valid one for the given kind. */
 export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>): LightingModeConfig {
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
   const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
@@ -303,7 +294,6 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
   };
 }
 
-/** Falls back to USB-only output when no runtime targets are selected. */
 export function resolveDefaultTargets(targets?: HueRuntimeTarget[]): HueRuntimeTarget[] {
   return targets && targets.length > 0 ? targets : ["usb"];
 }

@@ -36,7 +36,6 @@ import {
   type SerialConnectionStatus,
 } from "./deviceConnectionApi";
 
-/** Injectable dependencies for `useUsbConnectionStatus`, defaulting to the real bus + Tauri fetch. */
 export interface UseUsbConnectionStatusDeps {
   /** Inject for tests; defaults to the process-wide singleton bus. */
   connectionEvents?: ConnectionEventBus;
@@ -44,7 +43,6 @@ export interface UseUsbConnectionStatusDeps {
   getStatus?: () => Promise<SerialConnectionStatus>;
 }
 
-/** Read-only view of the currently bound USB serial port. */
 export interface UsbConnectionSnapshot {
   /** Currently connected port name; null when idle / disconnected. */
   connectedPort: string | null;
