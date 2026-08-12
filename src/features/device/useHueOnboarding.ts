@@ -342,8 +342,8 @@ async function persistResumeState(step: HueStep): Promise<void> {
   await shellStore.save({ hueOnboardingStep: mapped });
 }
 
-/** One-shot cleanup for pre-keychain installs. Anything short of a proven
- * keychain write leaves the plaintext copy alone; the next boot retries. */
+/** One-shot cleanup for pre-keychain installs; deliberately not a store
+ * migration — see docs/architecture/hue.md. */
 async function migrateStoredCredentialsToKeychain(storedState: ShellState): Promise<void> {
   if (storedState.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN) {
     return;
@@ -738,8 +738,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       }));
 
       if (response.credentials) {
-        // Only an explicit "keychain" grants permission to drop the PSK; absent
-        // and unrecognised backends must keep the plaintext copy usable.
+        // hueAppKey deliberately stays on disk — see docs/architecture/hue.md.
         const keychainOwnsPsk =
           response.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;
 
@@ -927,8 +926,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       }
 
       const savedBridge = storedState.lastHueBridge ?? null;
-      // App key alone: with the PSK in the keychain there is no client key on
-      // disk, and demanding both would strand the user on NEEDS_REPAIR.
+      // App key alone; demanding both strands the user — docs/architecture/hue.md.
       const savedCredentials = storedState.hueAppKey
         ? {
             username: storedState.hueAppKey,

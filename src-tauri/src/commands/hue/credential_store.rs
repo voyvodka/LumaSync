@@ -316,8 +316,8 @@ pub fn migrate_hue_credentials_to_keychain(
         return MigrationOutcome::Failed;
     }
 
-    // The caller deletes the plaintext copy on the strength of this outcome, so
-    // prove the pair is readable back before claiming it. Never delete first.
+    // Rollback deletes BOTH halves, and the read-back is not optional —
+    // see docs/architecture/hue.md (keychain rollback).
     match resolve_hue_credentials(store, "", "") {
         Some(resolved)
             if resolved.username == username

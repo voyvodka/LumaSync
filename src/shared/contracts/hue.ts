@@ -507,8 +507,8 @@ export interface HuePairingCredentials {
 export interface HuePairBridgeResponse {
   status: HueCommandStatus;
   credentials: HuePairingCredentials | null;
-  /** Absent or unrecognised (Rust can emit `"noop"`) MUST read as legacy: test
-   * `=== "keychain"` explicitly, the only value that permits deleting the PSK. */
+  /** Only the literal `"keychain"` licenses deleting the plaintext PSK; absent
+   * and unrecognised read as legacy — see docs/architecture/hue.md. */
   credentialStorageBackend?: HueCredentialBackend;
 }
 

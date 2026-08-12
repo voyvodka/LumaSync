@@ -610,9 +610,8 @@ describe("migrateShellState — cross-step contract", () => {
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  // Deliberately negative: credential cleanup is NOT a migration concern.
-  // migrateShellState is pure and cannot reach the OS keychain, so it can
-  // never prove the keychain holds a copy before deleting the plaintext one.
+  // Deliberately negative: credential cleanup is not a migration concern —
+  // see docs/architecture/hue.md.
   it("never touches the Hue credential fields at any schema version", () => {
     for (let version = 1; version <= SHELL_STATE_SCHEMA_VERSION; version += 1) {
       const state = {
