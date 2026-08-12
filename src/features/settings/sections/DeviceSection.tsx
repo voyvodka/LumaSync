@@ -12,9 +12,10 @@ import type {
 import { shellStore } from "@/features/persistence/shellStore";
 import { listDisplays } from "@/features/calibration/calibrationApi";
 import { buildDeviceStatusCard } from "@/features/device/deviceStatusCard";
-import { buildHueRuntimeStatusCard } from "@/features/device/hueRuntimeStatusCard";
+import { deriveHueBridgeCardState } from "@/features/hue/model/hueBridgeCardState";
+import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import { useDeviceConnection } from "@/features/device/useDeviceConnection";
-import { useHueOnboarding } from "@/features/device/useHueOnboarding";
+import { useHueOnboarding } from "@/features/hue/useHueOnboarding";
 import { stopHue } from "@/features/mode/modeApi";
 import { HueChannelMapPanel } from "./HueChannelMapPanel";
 import { WledDevicePicker } from "./WledDevicePicker";
@@ -150,31 +151,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     status: runtimeStatus,
   });
 
-  // ── Hue bridge card state derivation ──────────────────────────────────
-  const hueBridgeState = selectedBridgeId
-    ? (() => {
-        if (runtimeStatus?.code === "HUE_STOP_TIMEOUT_PARTIAL") return "stopPartial" as const;
-        if (runtimeStatus?.code === "CONFIG_NOT_READY_GATE_BLOCKED") return "gateBlocked" as const;
-        if (runtimeStatus?.state === "Running") return "streaming" as const;
-        if (runtimeStatus?.state === "Reconnecting" || runtimeStatus?.code?.startsWith("TRANSIENT_")) return "reconnecting" as const;
-        if (bridgeUnreachable) return "offline" as const;
-        if (credentialState === "needs_repair" && !isHuePairing) {
-          // A rejected link button is a pairing step the user can still complete —
-          // never surface it as "credentials expired" (#167).
-          if (hueStatus?.code === "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED") return "pairingLinkButton" as const;
-          return hueStatus?.code === "HUE_PAIRING_FAILED" ? "pairingFailed" as const : "authError" as const;
-        }
-        if (isHuePairing) {
-          return hueStatus?.code === "HUE_PAIRING_PENDING_LINK_BUTTON" ? "pairingLinkButton" as const : "pairing" as const;
-        }
-        if (credentialState === "valid") {
-          if (!selectedAreaId) return "areaSelect" as const;
-          if (isReadinessStale) return "stale" as const;
-          return "idle" as const;
-        }
-        return "pairing" as const;
-      })()
-    : null;
+  const hueBridgeState = deriveHueBridgeCardState({
+    selectedBridgeId,
+    runtimeStatus,
+    hueStatus,
+    credentialState,
+    bridgeUnreachable,
+    isPairing: isHuePairing,
+    selectedAreaId,
+    isReadinessStale,
+  });
 
   const hueIsDiscoveryFailed = !isHueDiscovering && !selectedBridgeId && hueStatus?.code === "HUE_DISCOVERY_FAILED";
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;

@@ -4,7 +4,8 @@ Everything about driving a Hue bridge that the code cannot tell you itself. Seve
 protocol limits rather than preferences — changing them breaks the stream rather than tuning it.
 
 Implementation lives in `src-tauri/src/commands/hue/`, the contract in
-`src/shared/contracts/hue.ts`. **Hue has no feature module** — its UI is in
+`src/shared/contracts/hue.ts`, and the frontend state in `src/features/hue/`.
+**That module holds no UI** — the Hue screens are in
 `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`.
 
 ## Decisions

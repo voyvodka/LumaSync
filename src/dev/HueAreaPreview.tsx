@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HueChannelMapPanel, MiniSpatialPreview } from "../features/settings/sections/HueChannelMapPanel";
-import type { HueAreaChannelInfo } from "../features/device/hueOnboardingApi";
+import type { HueAreaChannelInfo } from "../features/hue/hueOnboardingApi";
 
 /** 10 channels spread around the TV — varied positions for thorough spatial testing. */
 const MOCK_CHANNELS: HueAreaChannelInfo[] = [

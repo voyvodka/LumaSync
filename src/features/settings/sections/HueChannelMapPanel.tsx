@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
-import type { HueAreaChannelInfo } from "@/features/device/hueOnboardingApi";
+import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import {
   CHANNEL_WRITEBACK_STATUS,
   type HueChannelPlacement,

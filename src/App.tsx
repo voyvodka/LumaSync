@@ -41,11 +41,11 @@ import {
   stopLighting,
   stopHue as stopHueCommand,
 } from "./features/mode/modeApi";
-import { validateHueCredentials } from "./features/device/hueOnboardingApi";
+import { validateHueCredentials } from "./features/hue/hueOnboardingApi";
 import {
   invalidateHueStreamStatus,
   readHueStreamStatus,
-} from "./features/device/hueReadCache";
+} from "./features/hue/hueReadCache";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,

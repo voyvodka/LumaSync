@@ -138,7 +138,7 @@ Each module uses some of `ui/` (React components), `state/` (state machines and 
 
 Two things the directory listing will not tell you:
 
-- **Hue has no feature module.** Its UI lives in `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`, and its contract in `src/shared/contracts/hue.ts`.
+- **`hue` holds no UI.** The module is state, model, and the `invoke()` bridge; the Hue screens live in `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`, and the contract in `src/shared/contracts/hue.ts`.
 - **`onboarding` does not include the room map.** That editor is an advanced surface most users skip; first run must work without it.
 
 ### Rust command modules (`src-tauri/src/commands/`)
@@ -196,9 +196,14 @@ Run after any change, lightest checks first:
 1. `pnpm typecheck`
 2. `pnpm vitest run <changed-test-or-folder>`
 3. `pnpm verify:shell-contracts` (if contracts/commands touched)
-4. `pnpm check:rust` (if Rust touched)
-5. `cargo fmt --all -- --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test -- --test-threads=1` (if Rust touched — CI enforces all three, clippy at deny level)
-6. `pnpm build` (integration confidence)
+4. `pnpm check:i18n` (if a file that reads translation keys was added, moved, or **deleted** — deleting a file orphans every key it alone referenced, and the orphan ratchet fails CI on it)
+5. `pnpm check:rust` (if Rust touched)
+6. `cargo fmt --all -- --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test -- --test-threads=1` (if Rust touched — CI enforces all three, clippy at deny level)
+7. `pnpm build` (integration confidence)
+
+Before opening a PR, run `pnpm check:all` — it is what CI runs, and it is a superset of steps 1, 3,
+4 and 5. Running the four individually is not the same thing; that gap is how a green local tree
+still fails the build.
 
 ## Debugging: Live Log Analysis
 
