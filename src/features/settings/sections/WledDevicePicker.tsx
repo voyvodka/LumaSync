@@ -63,7 +63,7 @@ export function WledDevicePicker({
     const v4 = /^(\d{1,3}\.){3}\d{1,3}$/;
     const v6 = /^[0-9a-fA-F:]+$/;
     if (!v4.test(value) && !v6.test(value)) {
-      return t("devicesPage.wled.invalidIp");
+      return t("device:page.wled.invalidIp");
     }
     return null;
   }, [t]);
@@ -145,9 +145,9 @@ export function WledDevicePicker({
     <div className="lm-device-cat-body">
       <div className="lm-device-head">
         <div>
-          <h1>{t("devicesPage.wled.title")}</h1>
+          <h1>{t("device:page.wled.title")}</h1>
           <div className="lm-device-head-sub">
-            {t("devicesPage.wled.subtitle")}
+            {t("device:page.wled.subtitle")}
           </div>
         </div>
       </div>
@@ -156,10 +156,10 @@ export function WledDevicePicker({
       <div className="lm-hue-ip-form">
         <div>
           <div className="lm-hue-ip-form-title">
-            {t("devicesPage.wled.manualIp")}
+            {t("device:page.wled.manualIp")}
           </div>
           <div className="lm-hue-ip-form-sub">
-            {t("devicesPage.wled.manualIpHint")}
+            {t("device:page.wled.manualIpHint")}
           </div>
         </div>
         <div className="lm-hue-ip-row">
@@ -169,7 +169,7 @@ export function WledDevicePicker({
             spellCheck={false}
             className="lm-hue-ip-input"
             value={manualIp}
-            placeholder={t("devicesPage.wled.manualIpPlaceholder")}
+            placeholder={t("device:page.wled.manualIpPlaceholder")}
             onChange={(e) => setManualIp(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !isDiscovering) {
@@ -177,7 +177,7 @@ export function WledDevicePicker({
                 void handleDiscover();
               }
             }}
-            aria-label={t("devicesPage.wled.manualIp")}
+            aria-label={t("device:page.wled.manualIp")}
           />
           <button
             type="button"
@@ -187,8 +187,8 @@ export function WledDevicePicker({
             onClick={() => { void handleDiscover(); }}
           >
             {isDiscovering
-              ? t("devicesPage.wled.discovering")
-              : t("devicesPage.wled.discoverAction")}
+              ? t("device:page.wled.discovering")
+              : t("device:page.wled.discoverAction")}
           </button>
         </div>
         {manualIpError && <div className="lm-hue-ip-error">{manualIpError}</div>}
@@ -216,8 +216,8 @@ export function WledDevicePicker({
       <div className="lm-device-grid mt-3">
         {devices.length === 0 && !isDiscovering && discoveryStatus && (
           <div className="lm-device-empty">
-            <h3>{t("devicesPage.wled.empty.title")}</h3>
-            <p>{t("devicesPage.wled.empty.body")}</p>
+            <h3>{t("device:page.wled.empty.title")}</h3>
+            <p>{t("device:page.wled.empty.body")}</p>
           </div>
         )}
         {devices.map((device) => {
@@ -243,11 +243,11 @@ export function WledDevicePicker({
                     <span>{device.name ?? device.ip}</span>
                     {isActive ? (
                       <span className="lm-dcard-pill is-streaming">
-                        {t("devicesPage.wled.pill.connected")}
+                        {t("device:page.wled.pill.connected")}
                       </span>
                     ) : (
                       <span className="lm-dcard-pill is-warn">
-                        {t("devicesPage.wled.pill.discovered")}
+                        {t("device:page.wled.pill.discovered")}
                       </span>
                     )}
                   </div>
@@ -257,14 +257,14 @@ export function WledDevicePicker({
               <div className="lm-dcard-body">
                 <div className="lm-dcard-cell">
                   <div className="lm-dcard-cell-k">
-                    {t("devicesPage.wled.cellLedCount")}
+                    {t("device:page.wled.cellLedCount")}
                   </div>
                   <div className="lm-dcard-cell-v">{device.ledCount}</div>
                 </div>
                 {device.version && (
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">
-                      {t("devicesPage.wled.cellVersion")}
+                      {t("device:page.wled.cellVersion")}
                     </div>
                     <div className="lm-dcard-cell-v">{device.version}</div>
                   </div>
@@ -272,7 +272,7 @@ export function WledDevicePicker({
                 {device.mac && (
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">
-                      {t("devicesPage.wled.cellMac")}
+                      {t("device:page.wled.cellMac")}
                     </div>
                     <div className="lm-dcard-cell-v">{device.mac}</div>
                   </div>
@@ -302,10 +302,10 @@ export function WledDevicePicker({
                   onClick={() => { void handleConnect(device); }}
                 >
                   {rowState.kind === "busy" && rowState.action === "connect"
-                    ? t("devicesPage.wled.connecting")
+                    ? t("device:page.wled.connecting")
                     : isActive
-                      ? t("devicesPage.wled.reconnectAction")
-                      : t("devicesPage.wled.connectAction")}
+                      ? t("device:page.wled.reconnectAction")
+                      : t("device:page.wled.connectAction")}
                 </button>
                 <button
                   type="button"
@@ -315,8 +315,8 @@ export function WledDevicePicker({
                   onClick={() => { void handleTest(device); }}
                 >
                   {rowState.kind === "busy" && rowState.action === "test"
-                    ? t("devicesPage.wled.testing")
-                    : t("devicesPage.wled.testAction")}
+                    ? t("device:page.wled.testing")
+                    : t("device:page.wled.testAction")}
                 </button>
               </div>
             </div>
@@ -334,21 +334,21 @@ function translateWledStatusCode(
 ): string | null {
   switch (code) {
     case WLED_STATUS.DISCOVERY_OK:
-      return t("devicesPage.wled.status.discoveryOk");
+      return t("device:page.wled.status.discoveryOk");
     case WLED_STATUS.DISCOVERY_EMPTY:
-      return t("devicesPage.wled.status.discoveryEmpty");
+      return t("device:page.wled.status.discoveryEmpty");
     case WLED_STATUS.DISCOVERY_TIMEOUT:
-      return t("devicesPage.wled.status.discoveryTimeout");
+      return t("device:page.wled.status.discoveryTimeout");
     case WLED_STATUS.BRIDGE_UNREACHABLE:
-      return t("devicesPage.wled.status.bridgeUnreachable");
+      return t("device:page.wled.status.bridgeUnreachable");
     case WLED_STATUS.PROTOCOL_MISMATCH:
-      return t("devicesPage.wled.status.protocolMismatch");
+      return t("device:page.wled.status.protocolMismatch");
     case WLED_STATUS.LED_COUNT_MISMATCH:
-      return t("devicesPage.wled.status.ledCountMismatch");
+      return t("device:page.wled.status.ledCountMismatch");
     case WLED_STATUS.INVALID_IP:
-      return t("devicesPage.wled.status.invalidIp");
+      return t("device:page.wled.status.invalidIp");
     case WLED_STATUS.INVALID_LED_COUNT:
-      return t("devicesPage.wled.status.invalidLedCount");
+      return t("device:page.wled.status.invalidLedCount");
     default:
       return null;
   }

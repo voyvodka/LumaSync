@@ -1,5 +1,6 @@
 import calibration from "./calibration";
 import common from "./common";
+import device from "./device";
 import lights from "./lights";
 import preview from "./preview";
 import roomMap from "./roomMap";
@@ -12,6 +13,7 @@ import updater from "./updater";
 export const en = {
   calibration,
   common,
+  device,
   lights,
   preview,
   roomMap,

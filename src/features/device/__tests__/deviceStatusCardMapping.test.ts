@@ -15,8 +15,8 @@ describe("device status card mapping", () => {
 
     expect(card.variant).toBe("info");
     expect(card.code).toBe("RECOVERY_IN_PROGRESS");
-    expect(card.titleKey).toBe("device.status.reconnectingTitle");
-    expect(card.bodyKey).toBe("device.status.reconnectingBody");
+    expect(card.titleKey).toBe("device:status.reconnectingTitle");
+    expect(card.bodyKey).toBe("device:status.reconnectingBody");
   });
 
   it("maps health check fail to persistent error with actionable context", () => {
@@ -39,7 +39,7 @@ describe("device status card mapping", () => {
 
     expect(card.variant).toBe("error");
     expect(card.code).toBe("HEALTH_CHECK_FAIL");
-    expect(card.titleKey).toBe("device.healthCheck.failTitle");
+    expect(card.titleKey).toBe("device:healthCheck.failTitle");
     expect(card.details).toBe("choose another port");
     expect(card.healthSteps).toEqual([
       {

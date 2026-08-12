@@ -118,7 +118,7 @@ async function renderHueTab(state: ReturnType<typeof createHueHookState>) {
   const user = userEvent.setup();
   useHueOnboardingMock.mockReturnValue(state);
   render(<DeviceSection />);
-  const hueTabBtn = screen.getByText("devicesPage.rail.hueBridges").closest("button")!;
+  const hueTabBtn = screen.getByText("device:page.rail.hueBridges").closest("button")!;
   await user.click(hueTabBtn);
 }
 
@@ -334,18 +334,18 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
     render(<DeviceSection />);
 
     // USB tab is active by default. Click "Add first strip" to open the form.
-    const addBtn = await screen.findByText("devicesPage.usb.paired.addFirst");
+    const addBtn = await screen.findByText("device:page.usb.paired.addFirst");
     await user.click(addBtn);
 
     // Port pre-selected (COM3 from mock). Click "Confirm add" to trigger handleAddStrip.
-    const confirmBtn = await screen.findByText("devicesPage.usb.paired.confirmAdd");
+    const confirmBtn = await screen.findByText("device:page.usb.paired.confirmAdd");
     await user.click(confirmBtn);
 
     // persistError banner renders with role="status" aria-live="polite".
     // t() returns the key directly (react-i18next mock above).
     await waitFor(() => {
       expect(
-        screen.getByText("devicesPage.usb.paired.persistError")
+        screen.getByText("device:page.usb.paired.persistError")
       ).toBeInTheDocument();
     });
   });
@@ -357,15 +357,15 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
     const user = userEvent.setup();
     render(<DeviceSection />);
 
-    const addBtn = await screen.findByText("devicesPage.usb.paired.addFirst");
+    const addBtn = await screen.findByText("device:page.usb.paired.addFirst");
     await user.click(addBtn);
-    const confirmBtn = await screen.findByText("devicesPage.usb.paired.confirmAdd");
+    const confirmBtn = await screen.findByText("device:page.usb.paired.confirmAdd");
     await user.click(confirmBtn);
 
     // Wait for banner to appear with real timers (so waitFor works normally).
     await waitFor(() => {
       expect(
-        screen.getByText("devicesPage.usb.paired.persistError")
+        screen.getByText("device:page.usb.paired.persistError")
       ).toBeInTheDocument();
     });
 
@@ -379,7 +379,7 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
     await waitFor(
       () => {
         expect(
-          screen.queryByText("devicesPage.usb.paired.persistError"),
+          screen.queryByText("device:page.usb.paired.persistError"),
         ).not.toBeInTheDocument();
       },
       { timeout: 4000, interval: 100 },

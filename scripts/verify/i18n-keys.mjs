@@ -23,7 +23,7 @@ const LEGACY_CATALOGUE_FILE = resolve(ROOT, "src/locales/en/common.json");
 // Static heads of live `` t(`prefix.${x}`) `` sites. An unlisted head is only a
 // note(), but orphan accounting under it is unreliable until the list catches up.
 const KNOWN_DYNAMIC_PREFIXES = [
-  "device.healthCheck.steps.labels",
+  "device:healthCheck.steps.labels",
   "device.hue.channelMap.regions",
   "device.hue.runtime.codes",
   "device.hue.runtime.states",

@@ -2,6 +2,7 @@
 export const I18N_NAMESPACES = [
   "calibration",
   "common",
+  "device",
   "lights",
   "preview",
   "roomMap",
