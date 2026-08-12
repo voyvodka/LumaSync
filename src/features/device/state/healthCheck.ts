@@ -1,5 +1,6 @@
 import { DEVICE_OPERATION, DEVICE_STATUS } from "@/shared/contracts/device";
 import type { HealthCheckResult } from "../deviceConnectionApi";
+import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import type { ConnectionStore } from "./connectionStore";
 import type { DeviceConnectionControllerDeps } from "./connectionTypes";
 
@@ -10,6 +11,7 @@ export interface HealthCheck {
 export function createHealthCheck(
   store: ConnectionStore,
   deps: DeviceConnectionControllerDeps,
+  firmwareProfileEventsBus: FirmwareProfileEventBus | null,
 ): HealthCheck {
   const now = deps.now ?? (() => Date.now());
   const runHealthCheckRequest =
@@ -78,6 +80,10 @@ export function createHealthCheck(
               details: firstFailedStep?.message ?? "Try refresh, select another port, then retry.",
             },
       }));
+
+      // Lets FirmwareProfilePicker read the advertised profile without
+      // mounting its own controller (and running its own health check).
+      firmwareProfileEventsBus?.emit({ advertisedFirmwareProfile: result.advertisedFirmwareProfile });
     } catch (error) {
       if (!store.isCurrentToken(token)) {
         return;
