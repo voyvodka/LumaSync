@@ -1,3 +1,4 @@
+/** Tauri command ids for display enumeration and the calibration overlay window. */
 export const DISPLAY_OVERLAY_COMMANDS = {
   LIST_DISPLAYS: "list_displays",
   OPEN_DISPLAY_OVERLAY: "open_display_overlay",
@@ -5,10 +6,13 @@ export const DISPLAY_OVERLAY_COMMANDS = {
   UPDATE_DISPLAY_OVERLAY_PREVIEW: "update_display_overlay_preview",
 } as const;
 
+/** Opaque identifier for a physical display, as reported by the OS. */
 export type DisplayId = string;
 
+/** One edge of the LED strip layout around a display. */
 export type OverlaySegment = "top" | "right" | "bottom" | "left";
 
+/** LED count per {@link OverlaySegment}, for rendering the calibration overlay preview. */
 export interface OverlayPreviewCounts {
   top: number;
   right: number;
@@ -16,11 +20,13 @@ export interface OverlayPreviewCounts {
   left: number;
 }
 
+/** One LED's position in the overlay's segment-ordered render sequence. */
 export interface OverlayPreviewSequenceItem {
   segment: OverlaySegment;
   localIndex: number;
 }
 
+/** Full preview state pushed to the calibration overlay window. */
 export interface OverlayPreviewPayload {
   counts: OverlayPreviewCounts;
   bottomMissing: number;
@@ -37,6 +43,7 @@ export interface OverlayPreviewPayload {
   displayId?: DisplayId;
 }
 
+/** One enumerated display's geometry and identity, offered for capture-source selection. */
 export interface DisplayInfo {
   id: DisplayId;
   label: string;
@@ -59,6 +66,7 @@ export const DISPLAY_OVERLAY_STATUS = {
   PREVIEW_SYNC_FAILED: "OVERLAY_PREVIEW_SYNC_FAILED",
 } as const;
 
+/** Union of the codes in {@link DISPLAY_OVERLAY_STATUS}. */
 export type DisplayOverlayStatusCode =
   (typeof DISPLAY_OVERLAY_STATUS)[keyof typeof DISPLAY_OVERLAY_STATUS];
 
@@ -72,6 +80,7 @@ export type DisplayTargetBlockedCode =
   | DisplayOverlayStatusCode
   | typeof OVERLAY_NO_DISPLAY;
 
+/** Coded result shape returned by the display overlay commands. */
 export interface DisplayOverlayCommandResult {
   ok: boolean;
   code: DisplayOverlayStatusCode;

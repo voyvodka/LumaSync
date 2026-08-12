@@ -29,6 +29,7 @@ export const PLATFORM_COMMANDS = {
   OPEN_LOG_DIR: "open_log_dir",
 } as const;
 
+/** Union of the command ids in {@link PLATFORM_COMMANDS}. */
 export type PlatformCommandId =
   (typeof PLATFORM_COMMANDS)[keyof typeof PLATFORM_COMMANDS];
 
@@ -43,12 +44,14 @@ export type PlatformCommandId =
  */
 export type NotificationKind = "info" | "warn" | "error";
 
+/** Ordered list of every {@link NotificationKind}, for iterating in settings UI. */
 export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
   "info",
   "warn",
   "error",
 ] as const;
 
+/** Content and severity of a single OS notification toast. */
 export interface NotificationPayload {
   title: string;
   body: string;
@@ -73,6 +76,7 @@ export const NOTIFICATION_RESULT_CODES = {
   UNSUPPORTED_OS: "NOTIF_UNSUPPORTED_OS",
 } as const;
 
+/** Union of the codes in {@link NOTIFICATION_RESULT_CODES}. */
 export type NotificationResultCode =
   (typeof NOTIFICATION_RESULT_CODES)[keyof typeof NOTIFICATION_RESULT_CODES];
 

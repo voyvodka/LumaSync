@@ -23,6 +23,7 @@ import type { HueRuntimeTarget } from "./hue";
 // handlers + frontend *Api.ts invoke() bridges arrive in Phase 1.
 // ---------------------------------------------------------------------------
 
+/** Tauri command ids for the LED preview/test surface (test patterns, twin overlay, control popup). */
 export const PREVIEW_COMMANDS = {
   /** Start a synthetic test pattern; frames flow through the ambilight worker. */
   START_TEST_PATTERN: "start_led_test_pattern",
@@ -42,6 +43,7 @@ export const PREVIEW_COMMANDS = {
   HIDE_CONTROL_POPUP: "hide_led_control_popup",
 } as const;
 
+/** Union of the ids in {@link PREVIEW_COMMANDS}. */
 export type PreviewCommandId = (typeof PREVIEW_COMMANDS)[keyof typeof PREVIEW_COMMANDS];
 
 // ---------------------------------------------------------------------------
@@ -61,6 +63,7 @@ export const LED_TEST_PATTERN_KIND = [
   "gamut",
 ] as const;
 
+/** Union of the kinds in {@link LED_TEST_PATTERN_KIND}. */
 export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
 
 /**
@@ -84,6 +87,7 @@ export type TestPatternSpeed = "slow" | "med" | "fast";
 // Command payloads + results
 // ---------------------------------------------------------------------------
 
+/** Payload for `start_led_test_pattern`. */
 export interface StartLedTestPatternPayload {
   /** The pattern to inject (carries its own per-kind payload). */
   pattern: LedTestPattern;
@@ -130,6 +134,7 @@ export interface LedTestPatternResult {
  */
 export type TwinScope = "test" | "live";
 
+/** Payload for `open_led_twin_overlay`. */
 export interface OpenLedTwinOverlayPayload {
   /** Display to overlay. Absent ⇒ backend falls back to the selected/primary display. */
   displayId?: DisplayId;
@@ -137,11 +142,13 @@ export interface OpenLedTwinOverlayPayload {
   scope: TwinScope;
 }
 
+/** Payload for `close_led_twin_overlay`. */
 export interface CloseLedTwinOverlayPayload {
   /** Display whose overlay should close. Absent ⇒ close every open twin overlay. */
   displayId?: DisplayId;
 }
 
+/** Result of the twin overlay open/close commands. */
 export interface TwinOverlayResult {
   ok: boolean;
   code: TwinOverlayStatusCode;
@@ -153,6 +160,7 @@ export interface TwinOverlayResult {
 // Control popup window
 // ---------------------------------------------------------------------------
 
+/** Result of the control popup open/show/hide commands. */
 export interface ControlPopupResult {
   ok: boolean;
   code: ControlPopupStatusCode;
@@ -165,6 +173,7 @@ export interface ControlPopupResult {
 // Preview runtime snapshot (`get_led_preview_status`)
 // ---------------------------------------------------------------------------
 
+/** Snapshot of the preview/test runtime, returned by `get_led_preview_status`. */
 export interface LedPreviewStatus {
   /** Whether a synthetic test pattern is currently being injected. */
   testActive: boolean;
@@ -188,6 +197,7 @@ export interface LedPreviewStatus {
 // Status codes — typed constants, never raw strings.
 // ---------------------------------------------------------------------------
 
+/** Status codes returned by the synthetic test-pattern commands. */
 export const LED_TEST_STATUS = {
   /** Pattern accepted and now streaming to the configured sink(s). */
   PATTERN_STARTED: "LED_TEST_PATTERN_STARTED",
@@ -210,8 +220,10 @@ export const LED_TEST_STATUS = {
   PATTERN_RUNTIME_ERROR: "LED_TEST_PATTERN_RUNTIME_ERROR",
 } as const;
 
+/** Union of the codes in {@link LED_TEST_STATUS}. */
 export type LedTestStatusCode = (typeof LED_TEST_STATUS)[keyof typeof LED_TEST_STATUS];
 
+/** Status codes returned by the twin overlay open/close commands. */
 export const TWIN_OVERLAY_STATUS = {
   /** Overlay window opened (or an already-open one was focused) for the display. */
   OPENED: "TWIN_OVERLAY_OPENED",
@@ -232,9 +244,11 @@ export const TWIN_OVERLAY_STATUS = {
   UNSUPPORTED_PLATFORM_LIVE: "TWIN_OVERLAY_UNSUPPORTED_PLATFORM_LIVE",
 } as const;
 
+/** Union of the codes in {@link TWIN_OVERLAY_STATUS}. */
 export type TwinOverlayStatusCode =
   (typeof TWIN_OVERLAY_STATUS)[keyof typeof TWIN_OVERLAY_STATUS];
 
+/** Status codes returned by the control popup open/show/hide commands. */
 export const CONTROL_POPUP_STATUS = {
   /** Popup window created (hidden until a subsequent show call). */
   OPENED: "CONTROL_POPUP_OPENED",
@@ -246,6 +260,7 @@ export const CONTROL_POPUP_STATUS = {
   FAILED: "CONTROL_POPUP_FAILED",
 } as const;
 
+/** Union of the codes in {@link CONTROL_POPUP_STATUS}. */
 export type ControlPopupStatusCode =
   (typeof CONTROL_POPUP_STATUS)[keyof typeof CONTROL_POPUP_STATUS];
 

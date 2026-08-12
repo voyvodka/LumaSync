@@ -42,6 +42,7 @@ export const DEVICE_COMMANDS = {
   TEST_WLED_BRIDGE: "test_wled_bridge",
 } as const;
 
+/** Coarse connection lifecycle states surfaced across the device UI. */
 export const DEVICE_STATUS = {
   IDLE: "idle",
   SCANNING: "scanning",
@@ -55,8 +56,10 @@ export const DEVICE_STATUS = {
   ERROR: "error",
 } as const;
 
+/** Union of the states in {@link DEVICE_STATUS}. */
 export type DeviceStatus = (typeof DEVICE_STATUS)[keyof typeof DEVICE_STATUS];
 
+/** VID:PID pairs of the supported USB-serial controller chips (allowlist). */
 export const SUPPORTED_CONTROLLER_IDS = [
   "1A86:7523", // CH340
   "0403:6001", // FTDI FT232
@@ -69,8 +72,10 @@ export const SUPPORTED_CONTROLLER_IDS = [
   "0403:6014", // FT232H (FTDI Hi-Speed)
 ] as const;
 
+/** Union of the ids in {@link SUPPORTED_CONTROLLER_IDS}. */
 export type SupportedControllerId = (typeof SUPPORTED_CONTROLLER_IDS)[number];
 
+/** Coded error reasons surfaced by the device connection commands. */
 export const DEVICE_ERROR_CODES = {
   PORT_NOT_FOUND: "PORT_NOT_FOUND",
   /** Port is outside `SUPPORTED_USB_DEVICE_ALLOWLIST`. Was long declared here
@@ -80,6 +85,7 @@ export const DEVICE_ERROR_CODES = {
   UNKNOWN: "UNKNOWN",
 } as const;
 
+/** Union of the codes in {@link DEVICE_ERROR_CODES}. */
 export type DeviceErrorCode = (typeof DEVICE_ERROR_CODES)[keyof typeof DEVICE_ERROR_CODES];
 
 /** `list_serial_ports` outcome. Separate from {@link DEVICE_ERROR_CODES} because
@@ -89,6 +95,7 @@ export const SERIAL_PORT_LIST_STATUS = {
   FAILED: "LIST_PORTS_FAILED",
 } as const;
 
+/** Union of the codes in {@link SERIAL_PORT_LIST_STATUS}. */
 export type SerialPortListStatusCode =
   (typeof SERIAL_PORT_LIST_STATUS)[keyof typeof SERIAL_PORT_LIST_STATUS];
 
@@ -100,9 +107,11 @@ export const SERIAL_CONNECT_STATUS = {
   FAILED: "CONNECT_FAILED",
 } as const;
 
+/** Union of the codes in {@link SERIAL_CONNECT_STATUS}. */
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
 
+/** In-flight device operation kind, used to gate concurrent UI actions. */
 export const DEVICE_OPERATION = {
   IDLE: "idle",
   RECOVERY: "recovery",
@@ -110,16 +119,20 @@ export const DEVICE_OPERATION = {
   HEALTH_CHECK: "health_check",
 } as const;
 
+/** Union of the operations in {@link DEVICE_OPERATION}. */
 export type DeviceOperation = (typeof DEVICE_OPERATION)[keyof typeof DEVICE_OPERATION];
 
+/** Ordered stages of the serial health-check flow. */
 export const DEVICE_HEALTH_STEPS = {
   PORT_VISIBLE: "PORT_VISIBLE",
   PORT_SUPPORTED: "PORT_SUPPORTED",
   CONNECT_AND_VERIFY: "CONNECT_AND_VERIFY",
 } as const;
 
+/** Union of the steps in {@link DEVICE_HEALTH_STEPS}. */
 export type DeviceHealthStep = (typeof DEVICE_HEALTH_STEPS)[keyof typeof DEVICE_HEALTH_STEPS];
 
+/** Persisted shellStore keys owned by the device feature. */
 export const DEVICE_STORE_KEYS = {
   LAST_SUCCESSFUL_PORT: "lastSuccessfulPort",
 } as const;
@@ -146,6 +159,7 @@ export const FIRMWARE_PROFILE = {
   LUMASYNC_V1: "lumasync-v1",
 } as const;
 
+/** Union of the profiles in {@link FIRMWARE_PROFILE}. */
 export type FirmwareProfile = (typeof FIRMWARE_PROFILE)[keyof typeof FIRMWARE_PROFILE];
 
 // ---------------------------------------------------------------------------
@@ -175,6 +189,7 @@ export const LED_CHIP_TYPE = {
   SK6812_RGBW: "sk6812-rgbw",
 } as const;
 
+/** Union of the chip types in {@link LED_CHIP_TYPE}. */
 export type LedChipType = (typeof LED_CHIP_TYPE)[keyof typeof LED_CHIP_TYPE];
 
 // ---------------------------------------------------------------------------
@@ -263,6 +278,7 @@ export const SERIAL_HEALTH_CODES = {
   PROTOCOL_ERROR: "SERIAL_HEALTH_PROTOCOL_ERROR",
 } as const;
 
+/** Union of the codes in {@link SERIAL_HEALTH_CODES}. */
 export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_HEALTH_CODES];
 
 /**
@@ -435,4 +451,5 @@ export const WLED_STATUS = {
   SINK_NOT_STARTED: "WLED_SINK_NOT_STARTED",
 } as const;
 
+/** Union of the codes in {@link WLED_STATUS}. */
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];

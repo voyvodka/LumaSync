@@ -31,6 +31,7 @@ export const SHELL_COMMANDS = {
   UPDATE_TRAY_LABELS: "update_tray_labels",
 } as const;
 
+/** Union of the command ids in {@link SHELL_COMMANDS}. */
 export type ShellCommand = (typeof SHELL_COMMANDS)[keyof typeof SHELL_COMMANDS];
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ export const TRAY_MENU_IDS = {
   QUIT: "quit",
 } as const;
 
+/** Union of the ids in {@link TRAY_MENU_IDS}. */
 export type TrayMenuId = (typeof TRAY_MENU_IDS)[keyof typeof TRAY_MENU_IDS];
 
 // ---------------------------------------------------------------------------
@@ -68,6 +70,7 @@ export const SECTION_IDS = {
   ROOM_MAP: "room-map",
 } as const;
 
+/** Union of the ids in {@link SECTION_IDS}. */
 export type SectionId = (typeof SECTION_IDS)[keyof typeof SECTION_IDS];
 
 /** Ordered list of main navigation sections */
@@ -451,6 +454,7 @@ export const KEYBIND_ACTIONS = {
   OPEN_SETTINGS: "open-settings",
 } as const;
 
+/** Union of the actions in {@link KEYBIND_ACTIONS}. */
 export type KeybindAction = (typeof KEYBIND_ACTIONS)[keyof typeof KEYBIND_ACTIONS];
 
 /** Platform variants for keybind label + detection. */

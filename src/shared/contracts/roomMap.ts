@@ -20,6 +20,7 @@
 // Room Map Commands
 // ---------------------------------------------------------------------------
 
+/** Tauri command ids for saving/loading the room map and copying background images. */
 export const ROOM_MAP_COMMANDS = {
   SAVE: "save_room_map",
   LOAD: "load_room_map",
@@ -30,20 +31,6 @@ export const ROOM_MAP_COMMANDS = {
 // Hue Channel Placement
 // ---------------------------------------------------------------------------
 
-/**
- * Persisted position of a Hue Entertainment Area channel in room space.
- * Replaces or supplements the bridge-reported positionX/Y.
- *
- * v1.5 W1-A1: an optional `zoneId` + `zoneRelativePosition` pair is layered
- * on top of the legacy absolute coordinates. When `zoneId` is set, the
- * `zoneRelativePosition` is the authoritative source of truth and the
- * absolute `x/y/z` are derived from `HueZone.center{X,Y,Z}` plus
- * `HueZone.scale{X,Y,Z}` at runtime. Existing call sites that only know
- * about `x/y/z` keep working unchanged (legacy flat mode).
- *
- * v1.5 W4-F2: `zoneId` references a `HueZone` (the only surviving zone
- * kind after the direction reversal — logical zones were dropped).
- */
 /** Zone-relative coordinate in `[-1, 1]` per axis — mirrors Rust's `ZoneRelativePosition`. */
 export interface ZoneRelativePosition {
   x: number;
@@ -51,6 +38,8 @@ export interface ZoneRelativePosition {
   z: number;
 }
 
+/** Persisted position of a Hue channel; when `zoneId` is set, `zoneRelativePosition`
+ * is authoritative and absolute `x/y/z` are derived from the zone at runtime. */
 export interface HueChannelPlacement {
   /** Channel index within the entertainment area (0-based) */
   channelIndex: number;
@@ -81,6 +70,7 @@ export interface HueChannelPlacement {
 // USB Strip Placement
 // ---------------------------------------------------------------------------
 
+/** A USB LED strip segment's perimeter placement in room space. */
 export interface UsbStripPlacement {
   stripId: string;
   /** Starting corner position on room perimeter */
@@ -108,6 +98,7 @@ export interface UsbStripPlacement {
 // Furniture Placement
 // ---------------------------------------------------------------------------
 
+/** A furniture item's placement in the room-map editor. */
 export interface FurniturePlacement {
   id: string;
   type: "sofa" | "table" | "chair" | "other";
@@ -125,6 +116,7 @@ export interface FurniturePlacement {
 // TV Anchor Placement
 // ---------------------------------------------------------------------------
 
+/** The TV's placement, used as the spatial anchor for channel/strip positions. */
 export interface TvAnchorPlacement {
   /** Center position of the TV */
   x: number;
@@ -140,6 +132,7 @@ export interface TvAnchorPlacement {
 // Room Dimensions
 // ---------------------------------------------------------------------------
 
+/** Physical room dimensions in meters, used to scale the room-map editor. */
 export interface RoomDimensions {
   /** Width in meters */
   widthMeters: number;
@@ -404,6 +397,7 @@ export const HUE_ZONE_COMMANDS = {
   ASSIGN_CHANNEL_TO_HUE_ZONE: "assign_channel_to_hue_zone",
 } as const;
 
+/** Union of the ids in {@link HUE_ZONE_COMMANDS}. */
 export type HueZoneCommandId =
   (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
 
@@ -454,6 +448,7 @@ export const HUE_ZONE_STATUS_CODES = {
   HUE_ZONE_OVERSIZED: "HUE_ZONE_OVERSIZED",
 } as const;
 
+/** Union of the codes in {@link HUE_ZONE_STATUS_CODES}. */
 export type HueZoneStatusCode =
   (typeof HUE_ZONE_STATUS_CODES)[keyof typeof HUE_ZONE_STATUS_CODES];
 
@@ -479,22 +474,26 @@ export interface HueZoneCommandResult {
   channels: HueChannelPlacement[];
 }
 
+/** Payload for `create_hue_zone`. */
 export interface CreateHueZoneRequest {
   zone: HueZone;
   existingZones?: HueZone[];
 }
 
+/** Payload for `update_hue_zone`. */
 export interface UpdateHueZoneRequest {
   zone: HueZone;
   existingZones?: HueZone[];
 }
 
+/** Payload for `delete_hue_zone`. */
 export interface DeleteHueZoneRequest {
   zoneId: string;
   existingZones?: HueZone[];
   channels?: HueChannelPlacement[];
 }
 
+/** Payload for `assign_channel_to_hue_zone`. */
 export interface AssignChannelRequest {
   channelIndex: number;
   /** `null` detaches the channel back to legacy absolute placement. */
@@ -512,6 +511,7 @@ export const CHANNEL_WRITEBACK_STATUS = {
   NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
 } as const;
 
+/** Union of the codes in {@link CHANNEL_WRITEBACK_STATUS}. */
 export type ChannelWritebackStatusCode =
   (typeof CHANNEL_WRITEBACK_STATUS)[keyof typeof CHANNEL_WRITEBACK_STATUS];
 
@@ -519,6 +519,7 @@ export type ChannelWritebackStatusCode =
 // Image Layer
 // ---------------------------------------------------------------------------
 
+/** A background/reference image layer placed in the room-map editor. */
 export interface ImageLayer {
   id: string;
   /** Absolute path to the image file */
@@ -598,12 +599,14 @@ export interface RoomMapConfig {
 // Defaults
 // ---------------------------------------------------------------------------
 
+/** Fallback room dimensions used before the user customises them. */
 export const DEFAULT_ROOM_DIMENSIONS: RoomDimensions = {
   widthMeters: 5,
   depthMeters: 4,
   heightMeters: 2.5,
 };
 
+/** Empty room map config used to seed a fresh install. */
 export const DEFAULT_ROOM_MAP: RoomMapConfig = {
   dimensions: DEFAULT_ROOM_DIMENSIONS,
   hueChannels: [],

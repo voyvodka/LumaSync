@@ -37,6 +37,7 @@
  */
 export type LightingSmoothingPreset = "subtle" | "moderate" | "intense";
 
+/** EWMA alpha coefficient for each {@link LightingSmoothingPreset}. */
 export const LIGHTING_SMOOTHING_PRESET_COEFFICIENTS: Readonly<
   Record<LightingSmoothingPreset, number>
 > = {
@@ -62,6 +63,7 @@ export const LIGHTING_MODE_GATE_STATUS = {
   HUE_NOT_READY: "HUE_NOT_READY",
 } as const;
 
+/** Union of the codes in {@link LIGHTING_MODE_GATE_STATUS}. */
 export type LightingModeGateStatusCode =
   (typeof LIGHTING_MODE_GATE_STATUS)[keyof typeof LIGHTING_MODE_GATE_STATUS];
 
@@ -82,6 +84,7 @@ export const LIGHTING_MODE_STATUS = {
   LIGHTING_MODE_STATUS_OK: "LIGHTING_MODE_STATUS_OK",
 } as const;
 
+/** Union of the codes in {@link LIGHTING_MODE_STATUS}. */
 export type LightingModeStatusCode =
   (typeof LIGHTING_MODE_STATUS)[keyof typeof LIGHTING_MODE_STATUS];
 

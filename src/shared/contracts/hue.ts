@@ -15,6 +15,7 @@ import {
   type HueZoneStatusCode as RoomMapHueZoneStatusCode,
 } from "./roomMap";
 
+/** Tauri command ids for the Hue onboarding/streaming bridge. */
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
   VERIFY_BRIDGE_IP: "verify_hue_bridge_ip",
@@ -32,6 +33,7 @@ export const HUE_COMMANDS = {
   MIGRATE_CREDENTIALS: "migrate_hue_credentials",
 } as const;
 
+/** Union of the Hue command ids in {@link HUE_COMMANDS}. */
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,7 @@ export const HUE_ZONE_STATUS_CODES = ROOM_MAP_HUE_ZONE_STATUS_CODES;
 /** Re-export of the canonical Hue zone status code union. */
 export type HueZoneStatusCode = RoomMapHueZoneStatusCode;
 
+/** Status codes returned by the Hue onboarding/pairing/discovery commands. */
 export const HUE_STATUS = {
   DISCOVERY_OK: "HUE_DISCOVERY_OK",
   DISCOVERY_EMPTY: "HUE_DISCOVERY_EMPTY",
@@ -177,17 +180,21 @@ export const HUE_STATUS = {
   MDNS_UNSUPPORTED: "HUE_MDNS_UNSUPPORTED",
 } as const;
 
+/** Union of the status codes in {@link HUE_STATUS}. */
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
 
+/** Coarse pairing-credential health used to decide whether to prompt a re-pair. */
 export const HUE_CREDENTIAL_STATUS = {
   VALID: "valid",
   NEEDS_REPAIR: "needs_repair",
   UNKNOWN: "unknown",
 } as const;
 
+/** Union of the values in {@link HUE_CREDENTIAL_STATUS}. */
 export type HueCredentialStatus =
   (typeof HUE_CREDENTIAL_STATUS)[keyof typeof HUE_CREDENTIAL_STATUS];
 
+/** Steps of the Hue onboarding wizard, in order. */
 export const HUE_ONBOARDING_STEP = {
   DISCOVER: "discover",
   PAIR: "pair",
@@ -195,15 +202,18 @@ export const HUE_ONBOARDING_STEP = {
   READY: "ready",
 } as const;
 
+/** Union of the steps in {@link HUE_ONBOARDING_STEP}. */
 export type HueOnboardingStep =
   (typeof HUE_ONBOARDING_STEP)[keyof typeof HUE_ONBOARDING_STEP];
 
+/** Coded result shape shared by every Hue command — never throws, always returns this. */
 export interface HueCommandStatus {
   code: HueStatusCode | string;
   message: string;
   details?: string;
 }
 
+/** Lifecycle states of the Hue entertainment stream. */
 export const HUE_RUNTIME_STATES = {
   IDLE: "Idle",
   STARTING: "Starting",
@@ -213,9 +223,11 @@ export const HUE_RUNTIME_STATES = {
   FAILED: "Failed",
 } as const;
 
+/** Union of the states in {@link HUE_RUNTIME_STATES}. */
 export type HueRuntimeState =
   (typeof HUE_RUNTIME_STATES)[keyof typeof HUE_RUNTIME_STATES];
 
+/** Suggested recovery action for a Hue runtime fault, shown as a UI hint. */
 export const HUE_RUNTIME_ACTION_HINT = {
   RETRY: "retry",
   RECONNECT: "reconnect",
@@ -224,18 +236,22 @@ export const HUE_RUNTIME_ACTION_HINT = {
   ADJUST_AREA: "adjust_area",
 } as const;
 
+/** Union of the hints in {@link HUE_RUNTIME_ACTION_HINT}. */
 export type HueRuntimeActionHint =
   (typeof HUE_RUNTIME_ACTION_HINT)[keyof typeof HUE_RUNTIME_ACTION_HINT];
 
+/** What triggered a Hue runtime state change — which surface initiated it. */
 export const HUE_RUNTIME_TRIGGER_SOURCE = {
   MODE_CONTROL: "mode_control",
   DEVICE_SURFACE: "device_surface",
   SYSTEM: "system",
 } as const;
 
+/** Union of the sources in {@link HUE_RUNTIME_TRIGGER_SOURCE}. */
 export type HueRuntimeTriggerSource =
   (typeof HUE_RUNTIME_TRIGGER_SOURCE)[keyof typeof HUE_RUNTIME_TRIGGER_SOURCE];
 
+/** Fine-grained runtime status codes surfaced on `HueRuntimeStatus.code`. */
 export const HUE_RUNTIME_STATUS = {
   STREAM_STARTING: "HUE_STREAM_STARTING",
   STREAM_RUNNING: "HUE_STREAM_RUNNING",
@@ -264,6 +280,7 @@ export const HUE_RUNTIME_STATUS = {
   START_NOOP_ALREADY_ACTIVE: "HUE_START_NOOP_ALREADY_ACTIVE",
 } as const;
 
+/** Union of the codes in {@link HUE_RUNTIME_STATUS}. */
 export type HueRuntimeStatusCode =
   (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
 
@@ -275,6 +292,7 @@ export const HUE_READINESS_REASON = {
   ACTIVE_STREAMER: "HUE_STREAM_NOT_READY_ACTIVE_STREAMER",
 } as const;
 
+/** Union of the reasons in {@link HUE_READINESS_REASON}. */
 export type HueReadinessReason =
   (typeof HUE_READINESS_REASON)[keyof typeof HUE_READINESS_REASON];
 
@@ -289,6 +307,7 @@ export const HUE_SOLID_COLOR_STATUS = {
   APPLY_SKIPPED_NO_LIGHTS: "HUE_COLOR_APPLY_SKIPPED_NO_LIGHTS",
 } as const;
 
+/** Union of the codes in {@link HUE_SOLID_COLOR_STATUS}. */
 export type HueSolidColorStatusCode =
   (typeof HUE_SOLID_COLOR_STATUS)[keyof typeof HUE_SOLID_COLOR_STATUS];
 
@@ -303,12 +322,14 @@ export function isHueSolidColorUnapplied(code: string): boolean {
   );
 }
 
+/** Prefix families the runtime status codes fall into, for coarse-grained UI branching. */
 export const HUE_RUNTIME_STATUS_FAMILY = {
   TRANSIENT: "TRANSIENT_*",
   AUTH_INVALID: "AUTH_INVALID_*",
   CONFIG_NOT_READY: "CONFIG_NOT_READY_*",
 } as const;
 
+/** Structured fault codes for the Hue diagnostics/telemetry surface, grouped by subsystem. */
 export const HUE_FAULT_CODES = {
   // Network/connection family (HUE-NET-xx)
   NET_BRIDGE_UNREACHABLE: "HUE-NET-01",
@@ -329,6 +350,7 @@ export const HUE_FAULT_CODES = {
   CFG_BRIDGE_IP_CHANGED: "HUE-CFG-02",
 } as const;
 
+/** Union of the codes in {@link HUE_FAULT_CODES}. */
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
 
 // ---------------------------------------------------------------------------
@@ -354,6 +376,7 @@ export const HUE_CREDENTIAL_BACKENDS = {
   PLAINTEXT_LEGACY: "plaintext-legacy",
 } as const;
 
+/** Union of the backends in {@link HUE_CREDENTIAL_BACKENDS}. */
 export type HueCredentialBackend =
   (typeof HUE_CREDENTIAL_BACKENDS)[keyof typeof HUE_CREDENTIAL_BACKENDS];
 
@@ -415,6 +438,7 @@ export const HUE_ROOM_ARCHETYPES = [
   "other",
 ] as const;
 
+/** Union of the archetypes in {@link HUE_ROOM_ARCHETYPES}. */
 export type HueRoomArchetype = (typeof HUE_ROOM_ARCHETYPES)[number];
 
 /** Sentinel returned when the bridge advertises an archetype the whitelist does not know. */
@@ -446,8 +470,10 @@ export const HUE_INTENSITY_PRESET_COEFFICIENTS: Readonly<
 export const DEFAULT_HUE_INTENSITY_PRESET: LightingSmoothingPreset =
   DEFAULT_LIGHTING_SMOOTHING_PRESET;
 
+/** Which output surface a runtime telemetry row describes. */
 export type HueRuntimeTarget = "hue" | "usb";
 
+/** One target's row in the runtime telemetry grid (Hue or USB). */
 export interface HueRuntimeTargetTelemetryRow {
   target: HueRuntimeTarget;
   state: HueRuntimeState;
@@ -459,6 +485,7 @@ export interface HueRuntimeTargetTelemetryRow {
   actionHint?: HueRuntimeActionHint;
 }
 
+/** Rolled-up counts across all runtime telemetry rows, for a single status summary line. */
 export interface HueRuntimeAggregateTelemetry {
   activeTargets: HueRuntimeTarget[];
   runningCount: number;
@@ -466,11 +493,13 @@ export interface HueRuntimeAggregateTelemetry {
   failedCount: number;
 }
 
+/** Full runtime telemetry payload: per-target rows plus the aggregate summary. */
 export interface HueRuntimeTelemetry {
   hue: HueRuntimeTargetTelemetryRow;
   aggregate: HueRuntimeAggregateTelemetry;
 }
 
+/** `HueCommandStatus` extended with the fields the runtime status commands add. */
 export interface HueRuntimeStatus extends HueCommandStatus {
   state: HueRuntimeState;
   triggerSource: HueRuntimeTriggerSource;
@@ -480,6 +509,7 @@ export interface HueRuntimeStatus extends HueCommandStatus {
   telemetry?: HueRuntimeTelemetry;
 }
 
+/** One bridge returned by discovery, before pairing. */
 export interface HueBridgeSummary {
   id: string;
   ip: string;
@@ -488,11 +518,13 @@ export interface HueBridgeSummary {
   softwareVersion?: string;
 }
 
+/** Credentials issued by the bridge on successful pairing. */
 export interface HuePairingCredentials {
   username: string;
   clientKey: string;
 }
 
+/** Result of `pair_hue_bridge`. */
 export interface HuePairBridgeResponse {
   status: HueCommandStatus;
   credentials: HuePairingCredentials | null;
@@ -508,6 +540,7 @@ export interface HueCredentialMigrationResponse {
   backend?: HueCredentialBackend;
 }
 
+/** One selectable Hue entertainment area, as offered during onboarding. */
 export interface HueEntertainmentAreaSummary {
   id: string;
   name: string;
@@ -523,6 +556,7 @@ export interface HueEntertainmentAreaSummary {
   activeStreamer?: boolean;
 }
 
+/** Result of `check_hue_stream_readiness` — whether starting the stream would succeed. */
 export interface HueStreamReadiness {
   ready: boolean;
   reasons: string[];

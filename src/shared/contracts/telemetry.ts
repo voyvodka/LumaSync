@@ -9,6 +9,7 @@ export const TELEMETRY_QUEUE_HEALTH = {
   CRITICAL: "critical",
 } as const;
 
+/** Union of the levels in {@link TELEMETRY_QUEUE_HEALTH}. */
 export type TelemetryQueueHealth =
   (typeof TELEMETRY_QUEUE_HEALTH)[keyof typeof TELEMETRY_QUEUE_HEALTH];
 
@@ -25,6 +26,7 @@ export const LINK_MAX_FPS_ABSENT = 0;
  */
 export const LINK_CONSTRAINED_FPS_THRESHOLD = 30;
 
+/** Per-frame USB serial link performance snapshot, sampled for the telemetry HUD. */
 export interface RuntimeTelemetrySnapshot {
   captureFps: number;
   sendFps: number;
@@ -43,6 +45,7 @@ export interface RuntimeTelemetrySnapshot {
   linkMaxFps: number;
 }
 
+/** Per-frame Hue entertainment stream health snapshot, sampled for the telemetry HUD. */
 export interface HueTelemetrySnapshot {
   state: string;
   uptimeSecs: number | null;
@@ -57,6 +60,7 @@ export interface HueTelemetrySnapshot {
   dtlsConnectedAtSecs: number | null;
 }
 
+/** Combined USB + Hue telemetry returned by `get_runtime_telemetry`. */
 export interface FullTelemetrySnapshot {
   usb: RuntimeTelemetrySnapshot;
   /** `null` until Hue has been active at least once this session. */
