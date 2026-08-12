@@ -24,10 +24,10 @@ const LEGACY_CATALOGUE_FILE = resolve(ROOT, "src/locales/en/common.json");
 // note(), but orphan accounting under it is unreliable until the list catches up.
 const KNOWN_DYNAMIC_PREFIXES = [
   "device:healthCheck.steps.labels",
-  "device.hue.channelMap.regions",
-  "device.hue.runtime.codes",
-  "device.hue.runtime.states",
-  "device.hue.runtime.triggerSource",
+  "hue:channelMap.regions",
+  "hue:runtime.codes",
+  "hue:runtime.states",
+  "hue:runtime.triggerSource",
   "common:hotplug.targetLabel",
   "preview:pattern",
   "preview:status",

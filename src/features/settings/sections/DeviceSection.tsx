@@ -1015,27 +1015,27 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               <h1>{t("device:page.header.hueTitle")}</h1>
               <div className="lm-device-head-sub" role="status" aria-live="polite">
                 {hueBridgeState === "streaming"
-                  ? t("device.hue.card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
+                  ? t("hue:card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
                   : hueBridgeState === "idle"
-                  ? `${selectedArea?.name ?? "—"} · ${t("devicesPage.hue.pill.ready").toLowerCase()}`
+                  ? `${selectedArea?.name ?? "—"} · ${t("hue:page.pill.ready").toLowerCase()}`
                   : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton"
-                  ? t("device.hue.wizard.pairingStep")
+                  ? t("hue:wizard.pairingStep")
                   : hueBridgeState === "areaSelect"
-                  ? t("device.hue.wizard.areaStep")
+                  ? t("hue:wizard.areaStep")
                   : hueBridgeState === "authError"
-                  ? t("device.hue.credential.needsRepair")
+                  ? t("hue:credential.needsRepair")
                   : hueBridgeState === "pairingFailed"
-                  ? t("device.hue.wizard.pairingFailed")
+                  ? t("hue:wizard.pairingFailed")
                   : hueBridgeState === "offline"
-                  ? t("device.hue.bridge.unreachable")
+                  ? t("hue:bridge.unreachable")
                   : hueBridgeState === "reconnecting"
-                  ? t("device.hue.runtime.reconnectingTitle")
+                  ? t("hue:runtime.reconnectingTitle")
                   : hueBridgeState === "stale"
-                  ? t("device.hue.runtime.checklist.revalidate")
+                  ? t("hue:runtime.checklist.revalidate")
                   : hueBridgeState === "gateBlocked"
-                  ? t("device.hue.runtime.checklist.title")
+                  ? t("hue:runtime.checklist.title")
                   : hueBridgeState === "stopPartial"
-                  ? t("device.hue.runtime.timeout.title")
+                  ? t("hue:runtime.timeout.title")
                   : t("device:page.header.hueSub")}
               </div>
             </div>
@@ -1047,7 +1047,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 disabled={isHueDiscovering} aria-busy={isHueDiscovering}
               >
                 <IconRefresh />
-                <span>{isHueDiscovering ? t("devicesPage.hue.scanning") : hueBridgeState === "offline" ? t("device.hue.wizard.offlineRediscover") : t("devicesPage.hue.scanNetwork")}</span>
+                <span>{isHueDiscovering ? t("hue:page.scanning") : hueBridgeState === "offline" ? t("hue:wizard.offlineRediscover") : t("hue:page.scanNetwork")}</span>
               </button>
             </div>
           </div>
@@ -1061,7 +1061,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 <div className="lm-hue-scan-card">
                   <span className="lm-hue-wait-sp" />
                   <span style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", letterSpacing: "0.04em" }}>
-                    {t("devicesPage.hue.scanningDetail")}
+                    {t("hue:page.scanningDetail")}
                   </span>
                 </div>
               ) : bridges.length > 0 ? (
@@ -1081,7 +1081,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <div className="lm-dcard-tx">
                           <div className="lm-dcard-name">
                             <span>{bridge.name}</span>
-                            <span className="lm-dcard-pill is-warn">{t("devicesPage.hue.pill.discovered")}</span>
+                            <span className="lm-dcard-pill is-warn">{t("hue:page.pill.discovered")}</span>
                           </div>
                           <div className="lm-dcard-sub">{bridge.ip}</div>
                         </div>
@@ -1092,7 +1092,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           className="lm-dcard-act"
                           onClick={(e) => { e.stopPropagation(); selectBridge(bridge.id); }}
                         >
-                          {t("devicesPage.hue.addBridge")}
+                          {t("hue:page.addBridge")}
                         </button>
                       </div>
                     </div>
@@ -1102,11 +1102,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 /* State K2: Discovery failed */
                 <div className="lm-hue-hero">
                   <div className="lm-hue-hero-ic"><IconWifi /></div>
-                  <p className="lm-hue-hero-title">{t("devicesPage.hue.scanFailed")}</p>
-                  <p className="lm-hue-hero-sub">{t("devicesPage.hue.scanFailedBody")}</p>
+                  <p className="lm-hue-hero-title">{t("hue:page.scanFailed")}</p>
+                  <p className="lm-hue-hero-sub">{t("hue:page.scanFailedBody")}</p>
                   <div className="lm-hue-hero-btns">
                     <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                      {t("devicesPage.hue.scanAgain")}
+                      {t("hue:page.scanAgain")}
                     </button>
                   </div>
                 </div>
@@ -1114,11 +1114,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 /* State K1: Discovery empty */
                 <div className="lm-hue-hero">
                   <div className="lm-hue-hero-ic"><IconBridge /></div>
-                  <p className="lm-hue-hero-title">{t("devicesPage.hue.noResult")}</p>
-                  <p className="lm-hue-hero-sub">{t("devicesPage.hue.noResultBody")}</p>
+                  <p className="lm-hue-hero-title">{t("hue:page.noResult")}</p>
+                  <p className="lm-hue-hero-sub">{t("hue:page.noResultBody")}</p>
                   <div className="lm-hue-hero-btns">
                     <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                      {t("devicesPage.hue.scanAgain")}
+                      {t("hue:page.scanAgain")}
                     </button>
                   </div>
                 </div>
@@ -1126,11 +1126,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 /* State I: Empty hero — initial state */
                 <div className="lm-hue-hero">
                   <div className="lm-hue-hero-ic"><IconBridge /></div>
-                  <p className="lm-hue-hero-title">{t("device.hue.wizard.emptyTitle")}</p>
-                  <p className="lm-hue-hero-sub">{t("device.hue.wizard.emptyBody")}</p>
+                  <p className="lm-hue-hero-title">{t("hue:wizard.emptyTitle")}</p>
+                  <p className="lm-hue-hero-sub">{t("hue:wizard.emptyBody")}</p>
                   <div className="lm-hue-hero-btns">
                     <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                      {t("device.hue.wizard.emptyAction")}
+                      {t("hue:wizard.emptyAction")}
                     </button>
                   </div>
                 </div>
@@ -1159,16 +1159,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           hueBridgeState === "offline" || hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error" :
                           " is-warn"
                         }`}>
-                          {hueBridgeState === "streaming" ? t("devicesPage.hue.pill.streaming") :
-                           hueBridgeState === "idle" ? t("devicesPage.hue.pill.ready") :
-                           hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("devicesPage.hue.pill.awaiting") :
-                           hueBridgeState === "pairingFailed" ? t("devicesPage.hue.pill.failed") :
-                           hueBridgeState === "areaSelect" ? t("devicesPage.hue.pill.paired") :
-                           hueBridgeState === "authError" ? t("devicesPage.hue.pill.authError") :
-                           hueBridgeState === "offline" ? t("device.hue.bridge.unreachable") :
-                           hueBridgeState === "reconnecting" ? t("devicesPage.hue.pill.reconnecting") :
-                           hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("devicesPage.hue.pill.awaiting") :
-                           hueBridgeState === "stopPartial" ? t("devicesPage.hue.pill.failed") :
+                          {hueBridgeState === "streaming" ? t("hue:page.pill.streaming") :
+                           hueBridgeState === "idle" ? t("hue:page.pill.ready") :
+                           hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("hue:page.pill.awaiting") :
+                           hueBridgeState === "pairingFailed" ? t("hue:page.pill.failed") :
+                           hueBridgeState === "areaSelect" ? t("hue:page.pill.paired") :
+                           hueBridgeState === "authError" ? t("hue:page.pill.authError") :
+                           hueBridgeState === "offline" ? t("hue:bridge.unreachable") :
+                           hueBridgeState === "reconnecting" ? t("hue:page.pill.reconnecting") :
+                           hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("hue:page.pill.awaiting") :
+                           hueBridgeState === "stopPartial" ? t("hue:page.pill.failed") :
                            ""}
                         </span>
                       </div>
@@ -1183,7 +1183,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <div className="lm-hue-traffic-fill" />
                       </div>
                       <div className="lm-hue-traffic-label">
-                        <span>{t("device.hue.card.trafficLabel")}</span>
+                        <span>{t("hue:card.trafficLabel")}</span>
                         <b>DTLS · 20 Hz</b>
                       </div>
                     </div>
@@ -1194,8 +1194,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-hue-repair is-error">
                       <IconInfo />
                       <div className="lm-hue-repair-tx">
-                        <div className="lm-hue-repair-title">{t("device.hue.credential.needsRepair")}</div>
-                        <div className="lm-hue-repair-sub">{t("device.hue.credential.repairHint")}</div>
+                        <div className="lm-hue-repair-title">{t("hue:credential.needsRepair")}</div>
+                        <div className="lm-hue-repair-sub">{t("hue:credential.repairHint")}</div>
                       </div>
                       <button
                         type="button"
@@ -1203,7 +1203,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         onClick={() => { void pair(); }}
                         disabled={isHuePairing} aria-busy={isHuePairing}
                       >
-                        {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.runtime.actions.repair")}
+                        {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
                       </button>
                     </div>
                   ) : null}
@@ -1212,87 +1212,87 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {hueBridgeState === "streaming" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v is-am">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellRate")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellRate")}</div>
                         <div className="lm-dcard-cell-v is-am">20 Hz</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "idle" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellStatus")}</div>
-                        <div className="lm-dcard-cell-v is-ok">{t("devicesPage.hue.pill.ready")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
+                        <div className="lm-dcard-cell-v is-ok">{t("hue:page.pill.ready")}</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "stale" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellStatus")}</div>
-                        <div className="lm-dcard-cell-v is-warn">{t("devicesPage.hue.pill.awaiting")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
+                        <div className="lm-dcard-cell-v is-warn">{t("hue:page.pill.awaiting")}</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "reconnecting" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
                       </div>
                       {hueStatus?.code ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellError")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellError")}</div>
                           <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                         </div>
                       ) : null}
                       {hueRuntimeModel.retry?.remainingAttempts !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellRetries")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellRetries")}</div>
                           <div className="lm-dcard-cell-v is-am">{hueRuntimeModel.retry.remainingAttempts}</div>
                         </div>
                       ) : null}
                       {hueRuntimeModel.retry?.nextAttemptMs !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellNext")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellNext")}</div>
                           <div className="lm-dcard-cell-v is-am">{(hueRuntimeModel.retry.nextAttemptMs / 1000).toFixed(1)} s</div>
                         </div>
                       ) : null}
@@ -1301,12 +1301,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellFault")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
                         <div className="lm-dcard-cell-v is-am" style={{ fontSize: "9px" }}>HUE_STOP_PARTIAL</div>
                       </div>
                     </div>
@@ -1314,16 +1314,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellConfig")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellConfig")}</div>
                         <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>NOT_READY</div>
                       </div>
                     </div>
@@ -1331,17 +1331,17 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellCredential")}</div>
-                        <div className="lm-dcard-cell-v is-error">{t("device.hue.card.cellCredentialInvalid")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellCredential")}</div>
+                        <div className="lm-dcard-cell-v is-error">{t("hue:card.cellCredentialInvalid")}</div>
                       </div>
                       {hueStatus?.code ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellFault")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
                           <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                         </div>
                       ) : null}
@@ -1355,44 +1355,44 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-hue-steps">
                       <div className="lm-hue-step is-done">
                         <span className="lm-hue-step-dot"><IconCheck /></span>
-                        <span>{t("device.hue.steps.discover")}</span>
+                        <span>{t("hue:steps.discover")}</span>
                       </div>
                       <div className="lm-hue-step-line is-done" />
                       <div className="lm-hue-step is-active">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.pair")}</span>
+                        <span>{t("hue:steps.pair")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.area")}</span>
+                        <span>{t("hue:steps.area")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.ready")}</span>
+                        <span>{t("hue:steps.ready")}</span>
                       </div>
                     </div>
                   ) : hueBridgeState === "pairingFailed" ? (
                     <div className="lm-hue-steps">
                       <div className="lm-hue-step is-done">
                         <span className="lm-hue-step-dot"><IconCheck /></span>
-                        <span>{t("device.hue.steps.discover")}</span>
+                        <span>{t("hue:steps.discover")}</span>
                       </div>
                       <div className="lm-hue-step-line is-done" />
                       <div className="lm-hue-step is-fail">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.pair")}</span>
+                        <span>{t("hue:steps.pair")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.area")}</span>
+                        <span>{t("hue:steps.area")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.ready")}</span>
+                        <span>{t("hue:steps.ready")}</span>
                       </div>
                     </div>
                   ) : null}
@@ -1401,17 +1401,17 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {hueBridgeState === "pairingLinkButton" ? (
                     <div className="lm-hue-wait">
                       <span className="lm-hue-wait-sp" />
-                      <span>{t("device.hue.pair.linkButtonHint")}</span>
+                      <span>{t("hue:pair.linkButtonHint")}</span>
                     </div>
                   ) : null}
 
                   {/* State D/G: Area selection */}
                   {hueBridgeState === "areaSelect" ? (
                     <div className="lm-hue-areas">
-                      <div className="lm-hue-areas-label">{t("device.hue.areas.selectLabel")}</div>
+                      <div className="lm-hue-areas-label">{t("hue:areas.selectLabel")}</div>
                       {areaGroups.length === 0 ? (
                         <p style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", padding: "4px 0" }}>
-                          {t("device.hue.areas.empty")}
+                          {t("hue:areas.empty")}
                         </p>
                       ) : (
                         <div className="lm-hue-area-list">
@@ -1425,9 +1425,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                               >
                                 <span className="lm-hue-area-ic" />
                                 <span className="lm-hue-area-name">{area.name}</span>
-                                <span className="lm-hue-area-ch">{t("device.hue.areas.channels", { count: area.channelCount ?? 0 })}</span>
+                                <span className="lm-hue-area-ch">{t("hue:areas.channels", { count: area.channelCount ?? 0 })}</span>
                                 {area.activeStreamer ? (
-                                  <span className="lm-hue-area-badge">{t("device.hue.areas.activeStreamer")}</span>
+                                  <span className="lm-hue-area-badge">{t("hue:areas.activeStreamer")}</span>
                                 ) : null}
                               </button>
                             ))
@@ -1439,8 +1439,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <div className="lm-hue-repair is-error" style={{ marginTop: "6px" }}>
                           <IconInfo />
                           <div className="lm-hue-repair-tx">
-                            <div className="lm-hue-repair-title">{t("device.hue.areas.conflictTitle")}</div>
-                            <div className="lm-hue-repair-sub">{t("device.hue.areas.conflictHint")}</div>
+                            <div className="lm-hue-repair-title">{t("hue:areas.conflictTitle")}</div>
+                            <div className="lm-hue-repair-sub">{t("hue:areas.conflictHint")}</div>
                           </div>
                         </div>
                       ) : null}
@@ -1451,7 +1451,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           onClick={() => { void revalidateArea(); }}
                           disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                         >
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : `${t("devicesPage.hue.confirmArea")} →`}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : `${t("hue:page.confirmArea")} →`}
                         </button>
                       ) : null}
                     </div>
@@ -1460,10 +1460,10 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {/* State F: Offline reasons */}
                   {hueBridgeState === "offline" ? (
                     <div className="lm-hue-offline">
-                      <div className="lm-hue-offline-title">{t("device.hue.wizard.offlineReasonsTitle")}</div>
-                      <div className="lm-hue-offline-item">{t("device.hue.wizard.offlineReason1")}</div>
-                      <div className="lm-hue-offline-item">{t("device.hue.wizard.offlineReason2")}</div>
-                      <div className="lm-hue-offline-item">{t("device.hue.wizard.offlineReason3")}</div>
+                      <div className="lm-hue-offline-title">{t("hue:wizard.offlineReasonsTitle")}</div>
+                      <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason1")}</div>
+                      <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason2")}</div>
+                      <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason3")}</div>
                     </div>
                   ) : null}
 
@@ -1477,7 +1477,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                               remaining: hueRuntimeModel.retry.remainingAttempts ?? "—",
                               nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "—",
                             })
-                          : t("device.hue.runtime.reconnectingTitle")}
+                          : t("hue:runtime.reconnectingTitle")}
                       </span>
                       <button
                         type="button"
@@ -1485,7 +1485,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }}
                         disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}
                       >
-                        {t("devicesPage.hue.stopRetrying")}
+                        {t("hue:page.stopRetrying")}
                       </button>
                     </div>
                   ) : null}
@@ -1494,14 +1494,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {hueBridgeState === "stale" ? (
                     <div className="lm-hue-stale">
                       <IconInfo />
-                      <span className="lm-hue-stale-tx">{t("device.hue.runtime.checklist.revalidate")}</span>
+                      <span className="lm-hue-stale-tx">{t("hue:runtime.checklist.revalidate")}</span>
                       <button
                         type="button"
                         className="lm-hue-stale-act"
                         onClick={() => { void revalidateArea(); }}
                         disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                       >
-                        {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                        {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                       </button>
                     </div>
                   ) : null}
@@ -1509,11 +1509,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {/* State P: Gate blocked checklist */}
                   {hueBridgeState === "gateBlocked" ? (
                     <div className="lm-hue-checklist">
-                      <div className="lm-hue-checklist-title">{t("device.hue.runtime.checklist.title")}</div>
+                      <div className="lm-hue-checklist-title">{t("hue:runtime.checklist.title")}</div>
                       {isReadinessStale ? (
                         <div className="lm-hue-checklist-item">
                           <IconInfo />
-                          <span>{t("device.hue.runtime.checklist.revalidate")}</span>
+                          <span>{t("hue:runtime.checklist.revalidate")}</span>
                         </div>
                       ) : null}
                       <div className="lm-hue-checklist-btns">
@@ -1523,7 +1523,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           onClick={() => { void revalidateArea(); }}
                           disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                         >
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                       </div>
                     </div>
@@ -1532,7 +1532,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {/* State Q: Stop timeout fault */}
                   {hueBridgeState === "stopPartial" ? (
                     <div className="lm-hue-fault">
-                      {t("device.hue.runtime.timeout.title")}
+                      {t("hue:runtime.timeout.title")}
                     </div>
                   ) : null}
 
@@ -1541,93 +1541,93 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     {hueBridgeState === "streaming" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                          {t("devicesPage.hue.changeArea")}
+                          {t("hue:page.changeArea")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={isRuntimeMutating || hueStartDisabled} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.reconnectNow")}
+                          {t("hue:page.reconnectNow")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "idle" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                          {t("devicesPage.hue.changeArea")}
+                          {t("hue:page.changeArea")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? (
                       <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                        {t("devicesPage.hue.cancel")}
+                        {t("hue:page.cancel")}
                       </button>
                     ) : hueBridgeState === "areaSelect" ? (
                       <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                        {isLoadingAreas ? t("device.hue.actions.loadingAreas") : t("device.hue.actions.refreshAreas")}
+                        {isLoadingAreas ? t("hue:actions.loadingAreas") : t("hue:actions.refreshAreas")}
                       </button>
                     ) : hueBridgeState === "authError" || hueBridgeState === "pairingFailed" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing} aria-busy={isHuePairing}>
-                          {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.runtime.actions.repair")}
+                          {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "offline" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }} disabled={isHueDiscovering} aria-busy={isHueDiscovering}>
-                          {isHueDiscovering ? t("device.hue.actions.discovering") : t("device.hue.wizard.offlineRediscover")}
+                          {isHueDiscovering ? t("hue:actions.discovering") : t("hue:wizard.offlineRediscover")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { setManualIp(""); }}>
-                          {t("devicesPage.hue.tryDifferentIp")}
+                          {t("hue:page.tryDifferentIp")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "reconnecting" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.reconnectNow")}
+                          {t("hue:page.reconnectNow")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.stopRetrying")}
+                          {t("hue:page.stopRetrying")}
                         </button>
                       </>
                     ) : hueBridgeState === "stale" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={hueStartDisabled}>
-                          {t("device.hue.actions.start")}
+                          {t("hue:actions.start")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "gateBlocked" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                          {t("devicesPage.hue.changeArea")}
+                          {t("hue:page.changeArea")}
                         </button>
                       </>
                     ) : hueBridgeState === "stopPartial" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.retryStop")}
+                          {t("hue:page.retryStop")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forceForget")}
+                          {t("hue:page.forceForget")}
                         </button>
                       </>
                     ) : null}
@@ -1657,8 +1657,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
             {!selectedBridgeId ? (
               <div className="lm-hue-ip-form">
                 <div>
-                  <div className="lm-hue-ip-form-title">{t("device.hue.manualIp.title")}</div>
-                  <div className="lm-hue-ip-form-sub">{t("device.hue.manualIp.description")}</div>
+                  <div className="lm-hue-ip-form-title">{t("hue:manualIp.title")}</div>
+                  <div className="lm-hue-ip-form-sub">{t("hue:manualIp.description")}</div>
                 </div>
                 <div className="lm-hue-ip-row">
                   <input
@@ -1671,7 +1671,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         void submitManualIp();
                       }
                     }}
-                    placeholder={t("device.hue.manualIp.placeholder")}
+                    placeholder={t("hue:manualIp.placeholder")}
                   />
                   <button
                     type="button"
@@ -1679,7 +1679,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     onClick={() => { void submitManualIp(); }}
                     disabled={hueManualIpDisabled}
                   >
-                    {t("devicesPage.hue.enterIp")}
+                    {t("hue:page.enterIp")}
                   </button>
                 </div>
                 {manualIpError ? <div className="lm-hue-ip-error">{t(manualIpError)}</div> : null}

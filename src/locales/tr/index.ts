@@ -1,6 +1,7 @@
 import calibration from "./calibration";
 import common from "./common";
 import device from "./device";
+import hue from "./hue";
 import lights from "./lights";
 import preview from "./preview";
 import roomMap from "./roomMap";
@@ -14,6 +15,7 @@ export const tr = {
   calibration,
   common,
   device,
+  hue,
   lights,
   preview,
   roomMap,

@@ -154,7 +154,7 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "hue:actions.start" })).toBeDisabled();
     });
   });
 
@@ -190,8 +190,8 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("devicesPage.hue.pill.awaiting")).toBeInTheDocument();
-      expect(screen.queryByText("devicesPage.hue.pill.authError")).not.toBeInTheDocument();
+      expect(screen.getByText("hue:page.pill.awaiting")).toBeInTheDocument();
+      expect(screen.queryByText("hue:page.pill.authError")).not.toBeInTheDocument();
     });
   });
 
@@ -209,7 +209,7 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("devicesPage.hue.pill.authError")).toBeInTheDocument();
+      expect(screen.getByText("hue:page.pill.authError")).toBeInTheDocument();
     });
   });
 });
@@ -230,9 +230,9 @@ describe("DeviceSection hue runtime controls", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "device.hue.actions.start" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "hue:actions.start" })).toBeDisabled();
     });
-    expect(screen.getAllByText("device.hue.runtime.checklist.revalidate")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("hue:runtime.checklist.revalidate")[0]).toBeInTheDocument();
   });
 
   it("routes stop action to stopHue when stream is reconnecting", async () => {
@@ -247,9 +247,9 @@ describe("DeviceSection hue runtime controls", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: "devicesPage.hue.stopRetrying" })[0]).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "hue:page.stopRetrying" })[0]).toBeInTheDocument();
     });
-    await user.click(screen.getAllByRole("button", { name: "devicesPage.hue.stopRetrying" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "hue:page.stopRetrying" })[0]);
 
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
   });
@@ -268,9 +268,9 @@ describe("DeviceSection hue runtime controls", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "hue:page.reconnectNow" })).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" }));
+    await user.click(screen.getByRole("button", { name: "hue:page.reconnectNow" }));
 
     expect(startRuntime).toHaveBeenCalledTimes(1);
   });
@@ -300,9 +300,9 @@ describe("DeviceSection hue runtime controls", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "hue:page.reconnectNow" })).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: "devicesPage.hue.reconnectNow" }));
+    await user.click(screen.getByRole("button", { name: "hue:page.reconnectNow" }));
 
     expect(retryRuntimeTarget).toHaveBeenCalledWith("hue");
   });

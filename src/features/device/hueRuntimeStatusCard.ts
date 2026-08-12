@@ -94,8 +94,8 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
   if (!input.status) {
     return {
       variant: "info",
-      titleKey: "device.hue.runtime.idleTitle",
-      bodyKey: "device.hue.runtime.idleBody",
+      titleKey: "hue:runtime.idleTitle",
+      bodyKey: "hue:runtime.idleBody",
       actionHints: [],
     };
   }
@@ -105,17 +105,17 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
 
   return {
     variant: resolveVariant(status),
-    titleKey: `device.hue.runtime.states.${status.state}`,
-    bodyKey: `device.hue.runtime.codes.${status.code}`,
+    titleKey: `hue:runtime.states.${status.state}`,
+    bodyKey: `hue:runtime.codes.${status.code}`,
     details: status.details ?? undefined,
     actionHints: resolveActionHints(status),
     retry: hasRetry
       ? {
           remainingAttempts: status.remainingAttempts,
           nextAttemptMs: status.nextAttemptMs,
-          labelKey: "device.hue.runtime.retry.progress",
+          labelKey: "hue:runtime.retry.progress",
         }
       : undefined,
-    triggerSourceKey: `device.hue.runtime.triggerSource.${status.triggerSource}`,
+    triggerSourceKey: `hue:runtime.triggerSource.${status.triggerSource}`,
   };
 }

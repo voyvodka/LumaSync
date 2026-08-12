@@ -2316,8 +2316,8 @@ function App() {
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
             {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
-              ? t("hue.colorNotApplied.noLights")
-              : t("hue.colorNotApplied.streamOffline")}
+              ? t("hue:colorNotApplied.noLights")
+              : t("hue:colorNotApplied.streamOffline")}
           </span>
         </div>
       )}

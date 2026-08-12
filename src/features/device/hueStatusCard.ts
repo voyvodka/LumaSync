@@ -21,48 +21,48 @@ export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardMode
   if (input.isValidatingCredential) {
     return {
       variant: "info",
-      titleKey: "device.hue.status.validatingTitle",
-      bodyKey: "device.hue.status.validatingBody",
+      titleKey: "hue:status.validatingTitle",
+      bodyKey: "hue:status.validatingBody",
     };
   }
 
   if (input.isPairing) {
     return {
       variant: "info",
-      titleKey: "device.hue.status.pairingTitle",
-      bodyKey: "device.hue.status.pairingBody",
+      titleKey: "hue:status.pairingTitle",
+      bodyKey: "hue:status.pairingBody",
     };
   }
 
   if (input.isCheckingReadiness) {
     return {
       variant: "info",
-      titleKey: "device.hue.status.readinessCheckingTitle",
-      bodyKey: "device.hue.status.readinessCheckingBody",
+      titleKey: "hue:status.readinessCheckingTitle",
+      bodyKey: "hue:status.readinessCheckingBody",
     };
   }
 
   if (input.bridgeUnreachable) {
     return {
       variant: "info",
-      titleKey: "device.hue.status.bridgeOfflineTitle",
-      bodyKey: "device.hue.status.bridgeOfflineBody",
+      titleKey: "hue:status.bridgeOfflineTitle",
+      bodyKey: "hue:status.bridgeOfflineBody",
     };
   }
 
   if (!input.status) {
     return {
       variant: "info",
-      titleKey: "device.hue.status.idleTitle",
-      bodyKey: "device.hue.status.idleBody",
+      titleKey: "hue:status.idleTitle",
+      bodyKey: "hue:status.idleBody",
     };
   }
 
   if (input.status.code === "HUE_STREAM_READY") {
     return {
       variant: "success",
-      titleKey: "device.hue.status.streamReadyTitle",
-      bodyKey: "device.hue.status.streamReadyBody",
+      titleKey: "hue:status.streamReadyTitle",
+      bodyKey: "hue:status.streamReadyBody",
       details: input.status.details ?? undefined,
     };
   }
@@ -74,8 +74,8 @@ export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardMode
   ) {
     return {
       variant: "success",
-      titleKey: "device.hue.status.successTitle",
-      bodyKey: "device.hue.status.successBody",
+      titleKey: "hue:status.successTitle",
+      bodyKey: "hue:status.successBody",
       details: input.status.message,
     };
   }
@@ -83,8 +83,8 @@ export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardMode
   if (input.status.code === "HUE_STREAM_NOT_READY") {
     return {
       variant: "error",
-      titleKey: "device.hue.status.streamNotReadyTitle",
-      bodyKey: "device.hue.status.streamNotReadyBody",
+      titleKey: "hue:status.streamNotReadyTitle",
+      bodyKey: "hue:status.streamNotReadyBody",
       details: input.status.details ?? undefined,
     };
   }
@@ -92,16 +92,16 @@ export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardMode
   if (input.credentialState === "needs_repair" || input.status.code.includes("FAILED") || input.status.code.includes("INVALID")) {
     return {
       variant: "error",
-      titleKey: "device.hue.status.errorTitle",
-      bodyKey: "device.hue.status.errorBody",
+      titleKey: "hue:status.errorTitle",
+      bodyKey: "hue:status.errorBody",
       details: input.status.details ?? input.status.message,
     };
   }
 
   return {
     variant: "info",
-    titleKey: "device.hue.status.infoTitle",
-    bodyKey: "device.hue.status.infoBody",
+    titleKey: "hue:status.infoTitle",
+    bodyKey: "hue:status.infoBody",
     details: input.status.message,
   };
 }

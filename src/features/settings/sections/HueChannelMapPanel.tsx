@@ -134,7 +134,7 @@ function ModePillToggle({
         onClick={() => { onModeChange("position"); }}
         className={mode === "position" ? "is-on" : ""}
       >
-        {t("device.hue.channelMap.modPosition")}
+        {t("hue:channelMap.modPosition")}
       </button>
       <button
         type="button"
@@ -143,7 +143,7 @@ function ModePillToggle({
         onClick={() => { onModeChange("assign-zone"); }}
         className={mode === "assign-zone" ? "is-on" : ""}
       >
-        {t("device.hue.channelMap.modAssignZone")}
+        {t("hue:channelMap.modAssignZone")}
       </button>
     </div>
   );
@@ -165,7 +165,7 @@ function DragCoordinateTooltip({
   return (
     <div
       className="lm-chmap-tooltip"
-      aria-label={t("device.hue.channelMap.tooltipAriaLabel", { x: x.toFixed(2), y: y.toFixed(2) })}
+      aria-label={t("hue:channelMap.tooltipAriaLabel", { x: x.toFixed(2), y: y.toFixed(2) })}
     >
       x: {x.toFixed(2)}, y: {y.toFixed(2)}
     </div>
@@ -200,12 +200,12 @@ function ChannelDetailStrip({
   const z = placement?.z ?? 0;
 
   return (
-    <div className="lm-chmap-detail" role="region" aria-label={t("device.hue.channelMap.detailStripChannel", { index: channelIndexLabel })}>
+    <div className="lm-chmap-detail" role="region" aria-label={t("hue:channelMap.detailStripChannel", { index: channelIndexLabel })}>
       <span className="lm-chmap-detail-name">
-        {t("device.hue.channelMap.detailStripChannel", { index: channelIndexLabel })}
+        {t("hue:channelMap.detailStripChannel", { index: channelIndexLabel })}
       </span>
       <span className="lm-chmap-detail-pos">
-        {t("device.hue.channelMap.detailStripCoords", {
+        {t("hue:channelMap.detailStripCoords", {
           x: (placement?.x ?? 0).toFixed(2),
           y: (placement?.y ?? 0).toFixed(2),
         })}
@@ -213,7 +213,7 @@ function ChannelDetailStrip({
 
       <label className="lm-chmap-detail-z">
         <span className="lm-chmap-detail-z-label">
-          {t("device.hue.channelMap.detailStripHeight")}
+          {t("hue:channelMap.detailStripHeight")}
         </span>
         <input
           type="range"
@@ -222,7 +222,7 @@ function ChannelDetailStrip({
           step={0.01}
           value={z}
           onChange={(e) => { onZChange(parseFloat(e.target.value)); }}
-          aria-label={t("device.hue.channelMap.detailStripHeight")}
+          aria-label={t("hue:channelMap.detailStripHeight")}
           aria-valuemin={-1}
           aria-valuemax={1}
           aria-valuenow={z}
@@ -314,7 +314,7 @@ export function HueChannelMapPanel({
   }, [channels]);
 
   const regionLabel = (region: string): string => {
-    const key = `device.hue.channelMap.regions.${region}`;
+    const key = `hue:channelMap.regions.${region}`;
     const translated = t(key);
     return translated === key ? region : translated;
   };
@@ -340,7 +340,7 @@ export function HueChannelMapPanel({
 
   const handleSaveToBridge = useCallback(async () => {
     if (!bridgeIp || !username || !areaId) return;
-    const confirmed = window.confirm(t("device.hue.channelMap.saveConfirm", { ip: bridgeIp }));
+    const confirmed = window.confirm(t("hue:channelMap.saveConfirm", { ip: bridgeIp }));
     if (!confirmed) return;
 
     setIsSaving(true);
@@ -544,12 +544,12 @@ export function HueChannelMapPanel({
 
   if (isLoading) {
     return (
-      <section className="lm-settings-group lm-chmap" role="region" aria-label={t("device.hue.channelMap.title")}>
+      <section className="lm-settings-group lm-chmap" role="region" aria-label={t("hue:channelMap.title")}>
         <div className="lm-settings-group-h">
-          <span className="t">{t("device.hue.channelMap.title")}</span>
+          <span className="t">{t("hue:channelMap.title")}</span>
         </div>
         <div className="lm-chmap-body">
-          <p className="lm-chmap-hint">{t("device.hue.channelMap.loading")}</p>
+          <p className="lm-chmap-hint">{t("hue:channelMap.loading")}</p>
         </div>
       </section>
     );
@@ -562,10 +562,10 @@ export function HueChannelMapPanel({
   // Hint text varies by mode and selection
   const hintText =
     mode === "assign-zone"
-      ? t("device.hue.channelMap.hint")
+      ? t("hue:channelMap.hint")
       : hasSelection
-        ? t("device.hue.channelMap.hintPositionModeSelected")
-        : t("device.hue.channelMap.hintPositionMode");
+        ? t("hue:channelMap.hintPositionModeSelected")
+        : t("hue:channelMap.hintPositionMode");
 
   const hasSaveAction = Boolean(bridgeIp && username && areaId);
 
@@ -573,11 +573,11 @@ export function HueChannelMapPanel({
     <section
       className="lm-settings-group lm-chmap"
       role="region"
-      aria-label={t("device.hue.channelMap.title")}
+      aria-label={t("hue:channelMap.title")}
     >
       {/* Header — title + mode toggle */}
       <div className="lm-settings-group-h">
-        <span className="t">{t("device.hue.channelMap.title")}</span>
+        <span className="t">{t("hue:channelMap.title")}</span>
         <ModePillToggle mode={mode} onModeChange={setMode} t={t} />
       </div>
 
@@ -587,7 +587,7 @@ export function HueChannelMapPanel({
           <span className="lm-chmap-hint-text">{hintText}</span>
           {mode === "position" && selectedChannels.size > 1 && (
             <span className="lm-chmap-multi" aria-live="polite">
-              {t("device.hue.channelMap.multiSelectCount", { count: String(selectedChannels.size) })}
+              {t("hue:channelMap.multiSelectCount", { count: String(selectedChannels.size) })}
             </span>
           )}
         </div>
@@ -597,7 +597,7 @@ export function HueChannelMapPanel({
           ref={canvasRef}
           className="lm-chmap-canvas"
           role="application"
-          aria-label={t("device.hue.channelMap.canvasAriaLabel")}
+          aria-label={t("hue:channelMap.canvasAriaLabel")}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
@@ -606,16 +606,16 @@ export function HueChannelMapPanel({
 
           {/* Region edge labels — short codes via i18n */}
           <span className="lm-chmap-canvas-edge is-l" aria-hidden>
-            {t("device.hue.channelMap.regionShort.left")}
+            {t("hue:channelMap.regionShort.left")}
           </span>
           <span className="lm-chmap-canvas-edge is-r" aria-hidden>
-            {t("device.hue.channelMap.regionShort.right")}
+            {t("hue:channelMap.regionShort.right")}
           </span>
           <span className="lm-chmap-canvas-edge is-t" aria-hidden>
-            {t("device.hue.channelMap.regionShort.top")}
+            {t("hue:channelMap.regionShort.top")}
           </span>
           <span className="lm-chmap-canvas-edge is-b" aria-hidden>
-            {t("device.hue.channelMap.regionShort.bottom")}
+            {t("hue:channelMap.regionShort.bottom")}
           </span>
 
           {/* Channel dots */}
@@ -692,7 +692,7 @@ export function HueChannelMapPanel({
         {/* Persist error feedback (shellStore write failed) */}
         {persistError && (
           <div className="lm-chmap-feedback is-warn" role="alert">
-            <span>{t("device.hue.channelMap.saveError")}</span>
+            <span>{t("hue:channelMap.saveError")}</span>
           </div>
         )}
       </div>
@@ -712,7 +712,7 @@ export function HueChannelMapPanel({
               key={ch.index}
               className="lm-chmap-row"
               role="group"
-              aria-label={t("device.hue.channelMap.regionRowAriaLabel", { index: channelLabel })}
+              aria-label={t("hue:channelMap.regionRowAriaLabel", { index: channelLabel })}
             >
               <div className="lm-chmap-row-id">
                 <button
@@ -720,7 +720,7 @@ export function HueChannelMapPanel({
                   className={`lm-chmap-row-dot${isSelected ? " is-selected" : ""}`}
                   style={{ ["--lm-chmap-dot-color" as string]: dotColor }}
                   aria-pressed={isSelected}
-                  aria-label={t("device.hue.channelMap.rowDotAriaLabel", { index: channelLabel })}
+                  aria-label={t("hue:channelMap.rowDotAriaLabel", { index: channelLabel })}
                   onClick={(e) => {
                     toggleSelection(ch.index, e.shiftKey);
                   }}
@@ -730,12 +730,12 @@ export function HueChannelMapPanel({
                 </span>
                 <span className="lm-chmap-row-lights">
                   {ch.lightCount === 1
-                    ? t("device.hue.channelMap.oneLight")
-                    : t("device.hue.channelMap.lights", { count: ch.lightCount })}
+                    ? t("hue:channelMap.oneLight")
+                    : t("hue:channelMap.lights", { count: ch.lightCount })}
                 </span>
               </div>
 
-              <div className="lm-chmap-pills" role="radiogroup" aria-label={t("device.hue.channelMap.zonePicker")}>
+              <div className="lm-chmap-pills" role="radiogroup" aria-label={t("hue:channelMap.zonePicker")}>
                 {REGIONS.map((region) => {
                   const isActive = effectiveRegion === region;
                   return (
@@ -762,7 +762,7 @@ export function HueChannelMapPanel({
               <div className="lm-chmap-row-trail">
                 {isSaved ? (
                   <span className="lm-chmap-row-saved" aria-live="polite">
-                    {t("device.hue.channelMap.saved")}
+                    {t("hue:channelMap.saved")}
                   </span>
                 ) : isOverridden ? (
                   <button
@@ -771,9 +771,9 @@ export function HueChannelMapPanel({
                     onClick={() => {
                       handleSetRegion(ch.index, null);
                     }}
-                    title={t("device.hue.channelMap.resetToAuto")}
+                    title={t("hue:channelMap.resetToAuto")}
                   >
-                    {t("device.hue.channelMap.auto")}
+                    {t("hue:channelMap.auto")}
                   </button>
                 ) : null}
               </div>
@@ -786,29 +786,29 @@ export function HueChannelMapPanel({
       {hasSaveAction && (
         <div className="lm-chmap-footer">
           <div className="lm-chmap-footer-row">
-            <span className="lm-chmap-beta">{t("device.hue.channelMap.beta")}</span>
+            <span className="lm-chmap-beta">{t("hue:channelMap.beta")}</span>
             <div className="lm-chmap-footer-spacer" />
             <button
               type="button"
               className="lm-device-btn is-primary"
               disabled={isStreaming || isSaving}
-              title={isStreaming ? t("device.hue.channelMap.saveToBridgeTooltip") : undefined}
+              title={isStreaming ? t("hue:channelMap.saveToBridgeTooltip") : undefined}
               onClick={() => {
                 void handleSaveToBridge();
               }}
             >
-              {isSaving ? t("device.hue.channelMap.saving") : t("device.hue.channelMap.saveToBridge")}
+              {isSaving ? t("hue:channelMap.saving") : t("hue:channelMap.saveToBridge")}
             </button>
           </div>
           {saveResult !== null && (
             saveResult.ok ? (
               <div className="lm-chmap-feedback is-ok" role="status" aria-live="polite">
-                <span>{t("device.hue.channelMap.savedToBridge")}</span>
+                <span>{t("hue:channelMap.savedToBridge")}</span>
               </div>
             ) : (
               <div className="lm-chmap-feedback is-err" role="alert">
                 <span>
-                  {t("device.hue.channelMap.saveToBridgeError", { code: saveResult.code ?? "" })}
+                  {t("hue:channelMap.saveToBridgeError", { code: saveResult.code ?? "" })}
                 </span>
                 <button
                   type="button"
@@ -817,7 +817,7 @@ export function HueChannelMapPanel({
                     void handleSaveToBridge();
                   }}
                 >
-                  {t("device.hue.channelMap.saveToBridgeErrorRetry")}
+                  {t("hue:channelMap.saveToBridgeErrorRetry")}
                 </button>
               </div>
             )
