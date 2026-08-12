@@ -127,6 +127,11 @@ const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 /** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
 const USB_DISCONNECT_NOTICE_MS = 5_000;
 /**
+ * Marks that first-connect calibration has already been auto-opened. Session-scoped
+ * so a WebView reload does not drop the user back into the editor unprompted.
+ */
+const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
+/**
  * Hard floor on the rate at which non-`force` `setLightingMode` invokes are
  * allowed to reach the Tauri backend. Belt-and-braces backstop for the
  * content-based dedup signature: even if a re-render storm somehow produces
@@ -267,7 +272,7 @@ function App() {
   // advances when the user actively engages.
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
   const [hasInteractedWithMode, setHasInteractedWithMode] = useState(false);
-  const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
+  const autoOpenTriggeredRef = useRef(sessionStorage.getItem(CALIBRATION_AUTO_OPENED_KEY) === "1");
   const modeTransitionLockRef = useRef(false);
   const bootstrapRanRef = useRef(false);
   // Auto-updater check is intentionally module-level (not inside the boot
@@ -1360,6 +1365,9 @@ function App() {
 
     if (shouldOpen) {
       autoOpenTriggeredRef.current = true;
+      // The ref is seeded from this key on mount, so the write is what makes the
+      // guard outlive a WebView reload.
+      sessionStorage.setItem(CALIBRATION_AUTO_OPENED_KEY, "1");
       setActiveSection(SECTION_IDS.LED_SETUP);
     }
 
