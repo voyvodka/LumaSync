@@ -6,6 +6,7 @@ const HEALTH_STEP_ORDER = ["PORT_VISIBLE", "PORT_SUPPORTED", "CONNECT_AND_VERIFY
 
 type HealthStep = HealthCheckResult["steps"][number];
 
+/** One health-check step, ordered and formatted for the status card. */
 export interface DeviceStatusHealthStepModel {
   step: HealthStep["step"];
   pass: boolean;
@@ -13,6 +14,7 @@ export interface DeviceStatusHealthStepModel {
   details: string | null;
 }
 
+/** Renderable view model for the device connection status card. */
 export interface DeviceStatusCardModel {
   variant: "success" | "error" | "info";
   code: string;
@@ -43,6 +45,7 @@ function mapHealthSteps(healthCheck: HealthCheckResult): DeviceStatusHealthStepM
     }));
 }
 
+/** Input to `buildDeviceStatusCard`. */
 export interface DeviceStatusCardInput {
   status: string;
   statusCard: {
@@ -57,6 +60,7 @@ export interface DeviceStatusCardInput {
   latestHealthCheck?: HealthCheckResult | null;
 }
 
+/** Derives the device status card model, prioritizing health-check and reconnect state over the raw status code. */
 export function buildDeviceStatusCard(input: DeviceStatusCardInput): DeviceStatusCardModel {
   if (input.isHealthChecking) {
     return {

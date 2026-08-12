@@ -31,6 +31,7 @@ import {
 import { getLightingModeStatus } from "@/features/mode/modeApi";
 import { getLedPreviewStatus } from "../previewApi";
 
+/** Live lighting mode + preview snapshot as seen by a webview separate from the main window. */
 export interface LightingModeSyncState {
   /** Live lighting mode config, or `null` until the first sync resolves. */
   mode: LightingModeConfig | null;
@@ -40,6 +41,7 @@ export interface LightingModeSyncState {
   preview: LedPreviewStatus | null;
 }
 
+/** Seeds and keeps `LightingModeSyncState` in sync via the mode/preview broadcast events. */
 export function useLightingModeSync(): LightingModeSyncState {
   const [mode, setMode] = useState<LightingModeConfig | null>(null);
   const [active, setActive] = useState(false);

@@ -19,10 +19,12 @@
  */
 import { DEVICE_ERROR_CODES } from "@/shared/contracts/device";
 
+/** Boot-time auto-reconnect rejection reasons meaning USB is structurally unusable this session. */
 export type ConnectionRejectionCode =
   | typeof DEVICE_ERROR_CODES.PORT_UNSUPPORTED
   | typeof DEVICE_ERROR_CODES.PORT_NOT_FOUND;
 
+/** A USB connect/disconnect transition broadcast to every subscriber. */
 export interface ConnectionEvent {
   readonly portName: string;
   readonly connected: boolean;
@@ -36,13 +38,16 @@ export interface ConnectionEvent {
   readonly unsupportedReason?: ConnectionRejectionCode;
 }
 
+/** Callback invoked with every emitted `ConnectionEvent`. */
 export type ConnectionEventListener = (event: ConnectionEvent) => void;
 
+/** Fan-out channel for connection events; `subscribe` returns its own unsubscribe. */
 export interface ConnectionEventBus {
   emit(event: ConnectionEvent): void;
   subscribe(listener: ConnectionEventListener): () => void;
 }
 
+/** Creates an isolated `ConnectionEventBus`; use `connectionEvents` for the shared instance. */
 export function createConnectionEventBus(): ConnectionEventBus {
   const listeners = new Set<ConnectionEventListener>();
 

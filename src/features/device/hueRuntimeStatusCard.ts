@@ -5,12 +5,14 @@ import {
 } from "@/shared/contracts/hue";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 
+/** Retry progress surfaced on the runtime status card while a reconnect is in flight. */
 export interface HueRuntimeStatusCardRetry {
   remainingAttempts?: number;
   nextAttemptMs?: number;
   labelKey: TranslationKey;
 }
 
+/** Renderable view model for the Hue runtime status card. */
 export interface HueRuntimeStatusCardModel {
   variant: "success" | "error" | "info";
   titleKey: TranslationKey;
@@ -21,6 +23,7 @@ export interface HueRuntimeStatusCardModel {
   triggerSourceKey?: TranslationKey;
 }
 
+/** Input to `buildHueRuntimeStatusCard`. */
 export interface HueRuntimeStatusCardInput {
   status: HueRuntimeStatus | null;
 }
@@ -37,6 +40,7 @@ function resolveVariant(status: HueRuntimeStatus): HueRuntimeStatusCardModel["va
   return "info";
 }
 
+/** Maps a fault code to its recommended recovery actions when the status has no explicit hint. */
 export function deriveFamilyActionHints(code: string | null | undefined): HueRuntimeActionHint[] {
   if (typeof code !== "string" || code.length === 0) {
     return [];
@@ -91,6 +95,7 @@ function resolveActionHints(status: HueRuntimeStatus): HueRuntimeActionHint[] {
   return deriveFamilyActionHints(status.code);
 }
 
+/** Derives the Hue runtime status card model from the latest streaming status. */
 export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): HueRuntimeStatusCardModel {
   if (!input.status) {
     return {

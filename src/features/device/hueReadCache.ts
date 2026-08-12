@@ -28,6 +28,7 @@ function now(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
+/** Staleness-checked cache read that coalesces concurrent callers onto one in-flight fetch. */
 function read<T>(key: string, maxAgeMs: number, fetcher: () => Promise<T>): Promise<T> {
   const entry = entries.get(key) as CacheEntry<T> | undefined;
 
@@ -62,6 +63,7 @@ function read<T>(key: string, maxAgeMs: number, fetcher: () => Promise<T>): Prom
 
 const STATUS_KEY = "hue:stream-status";
 
+/** Cached `get_hue_stream_status` read, deduping concurrent callers within `maxAgeMs`. */
 export function readHueStreamStatus(maxAgeMs: number = HUE_STATUS_MAX_AGE_MS) {
   return read(STATUS_KEY, maxAgeMs, () => getHueStreamStatus());
 }
@@ -71,6 +73,7 @@ export function invalidateHueStreamStatus(): void {
   entries.delete(STATUS_KEY);
 }
 
+/** Cached blocked-area readiness read, keyed per bridge/user/area and deduped within `maxAgeMs`. */
 export function readHueStreamReadiness(
   bridgeIp: string,
   username: string,

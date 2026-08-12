@@ -31,6 +31,7 @@ const SWATCH: Record<LedTestPatternKind, string> = {
 const STATIC_KINDS: ReadonlySet<LedTestPatternKind> = new Set(["solid", "gamut"]);
 const SPEEDS: TestPatternSpeed[] = ["slow", "med", "fast"];
 
+/** Props for `PatternPicker`. */
 export interface PatternPickerProps {
   selectedKind: LedTestPatternKind;
   speed: TestPatternSpeed;
@@ -40,6 +41,7 @@ export interface PatternPickerProps {
   onSpeedChange: (speed: TestPatternSpeed) => void;
 }
 
+/** Test-pattern kind + speed picker — see module docs above for the speed-disable rule. */
 export function PatternPicker({
   selectedKind,
   speed,

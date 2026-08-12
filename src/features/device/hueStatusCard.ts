@@ -2,6 +2,7 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { HueCredentialStatus } from "@/shared/contracts/hue";
 import type { CommandStatus } from "./hueOnboardingApi";
 
+/** Renderable view model for the Hue pairing/onboarding status card. */
 export interface HueStatusCardModel {
   variant: "success" | "error" | "info";
   titleKey: TranslationKey;
@@ -9,6 +10,7 @@ export interface HueStatusCardModel {
   details?: string;
 }
 
+/** Input to `buildHueStatusCard`. */
 export interface HueStatusCardInput {
   status: CommandStatus | null;
   credentialState: HueCredentialStatus;
@@ -18,6 +20,7 @@ export interface HueStatusCardInput {
   bridgeUnreachable?: boolean;
 }
 
+/** Derives the Hue status card model, prioritizing in-progress operations over the last command result. */
 export function buildHueStatusCard(input: HueStatusCardInput): HueStatusCardModel {
   if (input.isValidatingCredential) {
     return {

@@ -25,6 +25,7 @@ import {
 } from "@/features/mode/model/contracts";
 import type { LedTestPatternKind } from "@/shared/contracts/preview";
 
+/** One enriched edge-signal frame: per-LED colours plus Hue channel + pattern metadata. */
 export interface LedPreviewFrame {
   /** Full per-LED RGB buffer, ordered along the calibrated strip path. */
   leds: Array<[number, number, number]>;
