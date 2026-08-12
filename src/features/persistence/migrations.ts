@@ -99,6 +99,11 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV2ToV3(next);
   }
 
+  // 3 → 4: re-fold hueZones the Lights dock stranded after 1 → 2 had run
+  if ((next.schemaVersion ?? 1) < 4) {
+    next = migrateV3ToV4(next);
+  }
+
   return next;
 }
 
@@ -209,6 +214,61 @@ function isHueShapedRecord(record: Record<string, unknown>): boolean {
     return false;
 
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// 3 → 4 — re-fold `hueZones` stranded by the Lights dock after 1 → 2 ran
+// ---------------------------------------------------------------------------
+
+/** Recovering (not dropping) is safe: no released build rendered `hueZones`, so a
+ * stranded zone cannot be one the user deleted. See docs/architecture/hue.md. */
+function migrateV3ToV4(state: ShellState): ShellState {
+  const room = state.roomMap;
+
+  if (!room) {
+    return { ...state, schemaVersion: 4 };
+  }
+
+  const strandedRaw = (room.hueZones ?? []) as LegacyHueZone[];
+  const existingZones = (room.zones ?? []) as HueZone[];
+
+  const { hueZones: _drop, ...roomWithoutHueZones } = room;
+  void _drop;
+
+  if (strandedRaw.length === 0) {
+    return {
+      ...state,
+      schemaVersion: 4,
+      roomMap: { ...roomWithoutHueZones, zones: existingZones },
+    };
+  }
+
+  const seenIds = new Set(existingZones.map((zone) => zone.id));
+  const recovered: HueZone[] = [];
+
+  for (const stranded of strandedRaw) {
+    const converted = migrateLegacyHueZone(stranded);
+    if (!converted) continue;
+    if (seenIds.has(converted.id)) continue;
+    seenIds.add(converted.id);
+    recovered.push(converted);
+  }
+
+  if (recovered.length > 0) {
+    console.warn(
+      `[LumaSync] migration: recovering Hue zones stranded on roomMap.hueZones (count: ${recovered.length})`,
+      "— written by the pre-fix Lights dock; see docs/architecture/hue.md",
+    );
+  }
+
+  return {
+    ...state,
+    schemaVersion: 4,
+    roomMap: {
+      ...roomWithoutHueZones,
+      zones: [...existingZones, ...recovered],
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

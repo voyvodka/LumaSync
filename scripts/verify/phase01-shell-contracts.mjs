@@ -272,16 +272,13 @@ if (orderMatch) {
 }
 
 // ---------------------------------------------------------------------------
-// Schema version bump (v1.5 post-W4-F2 — must be 3 to gate the window-geometry
-// 2 → 3 migration that swaps corner+size persistence for a mode-invariant
-// center point. The 1 → 2 zone-unification step still runs in chain so v1
-// on-disk states upgrade through both rules on a single load.).
+// Schema version bump — gates the newest migration step; earlier steps chain.
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (v1.5 post-W4-F2) ]");
+console.log("\n[ Shell state schema version (v1.6 stranded-zone recovery) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*3\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 3 (window-geometry center-point migration gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 3 — windowCenter migration shim has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*4\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 4 (stranded Hue zone recovery gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 4 — the 3 → 4 recovery shim has no trigger"
 );
 
 // ---------------------------------------------------------------------------

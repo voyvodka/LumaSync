@@ -118,7 +118,8 @@ export const SECTION_ORDER: SectionId[] = [
  * absence-defaults, so NO schema bump is required — the version MUST stay
  * `3` and the legacy spread-merge handles upgrading on-disk v3 states.
  */
-export const SHELL_STATE_SCHEMA_VERSION = 3 as const;
+/** `3 → 4` re-folds Hue zones stranded in `roomMap.hueZones` — see docs/architecture/hue.md. */
+export const SHELL_STATE_SCHEMA_VERSION = 4 as const;
 
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {

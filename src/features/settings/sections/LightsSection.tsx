@@ -216,7 +216,9 @@ export function LightsSection({
     try {
       const state = await shellStore.load();
       const currentMap: RoomMapConfig = state.roomMap ?? DEFAULT_ROOM_MAP;
-      const existing = currentMap.hueZones ?? [];
+      // `zones` is the only zone array the room map renders; `hueZones` is a
+      // one-shot migration input. See docs/architecture/hue.md.
+      const existing = currentMap.zones ?? [];
       const id = `hue-zone-${crypto.randomUUID()}`;
       const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
       const colorVar = `var(${palette[existing.length % palette.length]})`;
@@ -232,11 +234,10 @@ export function LightsSection({
         scaleZ: 0.5,
         channelIndices: [],
         borderColor: colorVar,
-        centerColor: colorVar,
       };
       const nextMap: RoomMapConfig = {
         ...currentMap,
-        hueZones: [...existing, newZone],
+        zones: [...existing, newZone],
       };
       await shellStore.save({
         roomMap: nextMap,
