@@ -2,8 +2,9 @@
 #
 # Ratchet: this file may only SHRINK. A key here that gains a reference is fine
 # (prune the line); a new orphan not listed here fails the verifier. Seeded after
-# deleting the 4 provably-dead families (aboutLogs, language, notifications, hueZone)
-# — see devdocs/frontend-hygiene/D-DESIGN.md "Owner flags" for the remaining backlog.
+# deleting the 4 provably-dead families (aboutLogs, language, notifications, hueZone).
+# The rest need an owner decision — a key with no reference may be genuinely dead,
+# or may belong to a surface that was never wired up — so they are listed, not deleted.
 #
 # Blank lines and # comments ignored. One key per line, sorted.
 
