@@ -23,7 +23,6 @@ import type { HueRuntimeTarget } from "./hue";
 // handlers + frontend *Api.ts invoke() bridges arrive in Phase 1.
 // ---------------------------------------------------------------------------
 
-/** Tauri command ids for the LED preview/test surface (test patterns, twin overlay, control popup). */
 export const PREVIEW_COMMANDS = {
   /** Start a synthetic test pattern; frames flow through the ambilight worker. */
   START_TEST_PATTERN: "start_led_test_pattern",
@@ -195,7 +194,6 @@ export interface LedPreviewStatus {
 // Status codes — typed constants, never raw strings.
 // ---------------------------------------------------------------------------
 
-/** Status codes returned by the synthetic test-pattern commands. */
 export const LED_TEST_STATUS = {
   /** Pattern accepted and now streaming to the configured sink(s). */
   PATTERN_STARTED: "LED_TEST_PATTERN_STARTED",
@@ -220,7 +218,6 @@ export const LED_TEST_STATUS = {
 
 export type LedTestStatusCode = (typeof LED_TEST_STATUS)[keyof typeof LED_TEST_STATUS];
 
-/** Status codes returned by the twin overlay open/close commands. */
 export const TWIN_OVERLAY_STATUS = {
   /** Overlay window opened (or an already-open one was focused) for the display. */
   OPENED: "TWIN_OVERLAY_OPENED",
@@ -244,7 +241,6 @@ export const TWIN_OVERLAY_STATUS = {
 export type TwinOverlayStatusCode =
   (typeof TWIN_OVERLAY_STATUS)[keyof typeof TWIN_OVERLAY_STATUS];
 
-/** Status codes returned by the control popup open/show/hide commands. */
 export const CONTROL_POPUP_STATUS = {
   /** Popup window created (hidden until a subsequent show call). */
   OPENED: "CONTROL_POPUP_OPENED",

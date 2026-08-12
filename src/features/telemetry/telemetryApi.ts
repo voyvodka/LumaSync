@@ -88,7 +88,6 @@ function mapHueTelemetrySnapshot(dto: HueTelemetrySnapshotDto): HueTelemetrySnap
   };
 }
 
-/** Normalize the raw combined USB+Hue telemetry DTO into the domain shape. */
 export function mapFullTelemetrySnapshot(dto: FullTelemetrySnapshotDto): FullTelemetrySnapshot {
   return {
     usb: mapRuntimeTelemetrySnapshot(dto.usb),

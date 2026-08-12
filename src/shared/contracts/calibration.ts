@@ -19,10 +19,8 @@ export type LedDirection = "cw" | "ccw";
 /** Which adjacent segment "owns" the shared corner LED. */
 export type CornerOwnership = "horizontal" | "vertical";
 
-/** Overlay preview color intensity — subdued vs saturated. */
 export type LedVisualPreset = "subtle" | "vivid";
 
-/** One edge of the display perimeter the LED strip runs along. */
 export type LedSegmentKey = "top" | "right" | "bottom" | "left";
 
 /** Where the LED strip's first pixel sits, including the two bottom-gap variants for split runs. */
@@ -38,7 +36,6 @@ export type LedStartAnchor =
   | "left-start"
   | "left-end";
 
-/** LED count per {@link LedSegmentKey}. */
 export interface LedSegmentCounts {
   top: number;
   right: number;

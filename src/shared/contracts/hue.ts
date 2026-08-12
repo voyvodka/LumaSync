@@ -15,7 +15,6 @@ import {
   type HueZoneStatusCode as RoomMapHueZoneStatusCode,
 } from "./roomMap";
 
-/** Tauri command ids for the Hue onboarding/streaming bridge. */
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
   VERIFY_BRIDGE_IP: "verify_hue_bridge_ip",
@@ -70,7 +69,6 @@ export const HUE_ZONE_STATUS_CODES = ROOM_MAP_HUE_ZONE_STATUS_CODES;
 /** Re-export of the canonical Hue zone status code union. */
 export type HueZoneStatusCode = RoomMapHueZoneStatusCode;
 
-/** Status codes returned by the Hue onboarding/pairing/discovery commands. */
 export const HUE_STATUS = {
   DISCOVERY_OK: "HUE_DISCOVERY_OK",
   DISCOVERY_EMPTY: "HUE_DISCOVERY_EMPTY",
@@ -209,7 +207,6 @@ export interface HueCommandStatus {
   details?: string;
 }
 
-/** Lifecycle states of the Hue entertainment stream. */
 export const HUE_RUNTIME_STATES = {
   IDLE: "Idle",
   STARTING: "Starting",
@@ -234,7 +231,6 @@ export const HUE_RUNTIME_ACTION_HINT = {
 export type HueRuntimeActionHint =
   (typeof HUE_RUNTIME_ACTION_HINT)[keyof typeof HUE_RUNTIME_ACTION_HINT];
 
-/** What triggered a Hue runtime state change — which surface initiated it. */
 export const HUE_RUNTIME_TRIGGER_SOURCE = {
   MODE_CONTROL: "mode_control",
   DEVICE_SURFACE: "device_surface",
@@ -319,7 +315,6 @@ export const HUE_RUNTIME_STATUS_FAMILY = {
   CONFIG_NOT_READY: "CONFIG_NOT_READY_*",
 } as const;
 
-/** Structured fault codes for the Hue diagnostics/telemetry surface, grouped by subsystem. */
 export const HUE_FAULT_CODES = {
   // Network/connection family (HUE-NET-xx)
   NET_BRIDGE_UNREACHABLE: "HUE-NET-01",
@@ -460,7 +455,6 @@ export const DEFAULT_HUE_INTENSITY_PRESET: LightingSmoothingPreset =
 /** Which output surface a runtime telemetry row describes. */
 export type HueRuntimeTarget = "hue" | "usb";
 
-/** One target's row in the runtime telemetry grid (Hue or USB). */
 export interface HueRuntimeTargetTelemetryRow {
   target: HueRuntimeTarget;
   state: HueRuntimeState;
@@ -472,7 +466,6 @@ export interface HueRuntimeTargetTelemetryRow {
   actionHint?: HueRuntimeActionHint;
 }
 
-/** Rolled-up counts across all runtime telemetry rows, for a single status summary line. */
 export interface HueRuntimeAggregateTelemetry {
   activeTargets: HueRuntimeTarget[];
   runningCount: number;
@@ -480,13 +473,11 @@ export interface HueRuntimeAggregateTelemetry {
   failedCount: number;
 }
 
-/** Full runtime telemetry payload: per-target rows plus the aggregate summary. */
 export interface HueRuntimeTelemetry {
   hue: HueRuntimeTargetTelemetryRow;
   aggregate: HueRuntimeAggregateTelemetry;
 }
 
-/** `HueCommandStatus` extended with the fields the runtime status commands add. */
 export interface HueRuntimeStatus extends HueCommandStatus {
   state: HueRuntimeState;
   triggerSource: HueRuntimeTriggerSource;
@@ -505,7 +496,6 @@ export interface HueBridgeSummary {
   softwareVersion?: string;
 }
 
-/** Credentials issued by the bridge on successful pairing. */
 export interface HuePairingCredentials {
   username: string;
   clientKey: string;
@@ -527,7 +517,6 @@ export interface HueCredentialMigrationResponse {
   backend?: HueCredentialBackend;
 }
 
-/** One selectable Hue entertainment area, as offered during onboarding. */
 export interface HueEntertainmentAreaSummary {
   id: string;
   name: string;

@@ -1,6 +1,7 @@
-// Device connection contracts for frontend <-> backend command bridge.
+/**
+ * Device connection contracts for frontend <-> backend command bridge.
+ */
 
-/** Tauri command ids for serial device connection, calibration, and health checks. */
 export const DEVICE_COMMANDS = {
   LIST_PORTS: "list_serial_ports",
   CONNECT_PORT: "connect_serial_port",
@@ -41,7 +42,6 @@ export const DEVICE_COMMANDS = {
   TEST_WLED_BRIDGE: "test_wled_bridge",
 } as const;
 
-/** Coarse connection lifecycle states surfaced across the device UI. */
 export const DEVICE_STATUS = {
   IDLE: "idle",
   SCANNING: "scanning",
@@ -72,7 +72,6 @@ export const SUPPORTED_CONTROLLER_IDS = [
 
 export type SupportedControllerId = (typeof SUPPORTED_CONTROLLER_IDS)[number];
 
-/** Coded error reasons surfaced by the device connection commands. */
 export const DEVICE_ERROR_CODES = {
   PORT_NOT_FOUND: "PORT_NOT_FOUND",
   /** Port is outside `SUPPORTED_USB_DEVICE_ALLOWLIST`. Was long declared here

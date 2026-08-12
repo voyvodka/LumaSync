@@ -26,12 +26,10 @@ export interface WledDiscoveryResponse {
   devices: WledDeviceInfo[];
 }
 
-/** Result of `connectWledSink`. */
 export interface WledConnectResponse {
   status: WledCommandStatus;
 }
 
-/** Result of `testWledBridge`. */
 export interface WledTestResponse {
   status: WledCommandStatus;
   /** Round-trip latency of the test packet (ms), populated on success. */

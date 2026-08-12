@@ -20,7 +20,6 @@
 // Room Map Commands
 // ---------------------------------------------------------------------------
 
-/** Tauri command ids for saving/loading the room map and copying background images. */
 export const ROOM_MAP_COMMANDS = {
   SAVE: "save_room_map",
   LOAD: "load_room_map",
@@ -70,7 +69,6 @@ export interface HueChannelPlacement {
 // USB Strip Placement
 // ---------------------------------------------------------------------------
 
-/** A USB LED strip segment's perimeter placement in room space. */
 export interface UsbStripPlacement {
   stripId: string;
   /** Starting corner position on room perimeter */
@@ -98,7 +96,6 @@ export interface UsbStripPlacement {
 // Furniture Placement
 // ---------------------------------------------------------------------------
 
-/** A furniture item's placement in the room-map editor. */
 export interface FurniturePlacement {
   id: string;
   type: "sofa" | "table" | "chair" | "other";
@@ -516,7 +513,6 @@ export type ChannelWritebackStatusCode =
 // Image Layer
 // ---------------------------------------------------------------------------
 
-/** A background/reference image layer placed in the room-map editor. */
 export interface ImageLayer {
   id: string;
   /** Absolute path to the image file */

@@ -37,12 +37,10 @@ export async function startCalibrationTestPattern(
   return invoke<CalibrationTestPatternResult>(DEVICE_COMMANDS.START_CALIBRATION_TEST_PATTERN, { payload });
 }
 
-/** Stop the currently running calibration test pattern. */
 export async function stopCalibrationTestPattern(): Promise<CalibrationTestPatternResult> {
   return invoke<CalibrationTestPatternResult>(DEVICE_COMMANDS.STOP_CALIBRATION_TEST_PATTERN);
 }
 
-/** List the connected displays available for a calibration overlay. */
 export async function listDisplays(): Promise<DisplayInfo[]> {
   return invoke<DisplayInfo[]>(DISPLAY_OVERLAY_COMMANDS.LIST_DISPLAYS);
 }
@@ -58,7 +56,6 @@ export async function openDisplayOverlay(
   });
 }
 
-/** Close the calibration overlay window open on the given display. */
 export async function closeDisplayOverlay(displayId: DisplayId): Promise<DisplayOverlayCommandResult> {
   return invoke<DisplayOverlayCommandResult>(DISPLAY_OVERLAY_COMMANDS.CLOSE_DISPLAY_OVERLAY, { displayId });
 }

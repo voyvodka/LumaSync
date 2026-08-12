@@ -34,7 +34,6 @@ export interface HueVerifyBridgeIpResponse {
   bridge: HueBridgeSummary | null;
 }
 
-/** Credentials issued by the bridge on successful pairing. */
 export interface HuePairingCredentials {
   username: string;
   clientKey: string;
@@ -51,7 +50,6 @@ export interface HueValidateCredentialsResponse {
   valid: boolean;
 }
 
-/** One selectable Hue entertainment area, as offered during onboarding. */
 export interface HueEntertainmentAreaSummary {
   id: string;
   name: string;
@@ -60,7 +58,6 @@ export interface HueEntertainmentAreaSummary {
   activeStreamer?: boolean;
 }
 
-/** Result of `listHueEntertainmentAreas` — every area available under the paired credentials. */
 export interface HueEntertainmentAreaListResponse {
   status: CommandStatus;
   areas: HueEntertainmentAreaSummary[];
@@ -72,7 +69,6 @@ export interface HueStreamReadiness {
   reasons: string[];
 }
 
-/** Result of `checkHueStreamReadiness`. */
 export interface HueStreamReadinessResponse {
   status: CommandStatus;
   readiness: HueStreamReadiness;

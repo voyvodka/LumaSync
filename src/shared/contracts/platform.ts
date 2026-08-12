@@ -6,7 +6,6 @@
 // Platform commands
 // ---------------------------------------------------------------------------
 
-/** Tauri command ids for the platform surface (notifications today). */
 export const PLATFORM_COMMANDS = {
   /**
    * Request permission to show OS notifications. On macOS this triggers
@@ -51,7 +50,6 @@ export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
   "error",
 ] as const;
 
-/** Content and severity of a single OS notification toast. */
 export interface NotificationPayload {
   title: string;
   body: string;

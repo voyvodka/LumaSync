@@ -31,7 +31,6 @@ export interface SerialPortDescriptor {
   usb: UsbPortMetadata | null;
 }
 
-/** Result of `listSerialPorts` — every enumerated port plus the call's own status. */
 export interface SerialPortListResponse {
   status: CommandStatus;
   ports: SerialPortDescriptor[];
@@ -45,7 +44,6 @@ export interface SerialConnectionStatus {
   updatedAtUnixMs: number;
 }
 
-/** Pass/fail outcome of a single step in the serial health-check sequence. */
 export interface HealthStepResult {
   step: DeviceHealthStep;
   pass: boolean;

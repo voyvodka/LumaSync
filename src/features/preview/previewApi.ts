@@ -88,7 +88,6 @@ export async function stopLedTestPattern(
   }
 }
 
-/** Read the current preview surface state (test pattern, twin overlays, popup visibility). */
 export async function getLedPreviewStatus(
   invoker: PreviewInvoker = defaultInvoke,
 ): Promise<LedPreviewStatus> {

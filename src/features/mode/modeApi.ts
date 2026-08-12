@@ -18,7 +18,6 @@ export interface ModeApiError {
   details?: string;
 }
 
-/** Result of a USB lighting-mode command — the mode now in effect plus its coded status. */
 export interface ModeCommandResult {
   active: boolean;
   mode: LightingModeConfig;
@@ -40,7 +39,6 @@ export interface StartHuePayload {
   channelRegionOverrides?: Record<number, string>;
 }
 
-/** RGB (+ optional brightness) to push to the Hue lights as a static color. */
 export interface HueSolidColorPayload {
   r: number;
   g: number;
@@ -57,7 +55,6 @@ export interface HueSolidColorSnapshot {
   brightness: number;
 }
 
-/** Result of a Hue streaming command — runtime state/status plus the last solid color, if any. */
 export interface HueRuntimeCommandResult {
   active: boolean;
   status: {
