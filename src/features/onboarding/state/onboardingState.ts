@@ -34,6 +34,7 @@ export const ONBOARDING_STEPS = {
   COMPLETE: "complete",
 } as const;
 
+/** One value from {@link ONBOARDING_STEPS}. */
 export type OnboardingStep =
   (typeof ONBOARDING_STEPS)[keyof typeof ONBOARDING_STEPS];
 

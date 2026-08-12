@@ -4,6 +4,7 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { shellStore } from "../persistence/shellStore";
 import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/shell";
 
+/** Auto-updater lifecycle state: idle, checking, available, downloading, installing, or error. */
 export type UpdaterState =
   | { status: "idle" }
   | { status: "checking" }
@@ -40,6 +41,7 @@ async function readUpdateChannel(): Promise<UpdateChannel> {
   }
 }
 
+/** Drives the auto-update lifecycle: check, download with progress, install. */
 export function useAutoUpdater() {
   const [state, setState] = useState<UpdaterState>({ status: "idle" });
   const [channel, setChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);

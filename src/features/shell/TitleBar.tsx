@@ -40,8 +40,10 @@ interface TitleBarProps {
   onSectionChange?: (id: SectionId) => void;
 }
 
+/** Title bar height in pixels, shared with window-size layout math. */
 export const TITLE_BAR_HEIGHT_PX = 36;
 
+/** Custom cross-platform window title bar: drag region, nav tabs, and window controls. */
 export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange }: TitleBarProps) {
   const { t } = useTranslation();
   const [platform] = useState<Platform>(detectPlatform);

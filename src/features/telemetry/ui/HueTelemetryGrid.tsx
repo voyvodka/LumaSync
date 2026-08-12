@@ -21,6 +21,7 @@ function stateTint(state: string): string {
   return "";
 }
 
+/** Renders the Hue entertainment stream health grid (status, packet rate, DTLS, reconnects). */
 export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
   const { t } = useTranslation();
 

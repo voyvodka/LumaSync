@@ -38,6 +38,7 @@ interface SolidColorPanelProps {
   onCommit: (draft: { r: number; g: number; b: number; brightness: number }) => void;
 }
 
+/** Solid-mode color + brightness editor (HSV picker with a hex/RGB readout). */
 export function SolidColorPanel({
   incoming,
   disabled,

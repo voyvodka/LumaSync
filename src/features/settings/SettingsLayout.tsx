@@ -61,6 +61,7 @@ interface SettingsLayoutProps {
   onOpenDevices?: () => void;
 }
 
+/** Routes the settings surface to the compact or full-mode section layout. */
 export const SettingsLayout = memo(function SettingsLayout({
   uiMode,
   activeSection,

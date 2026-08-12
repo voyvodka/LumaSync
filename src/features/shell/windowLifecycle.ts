@@ -40,6 +40,7 @@ async function getStore() {
   });
 }
 
+/** Reads shell state from the store, merging in defaults and running schema migrations. */
 export async function loadShellState(): Promise<ShellState> {
   const store = await getStore();
   const saved = await store.get<Partial<ShellState>>(SHELL_STORE_KEY);
@@ -94,6 +95,7 @@ export async function loadShellState(): Promise<ShellState> {
   return migrated;
 }
 
+/** Merges a partial shape into the persisted shell state store. */
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {
   const store = await getStore();
   const current = await loadShellState();

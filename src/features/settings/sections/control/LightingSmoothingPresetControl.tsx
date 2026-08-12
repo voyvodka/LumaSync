@@ -38,6 +38,7 @@ import { shellStore } from "@/features/persistence/shellStore";
 
 const PRESET_ORDER: LightingSmoothingPreset[] = ["subtle", "moderate", "intense"];
 
+/** Props for {@link LightingSmoothingPresetControl}. */
 export interface LightingSmoothingPresetControlProps {
   /** Initial preset from shellStore — parent hydrates before first paint. */
   initialPreset?: LightingSmoothingPreset;
@@ -48,6 +49,7 @@ export interface LightingSmoothingPresetControlProps {
   onPresetChange?: (next: LightingSmoothingPreset) => void;
 }
 
+/** Segmented control for the shared USB/Hue lighting responsiveness preset. */
 export function LightingSmoothingPresetControl({
   initialPreset,
   onPresetChange,

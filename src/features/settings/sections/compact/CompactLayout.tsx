@@ -72,6 +72,7 @@ const DEFAULT_AMBILIGHT = {
   blackBorderDetection: false,
 } as const;
 
+/** Tray-style 320px compact UI: mode strip, active-mode card, and scene row. */
 export function CompactLayout({
   lightingMode,
   outputTargets,

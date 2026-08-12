@@ -27,6 +27,7 @@ function buildLinearGradient(
   return `linear-gradient(${direction},${samples.map(rgbTripletToCss).join(",")})`;
 }
 
+/** Props for {@link EdgeSignalGrid}. */
 export interface EdgeSignalGridProps {
   /** Subscribe only while Ambilight is active — no IPC traffic otherwise. */
   isAmbilight: boolean;
@@ -35,6 +36,7 @@ export interface EdgeSignalGridProps {
   resolutionLabel: string | null;
 }
 
+/** Renders live per-edge capture-color gradients plus the display center tile. */
 export function EdgeSignalGrid({
   isAmbilight,
   counts,

@@ -51,6 +51,7 @@ function nextDoublePaint(): Promise<void> {
   });
 }
 
+/** Drives the compact/full UI mode transition: fade out, resize window, fade in. */
 export function useUIMode() {
   const [currentMode, setCurrentMode] = useState<UIMode>("compact");
   const [isContentVisible, setIsContentVisible] = useState(true);

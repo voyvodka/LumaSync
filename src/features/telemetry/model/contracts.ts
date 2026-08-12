@@ -1,12 +1,15 @@
+/** Backpressure tier of the ambilight frame queue. */
 export const TELEMETRY_QUEUE_HEALTH = {
   HEALTHY: "healthy",
   WARNING: "warning",
   CRITICAL: "critical",
 } as const;
 
+/** One value from {@link TELEMETRY_QUEUE_HEALTH}. */
 export type TelemetryQueueHealth =
   (typeof TELEMETRY_QUEUE_HEALTH)[keyof typeof TELEMETRY_QUEUE_HEALTH];
 
+/** USB capture/send FPS and queue health, polled from the Rust runtime. */
 export interface RuntimeTelemetrySnapshot {
   captureFps: number;
   sendFps: number;
@@ -15,12 +18,14 @@ export interface RuntimeTelemetrySnapshot {
   frameLatencyMs: number;
 }
 
+/** Pre-formatted, display-ready view of a {@link RuntimeTelemetrySnapshot}. */
 export interface RuntimeTelemetryDisplayModel {
   captureFpsText: string;
   sendFpsText: string;
   queueHealthLabel: TelemetryQueueHealth;
 }
 
+/** Hue entertainment stream health: state, packet rate, DTLS, and reconnects. */
 export interface HueTelemetrySnapshot {
   state: string;
   uptimeSecs: number | null;
@@ -35,6 +40,7 @@ export interface HueTelemetrySnapshot {
   dtlsConnectedAtSecs: number | null;
 }
 
+/** Combined USB + Hue telemetry returned by a single poll. */
 export interface FullTelemetrySnapshot {
   usb: RuntimeTelemetrySnapshot;
   hue: HueTelemetrySnapshot | null;

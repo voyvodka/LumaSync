@@ -104,6 +104,7 @@ function SliderRow({
   );
 }
 
+/** Props for {@link ColorCorrectionPanel}. */
 export interface ColorCorrectionPanelProps {
   /**
    * Initial config hydrated from shellStore by the parent on first mount.
@@ -119,6 +120,7 @@ export interface ColorCorrectionPanelProps {
   onConfigChange?: (next: ColorCorrectionConfig) => void;
 }
 
+/** Collapsible editor for per-channel LED gamma, white point, and saturation. */
 export function ColorCorrectionPanel({
   initialConfig,
   onConfigChange,

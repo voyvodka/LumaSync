@@ -18,11 +18,13 @@ function isSameSolidDraft(left: SolidDraft, right: SolidDraft): boolean {
   );
 }
 
+/** Options for {@link useSolidColorDraft}. */
 export interface UseSolidColorDraftOptions {
   incoming: { r: number; g: number; b: number; brightness: number };
   onCommit: (draft: { r: number; g: number; b: number; brightness: number }) => void;
 }
 
+/** Tracks a local solid-color edit and rate-limits how often it commits upstream. */
 export function useSolidColorDraft({ incoming, onCommit }: UseSolidColorDraftOptions) {
   const [draft, setDraft] = useState<SolidDraft>(incoming);
   const commitTimerRef = useRef<number | null>(null);
@@ -46,6 +48,8 @@ export function useSolidColorDraft({ incoming, onCommit }: UseSolidColorDraftOpt
     onCommit(payload);
   };
 
+  // Throttles onCommit to SOLID_COMMIT_MIN_INTERVAL_MS so a fast-dragged
+  // slider doesn't flood the backend with invoke calls.
   const queueCommit = (payload: SolidDraft) => {
     pendingCommitRef.current = payload;
     const elapsed = Date.now() - lastCommitAtRef.current;

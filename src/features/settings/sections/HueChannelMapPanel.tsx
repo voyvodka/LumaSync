@@ -247,6 +247,7 @@ interface DragState {
   groupStartPositions: Map<number, { x: number; y: number }>;
 }
 
+/** Spatial editor for placing Hue entertainment-area channels and assigning them to zones. */
 export function HueChannelMapPanel({
   channels,
   isLoading,
@@ -842,6 +843,7 @@ interface MiniChannelShape {
   index?: number;
 }
 
+/** Small read-only dot preview of channel positions, used outside the main editor. */
 export function MiniSpatialPreview({
   channels,
   channelCount,
