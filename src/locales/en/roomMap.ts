@@ -53,22 +53,16 @@ export default {
     defaultLabel: "Channel {{index}}",
   },
   zones: {
-    panelTitle: "Zones",
     deriveButton: "Derive Zones",
     confirmDeriveButton: "Confirm",
     cancelDeriveButton: "Discard Preview",
     addZoneButton: "+ Zone",
     namePlaceholder: "Zone name",
-    defaultName: "Zone {{N}}",
-    deleteAriaLabel: "Delete zone {{name}}",
     deriveDisabledTooltip: "Place a USB strip and TV anchor first",
-    emptyPanel: "No zones defined. Press + Zone to create one.",
     deriveSuccess: "Zones derived — review and confirm",
     errNoTvAnchor: "Place a TV anchor on the map before deriving zones.",
     errNoUsbStrip: "Place a USB strip on the map before deriving zones.",
     calibrationApplyNote: "Zone counts applied. Save in Calibration to persist.",
-    lightCount: "{{N}} lights",
-    lightCountOne: "1 light",
   },
   hueZones: {
     title: "Hue Zones",
@@ -101,7 +95,6 @@ export default {
     },
   },
   zoneProperties: {
-    title: "Zone properties",
     color: "Color",
     borderColor: "Border",
     centerColor: "Center",
@@ -109,7 +102,6 @@ export default {
   },
   objectPanel: {
     objectsTab: "Objects",
-    zonesTab: "Zones",
     hueZonesTab: "Hue Zones",
     empty: "No objects placed yet.",
     tvLabel: "TV",
