@@ -1,11 +1,10 @@
-//! Rust mirror of the `LedCalibrationConfig` TypeScript contract defined in
-//! `src/shared/contracts/calibration.ts`, plus the LED-sequence and
-//! pixel-averaging logic that turns a calibration config into per-LED colors.
-//!
-//! Field names and types must stay in sync with the TS interface. The
-//! `verify:shell-contracts` script will flag drift. All string-enum fields use
-//! `String` (not Rust enums) so that unknown future values round-trip without
-//! breaking deserialization — the encoder validates them at use-time.
+/// Rust mirror of the `LedCalibrationConfig` TypeScript contract defined in
+/// `src/shared/contracts/calibration.ts`.
+///
+/// Field names and types must stay in sync with the TS interface. The
+/// `verify:shell-contracts` script will flag drift. All string-enum fields use
+/// `String` (not Rust enums) so that unknown future values round-trip without
+/// breaking deserialization — the encoder validates them at use-time.
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -73,7 +72,6 @@ impl LedSegment {
         LedSegment::Left,
     ];
 
-    /// Look up this segment's LED count in `counts`.
     pub fn count(&self, counts: &LedSegmentCounts) -> u16 {
         match self {
             LedSegment::Top => counts.top,
@@ -88,8 +86,6 @@ impl LedSegment {
 // Sequence item — mirrors `LedSequenceItem` in indexMapping.ts
 // ---------------------------------------------------------------------------
 
-/// One LED's position in the strip-order sequence: physical index, edge
-/// segment, and index within that segment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedSequenceItem {
     pub index: usize,

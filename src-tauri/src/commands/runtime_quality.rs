@@ -1,10 +1,5 @@
-//! Adaptive frame smoothing and send-pacing for the ambilight worker loop —
-//! trades latency for stability under CPU/USB pressure without dropping
-//! below the strip's minimum refresh rate.
-
 use std::time::{Duration, Instant};
 
-/// Tuning knobs for `RuntimeQualityController`'s smoothing and adaptive pacing.
 #[derive(Clone, Debug)]
 pub struct RuntimeQualityConfig {
     pub smoothing_alpha: f32,
@@ -26,16 +21,12 @@ impl Default for RuntimeQualityConfig {
     }
 }
 
-/// One frame's measured capture and send cost, in milliseconds.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RuntimeTimingSample {
     pub capture_cost_ms: f32,
     pub send_cost_ms: f32,
 }
 
-/// Smooths per-LED colour transitions and adapts the send interval to
-/// observed frame cost, so a slow capture/USB write degrades gracefully
-/// instead of stalling the worker loop.
 #[derive(Debug)]
 pub struct RuntimeQualityController {
     config: RuntimeQualityConfig,
@@ -45,7 +36,6 @@ pub struct RuntimeQualityController {
 }
 
 impl RuntimeQualityController {
-    /// Build a controller with no smoothing history and no observed cost yet.
     pub fn new(config: RuntimeQualityConfig) -> Self {
         Self {
             config,
@@ -55,9 +45,6 @@ impl RuntimeQualityController {
         }
     }
 
-    /// Blend `target_frame` toward the previous smoothed frame by
-    /// `smoothing_alpha`, returning the new per-LED colours to send.
-    /// A change in LED count resets smoothing and snaps to `target_frame`.
     pub fn smooth(&mut self, target_frame: &[[u8; 3]]) -> Vec<[u8; 3]> {
         if self.previous_frame.len() != target_frame.len() {
             self.previous_frame = target_frame.to_vec();
@@ -82,8 +69,6 @@ impl RuntimeQualityController {
             .collect()
     }
 
-    /// Feed one frame's capture/send cost into the EWMA that
-    /// `current_send_interval` uses to detect pressure.
     pub fn observe_timing(&mut self, capture_ms: f32, send_ms: f32) {
         let sample = RuntimeTimingSample {
             capture_cost_ms: capture_ms,
@@ -98,9 +83,6 @@ impl RuntimeQualityController {
         });
     }
 
-    /// Interval to wait before the next send, stretched above
-    /// `base_interval_ms` when observed cost indicates the loop is under
-    /// pressure, clamped to `[min_interval_ms, max_interval_ms]`.
     pub fn current_send_interval(&self) -> Duration {
         let base_interval_ms = self.config.base_interval_ms.max(1);
         let min_interval_ms = self.config.min_interval_ms.max(1);
@@ -117,7 +99,6 @@ impl RuntimeQualityController {
         Duration::from_millis(adaptive_ms.clamp(min_interval_ms, max_interval_ms))
     }
 
-    /// Update the smoothing strength at runtime (e.g. user changed the setting).
     pub fn set_smoothing_alpha(&mut self, alpha: f32) {
         self.config.smoothing_alpha = alpha.clamp(0.0, 1.0);
     }
@@ -141,8 +122,6 @@ impl RuntimeQualityController {
         self.observed_cost_ewma_ms.unwrap_or(0.0)
     }
 
-    /// Gate for the worker loop: `true` (and records `now` as the last send)
-    /// once `current_send_interval` has elapsed since the previous send.
     pub fn should_send_now(&mut self, now: Instant) -> bool {
         let Some(last_sent_at) = self.last_sent_at else {
             self.last_sent_at = Some(now);
@@ -158,29 +137,22 @@ impl RuntimeQualityController {
     }
 }
 
-/// Single-slot coalescing buffer between capture and send: a frame that
-/// arrives before the previous one was sent overwrites it rather than queuing,
-/// so the worker always sends the latest frame instead of falling behind.
 #[derive(Debug, Default)]
 pub struct RuntimeFrameSlot {
     latest: Option<Vec<[u8; 3]>>,
 }
 
 impl RuntimeFrameSlot {
-    /// Build an empty slot.
     pub fn new() -> Self {
         Self { latest: None }
     }
 
-    /// Store `frame`, overwriting whatever was pending. Returns `true` when
-    /// an unsent frame was dropped (useful for slot-overwrite telemetry).
     pub fn push(&mut self, frame: Vec<[u8; 3]>) -> bool {
         let replaced = self.latest.is_some();
         self.latest = Some(frame);
         replaced
     }
 
-    /// Take and clear the pending frame, if any.
     pub fn take_latest(&mut self) -> Option<Vec<[u8; 3]>> {
         self.latest.take()
     }

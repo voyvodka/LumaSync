@@ -1,8 +1,3 @@
-//! Platform screen-capture abstraction — a `CapturedFrame` source per OS
-//! (ScreenCaptureKit / Windows Graphics Capture / xcap) plus the shared
-//! display-selection and black-border-detection helpers they all use.
-
-/// One captured screen frame in packed RGB, row-major, top-left origin.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapturedFrame {
     pub width: u32,
@@ -12,21 +7,18 @@ pub struct CapturedFrame {
 
 // v1.3 single-zone sampling structs — kept for backward compat and existing tests.
 // v1.4 per-LED path uses `led_calibration::sample_frame_for_sequence` instead.
-/// v1.3 single-zone sampler input — LED count only, no per-LED geometry.
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SamplingCalibration {
     pub led_count: usize,
 }
 
-/// v1.3 single-zone sampler output — one colour per LED in strip order.
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SampledLedFrame {
     pub colors: Vec<[u8; 3]>,
 }
 
-/// Coded failure from a platform capture backend.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AmbilightCaptureError {
     /// Surfaced when a platform's capture pipeline reports a missing frame
@@ -41,7 +33,6 @@ pub enum AmbilightCaptureError {
 }
 
 impl AmbilightCaptureError {
-    /// Render as the coded string surfaced across the Tauri IPC boundary.
     pub fn as_reason(&self) -> String {
         match self {
             Self::FrameUnavailable => "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE".to_string(),
@@ -52,8 +43,6 @@ impl AmbilightCaptureError {
 
 use std::sync::Arc;
 
-/// Pull-mode handle to a platform capture session — the ambilight worker
-/// polls `capture_frame` at its own cadence rather than being pushed frames.
 pub trait AmbilightFrameSource: Send {
     fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError>;
 }
@@ -117,28 +106,21 @@ pub fn select_display_index(
     Some(0)
 }
 
-/// Open a live capture session on the current platform for `display_id`
-/// (or the primary display when `None`/unresolved). Dispatches to the
-/// per-OS `platform` module compiled for the target.
 pub fn create_live_frame_source(
     display_id: Option<&str>,
 ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
     platform::create_live_frame_source(display_id)
 }
 
-/// Fixed-frame `AmbilightFrameSource` used for onboarding previews and tests
-/// where a live capture session is not available or not wanted.
 pub struct StaticFrameSource {
     frame: CapturedFrame,
 }
 
 impl StaticFrameSource {
-    /// Wrap a caller-supplied frame.
     pub fn new(frame: CapturedFrame) -> Self {
         Self { frame }
     }
 
-    /// A small placeholder gradient used when no real frame is available yet.
     pub fn default_frame() -> CapturedFrame {
         CapturedFrame {
             width: 4,
@@ -993,9 +975,6 @@ pub fn crop_frame_to_content(frame: &CapturedFrame, insets: &BlackBorderInsets) 
 }
 
 // v1.3 single-zone sampler — retained for tests; v1.4 path uses build_led_sequence.
-/// Map a captured frame's pixels onto `calibration.led_count` LEDs by simple
-/// index wraparound (no per-LED geometry). Superseded by
-/// `led_calibration::sample_frame_for_sequence`; kept for regression tests.
 #[allow(dead_code)]
 pub fn sample_led_frame(
     frame: &CapturedFrame,
