@@ -1,3 +1,4 @@
+import common from "./common";
 import preview from "./preview";
 import settings from "./settings";
 import shell from "./shell";
@@ -6,6 +7,7 @@ import tray from "./tray";
 import updater from "./updater";
 
 export const tr = {
+  common,
   preview,
   settings,
   shell,

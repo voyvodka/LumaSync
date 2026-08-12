@@ -490,7 +490,7 @@ describe("App mode orchestration", () => {
 
     // Expect: USB suggest banner appears
     await waitFor(() => {
-      // Banner text from i18n key "hotplug.usbDetected"
+      // Banner text from i18n key "common:hotplug.usbDetected"
       // In test environment with mocked i18n, the key itself or English text may appear
       expect(screen.getByTestId("active-mode")).toBeInTheDocument();
     });

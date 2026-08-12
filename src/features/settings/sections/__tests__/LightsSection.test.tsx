@@ -25,14 +25,14 @@ vi.mock("react-i18next", () => ({
         "lightsPage.dock.rows.hueName": "HUE",
         "lightsPage.dock.rows.hueType": "ENTERTAINMENT",
         "lightsPage.dock.rows.hueSubIdle": "Bridge · standby",
-        "general.mode.brightness": "Brightness",
-        "general.mode.solidColor": "Solid color",
-        "ui.colorPicker.hexLabel": "HEX",
-        "ui.colorPicker.rootAriaLabel": "Color picker",
-        "ui.colorPicker.hueLabel": "Hue",
-        "ui.colorPicker.svLabel": "Saturation and value",
-        "ui.colorPicker.recentColors": "Recent",
-        "ui.colorPicker.recentItemAriaLabel": "Recent colour {{hex}}",
+        "common:mode.brightness": "Brightness",
+        "common:mode.solidColor": "Solid color",
+        "common:ui.colorPicker.hexLabel": "HEX",
+        "common:ui.colorPicker.rootAriaLabel": "Color picker",
+        "common:ui.colorPicker.hueLabel": "Hue",
+        "common:ui.colorPicker.svLabel": "Saturation and value",
+        "common:ui.colorPicker.recentColors": "Recent",
+        "common:ui.colorPicker.recentItemAriaLabel": "Recent colour {{hex}}",
       };
 
       let value = dict[key] ?? key;

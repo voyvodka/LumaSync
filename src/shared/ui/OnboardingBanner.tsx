@@ -153,8 +153,8 @@ export function OnboardingBanner({
           type="button"
           className="lm-onboarding-banner-dismiss"
           onClick={onDismiss}
-          aria-label={t("ui.onboardingBanner.dismissAriaLabel")}
-          title={t("ui.onboardingBanner.dismissAriaLabel")}
+          aria-label={t("common:ui.onboardingBanner.dismissAriaLabel")}
+          title={t("common:ui.onboardingBanner.dismissAriaLabel")}
         >
           <DismissIcon />
         </button>

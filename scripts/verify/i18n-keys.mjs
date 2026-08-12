@@ -28,7 +28,7 @@ const KNOWN_DYNAMIC_PREFIXES = [
   "device.hue.runtime.codes",
   "device.hue.runtime.states",
   "device.hue.runtime.triggerSource",
-  "hotplug.targetLabel",
+  "common:hotplug.targetLabel",
   "preview:pattern",
   "preview:status",
   "preview:test.speed",

@@ -61,7 +61,7 @@ export function SolidColorPanel({
       {/* Color picker row */}
       <div>
         <p className="mb-2 text-xs font-medium text-slate-600 dark:text-zinc-300">
-          {t("general.mode.solidColor")}
+          {t("common:mode.solidColor")}
           <span className="ml-2 [font-family:var(--lm-mono)] text-zinc-100">
             {hexColor.toUpperCase()}
           </span>
@@ -76,11 +76,11 @@ export function SolidColorPanel({
             value={hexColor}
             onChange={(hex) => setColor(parseHexColor(hex))}
             disabled={disabled}
-            ariaLabel={t("general.mode.solidColor")}
+            ariaLabel={t("common:mode.solidColor")}
           />
           <div className="min-w-0">
             <p className="text-xs font-medium text-slate-800 dark:text-zinc-100">
-              {t("general.mode.colorModelRgb")}
+              {t("common:mode.colorModelRgb")}
             </p>
             <p className="text-xs tabular-nums text-slate-500 dark:text-zinc-400">
               {draft.r}, {draft.g}, {draft.b}
@@ -92,7 +92,7 @@ export function SolidColorPanel({
       {/* Brightness slider — full width */}
       <div>
         <p className="mb-2 flex items-center justify-between text-xs font-medium text-slate-600 dark:text-zinc-300">
-          <span>{t("general.mode.brightness")}</span>
+          <span>{t("common:mode.brightness")}</span>
           <span className="tabular-nums text-zinc-100">
             {brightnessPercent}%
           </span>
@@ -103,7 +103,7 @@ export function SolidColorPanel({
           max={100}
           step={1}
           disabled={brightnessLocked}
-          aria-label={t("general.mode.brightness")}
+          aria-label={t("common:mode.brightness")}
           aria-disabled={brightnessLocked}
           title={brightnessDisabled ? brightnessDisabledReason : undefined}
           value={brightnessPercent}

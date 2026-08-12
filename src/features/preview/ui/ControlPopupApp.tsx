@@ -460,26 +460,26 @@ export function ControlPopupApp() {
       <div className="lm-control-body">
         {/* Mode strip */}
         <div>
-          <div className="lm-control-section-title">{t("general.mode.title")}</div>
-          <div className="lm-control-mode-strip" role="radiogroup" aria-label={t("general.mode.title")}>
+          <div className="lm-control-section-title">{t("common:mode.title")}</div>
+          <div className="lm-control-mode-strip" role="radiogroup" aria-label={t("common:mode.title")}>
             <ModeButton
               kind={LIGHTING_MODE_KIND.OFF}
               active={!testActive && kind === LIGHTING_MODE_KIND.OFF}
-              label={t("general.mode.options.off")}
+              label={t("common:mode.options.off")}
               icon={<IconOff />}
               onClick={handleModeClick}
             />
             <ModeButton
               kind={LIGHTING_MODE_KIND.AMBILIGHT}
               active={!testActive && kind === LIGHTING_MODE_KIND.AMBILIGHT}
-              label={t("general.mode.options.ambilight")}
+              label={t("common:mode.options.ambilight")}
               icon={<IconAmbilight />}
               onClick={handleModeClick}
             />
             <ModeButton
               kind={LIGHTING_MODE_KIND.SOLID}
               active={!testActive && isSolid}
-              label={t("general.mode.options.solid")}
+              label={t("common:mode.options.solid")}
               icon={<IconSolidDot />}
               onClick={handleModeClick}
             />
@@ -490,7 +490,7 @@ export function ControlPopupApp() {
         {showBrightness && (
           <div>
             <div className="lm-control-section-title flex items-center justify-between">
-              <span>{showColorPicker ? t("general.mode.solidColor") : t("general.mode.brightness")}</span>
+              <span>{showColorPicker ? t("common:mode.solidColor") : t("common:mode.brightness")}</span>
               <span className="[font-family:var(--lm-mono)] text-[10px] text-[var(--lm-ink-dim)]">
                 {showColorPicker ? `${hexColor.toUpperCase()} · ` : ""}
                 <span className="lm-control-readout-num">{brightnessPct}%</span>
@@ -501,19 +501,19 @@ export function ControlPopupApp() {
                 <HsvColorPicker
                   value={hexColor}
                   onChange={(hex) => setColor(fromHex(hex))}
-                  ariaLabel={t("general.mode.solidColor")}
+                  ariaLabel={t("common:mode.solidColor")}
                   compact
                 />
               )}
               <label className="w-full">
-                <span className="sr-only">{t("general.mode.brightness")}</span>
+                <span className="sr-only">{t("common:mode.brightness")}</span>
                 <input
                   type="range"
                   min={0}
                   max={100}
                   step={1}
                   value={brightnessPct}
-                  aria-label={t("general.mode.brightness")}
+                  aria-label={t("common:mode.brightness")}
                   className="h-2 w-full cursor-pointer appearance-none rounded-full"
                   style={{
                     accentColor: "var(--lm-amber)",

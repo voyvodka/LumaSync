@@ -96,29 +96,29 @@ export function OnboardingFlow({
     if (step === ONBOARDING_STEPS.COMPLETE) return null;
     if (step === ONBOARDING_STEPS.LIGHTS) {
       return {
-        title: t("ui.onboarding.step1.title"),
-        body: t("ui.onboarding.step1.body"),
+        title: t("common:ui.onboarding.step1.title"),
+        body: t("common:ui.onboarding.step1.body"),
         primaryAction: {
-          label: t("ui.onboarding.step1.action"),
+          label: t("common:ui.onboarding.step1.action"),
           onClick: onOpenLights,
         },
       };
     }
     if (step === ONBOARDING_STEPS.DEVICES) {
       return {
-        title: t("ui.onboarding.step2.title"),
-        body: t("ui.onboarding.step2.body"),
+        title: t("common:ui.onboarding.step2.title"),
+        body: t("common:ui.onboarding.step2.body"),
         primaryAction: {
-          label: t("ui.onboarding.step2.action"),
+          label: t("common:ui.onboarding.step2.action"),
           onClick: onOpenDevices,
         },
       };
     }
     return {
-      title: t("ui.onboarding.step3.title"),
-      body: t("ui.onboarding.step3.body"),
+      title: t("common:ui.onboarding.step3.title"),
+      body: t("common:ui.onboarding.step3.body"),
       primaryAction: {
-        label: t("ui.onboarding.step3.action"),
+        label: t("common:ui.onboarding.step3.action"),
         onClick: onOpenCalibration,
       },
     };

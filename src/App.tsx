@@ -2227,20 +2227,20 @@ function App() {
           className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg"
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px" }}>{t("hotplug.usbDetected")}</span>
+          <span style={{ fontSize: "12px" }}>{t("common:hotplug.usbDetected")}</span>
           <button
             type="button"
             onClick={() => { void handleAcceptUsbTarget(); }}
             style={{ fontSize: "11px", padding: "2px 10px", borderRadius: "4px", background: "var(--lm-amber)", color: "#07080a", fontWeight: 600, border: "none", cursor: "pointer" }}
           >
-            {t("hotplug.addTarget")}
+            {t("common:hotplug.addTarget")}
           </button>
           <button
             type="button"
             onClick={handleDismissUsbSuggest}
             style={{ fontSize: "11px", color: "var(--lm-muted)", background: "transparent", border: "none", cursor: "pointer" }}
           >
-            {t("hotplug.dismiss")}
+            {t("common:hotplug.dismiss")}
           </button>
         </div>
       )}
@@ -2249,7 +2249,7 @@ function App() {
           className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("common:hotplug.usbDisconnected")}</span>
         </div>
       )}
       {usbUnsupportedNotice && (
@@ -2271,7 +2271,7 @@ function App() {
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
-            {t("hotplug.unsupportedFallback")}
+            {t("common:hotplug.unsupportedFallback")}
           </span>
         </div>
       )}
@@ -2290,9 +2290,9 @@ function App() {
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
-            {t("hotplug.stopFailed", {
+            {t("common:hotplug.stopFailed", {
               targets: stopFailedNotice
-                .map((target) => t(`hotplug.targetLabel.${target}` as const))
+                .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
                 .join(", "),
             })}
           </span>

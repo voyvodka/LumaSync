@@ -271,7 +271,7 @@ describe("ControlPopupApp run controls", () => {
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
 
     // Hand the light back to a real mode, which disengages the test.
-    await user.click(screen.getByRole("radio", { name: /general\.mode\.options\.ambilight/ }));
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
     await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
 
     await user.click(screen.getByRole("button", { name: "preview:control.close" }));
@@ -309,7 +309,7 @@ describe("ControlPopupApp run controls", () => {
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
     startLedTestPattern.mockClear();
 
-    await user.click(screen.getByRole("radio", { name: /general\.mode\.options\.ambilight/ }));
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
 
     await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
     expect(startLedTestPattern).not.toHaveBeenCalled();
