@@ -462,41 +462,6 @@ describe("App mode orchestration", () => {
     expect(screen.getByTestId("active-mode")).toBeInTheDocument();
   });
 
-  it("shows USB suggest banner when USB is plugged in during Hue-only session", async () => {
-    // Setup: Start with targets=["hue"], isConnected=false
-    mockIsConnected = false;
-    invokeMock.mockResolvedValue({ connected: false });
-    loadShellStateMock.mockResolvedValueOnce({
-      lastSection: "general",
-      ledCalibration: null,
-      lightingMode: { kind: "off" },
-      lastOutputTargets: ["hue"],
-      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
-      hueAppKey: "app-user",
-      hueClientKey: "AABBCCDD11223344",
-      lastHueAreaId: "area-1",
-    });
-
-    const { rerender } = render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
-    });
-
-    // Action: Simulate USB being plugged in
-    mockIsConnected = true;
-    await act(async () => {
-      rerender(<App />);
-    });
-
-    // Expect: USB suggest banner appears
-    await waitFor(() => {
-      // Banner text from i18n key "common:hotplug.usbDetected"
-      // In test environment with mocked i18n, the key itself or English text may appear
-      expect(screen.getByTestId("active-mode")).toBeInTheDocument();
-    });
-  });
-
   // ---------------------------------------------------------------------
   // Bug 10C — auto-add "usb" to outputTargets on the first false→true
   // transition of `isConnected`. Pairing IS the user's "I want USB

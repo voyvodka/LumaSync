@@ -245,7 +245,6 @@ function App() {
   // Hot-plug detection refs/state — separate from wasConnectedRef (per Pitfall 4)
   const prevUsbConnectedRef = useRef<boolean | null>(null); // null = not yet initialized
   const [bootstrapDone, setBootstrapDone] = useState(false);
-  const [showUsbSuggest, setShowUsbSuggest] = useState(false);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
   // Bug 10D — surfaces a one-time non-blocking notice when boot-time
   // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
@@ -1511,29 +1510,9 @@ function App() {
     const wasConnected = prevUsbConnectedRef.current;
 
     if (wasConnected === false && isConnected) {
-      // Bug 10C — auto-add "usb" to outputTargets on the false→true
-      // transition (manual pair OR physical hot-plug). Pairing IS the
-      // user's "I want USB output" intent; without this fix the Lights
-      // output toggle stays `is-off` until a WebView reload, even though
-      // the StatusBar USB pill flips to OK as soon as
-      // `connectionEvents` propagates the new isConnected.
-      //
-      // We deliberately bypass `handleOutputTargetsChange` here:
-      //   * its delta-start branch is gated on `lightingMode.kind !== OFF`
-      //     (early-return at line ~968), so for a cold-launch pair where
-      //     mode is OFF, the helper would only do `setSelectedOutputTargets`
-      //     plus a `saveShellState`. We replicate that minimal pair below.
-      //   * if a mode is already running, calling delta-start here would
-      //     race against the bootstrap pipeline (start_hue_stream /
-      //     dispatchSetLightingMode) for a target that is also being
-      //     hydrated from persisted lastOutputTargets. Letting the next
-      //     deliberate user action drive that path keeps the contract clean.
-      //
-      // Idempotent: the `includes` guard means a second pair on an
-      // already-targeted USB session is a noop. The legacy
-      // `showUsbSuggest` banner UI below is left in place (state /
-      // handler / JSX / i18n keys) so a future opt-in flow can revive
-      // the prompt; it just never fires on its own anymore.
+      // Pairing is itself the "I want USB output" intent, and the target is
+      // added directly rather than through `handleOutputTargetsChange`.
+      // Both halves are load-bearing — docs/architecture/ui-and-shell.md.
       if (!selectedOutputTargets.includes("usb")) {
         const nextTargets = normalizeOutputTargets([...selectedOutputTargets, "usb"]);
         setSelectedOutputTargets(nextTargets);
@@ -1553,7 +1532,6 @@ function App() {
         }
         // If no targets remain, keep current targets — mode buttons will show disabled via guard
       }
-      setShowUsbSuggest(false);
     }
 
     prevUsbConnectedRef.current = isConnected;
@@ -1627,17 +1605,6 @@ function App() {
         unsupportedNoticeTimerId = null;
       }
     };
-  }, []);
-
-  const handleAcceptUsbTarget = useCallback(async () => {
-    setShowUsbSuggest(false);
-    if (!selectedOutputTargets.includes("usb")) {
-      await handleOutputTargetsChange([...selectedOutputTargets, "usb"]);
-    }
-  }, [selectedOutputTargets, handleOutputTargetsChange]);
-
-  const handleDismissUsbSuggest = useCallback(() => {
-    setShowUsbSuggest(false);
   }, []);
 
   const handleLightingModeChange = useCallback(
@@ -2223,28 +2190,6 @@ function App() {
         onDismiss={dismiss}
         onRetry={() => void checkForUpdates()}
       />
-      {showUsbSuggest && (
-        <div
-          className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg"
-          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
-        >
-          <span style={{ fontSize: "12px" }}>{t("common:hotplug.usbDetected")}</span>
-          <button
-            type="button"
-            onClick={() => { void handleAcceptUsbTarget(); }}
-            style={{ fontSize: "11px", padding: "2px 10px", borderRadius: "4px", background: "var(--lm-amber)", color: "#07080a", fontWeight: 600, border: "none", cursor: "pointer" }}
-          >
-            {t("common:hotplug.addTarget")}
-          </button>
-          <button
-            type="button"
-            onClick={handleDismissUsbSuggest}
-            style={{ fontSize: "11px", color: "var(--lm-ink-dim)", background: "transparent", border: "none", cursor: "pointer" }}
-          >
-            {t("common:hotplug.dismiss")}
-          </button>
-        </div>
-      )}
       {usbDisconnectNotice && (
         <div
           data-testid="usb-disconnect-notice"

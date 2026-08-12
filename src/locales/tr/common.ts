@@ -91,9 +91,6 @@ const common: Catalogue<typeof enCommon> = {
     },
   },
   hotplug: {
-    usbDetected: "USB LED şerit algılandı. Çıkış hedefi olarak eklensin mi?",
-    addTarget: "Ekle",
-    dismiss: "Kapat",
     usbDisconnected: "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor.",
     unsupportedFallback: "USB cihazı tanınmıyor — Hue-only moda alındı.",
     stopFailed: "{{targets}} durdurulamadı. Çıkış etkin bırakıldı; yeniden deneyin.",

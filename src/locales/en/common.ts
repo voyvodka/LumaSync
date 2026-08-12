@@ -88,9 +88,6 @@ export default {
     },
   },
   hotplug: {
-    usbDetected: "USB LED strip detected. Add as output target?",
-    addTarget: "Add",
-    dismiss: "Dismiss",
     usbDisconnected: "USB device disconnected. Continuing with remaining targets.",
     unsupportedFallback: "USB device not recognised — switched to Hue-only mode.",
     stopFailed: "Stop failed for {{targets}}. Output left active — try again.",
