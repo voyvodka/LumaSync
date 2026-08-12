@@ -35,6 +35,7 @@
  */
 import { useTranslation } from "react-i18next";
 
+/** A clickable primary or secondary action rendered inside {@link OnboardingBanner}. */
 export interface OnboardingBannerAction {
   /** Visible label rendered inside the amber pill. */
   label: string;
@@ -47,6 +48,7 @@ export interface OnboardingBannerAction {
   ariaLabel?: string;
 }
 
+/** Props for {@link OnboardingBanner}. */
 export interface OnboardingBannerProps {
   /** Uppercase amber heading — short, e.g. "Calibration required". */
   title: string;
@@ -88,6 +90,7 @@ export interface OnboardingBannerProps {
   ariaLive?: "polite" | "off";
 }
 
+/** Dismissible progressive-hint banner with a title, body, optional step pill, and up to two actions. */
 export function OnboardingBanner({
   title,
   body,
