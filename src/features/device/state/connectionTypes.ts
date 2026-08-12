@@ -5,6 +5,7 @@ import type {
   SerialPortListResponse,
 } from "../deviceConnectionApi";
 import type { ConnectionEventBus } from "../connectionEvents";
+import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import type { DevicePort } from "../types";
 
 export type Listener = (state: DeviceConnectionControllerState) => void;
@@ -67,6 +68,11 @@ export interface DeviceConnectionControllerDeps {
    * reload. Tests provide a scoped bus to keep cross-test state clean.
    */
   connectionEvents?: ConnectionEventBus;
+  /**
+   * Broadcasts a completed health check's advertised firmware profile so
+   * FirmwareProfilePicker can read it without mounting its own controller.
+   */
+  firmwareProfileEvents?: FirmwareProfileEventBus;
 }
 
 export interface DeviceConnectionController {

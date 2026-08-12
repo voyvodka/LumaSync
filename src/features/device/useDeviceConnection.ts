@@ -8,6 +8,7 @@ import {
   runSerialHealthCheck,
 } from "./deviceConnectionApi";
 import { connectionEvents as defaultConnectionEvents } from "./connectionEvents";
+import { firmwareProfileEvents as defaultFirmwareProfileEvents } from "./firmwareProfileEvents";
 import { createDeviceConnectionController } from "./state/deviceConnectionController";
 import type { DeviceConnectionControllerState } from "./state/connectionTypes";
 
@@ -83,6 +84,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
         // Bug 10B — share the process-wide event bus so sibling
         // useDeviceConnection() instances (App / DEVICES) stay in sync.
         connectionEvents: defaultConnectionEvents,
+        firmwareProfileEvents: defaultFirmwareProfileEvents,
       }),
     [initialLastSuccessfulPort],
   );

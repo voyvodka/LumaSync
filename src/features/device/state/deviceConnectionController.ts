@@ -21,6 +21,7 @@ export function createDeviceConnectionController(
   const refreshVisibleWaitMs = deps.refreshVisibleWaitMs ?? REFRESH_MIN_VISIBLE_MS;
   const autoReconnectOnInit = deps.autoReconnectOnInit ?? false;
   const connectionEventsBus = deps.connectionEvents ?? null;
+  const firmwareProfileEventsBus = deps.firmwareProfileEvents ?? null;
 
   const store = createConnectionStore(
     withDerivedFlags({
@@ -47,7 +48,7 @@ export function createDeviceConnectionController(
     cancelRecovery: autoRecovery.cancelRecovery,
   });
 
-  const healthCheck = createHealthCheck(store, deps);
+  const healthCheck = createHealthCheck(store, deps, firmwareProfileEventsBus);
   const autoReconnect = createAutoReconnectOnInit(store, deps, connectionEventsBus);
   const siblingSync = createSiblingSync(store, deps, connectionEventsBus);
 

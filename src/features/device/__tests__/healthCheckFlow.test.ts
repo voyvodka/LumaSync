@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { FIRMWARE_PROFILE } from "@/shared/contracts/device";
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
+import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import { createDeviceConnectionController } from "../state/deviceConnectionController";
 
 function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
@@ -142,5 +144,92 @@ describe("health check flow", () => {
 
     resolveHealth(healthResult(true));
     await pendingHealth;
+  });
+
+  it("broadcasts the advertised firmware profile on the firmwareProfileEvents bus", async () => {
+    const emit = vi.fn();
+    const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi.fn().mockResolvedValue(
+        listResponse([
+          {
+            name: "COM4",
+            kind: "usb",
+            isSupported: true,
+            supportReason: "Supported USB serial adapter",
+            usb: { vid: 0x1a86, pid: 0x7523, manufacturer: null, product: null, serialNumber: null },
+          },
+        ]),
+      ),
+      connectSerialPort: vi.fn(),
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+      runSerialHealthCheck: vi.fn().mockResolvedValue({
+        ...healthResult(true),
+        advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1,
+      }),
+      firmwareProfileEvents,
+    });
+
+    await controller.initialize();
+    await controller.runHealthCheck();
+
+    expect(emit).toHaveBeenCalledWith({ advertisedFirmwareProfile: FIRMWARE_PROFILE.LUMASYNC_V1 });
+  });
+
+  it("broadcasts undefined when the handshake step didn't complete", async () => {
+    const emit = vi.fn();
+    const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi.fn().mockResolvedValue(
+        listResponse([
+          {
+            name: "COM4",
+            kind: "usb",
+            isSupported: true,
+            supportReason: "Supported USB serial adapter",
+            usb: { vid: 0x1a86, pid: 0x7523, manufacturer: null, product: null, serialNumber: null },
+          },
+        ]),
+      ),
+      connectSerialPort: vi.fn(),
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+      runSerialHealthCheck: vi.fn().mockResolvedValue(healthResult(false)),
+      firmwareProfileEvents,
+    });
+
+    await controller.initialize();
+    await controller.runHealthCheck();
+
+    expect(emit).toHaveBeenCalledWith({ advertisedFirmwareProfile: undefined });
+  });
+
+  it("does not emit when the health check throws", async () => {
+    const emit = vi.fn();
+    const firmwareProfileEvents: FirmwareProfileEventBus = { emit, subscribe: vi.fn() };
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi.fn().mockResolvedValue(
+        listResponse([
+          {
+            name: "COM4",
+            kind: "usb",
+            isSupported: true,
+            supportReason: "Supported USB serial adapter",
+            usb: { vid: 0x1a86, pid: 0x7523, manufacturer: null, product: null, serialNumber: null },
+          },
+        ]),
+      ),
+      connectSerialPort: vi.fn(),
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+      runSerialHealthCheck: vi.fn().mockRejectedValue(new Error("IPC dropped")),
+      firmwareProfileEvents,
+    });
+
+    await controller.initialize();
+    await controller.runHealthCheck();
+
+    expect(emit).not.toHaveBeenCalled();
   });
 });
