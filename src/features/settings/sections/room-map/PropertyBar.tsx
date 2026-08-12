@@ -134,7 +134,7 @@ export function PropertyBar({
   onUpdateImageAspectLock,
   onResetImageScale,
 }: PropertyBarProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const fields = getFieldValues(config, selectedId);
 
   if (!fields || !selectedId) {

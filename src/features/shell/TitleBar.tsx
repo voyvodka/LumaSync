@@ -43,7 +43,7 @@ interface TitleBarProps {
 export const TITLE_BAR_HEIGHT_PX = 36;
 
 export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChange }: TitleBarProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [platform] = useState<Platform>(detectPlatform);
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -186,7 +186,7 @@ function WindowControls({
   onToggleMaximize,
   onClose,
 }: WindowControlsProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   return (
     <div className="flex h-9 items-center">
       <CtrlButton onClick={onMinimize} aria={t("shell:titleBar.minimize")}>

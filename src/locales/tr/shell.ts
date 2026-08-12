@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enShell from "@/locales/en/shell";
+
+const shell: Catalogue<typeof enShell> = {
   keybind: {
     modeOff: "Işıkları kapat",
     modeAmbilight: "Ambilight moduna geç",
@@ -37,3 +40,5 @@ export default {
     close: "Kapat",
   },
 };
+
+export default shell;

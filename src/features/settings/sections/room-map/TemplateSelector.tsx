@@ -1,4 +1,6 @@
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { RoomMapConfig, FurniturePlacement, UsbStripPlacement, TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 
@@ -8,10 +10,10 @@ interface TemplateSelectorProps {
 
 interface Template {
   id: string;
-  nameKey: string;
-  descKey: string;
+  nameKey: TranslationKey;
+  descKey: TranslationKey;
   icon: string;
-  config: (t: (key: string) => string) => RoomMapConfig;
+  config: (t: TFunction) => RoomMapConfig;
 }
 
 function makeTemplate(
@@ -82,7 +84,7 @@ const TEMPLATES: Template[] = [
 ];
 
 export function TemplateSelector({ onSelect }: TemplateSelectorProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   return (
     <div className="flex h-full items-center justify-center">

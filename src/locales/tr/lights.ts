@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enLights from "@/locales/en/lights";
+
+const lights: Catalogue<typeof enLights> = {
   slab: {
     modeText: "Aydınlatma",
     modeAccent: "Modu",
@@ -118,3 +121,5 @@ export default {
     },
   },
 };
+
+export default lights;

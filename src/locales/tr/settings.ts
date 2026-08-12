@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enSettings from "@/locales/en/settings";
+
+const settings: Catalogue<typeof enSettings> = {
   title: "Genel",
   subtitle: "Başlangıç davranışı ve dil",
   groups: {
@@ -61,3 +64,5 @@ export default {
     alwaysOn: "Her zaman açık",
   },
 };
+
+export default settings;

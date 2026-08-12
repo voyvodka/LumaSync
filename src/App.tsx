@@ -217,7 +217,7 @@ function isHueStopCodeOk(code: string): boolean {
 }
 
 function App() {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss, devSetState: devSetUpdaterState } = useAutoUpdater();
   const {
     currentMode,

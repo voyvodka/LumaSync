@@ -89,7 +89,7 @@ const FPS_GREEN_THRESHOLD = 45;
 const FPS_AMBER_THRESHOLD = 25;
 
 export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const isCompact = uiMode === "compact";
   const platform = useMemo(() => resolveKeybindPlatform(), []);
 
@@ -224,7 +224,7 @@ interface FpsPillProps {
 }
 
 function FpsPill({ isCompact, enabled }: FpsPillProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const snapshot = useRuntimeTelemetry(undefined, enabled);
 
   const fps = snapshot.fps;

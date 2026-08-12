@@ -132,7 +132,7 @@ export function LedChipTypePicker({
   firmwareProfile,
   onChipTypeChange,
 }: LedChipTypePickerProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [chipType, setChipType] = useState<LedChipType>(
     initialChipType ?? DEFAULT_CHIP_TYPE,
   );

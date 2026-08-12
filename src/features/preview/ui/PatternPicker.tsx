@@ -48,7 +48,7 @@ export function PatternPicker({
   onSelectKind,
   onSpeedChange,
 }: PatternPickerProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const speedDisabled = disabled || STATIC_KINDS.has(selectedKind);
 
   return (

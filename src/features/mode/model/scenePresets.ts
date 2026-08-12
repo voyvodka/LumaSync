@@ -9,9 +9,11 @@
  * manual adjustments survive a scene click.
  */
 
+import type { TranslationKey } from "@/features/i18n/catalogue";
+
 export interface ScenePreset {
   id: string;
-  labelKey: string;
+  labelKey: TranslationKey;
   /** CSS `background` value applied to the tile thumbnail. */
   gradient: string;
   r: number;

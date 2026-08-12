@@ -19,6 +19,7 @@
  *     so screen readers announce result changes.
  */
 import { useCallback, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -48,7 +49,7 @@ export function WledDevicePicker({
   activeWledIp = null,
   onConnected,
 }: WledDevicePickerProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [manualIp, setManualIp] = useState("");
   const [manualIpError, setManualIpError] = useState<string | null>(null);
   const [isDiscovering, setIsDiscovering] = useState(false);
@@ -330,7 +331,7 @@ export function WledDevicePicker({
 /** Map a `WLED_STATUS` code to its localized string, or null when unknown. */
 function translateWledStatusCode(
   code: string,
-  t: (key: string) => string,
+  t: TFunction,
 ): string | null {
   switch (code) {
     case WLED_STATUS.DISCOVERY_OK:

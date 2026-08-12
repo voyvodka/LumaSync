@@ -45,7 +45,7 @@ export function ZoneDeriveOverlay({
   onConfirm,
   onDiscard,
 }: ZoneDeriveOverlayProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   // TV bounding box in pixels
   const leftPx = (tv.x - tv.width / 2) * pxPerMeter;

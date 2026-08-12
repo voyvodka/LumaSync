@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useTranslation, Trans } from "react-i18next";
 import type { Update } from "@tauri-apps/plugin-updater";
 import type { UpdaterState } from "./useAutoUpdater";
@@ -69,7 +70,7 @@ function parseReleaseNotes(body: string | undefined): Note[] {
 }
 
 export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModalProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   if (
     state.status !== "available" &&
@@ -130,7 +131,10 @@ export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModa
 // State components
 // ────────────────────────────────────────────────────────────────────
 
-type TFn = ReturnType<typeof useTranslation>["t"];
+// `ReturnType<typeof useTranslation>["t"]` hits a TS2589 "excessively deep"
+// instantiation limit once `useTranslation`'s Ns default is the full
+// namespace tuple — use the plain `TFunction` type instead.
+type TFn = TFunction;
 
 function AvailableContent({
   update,

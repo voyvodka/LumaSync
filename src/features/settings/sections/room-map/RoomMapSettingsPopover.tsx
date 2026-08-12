@@ -85,7 +85,7 @@ export function RoomMapSettingsPopover({
   onHueZonesToggle,
   onReset,
 }: RoomMapSettingsPopoverProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement>(null);
   const [resetConfirming, setResetConfirming] = useState(false);
 

@@ -26,7 +26,7 @@ interface SystemSectionProps {
 }
 
 export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetUpdaterState, usbConnected }: SystemSectionProps) {
-  const { t, i18n } = useTranslation("common");
+  const { t, i18n } = useTranslation();
   const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";
   const [startupEnabled, setStartupEnabled] = useState(false);
   const [startupLoading, setStartupLoading] = useState(true);

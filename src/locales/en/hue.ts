@@ -224,8 +224,10 @@ export default {
       TRANSIENT_RETRY_SCHEDULED: "Transient issue detected. Auto-retry scheduled.",
       TRANSIENT_RETRY_EXHAUSTED: "Retry budget exhausted. Manual reconnect required.",
       AUTH_INVALID_CREDENTIALS: "Credentials are invalid. Re-pair is required.",
+      AUTH_INVALID_RE_PAIR_REQUIRED: "The bridge rejected the request. Re-pair is required.",
       CONFIG_NOT_READY_GATE_BLOCKED: "Start gate blocked because readiness is stale or missing.",
       HUE_STOP_TIMEOUT_PARTIAL: "Stop timed out. Partial-stop cleanup is required.",
+      HUE_START_NOOP_ALREADY_ACTIVE: "Hue stream is already running.",
       undefined: "Status code unavailable. Waiting for runtime update.",
     },
     retry: {

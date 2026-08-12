@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enRoomMap from "@/locales/en/roomMap";
+
+const roomMap: Catalogue<typeof enRoomMap> = {
   comingSoon: "Oda haritası editörü ilerleyen bir güncellemede gelecek.",
   toolbar: {
     addTv: "TV Ekle",
@@ -222,3 +225,5 @@ export default {
     },
   },
 };
+
+export default roomMap;

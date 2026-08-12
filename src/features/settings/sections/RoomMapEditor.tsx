@@ -137,7 +137,7 @@ const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
 });
 
 export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1407,7 +1407,7 @@ function RenameDialog({
   onConfirm: (name: string) => void;
   onCancel: () => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [value, setValue] = useState(currentLabel);
   const inputRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);

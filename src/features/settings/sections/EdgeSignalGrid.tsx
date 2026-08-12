@@ -41,7 +41,7 @@ export function EdgeSignalGrid({
   displayIndex,
   resolutionLabel,
 }: EdgeSignalGridProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [edgeSignal, setEdgeSignal] = useState<EdgeSignalPayload | null>(null);
 
   useEffect(() => {

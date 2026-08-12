@@ -159,7 +159,7 @@ export function HueChannelOverlay({
   allHueZones,
   hidePassiveZoneBounds = false,
 }: HueChannelOverlayProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   const dragRef = useRef<DragState>({ ...EMPTY_DRAG });
 

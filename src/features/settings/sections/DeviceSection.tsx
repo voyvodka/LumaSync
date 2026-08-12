@@ -60,7 +60,7 @@ export interface DeviceSectionProps {
 }
 
 export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const {
     bridges,
     selectedBridgeId,
