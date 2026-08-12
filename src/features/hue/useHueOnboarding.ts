@@ -37,14 +37,13 @@ import {
   STREAMING_RUNTIME_STATES,
 } from "./model/pollingCadence";
 import { deriveRuntimeTargets } from "./model/runtimeTargets";
+import { useHueAreaChannels } from "./state/useHueAreaChannels";
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
-  getHueAreaChannels,
   listHueEntertainmentAreas,
   migrateHueCredentials,
   pairHueBridge,
-  type HueAreaChannelInfo,
   type HuePairingCredentials,
   validateHueCredentials,
   verifyHueBridgeIp,
@@ -99,9 +98,6 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const lastRuntimePollAtRef = useRef(0);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
   const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
-  const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
-  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
-  const [channelRegionOverrides, setChannelRegionOverrides] = useState<Record<number, string>>({});
 
   const selectedBridge = useMemo(
     () => state.bridges.find((bridge) => bridge.id === state.selectedBridgeId) ?? null,
@@ -151,83 +147,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     });
   }, []);
 
-  // Load channels whenever the selected area or credentials change.
-  useEffect(() => {
-    if (!selectedBridge || !state.credentials || !state.selectedAreaId) {
-      setAreaChannels([]);
-      return;
-    }
-
-    let cancelled = false;
-    const areaId = state.selectedAreaId;
-    const { ip } = selectedBridge;
-    const { username } = state.credentials;
-
-    setIsLoadingChannels(true);
-    void getHueAreaChannels(ip, username, areaId)
-      .then((channels) => {
-        if (!cancelled) {
-          setAreaChannels(channels);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAreaChannels([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingChannels(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBridge, state.credentials, state.selectedAreaId]);
-
-  // Load channel overrides for the selected area from the store.
-  useEffect(() => {
-    if (!state.selectedAreaId) {
-      setChannelRegionOverrides({});
-      return;
-    }
-
-    const areaId = state.selectedAreaId;
-    void shellStore.load().then((stored) => {
-      const overrides = stored.hueChannelRegionOverrides?.[areaId] ?? {};
-      setChannelRegionOverrides(overrides);
-    });
-  }, [state.selectedAreaId]);
-
-  const setChannelRegion = useCallback(
-    (channelIndex: number, region: string | null) => {
-      if (!state.selectedAreaId) return;
-
-      const areaId = state.selectedAreaId;
-      setChannelRegionOverrides((prev) => {
-        const next = { ...prev };
-        if (region === null) {
-          delete next[channelIndex];
-        } else {
-          next[channelIndex] = region;
-        }
-
-        void shellStore.load().then((stored) => {
-          const allOverrides = { ...(stored.hueChannelRegionOverrides ?? {}) };
-          if (Object.keys(next).length === 0) {
-            delete allOverrides[areaId];
-          } else {
-            allOverrides[areaId] = next;
-          }
-          void shellStore.save({ hueChannelRegionOverrides: allOverrides });
-        });
-
-        return next;
-      });
-    },
-    [state.selectedAreaId],
-  );
+  const { areaChannels, isLoadingChannels, channelRegionOverrides, setChannelRegion } =
+    useHueAreaChannels(selectedBridge, state.credentials, state.selectedAreaId);
 
   const applyReadinessResult = useCallback(
     (
