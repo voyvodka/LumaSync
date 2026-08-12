@@ -36,6 +36,19 @@ spatial 3D positions, or sink-internal addressing — and it confused users acro
 testing. `ScreenZone` and `LedZone` will land later as separately prefixed types sharing no
 discriminator with `HueZone`; a bare `Zone` is ambiguous across three industry namespaces.
 
+**`RoomMapConfig.zones` is the only zone array anything renders.** The deprecated `hueZones` field
+is a migration *input*, not a second store. Every authoring path — the room-map editor and the
+Lights dock alike — writes `zones`.
+
+**Stranded zones are recovered, not dropped.** Through v1.5.4 the Lights dock's "Add Hue zone"
+button wrote into `hueZones` at a point when the one-shot `schemaVersion 1 → 2` fold had already
+run, so those zones were never rendered and never could be. A `3 → 4` step re-folds them. Reviving
+persisted records is normally the wrong instinct — a fold that resurrects something the user
+deleted is worse than the original bug — but here nothing in any released build ever displayed
+`hueZones`, so a stranded record cannot be one the user chose to delete. The fold still dedupes by
+id and reuses `migrateLegacyHueZone`, so a corrupt record is dropped with a warning rather than
+half-migrated.
+
 ## Gotchas
 
 - **`commands/hue_stream_lifecycle.rs` is a re-export shim.** The implementation moved under `commands::hue::*`. Import paths still resolve through it; do not add new code there.
