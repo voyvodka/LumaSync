@@ -34,7 +34,7 @@ const KNOWN_DYNAMIC_PREFIXES = [
   "ledPreview.test.speed",
   "roomMap.furniture.type",
   "settings.sections",
-  "telemetry.queueHealth",
+  "telemetry:queueHealth",
 ];
 
 // ---------------------------------------------------------------------------

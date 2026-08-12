@@ -261,9 +261,9 @@ startupTray.alwaysOn
 startupTray.minimizeOnClose
 startupTray.title
 startupTray.trayInfo
-telemetry.hue.errorAgo
-telemetry.hue.noError
-telemetry.hue.packetRateFormat
-telemetry.hue.reconnectsFormat
-telemetry.hue.uptimeFormat
+telemetry:hue.errorAgo
+telemetry:hue.noError
+telemetry:hue.packetRateFormat
+telemetry:hue.reconnectsFormat
+telemetry:hue.uptimeFormat
 updater.actions.showLogs

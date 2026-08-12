@@ -43,35 +43,35 @@ export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
   return (
     <>
       <div className="lm-settings-group-h">
-        <span className="t">{t("telemetry.title")}</span>
+        <span className="t">{t("telemetry:title")}</span>
         <span className="sub">{t("settingsPage.groups.telemetry.sub")}</span>
       </div>
 
       <div className="lm-tele-body">
-        <p className="lm-tele-desc">{t("telemetry.description")}</p>
+        <p className="lm-tele-desc">{t("telemetry:description")}</p>
 
-        {isLoading ? <p className="lm-tele-note">{t("telemetry.states.loading")}</p> : null}
+        {isLoading ? <p className="lm-tele-note">{t("telemetry:states.loading")}</p> : null}
 
         {!isLoading && hasError ? (
           <p className="lm-tele-note is-error" role="alert">
-            {t("telemetry.states.error")}
+            {t("telemetry:states.error")}
           </p>
         ) : null}
 
         {!isLoading && !hasError && snapshot ? (
           <div className="lm-tele-grid">
             <article className="lm-tele-tile">
-              <span className="k">{t("telemetry.metrics.captureFps")}</span>
+              <span className="k">{t("telemetry:metrics.captureFps")}</span>
               <span className="v">{formatFps(snapshot.usb.captureFps)}</span>
             </article>
             <article className="lm-tele-tile">
-              <span className="k">{t("telemetry.metrics.sendFps")}</span>
+              <span className="k">{t("telemetry:metrics.sendFps")}</span>
               <span className="v">{formatFps(snapshot.usb.sendFps)}</span>
             </article>
             <article className="lm-tele-tile">
-              <span className="k">{t("telemetry.metrics.queueHealth")}</span>
+              <span className="k">{t("telemetry:metrics.queueHealth")}</span>
               <span className={`v ${queueHealthTint(snapshot.usb.queueHealth)}`}>
-                {t(`telemetry.queueHealth.${snapshot.usb.queueHealth}`)}
+                {t(`telemetry:queueHealth.${snapshot.usb.queueHealth}`)}
               </span>
             </article>
           </div>
@@ -79,7 +79,7 @@ export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
 
         {!isLoading && !hasError && snapshot?.hue ? <HueTelemetryGrid hue={snapshot.hue} /> : null}
 
-        {showEmpty ? <p className="lm-tele-note">{t("telemetry.states.empty")}</p> : null}
+        {showEmpty ? <p className="lm-tele-note">{t("telemetry:states.empty")}</p> : null}
       </div>
     </>
   );
