@@ -50,7 +50,6 @@ pub struct HueVerifyBridgeIpResponse {
     pub bridge: Option<HueBridgeSummary>,
 }
 
-/// Username + client key issued by the bridge on a successful pairing.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HuePairingCredentials {
@@ -111,8 +110,6 @@ pub struct HueEntertainmentArea {
     pub active_streamer: bool,
 }
 
-/// Response for `list_hue_entertainment_areas` — status plus the areas found
-/// on the bridge.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueEntertainmentAreaListResponse {
@@ -128,8 +125,6 @@ pub struct HueStreamReadiness {
     pub reasons: Vec<String>,
 }
 
-/// Response for `check_hue_stream_readiness` — status plus the readiness
-/// verdict.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueStreamReadinessResponse {
@@ -798,8 +793,6 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
     }
 }
 
-/// Parse the cloud discovery endpoint's JSON array into a
-/// `HueDiscoveryResponse`.
 pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
     match serde_json::from_str::<Vec<DiscoveryBridge>>(payload) {
         Ok(discovered) if discovered.is_empty() => HueDiscoveryResponse {

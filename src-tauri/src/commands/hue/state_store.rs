@@ -57,8 +57,6 @@ pub enum HueRuntimeState {
     Failed,
 }
 
-/// Who or what initiated a Hue runtime transition, surfaced in status for UI
-/// attribution.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HueRuntimeTriggerSource {
@@ -67,8 +65,6 @@ pub enum HueRuntimeTriggerSource {
     System,
 }
 
-/// Suggested next action the frontend should offer the user for the current
-/// status code.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum HueRuntimeActionHint {
@@ -98,8 +94,6 @@ pub struct HueRuntimeStatus {
     pub trigger_source: HueRuntimeTriggerSource,
 }
 
-/// Response envelope for stream-lifecycle commands — active flag, current
-/// status, and the last solid color if any.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueRuntimeCommandResult {

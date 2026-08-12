@@ -1,6 +1,3 @@
-//! The single output abstraction (`LedSink`) shared by every LED destination
-//! — serial today, WLED/OpenRGB in future milestones.
-
 /// `LedSink` trait — the single output abstraction for all LED destinations.
 ///
 /// v1.4: `SerialSink` is the only implementation.
