@@ -5,7 +5,6 @@ export const MODE_GUARD_REASONS = {
   CALIBRATION_REQUIRED: "CALIBRATION_REQUIRED",
 } as const;
 
-/** Union of the reasons in {@link MODE_GUARD_REASONS}. */
 export type ModeGuardReason = (typeof MODE_GUARD_REASONS)[keyof typeof MODE_GUARD_REASONS];
 
 export interface LedModeGuardResult {

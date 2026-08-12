@@ -16,7 +16,6 @@
 
 import { clamp } from "@/shared/lib/math";
 
-/** CSS accent values for a lighting mode: base color, a soft alpha variant, and an optional header gradient. */
 export interface AccentTheme {
   /** rgb() string — opaque accent for strokes, rings, slider track. */
   color: string;
