@@ -736,7 +736,32 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
       statusCard: null,
     }));
 
-    const connection = await deps.connectSerialPort(targetPort);
+    let connection: SerialConnectionStatus;
+    try {
+      connection = await deps.connectSerialPort(targetPort);
+    } catch (error) {
+      // A rejected invoke must still release the one-operation-at-a-time
+      // gate, or the device UI wedges until reload — see runHealthCheck's
+      // catch below for the same shape.
+      if (token !== operationToken) {
+        return;
+      }
+
+      finishOperation(token);
+      setState((prev) => ({
+        ...prev,
+        status: DEVICE_STATUS.ERROR,
+        connectedPort: null,
+        statusCard: {
+          variant: "error",
+          code: "CONNECT_FAILED",
+          message: "Could not connect to the selected port.",
+          details: error instanceof Error ? error.message : String(error),
+        },
+      }));
+      return;
+    }
+
     if (token !== operationToken) {
       return;
     }
