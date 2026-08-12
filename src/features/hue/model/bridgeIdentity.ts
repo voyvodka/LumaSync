@@ -10,6 +10,8 @@ import type { HueBridgeSummary } from "../hueOnboardingApi";
 const IPV4_PATTERN =
   /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
 
+// `bridge.ip` is an identifier to hand to Rust, never a URL to build from here.
+// Rust owns HTTPS-first and the downgrade rules; a frontend fetch bypasses both.
 export function normalizeIpValue(value: string): string {
   return value.trim();
 }
