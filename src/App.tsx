@@ -2239,7 +2239,7 @@ function App() {
           <button
             type="button"
             onClick={handleDismissUsbSuggest}
-            style={{ fontSize: "11px", color: "var(--lm-muted)", background: "transparent", border: "none", cursor: "pointer" }}
+            style={{ fontSize: "11px", color: "var(--lm-ink-dim)", background: "transparent", border: "none", cursor: "pointer" }}
           >
             {t("common:hotplug.dismiss")}
           </button>
@@ -2274,7 +2274,7 @@ function App() {
           }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {t("common:hotplug.unsupportedFallback")}
           </span>
         </div>
@@ -2293,7 +2293,7 @@ function App() {
           }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {t("common:hotplug.stopFailed", {
               targets: stopFailedNotice
                 .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
@@ -2318,7 +2318,7 @@ function App() {
           }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
               ? t("hue:colorNotApplied.noLights")
               : t("hue:colorNotApplied.streamOffline")}
