@@ -277,15 +277,8 @@ function migrateV3ToV4(state: ShellState): ShellState {
  *     centerX = windowX + round(windowWidth / 2)
  *     centerY = windowY + round(windowHeight / 2)
  *
- * Bias caveat — on macOS the title bar adds ~28px of outer height that is
- * NOT captured in the persisted inner `windowWidth/Height`. The derived
- * center therefore sits ~14px above the user's perceived window center
- * for a one-shot legacy migration. Acceptable: the next persist after
- * any window move/resize overwrites the center using the *outer* size in
- * the rewritten `persistWindowState` path, so the bias self-corrects on
- * first interaction. Documenting here so a future maintainer doesn't
- * "fix" the migration by reaching for the chrome height (which is
- * platform-dependent and not knowable from persisted state alone).
+ * Bias caveat — this one-shot migration sits ~14px high on macOS and
+ * self-corrects on the next move/resize. See docs/architecture/contracts-and-state.md.
  *
  * Defensive cases:
  * - All four legacy fields `null`/absent ⇒ both center fields are `null`
