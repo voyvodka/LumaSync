@@ -12,6 +12,7 @@ import {
   sumSegmentCounts,
 } from "../model/contracts";
 
+/** Snapshot of the calibration editor's in-progress config plus dirty/close-confirmation UI state. */
 export interface CalibrationEditorState {
   baseline: LedCalibrationConfig;
   current: LedCalibrationConfig;
@@ -61,6 +62,7 @@ function normalizeDraft(config: CalibrationDraftModel): LedCalibrationConfig {
   return normalizeConfig(config as LedCalibrationConfig);
 }
 
+// Stable JSON key used to detect config changes for the isDirty check.
 function modelFingerprint(config: LedCalibrationConfig): string {
   const normalized = normalizeConfig(config);
   return JSON.stringify({
@@ -92,10 +94,12 @@ function buildState(
   };
 }
 
+/** Builds the editor's initial state, using the given config as both baseline and current. */
 export function createCalibrationEditorState(initial: LedCalibrationConfig): CalibrationEditorState {
   return buildState(initial, initial);
 }
 
+/** Applies a partial patch to the editor's current config and recomputes dirty state. */
 export function updateEditorConfig(
   state: CalibrationEditorState,
   patch: EditorConfigPatch,
@@ -118,6 +122,7 @@ export function updateEditorConfig(
   return buildState(state.baseline, next);
 }
 
+/** Replaces the editor's current config with a freshly normalized draft model. */
 export function loadEditorConfig(
   state: CalibrationEditorState,
   model: CalibrationDraftModel,
@@ -125,10 +130,12 @@ export function loadEditorConfig(
   return buildState(state.baseline, normalizeDraft(model));
 }
 
+/** Commits the current config as the new baseline, clearing the dirty flag. */
 export function saveEditorCalibration(state: CalibrationEditorState): CalibrationEditorState {
   return buildState(state.current, state.current);
 }
 
+/** Starts the close flow: requests discard confirmation if there are unsaved changes, else closes immediately. */
 export function requestEditorClose(state: CalibrationEditorState): CalibrationEditorState {
   if (state.isDirty) {
     return {
@@ -145,6 +152,7 @@ export function requestEditorClose(state: CalibrationEditorState): CalibrationEd
   };
 }
 
+/** Cancels a pending close request and dismisses the discard-confirmation prompt. */
 export function keepEditing(state: CalibrationEditorState): CalibrationEditorState {
   return {
     ...state,
@@ -153,6 +161,7 @@ export function keepEditing(state: CalibrationEditorState): CalibrationEditorSta
   };
 }
 
+/** Reverts to the baseline config and closes the editor, discarding unsaved edits. */
 export function discardEditorChanges(state: CalibrationEditorState): CalibrationEditorState {
   return {
     ...buildState(state.baseline, state.baseline),

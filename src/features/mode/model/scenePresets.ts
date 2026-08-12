@@ -11,6 +11,7 @@
 
 import type { TranslationKey } from "@/features/i18n/catalogue";
 
+/** A single mood-tile preset: display gradient plus the solid RGB it actually drives. */
 export interface ScenePreset {
   id: string;
   labelKey: TranslationKey;
@@ -23,6 +24,7 @@ export interface ScenePreset {
   brightness: number;
 }
 
+/** The fixed catalog of scene tiles shown in both full and compact layouts. */
 export const SCENE_PRESETS: readonly ScenePreset[] = [
   {
     id: "movie",

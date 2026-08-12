@@ -42,6 +42,9 @@ import {
 } from "@/shared/contracts/display";
 import { clamp } from "@/shared/lib/math";
 
+// The fullscreen calibration overlay steals window focus on open; re-grab it
+// (once immediately, once after the overlay finishes animating in) so
+// keyboard input keeps working in the main window.
 function reclaimFocus() {
   void getCurrentWindow().setFocus();
   setTimeout(() => void getCurrentWindow().setFocus(), 150);
@@ -106,6 +109,7 @@ function anchorFromEdgeEndpoint(edge: AnchorEdge, endpoint: AnchorEndpoint): Led
   return `${edge}-${endpoint}` as LedStartAnchor;
 }
 
+/** Full LED calibration editor: stage preview, edge/anchor/direction dock, test pattern, and save/discard flow. */
 export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: CalibrationPageProps) {
   const { t } = useTranslation();
 

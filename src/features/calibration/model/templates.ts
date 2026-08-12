@@ -9,6 +9,7 @@ const MANUAL_COUNTS = {
   left: 0,
 } as const;
 
+/** Built-in monitor-size presets offered in the calibration template picker. */
 export const CALIBRATION_TEMPLATES: CalibrationTemplate[] = [
   {
     id: "monitor-24-16-9",
@@ -62,6 +63,7 @@ export const CALIBRATION_TEMPLATES: CalibrationTemplate[] = [
   },
 ];
 
+/** Converts a named template into a full calibration config with a computed `totalLeds`. */
 export function toLedCalibrationConfig(template: CalibrationTemplate): LedCalibrationConfig {
   return {
     templateId: template.id,
@@ -75,6 +77,7 @@ export function toLedCalibrationConfig(template: CalibrationTemplate): LedCalibr
   };
 }
 
+/** Looks up a template by id and converts it to a config; falls back to the manual/all-zero config if not found. */
 export function applyTemplate(templateId: string): LedCalibrationConfig {
   const template = CALIBRATION_TEMPLATES.find((candidate) => candidate.id === templateId);
   if (!template) {
@@ -125,6 +128,7 @@ export function deriveDefaultCounts(display: Pick<DisplayInfo, "width" | "height
   return { top: topBase, right: sideBase, bottom: topBase, left: sideBase };
 }
 
+/** All-zero calibration config used as the manual/no-template starting point. */
 export function resetToManual(): LedCalibrationConfig {
   return {
     counts: { ...MANUAL_COUNTS },

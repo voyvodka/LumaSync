@@ -1,12 +1,14 @@
 import type { LedCalibrationConfig } from "./contracts";
 import type { LedSegmentKey, LedStartAnchor } from "./contracts";
 
+/** One physical LED's position in the strip sequence: its global index plus the edge/local-index it belongs to. */
 export interface LedSequenceItem {
   index: number;
   segment: LedSegmentKey;
   localIndex: number;
 }
 
+/** Looks up the sequence item at a marker index, wrapping negative/out-of-range indexes into bounds. */
 export function resolveLedSequenceItem(
   sequence: LedSequenceItem[],
   markerIndex: number,
@@ -43,6 +45,8 @@ const SEGMENT_ANCHOR_TO_KEY: Record<
   "left-end": { segment: "left", localIndex: "end" },
 };
 
+// Picks the LED just inside the stand gap on the given side, splitting the
+// bottom edge at its midpoint when there is no gap to anchor against.
 function resolveBottomGapAnchorLocalIndex(
   bottomCount: number,
   bottomMissing: number,
@@ -113,6 +117,7 @@ function rotateSequence(sequence: LedSequenceItem[], startIndex: number): LedSeq
   return [...sequence.slice(startIndex), ...sequence.slice(0, startIndex)];
 }
 
+/** Builds the physical LED order for a calibration config: canonical edges rotated to the start anchor and oriented by direction. */
 export function buildLedSequence(config: LedCalibrationConfig): LedSequenceItem[] {
   const canonical = buildCanonicalSequence(config);
   const anchorIndex = resolveAnchorIndex(canonical, config);

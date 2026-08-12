@@ -5,8 +5,10 @@ import {
 import type { LedCalibrationConfig } from "../model/contracts";
 import { buildLedSequence, resolveLedSequenceItem } from "../model/indexMapping";
 
+/** Whether the test pattern is only rendering in the preview overlay or also driving hardware. */
 export type TestPatternMode = "sending" | "preview-only";
 
+/** Point-in-time view of the running calibration test pattern. */
 export interface TestPatternSnapshot {
   isEnabled: boolean;
   mode: TestPatternMode;
@@ -32,6 +34,7 @@ interface CreateTestPatternFlowDeps {
 
 const MARKER_ADVANCE_MS = 120;
 
+/** Controller for the animated calibration test pattern (preview + optional hardware output). */
 export interface TestPatternFlow {
   getSnapshot: () => TestPatternSnapshot;
   setTotalLeds: (totalLeds: number) => TestPatternSnapshot;
@@ -48,6 +51,7 @@ function nextMarkerIndex(current: number, totalLeds: number): number {
   return (current + 1) % totalLeds;
 }
 
+/** Builds a test pattern flow that animates a marker and optionally forwards it to connected hardware. */
 export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatternFlow {
   const now = deps.now ?? (() => Date.now());
   const scheduleFrame =
@@ -177,6 +181,7 @@ export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatt
   };
 }
 
+/** Test pattern flow wired to the real serial API, mapping marker indexes through the current LED sequence. */
 export function createDefaultTestPatternFlow(
   getConnectionStatus: () => Promise<TestPatternConnectionStatus>,
   initialConfig?: LedCalibrationConfig,

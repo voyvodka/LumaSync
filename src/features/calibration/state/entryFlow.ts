@@ -1,5 +1,6 @@
 import type { LedCalibrationConfig } from "../model/contracts";
 
+/** Decision of whether/why to open the calibration overlay, and what config to seed it with. */
 export interface CalibrationOverlayEntry {
   open: boolean;
   reason: "first-connection" | "settings-edit" | "none";
@@ -18,6 +19,7 @@ interface AutoOpenOnConnectionInput {
   alreadyAutoOpened: boolean;
 }
 
+/** Decides whether a newly connected device should force-open first-time calibration. */
 export function deriveCalibrationOverlayEntry(
   input: DeriveCalibrationOverlayEntryInput,
 ): CalibrationOverlayEntry {
@@ -35,6 +37,7 @@ export function deriveCalibrationOverlayEntry(
   };
 }
 
+/** Opens the calibration overlay for a user-initiated edit from Settings. */
 export function startCalibrationFromSettings(
   savedCalibration?: LedCalibrationConfig,
 ): CalibrationOverlayEntry {
@@ -45,6 +48,7 @@ export function startCalibrationFromSettings(
   };
 }
 
+/** Whether a fresh device connection should auto-open calibration (only once, only if none is saved yet). */
 export function shouldAutoOpenCalibrationOnConnection(
   input: AutoOpenOnConnectionInput,
 ): boolean {
