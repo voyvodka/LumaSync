@@ -413,6 +413,69 @@ check(
   "STILL PRESENT: literal Hue zone status code strings in hue.ts (move to roomMap.ts > HUE_ZONE_STATUS_CODES)"
 );
 
+console.log("\n[ Hue pairing response — Rust → hue.ts field parity ]");
+// credentialStorageBackend was dropped here once already: Rust emitted it, the
+// TS envelope never declared it, and the DTLS pre-shared key stayed in
+// plaintext on disk as a result. The pin is what makes that failure loud.
+const HUE_ONBOARDING_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/hue_onboarding.rs");
+const hueOnboardingRustSource = readOrEmpty(HUE_ONBOARDING_RUST_FILE, "rust hue_onboarding");
+const HUE_CREDENTIAL_STORE_RUST_FILE = resolve(
+  ROOT,
+  "src-tauri/src/commands/hue/credential_store.rs"
+);
+const credentialStoreRustSource = readOrEmpty(
+  HUE_CREDENTIAL_STORE_RUST_FILE,
+  "rust credential_store"
+);
+
+const EXPECTED_PAIR_RESPONSE_FIELDS = 3;
+const pairResponseFields = rustStructFields(hueOnboardingRustSource, "HuePairBridgeResponse");
+if (!pairResponseFields || pairResponseFields.length === 0) {
+  fail('EXTRACTION FAILED: no fields found on Rust struct "HuePairBridgeResponse"');
+} else {
+  check(
+    pairResponseFields.length === EXPECTED_PAIR_RESPONSE_FIELDS,
+    `HuePairBridgeResponse harvested exactly ${EXPECTED_PAIR_RESPONSE_FIELDS} fields`,
+    `HARVEST COUNT DRIFT: expected ${EXPECTED_PAIR_RESPONSE_FIELDS} fields on `
+      + `HuePairBridgeResponse, got ${pairResponseFields.length} `
+      + `[${pairResponseFields.join(", ")}] — update the pin deliberately`
+  );
+  const tsPairBlock = hueSource.match(
+    /export interface HuePairBridgeResponse\s*\{([\s\S]*?)\n\}/
+  );
+  if (!tsPairBlock) {
+    fail('MISSING interface "HuePairBridgeResponse" in hue.ts');
+  } else {
+    for (const field of pairResponseFields) {
+      check(
+        new RegExp(`^\\s*${field}\\??\\s*:`, "m").test(tsPairBlock[1]),
+        `HuePairBridgeResponse.${field} declared in hue.ts`,
+        `MISSING HuePairBridgeResponse.${field} in hue.ts — Rust serializes it `
+          + `(#[serde(rename_all = "camelCase")]) but the contract drops it`
+      );
+    }
+  }
+}
+
+// The backend strings are a wire contract shared by two files; if they drift,
+// "keychain" stops being recognised and the plaintext copy is kept forever.
+check(
+  credentialStoreRustSource.includes('CredentialBackend::Keychain => "keychain"')
+    && credentialStoreRustSource.includes(
+      'CredentialBackend::PlaintextLegacy => "plaintext-legacy"'
+    ),
+  "Rust CredentialBackend emits the contracted backend literals",
+  "BACKEND LITERAL DRIFT: credential_store.rs no longer emits "
+    + '"keychain" / "plaintext-legacy" — hue.ts HUE_CREDENTIAL_BACKENDS would go stale'
+);
+check(
+  hueSource.includes('KEYCHAIN: "keychain"')
+    && hueSource.includes('PLAINTEXT_LEGACY: "plaintext-legacy"'),
+  "hue.ts HUE_CREDENTIAL_BACKENDS pins the Rust backend literals",
+  "BACKEND LITERAL DRIFT: hue.ts HUE_CREDENTIAL_BACKENDS no longer matches "
+    + "CredentialBackend::as_str in credential_store.rs"
+);
+
 // ---------------------------------------------------------------------------
 // Device contract
 // ---------------------------------------------------------------------------
