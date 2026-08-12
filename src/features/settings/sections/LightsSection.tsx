@@ -362,10 +362,10 @@ export function LightsSection({
       <div className="lm-lights-center">
         {lockState.showReason && (
           <OnboardingBanner
-            title={t("lightsPage.calibrationBanner.title")}
-            body={t("lightsPage.calibrationBanner.sub")}
+            title={t("lights:calibrationBanner.title")}
+            body={t("lights:calibrationBanner.sub")}
             primaryAction={{
-              label: t("lightsPage.calibrationBanner.action"),
+              label: t("lights:calibrationBanner.action"),
               onClick: onOpenCalibration,
             }}
           />
@@ -374,7 +374,7 @@ export function LightsSection({
         {/* Mode strip */}
         <div>
           <div className="lm-lights-slab">
-            {t("lightsPage.slab.modeText")} <b>{t("lightsPage.slab.modeAccent")}</b>
+            {t("lights:slab.modeText")} <b>{t("lights:slab.modeAccent")}</b>
           </div>
           <div className="lm-mstrip" role="group">
             <button
@@ -386,8 +386,8 @@ export function LightsSection({
             >
               <span className="ico"><IconOff /></span>
               <span className="tx">
-                <span className="tn">{t("lightsPage.mode.off.title")}</span>
-                <span className="ts">{t("lightsPage.mode.off.subtitle")}</span>
+                <span className="tn">{t("lights:mode.off.title")}</span>
+                <span className="ts">{t("lights:mode.off.subtitle")}</span>
               </span>
               <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_OFF} />
             </button>
@@ -402,11 +402,11 @@ export function LightsSection({
             >
               <span className="ico"><IconAmbilight /></span>
               <span className="tx">
-                <span className="tn">{t("lightsPage.mode.ambilight.title")}</span>
+                <span className="tn">{t("lights:mode.ambilight.title")}</span>
                 <span className="ts">
                   {typeof totalLeds === "number" && totalLeds > 0
-                    ? t("lightsPage.mode.ambilight.subtitle", { count: totalLeds })
-                    : t("lightsPage.mode.ambilight.subtitleFallback")}
+                    ? t("lights:mode.ambilight.subtitle", { count: totalLeds })
+                    : t("lights:mode.ambilight.subtitleFallback")}
                 </span>
               </span>
               <ModeKeybindBadge action={KEYBIND_ACTIONS.MODE_AMBILIGHT} />
@@ -425,9 +425,9 @@ export function LightsSection({
             >
               <span className="ico"><IconSolid /></span>
               <span className="tx">
-                <span className="tn">{t("lightsPage.mode.solid.title")}</span>
+                <span className="tn">{t("lights:mode.solid.title")}</span>
                 <span className="ts">
-                  {t("lightsPage.mode.solid.subtitle", {
+                  {t("lights:mode.solid.subtitle", {
                     hex: solidHex.toUpperCase(),
                     brightness: solidBrightnessPct,
                   })}
@@ -454,7 +454,7 @@ export function LightsSection({
               brightnessDisabled={isAdalight}
               brightnessDisabledReason={
                 isAdalight
-                  ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+                  ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
                   : undefined
               }
               onCommit={(draft) =>
@@ -467,17 +467,17 @@ export function LightsSection({
         {/* Edge signal + profile — only when Ambilight is active */}
         {isAmbilight && <div>
           <div className="lm-lights-slab">
-            {t("lightsPage.slab.signalText")} <b>{t("lightsPage.slab.signalAccent")}</b>
+            {t("lights:slab.signalText")} <b>{t("lights:slab.signalAccent")}</b>
           </div>
           <div className="lm-signal">
             <div className="lm-signal-head">
-              <span className="l">{t("lightsPage.signal.title")}</span>
+              <span className="l">{t("lights:signal.title")}</span>
               <span className="meta-pill">
                 <span>
-                  {t("lightsPage.signal.delta")} <b>{latencyLabel}</b>
+                  {t("lights:signal.delta")} <b>{latencyLabel}</b>
                 </span>
                 <span>
-                  {t("lightsPage.signal.fps")} <b>{fpsLabel}</b>
+                  {t("lights:signal.fps")} <b>{fpsLabel}</b>
                 </span>
               </span>
             </div>
@@ -504,7 +504,7 @@ export function LightsSection({
                   the SolidColorPanel brightness slider. */}
               <div className="lm-psl">
                 <div className="row">
-                  <span>{t("lightsPage.signal.profile.brightness")}</span>
+                  <span>{t("lights:signal.profile.brightness")}</span>
                   <b>{ambilightBrightnessPct}%</b>
                 </div>
                 <div className="tr">
@@ -519,10 +519,10 @@ export function LightsSection({
                     value={ambilightBrightnessPct}
                     disabled={ambilightBrightnessLocked}
                     aria-disabled={ambilightBrightnessLocked}
-                    aria-label={t("lightsPage.signal.profile.brightness")}
+                    aria-label={t("lights:signal.profile.brightness")}
                     title={
                       isAdalight
-                        ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+                        ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
                         : undefined
                     }
                     onChange={(e) => handleAmbilightBrightnessChange(parseInt(e.target.value, 10))}
@@ -532,7 +532,7 @@ export function LightsSection({
               {/* Saturation — wired to AmbilightPayload.saturation (0.5–2.0). */}
               <div className="lm-psl">
                 <div className="row">
-                  <span>{t("lightsPage.signal.profile.saturation")}</span>
+                  <span>{t("lights:signal.profile.saturation")}</span>
                   <b>{saturationValue}%</b>
                 </div>
                 <div className="tr">
@@ -546,7 +546,7 @@ export function LightsSection({
                     step={1}
                     value={saturationValue}
                     disabled={slidersDisabled}
-                    aria-label={t("lightsPage.signal.profile.saturation")}
+                    aria-label={t("lights:signal.profile.saturation")}
                     onChange={(e) => handleSaturationChange(parseInt(e.target.value, 10))}
                   />
                 </div>
@@ -554,11 +554,11 @@ export function LightsSection({
               {/* Black border — toggle */}
               <div className="lm-psl is-toggle">
                 <div className="row">
-                  <span>{t("lightsPage.signal.profile.blackBorder")}</span>
+                  <span>{t("lights:signal.profile.blackBorder")}</span>
                   <b>
                     {blackBorderOn
-                      ? t("lightsPage.signal.profile.blackBorderAuto")
-                      : t("lightsPage.signal.profile.blackBorderOff")}
+                      ? t("lights:signal.profile.blackBorderAuto")
+                      : t("lights:signal.profile.blackBorderOff")}
                   </b>
                 </div>
                 <div className="tr">
@@ -587,7 +587,7 @@ export function LightsSection({
             in sync after reloads and Compact-view edits. */}
         <div>
           <div className="lm-lights-slab">
-            {t("lightsPage.slab.scenesText")} <b>{t("lightsPage.slab.scenesAccent")}</b>
+            {t("lights:slab.scenesText")} <b>{t("lights:slab.scenesAccent")}</b>
           </div>
           <div className="lm-scenes">
             {SCENE_PRESETS.map((preset) => {
@@ -635,19 +635,19 @@ export function LightsSection({
       </div>
 
       {/* ── Right dock ────────────────────────────────────────────────── */}
-      <aside className="lm-dock" aria-label={t("lightsPage.dock.outputs")}>
+      <aside className="lm-dock" aria-label={t("lights:dock.outputs")}>
         <div>
           <h4>
-            <span className="t">{t("lightsPage.dock.outputs")}</span>
+            <span className="t">{t("lights:dock.outputs")}</span>
             <button
               type="button"
               className="add"
               aria-disabled={!canAddHueZone}
-              aria-label={t("lightsPage.dock.addAria")}
+              aria-label={t("lights:dock.addAria")}
               title={
                 canAddHueZone
-                  ? t("lightsPage.dock.addHueZoneTooltip")
-                  : t("lightsPage.dock.addDisabledTooltip")
+                  ? t("lights:dock.addHueZoneTooltip")
+                  : t("lights:dock.addDisabledTooltip")
               }
               onClick={canAddHueZone ? () => { void handleAddHueZone(); } : undefined}
             >
@@ -668,18 +668,18 @@ export function LightsSection({
               <span className="st" />
               <div className="tx">
                 <div className="n">
-                  {t("lightsPage.dock.rows.usbName")}{" "}
-                  <em>{t("lightsPage.dock.rows.usbType")}</em>
+                  {t("lights:dock.rows.usbName")}{" "}
+                  <em>{t("lights:dock.rows.usbType")}</em>
                 </div>
                 <div className="s">
                   {usbConnected ? (
                     <Trans
-                      i18nKey="lightsPage.dock.rows.usbSub"
+                      i18nKey="lights:dock.rows.usbSub"
                       values={{ count: totalLeds ?? 0 }}
                       components={{ b: <b /> }}
                     />
                   ) : (
-                    t("lightsPage.dock.rows.usbSubUnavailable")
+                    t("lights:dock.rows.usbSubUnavailable")
                   )}
                 </div>
               </div>
@@ -698,20 +698,20 @@ export function LightsSection({
               <span className="st" />
               <div className="tx">
                 <div className="n">
-                  {t("lightsPage.dock.rows.hueName")}{" "}
-                  <em>{t("lightsPage.dock.rows.hueType")}</em>
+                  {t("lights:dock.rows.hueName")}{" "}
+                  <em>{t("lights:dock.rows.hueType")}</em>
                 </div>
                 <div className="s">
                   {!hueAvailable ? (
-                    t("lightsPage.dock.rows.hueSubUnavailable")
+                    t("lights:dock.rows.hueSubUnavailable")
                   ) : hueStreaming ? (
                     <Trans
-                      i18nKey="lightsPage.dock.rows.hueSubStreaming"
+                      i18nKey="lights:dock.rows.hueSubStreaming"
                       components={{ b: <b /> }}
                     />
                   ) : (
                     <Trans
-                      i18nKey="lightsPage.dock.rows.hueSubIdle"
+                      i18nKey="lights:dock.rows.hueSubIdle"
                       components={{ b: <b /> }}
                     />
                   )}
@@ -723,8 +723,8 @@ export function LightsSection({
         </div>
 
         <div className="lm-hint-box">
-          <b>{t("lightsPage.dock.hintTitle")}</b>
-          {t("lightsPage.dock.hintBody")
+          <b>{t("lights:dock.hintTitle")}</b>
+          {t("lights:dock.hintBody")
             .split("\n")
             .map((line, idx, arr) => (
               <span key={idx}>

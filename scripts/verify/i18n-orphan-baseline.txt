@@ -228,9 +228,9 @@ devicesPage.hue.confirmArea
 devicesPage.hue.pill.offline
 devicesPage.hue.retryPair
 devicesPage.usb.traffic
-ledSettings.colorCorrection.kelvinHint
-lightsPage.dock.addTooltip
-lightsPage.signal.smoothing.description
+lights:dock.addTooltip
+lights:led.colorCorrection.kelvinHint
+lights:signal.smoothing.description
 preview:control.closed
 preview:live.unavailableLinux
 roomMap.comingSoon

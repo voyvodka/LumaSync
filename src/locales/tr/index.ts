@@ -1,4 +1,5 @@
 import common from "./common";
+import lights from "./lights";
 import preview from "./preview";
 import settings from "./settings";
 import shell from "./shell";
@@ -8,6 +9,7 @@ import updater from "./updater";
 
 export const tr = {
   common,
+  lights,
   preview,
   settings,
   shell,

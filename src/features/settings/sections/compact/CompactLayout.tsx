@@ -111,7 +111,7 @@ export function CompactLayout({
   }, []);
   const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
   const adalightLockReason = isAdalight
-    ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+    ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
     : undefined;
 
   const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID;

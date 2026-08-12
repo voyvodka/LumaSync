@@ -209,11 +209,11 @@ export function ColorCorrectionPanel({
           border: "none",
         }}
       >
-        <span className="t">{t("ledSettings.colorCorrection.title")}</span>
+        <span className="t">{t("lights:led.colorCorrection.title")}</span>
         <span className="sub">
           {canReset
             ? `${config.kelvin}K · ×${config.saturation.toFixed(2)}`
-            : t("ledSettings.colorCorrection.description")}
+            : t("lights:led.colorCorrection.description")}
         </span>
       </button>
       {isExpanded && (
@@ -223,8 +223,8 @@ export function ColorCorrectionPanel({
           style={{ padding: 14 }}
         >
           <SliderRow
-            label={t("ledSettings.colorCorrection.gammaR")}
-            ariaLabel={t("ledSettings.colorCorrection.gammaR")}
+            label={t("lights:led.colorCorrection.gammaR")}
+            ariaLabel={t("lights:led.colorCorrection.gammaR")}
             min={GAMMA_RANGE.min}
             max={GAMMA_RANGE.max}
             step={0.1}
@@ -235,8 +235,8 @@ export function ColorCorrectionPanel({
             }
           />
           <SliderRow
-            label={t("ledSettings.colorCorrection.gammaG")}
-            ariaLabel={t("ledSettings.colorCorrection.gammaG")}
+            label={t("lights:led.colorCorrection.gammaG")}
+            ariaLabel={t("lights:led.colorCorrection.gammaG")}
             min={GAMMA_RANGE.min}
             max={GAMMA_RANGE.max}
             step={0.1}
@@ -247,8 +247,8 @@ export function ColorCorrectionPanel({
             }
           />
           <SliderRow
-            label={t("ledSettings.colorCorrection.gammaB")}
-            ariaLabel={t("ledSettings.colorCorrection.gammaB")}
+            label={t("lights:led.colorCorrection.gammaB")}
+            ariaLabel={t("lights:led.colorCorrection.gammaB")}
             min={GAMMA_RANGE.min}
             max={GAMMA_RANGE.max}
             step={0.1}
@@ -259,8 +259,8 @@ export function ColorCorrectionPanel({
             }
           />
           <SliderRow
-            label={t("ledSettings.colorCorrection.kelvin")}
-            ariaLabel={`${t("ledSettings.colorCorrection.kelvin")} — ${t("ledSettings.colorCorrection.kelvinHint")}`}
+            label={t("lights:led.colorCorrection.kelvin")}
+            ariaLabel={`${t("lights:led.colorCorrection.kelvin")} — ${t("lights:led.colorCorrection.kelvinHint")}`}
             min={KELVIN_RANGE_K.min}
             max={KELVIN_RANGE_K.max}
             step={100}
@@ -274,8 +274,8 @@ export function ColorCorrectionPanel({
             }
           />
           <SliderRow
-            label={t("ledSettings.colorCorrection.saturation")}
-            ariaLabel={t("ledSettings.colorCorrection.saturation")}
+            label={t("lights:led.colorCorrection.saturation")}
+            ariaLabel={t("lights:led.colorCorrection.saturation")}
             min={SATURATION_RANGE.min}
             max={SATURATION_RANGE.max}
             step={0.05}
@@ -300,9 +300,9 @@ export function ColorCorrectionPanel({
               className="lm-settings-btn"
               onClick={handleReset}
               disabled={!canReset}
-              aria-label={t("ledSettings.colorCorrection.reset")}
+              aria-label={t("lights:led.colorCorrection.reset")}
             >
-              {t("ledSettings.colorCorrection.reset")}
+              {t("lights:led.colorCorrection.reset")}
             </button>
           </div>
         </div>

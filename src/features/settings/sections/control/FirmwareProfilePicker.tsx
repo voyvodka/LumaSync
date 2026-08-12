@@ -313,7 +313,7 @@ function OverrideWarningDialog({
             color: "var(--lm-amber, #ffb020)",
           }}
         >
-          {t("ledSettings.firmwareProfile.overrideWarningTitle")}
+          {t("lights:led.firmwareProfile.overrideWarningTitle")}
         </div>
         <div
           id={bodyId}
@@ -323,7 +323,7 @@ function OverrideWarningDialog({
             lineHeight: 1.55,
           }}
         >
-          {t("ledSettings.firmwareProfile.overrideWarningBody", {
+          {t("lights:led.firmwareProfile.overrideWarningBody", {
             advertised,
             attempted,
           })}
@@ -345,7 +345,7 @@ function OverrideWarningDialog({
             onChange={(e) => setDontAskAgain(e.target.checked)}
             data-testid="lm-fw-override-dont-ask"
           />
-          {t("ledSettings.firmwareProfile.overrideWarningDontAskAgain")}
+          {t("lights:led.firmwareProfile.overrideWarningDontAskAgain")}
         </label>
         <div
           style={{
@@ -372,7 +372,7 @@ function OverrideWarningDialog({
               fontSize: 12,
             }}
           >
-            {t("ledSettings.firmwareProfile.overrideWarningCancel")}
+            {t("lights:led.firmwareProfile.overrideWarningCancel")}
           </button>
           <button
             ref={confirmRef}
@@ -392,7 +392,7 @@ function OverrideWarningDialog({
               fontWeight: 600,
             }}
           >
-            {t("ledSettings.firmwareProfile.overrideWarningConfirm", {
+            {t("lights:led.firmwareProfile.overrideWarningConfirm", {
               attempted,
             })}
           </button>
@@ -615,14 +615,14 @@ export function FirmwareProfilePicker({
   return (
     <section className="lm-settings-group">
       <div className="lm-settings-group-h">
-        <span className="t">{t("ledSettings.firmwareProfile.title")}</span>
+        <span className="t">{t("lights:led.firmwareProfile.title")}</span>
         <span className="sub">
-          {t("ledSettings.firmwareProfile.description")}
+          {t("lights:led.firmwareProfile.description")}
         </span>
       </div>
       <div
         role="radiogroup"
-        aria-label={t("ledSettings.firmwareProfile.title")}
+        aria-label={t("lights:led.firmwareProfile.title")}
         style={{
           display: "flex",
           gap: 10,
@@ -637,12 +637,12 @@ export function FirmwareProfilePicker({
           const isAdvertised = advertised === p;
           const labelKey =
             p === FIRMWARE_PROFILE.LUMASYNC_V1
-              ? "ledSettings.firmwareProfile.lumasyncV1Label"
-              : "ledSettings.firmwareProfile.adalightLabel";
+              ? "lights:led.firmwareProfile.lumasyncV1Label"
+              : "lights:led.firmwareProfile.adalightLabel";
           const descriptionKey =
             p === FIRMWARE_PROFILE.LUMASYNC_V1
-              ? "ledSettings.firmwareProfile.lumasyncV1Description"
-              : "ledSettings.firmwareProfile.adalightDescription";
+              ? "lights:led.firmwareProfile.lumasyncV1Description"
+              : "lights:led.firmwareProfile.adalightDescription";
           return (
             <ProfileTile
               key={p}
@@ -654,14 +654,14 @@ export function FirmwareProfilePicker({
               disabled={disabled}
               advertisedBadge={
                 isAdvertised
-                  ? t("ledSettings.firmwareProfile.advertisedBadge", {
+                  ? t("lights:led.firmwareProfile.advertisedBadge", {
                       advertised: advertised,
                     })
                   : undefined
               }
               mismatchTooltip={
                 mismatched && advertised !== undefined
-                  ? t("ledSettings.firmwareProfile.mismatchTooltip", {
+                  ? t("lights:led.firmwareProfile.mismatchTooltip", {
                       advertised,
                       attempted: p,
                     })
@@ -670,7 +670,7 @@ export function FirmwareProfilePicker({
               notice={
                 checked && p === FIRMWARE_PROFILE.ADALIGHT
                   ? t(
-                      "ledSettings.firmwareProfile.brightnessDisabledTooltip",
+                      "lights:led.firmwareProfile.brightnessDisabledTooltip",
                     )
                   : undefined
               }
@@ -703,10 +703,10 @@ export function FirmwareProfilePicker({
           />
           <label htmlFor={overrideToggleId} style={{ cursor: "pointer" }}>
             <span style={{ fontWeight: 600 }}>
-              {t("ledSettings.firmwareProfile.useAnywayLabel")}
+              {t("lights:led.firmwareProfile.useAnywayLabel")}
             </span>
             <span style={{ marginLeft: 6, color: "#6c7585" }}>
-              {t("ledSettings.firmwareProfile.useAnywayHint")}
+              {t("lights:led.firmwareProfile.useAnywayHint")}
             </span>
           </label>
         </div>

@@ -208,12 +208,12 @@ export function LedChipTypePicker({
   return (
     <section className="lm-settings-group">
       <div className="lm-settings-group-h">
-        <span className="t">{t("ledSettings.chipType.label")}</span>
-        <span className="sub">{t("ledSettings.chipType.description")}</span>
+        <span className="t">{t("lights:led.chipType.label")}</span>
+        <span className="sub">{t("lights:led.chipType.description")}</span>
       </div>
       <div
         role="radiogroup"
-        aria-label={t("ledSettings.chipType.label")}
+        aria-label={t("lights:led.chipType.label")}
         style={{
           display: "flex",
           gap: 10,
@@ -223,7 +223,7 @@ export function LedChipTypePicker({
       >
         <ChipTile
           chipType={LED_CHIP_TYPE.WS2812B_GRB}
-          label={t("ledSettings.chipType.options.ws2812b")}
+          label={t("lights:led.chipType.options.ws2812b")}
           description="WS2812B · GRB · 3 bytes/pixel"
           checked={chipType === LED_CHIP_TYPE.WS2812B_GRB}
           onSelect={handleSelect}
@@ -232,11 +232,11 @@ export function LedChipTypePicker({
         />
         <ChipTile
           chipType={LED_CHIP_TYPE.SK6812_RGBW}
-          label={t("ledSettings.chipType.options.sk6812rgbw")}
+          label={t("lights:led.chipType.options.sk6812rgbw")}
           description="SK6812 · RGBW · 4 bytes/pixel · W=min(R,G,B)"
           warning={
             showAdalightWarning
-              ? t("ledSettings.chipType.sk6812AdalightWarning")
+              ? t("lights:led.chipType.sk6812AdalightWarning")
               : undefined
           }
           checked={chipType === LED_CHIP_TYPE.SK6812_RGBW}

@@ -75,13 +75,13 @@ export function EdgeSignalGrid({
   }), [edgeSignal]);
 
   return (
-    <div className="lm-edges" aria-label={t("lightsPage.signal.edgesAria")}>
+    <div className="lm-edges" aria-label={t("lights:signal.edgesAria")}>
       <div
         className="lm-edge lm-edge-top"
         style={edgeGradients.top ? { background: edgeGradients.top } : undefined}
       >
         <span className="label">
-          {t("lightsPage.signal.edges.top", { count: counts?.top ?? 0 })}
+          {t("lights:signal.edges.top", { count: counts?.top ?? 0 })}
         </span>
       </div>
       <div
@@ -89,13 +89,13 @@ export function EdgeSignalGrid({
         style={edgeGradients.left ? { background: edgeGradients.left } : undefined}
       >
         <span className="label">
-          {t("lightsPage.signal.edges.left", { count: counts?.left ?? 0 })}
+          {t("lights:signal.edges.left", { count: counts?.left ?? 0 })}
         </span>
       </div>
       <div className="lm-edge lm-edge-c">
         <div className="scene">
-          <b>{t("lightsPage.signal.display.label", { index: displayIndex })}</b>
-          {resolutionLabel ?? t("lightsPage.signal.display.sub")}
+          <b>{t("lights:signal.display.label", { index: displayIndex })}</b>
+          {resolutionLabel ?? t("lights:signal.display.sub")}
         </div>
       </div>
       <div
@@ -103,7 +103,7 @@ export function EdgeSignalGrid({
         style={edgeGradients.right ? { background: edgeGradients.right } : undefined}
       >
         <span className="label">
-          {t("lightsPage.signal.edges.right", { count: counts?.right ?? 0 })}
+          {t("lights:signal.edges.right", { count: counts?.right ?? 0 })}
         </span>
       </div>
       <div
@@ -111,7 +111,7 @@ export function EdgeSignalGrid({
         style={edgeGradients.bottom ? { background: edgeGradients.bottom } : undefined}
       >
         <span className="label">
-          {t("lightsPage.signal.edges.bot", { count: counts?.bottom ?? 0 })}
+          {t("lights:signal.edges.bot", { count: counts?.bottom ?? 0 })}
         </span>
       </div>
     </div>

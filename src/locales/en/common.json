@@ -155,86 +155,6 @@
       }
     }
   },
-  "lightsPage": {
-    "slab": {
-      "modeText": "Lighting",
-      "modeAccent": "Mode",
-      "signalText": "Edge signal",
-      "signalAccent": "· live · mode settings",
-      "scenesText": "Scene",
-      "scenesAccent": "presets"
-    },
-    "mode": {
-      "off": {
-        "title": "Off",
-        "subtitle": "Outputs parked"
-      },
-      "ambilight": {
-        "title": "Ambilight",
-        "subtitle": "Display 1 · {{count}} LED",
-        "subtitleFallback": "Live screen capture"
-      },
-      "solid": {
-        "title": "Solid",
-        "subtitle": "{{hex}} · {{brightness}}%"
-      }
-    },
-    "signal": {
-      "title": "Capture → Strip",
-      "delta": "Δ",
-      "fps": "Σ",
-      "edgesAria": "Live edge preview",
-      "edges": {
-        "top": "TOP · {{count}}",
-        "bot": "BOT · {{count}}",
-        "left": "L · {{count}}",
-        "right": "R · {{count}}"
-      },
-      "display": {
-        "label": "DISPLAY {{index}}",
-        "sub": "—"
-      },
-      "profile": {
-        "brightness": "Brightness",
-        "saturation": "Saturation",
-        "blackBorder": "Black border",
-        "blackBorderAuto": "auto",
-        "blackBorderOff": "off"
-      },
-      "smoothing": {
-        "title": "Lighting responsiveness",
-        "description": "How quickly lights follow screen changes — applies to both LED strips and Hue lights.",
-        "subtle": "Subtle",
-        "moderate": "Moderate",
-        "intense": "Intense"
-      }
-    },
-    "dock": {
-      "outputs": "Outputs",
-      "addAria": "Add output",
-      "addTooltip": "Coming soon — multi Hue zone",
-      "addHueZoneTooltip": "Add a new Hue zone",
-      "addDisabledTooltip": "Pair a Hue bridge to add zones",
-      "hintTitle": "Room space",
-      "hintBody": "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
-      "rows": {
-        "usbName": "USB",
-        "usbType": "CH340",
-        "usbSub": "{{count}} LEDs · <b>serial</b>",
-        "usbSubUnavailable": "No strip connected",
-        "hueName": "HUE",
-        "hueType": "ENTERTAINMENT",
-        "hueSubStreaming": "Bridge · <b>DTLS 50hz</b>",
-        "hueSubIdle": "Bridge · <b>standby</b>",
-        "hueSubUnavailable": "Not configured"
-      }
-    },
-    "calibrationBanner": {
-      "title": "Calibration required",
-      "sub": "Finish LED layout before enabling this mode.",
-      "action": "Open setup"
-    }
-  },
   "device": {
     "title": "Device",
     "description": "Scan serial ports, choose one, and connect without restarting the app.",
@@ -1035,46 +955,6 @@
         "right": "Right",
         "bottom": "Bottom"
       }
-    }
-  },
-  "ledSettings": {
-    "colorCorrection": {
-      "title": "Color Correction",
-      "description": "Per-channel color correction applied before output.",
-      "gammaR": "Gamma Red",
-      "gammaG": "Gamma Green",
-      "gammaB": "Gamma Blue",
-      "kelvin": "White Point (K)",
-      "saturation": "Saturation",
-      "reset": "Reset to defaults",
-      "kelvinHint": "Lower = warmer, higher = cooler"
-    },
-    "chipType": {
-      "label": "LED Chip Type",
-      "description": "SK6812 RGBW strips include a dedicated white LED for cleaner whites.",
-      "options": {
-        "ws2812b": "WS2812B (3-byte RGB)",
-        "sk6812rgbw": "SK6812 RGBW (4-byte)"
-      },
-      "sk6812AdalightWarning": "SK6812 RGBW is not supported with the Adalight profile. Falling back to WS2812B encoding."
-    },
-    "firmwareProfile": {
-      "title": "Firmware Profile",
-      "description": "Choose the serial protocol that matches your LED controller firmware.",
-      "lumasyncV1Label": "LumaSync v1",
-      "lumasyncV1Description": "Native LumaSync protocol with health check and telemetry.",
-      "adalightLabel": "Adalight",
-      "adalightDescription": "Compatible with Prismatik, Hyperion, Boblight, and most DIY Arduino sketches.",
-      "brightnessDisabledTooltip": "Adalight profile: brightness is fixed in firmware",
-      "mismatchTooltip": "Firmware reports {{advertised}}; selecting {{attempted}} will result in silent no-op. Update firmware or override with caution.",
-      "advertisedBadge": "Detected: {{advertised}}",
-      "useAnywayLabel": "Use anyway",
-      "useAnywayHint": "Override the firmware-detected profile. Only enable if you are running custom firmware.",
-      "overrideWarningTitle": "Mismatched firmware profile",
-      "overrideWarningBody": "Your controller advertised {{advertised}} during the last health check, but you are about to select {{attempted}}. The USB strip will silently no-op while Hue keeps streaming. Continue only if you are sure your firmware understands the {{attempted}} wire format.",
-      "overrideWarningConfirm": "Use {{attempted}} anyway",
-      "overrideWarningCancel": "Cancel",
-      "overrideWarningDontAskAgain": "Don't ask me again"
     }
   },
   "hue": {

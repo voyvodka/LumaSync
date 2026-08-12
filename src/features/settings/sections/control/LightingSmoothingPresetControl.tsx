@@ -117,9 +117,9 @@ export function LightingSmoothingPresetControl({
 
   const presetLabels: Record<LightingSmoothingPreset, string> = useMemo(
     () => ({
-      subtle: t("lightsPage.signal.smoothing.subtle"),
-      moderate: t("lightsPage.signal.smoothing.moderate"),
-      intense: t("lightsPage.signal.smoothing.intense"),
+      subtle: t("lights:signal.smoothing.subtle"),
+      moderate: t("lights:signal.smoothing.moderate"),
+      intense: t("lights:signal.smoothing.intense"),
     }),
     [t],
   );
@@ -127,13 +127,13 @@ export function LightingSmoothingPresetControl({
   return (
     <div className="lm-psl lm-psl-seg">
       <div className="row">
-        <span>{t("lightsPage.signal.smoothing.title")}</span>
+        <span>{t("lights:signal.smoothing.title")}</span>
         <b>{presetLabels[preset]}</b>
       </div>
       <div
         className="lm-settings-seg"
         role="radiogroup"
-        aria-label={t("lightsPage.signal.smoothing.title")}
+        aria-label={t("lights:signal.smoothing.title")}
       >
         {PRESET_ORDER.map((candidate) => {
           const isActive = candidate === preset;
