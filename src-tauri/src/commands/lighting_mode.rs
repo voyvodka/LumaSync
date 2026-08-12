@@ -1,3 +1,7 @@
+//! Lighting mode state machine — owns the Off/Solid/Ambilight transitions,
+//! the ambilight capture→sample→correct→send worker thread, and the LED
+//! test-pattern preview path that reuses the same worker plumbing.
+
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -101,6 +105,8 @@ pub struct SolidColorPayload {
     pub brightness: f32,
 }
 
+/// Tunables for `LightingModeKind::Ambilight` — brightness plus the
+/// sampling/smoothing knobs applied on top of raw screen capture.
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AmbilightPayload {
@@ -132,6 +138,8 @@ pub struct AmbilightPayload {
     pub hue_intensity_preset: Option<HueIntensityPreset>,
 }
 
+/// Full desired-state payload for `set_lighting_mode` — mode selection plus
+/// every per-mode and per-output setting needed to (re)start the worker.
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LightingModeConfig {
@@ -189,6 +197,8 @@ impl Default for LightingModeConfig {
     }
 }
 
+/// Response shape shared by `set_lighting_mode`, `stop_lighting`, and
+/// `get_lighting_mode_status` — the mode now in effect plus a coded status.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LightingModeCommandResult {
@@ -390,6 +400,8 @@ impl Default for LightingRuntimeOwner {
     }
 }
 
+/// Tauri-managed holder for the lighting mode state machine — active mode,
+/// the running worker (if any), live-tunable settings, and the output bridge.
 #[derive(Default)]
 pub struct LightingRuntimeState {
     runtime: Mutex<LightingRuntimeOwner>,
@@ -754,38 +766,9 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     if let Some(worker) = owner.worker.take() {
         worker.stop();
     }
-    // v1.5 — DO NOT close the cached serial port handle here.
-    //
-    // Calling `disconnect_session` drops the open `Box<dyn Write>` for
-    // this port; the very next packet write reopens it via
-    // `serialport::new(...).open()`, which on CH340 / Arduino Nano /
-    // most USB-CDC adapters toggles DTR — and that toggles the
-    // Arduino's RESET line. The bootloader then runs for ~1-2 s and
-    // swallows whatever LumaSync packet was supposed to land on the
-    // strip, so the WS2812 buffer ends up at the post-reset zeroed
-    // state and the strip looks "off".
-    //
-    // This is exactly the asymmetry the user reported on real hardware
-    // (v1.5 hardware repro #47): Ambilight runs through a single open
-    // (the worker holds the handle for its lifetime) so it's immune,
-    // but Solid mode disconnects on every transition and re-opens on
-    // the very next frame, resetting the MCU before its packet ever
-    // reaches FastLED.
-    //
-    // Keeping the cached handle alive is safe across mode transitions:
-    //  - The same port will be reused by the next Solid / Ambilight
-    //    invocation; cache-hit avoids the DTR pulse.
-    //  - If the device is unplugged, the next `write_all` errors and
-    //    `SerialLedPacketSender::send` already drops the handle on
-    //    failure (`sessions.remove(port_name)` on `result.is_err()`).
-    //  - If the user picks a different port, the old handle stays in
-    //    the cache as an inert FD until the process exits — acceptable
-    //    leak (one fd per ever-used port), priced against the
-    //    user-facing "Solid is dark" bug.
-    //
-    // Net behaviour: stop_previous is now a pure runtime-state
-    // teardown (workers + live atomics + active_port slot). The serial
-    // session lives on the LedOutputBridge across mode changes.
+    // Do NOT close the cached serial port handle here — reopening the port
+    // toggles DTR and resets the MCU before the packet lands. See
+    // docs/architecture/device-output.md (DTR reset).
     let cleared_port = owner.active_port.take();
     let total_ms = t0.elapsed().as_millis();
     info!(
@@ -960,6 +943,10 @@ pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
 /// dominant fringe color without dipping too deep into the center.
 const EDGE_SIGNAL_AXIS_OFFSET: f32 = 0.92;
 
+/// Payload for the `ambilight://edge-signal` event — one sample strip per
+/// screen edge for the settings preview, plus optional v1.6 LED Preview
+/// fields (`leds`, `hue_channels`, etc.) that ride along without breaking
+/// the original 4-edge consumer.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EdgeSignalPayload {
@@ -1033,6 +1020,10 @@ fn apply_saturation_inplace(colors: &mut [[u8; 3]], factor: f32) {
     }
 }
 
+/// Sample `frame` along its four edges (inset by `insets` to skip detected
+/// black borders) to build the lightweight preview payload for
+/// `EDGE_SIGNAL_EVENT`. Independent of the LED-driving sampling path so
+/// changes to per-LED mapping never affect this preview.
 pub fn compute_edge_signal(frame: &CapturedFrame, insets: &BlackBorderInsets) -> EdgeSignalPayload {
     let samples = EDGE_SIGNAL_SAMPLES_PER_EDGE;
     let mut top = Vec::with_capacity(samples);
@@ -2262,6 +2253,10 @@ fn apply_mode_change(
     }
 }
 
+/// Apply a full `LightingModeConfig` from the frontend: hydrates missing
+/// calibration/ambilight settings from persisted shell-state, then starts,
+/// reconfigures, or stops the worker to match the requested mode. Broadcasts
+/// `LIGHTING_MODE_CHANGED_EVENT` and the preview snapshot on every call.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn set_lighting_mode<R: Runtime>(
@@ -2382,6 +2377,9 @@ pub fn set_lighting_mode<R: Runtime>(
     Ok(result)
 }
 
+/// Force the lighting mode to `Off`, stopping any running worker. Also used
+/// on the app shutdown path, so it resolves `LedTwinState` best-effort via
+/// the `AppHandle` rather than requiring it as a managed-state argument.
 #[tauri::command]
 pub fn stop_lighting<R: Runtime>(
     app: AppHandle<R>,
@@ -2430,6 +2428,8 @@ pub fn stop_lighting<R: Runtime>(
     Ok(result)
 }
 
+/// Read-only snapshot of the current lighting mode, for the frontend to
+/// reconcile against on load without triggering a mode change.
 #[tauri::command]
 pub fn get_lighting_mode_status(
     runtime_state: State<'_, LightingRuntimeState>,
@@ -2457,6 +2457,8 @@ pub fn get_lighting_mode_status(
 /// so preview surfaces (and any window other than the issuer) reconcile.
 pub const LIGHTING_MODE_CHANGED_EVENT: &str = "lighting://mode-changed";
 
+/// Payload for `LIGHTING_MODE_CHANGED_EVENT` — the new mode and whether it
+/// is active, broadcast to every window (not just the command's caller).
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LightingModeChangedPayload {
@@ -2612,6 +2614,8 @@ impl LightingRuntimeState {
     }
 }
 
+/// Request payload for `start_led_test_pattern` — which synthetic pattern to
+/// run, at what speed/brightness, and which output channels to drive.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartLedTestPatternPayload {
@@ -2623,6 +2627,9 @@ pub struct StartLedTestPatternPayload {
     pub targets: Option<Vec<String>>,
 }
 
+/// Result of `start_led_test_pattern` / `stop_led_test_pattern` — whether the
+/// pattern is running and whether it fell back to preview-only (no connected
+/// output sink).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LedTestPatternResult {
@@ -2631,6 +2638,10 @@ pub struct LedTestPatternResult {
     pub status: CommandStatus,
 }
 
+/// Start a synthetic LED test pattern (spiral, chase, etc.) for the LED
+/// Preview feature — resolves available output targets, requires a real
+/// strip calibration to size the pattern, and captures the prior live mode
+/// so `stop_led_test_pattern` can restore it.
 // Arg count is Tauri's managed-state injection, not a bundling opportunity.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -2798,6 +2809,9 @@ pub fn start_led_test_pattern<R: Runtime>(
     Ok(outcome)
 }
 
+/// Stop the running LED test pattern and restore the mode that was active
+/// before it started (or force `Off` if that restore itself gets gated by a
+/// disconnected sink, so the synthetic worker never gets stranded running).
 #[tauri::command]
 pub fn stop_led_test_pattern<R: Runtime>(
     app: AppHandle<R>,
@@ -2852,6 +2866,8 @@ pub fn stop_led_test_pattern<R: Runtime>(
     })
 }
 
+/// Combined snapshot for the LED Preview UI — whether a test pattern or live
+/// ambilight is the current preview source, plus twin-overlay window state.
 #[tauri::command]
 pub fn get_led_preview_status(
     runtime_state: State<'_, LightingRuntimeState>,

@@ -90,6 +90,7 @@ function hexPair(value: number): string {
   return clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0");
 }
 
+/** Formats an RGB triplet as a `#`-prefixed lowercase hex string. */
 export function rgbToHex({ r, g, b }: Rgb): string {
   return `#${hexPair(r)}${hexPair(g)}${hexPair(b)}`;
 }
@@ -102,6 +103,7 @@ export function sanitizeHexInput(raw: string): string {
   return raw.replace(/[^0-9a-fA-F]/g, "").slice(0, HEX_DIGITS).toUpperCase();
 }
 
+/** Parses a hex string (with or without a leading `#`) into an RGB triplet, or `null` if invalid. */
 export function parseHex(value: string): Rgb | null {
   const trimmed = value.trim().replace(/^#/, "");
   if (!/^[0-9a-fA-F]{6}$/.test(trimmed)) return null;
@@ -203,6 +205,7 @@ const SQUARE_Y0 = CENTER - SQUARE_HALF;
 // the brightness sliders elsewhere in the codebase. Tested empirically
 // to feel "instant" while keeping the Tauri invoke rate sane.
 
+/** Minimum spacing between throttled `onChange` dispatches during a drag, in ms. */
 export const DRAG_COMMIT_MIN_INTERVAL_MS = 50;
 
 // ---------------------------------------------------------------------------
@@ -228,6 +231,7 @@ export interface HsvColorPickerProps {
   compact?: boolean;
 }
 
+/** SVG-native HSV color picker: hue ring, saturation/value square, hex field, and recent-colors strip. */
 export function HsvColorPicker({
   value,
   onChange,

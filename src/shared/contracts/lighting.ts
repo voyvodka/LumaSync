@@ -37,6 +37,7 @@
  */
 export type LightingSmoothingPreset = "subtle" | "moderate" | "intense";
 
+/** EWMA alpha coefficient for each {@link LightingSmoothingPreset}. */
 export const LIGHTING_SMOOTHING_PRESET_COEFFICIENTS: Readonly<
   Record<LightingSmoothingPreset, number>
 > = {

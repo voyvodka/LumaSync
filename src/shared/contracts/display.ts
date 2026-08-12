@@ -5,6 +5,7 @@ export const DISPLAY_OVERLAY_COMMANDS = {
   UPDATE_DISPLAY_OVERLAY_PREVIEW: "update_display_overlay_preview",
 } as const;
 
+/** Opaque identifier for a physical display, as reported by the OS. */
 export type DisplayId = string;
 
 export type OverlaySegment = "top" | "right" | "bottom" | "left";
@@ -21,6 +22,7 @@ export interface OverlayPreviewSequenceItem {
   localIndex: number;
 }
 
+/** Full preview state pushed to the calibration overlay window. */
 export interface OverlayPreviewPayload {
   counts: OverlayPreviewCounts;
   bottomMissing: number;
@@ -37,6 +39,7 @@ export interface OverlayPreviewPayload {
   displayId?: DisplayId;
 }
 
+/** One enumerated display's geometry and identity, offered for capture-source selection. */
 export interface DisplayInfo {
   id: DisplayId;
   label: string;

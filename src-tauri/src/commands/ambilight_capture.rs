@@ -294,21 +294,8 @@ mod platform {
 
     impl Drop for WindowsLiveFrameSource {
         fn drop(&mut self) {
-            // CaptureControl::stop() signals + JOINS the WGC message-loop thread
-            // (indeterminate duration). This Drop runs from
-            // LightingWorkerRuntime::stop() on the Tauri command thread (mode
-            // switch) and the shutdown thread, so calling stop() inline would
-            // freeze the caller -- falsifying the non-blocking contract that the
-            // macOS sibling (MacOSLiveFrameSource::Drop) already honors. Detach
-            // stop() onto a dedicated thread so this Drop returns immediately.
-            //
-            // CaptureControl is moved (not cloned -- unlike macOS's SCStream it is
-            // not Clone) into the closure; it is Send (produced by
-            // start_free_threaded and used cross-thread by design), so no
-            // `unsafe impl Send` is needed. We discard the spawn result so a
-            // spawn failure does not panic. No grace-period sleep is needed here:
-            // the macOS 150ms sleep guards the DispatchQueue sample-handler
-            // ref-count race (SIGBUS), which windows-capture has no equivalent of.
+            // stop() joins the WGC thread; detach so this Drop stays
+            // non-blocking. See docs/architecture/capture-and-pipeline.md.
             if let Some(capture_control) = self.capture_control.take() {
                 let _ = std::thread::Builder::new()
                     .name("wgc-stop".into())
@@ -372,24 +359,8 @@ mod platform {
                 return Err("AMBILIGHT_CAPTURE_PIXEL_BUFFER_INVALID");
             }
 
-            // 4K downscale scaffold (v1.5 W2-C2 / Platform GAP 3).
-            //
-            // windows-capture 2.0 does not expose a GPU-side `output_size`
-            // hint the way macOS ScreenCaptureKit does, so a 4K capture
-            // path delivers ~33 MB per frame at 60 Hz — turning the
-            // RGBA→RGB conversion + per-pixel iteration into the 4K CPU
-            // hot spot. Until v2.0 ships a hardware downscale (Platform
-            // GAP 3 follow-up), we shoulder the cost CPU-side with a
-            // nearest-neighbor stride so the downstream sampler still
-            // sees a manageable grid.
-            //
-            // Heuristic mirrors the macOS branch: cap the longer axis at
-            // ~640 px. The integer stride keeps row/column iteration
-            // index-aligned and avoids interpolation cost — colour
-            // averaging in the sampler tolerates aliasing because each
-            // LED region already covers many output pixels. Native
-            // 1080p stays 1:1 (stride 1) so this is a no-op on common
-            // monitors.
+            // CPU-side downscale scaffold — no GPU hint on this platform.
+            // See docs/architecture/capture-and-pipeline.md.
             const MAX_CAPTURE_DIM: u32 = 640;
             let stride = (width.max(height) / MAX_CAPTURE_DIM).max(1) as usize;
             let stride_active = stride > 1;

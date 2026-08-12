@@ -1,27 +1,6 @@
-// LumaSync — Phase 1: Tray-first runtime shell
-//
-// Lifecycle order:
-//   1. single-instance plugin (must be first — captures second-launch focus)
-//   2. autostart plugin
-//   3. store plugin
-//   4. window-state plugin
-//   5. tray icon + menu construction
-//   6. close-to-tray interception via on_window_event
-//
-// Shutdown flow (macOS, all OSes — see kick_off_shutdown_and_die for rationale):
-//   - red-X / Cmd+W → WindowEvent::CloseRequested → prevent_close + hide_to_tray
-//     (window stays alive in the tray; process keeps running).
-//   - Tray Quit menu item → kick_off_shutdown_and_die directly.
-//   - Cmd+Q on macOS → NSApp.terminate flow runs independently of our
-//     window event hook (tao 0.35 does NOT register applicationShouldTerminate:
-//     so there is no way to intercept it in user code). NSApp eventually fires
-//     applicationWillTerminate → tao emits LoopDestroyed → tauri-runtime-wry
-//     surfaces RunEvent::Exit. We catch RunEvent::Exit in the .run callback
-//     and run the same cleanup path. The watchdog inside
-//     kick_off_shutdown_and_die guarantees process death within 4s, so a
-//     stuck SCStream/DTLS Drop never produces a `?E` zombie.
-//   - Ctrl+C in the dev terminal → SIGINT → tokio::signal::ctrl_c task →
-//     kick_off_shutdown_and_die.
+// LumaSync — Phase 1: Tray-first runtime shell. Plugin registration order
+// matters (single-instance first). Shutdown triggers all converge on
+// `kick_off_shutdown_and_die` — see docs/architecture/ui-and-shell.md.
 
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -248,19 +227,8 @@ fn cleanup_blocking<R: Runtime>(app: AppHandle<R>) {
     std::process::exit(0);
 }
 
-// ---------------------------------------------------------------------------
-// Helper: kick_off_shutdown_and_die — entry point for ALL shutdown triggers.
-//
-// Spawns cleanup_blocking on a worker thread (so the macOS main thread is
-// never held — that was the deadlock culprit in v1.5.1+ when safe_quit ran
-// inline inside the tray menu callback or the WindowEvent::CloseRequested
-// handler). Arms a watchdog thread that calls process::exit(0) after
-// SHUTDOWN_WATCHDOG no matter what. Idempotent via SHUTDOWN_FIRED.
-//
-// This is what guarantees no `?E` zombies: the process dies in <= 4s
-// regardless of whether SCStream Drop, DTLS deactivate, or any other
-// cleanup step hangs.
-// ---------------------------------------------------------------------------
+// Entry point for ALL shutdown triggers — watchdog-guaranteed, idempotent
+// via SHUTDOWN_FIRED. See docs/architecture/ui-and-shell.md.
 fn kick_off_shutdown_and_die<R: Runtime>(app: &AppHandle<R>) {
     if SHUTDOWN_FIRED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         // Already in progress — don't re-arm.
@@ -287,12 +255,8 @@ fn kick_off_shutdown_and_die<R: Runtime>(app: &AppHandle<R>) {
         .expect("failed to spawn shutdown watchdog thread");
 }
 
-// Hard-exit (`std::process::exit`) bypasses Tauri plugin destroy() callbacks,
-// so the single-instance plugin's Unix socket at
-// /tmp/com_<identifier>_si.sock is leaked whenever the watchdog fires. The
-// next launch's plugin connect() succeeds against the stale inode and the
-// new instance silently exit(0)s. Remove the socket explicitly before the
-// hard exit so the next launch starts cleanly.
+// Hard-exit bypasses plugin destroy(), leaking the single-instance socket.
+// See docs/architecture/ui-and-shell.md.
 fn cleanup_orphan_socket() {
     let path = "/tmp/com_lumasync_app_si.sock";
     match std::fs::remove_file(path) {
@@ -418,23 +382,9 @@ fn app_context<R: Runtime>() -> tauri::Context<R> {
 pub fn run() {
     let mut builder = tauri::Builder::default();
 
-    // 1. Single-instance must be registered first.
-    //
-    // The macOS impl uses a Unix domain socket at `/tmp/<identifier>_si.sock`,
-    // NOT NSWorkspace zombie detection (verified against
-    // tauri-plugin-single-instance 2.4.1 source). The earlier "silent
-    // exit within 50ms" launch failure traced to leftover sockets from
-    // `?E` zombies whose RunEvent::Exit hook never fired (so the plugin's
-    // socket cleanup at `destroy()` never ran). With the new
-    // kick_off_shutdown_and_die guaranteeing process death + RunEvent::Exit
-    // delivery, the plugin's socket is now reliably cleaned, so we keep
-    // it enabled in BOTH debug and release builds.
-    // Debug builds skip single-instance: hard-exit (process::exit) bypasses
-    // the plugin's destroy() socket cleanup, so dev iterations leak
-    // /tmp/com_lumasync_app_si.sock and the next launch silently exits when
-    // the plugin connects to the stale socket. Release builds keep it on
-    // because tray-first UX needs single-instance contract; the explicit
-    // socket cleanup above guards against the hard-exit path on release too.
+    // 1. Single-instance must be registered first. Release-only — debug's
+    // hard-exit hot-reload cycle would otherwise leak the socket on every
+    // iteration. See docs/architecture/ui-and-shell.md.
     #[cfg(not(debug_assertions))]
     {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {

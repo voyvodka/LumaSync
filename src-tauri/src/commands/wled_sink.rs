@@ -1,13 +1,13 @@
-/// `WledUdpSink` -- `LedSink` implementation for WLED over DDP (UDP).
-///
-/// DDP packet layout (header = 10 bytes, then RGB payload):
-///  Byte 0:    flags     -- 0x41  (version=1, push flag set)
-///  Byte 1:    sequence  -- incrementing u8, wraps at 255
-///  Byte 2:    type      -- 0x01  (RGBRGB... data)
-///  Byte 3:    data-type -- 0x01  (8-bit RGB)
-///  Bytes 4-7: offset    -- big-endian u32 (0x00000000 for full frame)
-///  Bytes 8-9: length    -- big-endian u16 (led_count * 3)
-///  Bytes 10+: payload   -- R G B per LED in strip order
+//! `WledUdpSink` -- `LedSink` implementation for WLED over DDP (UDP).
+//!
+//! DDP packet layout (header = 10 bytes, then RGB payload):
+//!  Byte 0:    flags     -- 0x41  (version=1, push flag set)
+//!  Byte 1:    sequence  -- incrementing u8, wraps at 255
+//!  Byte 2:    type      -- 0x01  (RGBRGB... data)
+//!  Byte 3:    data-type -- 0x01  (8-bit RGB)
+//!  Bytes 4-7: offset    -- big-endian u32 (0x00000000 for full frame)
+//!  Bytes 8-9: length    -- big-endian u16 (led_count * 3)
+//!  Bytes 10+: payload   -- R G B per LED in strip order
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -43,6 +43,7 @@ pub struct WledUdpSink {
 }
 
 impl WledUdpSink {
+    /// Build a sink targeting `ip:port`. The UDP socket is not opened until `start()`.
     pub fn new(ip: std::net::Ipv4Addr, port: u16, led_count: u16, protocol: WledProtocol) -> Self {
         Self {
             ip,
@@ -147,6 +148,8 @@ pub struct CorrectedWledSink {
 }
 
 impl CorrectedWledSink {
+    /// Wrap a `WledUdpSink` with the shared correction pipeline, computing
+    /// gamma LUTs once from `corrections`.
     pub fn new(inner: WledUdpSink, corrections: ColorCorrectionConfig) -> Self {
         let luts = gamma_luts_for(&corrections);
         Self {
@@ -214,6 +217,7 @@ pub fn encode_ddp_packet(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<u8> {
     packet
 }
 
+/// Encode one frame as a WARLS packet: 1-byte timeout header plus raw RGB payload.
 pub fn encode_warls_packet(colors: &[[u8; 3]]) -> Vec<u8> {
     const WARLS_TIMEOUT_SEC: u8 = 1;
     let payload_len = colors.len() * 3;

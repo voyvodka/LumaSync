@@ -12,14 +12,8 @@
  * y: -1=bottom, +1=top
  * z: -1=floor, +1=ceiling
  *
- * v1.5 W4-F2 (2026-04-28): the W4-F unification (`Zone` discriminated by
- * `zoneType: "logical" | "hue"`) is rolled forward into a single Hue-only
- * surface. "Logical zone" was dropped because it has no industry analog —
- * everyone models screen rectangles, spatial 3D positions, or sink-internal
- * addressing, never a name plus a channel-index list — and it confused users in
- * testing. `ScreenZone` and `LedZone` will land later as separately prefixed
- * types sharing no discriminator with `HueZone`; a bare `Zone` is ambiguous
- * across three industry namespaces.
+ * Zones are Hue-only (docs/architecture/hue.md). `ScreenZone` / `LedZone`
+ * will land later as separate types sharing no discriminator with `HueZone`.
  */
 
 // ---------------------------------------------------------------------------
@@ -36,20 +30,6 @@ export const ROOM_MAP_COMMANDS = {
 // Hue Channel Placement
 // ---------------------------------------------------------------------------
 
-/**
- * Persisted position of a Hue Entertainment Area channel in room space.
- * Replaces or supplements the bridge-reported positionX/Y.
- *
- * v1.5 W1-A1: an optional `zoneId` + `zoneRelativePosition` pair is layered
- * on top of the legacy absolute coordinates. When `zoneId` is set, the
- * `zoneRelativePosition` is the authoritative source of truth and the
- * absolute `x/y/z` are derived from `HueZone.center{X,Y,Z}` plus
- * `HueZone.scale{X,Y,Z}` at runtime. Existing call sites that only know
- * about `x/y/z` keep working unchanged (legacy flat mode).
- *
- * v1.5 W4-F2: `zoneId` references a `HueZone` (the only surviving zone
- * kind after the direction reversal — logical zones were dropped).
- */
 /** Zone-relative coordinate in `[-1, 1]` per axis — mirrors Rust's `ZoneRelativePosition`. */
 export interface ZoneRelativePosition {
   x: number;
@@ -57,6 +37,8 @@ export interface ZoneRelativePosition {
   z: number;
 }
 
+/** Persisted position of a Hue channel; when `zoneId` is set, `zoneRelativePosition`
+ * is authoritative and absolute `x/y/z` are derived from the zone at runtime. */
 export interface HueChannelPlacement {
   /** Channel index within the entertainment area (0-based) */
   channelIndex: number;
@@ -131,6 +113,7 @@ export interface FurniturePlacement {
 // TV Anchor Placement
 // ---------------------------------------------------------------------------
 
+/** The TV's placement, used as the spatial anchor for channel/strip positions. */
 export interface TvAnchorPlacement {
   /** Center position of the TV */
   x: number;
@@ -146,6 +129,7 @@ export interface TvAnchorPlacement {
 // Room Dimensions
 // ---------------------------------------------------------------------------
 
+/** Physical room dimensions in meters, used to scale the room-map editor. */
 export interface RoomDimensions {
   /** Width in meters */
   widthMeters: number;
@@ -485,22 +469,26 @@ export interface HueZoneCommandResult {
   channels: HueChannelPlacement[];
 }
 
+/** Payload for `create_hue_zone`. */
 export interface CreateHueZoneRequest {
   zone: HueZone;
   existingZones?: HueZone[];
 }
 
+/** Payload for `update_hue_zone`. */
 export interface UpdateHueZoneRequest {
   zone: HueZone;
   existingZones?: HueZone[];
 }
 
+/** Payload for `delete_hue_zone`. */
 export interface DeleteHueZoneRequest {
   zoneId: string;
   existingZones?: HueZone[];
   channels?: HueChannelPlacement[];
 }
 
+/** Payload for `assign_channel_to_hue_zone`. */
 export interface AssignChannelRequest {
   channelIndex: number;
   /** `null` detaches the channel back to legacy absolute placement. */
@@ -604,12 +592,14 @@ export interface RoomMapConfig {
 // Defaults
 // ---------------------------------------------------------------------------
 
+/** Fallback room dimensions used before the user customises them. */
 export const DEFAULT_ROOM_DIMENSIONS: RoomDimensions = {
   widthMeters: 5,
   depthMeters: 4,
   heightMeters: 2.5,
 };
 
+/** Empty room map config used to seed a fresh install. */
 export const DEFAULT_ROOM_MAP: RoomMapConfig = {
   dimensions: DEFAULT_ROOM_DIMENSIONS,
   hueChannels: [],

@@ -117,17 +117,6 @@ export const HUE_STATUS = {
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
   // -------------------------------------------------------------------------
-  // Hue zone authoring codes — live in `roomMap.ts > HUE_ZONE_STATUS_CODES`
-  // -------------------------------------------------------------------------
-  // The eight Hue zone authoring codes (`HUE_ZONE_CREATED`, `HUE_ZONE_UPDATED`,
-  // `HUE_ZONE_DELETED`, `HUE_ZONE_NOT_FOUND`, `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`,
-  // `HUE_ZONE_LIMIT_REACHED`, `HUE_ZONE_CHANNEL_NOT_IN_AREA`,
-  // `HUE_ZONE_OVERSIZED`) are NOT inlined in `HUE_STATUS`. They live in
-  // `roomMap.ts > HUE_ZONE_STATUS_CODES` and are re-exported above as
-  // `HUE_ZONE_STATUS_CODES` for callers that prefer a single Hue import
-  // surface. (The brief W4-F generic `ZONE_*` rename was reverted in
-  // W4-F2 alongside the unification rollback.)
-  // -------------------------------------------------------------------------
   // OS keychain credential store (v1.5 W2-A1 / W2-A2)
   // -------------------------------------------------------------------------
   /**
@@ -190,6 +179,7 @@ export const HUE_STATUS = {
 
 export type HueStatusCode = (typeof HUE_STATUS)[keyof typeof HUE_STATUS];
 
+/** Coarse pairing-credential health used to decide whether to prompt a re-pair. */
 export const HUE_CREDENTIAL_STATUS = {
   VALID: "valid",
   NEEDS_REPAIR: "needs_repair",
@@ -199,6 +189,7 @@ export const HUE_CREDENTIAL_STATUS = {
 export type HueCredentialStatus =
   (typeof HUE_CREDENTIAL_STATUS)[keyof typeof HUE_CREDENTIAL_STATUS];
 
+/** Steps of the Hue onboarding wizard, in order. */
 export const HUE_ONBOARDING_STEP = {
   DISCOVER: "discover",
   PAIR: "pair",
@@ -209,6 +200,7 @@ export const HUE_ONBOARDING_STEP = {
 export type HueOnboardingStep =
   (typeof HUE_ONBOARDING_STEP)[keyof typeof HUE_ONBOARDING_STEP];
 
+/** Coded result shape shared by every Hue command — never throws, always returns this. */
 export interface HueCommandStatus {
   code: HueStatusCode | string;
   message: string;
@@ -227,6 +219,7 @@ export const HUE_RUNTIME_STATES = {
 export type HueRuntimeState =
   (typeof HUE_RUNTIME_STATES)[keyof typeof HUE_RUNTIME_STATES];
 
+/** Suggested recovery action for a Hue runtime fault, shown as a UI hint. */
 export const HUE_RUNTIME_ACTION_HINT = {
   RETRY: "retry",
   RECONNECT: "reconnect",
@@ -247,6 +240,7 @@ export const HUE_RUNTIME_TRIGGER_SOURCE = {
 export type HueRuntimeTriggerSource =
   (typeof HUE_RUNTIME_TRIGGER_SOURCE)[keyof typeof HUE_RUNTIME_TRIGGER_SOURCE];
 
+/** Fine-grained runtime status codes surfaced on `HueRuntimeStatus.code`. */
 export const HUE_RUNTIME_STATUS = {
   STREAM_STARTING: "HUE_STREAM_STARTING",
   STREAM_RUNNING: "HUE_STREAM_RUNNING",
@@ -314,6 +308,7 @@ export function isHueSolidColorUnapplied(code: string): boolean {
   );
 }
 
+/** Prefix families the runtime status codes fall into, for coarse-grained UI branching. */
 export const HUE_RUNTIME_STATUS_FAMILY = {
   TRANSIENT: "TRANSIENT_*",
   AUTH_INVALID: "AUTH_INVALID_*",
@@ -457,6 +452,7 @@ export const HUE_INTENSITY_PRESET_COEFFICIENTS: Readonly<
 export const DEFAULT_HUE_INTENSITY_PRESET: LightingSmoothingPreset =
   DEFAULT_LIGHTING_SMOOTHING_PRESET;
 
+/** Which output surface a runtime telemetry row describes. */
 export type HueRuntimeTarget = "hue" | "usb";
 
 export interface HueRuntimeTargetTelemetryRow {
@@ -491,6 +487,7 @@ export interface HueRuntimeStatus extends HueCommandStatus {
   telemetry?: HueRuntimeTelemetry;
 }
 
+/** One bridge returned by discovery, before pairing. */
 export interface HueBridgeSummary {
   id: string;
   ip: string;
@@ -504,6 +501,7 @@ export interface HuePairingCredentials {
   clientKey: string;
 }
 
+/** Result of `pair_hue_bridge`. */
 export interface HuePairBridgeResponse {
   status: HueCommandStatus;
   credentials: HuePairingCredentials | null;
@@ -534,6 +532,7 @@ export interface HueEntertainmentAreaSummary {
   activeStreamer?: boolean;
 }
 
+/** Result of `check_hue_stream_readiness` — whether starting the stream would succeed. */
 export interface HueStreamReadiness {
   ready: boolean;
   reasons: string[];

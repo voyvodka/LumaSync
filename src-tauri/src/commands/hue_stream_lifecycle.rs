@@ -1,28 +1,5 @@
-//! Thin re-export shim for the Hue runtime.
-//!
-//! v1.5 G8 split: this file used to host all 3 200+ LOC of the Hue runtime
-//! implementation. It now keeps only public re-exports so existing import
-//! paths (`super::hue_stream_lifecycle::*` from `lib.rs`,
-//! `lighting_mode.rs`, `runtime_telemetry.rs`) continue to resolve without
-//! churn while the implementation lives under `commands::hue::*`.
-//!
-//! Submodule home of every symbol exported from here:
-//!
-//! - `commands::hue::frame` — `HueAreaChannel`, `HueAreaChannelInfo`,
-//!   `HueColorSender`, `HueScreenRegion`
-//! - `commands::hue::state_store` — runtime DTOs, ownership types,
-//!   `acquire_hue_runtime`, lock-free output context helpers
-//! - `commands::hue::commands` — the seven `#[tauri::command]` entry
-//!   points (`start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
-//!   `set_hue_solid_color`, `get_hue_stream_status`,
-//!   `get_hue_area_channels`, `simulate_hue_fault`)
-//!
-//! v1.5 W4-F2: Hue zone authoring commands (`create_hue_zone`,
-//! `update_hue_zone`, `delete_hue_zone`, `assign_channel_to_hue_zone`)
-//! used to live under `commands::hue::zone`; they have moved to
-//! `commands::room_map::hue_zone`. The brief unified-`Zone` direction
-//! (W4-F PR1+PR2) was reverted in W4-F2 — only Hue zones remain. `lib.rs`
-//! registers them through the new path.
+//! Re-export shim — the implementation lives under `commands::hue::*`. Do
+//! not add new code here. See docs/architecture/hue.md (re-export shim).
 
 // ---------------------------------------------------------------------------
 // Frame & state-store types — used by lighting_mode.rs / runtime_telemetry.rs

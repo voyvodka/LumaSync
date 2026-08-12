@@ -21,15 +21,11 @@
 //!   to migrate Hue credentials off the plaintext shellStore fields.
 //!
 //! v1.5 W4-F2: the previous `zone` submodule moved to
-//! `commands::room_map::hue_zone`. The unified-`Zone`-with-discriminator
-//! direction (W4-F PR1+PR2) was reverted in W4-F2 — `HueZone` is the only
-//! zone kind that lives there today; future zone kinds (`ScreenZone`,
-//! `LedZone`) will land in their own modules with their own struct shapes.
+//! `commands::room_map::hue_zone` — zones are Hue-only, see
+//! docs/architecture/hue.md.
 //!
-//! The parent `commands::hue_stream_lifecycle` module is kept as a thin
-//! re-export shim so external callers (`lib.rs`, `lighting_mode.rs`,
-//! `runtime_telemetry.rs`) can continue to import from
-//! `super::hue_stream_lifecycle::*` without churn.
+//! `commands::hue_stream_lifecycle` is kept as a re-export shim so external
+//! callers keep resolving; see docs/architecture/hue.md (re-export shim).
 
 pub mod area_cache;
 pub mod commands;

@@ -1,28 +1,6 @@
-//! Process-wide, single-flight cache for the entertainment-area snapshot.
-//!
-//! Two independent frontend polling loops converge on the same bridge
-//! payload through *different* Tauri commands: the App health reconciler
-//! calls `get_hue_stream_status` (which re-runs the readiness chain), and the
-//! Devices-tab loop calls `check_hue_stream_readiness`. Both bottom out in
-//! `fetch_hue_entertainment_areas`, which fans out to two parallel CLIP v2
-//! GETs (`entertainment_configuration` + `room`). The frontend coalescer
-//! (`src/features/device/hueReadCache.ts`) can only dedupe *within* one
-//! command, so the duplication across the two commands has to be removed on
-//! this side of the IPC boundary.
-//!
-//! Three properties make that safe:
-//!
-//! 1. **Single-flight** — a caller arriving while a fetch is in flight waits
-//!    on the slot lock and then re-evaluates freshness, so it consumes the
-//!    leader's result instead of issuing its own round-trip.
-//! 2. **Generation-guarded invalidation** — any bridge-side entertainment
-//!    state mutation bumps `GENERATION`. A fetch that was issued before the
-//!    mutation and completes after it is *not* persisted, so a pre-mutation
-//!    view can never be served to a later caller.
-//! 3. **Force bypass** — every read that gates a state mutation (start,
-//!    restart, the reconnect monitor's pre-restart gate) and every
-//!    user-initiated area listing asks for `Force`, which skips both the
-//!    slot lock and the freshness check.
+//! Process-wide, single-flight cache for the entertainment-area snapshot —
+//! removes cross-command polling duplication on the IPC side. See
+//! docs/architecture/hue.md.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -39,23 +17,8 @@ use super::super::hue_onboarding::{AreaListError, HueEntertainmentArea};
 /// into a request storm against a host that is already struggling.
 pub(crate) type AreaSnapshot = Result<Vec<HueEntertainmentArea>, AreaListError>;
 
-/// How long a snapshot may be reused.
-///
-/// The duplication this cache exists to remove is *co-firing*: the 3 s blocked
-/// readiness refresh and the 5 s health poll land within ~1 s of each other
-/// every few ticks. Any TTL at or above ~1.1 s captures all of it, and a
-/// larger one captures nothing more — the next arrival is >2 s away either
-/// way. 1.5 s is therefore the smallest value that buys the full reduction,
-/// and it is also the frontend's own accepted staleness for the same data
-/// (`HUE_READINESS_MAX_AGE_MS`), so this layer never becomes the staleness
-/// bottleneck. Worst-case composed staleness is 3.5 s, below the 5 s
-/// health-poll period and well below the bridge's ~10 s entertainment
-/// inactivity close.
-///
-/// The value is only ever observational: liveness of our own stream is
-/// detected by the local, uncached `is_shutdown_signaled` probe and by the
-/// reconnect monitor, never by this payload, and every read that gates a
-/// mutation uses `HueReadFreshness::Force`.
+/// How long a snapshot may be reused — derived from the polling co-firing
+/// interval, not tuned. See docs/architecture/hue.md.
 pub(crate) const HUE_AREA_CACHE_TTL_MS: u64 = 1_500;
 
 /// Ceiling on distinct `(bridge_ip, username)` slots. One bridge is the norm;

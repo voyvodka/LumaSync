@@ -121,6 +121,8 @@ pub trait SecretStore: Send + Sync {
 pub struct KeychainStore;
 
 impl KeychainStore {
+    /// Construct a `KeychainStore` handle. No I/O happens until a method is
+    /// called.
     pub fn new() -> Self {
         Self
     }
@@ -190,6 +192,8 @@ impl SecretStore for KeychainStore {
 pub struct NoopStore;
 
 impl NoopStore {
+    /// Construct a `NoopStore` handle — no I/O, used as the unavailable-
+    /// keychain fallback.
     pub fn new() -> Self {
         Self
     }
@@ -253,6 +257,8 @@ pub enum MigrationOutcome {
 }
 
 impl MigrationOutcome {
+    /// Coded status string for this migration outcome, mirrored in the
+    /// `hue.ts` status contract.
     pub fn status_code(&self) -> &'static str {
         match self {
             MigrationOutcome::Migrated => status::MIGRATION_OK,
@@ -261,6 +267,8 @@ impl MigrationOutcome {
         }
     }
 
+    /// Which backend now holds the credentials after this outcome — informs
+    /// whether the caller may clear its plaintext copy.
     pub fn backend(&self) -> CredentialBackend {
         match self {
             MigrationOutcome::Migrated | MigrationOutcome::Skipped => CredentialBackend::Keychain,

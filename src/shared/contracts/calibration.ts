@@ -13,14 +13,17 @@
 // Calibration primitives
 // ---------------------------------------------------------------------------
 
+/** Winding direction of the LED strip around the display perimeter. */
 export type LedDirection = "cw" | "ccw";
 
+/** Which adjacent segment "owns" the shared corner LED. */
 export type CornerOwnership = "horizontal" | "vertical";
 
 export type LedVisualPreset = "subtle" | "vivid";
 
 export type LedSegmentKey = "top" | "right" | "bottom" | "left";
 
+/** Where the LED strip's first pixel sits, including the two bottom-gap variants for split runs. */
 export type LedStartAnchor =
   | "top-start"
   | "top-end"
@@ -55,6 +58,7 @@ export interface LedCalibrationConfig {
   totalLeds: number;
 }
 
+/** A named preset of calibration values, offered as a starting point in the editor. */
 export interface CalibrationTemplate {
   id: string;
   label: string;

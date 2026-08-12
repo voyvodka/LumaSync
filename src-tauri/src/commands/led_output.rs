@@ -1,3 +1,6 @@
+//! LED wire-protocol encoding (LumaSync v1 / Adalight, WS2812B / SK6812) and
+//! the serial-backed `LedSink` that writes the resulting packets over USB.
+
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -358,6 +361,9 @@ pub fn apply_color_correction_rgb_with_luts(
 // Error type
 // ---------------------------------------------------------------------------
 
+/// Coded failure from the serial output layer — `code` is the stable
+/// machine identifier surfaced across the Tauri IPC boundary, `details` is
+/// optional human context for logs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
     pub code: &'static str,
@@ -369,6 +375,7 @@ impl LedOutputError {
         Self { code, details }
     }
 
+    /// Render as the `CODE` or `CODE: details` string used in coded error responses.
     pub fn as_reason(&self) -> String {
         match &self.details {
             Some(details) => format!("{}: {}", self.code, details),
@@ -381,14 +388,13 @@ impl LedOutputError {
 // LedPacketSender trait + SerialLedPacketSender
 // ---------------------------------------------------------------------------
 
+/// Low-level write abstraction behind `LedOutputBridge`, so the bridge and
+/// its callers can be tested without opening a real serial port.
 pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
-    /// Drop the cached writer for `port_name`. Kept on the trait so the
-    /// bridge surface is symmetrical and future explicit "disconnect
-    /// device" callers (or tests asserting cache eviction semantics)
-    /// can reach the primitive without a second trait split. Production
-    /// hot paths intentionally do NOT call this — see the long-form
-    /// note in `SerialSink::stop` for the DTR-reset rationale.
+    /// Drop the cached writer for `port_name`. Kept for future explicit
+    /// "disconnect device" callers; production hot paths do NOT call this —
+    /// see docs/architecture/device-output.md (DTR reset).
     #[allow(dead_code)]
     fn disconnect_session(&self, port_name: &str);
 }
@@ -479,18 +485,23 @@ impl LedPacketSender for SerialLedPacketSender {
 // LedOutputBridge
 // ---------------------------------------------------------------------------
 
+/// Owns the serial packet sender and exposes the encode-agnostic write path
+/// shared by the Solid and Ambilight runtimes and by `SerialSink`.
 #[derive(Clone)]
 pub struct LedOutputBridge {
     sender: Arc<dyn LedPacketSender>,
 }
 
 impl LedOutputBridge {
+    /// Build a bridge backed by the real `serialport` crate.
     pub fn new() -> Self {
         Self {
             sender: Arc::new(SerialLedPacketSender::default()),
         }
     }
 
+    /// Build a bridge over an injected sender, for tests that need to
+    /// observe writes without opening a real port.
     #[cfg(test)]
     pub fn from_sender(sender: Arc<dyn LedPacketSender>) -> Self {
         Self { sender }
@@ -508,6 +519,8 @@ impl LedOutputBridge {
         self.sender.disconnect_session(port_name);
     }
 
+    /// Look up the currently connected port from `connection_state` and
+    /// write `packet` to it. Test-only convenience over `send_packet_to_port`.
     #[cfg(test)]
     pub fn send_packet(
         &self,
@@ -542,6 +555,8 @@ impl LedOutputBridge {
         self.send_packet_to_port(&port_name, packet)
     }
 
+    /// Write `packet` to `port_name`, opening or reusing a cached session on
+    /// the underlying sender as needed.
     pub fn send_packet_to_port(
         &self,
         port_name: &str,
@@ -790,6 +805,8 @@ pub fn encode_sk6812_packet(
 // Test-only helpers used by lighting_mode.rs and led_output tests
 // ---------------------------------------------------------------------------
 
+/// Test helper: encode a single solid RGB colour and write it through the
+/// bridge, mirroring the Solid mode command's output path.
 #[cfg(test)]
 pub fn apply_solid_payload(
     bridge: &LedOutputBridge,
@@ -803,6 +820,8 @@ pub fn apply_solid_payload(
     bridge.send_packet(connection_state, &packet)
 }
 
+/// Test helper: encode a full ambilight frame and write it through the
+/// bridge, mirroring the Ambilight mode command's output path.
 #[cfg(test)]
 pub fn send_ambilight_frame(
     bridge: &LedOutputBridge,
@@ -961,34 +980,8 @@ impl super::led_sink::LedSink for SerialSink {
     }
 
     fn stop(&mut self) -> Result<(), String> {
-        // v1.5 — Intentionally NOT calling `disconnect_session` here.
-        //
-        // The previous behaviour closed the cached serial port handle
-        // when the ambilight worker thread exited, which forced the
-        // very next Solid (or follow-up Ambilight) packet to reopen
-        // the port. Reopening a USB-CDC adapter (CH340 / FT232 /
-        // Arduino Nano) toggles DTR, which toggles the MCU's RESET
-        // line on standard Arduino-class boards. The bootloader then
-        // swallows ~1-2 s of inbound serial — including the next
-        // LumaSync packet — and the strip ends up frozen at the
-        // post-boot zeroed buffer state.
-        //
-        // Behaviour matrix after removing the disconnect:
-        //  - Ambilight worker shutdown (mode change, app shutdown):
-        //    handle stays in the bridge cache. Next mode that uses
-        //    the same port reuses it, no DTR pulse, no MCU reset.
-        //  - Device unplugged mid-session: the next write fails;
-        //    `SerialLedPacketSender::send` already drops the dead
-        //    handle on `result.is_err()`. Recovery on replug is
-        //    automatic via the lazy `sessions.contains_key` check.
-        //  - Different port selected: the old handle remains as an
-        //    inert FD until process exit. One fd per ever-used port
-        //    is a vastly better trade than the visible "Solid mode
-        //    looks broken" symptom we shipped without this fix.
-        //
-        // The `bridge` and `port_name` fields are kept on the struct
-        // so future explicit-cleanup callers (e.g. user clicking
-        // "Disconnect device") can reach them without re-plumbing.
+        // Do NOT call `disconnect_session` here — reopening the port toggles
+        // DTR and resets the MCU. See docs/architecture/device-output.md (DTR reset).
         let _ = self.port_name.as_deref();
         Ok(())
     }

@@ -1,3 +1,6 @@
+//! USB serial port enumeration, connect/health-check commands, and the
+//! `ActiveSinkRegistry` that hands the built `LedSink` to the ambilight worker.
+
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -27,43 +30,15 @@ const HANDSHAKE_PORT_READ_TIMEOUT_MS: u64 = 50;
 /// round-trip which is typically < 5 ms on a healthy link.
 const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(2_000);
 
-/// Post-open settle delay before sending any bytes to the device.
-///
-/// Opening a serial port asserts DTR, which triggers the AVR auto-reset
-/// circuit on Arduino-style boards (CH340, FTDI, CP2102, etc.). The
-/// bootloader occupies the bus for ~1.5–2 s before jumping to the user
-/// sketch. If LumaSync sends the PING handshake during this window the
-/// bootloader ignores it and the sketch never sees it, causing a guaranteed
-/// `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`.
-///
-/// Fix: sleep this long after `open()` and before writing any frame bytes.
-/// Both `connect_serial_port` and `run_serial_health_check` apply this delay.
-///
-/// Trade-off: every connect / health-check call now takes +2 s wall time.
-/// This is acceptable — the alternative is a guaranteed handshake failure on
-/// all Arduino-class hardware. A future improvement could suppress the reset
-/// entirely by driving DTR low immediately after open
-/// (`port.write_data_terminal_ready(false)` before any other byte), but that
-/// path requires testing across all five supported chip families and is
-/// deferred to a dedicated v1.5 follow-up item.
-///
-/// IMPORTANT: this delay is performed inside `tokio::task::spawn_blocking` so
-/// the Tauri IPC dispatcher thread remains responsive while the serial port
-/// settles. Running the sleep on the main IPC thread blocks every other
-/// command (UI, telemetry, settings reads) for the full ~4 s window — a UX
-/// regression observed on v1.5.0-rc where the entire app appeared frozen
-/// during Run Health Check.
+/// Post-open settle delay before sending any bytes to the device — a PING
+/// sent before the bootloader window closes is a guaranteed
+/// `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`. Must run inside `tokio::task::spawn_blocking`,
+/// never on the IPC dispatcher thread. See docs/architecture/device-output.md.
 const BOOTLOADER_SETTLE_DELAY_MS: u64 = 2_000;
 
-/// Supported USB serial adapter VID:PID allowlist.
-///
-/// Two-stage gate: all ports are enumerated with `isSupported: bool` so the
-/// UI can show unsupported devices; connect is blocked with `PORT_UNSUPPORTED`
-/// for entries not in this list.
-///
-/// v1.5 G5 additions: PL2303 (Prolific), CH341 (WinChipHead), CP2104 (Silicon
-/// Labs), FT232H (FTDI Hi-Speed). Same array-addition pattern as the original
-/// 5-entry list; no other changes required.
+/// Supported USB serial adapter VID:PID allowlist — read this constant,
+/// never hardcode elsewhere. See docs/architecture/device-output.md for why
+/// an unrecognized port is refused rather than opened.
 const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
     // --- original v1.x entries ---
     (0x1A86, 0x7523), // CH340 (WinChipHead)
@@ -96,6 +71,8 @@ pub struct UsbPortMetadata {
     pub serial_number: Option<String>,
 }
 
+/// One enumerated serial port plus whether it matches the supported USB
+/// adapter allowlist.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialPortDescriptor {
@@ -132,6 +109,8 @@ pub struct HealthStepResult {
     pub details: Option<String>,
 }
 
+/// Full outcome of `run_serial_health_check`: pass/fail per step, plus
+/// round-trip and firmware metadata on a successful handshake.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthCheckResult {
@@ -153,6 +132,7 @@ pub struct HealthCheckResult {
     pub advertised_firmware_profile: Option<FirmwareProfile>,
 }
 
+/// Tauri-managed state holding the most recently recorded serial connection status.
 pub struct SerialConnectionState {
     pub(crate) last_status: Mutex<SerialConnectionStatus>,
 }
@@ -276,6 +256,8 @@ impl ActiveSinkRegistry {
     }
 }
 
+/// List every serial port the OS can see, flagging which ones match the
+/// supported USB adapter allowlist.
 #[tauri::command]
 pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
     let ports = available_ports().map_err(|error| {
@@ -383,6 +365,8 @@ enum ConnectOutcome {
     },
 }
 
+/// Open the given serial port, run the bootloader settle delay, and
+/// register a fresh `SerialSink` in `ActiveSinkRegistry` on success.
 #[tauri::command]
 pub async fn connect_serial_port(
     port_name: String,
@@ -484,12 +468,8 @@ fn connect_serial_port_blocking(
         }
     };
 
-    // Reject non-USB serial ports up-front. macOS exposes phantom serial
-    // endpoints like /dev/cu.Bluetooth-Incoming-Port that accept open() and
-    // write() but route to nowhere — every frame "succeeds" while the LEDs
-    // stay dark. Without this gate the backend silently writes 20 Hz worth
-    // of solid-color frames into the void and the user reads it as a crash
-    // because nothing lights up.
+    // Reject non-USB serial ports up-front — macOS phantom endpoints accept
+    // open()/write() and go nowhere. See docs/architecture/device-output.md.
     match selected_port.port_type {
         SerialPortType::UsbPort(ref usb_info) => {
             if !is_supported_usb(usb_info.vid, usb_info.pid) {
@@ -595,6 +575,7 @@ fn connect_serial_port_blocking(
     }
 }
 
+/// Return the most recently recorded serial connection status.
 #[tauri::command]
 pub fn get_serial_connection_status(
     connection_state: tauri::State<'_, SerialConnectionState>,
@@ -892,22 +873,10 @@ fn is_supported_usb(vid: u16, pid: u16) -> bool {
         .any(|(allowed_vid, allowed_pid)| *allowed_vid == vid && *allowed_pid == pid)
 }
 
-/// Returns `true` for paths that should be suppressed from enumeration on macOS.
-///
-/// macOS exposes every USB serial adapter under two POSIX paths:
-///   - `/dev/cu.*`  — call-out device, non-blocking, correct for outgoing data.
-///   - `/dev/tty.*` — terminal device, blocking, requires DCD assertion.
-///
-/// CH340, FTDI FT232R, CP2102, and Arduino-class boards never assert DCD, so
-/// the tty.* sibling opens at the file-descriptor level but silently stalls on
-/// read/write once the kernel waits for the carrier-detect signal. This caused
-/// a real incident on 2026-04-26 where pairing with `/dev/tty.usbserial-10`
-/// produced "Connect and verify Pass" followed by a handshake timeout.
-///
-/// The filter covers ALL `/dev/tty.*` paths — including `/dev/tty.usbmodem*`
-/// for genuine Arduinos — because the cu.* sibling is always present and is
-/// the correct path. On Linux and Windows this function always returns `false`
-/// (compile-time no-op), so their enumerators are unaffected.
+/// Returns `true` for paths that should be suppressed from enumeration on macOS
+/// — the `/dev/tty.*` sibling of a `/dev/cu.*` port stalls on DCD instead of
+/// failing outright. See docs/architecture/device-output.md. No-op on
+/// Linux/Windows.
 #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 fn is_macos_tty_path(name: &str) -> bool {
     #[cfg(target_os = "macos")]

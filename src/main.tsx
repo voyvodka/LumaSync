@@ -1,38 +1,6 @@
-/**
- * main.tsx — Application entry point
- *
- * Bootstrap order:
- *  1. Resolve initial language via languagePolicy (I18N-02: English on first launch)
- *  2. Initialise i18next with the resolved language
- *  3. Mount React with provider composition (I18nextProvider, etc.)
- *
- * i18next is initialised BEFORE React renders to prevent hydration flicker
- * and ensure all components receive a ready translation instance.
- *
- * Window routing (v1.6 LED Preview): BOTH preview windows load the same
- * `index.html`, so we branch on `getCurrentWindow().label` BEFORE the heavy
- * `<App />` tree (and its device / Hue / capture effects) mounts:
- *   - label starts with `led-twin-overlay-` ⇒ the click-through digital-twin
- *     overlay, threaded with the Rust-injected `__LUMASYNC_TWIN_DISPLAY_ID__`,
- *   - label === `led-control-popup` ⇒ the interactive control popup,
- *   - else ⇒ the normal main-window `<App />`.
- *
- * Error-boundary policy (FE-5): every webview gets a boundary, because a single
- * render throw white-screens a tray-first app:
- *   - the main window and the (opaque) control popup are wrapped in
- *     `GlobalErrorBoundaryWithI18n`, whose fallback is the amber Rev 07 card,
- *   - the transparent click-through twin overlay is wrapped in the minimal
- *     `TwinErrorBoundary`, whose fallback renders NOTHING — an opaque card here
- *     would blanket the whole display, so a twin failure must degrade to an
- *     invisible overlay instead.
- *
- * Twin transparency (FE-2): the twin window is created transparent+visible, but
- * index.html's bundled global body gradient paints an opaque app background
- * before React mounts. We neutralize html/body/#root background SYNCHRONOUSLY
- * here — before bootstrap / i18n / React — so the twin never flashes an opaque
- * full-screen frame on open. `LedTwinOverlay`'s own effect keeps doing the same
- * as belt-and-suspenders. The opaque control popup is intentionally untouched.
- */
+// main.tsx — entry point. Bootstrap: resolve language → init i18next → mount
+// React. Both preview windows load this same index.html and branch on
+// `getCurrentWindow().label` before the heavy `<App />` tree mounts.
 
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -52,19 +20,9 @@ import {
   LED_TWIN_OVERLAY_LABEL_PREFIX,
 } from "./shared/contracts/preview";
 
-// Bridge browser `console.log/info/warn/error` to the Rust tauri-plugin-log
-// file sink so frontend output is captured in the same log file Rust writes
-// to (`~/Library/Logs/com.lumasync.app/lumasync-dev.log` on macOS). Without
-// this, frontend `console.*` calls live in the WebView devtools panel only,
-// which makes runtime debugging from outside DevTools impossible. The
-// browser console panel still receives the same entries — we wrap the
-// originals rather than replacing them so source-location attribution is
-// preserved in DevTools.
-//
-// `attachConsole` from @tauri-apps/plugin-log routes Rust logs TO the
-// browser console (the opposite direction we want); the explicit
-// `info`/`warn`/`error` exports invoke the plugin command which lands in
-// the plugin's target chain (Stdout + LogDir).
+// Mirrors console output into the Rust log sink — see
+// docs/architecture/ui-and-shell.md. We wrap the originals (not replace
+// them) so DevTools still shows correct source locations.
 function bridgeConsoleToTauri() {
   const fmt = (args: unknown[]) =>
     args
@@ -104,19 +62,9 @@ function bridgeConsoleToTauri() {
 
 bridgeConsoleToTauri();
 
-/**
- * FE-2 fix — neutralize the opaque global app background on the twin overlay
- * window SYNCHRONOUSLY, before bootstrap / i18n / React mount.
- *
- * The twin window is `.transparent(true).visible(true)` and shown immediately,
- * but index.html's bundled body gradient (plain CSS, no `!important`) paints
- * opaque over the full display from first paint until `LedTwinOverlay`'s effect
- * runs — and that effect only fires after first paint AND after `await
- * initI18n`. The result was a visible full-screen opaque flash on every twin
- * open. Setting the inline background to `transparent` here (inline beats the
- * non-`!important` stylesheet rule) removes the flash entirely. Only the twin
- * window is touched — the control popup stays opaque.
- */
+// FE-2 — clear the twin window's background synchronously, before bootstrap
+// runs, so it never flashes the opaque app gradient. See
+// docs/architecture/ui-and-shell.md. Only the twin is touched.
 function neutralizeTwinBackgroundEarly() {
   let label = "";
   try {
@@ -159,6 +107,8 @@ function resolveRootTree(): React.ReactNode {
     const displayId = (window as unknown as { __LUMASYNC_TWIN_DISPLAY_ID__?: string })
       .__LUMASYNC_TWIN_DISPLAY_ID__;
     return (
+      // TwinErrorBoundary renders nothing on failure — an opaque fallback
+      // here would blanket the display. See docs/architecture/ui-and-shell.md.
       <Providers>
         <TwinErrorBoundary>
           <LedTwinOverlay displayId={displayId} scope="test" />

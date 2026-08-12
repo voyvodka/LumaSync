@@ -82,23 +82,8 @@ pub(crate) fn wait_for_shutdown(signal: &ShutdownSignal, timeout: Duration) -> b
     }
 }
 
-// ---------------------------------------------------------------------------
-// Deactivate dedupe token (v1.5.2 A1.3)
-// ---------------------------------------------------------------------------
-//
-// `entertainment_configuration` deactivation can race between three call
-// sites: the sender thread's own cleanup path, the foreground
-// `stop_hue_stream` Tauri command, and the reconnect monitor's pre-restart
-// cleanup. Without coordination all three may PUT
-// `{ "action": "stop" }` to the same area, which the bridge logs as
-// duplicate stale-state mutations and which historically produced the
-// "phantom active streamer" symptom that bug audit A1.3 captured.
-//
-// `DeactivateToken` is the single-shot coordination primitive: whichever
-// caller wins `try_acquire()` is the only one that performs the HTTP PUT;
-// every later caller observes `false` and no-ops. The token is shared as
-// `Arc<DeactivateToken>` so all three call sites point at the same atomic
-// boolean for a given stream session.
+// Deactivate dedupe token (v1.5.2 A1.3) — coordinates three call sites that
+// can race to PUT the same "stop". See docs/architecture/hue.md.
 
 /// Single-shot atomic flag that gates the entertainment-configuration
 /// deactivation HTTP PUT. Exactly one acquirer wins; subsequent callers

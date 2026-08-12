@@ -1,3 +1,6 @@
+//! Hue bridge discovery, pairing, and Entertainment Area onboarding commands —
+//! the read/pair path that runs before a stream can start.
+
 use std::{net::Ipv4Addr, str::FromStr, time::Duration};
 
 use log::{debug, error, info, warn};
@@ -8,6 +11,8 @@ use serde_json::{json, Value};
 use super::hue::area_cache::{invalidate_hue_area_cache, read_area_snapshot, HueReadFreshness};
 use super::hue_http::{classify_hue_response, HueHttpFault};
 
+/// Uniform coded status returned by every Hue onboarding command; never
+/// throws — callers branch on `code`.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandStatus {
@@ -16,6 +21,7 @@ pub struct CommandStatus {
     pub details: Option<String>,
 }
 
+/// A discovered or verified Hue bridge, as surfaced to the frontend picker.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueBridgeSummary {
@@ -26,6 +32,8 @@ pub struct HueBridgeSummary {
     pub software_version: Option<String>,
 }
 
+/// Response for `discover_hue_bridges` — status plus the merged, deduped
+/// bridge list from cloud + mDNS discovery.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueDiscoveryResponse {
@@ -33,6 +41,8 @@ pub struct HueDiscoveryResponse {
     pub bridges: Vec<HueBridgeSummary>,
 }
 
+/// Response for `verify_hue_bridge_ip` — whether the given IP reaches a real
+/// bridge, for the manual-IP onboarding fallback.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueVerifyBridgeIpResponse {
@@ -47,6 +57,8 @@ pub struct HuePairingCredentials {
     pub client_key: String,
 }
 
+/// Response for `pair_hue_bridge` — pairing status, credentials on success,
+/// and where they ended up persisted.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HuePairBridgeResponse {
@@ -60,6 +72,8 @@ pub struct HuePairBridgeResponse {
     pub credential_storage_backend: Option<String>,
 }
 
+/// Response for `migrate_hue_credentials` — which backend now holds the
+/// credential pair.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueCredentialMigrationResponse {
@@ -70,6 +84,8 @@ pub struct HueCredentialMigrationResponse {
     pub backend: Option<String>,
 }
 
+/// Response for `validate_hue_credentials` — whether the stored bridge
+/// credentials still work.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueValidateCredentialsResponse {
@@ -77,6 +93,8 @@ pub struct HueValidateCredentialsResponse {
     pub valid: bool,
 }
 
+/// One bridge-side Entertainment Area, enriched with its room archetype for
+/// the frontend area picker.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueEntertainmentArea {
@@ -99,6 +117,7 @@ pub struct HueEntertainmentAreaListResponse {
     pub areas: Vec<HueEntertainmentArea>,
 }
 
+/// Whether the selected area can currently start a stream, plus why not.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueStreamReadiness {
@@ -120,6 +139,8 @@ struct DiscoveryBridge {
     internal_ip_address: String,
 }
 
+/// Discover Hue bridges on the network via cloud + mDNS discovery run in
+/// parallel, merging and deduplicating the results by bridge id.
 #[tauri::command]
 pub async fn discover_hue_bridges() -> HueDiscoveryResponse {
     // v1.5 W2-A3 — run cloud and mDNS discovery in parallel.
@@ -262,6 +283,8 @@ fn merge_discovery_sources(
     }
 }
 
+/// Check whether a manually entered IP reaches a real Hue bridge, for the
+/// manual-IP onboarding fallback when discovery finds nothing.
 #[tauri::command]
 pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpResponse {
     let invalid = verify_hue_bridge_ip_input(&bridge_ip);
@@ -307,6 +330,8 @@ pub async fn verify_hue_bridge_ip(bridge_ip: String) -> HueVerifyBridgeIpRespons
     }
 }
 
+/// Pair with the Hue bridge at `bridge_ip`, requesting the bridge link
+/// button and persisting the resulting credentials (keychain-first).
 #[tauri::command]
 pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
     let ip_check = verify_hue_bridge_ip_input(&bridge_ip);
@@ -487,6 +512,8 @@ pub fn migrate_hue_credentials(
     }
 }
 
+/// Verify that previously stored Hue credentials are still accepted by the
+/// bridge, distinguishing an explicit rejection from a reachability failure.
 #[tauri::command]
 pub async fn validate_hue_credentials(
     bridge_ip: String,
@@ -562,6 +589,8 @@ pub async fn validate_hue_credentials(
     }
 }
 
+/// List the bridge's Entertainment Areas for the area picker. Always a
+/// forced round-trip so a newly created area shows up immediately.
 #[tauri::command]
 pub async fn list_hue_entertainment_areas(
     bridge_ip: String,
@@ -806,6 +835,8 @@ pub fn parse_discovery_payload(payload: &str) -> HueDiscoveryResponse {
     }
 }
 
+/// Validate the IP format only, without a network round-trip; used to
+/// short-circuit before reaching the bridge.
 pub fn verify_hue_bridge_ip_input(ip: &str) -> HueVerifyBridgeIpResponse {
     if !is_valid_ipv4(ip) {
         return HueVerifyBridgeIpResponse {
@@ -958,6 +989,8 @@ fn pairing_error_status(error_type: Option<i64>, description: &str) -> CommandSt
     }
 }
 
+/// Interpret a `/api/<username>/config` response as valid, invalid, or an
+/// unparseable/unexpected payload.
 pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredentialsResponse {
     let parsed = serde_json::from_str::<Value>(payload);
     let Ok(value) = parsed else {
@@ -1215,6 +1248,8 @@ fn normalize_archetype(raw: &str) -> String {
     }
 }
 
+/// Parse a CLIP v2 `entertainment_configuration` payload into
+/// `HueEntertainmentArea` entries, joined against the room archetype index.
 pub fn parse_area_list_payload(
     payload: &str,
     room_index: &std::collections::HashMap<String, String>,
@@ -1367,11 +1402,9 @@ fn hue_cloud_http_client() -> Result<Client, String> {
 /// The fallback triggers on transport errors only. Once a bridge answers with
 /// any HTTP status the response is returned untouched so `classify_hue_response`
 /// keeps owning the 403/`error.type` re-pair contract.
-/// `allow_http_fallback` must be `false` for any request whose response carries
-/// a secret. The pairing POST returns the DTLS `clientkey`, so an attacker who
-/// blackholes TCP/443 could otherwise force the downgrade and read the PSK off
-/// the wire. Only connect-level failures fall back — a TLS handshake failure is
-/// exactly the signal an attacker would manufacture, so it stays fatal.
+///
+/// `allow_http_fallback` must stay `false` on the pairing call — it returns the
+/// DTLS `clientkey`. See docs/architecture/hue.md (downgrade-attack constraint).
 async fn send_clip_v1<F>(
     client: &Client,
     bridge_ip: &str,

@@ -74,6 +74,9 @@ pub async fn get_hue_area_channels(
     Ok(super::frame::channels_to_info(&channels))
 }
 
+/// Start the Hue entertainment stream for the given bridge/area — checks
+/// readiness, spawns the DTLS or HTTP sender, and stores the resulting
+/// stream context.
 #[tauri::command]
 pub async fn start_hue_stream(
     request: StartHueStreamRequest,
@@ -343,6 +346,8 @@ pub fn stop_hue_stream(
     Ok(make_result(&owner))
 }
 
+/// Stop the current stream (if any) and start a fresh one for the given
+/// request — used when an area/channel change requires a full reconnect.
 #[tauri::command]
 pub async fn restart_hue_stream(
     request: StartHueStreamRequest,
@@ -543,6 +548,8 @@ pub async fn restart_hue_stream(
     Ok(final_result)
 }
 
+/// Push a single solid color to every light in the active area, queuing it
+/// for replay if no sender is currently ready to take it.
 #[tauri::command]
 pub fn set_hue_solid_color(
     request: SetHueSolidColorRequest,
@@ -643,6 +650,8 @@ pub fn set_hue_solid_color(
     Ok(make_result(&owner))
 }
 
+/// Poll the current Hue runtime status, refreshing readiness against the
+/// bridge when a stream is active.
 #[tauri::command]
 pub async fn get_hue_stream_status(
     runtime_state: State<'_, HueRuntimeStateStore>,
@@ -756,6 +765,8 @@ fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
 // simulate_hue_fault — debug-only command (D-10, D-11)
 // ---------------------------------------------------------------------------
 
+/// Debug-only: force the active DTLS stream's shutdown signal to fire,
+/// exercising the reconnect monitor without a real bridge fault.
 #[cfg(debug_assertions)]
 #[tauri::command]
 pub fn simulate_hue_fault(
@@ -773,6 +784,8 @@ pub fn simulate_hue_fault(
     Err("NO_ACTIVE_DTLS_STREAM".to_string())
 }
 
+/// Release stub for `simulate_hue_fault` — always reports the debug-only
+/// command as unavailable.
 #[cfg(not(debug_assertions))]
 #[tauri::command]
 pub fn simulate_hue_fault() -> Result<String, String> {

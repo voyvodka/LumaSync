@@ -34,6 +34,7 @@ interface FullTelemetrySnapshotDto {
   hue: HueTelemetrySnapshotDto | null;
 }
 
+/** Injectable `invoke()` signature so telemetry commands can be unit-tested with a mock transport. */
 export type TelemetryInvoker = <T>(command: string, payload?: Record<string, unknown>) => Promise<T>;
 
 const defaultInvoke: TelemetryInvoker = (command, payload) => invoke(command, payload);
@@ -61,6 +62,7 @@ function normalizeLatencyMs(value: unknown): number {
   return Math.max(0, value);
 }
 
+/** Normalize the raw USB telemetry DTO into the domain shape, clamping negative/NaN readings to 0. */
 export function mapRuntimeTelemetrySnapshot(dto: RuntimeTelemetrySnapshotDto): RuntimeTelemetrySnapshot {
   return {
     captureFps: normalizeFps(dto.captureFps),
@@ -93,6 +95,7 @@ export function mapFullTelemetrySnapshot(dto: FullTelemetrySnapshotDto): FullTel
   };
 }
 
+/** Fetch the current runtime telemetry — USB capture/send FPS plus Hue stream stats when active. */
 export async function getFullTelemetrySnapshot(
   invoker: TelemetryInvoker = defaultInvoke,
 ): Promise<FullTelemetrySnapshot> {

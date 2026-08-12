@@ -10,17 +10,8 @@
  * - **Two preview webviews** — a click-through "digital twin" overlay
  *   (label prefix `led-twin-overlay-`) and an interactive control popup
  *   (label `led-control-popup`).
- * - **Per-LED color stream** — the worker enriches the existing
- *   `ambilight://edge-signal` event additively (see
- *   `features/mode/model/contracts.ts > EdgeSignalPayload`); this file owns
- *   the command + status surface that drives it.
- *
- * Coded-status discipline (user memory `feedback_rust_backend_errors.md`):
- * every command resolves with a coded status object on its ok-result — it
- * NEVER throws. The Rust `Result<_, String>` Err arm is reserved strictly
- * for lock-poison / serialize failures, not for domain outcomes. The
- * frontend discriminates on the `code` / `status.code` field, never on a
- * raw error string.
+ * - **Per-LED color stream** — enriches `ambilight://edge-signal`
+ *   (`EdgeSignalPayload` in `features/mode/model/contracts.ts`); owns the status surface.
  */
 
 import type { DisplayId } from "./display";
@@ -93,6 +84,7 @@ export type TestPatternSpeed = "slow" | "med" | "fast";
 // Command payloads + results
 // ---------------------------------------------------------------------------
 
+/** Payload for `start_led_test_pattern`. */
 export interface StartLedTestPatternPayload {
   /** The pattern to inject (carries its own per-kind payload). */
   pattern: LedTestPattern;
@@ -139,6 +131,7 @@ export interface LedTestPatternResult {
  */
 export type TwinScope = "test" | "live";
 
+/** Payload for `open_led_twin_overlay`. */
 export interface OpenLedTwinOverlayPayload {
   /** Display to overlay. Absent ⇒ backend falls back to the selected/primary display. */
   displayId?: DisplayId;
@@ -146,11 +139,13 @@ export interface OpenLedTwinOverlayPayload {
   scope: TwinScope;
 }
 
+/** Payload for `close_led_twin_overlay`. */
 export interface CloseLedTwinOverlayPayload {
   /** Display whose overlay should close. Absent ⇒ close every open twin overlay. */
   displayId?: DisplayId;
 }
 
+/** Result of the twin overlay open/close commands. */
 export interface TwinOverlayResult {
   ok: boolean;
   code: TwinOverlayStatusCode;
@@ -162,6 +157,7 @@ export interface TwinOverlayResult {
 // Control popup window
 // ---------------------------------------------------------------------------
 
+/** Result of the control popup open/show/hide commands. */
 export interface ControlPopupResult {
   ok: boolean;
   code: ControlPopupStatusCode;
@@ -174,6 +170,7 @@ export interface ControlPopupResult {
 // Preview runtime snapshot (`get_led_preview_status`)
 // ---------------------------------------------------------------------------
 
+/** Snapshot of the preview/test runtime, returned by `get_led_preview_status`. */
 export interface LedPreviewStatus {
   /** Whether a synthetic test pattern is currently being injected. */
   testActive: boolean;
@@ -194,8 +191,7 @@ export interface LedPreviewStatus {
 }
 
 // ---------------------------------------------------------------------------
-// Status codes — typed constants, never raw strings. Commands resolve with
-// one of these on the ok-result; they never throw a domain error.
+// Status codes — typed constants, never raw strings.
 // ---------------------------------------------------------------------------
 
 export const LED_TEST_STATUS = {

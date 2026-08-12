@@ -1,15 +1,6 @@
-/**
- * Platform surface contracts (v1.4 — Tauri notification plugin).
- *
- * Wraps OS-level capabilities that are not device-specific: toast
- * notifications today, with room for global shortcuts / clipboard in
- * later milestones.
- *
- * Every command returns a coded status object (never throws on the
- * Rust side) so the frontend can discriminate on `result.status`
- * without parsing human strings. Mirrors the Hue-never-throws
- * discipline.
- */
+/** Platform surface contracts (v1.4) — OS-level capabilities that are not
+ * device-specific: toast notifications today, room for global shortcuts /
+ * clipboard later. */
 
 // ---------------------------------------------------------------------------
 // Platform commands
@@ -52,6 +43,7 @@ export type PlatformCommandId =
  */
 export type NotificationKind = "info" | "warn" | "error";
 
+/** Ordered list of every {@link NotificationKind}, for iterating in settings UI. */
 export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
   "info",
   "warn",

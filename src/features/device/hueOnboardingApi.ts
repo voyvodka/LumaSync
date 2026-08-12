@@ -6,12 +6,14 @@ import type {
   HuePairBridgeResponse,
 } from "@/shared/contracts/hue";
 
+/** Coded result shape shared by the Hue onboarding commands — never throws, always returns this. */
 export interface CommandStatus {
   code: string;
   message: string;
   details: string | null;
 }
 
+/** One bridge returned by discovery, before pairing. */
 export interface HueBridgeSummary {
   id: string;
   ip: string;
@@ -20,11 +22,13 @@ export interface HueBridgeSummary {
   softwareVersion?: string;
 }
 
+/** Result of `discoverHueBridges` — bridges found via cloud + mDNS, deduped by id. */
 export interface HueDiscoveryResponse {
   status: CommandStatus;
   bridges: HueBridgeSummary[];
 }
 
+/** Result of `verifyHueBridgeIp` — the bridge at that address, if the format and reachability check pass. */
 export interface HueVerifyBridgeIpResponse {
   status: CommandStatus;
   bridge: HueBridgeSummary | null;
@@ -40,6 +44,7 @@ export type {
   HueCredentialMigrationResponse,
 } from "@/shared/contracts/hue";
 
+/** Result of `validateHueCredentials` — whether the stored username/clientKey still authenticate. */
 export interface HueValidateCredentialsResponse {
   status: CommandStatus;
   valid: boolean;
@@ -58,6 +63,7 @@ export interface HueEntertainmentAreaListResponse {
   areas: HueEntertainmentAreaSummary[];
 }
 
+/** Whether starting the Hue stream would succeed right now, and why not if it wouldn't. */
 export interface HueStreamReadiness {
   ready: boolean;
   reasons: string[];
@@ -68,18 +74,25 @@ export interface HueStreamReadinessResponse {
   readiness: HueStreamReadiness;
 }
 
+/** Discover bridges on the network via cloud discovery and mDNS in parallel. */
 export async function discoverHueBridges(): Promise<HueDiscoveryResponse> {
   return invoke<HueDiscoveryResponse>(HUE_COMMANDS.DISCOVER_BRIDGES);
 }
 
+/** Validate that a manually entered bridge IP is a well-formed, reachable address. */
 export async function verifyHueBridgeIp(bridgeIp: string): Promise<HueVerifyBridgeIpResponse> {
   return invoke<HueVerifyBridgeIpResponse>(HUE_COMMANDS.VERIFY_BRIDGE_IP, { bridgeIp });
 }
 
+/**
+ * Request pairing with the bridge at `bridgeIp`. Requires the physical link
+ * button to have been pressed recently; returns `HUE_PAIRING_PENDING_LINK_BUTTON` otherwise.
+ */
 export async function pairHueBridge(bridgeIp: string): Promise<HuePairBridgeResponse> {
   return invoke<HuePairBridgeResponse>(HUE_COMMANDS.PAIR_BRIDGE, { bridgeIp });
 }
 
+/** Move existing plaintext Hue credentials into the OS keychain; safe to call repeatedly. */
 export async function migrateHueCredentials(
   username: string,
   clientKey: string,
@@ -90,6 +103,7 @@ export async function migrateHueCredentials(
   });
 }
 
+/** Check whether a stored bridge/username pair still authenticates against the bridge. */
 export async function validateHueCredentials(
   bridgeIp: string,
   username: string,
@@ -102,6 +116,7 @@ export async function validateHueCredentials(
   });
 }
 
+/** List the entertainment areas configured on the bridge, for the area-select onboarding step. */
 export async function listHueEntertainmentAreas(
   bridgeIp: string,
   username: string,
@@ -112,6 +127,7 @@ export async function listHueEntertainmentAreas(
   });
 }
 
+/** Poll whether the selected area/credentials would let the Hue stream start right now (cached read). */
 export async function checkHueStreamReadiness(
   bridgeIp: string,
   username: string,
@@ -124,6 +140,7 @@ export async function checkHueStreamReadiness(
   });
 }
 
+/** One resolved entertainment channel: its bridge-reported position and auto-detected screen region. */
 export interface HueAreaChannelInfo {
   index: number;
   positionX: number;
@@ -132,6 +149,7 @@ export interface HueAreaChannelInfo {
   autoRegion: string;
 }
 
+/** Fetch per-channel metadata for the area — light count and auto-detected screen region — for the room-map editor. */
 export async function getHueAreaChannels(
   bridgeIp: string,
   username: string,

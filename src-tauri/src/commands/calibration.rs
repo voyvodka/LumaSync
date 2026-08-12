@@ -1,3 +1,6 @@
+//! Display enumeration, the transparent click-through calibration overlay
+//! window, and the LED test-pattern commands used to preview index mapping.
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
@@ -11,6 +14,8 @@ use tauri::{
 
 use super::device_connection::{CommandStatus, SerialConnectionState};
 
+/// Request payload for `start_calibration_test_pattern`: which LED indexes
+/// to light, the frame interval, and brightness.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartCalibrationTestPatternPayload {
@@ -19,6 +24,8 @@ pub struct StartCalibrationTestPatternPayload {
     pub brightness: u8,
 }
 
+/// Result of starting or stopping a calibration test pattern, including
+/// whether output actually reached hardware or ran preview-only.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CalibrationCommandResponse {
@@ -27,6 +34,8 @@ pub struct CalibrationCommandResponse {
     pub status: CommandStatus,
 }
 
+/// Metadata for one enumerated display, used to size and position the
+/// calibration and LED-twin overlay windows.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DisplayInfoPayload {
@@ -56,6 +65,8 @@ pub struct OverlayPreviewSequenceItemPayload {
     pub local_index: u16,
 }
 
+/// Full preview state pushed into the calibration overlay webview on open
+/// and on every live edit.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayPreviewPayload {
@@ -73,6 +84,7 @@ pub struct OverlayRuntimeState {
     pub active_overlay_label: Option<String>,
 }
 
+/// Tauri-managed state wrapping `OverlayRuntimeState` behind a mutex.
 #[derive(Default)]
 pub struct OverlayState {
     pub runtime: std::sync::Mutex<OverlayRuntimeState>,
@@ -335,6 +347,8 @@ fn apply_overlay_open_transition(
     overlay_result("OVERLAY_OPENED", "Display overlay opened.")
 }
 
+/// List every enumerated display for the frontend's display picker. Falls
+/// back to a single placeholder entry when the OS reports no monitors.
 #[tauri::command]
 pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPayload>, String> {
     let monitors = app
@@ -390,6 +404,8 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
     Ok(displays)
 }
 
+/// Open (or move) the calibration overlay onto the requested display,
+/// closing any previously open overlay first.
 #[tauri::command]
 pub fn open_display_overlay<R: Runtime>(
     app: AppHandle<R>,
@@ -492,6 +508,8 @@ pub fn close_display_overlay<R: Runtime>(
     Ok(overlay_result("OVERLAY_CLOSED", "Display overlay closed."))
 }
 
+/// Push an updated preview payload into the currently open calibration
+/// overlay without reopening the window.
 #[tauri::command]
 pub fn update_display_overlay_preview<R: Runtime>(
     app: AppHandle<R>,
@@ -630,6 +648,8 @@ mod tests {
     }
 }
 
+/// Start a calibration test pattern on the given LED indexes; runs
+/// preview-only when no device is connected.
 #[tauri::command]
 pub fn start_calibration_test_pattern(
     payload: StartCalibrationTestPatternPayload,

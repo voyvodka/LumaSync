@@ -45,6 +45,8 @@ pub(crate) const DEFAULT_RETRY_CAP_MS: u64 = 2_000;
 // State machine enums
 // ---------------------------------------------------------------------------
 
+/// State machine driving the Hue entertainment stream lifecycle, from idle
+/// through starting/running to a terminal `Failed`.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub enum HueRuntimeState {
     Idle,
@@ -77,6 +79,8 @@ pub enum HueRuntimeActionHint {
 // Wire-visible DTOs
 // ---------------------------------------------------------------------------
 
+/// Coded status describing the current (or most recent) Hue runtime state,
+/// returned by every stream-lifecycle command.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueRuntimeStatus {
@@ -98,6 +102,8 @@ pub struct HueRuntimeCommandResult {
     pub last_solid_color: Option<HueSolidColorSnapshot>,
 }
 
+/// Parameters needed to start (or restart) the Hue entertainment stream for
+/// a given bridge and area.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct StartHueStreamRequest {
@@ -112,6 +118,8 @@ pub struct StartHueStreamRequest {
     pub channel_region_overrides: Option<Vec<Option<String>>>,
 }
 
+/// Requested solid color + optional brightness to push to every light in
+/// the active area.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SetHueSolidColorRequest {
@@ -132,6 +140,8 @@ pub struct HueSolidColorSnapshot {
     pub brightness: f32,
 }
 
+/// Evidence collected before a stream-lifecycle transition is allowed to
+/// proceed, gating the runtime against half-configured state.
 #[derive(Clone, Debug)]
 pub struct HueRuntimeGateEvidence {
     pub bridge_configured: bool,
@@ -268,6 +278,8 @@ pub(crate) struct HueActiveStreamContext {
     pub(crate) deactivate_token: Arc<DeactivateToken>,
 }
 
+/// Lock-free snapshot of the channels + sender needed to push color, read by
+/// the ambilight worker without touching the runtime mutex.
 #[derive(Clone, Debug)]
 pub struct HueActiveOutputContext {
     pub channels: Vec<HueAreaChannel>,
@@ -307,6 +319,7 @@ impl Default for HueRuntimeOwner {
     }
 }
 
+/// Tauri-managed handle wrapping the mutex-guarded `HueRuntimeOwner`.
 pub struct HueRuntimeStateStore {
     pub(crate) runtime: Arc<Mutex<HueRuntimeOwner>>,
 }
@@ -320,6 +333,8 @@ impl Default for HueRuntimeStateStore {
 }
 
 impl HueRuntimeStateStore {
+    /// Clone the shared runtime handle for use outside the Tauri `State<>`
+    /// extractor (e.g. background tasks like the reconnect monitor).
     pub fn runtime_arc(&self) -> Arc<Mutex<HueRuntimeOwner>> {
         Arc::clone(&self.runtime)
     }
@@ -423,6 +438,8 @@ pub(crate) fn flush_pending_solid_color(owner: &mut HueRuntimeOwner) -> bool {
 // Lock-free output context snapshot + apply helpers
 // ---------------------------------------------------------------------------
 
+/// Take a lock-free snapshot of the active stream's output context, if a
+/// stream is currently running.
 pub fn snapshot_hue_output_context(
     runtime_state: &HueRuntimeStateStore,
 ) -> Result<Option<HueActiveOutputContext>, String> {

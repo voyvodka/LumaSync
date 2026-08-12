@@ -57,6 +57,7 @@ export const DEVICE_STATUS = {
 
 export type DeviceStatus = (typeof DEVICE_STATUS)[keyof typeof DEVICE_STATUS];
 
+/** VID:PID pairs of the supported USB-serial controller chips (allowlist). */
 export const SUPPORTED_CONTROLLER_IDS = [
   "1A86:7523", // CH340
   "0403:6001", // FTDI FT232
@@ -103,6 +104,7 @@ export const SERIAL_CONNECT_STATUS = {
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
 
+/** In-flight device operation kind, used to gate concurrent UI actions. */
 export const DEVICE_OPERATION = {
   IDLE: "idle",
   RECOVERY: "recovery",
@@ -112,6 +114,7 @@ export const DEVICE_OPERATION = {
 
 export type DeviceOperation = (typeof DEVICE_OPERATION)[keyof typeof DEVICE_OPERATION];
 
+/** Ordered stages of the serial health-check flow. */
 export const DEVICE_HEALTH_STEPS = {
   PORT_VISIBLE: "PORT_VISIBLE",
   PORT_SUPPORTED: "PORT_SUPPORTED",
@@ -120,6 +123,7 @@ export const DEVICE_HEALTH_STEPS = {
 
 export type DeviceHealthStep = (typeof DEVICE_HEALTH_STEPS)[keyof typeof DEVICE_HEALTH_STEPS];
 
+/** Persisted shellStore keys owned by the device feature. */
 export const DEVICE_STORE_KEYS = {
   LAST_SUCCESSFUL_PORT: "lastSuccessfulPort",
 } as const;
