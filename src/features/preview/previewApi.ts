@@ -1,20 +1,6 @@
-/**
- * Preview API bridge (v1.6 LED Preview & Test Experience).
- *
- * Thin `invoke()` wrappers over the `PREVIEW_COMMANDS` ids. Commands are
- * invoked by STRING id from the contract — there is no compile-time coupling
- * to the Rust half (it lands in parallel), so the frontend can ship and
- * typecheck independently.
- *
- * Coded-status discipline (`feedback_rust_backend_errors.md`): the Rust
- * commands NEVER throw a domain error — they resolve with a coded status on
- * their ok-result. The `Result::Err` arm is reserved for lock-poison /
- * serialize failures only. We still wrap every call in try/catch so a
- * transport-level rejection is logged with the `[LumaSync]` prefix (the
- * silent-catch ban is absolute) and degraded to a synthetic coded failure the
- * UI can render uniformly — never a thrown exception that could white-screen a
- * preview surface.
- */
+/** Preview API bridge (v1.6) — thin `invoke()` wrappers over
+ * `PREVIEW_COMMANDS`, wrapped in try/catch to degrade a transport
+ * rejection to a synthetic coded failure rather than throwing. */
 
 import { invoke } from "@tauri-apps/api/core";
 

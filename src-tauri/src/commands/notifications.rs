@@ -1,11 +1,5 @@
 //! Platform notification commands (v1.4 W3-O).
 //!
-//! Wraps `tauri-plugin-notification` behind a never-throws contract that
-//! mirrors the Hue discipline: every command returns a discriminated
-//! `NotificationResult` whose `status` field drives the frontend branch,
-//! never an uncaught exception. This matches the shape defined in
-//! `src/shared/contracts/platform.ts`.
-//!
 //! Platform nuances:
 //!   - macOS: the plugin's desktop `permission_state()` always returns
 //!     `Granted` today, so real denials surface as errors on `show()`

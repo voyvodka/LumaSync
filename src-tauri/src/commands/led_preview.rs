@@ -13,10 +13,6 @@
 //! (`window.__LUMASYNC_TWIN_DISPLAY_ID__`), mirroring the calibration overlay's
 //! `__LUMASYNC_OVERLAY_PREVIEW__` pattern.
 //!
-//! Coded-status discipline: commands NEVER throw — they resolve with a coded
-//! status on an ok-result. The `Result<_, String>` Err arm is reserved for
-//! state-lock poison only.
-//!
 //! Phase 1 scope: the windows are created; capture-EXCLUSION (`SCContentFilter`
 //! exclude / `SetWindowDisplayAffinity`) lands in Phase 2.
 
