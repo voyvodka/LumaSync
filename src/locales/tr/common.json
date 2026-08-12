@@ -1142,10 +1142,6 @@
       }
     }
   },
-  "trayHint": {
-    "title": "LumaSync menü çubuğunda çalışıyor",
-    "body": "Pencereyi geri açmak için menü çubuğundaki simgeye tıkla. Bu mesaj sadece ilk kapatmada görünür."
-  },
   "calibration": {
     "section": {
       "title": "Kalibrasyon",
@@ -1282,13 +1278,6 @@
         "bottom": "Alt"
       }
     }
-  },
-  "tray": {
-    "openSettings": "Ayarları Aç",
-    "lightsOff": "Işıkları Kapat",
-    "resumeLastMode": "Son Modda Aç",
-    "solidColor": "Sabit Renk",
-    "quit": "LumaSync'ten Çık"
   },
   "titleBar": {
     "minimize": "Simge durumuna küçült",

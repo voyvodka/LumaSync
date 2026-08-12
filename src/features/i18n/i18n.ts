@@ -15,8 +15,11 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 
-import enCommon from "@/locales/en/common.json";
-import trCommon from "@/locales/tr/common.json";
+import enLegacy from "@/locales/en/common.json";
+import { en, tr } from "@/locales";
+import trLegacy from "@/locales/tr/common.json";
+
+import { I18N_DEFAULT_NS, I18N_NAMESPACES } from "./namespaces";
 
 /** Supported language codes (must match languagePolicy.SUPPORTED_LANGUAGES) */
 export const I18N_SUPPORTED_LANGUAGES = ["en", "tr"] as const;
@@ -47,12 +50,14 @@ export async function initI18n(language: string = I18N_DEFAULT_LANGUAGE): Promis
     fallbackLng: I18N_DEFAULT_LANGUAGE,
 
     resources: {
-      en: { common: enCommon },
-      tr: { common: trCommon },
+      en: { ...en, legacy: enLegacy },
+      tr: { ...tr, legacy: trLegacy },
     },
 
-    defaultNS: "common",
-    ns: ["common"],
+    defaultNS: I18N_DEFAULT_NS,
+    ns: [...I18N_NAMESPACES],
+    // fallbackNS deliberately unset: a missing key must reach missingKeyHandler
+    // rather than being silently rescued from a sibling namespace.
 
     // Missing key handling: log in dev, show English fallback in production
     missingKeyHandler: (lngs, ns, key) => {

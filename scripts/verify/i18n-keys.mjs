@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 // i18n key verifier: scans every string literal in src/** (not just t() calls
-// — some keys are read as bare data) for missing keys (fatal) and orphans (ratcheted).
+// — some keys are read as bare data) for missing keys (fatal) and orphans (ratcheted),
+// and checks the namespace registry against the EN/TR locale barrels.
 
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
 
-const EN_CATALOGUE_FILE = resolve(ROOT, "src/locales/en/common.json");
 const SRC_DIR = resolve(ROOT, "src");
 const LOCALES_DIR = resolve(ROOT, "src/locales");
 const ORPHAN_BASELINE_FILE = resolve(__dirname, "i18n-orphan-baseline.txt");
 const NAMESPACE_REGISTRY_FILE = resolve(ROOT, "src/features/i18n/namespaces.ts");
 
-// ---------------------------------------------------------------------------
-// Known dynamic template-literal heads. Each maps to a live `` t(`prefix.${x}`) ``
-// site; verified against source at design time (D-DESIGN.md "Dynamic prefixes").
-// A head found in source but not in this list is reported via note() — not a
-// failure, since it's not necessarily wrong, but it means this list has drifted
-// from the code and orphan accounting under that prefix is no longer reliable.
-// ---------------------------------------------------------------------------
+// The flat pre-split catalogue. Present only while the namespace migration is in
+// flight; keys still living here are addressed with bare (unqualified) literals.
+const LEGACY_NS = "legacy";
+const LEGACY_CATALOGUE_FILE = resolve(ROOT, "src/locales/en/common.json");
+
+// Static heads of live `` t(`prefix.${x}`) `` sites. An unlisted head is only a
+// note(), but orphan accounting under it is unreliable until the list catches up.
 const KNOWN_DYNAMIC_PREFIXES = [
   "device.healthCheck.steps.labels",
   "device.hue.channelMap.regions",
@@ -75,7 +75,7 @@ function readOrEmpty(path, label) {
   }
 }
 
-/** Flatten a nested JSON catalogue into dot-path leaf keys. */
+/** Flatten a nested catalogue object into dot-path leaf keys. */
 function flattenCatalogue(obj, prefix = "") {
   const out = [];
   for (const [key, value] of Object.entries(obj)) {
@@ -114,7 +114,10 @@ function stripComments(source) {
 
 // A key segment: letters, digits, `_`/`-` (covers SCREAMING_SNAKE_CASE status
 // codes and kebab-case section ids like "led-setup"), must start with a letter.
-const KEY_SHAPE = /^[A-Za-z][A-Za-z0-9_-]*(\.[A-Za-z][A-Za-z0-9_-]*)+$/;
+const SEGMENT = "[A-Za-z][A-Za-z0-9_-]*";
+const DOTTED_KEY = new RegExp(`^${SEGMENT}(\\.${SEGMENT})+$`);
+const QUALIFIED_KEY = new RegExp(`^(${SEGMENT}):(${SEGMENT}(\\.${SEGMENT})*)$`);
+const SINGLE_KEBAB_SEGMENT = /^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)+$/;
 
 /**
  * Extract candidate key-literal strings from a source file: every quoted or
@@ -146,35 +149,61 @@ function extractLiterals(source) {
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Catalogue: one flat key set per registered namespace
 // ---------------------------------------------------------------------------
 console.log("\ni18n Key Reference Verifier");
 console.log("============================");
 
-let enCatalogue;
-try {
-  enCatalogue = JSON.parse(readFileSync(EN_CATALOGUE_FILE, "utf-8"));
-  console.log(`\nCatalogue: ${EN_CATALOGUE_FILE}`);
-} catch (err) {
-  console.error(`\nFATAL: Cannot read/parse EN catalogue: ${EN_CATALOGUE_FILE}`);
-  console.error(err.message);
+if (!existsSync(NAMESPACE_REGISTRY_FILE)) {
+  console.error(`\nFATAL: namespace registry missing: ${NAMESPACE_REGISTRY_FILE}`);
   process.exit(1);
 }
 
-const catalogueKeys = flattenCatalogue(enCatalogue);
-const catalogueKeySet = new Set(catalogueKeys);
-const topLevelPrefixes = new Set(Object.keys(enCatalogue));
+const { I18N_NAMESPACES, I18N_DEFAULT_NS } = await import(
+  pathToFileURL(NAMESPACE_REGISTRY_FILE).href
+);
+
+async function loadNamespace(ns) {
+  if (ns === LEGACY_NS) {
+    return JSON.parse(readFileSync(LEGACY_CATALOGUE_FILE, "utf-8"));
+  }
+  const module = await import(pathToFileURL(resolve(LOCALES_DIR, "en", `${ns}.ts`)).href);
+  return module.default;
+}
+
+const catalogue = new Map();
+for (const ns of I18N_NAMESPACES) {
+  try {
+    catalogue.set(ns, flattenCatalogue(await loadNamespace(ns)));
+  } catch (err) {
+    console.error(`\nFATAL: cannot load namespace "${ns}": ${err.message}`);
+    process.exit(1);
+  }
+}
+
+/** `legacy` keys are addressed bare; every other namespace is addressed `ns:key`. */
+const qualify = (ns, key) => (ns === LEGACY_NS ? key : `${ns}:${key}`);
+
+const allKeys = [...catalogue].flatMap(([ns, keys]) => keys.map((key) => qualify(ns, key)));
+const allKeySet = new Set(allKeys);
+const legacyPrefixes = new Set(
+  (catalogue.get(LEGACY_NS) ?? []).map((key) => key.slice(0, key.indexOf("."))),
+);
+
+console.log(`\nNamespaces: ${I18N_NAMESPACES.length} (default "${I18N_DEFAULT_NS}")`);
+for (const [ns, keys] of catalogue) console.log(`  ${ns.padEnd(12)} ${keys.length}`);
+console.log(`Catalogue leaf keys: ${allKeys.length}`);
 
 // i18next plural forms: t("x.y") resolves to "x.y_one"/"x.y_other" at runtime
 // (zoneChannelCount is the one live case) — the base key never appears as a leaf.
 const PLURAL_SUFFIXES = ["_zero", "_one", "_two", "_few", "_many", "_other"];
-const pluralBaseKeys = new Set(
-  catalogueKeys
-    .filter((key) => PLURAL_SUFFIXES.some((suffix) => key.endsWith(suffix)))
-    .map((key) => key.replace(/_(zero|one|two|few|many|other)$/, ""))
-);
-
-console.log(`Catalogue leaf keys: ${catalogueKeys.length}`);
+const pluralBases = new Map();
+for (const key of allKeys) {
+  if (!PLURAL_SUFFIXES.some((suffix) => key.endsWith(suffix))) continue;
+  const base = key.replace(/_(zero|one|two|few|many|other)$/, "");
+  if (!pluralBases.has(base)) pluralBases.set(base, []);
+  pluralBases.get(base).push(key);
+}
 
 const sourceFiles = walkSourceFiles(SRC_DIR);
 console.log(`Source files scanned: ${sourceFiles.length}`);
@@ -183,6 +212,19 @@ const referenced = new Set();
 const missingCandidates = new Map(); // key literal -> first file:line seen
 const unhandledDynamicHeads = new Set();
 
+/** A literal is a key reference only if its namespace half is one we know about. */
+function classify(literal) {
+  const qualified = QUALIFIED_KEY.exec(literal);
+  if (qualified) {
+    if (!catalogue.has(qualified[1]) || qualified[1] === LEGACY_NS) return null;
+    // Tauri event names ("tray:lights-off", "hue:stream-status") share the ns:key
+    // shape. No catalogue key is a single kebab-case segment — asserted below.
+    return SINGLE_KEBAB_SEGMENT.test(qualified[2]) ? null : literal;
+  }
+  if (!DOTTED_KEY.test(literal)) return null;
+  return legacyPrefixes.has(literal.slice(0, literal.indexOf("."))) ? literal : null;
+}
+
 for (const file of sourceFiles) {
   const raw = readFileSync(file, "utf-8");
   const source = stripComments(raw);
@@ -190,32 +232,29 @@ for (const file of sourceFiles) {
   const { literals, templateHeads } = extractLiterals(source);
 
   for (const lit of literals) {
-    if (!KEY_SHAPE.test(lit)) continue;
-    const topSegment = lit.slice(0, lit.indexOf("."));
-    if (!topLevelPrefixes.has(topSegment)) continue;
+    const key = classify(lit);
+    if (key === null) continue;
 
-    if (catalogueKeySet.has(lit)) {
-      referenced.add(lit);
-    } else if (pluralBaseKeys.has(lit)) {
-      for (const suffix of PLURAL_SUFFIXES) referenced.add(lit + suffix);
-    } else if (!missingCandidates.has(lit)) {
+    if (allKeySet.has(key)) {
+      referenced.add(key);
+    } else if (pluralBases.has(key)) {
+      for (const form of pluralBases.get(key)) referenced.add(form);
+    } else if (!missingCandidates.has(key)) {
       const lineNo = raw.slice(0, raw.indexOf(lit)).split("\n").length;
-      missingCandidates.set(lit, `${relPath}:${lineNo}`);
+      missingCandidates.set(key, `${relPath}:${lineNo}`);
     }
   }
 
   for (const head of templateHeads) {
-    if (!KEY_SHAPE.test(head) && !/^[A-Za-z][A-Za-z0-9_-]*$/.test(head)) continue;
-    const topSegment = head.split(".")[0];
-    if (!topLevelPrefixes.has(topSegment)) continue;
+    const key = classify(head) ?? (QUALIFIED_KEY.test(head) ? head : null);
+    if (key === null) continue;
 
-    if (KNOWN_DYNAMIC_PREFIXES.includes(head)) {
-      const subtreePrefix = `${head}.`;
-      for (const key of catalogueKeys) {
-        if (key.startsWith(subtreePrefix)) referenced.add(key);
+    if (KNOWN_DYNAMIC_PREFIXES.includes(key)) {
+      for (const candidate of allKeys) {
+        if (candidate.startsWith(`${key}.`)) referenced.add(candidate);
       }
     } else {
-      unhandledDynamicHeads.add(`${head} (${relPath})`);
+      unhandledDynamicHeads.add(`${key} (${relPath})`);
     }
   }
 }
@@ -246,7 +285,7 @@ if (unhandledDynamicHeads.size > 0) {
 // Orphans (RATCHETED, not fatal)
 // ---------------------------------------------------------------------------
 console.log("\n[ Orphan catalogue keys (ratcheted) ]");
-const orphans = catalogueKeys.filter((key) => !referenced.has(key)).sort();
+const orphans = allKeys.filter((key) => !referenced.has(key)).sort();
 const orphanBaseline = new Set(
   readOrEmpty(ORPHAN_BASELINE_FILE, "orphan baseline")
     .split("\n")
@@ -271,20 +310,41 @@ for (const key of staleBaselineEntries) {
 }
 
 // ---------------------------------------------------------------------------
-// Registry integrity — no-op until the namespace split (D2) exists.
+// Registry integrity
 // ---------------------------------------------------------------------------
 console.log("\n[ Namespace registry integrity ]");
-if (existsSync(NAMESPACE_REGISTRY_FILE)) {
-  // D2 activates this: verify every registered namespace has matching EN/TR
-  // barrel exports and every ns:key reference resolves within its namespace.
-  // Not implemented here — D1 only detects the registry's arrival.
-  fail(
-    "namespaces.ts now exists but registry-integrity checking is not implemented "
-      + "— wire it up as part of D2 before merging the namespace split"
+
+const moduleNamespaces = (lang) =>
+  new Set(
+    readdirSync(resolve(LOCALES_DIR, lang))
+      .filter((name) => name.endsWith(".ts") && name !== "index.ts")
+      .map((name) => name.replace(/\.ts$/, ""))
   );
-} else {
-  note("skipped — flat common.json catalogue, no namespace registry yet (activates in D2)");
+
+const registered = new Set(I18N_NAMESPACES.filter((ns) => ns !== LEGACY_NS));
+for (const lang of ["en", "tr"]) {
+  const modules = moduleNamespaces(lang);
+  const unregistered = [...modules].filter((ns) => !registered.has(ns)).sort();
+  const unbacked = [...registered].filter((ns) => !modules.has(ns)).sort();
+  check(
+    unregistered.length === 0 && unbacked.length === 0,
+    `${lang} locale modules match the registry (${modules.size})`,
+    `${lang} locale drift — unregistered modules: [${unregistered}], registered without a module: [${unbacked}]`
+  );
 }
+
+check(
+  I18N_NAMESPACES.includes(I18N_DEFAULT_NS),
+  `default namespace "${I18N_DEFAULT_NS}" is registered`,
+  `default namespace "${I18N_DEFAULT_NS}" is not in I18N_NAMESPACES`
+);
+
+const kebabRootKeys = allKeys.filter((key) => SINGLE_KEBAB_SEGMENT.test(key.split(":").at(-1)));
+check(
+  kebabRootKeys.length === 0,
+  "no catalogue key is a bare kebab-case segment (keeps it distinguishable from a Tauri event name)",
+  `catalogue keys indistinguishable from Tauri event names: [${kebabRootKeys}] — rename or nest them`
+);
 
 // ---------------------------------------------------------------------------
 // Summary

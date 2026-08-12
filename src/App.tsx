@@ -932,8 +932,8 @@ function App() {
             void (async () => {
               try {
                 const result = await showNotification({
-                  title: t("trayHint.title"),
-                  body: t("trayHint.body"),
+                  title: t("tray:hint.title"),
+                  body: t("tray:hint.body"),
                   kind: "info",
                 });
                 if (result.status !== "shown") {
@@ -1165,12 +1165,12 @@ function App() {
 
         // Push localized tray labels to Rust
         void updateTrayLabels({
-          openSettings: i18next.t("tray.openSettings"),
-          lightsOff: i18next.t("tray.lightsOff"),
-          resumeLastMode: i18next.t("tray.resumeLastMode"),
-          solidColor: i18next.t("tray.solidColor"),
+          openSettings: i18next.t("tray:openSettings"),
+          lightsOff: i18next.t("tray:lightsOff"),
+          resumeLastMode: i18next.t("tray:resumeLastMode"),
+          solidColor: i18next.t("tray:solidColor"),
           showLedPreview: i18next.t("ledPreview.tray.show"),
-          quit: i18next.t("tray.quit"),
+          quit: i18next.t("tray:quit"),
         });
 
         // v1.6 — the LED preview surfaces are NEVER auto-opened on boot. They
@@ -1215,12 +1215,12 @@ function App() {
   useEffect(() => {
     const handler = () => {
       void updateTrayLabels({
-        openSettings: i18next.t("tray.openSettings"),
-        lightsOff: i18next.t("tray.lightsOff"),
-        resumeLastMode: i18next.t("tray.resumeLastMode"),
-        solidColor: i18next.t("tray.solidColor"),
+        openSettings: i18next.t("tray:openSettings"),
+        lightsOff: i18next.t("tray:lightsOff"),
+        resumeLastMode: i18next.t("tray:resumeLastMode"),
+        solidColor: i18next.t("tray:solidColor"),
         showLedPreview: i18next.t("ledPreview.tray.show"),
-        quit: i18next.t("tray.quit"),
+        quit: i18next.t("tray:quit"),
       });
     };
     i18next.on("languageChanged", handler);
