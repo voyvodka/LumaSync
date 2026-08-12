@@ -414,9 +414,8 @@ check(
 );
 
 console.log("\n[ Hue pairing response — Rust → hue.ts field parity ]");
-// credentialStorageBackend was dropped here once already: Rust emitted it, the
-// TS envelope never declared it, and the DTLS pre-shared key stayed in
-// plaintext on disk as a result. The pin is what makes that failure loud.
+// credentialStorageBackend was dropped here once already and the DTLS
+// pre-shared key stayed in plaintext as a result — docs/architecture/hue.md.
 const HUE_ONBOARDING_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/hue_onboarding.rs");
 const hueOnboardingRustSource = readOrEmpty(HUE_ONBOARDING_RUST_FILE, "rust hue_onboarding");
 const HUE_CREDENTIAL_STORE_RUST_FILE = resolve(
