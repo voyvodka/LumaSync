@@ -316,8 +316,24 @@ pub fn migrate_hue_credentials_to_keychain(
         return MigrationOutcome::Failed;
     }
 
-    info!("[hue-cred] credentials migrated to keychain");
-    MigrationOutcome::Migrated
+    // The caller deletes the plaintext copy on the strength of this outcome, so
+    // prove the pair is readable back before claiming it. Never delete first.
+    match resolve_hue_credentials(store, "", "") {
+        Some(resolved)
+            if resolved.username == username
+                && resolved.client_key == client_key
+                && resolved.backend == CredentialBackend::Keychain =>
+        {
+            info!("[hue-cred] credentials migrated to keychain");
+            MigrationOutcome::Migrated
+        }
+        _ => {
+            warn!("[hue-cred] migration read-back mismatch — rolling back, keeping plaintext");
+            let _ = store.delete(KEY_HUE_APP_KEY);
+            let _ = store.delete(KEY_HUE_CLIENT_KEY);
+            MigrationOutcome::Failed
+        }
+    }
 }
 
 /// Resolved Hue credentials returned by `resolve_hue_credentials`.
