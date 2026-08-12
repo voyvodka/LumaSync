@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enCommon from "@/locales/en/common";
+
+const common: Catalogue<typeof enCommon> = {
   title: "Genel",
   description: "Genel uygulama ayarları.",
   output: {
@@ -100,3 +103,5 @@ export default {
     },
   },
 };
+
+export default common;

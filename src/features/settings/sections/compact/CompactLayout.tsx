@@ -84,7 +84,7 @@ export function CompactLayout({
   onOpenDevices,
   onHueIntensityPresetChange,
 }: CompactLayoutProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   // v1.5 W2 fix #41 — Adalight brightness lock parity with full settings.
   // Hydrate the persisted firmware profile so the compact Solid card can
@@ -462,7 +462,7 @@ const POPOVER_FALLBACK_HEIGHT_PX = 270;
 const POPOVER_VIEWPORT_MARGIN_PX = 8;
 
 function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const hex = rgbToHex(rgb);
   const isLight = perceivedLuminance(rgb) > 0.62;
   const textColor = isLight ? "rgba(0,0,0,0.82)" : "rgba(255,255,255,0.92)";
@@ -703,7 +703,7 @@ function SelfContainedBrightnessRow({
   brightnessDisabledReason,
   onCommit,
 }: SelfContainedBrightnessRowProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [localPercent, setLocalPercent] = useState(initialPercent);
   const isDraggingRef = useRef(false);
 

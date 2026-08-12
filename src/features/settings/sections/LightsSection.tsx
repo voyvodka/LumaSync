@@ -138,7 +138,7 @@ export function LightsSection({
   onColorCorrectionChange,
   onFirmwareProfileChange,
 }: LightsSectionProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const lockState = getLightsModeLockState(modeLockReason);
   const modeSelectorDisabled = lockState.showReason || isModeTransitioning;
   const normalizedMode = normalizeLightingModeConfig(mode);

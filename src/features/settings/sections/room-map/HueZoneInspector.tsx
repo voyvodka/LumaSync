@@ -127,7 +127,7 @@ export function HueZoneInspector({
   roomWidthM,
   roomDepthM,
 }: HueZoneInspectorProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const borderHex = resolveDisplayHex(zone.borderColor, "#3b82f6");
 
   const setBorder = useCallback(

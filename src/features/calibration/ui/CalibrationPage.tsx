@@ -107,7 +107,7 @@ function anchorFromEdgeEndpoint(edge: AnchorEdge, endpoint: AnchorEndpoint): Led
 }
 
 export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: CalibrationPageProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
     buildInitialEditorState(initialConfig),
@@ -699,7 +699,7 @@ function EdgeSummary({ label, value }: { label: string; value: number }) {
 // mobile numeric keyboard without rendering the native spinner that
 // would visually conflict with our +/- column.
 function CountStepper({ label, value, onChange }: { label: string; value: number; onChange: (nextValue: number) => void }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<string>(String(value));
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -830,7 +830,7 @@ function DirectionButton({ direction, label, active, onClick }: { direction: Led
 // header + the "/ {max}" sibling so the user always sees the
 // available headroom while typing.
 function StandGapStepper({ value, max, onChange }: { value: number; max: number; onChange: (nextValue: number) => void }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<string>(String(value));
   const inputRef = useRef<HTMLInputElement | null>(null);
 

@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enPreview from "@/locales/en/preview";
+
+const preview: Catalogue<typeof enPreview> = {
   title: "LED önizleme",
   tray: {
     show: "LED Önizlemesini Göster",
@@ -55,3 +58,5 @@ export default {
     CONTROL_POPUP_FAILED: "Kontrol penceresi açılamadı.",
   },
 };
+
+export default preview;

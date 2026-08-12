@@ -36,7 +36,7 @@ export function RoomMapToolbar({
   onUndo = () => {},
   onRedo = () => {},
 }: RoomMapToolbarProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const deriveDisabled = !hasUsb || !hasTv;
 
   return (
@@ -103,7 +103,7 @@ export function RoomMapToolbar({
 }
 
 function ShortcutsHelpButton() {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);

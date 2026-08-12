@@ -1,10 +1,11 @@
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import type { HueCredentialStatus } from "@/shared/contracts/hue";
 import type { CommandStatus } from "./hueOnboardingApi";
 
 export interface HueStatusCardModel {
   variant: "success" | "error" | "info";
-  titleKey: string;
-  bodyKey: string;
+  titleKey: TranslationKey;
+  bodyKey: TranslationKey;
   details?: string;
 }
 

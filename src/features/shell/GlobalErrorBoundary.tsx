@@ -240,6 +240,6 @@ export class GlobalErrorBoundary extends Component<Props, State> {
  * raw class so the fallback card respects the user's language.
  */
 export function GlobalErrorBoundaryWithI18n({ children }: { children: ReactNode }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   return <GlobalErrorBoundary t={t}>{children}</GlobalErrorBoundary>;
 }

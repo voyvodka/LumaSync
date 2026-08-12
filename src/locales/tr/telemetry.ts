@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enTelemetry from "@/locales/en/telemetry";
+
+const telemetry: Catalogue<typeof enTelemetry> = {
   title: "Çalışma telemetrisi",
   description: "Capture/send hızını ve kuyruk baskısını neredeyse gerçek zamanlı izle.",
   metrics: {
@@ -31,3 +34,5 @@ export default {
     errorAgo: "{{code}} — {{minutes}} dk önce",
   },
 };
+
+export default telemetry;

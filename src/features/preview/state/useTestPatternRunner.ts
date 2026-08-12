@@ -21,14 +21,19 @@ import { startLedTestPattern, stopLedTestPattern } from "../previewApi";
  */
 export const TEST_PATTERN_REFRESH_MIN_INTERVAL_MS = 250;
 
+type LedTestErrorCode = Extract<
+  LedTestStatusCode,
+  "LED_TEST_PATTERN_NO_CALIBRATION" | "LED_TEST_PATTERN_INVALID_PARAMS" | "LED_TEST_PATTERN_RUNTIME_ERROR"
+>;
+
 /** Status codes that represent a genuine failure (PREVIEW_ONLY is a success). */
-const ERROR_CODES: ReadonlySet<string> = new Set<LedTestStatusCode>([
+const ERROR_CODES: ReadonlySet<string> = new Set<LedTestErrorCode>([
   LED_TEST_STATUS.PATTERN_NO_CALIBRATION,
   LED_TEST_STATUS.PATTERN_INVALID_PARAMS,
   LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
 ]);
 
-export function isTestPatternErrorCode(code: string): boolean {
+export function isTestPatternErrorCode(code: string): code is LedTestErrorCode {
   return ERROR_CODES.has(code);
 }
 

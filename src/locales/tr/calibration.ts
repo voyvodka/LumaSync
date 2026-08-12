@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enCalibration from "@/locales/en/calibration";
+
+const calibration: Catalogue<typeof enCalibration> = {
   section: {
     title: "Kalibrasyon",
     description: "İlk kurulum ve ileri düzenleme için aynı editörü kullan.",
@@ -135,3 +138,5 @@ export default {
     },
   },
 };
+
+export default calibration;

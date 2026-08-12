@@ -94,7 +94,7 @@ function fromHex(hex: string): { r: number; g: number; b: number } {
 }
 
 export function ControlPopupApp() {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const { mode, preview } = useLightingModeSync();
 
   const stampsRef = useRef<ModeStamps>({ targets: ["usb"] });
@@ -563,7 +563,7 @@ export function ControlPopupApp() {
           {!testActive
             ? t("preview:test.idle")
             : preview?.activePattern
-              ? `${t("preview:test.running")} · ${t(`ledPreview.pattern.${preview.activePattern.kind}`)}`
+              ? `${t("preview:test.running")} · ${t(`preview:pattern.${preview.activePattern.kind}`)}`
               : t("preview:test.running")}
         </span>
         <button

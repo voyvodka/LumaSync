@@ -74,7 +74,7 @@ const MOCK_AREA_GROUPS: MockAreaGroup[] = [
 ];
 
 export function HueAreaPreview() {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [overrides, setOverrides] = useState<Record<number, string>>({});
 

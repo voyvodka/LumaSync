@@ -1,3 +1,5 @@
+import type { TranslationKey } from "@/features/i18n/catalogue";
+
 import type { HealthCheckResult } from "./deviceConnectionApi";
 
 const HEALTH_STEP_ORDER = ["PORT_VISIBLE", "PORT_SUPPORTED", "CONNECT_AND_VERIFY"] as const;
@@ -14,8 +16,8 @@ export interface DeviceStatusHealthStepModel {
 export interface DeviceStatusCardModel {
   variant: "success" | "error" | "info";
   code: string;
-  titleKey: string;
-  bodyKey: string;
+  titleKey: TranslationKey;
+  bodyKey: TranslationKey;
   details?: string;
   healthSteps?: DeviceStatusHealthStepModel[];
 }

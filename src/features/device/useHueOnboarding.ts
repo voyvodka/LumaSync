@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import type { TranslationKey } from "@/features/i18n/catalogue";
+
 import {
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
@@ -88,7 +90,7 @@ export interface UseHueOnboardingResult {
   selectedBridgeId: string | null;
   selectedBridge: HueBridgeSummary | null;
   manualIp: string;
-  manualIpError: string | null;
+  manualIpError: TranslationKey | null;
   credentialState: HueCredentialStatus;
   /** True when the bridge is registered but cannot be reached (network error, not auth error). */
   bridgeUnreachable: boolean;
@@ -161,7 +163,7 @@ interface HueOnboardingState {
   bridges: HueBridgeSummary[];
   selectedBridgeId: string | null;
   manualIp: string;
-  manualIpError: string | null;
+  manualIpError: TranslationKey | null;
   credentialState: HueCredentialStatus;
   /** Sticky flag: set true only on network-level credential check failure, cleared on successful validation or bridge removal. */
   bridgeUnreachable: boolean;
@@ -215,7 +217,7 @@ function normalizeIpValue(value: string): string {
   return value.trim();
 }
 
-function resolveManualIpError(value: string): string | null {
+function resolveManualIpError(value: string): TranslationKey | null {
   const normalized = normalizeIpValue(value);
   if (normalized.length === 0) {
     return null;

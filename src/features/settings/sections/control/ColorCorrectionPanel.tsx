@@ -123,7 +123,7 @@ export function ColorCorrectionPanel({
   initialConfig,
   onConfigChange,
 }: ColorCorrectionPanelProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [config, setConfig] = useState<ColorCorrectionConfig>(
     initialConfig ?? DEFAULT_COLOR_CORRECTION,
   );

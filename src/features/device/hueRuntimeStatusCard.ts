@@ -3,21 +3,22 @@ import {
   type HueRuntimeActionHint,
   type HueRuntimeStatus,
 } from "@/shared/contracts/hue";
+import type { TranslationKey } from "@/features/i18n/catalogue";
 
 export interface HueRuntimeStatusCardRetry {
   remainingAttempts?: number;
   nextAttemptMs?: number;
-  labelKey: string;
+  labelKey: TranslationKey;
 }
 
 export interface HueRuntimeStatusCardModel {
   variant: "success" | "error" | "info";
-  titleKey: string;
-  bodyKey: string;
+  titleKey: TranslationKey;
+  bodyKey: TranslationKey;
   details?: string;
   actionHints: HueRuntimeActionHint[];
   retry?: HueRuntimeStatusCardRetry;
-  triggerSourceKey?: string;
+  triggerSourceKey?: TranslationKey;
 }
 
 export interface HueRuntimeStatusCardInput {
@@ -106,7 +107,9 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
   return {
     variant: resolveVariant(status),
     titleKey: `hue:runtime.states.${status.state}`,
-    bodyKey: `hue:runtime.codes.${status.code}`,
+    // `status.code` is `HueRuntimeStatusCode | string` — HUE-* fault-family codes (see
+    // deriveFamilyActionHints) are open strings by design, not enum members.
+    bodyKey: `hue:runtime.codes.${status.code}` as TranslationKey,
     details: status.details ?? undefined,
     actionHints: resolveActionHints(status),
     retry: hasRetry

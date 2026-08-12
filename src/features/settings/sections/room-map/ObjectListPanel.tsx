@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import type {
   HueZone,
@@ -57,7 +58,7 @@ const TYPE_COLORS: Record<ObjectEntry["type"], string> = {
 
 function buildObjectList(
   config: RoomMapConfig,
-  t: (key: string, opts?: Record<string, string>) => string,
+  t: TFunction,
 ): ObjectEntry[] {
   const entries: ObjectEntry[] = [];
 
@@ -119,7 +120,7 @@ function ObjectRow({
   /** v1.5 W1-A5 — when nested under a zone header, indent and shrink. */
   indented?: boolean;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const rowRef = useRef<HTMLLIElement>(null);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
@@ -225,7 +226,7 @@ function ZoneTab({
   onDeleteZone,
   onRenameZone,
 }: Pick<ObjectListPanelProps, "zones" | "activeZoneId" | "onSelectZone" | "onAddZone" | "onDeleteZone" | "onRenameZone">) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -323,7 +324,7 @@ function renderObjectsWithHueGrouping(
   onDelete: (id: string) => void,
   onRenameFurniture: (id: string, label: string) => void,
   onToggleLock: ((id: string) => void) | undefined,
-  t: (key: string, opts?: Record<string, string>) => string,
+  t: TFunction,
 ): React.ReactNode {
   const nonHue = objects.filter((o) => o.type !== "hue");
   const hueObjects = objects.filter((o) => o.type === "hue");
@@ -446,7 +447,7 @@ export function ObjectListPanel({
   addHueZoneDisabled = false,
   addHueZoneDisabledTooltip,
 }: ObjectListPanelProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<"objects" | "zones" | "hueZones">("objects");
   const objects = buildObjectList(config, t);
   const hueZoneEditingEnabled =

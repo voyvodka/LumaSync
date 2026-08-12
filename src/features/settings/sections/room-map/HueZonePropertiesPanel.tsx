@@ -65,7 +65,7 @@ function resolveDisplayHex(value: string | undefined, fallback: string): string 
 }
 
 export function HueZonePropertiesPanel({ zone, onUpdate }: HueZonePropertiesPanelProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   const borderHex = resolveDisplayHex(zone.borderColor, "#3b82f6");
 

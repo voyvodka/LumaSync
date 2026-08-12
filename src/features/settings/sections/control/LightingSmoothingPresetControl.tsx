@@ -52,7 +52,7 @@ export function LightingSmoothingPresetControl({
   initialPreset,
   onPresetChange,
 }: LightingSmoothingPresetControlProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [preset, setPreset] = useState<LightingSmoothingPreset>(
     initialPreset ?? DEFAULT_LIGHTING_SMOOTHING_PRESET,
   );

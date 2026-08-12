@@ -238,7 +238,7 @@ export function HsvColorPicker({
   hideHex = false,
   compact = false,
 }: HsvColorPickerProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const hexInputId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<SVGCircleElement>(null);

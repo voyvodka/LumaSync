@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enUpdater from "@/locales/en/updater";
+
+const updater: Catalogue<typeof enUpdater> = {
   available: {
     eyebrow: "Güncelleme hazır",
     title: "Yeni bir sürüm var",
@@ -42,3 +45,5 @@ export default {
   checkAction: "Güncellemeleri kontrol et",
   checking: "Kontrol ediliyor...",
 };
+
+export default updater;

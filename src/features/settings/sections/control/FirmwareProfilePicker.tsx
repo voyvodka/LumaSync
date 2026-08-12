@@ -46,6 +46,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import {
   FIRMWARE_PROFILE,
   type FirmwareProfile,
@@ -219,7 +220,7 @@ function OverrideWarningDialog({
   onConfirm,
   onCancel,
 }: OverrideWarningDialogProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const titleId = useId();
   const bodyId = useId();
   const [dontAskAgain, setDontAskAgain] = useState(false);
@@ -434,7 +435,7 @@ export function FirmwareProfilePicker({
   initialDontWarnFirmwareProfileMismatch,
   onProfileChange,
 }: FirmwareProfilePickerProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [profile, setProfile] = useState<FirmwareProfile>(
     initialProfile ?? DEFAULT_PROFILE,
   );
@@ -635,11 +636,11 @@ export function FirmwareProfilePicker({
           const mismatched = isMismatch(p);
           const disabled = tileDisabled(p);
           const isAdvertised = advertised === p;
-          const labelKey =
+          const labelKey: TranslationKey =
             p === FIRMWARE_PROFILE.LUMASYNC_V1
               ? "lights:led.firmwareProfile.lumasyncV1Label"
               : "lights:led.firmwareProfile.adalightLabel";
-          const descriptionKey =
+          const descriptionKey: TranslationKey =
             p === FIRMWARE_PROFILE.LUMASYNC_V1
               ? "lights:led.firmwareProfile.lumasyncV1Description"
               : "lights:led.firmwareProfile.adalightDescription";

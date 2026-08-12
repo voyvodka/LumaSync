@@ -32,7 +32,7 @@ export function ZoneListPanel({
   onDeleteZone,
   onRenameZone,
 }: ZoneListPanelProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 

@@ -22,7 +22,7 @@ function stateTint(state: string): string {
 }
 
 export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   return (
     <>

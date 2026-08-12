@@ -98,7 +98,7 @@ function edgeGradient(track: EdgeTrack, packed: readonly PackedLedColor[]): stri
 }
 
 export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [calibration, setCalibration] = useState<LedCalibrationConfig | null>(null);
   const frame = useLedPreviewFrame(displayId);
 

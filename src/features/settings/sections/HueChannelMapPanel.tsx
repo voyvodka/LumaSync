@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import type { HueAreaChannelInfo } from "@/features/device/hueOnboardingApi";
@@ -123,7 +124,7 @@ function ModePillToggle({
 }: {
   mode: EditorMode;
   onModeChange: (m: EditorMode) => void;
-  t: (key: string) => string;
+  t: TFunction;
 }) {
   return (
     <div className="lm-settings-seg" role="tablist">
@@ -160,7 +161,7 @@ function DragCoordinateTooltip({
 }: {
   x: number;
   y: number;
-  t: (key: string, opts?: Record<string, string>) => string;
+  t: TFunction;
 }) {
   return (
     <div
@@ -187,7 +188,7 @@ function ChannelDetailStrip({
   channelPlacements: HueChannelPlacement[];
   channels: HueAreaChannelInfo[];
   onZChange: (z: number) => void;
-  t: (key: string, opts?: Record<string, string>) => string;
+  t: TFunction;
 }) {
   if (selectedChannels.size === 0) return null;
 
@@ -313,8 +314,8 @@ export function HueChannelMapPanel({
     );
   }, [channels]);
 
-  const regionLabel = (region: string): string => {
-    const key = `hue:channelMap.regions.${region}`;
+  const regionLabel = (region: Region): string => {
+    const key = `hue:channelMap.regions.${region}` as const;
     const translated = t(key);
     return translated === key ? region : translated;
   };

@@ -60,7 +60,7 @@ export function LeftToolbar({
   onAddHue,
   onAddImage,
 }: LeftToolbarProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [furnitureOpen, setFurnitureOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLDivElement>(null);

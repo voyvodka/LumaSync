@@ -45,7 +45,7 @@ export function SolidColorPanel({
   brightnessDisabledReason,
   onCommit,
 }: SolidColorPanelProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const { draft, setColor, setBrightness } = useSolidColorDraft({ incoming, onCommit });
 
   const hexColor = toHexColor(draft);

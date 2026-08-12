@@ -195,7 +195,7 @@ export function TvAnchorInspector({
   onUpdate: (patch: Partial<TvAnchorPlacement>) => void;
   onToggleLock: () => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const locked = !!tv.locked;
   return (
     <>
@@ -250,7 +250,7 @@ export function FurnitureInspector({
   onToggleLock: () => void;
   onRename: (label: string) => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const locked = !!item.locked;
   const [labelDraft, setLabelDraft] = useState(item.label ?? t(`roomMap:furniture.type.${item.type}`));
   const [labelDirty, setLabelDirty] = useState(false);
@@ -393,7 +393,7 @@ export function UsbStripInspector({
   onToggleLock: () => void;
   onManage?: () => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const locked = !!strip.locked;
 
   return (
@@ -482,7 +482,7 @@ export function HueChannelInspector({
   onRename: (label: string) => void;
   onToggleLock: () => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const locked = !!channel.locked;
   const [labelDraft, setLabelDraft] = useState(
     channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
@@ -606,7 +606,7 @@ export function ImageLayerInspector({
   onToggleLock: () => void;
   onRename: (label: string) => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const locked = !!layer.locked;
   const [labelDraft, setLabelDraft] = useState(layer.label);
   const [labelDirty, setLabelDirty] = useState(false);

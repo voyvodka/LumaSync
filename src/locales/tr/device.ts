@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enDevice from "@/locales/en/device";
+
+const device: Catalogue<typeof enDevice> = {
   title: "Cihaz",
   description: "Serial portları tara, birini seç ve uygulamayı yeniden başlatmadan bağlan.",
   actions: {
@@ -222,3 +225,5 @@ export default {
     },
   },
 };
+
+export default device;

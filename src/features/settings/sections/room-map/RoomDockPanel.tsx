@@ -39,6 +39,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -183,7 +184,7 @@ function getZoneColor(zone: { borderColor?: string }, index: number): string {
 
 function buildObjectList(
   config: RoomMapConfig,
-  t: (key: string, opts?: Record<string, string>) => string,
+  t: TFunction,
 ): ObjectRowEntry[] {
   const rows: ObjectRowEntry[] = [];
   for (const layer of config.imageLayers) {
@@ -251,7 +252,7 @@ function ObjectRow({
   onRename?: (label: string) => void;
   onToggleLock: () => void;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
 
@@ -386,7 +387,7 @@ function ObjectsTab(props: {
     onRenameFurniture,
     onToggleLock,
   } = props;
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const rows = buildObjectList(config, t);
   if (rows.length === 0) {
     return <div className="lm-room-dock-empty">{t("roomMap:objectPanel.empty")}</div>;
@@ -571,7 +572,7 @@ function MovePopover({
   onClose: () => void;
   triggerRect: DOMRect | null;
 }) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
@@ -673,7 +674,7 @@ function HueZonesTab(props: {
     onAssignChannelToZone,
     onNavigateToDevices,
   } = props;
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -1161,7 +1162,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onUsbManage,
     hueChannelStatus = "unknown",
   } = props;
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   const hueZoneEditing =
     onSelectHueZone !== undefined &&

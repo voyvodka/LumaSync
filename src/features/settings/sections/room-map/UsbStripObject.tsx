@@ -36,7 +36,7 @@ export function UsbStripObject({
   onSelect,
   onChange,
 }: UsbStripObjectProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   const [localSX, setLocalSX] = useState(placement.startX);
   const [localSY, setLocalSY] = useState(placement.startY);

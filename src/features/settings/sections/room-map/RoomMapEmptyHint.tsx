@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 export function RoomMapEmptyHint() {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 pointer-events-none">

@@ -63,7 +63,7 @@ export function OnboardingFlow({
   onOpenCalibration,
   onComplete,
 }: OnboardingFlowProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
 
   // Persisted-flag short-circuit — flow does not render at all once the
   // user has finished or skipped onboarding. App.tsx already gates the

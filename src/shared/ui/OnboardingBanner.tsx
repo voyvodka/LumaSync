@@ -99,7 +99,7 @@ export function OnboardingBanner({
   ariaLabel,
   ariaLive = "polite",
 }: OnboardingBannerProps) {
-  const { t } = useTranslation("common");
+  const { t } = useTranslation();
   const showStepPill =
     typeof step === "number" && typeof totalSteps === "number" && totalSteps > 0;
 

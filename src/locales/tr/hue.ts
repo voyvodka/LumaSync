@@ -1,4 +1,7 @@
-export default {
+import type { Catalogue } from "@/features/i18n/catalogue";
+import type enHue from "@/locales/en/hue";
+
+const hue: Catalogue<typeof enHue> = {
   title: "Philips Hue",
   description: "Bridge keşfi, eşleştirme ve entertainment alanı kurulumu.",
   steps: {
@@ -224,8 +227,10 @@ export default {
       TRANSIENT_RETRY_SCHEDULED: "Geçici sorun algılandı. Otomatik deneme planlandı.",
       TRANSIENT_RETRY_EXHAUSTED: "Deneme bütçesi tükendi. Manuel yeniden bağlan gerekli.",
       AUTH_INVALID_CREDENTIALS: "Kimlik bilgileri geçersiz. Yeniden eşleştirme gerekli.",
+      AUTH_INVALID_RE_PAIR_REQUIRED: "Bridge isteği reddetti. Yeniden eşleştirme gerekli.",
       CONFIG_NOT_READY_GATE_BLOCKED: "Başlatma kapı kontrolden geçmedi; hazırlık stale veya eksik.",
       HUE_STOP_TIMEOUT_PARTIAL: "Durdurma zaman aşımına uğradı. Kısmi durdurma temizliği gerekli.",
+      HUE_START_NOOP_ALREADY_ACTIVE: "Hue yayını zaten çalışıyor.",
       undefined: "Durum kodu alınamadı. Son durum bilgisi bekleniyor.",
     },
     retry: {
@@ -375,3 +380,5 @@ export default {
     noLights: "Adreslenebilir Hue ışığı bulunamadı — eğlence alanını yeniden doğrulayın.",
   },
 };
+
+export default hue;
