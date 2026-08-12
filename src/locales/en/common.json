@@ -20,14 +20,6 @@
       "diagnostics": "Diagnostics"
     }
   },
-  "language": {
-    "title": "Language",
-    "description": "Choose the display language for the application.",
-    "options": {
-      "en": "English",
-      "tr": "Türkçe"
-    }
-  },
   "ui": {
     "colorPicker": {
       "rootAriaLabel": "Color picker",
@@ -395,12 +387,6 @@
       "tagline": "Screen-synced ambient lighting",
       "license": "MIT"
     }
-  },
-  "aboutLogs": {
-    "title": "About & Logs",
-    "version": "Version",
-    "logs": "Logs",
-    "logsDescription": "Application logs are stored locally for debugging."
   },
   "updater": {
     "available": {
@@ -1383,33 +1369,11 @@
       "overrideWarningDontAskAgain": "Don't ask me again"
     }
   },
-  "hueZone": {
-    "statusCode": {
-      "created": "Hue zone created.",
-      "updated": "Hue zone updated.",
-      "deleted": "Hue zone deleted.",
-      "notFound": "Hue zone not found.",
-      "channelOutOfBounds": "Channel position is outside the allowed range.",
-      "limitReached": "Bridge channel cap reached for this Hue entertainment area.",
-      "channelNotInArea": "Channel does not belong to this Hue zone’s entertainment area.",
-      "oversized": "Hue zone size is outside the allowed range."
-    }
-  },
   "hue": {
     "colorNotApplied": {
       "streamOffline": "Hue stream is offline — the colour is queued and will be sent when it reconnects.",
       "noLights": "No addressable Hue lights resolved — revalidate the entertainment area."
     }
-  },
-  "notifications": {
-    "permission": {
-      "denied": {
-        "title": "Notifications disabled",
-        "body": "Enable notifications in System Settings to see LumaSync alerts.",
-        "action": "Open Settings"
-      }
-    },
-    "unsupported": "This system does not support notifications."
   },
   "ledPreview": {
     "title": "LED preview",
