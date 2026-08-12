@@ -7,19 +7,8 @@
  * idempotent by design — once a state is at the latest schema version the
  * helper short-circuits and returns the input unchanged.
  *
- * v1.5 W4-F2 (post-direction-reversal) — the `1 → 2` step folds the
- * deprecated `RoomMapConfig.hueZones?: LegacyHueZone[]` array into the
- * unified `RoomMapConfig.zones: HueZone[]` array (Hue-only). The brief
- * W4-F unification (logical + Hue under a `zoneType` discriminator) was
- * rolled back; legacy `ZoneDefinition[]` records that may have leaked into
- * `state.roomMap.zones` on dev branches are DROPPED with a `console.warn` so
- * the operator can audit the loss. Dropping is safe only because the
- * unification never shipped — no released build ever persisted these.
- *
- * The pure helper `migrateLegacyHueZone` (in
- * `shared/contracts/roomMap.ts`) does the per-record Hue conversion and
- * returns `null` on corrupt inputs; this shim filters those nulls so the
- * migrated state never carries half-formed zones.
+ * `1 → 2` folds `hueZones` into `zones` and drops stray `ZoneDefinition`
+ * records (never shipped) — see docs/architecture/{hue,contracts-and-state}.md.
  *
  * v1.5 (post-W4-F2) `2 → 3` — the corner-anchored window geometry
  * (`windowX` / `windowY` / `windowWidth` / `windowHeight`) is replaced by

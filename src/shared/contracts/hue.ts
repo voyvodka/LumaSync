@@ -117,17 +117,6 @@ export const HUE_STATUS = {
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
   // -------------------------------------------------------------------------
-  // Hue zone authoring codes — live in `roomMap.ts > HUE_ZONE_STATUS_CODES`
-  // -------------------------------------------------------------------------
-  // The eight Hue zone authoring codes (`HUE_ZONE_CREATED`, `HUE_ZONE_UPDATED`,
-  // `HUE_ZONE_DELETED`, `HUE_ZONE_NOT_FOUND`, `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS`,
-  // `HUE_ZONE_LIMIT_REACHED`, `HUE_ZONE_CHANNEL_NOT_IN_AREA`,
-  // `HUE_ZONE_OVERSIZED`) are NOT inlined in `HUE_STATUS`. They live in
-  // `roomMap.ts > HUE_ZONE_STATUS_CODES` and are re-exported above as
-  // `HUE_ZONE_STATUS_CODES` for callers that prefer a single Hue import
-  // surface. (The brief W4-F generic `ZONE_*` rename was reverted in
-  // W4-F2 alongside the unification rollback.)
-  // -------------------------------------------------------------------------
   // OS keychain credential store (v1.5 W2-A1 / W2-A2)
   // -------------------------------------------------------------------------
   /**

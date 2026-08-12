@@ -10,11 +10,8 @@
 //!   frame-build time is `world = center + scale * zone_relative_position`.
 //!   The transform helper lives here so callers (`commands::hue::frame`)
 //!   can opt into zone awareness without re-deriving the math.
-//! - The previous "logical zone" concept (USB-side region grouping under
-//!   a shared `Zone` discriminator) was removed in v1.5 W4-F2. Future
-//!   zone kinds (`ScreenZone`, `LedZone`) will land as separate, explicit
-//!   prefix types in their own modules — they will NOT share a struct
-//!   shape with `HueZone`.
+//! - Zones are Hue-only — see docs/architecture/hue.md. Future zone kinds
+//!   (`ScreenZone`, `LedZone`) will be separate types with no shared shape.
 //!
 //! Persistence: the canonical zone list lives in `RoomMapConfig.zones`
 //! (`Vec<HueZone>`) on the frontend `shellStore`. These commands do not

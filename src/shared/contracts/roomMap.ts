@@ -12,14 +12,8 @@
  * y: -1=bottom, +1=top
  * z: -1=floor, +1=ceiling
  *
- * v1.5 W4-F2 (2026-04-28): the W4-F unification (`Zone` discriminated by
- * `zoneType: "logical" | "hue"`) is rolled forward into a single Hue-only
- * surface. "Logical zone" was dropped because it has no industry analog —
- * everyone models screen rectangles, spatial 3D positions, or sink-internal
- * addressing, never a name plus a channel-index list — and it confused users in
- * testing. `ScreenZone` and `LedZone` will land later as separately prefixed
- * types sharing no discriminator with `HueZone`; a bare `Zone` is ambiguous
- * across three industry namespaces.
+ * Zones are Hue-only (docs/architecture/hue.md). `ScreenZone` / `LedZone`
+ * will land later as separate types sharing no discriminator with `HueZone`.
  */
 
 // ---------------------------------------------------------------------------
