@@ -157,13 +157,13 @@ export class GlobalErrorBoundary extends Component<Props, State> {
 
     const { t } = this.props;
     const copy = {
-      title: t ? t("shell.errorBoundary.title") : FALLBACK_COPY.title,
-      body: t ? t("shell.errorBoundary.body") : FALLBACK_COPY.body,
-      restart: t ? t("shell.errorBoundary.restart") : FALLBACK_COPY.restart,
-      showLogs: t ? t("shell.errorBoundary.showLogs") : FALLBACK_COPY.showLogs,
-      copyError: t ? t("shell.errorBoundary.copyError") : FALLBACK_COPY.copyError,
-      showDetails: t ? t("shell.errorBoundary.showDetails") : FALLBACK_COPY.showDetails,
-      hideDetails: t ? t("shell.errorBoundary.hideDetails") : FALLBACK_COPY.hideDetails,
+      title: t ? t("shell:errorBoundary.title") : FALLBACK_COPY.title,
+      body: t ? t("shell:errorBoundary.body") : FALLBACK_COPY.body,
+      restart: t ? t("shell:errorBoundary.restart") : FALLBACK_COPY.restart,
+      showLogs: t ? t("shell:errorBoundary.showLogs") : FALLBACK_COPY.showLogs,
+      copyError: t ? t("shell:errorBoundary.copyError") : FALLBACK_COPY.copyError,
+      showDetails: t ? t("shell:errorBoundary.showDetails") : FALLBACK_COPY.showDetails,
+      hideDetails: t ? t("shell:errorBoundary.hideDetails") : FALLBACK_COPY.hideDetails,
     };
 
     const { error, errorInfo, showDetails } = this.state;

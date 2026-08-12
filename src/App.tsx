@@ -2117,7 +2117,7 @@ function App() {
       state: isConnected ? "OK" : "OFF",
       kind: isConnected ? "ok" : "off",
       onReconnect: isConnected ? undefined : openDevicesSection,
-      reconnectAriaLabel: t("statusBar.reconnect.usbAriaLabel"),
+      reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
     },
     {
       label: "HUE",
@@ -2137,7 +2137,7 @@ function App() {
             : "off",
       onReconnect:
         hueStreaming || hueReachable ? undefined : openDevicesSection,
-      reconnectAriaLabel: t("statusBar.reconnect.hueAriaLabel"),
+      reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
     },
   ];
   const statusBarHeight = statusBarHeightPx(currentMode);

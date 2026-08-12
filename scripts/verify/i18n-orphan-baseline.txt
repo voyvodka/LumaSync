@@ -255,12 +255,12 @@ settings.tabs.diagnostics
 settings.tabs.system
 settings.title
 settingsPage.groups.telemetry.title
-shell.fpsHud.latencyUnit
+shell:fpsHud.latencyUnit
+shell:statusBar.reconnect.tooltip
 startupTray.alwaysOn
 startupTray.minimizeOnClose
 startupTray.title
 startupTray.trayInfo
-statusBar.reconnect.tooltip
 telemetry.hue.errorAgo
 telemetry.hue.noError
 telemetry.hue.packetRateFormat
