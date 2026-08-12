@@ -1,8 +1,7 @@
-/**
- * `get_runtime_telemetry` contracts. Rust handoff:
- * `src-tauri/src/commands/runtime_telemetry.rs` — field parity is verified.
- */
+// `get_runtime_telemetry` contracts. Rust handoff:
+// `src-tauri/src/commands/runtime_telemetry.rs` — field parity is verified.
 
+/** How close the capture-to-output queue is to falling behind. */
 export const TELEMETRY_QUEUE_HEALTH = {
   HEALTHY: "healthy",
   WARNING: "warning",

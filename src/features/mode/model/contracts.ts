@@ -71,6 +71,7 @@ export interface EdgeSignalPayload {
   displayId?: DisplayId;
 }
 
+/** Union of the kinds in {@link LIGHTING_MODE_KIND}. */
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
 
 /** RGB + brightness payload driving Solid mode. */

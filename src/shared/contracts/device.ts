@@ -1,7 +1,6 @@
-/**
- * Device connection contracts for frontend <-> backend command bridge.
- */
+// Device connection contracts for frontend <-> backend command bridge.
 
+/** Tauri command ids for serial device connection, calibration, and health checks. */
 export const DEVICE_COMMANDS = {
   LIST_PORTS: "list_serial_ports",
   CONNECT_PORT: "connect_serial_port",

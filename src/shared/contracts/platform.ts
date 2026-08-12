@@ -6,6 +6,7 @@
 // Platform commands
 // ---------------------------------------------------------------------------
 
+/** Tauri command ids for the platform surface (notifications today). */
 export const PLATFORM_COMMANDS = {
   /**
    * Request permission to show OS notifications. On macOS this triggers
