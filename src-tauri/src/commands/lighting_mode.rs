@@ -754,38 +754,9 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     if let Some(worker) = owner.worker.take() {
         worker.stop();
     }
-    // v1.5 — DO NOT close the cached serial port handle here.
-    //
-    // Calling `disconnect_session` drops the open `Box<dyn Write>` for
-    // this port; the very next packet write reopens it via
-    // `serialport::new(...).open()`, which on CH340 / Arduino Nano /
-    // most USB-CDC adapters toggles DTR — and that toggles the
-    // Arduino's RESET line. The bootloader then runs for ~1-2 s and
-    // swallows whatever LumaSync packet was supposed to land on the
-    // strip, so the WS2812 buffer ends up at the post-reset zeroed
-    // state and the strip looks "off".
-    //
-    // This is exactly the asymmetry the user reported on real hardware
-    // (v1.5 hardware repro #47): Ambilight runs through a single open
-    // (the worker holds the handle for its lifetime) so it's immune,
-    // but Solid mode disconnects on every transition and re-opens on
-    // the very next frame, resetting the MCU before its packet ever
-    // reaches FastLED.
-    //
-    // Keeping the cached handle alive is safe across mode transitions:
-    //  - The same port will be reused by the next Solid / Ambilight
-    //    invocation; cache-hit avoids the DTR pulse.
-    //  - If the device is unplugged, the next `write_all` errors and
-    //    `SerialLedPacketSender::send` already drops the handle on
-    //    failure (`sessions.remove(port_name)` on `result.is_err()`).
-    //  - If the user picks a different port, the old handle stays in
-    //    the cache as an inert FD until the process exits — acceptable
-    //    leak (one fd per ever-used port), priced against the
-    //    user-facing "Solid is dark" bug.
-    //
-    // Net behaviour: stop_previous is now a pure runtime-state
-    // teardown (workers + live atomics + active_port slot). The serial
-    // session lives on the LedOutputBridge across mode changes.
+    // Do NOT close the cached serial port handle here — reopening the port
+    // toggles DTR and resets the MCU before the packet lands. See
+    // docs/architecture/device-output.md (DTR reset).
     let cleared_port = owner.active_port.take();
     let total_ms = t0.elapsed().as_millis();
     info!(

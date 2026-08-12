@@ -383,12 +383,9 @@ impl LedOutputError {
 
 pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
-    /// Drop the cached writer for `port_name`. Kept on the trait so the
-    /// bridge surface is symmetrical and future explicit "disconnect
-    /// device" callers (or tests asserting cache eviction semantics)
-    /// can reach the primitive without a second trait split. Production
-    /// hot paths intentionally do NOT call this — see the long-form
-    /// note in `SerialSink::stop` for the DTR-reset rationale.
+    /// Drop the cached writer for `port_name`. Kept for future explicit
+    /// "disconnect device" callers; production hot paths do NOT call this —
+    /// see docs/architecture/device-output.md (DTR reset).
     #[allow(dead_code)]
     fn disconnect_session(&self, port_name: &str);
 }
@@ -961,34 +958,8 @@ impl super::led_sink::LedSink for SerialSink {
     }
 
     fn stop(&mut self) -> Result<(), String> {
-        // v1.5 — Intentionally NOT calling `disconnect_session` here.
-        //
-        // The previous behaviour closed the cached serial port handle
-        // when the ambilight worker thread exited, which forced the
-        // very next Solid (or follow-up Ambilight) packet to reopen
-        // the port. Reopening a USB-CDC adapter (CH340 / FT232 /
-        // Arduino Nano) toggles DTR, which toggles the MCU's RESET
-        // line on standard Arduino-class boards. The bootloader then
-        // swallows ~1-2 s of inbound serial — including the next
-        // LumaSync packet — and the strip ends up frozen at the
-        // post-boot zeroed buffer state.
-        //
-        // Behaviour matrix after removing the disconnect:
-        //  - Ambilight worker shutdown (mode change, app shutdown):
-        //    handle stays in the bridge cache. Next mode that uses
-        //    the same port reuses it, no DTR pulse, no MCU reset.
-        //  - Device unplugged mid-session: the next write fails;
-        //    `SerialLedPacketSender::send` already drops the dead
-        //    handle on `result.is_err()`. Recovery on replug is
-        //    automatic via the lazy `sessions.contains_key` check.
-        //  - Different port selected: the old handle remains as an
-        //    inert FD until process exit. One fd per ever-used port
-        //    is a vastly better trade than the visible "Solid mode
-        //    looks broken" symptom we shipped without this fix.
-        //
-        // The `bridge` and `port_name` fields are kept on the struct
-        // so future explicit-cleanup callers (e.g. user clicking
-        // "Disconnect device") can reach them without re-plumbing.
+        // Do NOT call `disconnect_session` here — reopening the port toggles
+        // DTR and resets the MCU. See docs/architecture/device-output.md (DTR reset).
         let _ = self.port_name.as_deref();
         Ok(())
     }

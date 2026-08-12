@@ -55,15 +55,9 @@ const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(2_000);
 /// during Run Health Check.
 const BOOTLOADER_SETTLE_DELAY_MS: u64 = 2_000;
 
-/// Supported USB serial adapter VID:PID allowlist.
-///
-/// Two-stage gate: all ports are enumerated with `isSupported: bool` so the
-/// UI can show unsupported devices; connect is blocked with `PORT_UNSUPPORTED`
-/// for entries not in this list.
-///
-/// v1.5 G5 additions: PL2303 (Prolific), CH341 (WinChipHead), CP2104 (Silicon
-/// Labs), FT232H (FTDI Hi-Speed). Same array-addition pattern as the original
-/// 5-entry list; no other changes required.
+/// Supported USB serial adapter VID:PID allowlist — read this constant,
+/// never hardcode elsewhere. See docs/architecture/device-output.md for why
+/// an unrecognized port is refused rather than opened.
 const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
     // --- original v1.x entries ---
     (0x1A86, 0x7523), // CH340 (WinChipHead)
