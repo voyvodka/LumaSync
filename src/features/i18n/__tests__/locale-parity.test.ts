@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import enCommon from "@/locales/en/common.json";
-import trCommon from "@/locales/tr/common.json";
+import { en, tr } from "@/locales";
+
+import { I18N_NAMESPACES } from "../namespaces";
 
 function flattenKeys(node: unknown, prefix = ""): string[] {
   if (node === null || typeof node !== "object" || Array.isArray(node)) {
@@ -47,8 +48,14 @@ function assertLocaleKeyParity(enLocale: unknown, trLocale: unknown) {
 }
 
 describe("locale key parity", () => {
-  it("keeps EN and TR locale key trees in parity", () => {
-    expect(() => assertLocaleKeyParity(enCommon, trCommon)).not.toThrow();
+  // Driven off the registry so a namespace added later is covered without edits.
+  it.each(I18N_NAMESPACES)("keeps EN and TR in parity for the %s namespace", (namespace) => {
+    expect(() => assertLocaleKeyParity(en[namespace], tr[namespace])).not.toThrow();
+  });
+
+  it("exposes every registered namespace in both locale barrels", () => {
+    expect(Object.keys(en).sort()).toEqual([...I18N_NAMESPACES].sort());
+    expect(Object.keys(tr).sort()).toEqual([...I18N_NAMESPACES].sort());
   });
 
   it("reports missing keys in both directions when trees drift", () => {

@@ -12,9 +12,8 @@ export const I18N_NAMESPACES = [
   "telemetry",
   "tray",
   "updater",
-  "legacy",
 ] as const;
 
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number];
 
-export const I18N_DEFAULT_NS: I18nNamespace = "legacy";
+export const I18N_DEFAULT_NS: I18nNamespace = "common";

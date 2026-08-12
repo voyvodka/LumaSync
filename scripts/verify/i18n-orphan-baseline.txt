@@ -1,4 +1,4 @@
-# Catalogue keys (src/locales/{en,tr}/common.json) referenced nowhere in src/**.
+# Catalogue keys (ns:key, from src/locales/{en,tr}/<ns>.ts) referenced nowhere in src/**.
 #
 # Ratchet: this file may only SHRINK. A key here that gains a reference is fine
 # (prune the line); a new orphan not listed here fails the verifier. Seeded after

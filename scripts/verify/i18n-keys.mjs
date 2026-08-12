@@ -15,11 +15,6 @@ const LOCALES_DIR = resolve(ROOT, "src/locales");
 const ORPHAN_BASELINE_FILE = resolve(__dirname, "i18n-orphan-baseline.txt");
 const NAMESPACE_REGISTRY_FILE = resolve(ROOT, "src/features/i18n/namespaces.ts");
 
-// The flat pre-split catalogue. Present only while the namespace migration is in
-// flight; keys still living here are addressed with bare (unqualified) literals.
-const LEGACY_NS = "legacy";
-const LEGACY_CATALOGUE_FILE = resolve(ROOT, "src/locales/en/common.json");
-
 // Static heads of live `` t(`prefix.${x}`) `` sites. An unlisted head is only a
 // note(), but orphan accounting under it is unreliable until the list catches up.
 const KNOWN_DYNAMIC_PREFIXES = [
@@ -115,7 +110,6 @@ function stripComments(source) {
 // A key segment: letters, digits, `_`/`-` (covers SCREAMING_SNAKE_CASE status
 // codes and kebab-case section ids like "led-setup"), must start with a letter.
 const SEGMENT = "[A-Za-z][A-Za-z0-9_-]*";
-const DOTTED_KEY = new RegExp(`^${SEGMENT}(\\.${SEGMENT})+$`);
 const QUALIFIED_KEY = new RegExp(`^(${SEGMENT}):(${SEGMENT}(\\.${SEGMENT})*)$`);
 const SINGLE_KEBAB_SEGMENT = /^[A-Za-z][A-Za-z0-9_]*(-[A-Za-z0-9_]+)+$/;
 
@@ -163,32 +157,19 @@ const { I18N_NAMESPACES, I18N_DEFAULT_NS } = await import(
   pathToFileURL(NAMESPACE_REGISTRY_FILE).href
 );
 
-async function loadNamespace(ns) {
-  if (ns === LEGACY_NS) {
-    return JSON.parse(readFileSync(LEGACY_CATALOGUE_FILE, "utf-8"));
-  }
-  const module = await import(pathToFileURL(resolve(LOCALES_DIR, "en", `${ns}.ts`)).href);
-  return module.default;
-}
-
 const catalogue = new Map();
 for (const ns of I18N_NAMESPACES) {
   try {
-    catalogue.set(ns, flattenCatalogue(await loadNamespace(ns)));
+    const module = await import(pathToFileURL(resolve(LOCALES_DIR, "en", `${ns}.ts`)).href);
+    catalogue.set(ns, flattenCatalogue(module.default));
   } catch (err) {
     console.error(`\nFATAL: cannot load namespace "${ns}": ${err.message}`);
     process.exit(1);
   }
 }
 
-/** `legacy` keys are addressed bare; every other namespace is addressed `ns:key`. */
-const qualify = (ns, key) => (ns === LEGACY_NS ? key : `${ns}:${key}`);
-
-const allKeys = [...catalogue].flatMap(([ns, keys]) => keys.map((key) => qualify(ns, key)));
+const allKeys = [...catalogue].flatMap(([ns, keys]) => keys.map((key) => `${ns}:${key}`));
 const allKeySet = new Set(allKeys);
-const legacyPrefixes = new Set(
-  (catalogue.get(LEGACY_NS) ?? []).map((key) => key.slice(0, key.indexOf("."))),
-);
 
 console.log(`\nNamespaces: ${I18N_NAMESPACES.length} (default "${I18N_DEFAULT_NS}")`);
 for (const [ns, keys] of catalogue) console.log(`  ${ns.padEnd(12)} ${keys.length}`);
@@ -212,17 +193,13 @@ const referenced = new Set();
 const missingCandidates = new Map(); // key literal -> first file:line seen
 const unhandledDynamicHeads = new Set();
 
-/** A literal is a key reference only if its namespace half is one we know about. */
+/** A literal is a key reference only if its namespace half is a registered one. */
 function classify(literal) {
   const qualified = QUALIFIED_KEY.exec(literal);
-  if (qualified) {
-    if (!catalogue.has(qualified[1]) || qualified[1] === LEGACY_NS) return null;
-    // Tauri event names ("tray:lights-off", "hue:stream-status") share the ns:key
-    // shape. No catalogue key is a single kebab-case segment — asserted below.
-    return SINGLE_KEBAB_SEGMENT.test(qualified[2]) ? null : literal;
-  }
-  if (!DOTTED_KEY.test(literal)) return null;
-  return legacyPrefixes.has(literal.slice(0, literal.indexOf("."))) ? literal : null;
+  if (qualified === null || !catalogue.has(qualified[1])) return null;
+  // Tauri event names ("tray:lights-off", "hue:stream-status") share the ns:key
+  // shape. No catalogue key is a single kebab-case segment — asserted below.
+  return SINGLE_KEBAB_SEGMENT.test(qualified[2]) ? null : literal;
 }
 
 for (const file of sourceFiles) {
@@ -246,7 +223,7 @@ for (const file of sourceFiles) {
   }
 
   for (const head of templateHeads) {
-    const key = classify(head) ?? (QUALIFIED_KEY.test(head) ? head : null);
+    const key = classify(head);
     if (key === null) continue;
 
     if (KNOWN_DYNAMIC_PREFIXES.includes(key)) {
@@ -321,7 +298,7 @@ const moduleNamespaces = (lang) =>
       .map((name) => name.replace(/\.ts$/, ""))
   );
 
-const registered = new Set(I18N_NAMESPACES.filter((ns) => ns !== LEGACY_NS));
+const registered = new Set(I18N_NAMESPACES);
 for (const lang of ["en", "tr"]) {
   const modules = moduleNamespaces(lang);
   const unregistered = [...modules].filter((ns) => !registered.has(ns)).sort();

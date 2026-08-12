@@ -15,9 +15,7 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
 
-import enLegacy from "@/locales/en/common.json";
 import { en, tr } from "@/locales";
-import trLegacy from "@/locales/tr/common.json";
 
 import { I18N_DEFAULT_NS, I18N_NAMESPACES } from "./namespaces";
 
@@ -49,10 +47,7 @@ export async function initI18n(language: string = I18N_DEFAULT_LANGUAGE): Promis
     lng: language,
     fallbackLng: I18N_DEFAULT_LANGUAGE,
 
-    resources: {
-      en: { ...en, legacy: enLegacy },
-      tr: { ...tr, legacy: trLegacy },
-    },
+    resources: { en, tr },
 
     defaultNS: I18N_DEFAULT_NS,
     ns: [...I18N_NAMESPACES],
