@@ -87,7 +87,6 @@ type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box
     + Send
     + Sync;
 
-/// The three top-level lighting states `set_lighting_mode` can select.
 #[derive(Clone, Default, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "lowercase")]
 pub enum LightingModeKind {
@@ -97,7 +96,6 @@ pub enum LightingModeKind {
     Solid,
 }
 
-/// Fixed RGB colour + brightness for `LightingModeKind::Solid`.
 #[derive(Clone, Deserialize, Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SolidColorPayload {

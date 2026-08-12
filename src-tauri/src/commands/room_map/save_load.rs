@@ -13,7 +13,6 @@ use tauri_plugin_fs::FsExt;
 use crate::commands::hue_onboarding::CommandStatus;
 use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
 
-/// Response from `save_room_map`.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveRoomMapResponse {

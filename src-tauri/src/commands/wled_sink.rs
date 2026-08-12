@@ -31,7 +31,6 @@ pub enum WledProtocol {
     Warls,
 }
 
-/// `LedSink` implementation that streams frames to a WLED device over DDP or WARLS.
 pub struct WledUdpSink {
     ip: std::net::Ipv4Addr,
     port: u16,
@@ -121,7 +120,6 @@ pub struct WledSinkConfig {
 }
 
 impl WledSinkConfig {
-    /// Build a fresh `WledUdpSink` from this snapshot.
     pub fn build(&self) -> WledUdpSink {
         WledUdpSink::new(self.ip, self.port, self.led_count, self.protocol)
     }
@@ -201,7 +199,6 @@ impl LedSink for CorrectedWledSink {
     }
 }
 
-/// Encode one frame as a DDP packet: 10-byte header plus raw RGB payload.
 pub fn encode_ddp_packet(colors: &[[u8; 3]], sequence: &AtomicU8) -> Vec<u8> {
     let seq = sequence.fetch_add(1, Ordering::Relaxed);
     let payload_len = colors.len() * 3;

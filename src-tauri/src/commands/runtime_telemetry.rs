@@ -165,7 +165,6 @@ pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTele
     })
 }
 
-/// Clone the current snapshot out of the shared lock.
 pub fn read_runtime_telemetry(
     snapshot: &SharedRuntimeTelemetry,
 ) -> Result<RuntimeTelemetrySnapshot, String> {
@@ -188,8 +187,6 @@ pub fn write_runtime_telemetry(
     Ok(())
 }
 
-/// Return the latest USB frame-rate window plus a Hue health snapshot, for
-/// the frontend's telemetry/diagnostics display.
 #[tauri::command]
 pub fn get_runtime_telemetry(
     telemetry_state: State<'_, RuntimeTelemetryState>,
@@ -218,7 +215,6 @@ pub struct RuntimeTelemetryWindow {
 }
 
 impl RuntimeTelemetryWindow {
-    /// Start a fresh counting window anchored at `started_at`.
     pub fn new(started_at: Instant) -> Self {
         Self {
             started_at,
@@ -238,17 +234,14 @@ impl RuntimeTelemetryWindow {
         self.link_constrained = link_constrained;
     }
 
-    /// Count one captured frame toward this window's `capture_fps`.
     pub fn record_capture(&mut self) {
         self.capture_count = self.capture_count.saturating_add(1);
     }
 
-    /// Count one frame actually sent to the sink toward this window's `send_fps`.
     pub fn record_send(&mut self) {
         self.send_count = self.send_count.saturating_add(1);
     }
 
-    /// Count one `RuntimeFrameSlot` overwrite, feeding `queue_health`.
     pub fn record_slot_overwrite(&mut self) {
         self.slot_overwrite_count = self.slot_overwrite_count.saturating_add(1);
     }

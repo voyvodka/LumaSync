@@ -206,7 +206,6 @@ pub struct CloseLedTwinOverlayPayload {
     pub display_id: Option<String>,
 }
 
-/// Coded result returned by the twin-overlay open/close commands.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TwinOverlayResult {
@@ -217,7 +216,6 @@ pub struct TwinOverlayResult {
     pub reason: Option<String>,
 }
 
-/// Coded result returned by the control-popup open/show/hide commands.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ControlPopupResult {

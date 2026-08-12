@@ -49,7 +49,6 @@ pub struct DisplayInfoPayload {
     pub is_primary: bool,
 }
 
-/// Per-edge LED counts mirrored into the calibration overlay's preview payload.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayPreviewCountsPayload {
@@ -59,8 +58,6 @@ pub struct OverlayPreviewCountsPayload {
     pub left: u16,
 }
 
-/// One LED's (segment, local index) position within the calibration
-/// overlay's preview sequence.
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayPreviewSequenceItemPayload {
@@ -81,7 +78,6 @@ pub struct OverlayPreviewPayload {
     pub frame_ms: Option<u16>,
 }
 
-/// Tracks which display and window label currently own the calibration overlay.
 #[derive(Default)]
 pub struct OverlayRuntimeState {
     pub active_display_id: Option<String>,
@@ -94,7 +90,6 @@ pub struct OverlayState {
     pub runtime: std::sync::Mutex<OverlayRuntimeState>,
 }
 
-/// Coded result returned by the display-overlay open/close/preview-sync commands.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DisplayOverlayCommandResult {
@@ -488,7 +483,6 @@ pub fn open_display_overlay<R: Runtime>(
     Ok(result)
 }
 
-/// Close the active calibration overlay window, if any.
 #[tauri::command]
 pub fn close_display_overlay<R: Runtime>(
     app: AppHandle<R>,
@@ -704,7 +698,6 @@ pub fn start_calibration_test_pattern(
     })
 }
 
-/// Stop the active calibration test pattern.
 #[tauri::command]
 pub fn stop_calibration_test_pattern(
     connection_state: tauri::State<'_, SerialConnectionState>,

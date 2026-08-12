@@ -30,7 +30,6 @@ use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Request payload for `discover_wled_devices`: the IP to probe.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDiscoveryRequest {
@@ -75,7 +74,6 @@ pub struct WledConnectRequest {
     pub protocol: Option<String>,
 }
 
-/// Response from `connect_wled_sink`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledConnectResponse {
