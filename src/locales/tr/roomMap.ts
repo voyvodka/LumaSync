@@ -56,22 +56,16 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     defaultLabel: "Kanal {{index}}",
   },
   zones: {
-    panelTitle: "Bölgeler",
     deriveButton: "Zone Türet",
     confirmDeriveButton: "Onayla",
     cancelDeriveButton: "Önizlemeyi İptal Et",
     addZoneButton: "+ Zone",
     namePlaceholder: "Zone adı",
-    defaultName: "Zone {{N}}",
-    deleteAriaLabel: "{{name}} zone'unu sil",
     deriveDisabledTooltip: "Önce haritaya bir USB şerit ve TV ekleyin",
-    emptyPanel: "Tanımlı zone yok. Oluşturmak için + Zone'a basın.",
     deriveSuccess: "Zone'lar türetildi — inceleyin ve onaylayın",
     errNoTvAnchor: "Zone türetmeden önce haritaya bir TV ekleyin.",
     errNoUsbStrip: "Zone türetmeden önce haritaya bir USB şerit ekleyin.",
     calibrationApplyNote: "Zone sayıları uygulandı. Kalıcı yapmak için Kalibrasyonda Kaydedin.",
-    lightCount: "{{N}} ışık",
-    lightCountOne: "1 ışık",
   },
   hueZones: {
     title: "Hue Bölgeleri",
@@ -104,7 +98,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
   },
   zoneProperties: {
-    title: "Bölge özellikleri",
     color: "Renk",
     borderColor: "Kenar",
     centerColor: "Merkez",
@@ -112,7 +105,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   },
   objectPanel: {
     objectsTab: "Nesneler",
-    zonesTab: "Zone'lar",
     hueZonesTab: "Hue Bölgeleri",
     empty: "Henüz nesne eklenmedi.",
     tvLabel: "TV",
