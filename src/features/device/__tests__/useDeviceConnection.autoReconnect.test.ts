@@ -18,7 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createConnectionEventBus, type ConnectionEvent } from "../connectionEvents";
 import type { SerialConnectionStatus, SerialPortListResponse } from "../deviceConnectionApi";
-import { createDeviceConnectionController } from "../useDeviceConnection";
+import { createDeviceConnectionController } from "../state/deviceConnectionController";
 
 // ---------------------------------------------------------------------------
 // Helpers shared across scenarios

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
-import { createDeviceConnectionController } from "../useDeviceConnection";
+import { createDeviceConnectionController } from "../state/deviceConnectionController";
 
 function listResponse(ports: SerialPortListResponse["ports"]): SerialPortListResponse {
   return {

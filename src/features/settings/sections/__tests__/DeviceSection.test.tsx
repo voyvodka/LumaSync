@@ -56,7 +56,6 @@ vi.mock("./control/LedChipTypePicker", () => ({
 function defaultDeviceConnectionState() {
   return {
     status: "idle",
-    groupedPorts: { supported: [], other: [] },
     ports: [],
     selectedPort: null,
     connectedPort: null,
@@ -72,7 +71,6 @@ function defaultDeviceConnectionState() {
     selectPort: vi.fn(),
     connectSelectedPort: vi.fn(),
     runHealthCheck: vi.fn(),
-    connectButtonLabel: "connect",
   };
 }
 
@@ -318,10 +316,6 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
       ...defaultDeviceConnectionState(),
       // One discovered port so the "Add strip" button is enabled.
       ports: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
-      groupedPorts: {
-        supported: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
-        other: [],
-      },
     });
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });

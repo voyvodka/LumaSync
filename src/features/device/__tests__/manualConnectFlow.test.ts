@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { SerialPortListResponse } from "../deviceConnectionApi";
-import { createDeviceConnectionController } from "../useDeviceConnection";
+import { createDeviceConnectionController } from "../state/deviceConnectionController";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
