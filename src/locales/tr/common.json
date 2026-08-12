@@ -20,14 +20,6 @@
       "diagnostics": "Tanılama"
     }
   },
-  "language": {
-    "title": "Dil",
-    "description": "Uygulamanın görüntüleme dilini seçin.",
-    "options": {
-      "en": "English",
-      "tr": "Türkçe"
-    }
-  },
   "ui": {
     "colorPicker": {
       "rootAriaLabel": "Renk seçici",
@@ -395,12 +387,6 @@
     "trayInfo": "Uygulama kapatıldığında sistem tepsisinde çalışmaya devam eder.",
     "minimizeOnClose": "Kapatınca tepsiye küçült",
     "alwaysOn": "Her zaman açık"
-  },
-  "aboutLogs": {
-    "title": "Hakkında & Günlükler",
-    "version": "Sürüm",
-    "logs": "Günlükler",
-    "logsDescription": "Uygulama günlükleri hata ayıklama için yerel olarak saklanır."
   },
   "updater": {
     "available": {
@@ -1383,33 +1369,11 @@
       "overrideWarningDontAskAgain": "Bir daha sorma"
     }
   },
-  "hueZone": {
-    "statusCode": {
-      "created": "Hue bölgesi oluşturuldu.",
-      "updated": "Hue bölgesi güncellendi.",
-      "deleted": "Hue bölgesi silindi.",
-      "notFound": "Hue bölgesi bulunamadı.",
-      "channelOutOfBounds": "Kanal pozisyonu izinli aralığın dışında.",
-      "limitReached": "Bridge bu Hue eğlence alanı için kanal sınırına ulaşıldı.",
-      "channelNotInArea": "Kanal bu Hue bölgesinin eğlence alanına ait değil.",
-      "oversized": "Hue bölge boyutu izinli aralığın dışında."
-    }
-  },
   "hue": {
     "colorNotApplied": {
       "streamOffline": "Hue akışı kapalı — renk kuyruğa alındı, bağlantı geri geldiğinde gönderilecek.",
       "noLights": "Adreslenebilir Hue ışığı bulunamadı — eğlence alanını yeniden doğrulayın."
     }
-  },
-  "notifications": {
-    "permission": {
-      "denied": {
-        "title": "Bildirimler devre dışı",
-        "body": "LumaSync uyarılarını görmek için Sistem Ayarları'ndan bildirimleri etkinleştirin.",
-        "action": "Ayarları Aç"
-      }
-    },
-    "unsupported": "Bu sistem bildirimleri desteklemiyor."
   },
   "ledPreview": {
     "title": "LED önizleme",
