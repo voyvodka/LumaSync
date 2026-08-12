@@ -138,13 +138,13 @@ export function RoomMapSettingsPopover({
       ref={popoverRef}
       className="absolute top-10 left-0 z-50 w-[280px] rounded-lg border border-[var(--lm-line)] bg-[var(--lm-panel)]/95 shadow-lg p-4"
       role="dialog"
-      aria-label={t("roomMap.toolbar.settingsAriaLabel")}
+      aria-label={t("roomMap:toolbar.settingsAriaLabel")}
     >
       <div className="flex flex-col gap-3">
         {/* Room Width */}
         <div>
           <label className={labelClass}>
-            {t("roomMap.settings.roomWidth")}
+            {t("roomMap:settings.roomWidth")}
           </label>
           <NumericField
             value={dimensions.widthMeters}
@@ -159,7 +159,7 @@ export function RoomMapSettingsPopover({
         {/* Room Depth */}
         <div>
           <label className={labelClass}>
-            {t("roomMap.settings.roomDepth")}
+            {t("roomMap:settings.roomDepth")}
           </label>
           <NumericField
             value={dimensions.depthMeters}
@@ -180,13 +180,13 @@ export function RoomMapSettingsPopover({
               onChange={() => onGridToggle(!showGrid)}
               className="rounded accent-[var(--lm-ink)]"
             />
-            {t("roomMap.settings.showGrid")}
+            {t("roomMap:settings.showGrid")}
           </label>
           {/* Grid stroke width slider */}
           {showGrid && (
             <div className="mt-2">
               <label className={labelClass}>
-                {t("roomMap.settings.gridStrokeWidth")}: {gridStrokeWidth.toFixed(1)}px
+                {t("roomMap:settings.gridStrokeWidth")}: {gridStrokeWidth.toFixed(1)}px
               </label>
               <input
                 type="range"
@@ -216,10 +216,10 @@ export function RoomMapSettingsPopover({
               onChange={() => onHueZonesToggle(!showHueZones)}
               className="rounded accent-[var(--lm-ink)]"
             />
-            {t("roomMap.settings.showHueZones")}
+            {t("roomMap:settings.showHueZones")}
           </label>
           <p className="mt-1 text-[10.5px] leading-snug text-[var(--lm-ink-faint)]">
-            {t("roomMap.settings.showHueZonesHint")}
+            {t("roomMap:settings.showHueZonesHint")}
           </p>
         </div>
 
@@ -237,8 +237,8 @@ export function RoomMapSettingsPopover({
             onClick={handleResetClick}
           >
             {resetConfirming
-              ? t("roomMap.settings.resetMapConfirm")
-              : t("roomMap.settings.resetMap")}
+              ? t("roomMap:settings.resetMapConfirm")
+              : t("roomMap:settings.resetMap")}
           </button>
         </div>
       </div>

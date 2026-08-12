@@ -200,13 +200,13 @@ export function TvAnchorInspector({
   return (
     <>
       <Header
-        typeLabel={t("roomMap.inspector.typeTv")}
-        name={t("roomMap.objectPanel.tvLabel")}
+        typeLabel={t("roomMap:inspector.typeTv")}
+        name={t("roomMap:objectPanel.tvLabel")}
         dotColor={TYPE_DOT_COLOR.tv}
       />
       <InspectorNumberField
         id="tv-w"
-        label={t("roomMap.inspector.widthLabel")}
+        label={t("roomMap:inspector.widthLabel")}
         value={tv.width}
         step={0.05}
         min={0.05}
@@ -216,7 +216,7 @@ export function TvAnchorInspector({
       />
       <InspectorNumberField
         id="tv-h"
-        label={t("roomMap.inspector.heightLabel")}
+        label={t("roomMap:inspector.heightLabel")}
         value={tv.height}
         step={0.05}
         min={0.02}
@@ -230,9 +230,9 @@ export function TvAnchorInspector({
         onClick={onToggleLock}
         aria-pressed={locked}
       >
-        {locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+        {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
       </button>
-      <p className="lm-room-dock-field-hint">{t("roomMap.inspector.tvHint")}</p>
+      <p className="lm-room-dock-field-hint">{t("roomMap:inspector.tvHint")}</p>
     </>
   );
 }
@@ -252,14 +252,14 @@ export function FurnitureInspector({
 }) {
   const { t } = useTranslation("common");
   const locked = !!item.locked;
-  const [labelDraft, setLabelDraft] = useState(item.label ?? t(`roomMap.furniture.type.${item.type}`));
+  const [labelDraft, setLabelDraft] = useState(item.label ?? t(`roomMap:furniture.type.${item.type}`));
   const [labelDirty, setLabelDirty] = useState(false);
 
   const commitLabel = () => {
     setLabelDirty(false);
     const trimmed = labelDraft.trim();
     if (!trimmed) {
-      setLabelDraft(item.label ?? t(`roomMap.furniture.type.${item.type}`));
+      setLabelDraft(item.label ?? t(`roomMap:furniture.type.${item.type}`));
       return;
     }
     if (trimmed !== item.label) onRename(trimmed);
@@ -267,20 +267,20 @@ export function FurnitureInspector({
 
   // Sync external rename while not editing.
   if (!labelDirty) {
-    const external = item.label ?? t(`roomMap.furniture.type.${item.type}`);
+    const external = item.label ?? t(`roomMap:furniture.type.${item.type}`);
     if (external !== labelDraft) setLabelDraft(external);
   }
 
   return (
     <>
       <Header
-        typeLabel={t("roomMap.inspector.typeFurniture")}
-        name={item.label ?? t(`roomMap.furniture.type.${item.type}`)}
+        typeLabel={t("roomMap:inspector.typeFurniture")}
+        name={item.label ?? t(`roomMap:furniture.type.${item.type}`)}
         dotColor={TYPE_DOT_COLOR.furniture}
       />
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`furn-name-${item.id}`}>
-          {t("roomMap.inspector.furnitureNameLabel")}
+          {t("roomMap:inspector.furnitureNameLabel")}
         </label>
         <input
           id={`furn-name-${item.id}`}
@@ -299,7 +299,7 @@ export function FurnitureInspector({
               e.preventDefault();
               commitLabel();
             } else if (e.key === "Escape") {
-              setLabelDraft(item.label ?? t(`roomMap.furniture.type.${item.type}`));
+              setLabelDraft(item.label ?? t(`roomMap:furniture.type.${item.type}`));
               setLabelDirty(false);
             }
           }}
@@ -308,7 +308,7 @@ export function FurnitureInspector({
 
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`furn-type-${item.id}`}>
-          {t("roomMap.inspector.furnitureTypeLabel")}
+          {t("roomMap:inspector.furnitureTypeLabel")}
         </label>
         <select
           id={`furn-type-${item.id}`}
@@ -319,7 +319,7 @@ export function FurnitureInspector({
         >
           {FURNITURE_TYPES.map((tp) => (
             <option key={tp} value={tp}>
-              {t(`roomMap.furniture.type.${tp}`)}
+              {t(`roomMap:furniture.type.${tp}`)}
             </option>
           ))}
         </select>
@@ -327,7 +327,7 @@ export function FurnitureInspector({
 
       <InspectorNumberField
         id={`furn-w-${item.id}`}
-        label={t("roomMap.inspector.widthLabel")}
+        label={t("roomMap:inspector.widthLabel")}
         value={item.width}
         step={0.05}
         min={0.1}
@@ -337,7 +337,7 @@ export function FurnitureInspector({
       />
       <InspectorNumberField
         id={`furn-h-${item.id}`}
-        label={t("roomMap.inspector.heightLabel")}
+        label={t("roomMap:inspector.heightLabel")}
         value={item.height}
         step={0.05}
         min={0.1}
@@ -347,7 +347,7 @@ export function FurnitureInspector({
       />
       <InspectorNumberField
         id={`furn-r-${item.id}`}
-        label={t("roomMap.inspector.furnitureRotationLabel")}
+        label={t("roomMap:inspector.furnitureRotationLabel")}
         value={item.rotation ?? 0}
         step={1}
         min={0}
@@ -363,7 +363,7 @@ export function FurnitureInspector({
         onClick={onToggleLock}
         aria-pressed={locked}
       >
-        {locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+        {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
       </button>
     </>
   );
@@ -399,15 +399,15 @@ export function UsbStripInspector({
   return (
     <>
       <Header
-        typeLabel={t("roomMap.inspector.typeUsb")}
-        name={t("roomMap.objectPanel.ledLabel", { count: String(strip.ledCount) })}
+        typeLabel={t("roomMap:inspector.typeUsb")}
+        name={t("roomMap:objectPanel.ledLabel", { count: String(strip.ledCount) })}
         dotColor={TYPE_DOT_COLOR.usb}
       />
 
       {/* Linked port + live status badge */}
       <div className="lm-room-dock-field">
         <span className="lm-room-dock-field-label">
-          {t("roomMap.inspector.usbPortLabel")}
+          {t("roomMap:inspector.usbPortLabel")}
         </span>
         <span
           className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${connectionStatus}`}
@@ -417,17 +417,17 @@ export function UsbStripInspector({
           <span className="lm-room-dock-conn-chip-dot" aria-hidden />
           <span className="lm-room-dock-conn-chip-tx">
             {connectionStatus === "connected"
-              ? (connectedPort ?? t("roomMap.inspector.usbConnectedFallback"))
+              ? (connectedPort ?? t("roomMap:inspector.usbConnectedFallback"))
               : connectionStatus === "disconnected"
-                ? t("roomMap.inspector.usbConnectionDisconnected")
-                : t("roomMap.inspector.usbConnectionUnknown")}
+                ? t("roomMap:inspector.usbConnectionDisconnected")
+                : t("roomMap:inspector.usbConnectionUnknown")}
           </span>
         </span>
       </div>
 
       <InspectorNumberField
         id={`usb-leds-${strip.stripId}`}
-        label={t("roomMap.inspector.usbLedCountLabel")}
+        label={t("roomMap:inspector.usbLedCountLabel")}
         value={strip.ledCount}
         step={1}
         min={1}
@@ -443,7 +443,7 @@ export function UsbStripInspector({
           onClick={onToggleLock}
           aria-pressed={locked}
         >
-          {locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+          {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
         </button>
         {onManage ? (
           <button
@@ -451,12 +451,12 @@ export function UsbStripInspector({
             className="lm-room-dock-inspect-action"
             onClick={onManage}
           >
-            {t("roomMap.inspector.usbManage")}
+            {t("roomMap:inspector.usbManage")}
           </button>
         ) : null}
       </div>
 
-      <p className="lm-room-dock-field-hint">{t("roomMap.inspector.usbHint")}</p>
+      <p className="lm-room-dock-field-hint">{t("roomMap:inspector.usbHint")}</p>
     </>
   );
 }
@@ -485,13 +485,13 @@ export function HueChannelInspector({
   const { t } = useTranslation("common");
   const locked = !!channel.locked;
   const [labelDraft, setLabelDraft] = useState(
-    channel.label ?? t("roomMap.hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
+    channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
   );
   const [labelDirty, setLabelDirty] = useState(false);
 
   if (!labelDirty) {
     const external =
-      channel.label ?? t("roomMap.hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) });
+      channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) });
     if (external !== labelDraft) setLabelDraft(external);
   }
 
@@ -500,7 +500,7 @@ export function HueChannelInspector({
     const trimmed = labelDraft.trim();
     if (!trimmed) {
       setLabelDraft(
-        channel.label ?? t("roomMap.hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
+        channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
       );
       return;
     }
@@ -510,16 +510,16 @@ export function HueChannelInspector({
   return (
     <>
       <Header
-        typeLabel={t("roomMap.inspector.typeHue")}
+        typeLabel={t("roomMap:inspector.typeHue")}
         name={
           channel.label ??
-          t("roomMap.hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) })
+          t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) })
         }
         dotColor={TYPE_DOT_COLOR.hue}
       />
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`hue-label-${channel.channelIndex}`}>
-          {t("roomMap.inspector.furnitureNameLabel")}
+          {t("roomMap:inspector.furnitureNameLabel")}
         </label>
         <input
           id={`hue-label-${channel.channelIndex}`}
@@ -540,7 +540,7 @@ export function HueChannelInspector({
             } else if (e.key === "Escape") {
               setLabelDraft(
                 channel.label ??
-                  t("roomMap.hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
+                  t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
               );
               setLabelDirty(false);
             }
@@ -550,7 +550,7 @@ export function HueChannelInspector({
       {bridgeStatus !== "unknown" ? (
         <div className="lm-room-dock-field">
           <span className="lm-room-dock-field-label">
-            {t("roomMap.inspector.hueBridgeLabel")}
+            {t("roomMap:inspector.hueBridgeLabel")}
           </span>
           <span
             className={`lm-room-dock-conn-chip lm-room-dock-conn-chip--${bridgeStatus}`}
@@ -560,24 +560,24 @@ export function HueChannelInspector({
             <span className="lm-room-dock-conn-chip-dot" aria-hidden />
             <span className="lm-room-dock-conn-chip-tx">
               {bridgeStatus === "connected"
-                ? t("roomMap.inspector.hueBridgeConnected")
-                : t("roomMap.inspector.hueBridgeDisconnected")}
+                ? t("roomMap:inspector.hueBridgeConnected")
+                : t("roomMap:inspector.hueBridgeDisconnected")}
             </span>
           </span>
         </div>
       ) : null}
       <div className="lm-room-dock-field">
         <span className="lm-room-dock-field-label">
-          {t("roomMap.inspector.hueChannelIndexLabel")}
+          {t("roomMap:inspector.hueChannelIndexLabel")}
         </span>
         <span className="lm-room-dock-field-value">{channel.channelIndex + 1}</span>
       </div>
       <div className="lm-room-dock-field">
         <span className="lm-room-dock-field-label">
-          {t("roomMap.inspector.hueZoneLabel")}
+          {t("roomMap:inspector.hueZoneLabel")}
         </span>
         <span className="lm-room-dock-field-value">
-          {zoneName ?? t("roomMap.hueZones.unassignedTitle")}
+          {zoneName ?? t("roomMap:hueZones.unassignedTitle")}
         </span>
       </div>
       <button
@@ -586,9 +586,9 @@ export function HueChannelInspector({
         onClick={onToggleLock}
         aria-pressed={locked}
       >
-        {locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+        {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
       </button>
-      <p className="lm-room-dock-field-hint">{t("roomMap.inspector.hueChannelHint")}</p>
+      <p className="lm-room-dock-field-hint">{t("roomMap:inspector.hueChannelHint")}</p>
     </>
   );
 }
@@ -628,13 +628,13 @@ export function ImageLayerInspector({
   return (
     <>
       <Header
-        typeLabel={t("roomMap.inspector.typeImage")}
+        typeLabel={t("roomMap:inspector.typeImage")}
         name={layer.label}
         dotColor={TYPE_DOT_COLOR.image}
       />
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`img-name-${layer.id}`}>
-          {t("roomMap.inspector.furnitureNameLabel")}
+          {t("roomMap:inspector.furnitureNameLabel")}
         </label>
         <input
           id={`img-name-${layer.id}`}
@@ -661,7 +661,7 @@ export function ImageLayerInspector({
       </div>
       <div className="lm-room-dock-field">
         <label className="lm-room-dock-field-label" htmlFor={`img-opacity-${layer.id}`}>
-          {t("roomMap.inspector.imageOpacityLabel")}
+          {t("roomMap:inspector.imageOpacityLabel")}
         </label>
         <input
           id={`img-opacity-${layer.id}`}
@@ -673,7 +673,7 @@ export function ImageLayerInspector({
           disabled={locked}
           onChange={(e) => onUpdate({ opacity: parseInt(e.target.value, 10) })}
           className="lm-room-dock-slider"
-          aria-label={t("roomMap.inspector.imageOpacityLabel")}
+          aria-label={t("roomMap:inspector.imageOpacityLabel")}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={opacity}
@@ -686,9 +686,9 @@ export function ImageLayerInspector({
         onClick={onToggleLock}
         aria-pressed={locked}
       >
-        {locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+        {locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
       </button>
-      <p className="lm-room-dock-field-hint">{t("roomMap.inspector.imageHint")}</p>
+      <p className="lm-room-dock-field-hint">{t("roomMap:inspector.imageHint")}</p>
     </>
   );
 }

@@ -26,16 +26,16 @@ import type { HueZone } from "@/shared/contracts/roomMap";
 // vars get interpolated identically to a real i18n run. Anything not
 // listed here returns the bare key (fine for non-visual labels).
 const FIXTURE_LOCALES: Record<string, string> = {
-  "roomMap.inspector.zoneSize": "Size",
-  "roomMap.inspector.zoneEdgeShort": "Edge",
-  "roomMap.inspector.zoneEdgeAriaLabel": "Zone edge length in metres",
-  "roomMap.inspector.zoneHexShort": "Hex",
-  "roomMap.inspector.zoneHexAriaLabel": "Zone color hex value",
-  "roomMap.inspector.zoneSizeHint":
+  "roomMap:inspector.zoneSize": "Size",
+  "roomMap:inspector.zoneEdgeShort": "Edge",
+  "roomMap:inspector.zoneEdgeAriaLabel": "Zone edge length in metres",
+  "roomMap:inspector.zoneHexShort": "Hex",
+  "roomMap:inspector.zoneHexAriaLabel": "Zone color hex value",
+  "roomMap:inspector.zoneSizeHint":
     "Zone is a 1:1 square; max equals the shorter room side.",
-  "roomMap.inspector.typeHueZone": "Hue zone",
-  "roomMap.zoneProperties.color": "Color",
-  "roomMap.zoneProperties.swatchAriaLabel": "Use {{name}} swatch",
+  "roomMap:inspector.typeHueZone": "Hue zone",
+  "roomMap:zoneProperties.color": "Color",
+  "roomMap:zoneProperties.swatchAriaLabel": "Use {{name}} swatch",
 };
 
 vi.mock("react-i18next", () => ({

@@ -397,7 +397,7 @@ export function HueChannelOverlay({
             />
             <span>{activeHueZone.name}</span>
             <span className="lm-room-zone-chip-tip">
-              {t("roomMap.hueZones.activeChipTip")}
+              {t("roomMap:hueZones.activeChipTip")}
             </span>
           </div>
           <div
@@ -421,8 +421,8 @@ export function HueChannelOverlay({
           <div
             role="button"
             tabIndex={0}
-            aria-label={t("roomMap.hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
-            title={t("roomMap.hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
+            aria-label={t("roomMap:hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
+            title={t("roomMap:hueZones.centerMarkerAriaLabel", { name: activeHueZone.name })}
             className="absolute flex h-3 w-3 cursor-grab items-center justify-center rounded-full ring-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
             style={{
               left: zoneBoundsBox.centerLeftPx,
@@ -599,7 +599,7 @@ export function HueChannelOverlay({
 
         const dotLabel =
           ch.label ??
-          t("roomMap.hueChannel.defaultLabel", { index: String(ch.channelIndex + 1) });
+          t("roomMap:hueChannel.defaultLabel", { index: String(ch.channelIndex + 1) });
 
         return (
           <div

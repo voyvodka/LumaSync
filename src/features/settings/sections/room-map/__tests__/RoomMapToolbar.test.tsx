@@ -25,14 +25,14 @@ const BASE_PROPS = {
 describe("RoomMapToolbar", () => {
   it("undo button is disabled when canUndo is false", () => {
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={false} canRedo={false} />);
-    const undoBtn = screen.getByRole("button", { name: "roomMap.toolbar.undo" });
+    const undoBtn = screen.getByRole("button", { name: "roomMap:toolbar.undo" });
     expect(undoBtn).toHaveAttribute("aria-disabled", "true");
   });
 
   it("undo button is enabled when canUndo is true", () => {
     const onUndo = vi.fn();
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={true} onUndo={onUndo} />);
-    const undoBtn = screen.getByRole("button", { name: "roomMap.toolbar.undo" });
+    const undoBtn = screen.getByRole("button", { name: "roomMap:toolbar.undo" });
     expect(undoBtn).toHaveAttribute("aria-disabled", "false");
     fireEvent.click(undoBtn);
     expect(onUndo).toHaveBeenCalledTimes(1);
@@ -40,13 +40,13 @@ describe("RoomMapToolbar", () => {
 
   it("redo button is disabled when canRedo is false", () => {
     render(<RoomMapToolbar {...BASE_PROPS} canUndo={false} canRedo={false} />);
-    const redoBtn = screen.getByRole("button", { name: "roomMap.toolbar.redo" });
+    const redoBtn = screen.getByRole("button", { name: "roomMap:toolbar.redo" });
     expect(redoBtn).toHaveAttribute("aria-disabled", "true");
   });
 
   it("derive zones button is disabled when neither TV nor USB is present", () => {
     render(<RoomMapToolbar {...BASE_PROPS} hasTv={false} hasUsb={false} />);
-    const deriveBtn = screen.getByRole("button", { name: "roomMap.zones.deriveButton" });
+    const deriveBtn = screen.getByRole("button", { name: "roomMap:zones.deriveButton" });
     expect(deriveBtn).toHaveAttribute("aria-disabled", "true");
   });
 
@@ -60,7 +60,7 @@ describe("RoomMapToolbar", () => {
         onDeriveZones={onDeriveZones}
       />,
     );
-    const deriveBtn = screen.getByRole("button", { name: "roomMap.zones.deriveButton" });
+    const deriveBtn = screen.getByRole("button", { name: "roomMap:zones.deriveButton" });
     expect(deriveBtn).not.toBeDisabled();
     fireEvent.click(deriveBtn);
     expect(onDeriveZones).toHaveBeenCalledTimes(1);
@@ -72,7 +72,7 @@ describe("RoomMapToolbar", () => {
       <RoomMapToolbar settingsOpen={false} onToggleSettings={onToggle} />,
     );
     const settingsBtn = screen.getByRole("button", {
-      name: "roomMap.toolbar.settingsAriaLabel",
+      name: "roomMap:toolbar.settingsAriaLabel",
     });
     expect(settingsBtn).toHaveAttribute("aria-pressed", "false");
 

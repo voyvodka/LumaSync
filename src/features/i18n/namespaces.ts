@@ -4,6 +4,7 @@ export const I18N_NAMESPACES = [
   "common",
   "lights",
   "preview",
+  "roomMap",
   "settings",
   "shell",
   "telemetry",

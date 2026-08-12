@@ -198,7 +198,7 @@ function buildObjectList(
     rows.push({
       id: "tv",
       type: "tv",
-      label: t("roomMap.objectPanel.tvLabel"),
+      label: t("roomMap:objectPanel.tvLabel"),
       locked: config.tvAnchor.locked,
     });
   }
@@ -206,7 +206,7 @@ function buildObjectList(
     rows.push({
       id: `furniture-${f.id}`,
       type: "furniture",
-      label: f.label ?? t(`roomMap.furniture.type.${f.type}`),
+      label: f.label ?? t(`roomMap:furniture.type.${f.type}`),
       locked: f.locked,
     });
   }
@@ -214,7 +214,7 @@ function buildObjectList(
     rows.push({
       id: `usb-${s.stripId}`,
       type: "usb",
-      label: t("roomMap.objectPanel.ledLabel", { count: String(s.ledCount) }),
+      label: t("roomMap:objectPanel.ledLabel", { count: String(s.ledCount) }),
       locked: s.locked,
     });
   }
@@ -222,7 +222,7 @@ function buildObjectList(
     rows.push({
       id: `hue-${ch.channelIndex}`,
       type: "hue",
-      label: ch.label ?? t("roomMap.objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
+      label: ch.label ?? t("roomMap:objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
       locked: ch.locked,
       zoneId: ch.zoneId,
     });
@@ -316,8 +316,8 @@ function ObjectRow({
       <button
         type="button"
         className="lm-room-dock-row-action"
-        aria-label={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
-        title={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+        aria-label={entry.locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
+        title={entry.locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
         onClick={(e) => {
           e.stopPropagation();
           onToggleLock();
@@ -336,7 +336,7 @@ function ObjectRow({
         <button
           type="button"
           className="lm-room-dock-row-action is-danger"
-          aria-label={t("roomMap.objectPanel.delete")}
+          aria-label={t("roomMap:objectPanel.delete")}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
@@ -389,7 +389,7 @@ function ObjectsTab(props: {
   const { t } = useTranslation("common");
   const rows = buildObjectList(config, t);
   if (rows.length === 0) {
-    return <div className="lm-room-dock-empty">{t("roomMap.objectPanel.empty")}</div>;
+    return <div className="lm-room-dock-empty">{t("roomMap:objectPanel.empty")}</div>;
   }
   const nonHue = rows.filter((r) => r.type !== "hue");
   const hueRows = rows.filter((r) => r.type === "hue");
@@ -472,7 +472,7 @@ function ObjectsTab(props: {
             </div>
             {bucket.length === 0 ? (
               <div className="lm-room-dock-empty" style={{ padding: "4px 8px", textAlign: "left" }}>
-                {t("roomMap.hueZones.groupEmpty")}
+                {t("roomMap:hueZones.groupEmpty")}
               </div>
             ) : (
               <ul className="space-y-px">
@@ -502,7 +502,7 @@ function ObjectsTab(props: {
               style={{ background: "var(--lm-ink-faint)" }}
               aria-hidden
             />
-            <span className="lm-room-dock-h-name">{t("roomMap.hueZones.unassignedTitle")}</span>
+            <span className="lm-room-dock-h-name">{t("roomMap:hueZones.unassignedTitle")}</span>
             <span className="lm-room-dock-h-count">{unassigned.length}</span>
           </div>
           <ul className="space-y-px">
@@ -598,7 +598,7 @@ function MovePopover({
     <div
       data-move-popover
       role="menu"
-      aria-label={t("roomMap.hueZones.movePopoverLabel")}
+      aria-label={t("roomMap:hueZones.movePopoverLabel")}
       className="lm-room-dock-move-popover"
       style={{ position: "fixed", top, left }}
     >
@@ -616,7 +616,7 @@ function MovePopover({
           style={{ background: "var(--lm-ink-faint)" }}
           aria-hidden
         />
-        <span>{t("roomMap.hueZones.unassignedTitle")}</span>
+        <span>{t("roomMap:hueZones.unassignedTitle")}</span>
       </button>
       {zones.map((z, zi) => (
         <button
@@ -803,22 +803,22 @@ function HueZonesTab(props: {
           <span className="lm-room-dock-area-state-title">
             {areaState.kind === "not-configured"
               ? areaState.orphanedAreaId
-                ? t("roomMap.hueZones.areaState.offlineTitle")
-                : t("roomMap.hueZones.areaState.notConfiguredTitle")
+                ? t("roomMap:hueZones.areaState.offlineTitle")
+                : t("roomMap:hueZones.areaState.notConfiguredTitle")
               : areaState.kind === "no-area"
-                ? t("roomMap.hueZones.areaState.noAreaTitle")
-                : t("roomMap.hueZones.areaState.readyTitle", {
+                ? t("roomMap:hueZones.areaState.noAreaTitle")
+                : t("roomMap:hueZones.areaState.readyTitle", {
                     N: String(hueZones.length),
                   })}
           </span>
           <span className="lm-room-dock-area-state-sub">
             {areaState.kind === "not-configured"
               ? areaState.orphanedAreaId
-                ? t("roomMap.hueZones.areaState.offlineHint")
-                : t("roomMap.hueZones.areaState.notConfiguredHint")
+                ? t("roomMap:hueZones.areaState.offlineHint")
+                : t("roomMap:hueZones.areaState.notConfiguredHint")
               : areaState.kind === "no-area"
-                ? t("roomMap.hueZones.areaState.noAreaHint")
-                : t("roomMap.hueZones.areaState.readyHint")}
+                ? t("roomMap:hueZones.areaState.noAreaHint")
+                : t("roomMap:hueZones.areaState.readyHint")}
           </span>
         </div>
         {areaState.kind !== "ready" && onNavigateToDevices && (
@@ -828,14 +828,14 @@ function HueZonesTab(props: {
             onClick={onNavigateToDevices}
           >
             {areaState.kind === "not-configured"
-              ? t("roomMap.hueZones.areaState.notConfiguredCta")
-              : t("roomMap.hueZones.areaState.noAreaCta")}
+              ? t("roomMap:hueZones.areaState.notConfiguredCta")
+              : t("roomMap:hueZones.areaState.noAreaCta")}
           </button>
         )}
       </div>
 
       <div className="lm-room-dock-h">
-        <span className="lm-room-dock-h-name">{t("roomMap.hueZones.title")}</span>
+        <span className="lm-room-dock-h-name">{t("roomMap:hueZones.title")}</span>
         <button
           type="button"
           className="lm-room-dock-h-add"
@@ -843,13 +843,13 @@ function HueZonesTab(props: {
           aria-disabled={addHueZoneDisabled}
           title={addHueZoneDisabled ? addHueZoneDisabledTooltip : undefined}
         >
-          {t("roomMap.hueZones.addAction")}
+          {t("roomMap:hueZones.addAction")}
         </button>
       </div>
 
       {hueZones.length === 0 ? (
         <div className="lm-room-dock-empty">
-          <div>{t("roomMap.hueZones.empty")}</div>
+          <div>{t("roomMap:hueZones.empty")}</div>
           <button
             type="button"
             className="lm-room-dock-cta lm-room-dock-empty-cta"
@@ -857,7 +857,7 @@ function HueZonesTab(props: {
             aria-disabled={addHueZoneDisabled}
             title={addHueZoneDisabled ? addHueZoneDisabledTooltip : undefined}
           >
-            {t("roomMap.hueZones.emptyCta")}
+            {t("roomMap:hueZones.emptyCta")}
           </button>
         </div>
       ) : (
@@ -903,7 +903,7 @@ function HueZonesTab(props: {
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onBlur={() => {
-                        const fallback = t("roomMap.hueZones.defaultName", { N: String(zi + 1) });
+                        const fallback = t("roomMap:hueZones.defaultName", { N: String(zi + 1) });
                         const name = editValue.trim() || fallback;
                         onRenameHueZone(zone.id, name);
                         setEditingId(null);
@@ -912,7 +912,7 @@ function HueZonesTab(props: {
                         e.stopPropagation();
                         if (e.key === "Enter") {
                           e.preventDefault();
-                          const fallback = t("roomMap.hueZones.defaultName", { N: String(zi + 1) });
+                          const fallback = t("roomMap:hueZones.defaultName", { N: String(zi + 1) });
                           const name = editValue.trim() || fallback;
                           onRenameHueZone(zone.id, name);
                           setEditingId(null);
@@ -936,13 +936,13 @@ function HueZonesTab(props: {
                   )}
                   <span className="lm-room-dock-row-meta">
                     {bucket.length === 1
-                      ? t("roomMap.hueZones.lightCountOne")
-                      : t("roomMap.hueZones.lightCount", { N: String(bucket.length) })}
+                      ? t("roomMap:hueZones.lightCountOne")
+                      : t("roomMap:hueZones.lightCount", { N: String(bucket.length) })}
                   </span>
                   <button
                     type="button"
                     className="lm-room-dock-row-action is-danger"
-                    aria-label={t("roomMap.hueZones.deleteAriaLabel", { name: zone.name })}
+                    aria-label={t("roomMap:hueZones.deleteAriaLabel", { name: zone.name })}
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteHueZone(zone.id);
@@ -981,7 +981,7 @@ function HueZonesTab(props: {
                           <span
                             className="lm-room-dock-row-grip"
                             aria-hidden
-                            title={t("roomMap.hueZones.dragHandleTip")}
+                            title={t("roomMap:hueZones.dragHandleTip")}
                           >
                             <IconDragHandle />
                           </span>
@@ -993,7 +993,7 @@ function HueZonesTab(props: {
                         />
                         <span className="lm-room-dock-row-label">
                           {ch.label ??
-                            t("roomMap.hueChannel.defaultLabel", {
+                            t("roomMap:hueChannel.defaultLabel", {
                               index: String(ch.channelIndex + 1),
                             })}
                         </span>
@@ -1001,7 +1001,7 @@ function HueZonesTab(props: {
                           <button
                             type="button"
                             className="lm-room-dock-row-action lm-room-dock-row-action--move"
-                            aria-label={t("roomMap.hueZones.moveChannelAriaLabel", {
+                            aria-label={t("roomMap:hueZones.moveChannelAriaLabel", {
                               channel: String(ch.channelIndex + 1),
                             })}
                             onClick={(e) => {
@@ -1040,7 +1040,7 @@ function HueZonesTab(props: {
                   aria-hidden
                 />
                 <span className="lm-room-dock-h-name">
-                  {t("roomMap.hueZones.unassignedTitle")}
+                  {t("roomMap:hueZones.unassignedTitle")}
                 </span>
                 <span className="lm-room-dock-h-count">{unassigned.length}</span>
               </div>
@@ -1071,7 +1071,7 @@ function HueZonesTab(props: {
                         <span
                           className="lm-room-dock-row-grip"
                           aria-hidden
-                          title={t("roomMap.hueZones.dragHandleTip")}
+                          title={t("roomMap:hueZones.dragHandleTip")}
                         >
                           <IconDragHandle />
                         </span>
@@ -1083,7 +1083,7 @@ function HueZonesTab(props: {
                       />
                       <span className="lm-room-dock-row-label">
                         {ch.label ??
-                          t("roomMap.hueChannel.defaultLabel", {
+                          t("roomMap:hueChannel.defaultLabel", {
                             index: String(ch.channelIndex + 1),
                           })}
                       </span>
@@ -1091,7 +1091,7 @@ function HueZonesTab(props: {
                         <button
                           type="button"
                           className="lm-room-dock-row-action lm-room-dock-row-action--move"
-                          aria-label={t("roomMap.hueZones.moveChannelAriaLabel", {
+                          aria-label={t("roomMap:hueZones.moveChannelAriaLabel", {
                             channel: String(ch.channelIndex + 1),
                           })}
                           onClick={(e) => {
@@ -1182,10 +1182,10 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
   );
 
   const tabs: Array<{ id: DockTab; label: string; count?: number; visible: boolean }> = [
-    { id: "objects", label: t("roomMap.objectPanel.objectsTab"), visible: true },
+    { id: "objects", label: t("roomMap:objectPanel.objectsTab"), visible: true },
     {
       id: "hueZones",
-      label: t("roomMap.objectPanel.hueZonesTab"),
+      label: t("roomMap:objectPanel.hueZonesTab"),
       count: hueZones.length,
       visible: hueZoneEditing,
     },
@@ -1283,13 +1283,13 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
       }
       default:
         return (
-          <p className="lm-room-dock-inspect-empty">{t("roomMap.inspector.empty")}</p>
+          <p className="lm-room-dock-inspect-empty">{t("roomMap:inspector.empty")}</p>
         );
     }
   };
 
   return (
-    <aside className="lm-room-dock" aria-label={t("roomMap.objectPanel.dockAriaLabel")}>
+    <aside className="lm-room-dock" aria-label={t("roomMap:objectPanel.dockAriaLabel")}>
       <div className="lm-room-dock-tabs" role="tablist">
         {tabs
           .filter((tab) => tab.visible)
@@ -1344,7 +1344,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           ) : null}
         </div>
 
-        <div className="lm-room-dock-inspect" role="region" aria-label={t("roomMap.inspector.regionAriaLabel")}>
+        <div className="lm-room-dock-inspect" role="region" aria-label={t("roomMap:inspector.regionAriaLabel")}>
           {renderInspector()}
         </div>
       </div>

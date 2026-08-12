@@ -31,7 +31,7 @@ describe("LeftToolbar", () => {
       <LeftToolbar {...BASE_PROPS} hasTv={false} onAddTv={onAddTv} />,
     );
 
-    const tvBtn = screen.getByRole("button", { name: "roomMap.toolbar.addTv" });
+    const tvBtn = screen.getByRole("button", { name: "roomMap:toolbar.addTv" });
 
     // Before TV placed: button is enabled and clickable
     expect(tvBtn).not.toHaveAttribute("aria-disabled", "true");
@@ -49,7 +49,7 @@ describe("LeftToolbar", () => {
     const onAddTv = vi.fn();
     render(<LeftToolbar {...BASE_PROPS} hasTv={true} onAddTv={onAddTv} />);
 
-    const tvBtn = screen.getByRole("button", { name: "roomMap.toolbar.addTv" });
+    const tvBtn = screen.getByRole("button", { name: "roomMap:toolbar.addTv" });
     fireEvent.click(tvBtn);
     expect(onAddTv).not.toHaveBeenCalled();
   });

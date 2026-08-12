@@ -177,8 +177,8 @@ export function PropertyBar({
           }`}
           onClick={locked ? undefined : () => onUpdateImageAspectLock?.(imgId, !fields.aspectLocked)}
           disabled={locked}
-          aria-label={fields.aspectLocked ? t("roomMap.propertyBar.aspectLocked") : t("roomMap.propertyBar.aspectUnlocked")}
-          title={fields.aspectLocked ? t("roomMap.propertyBar.aspectLocked") : t("roomMap.propertyBar.aspectUnlocked")}
+          aria-label={fields.aspectLocked ? t("roomMap:propertyBar.aspectLocked") : t("roomMap:propertyBar.aspectUnlocked")}
+          title={fields.aspectLocked ? t("roomMap:propertyBar.aspectLocked") : t("roomMap:propertyBar.aspectUnlocked")}
         >
           {fields.aspectLocked ? <IconLock /> : <IconUnlock />}
         </button>
@@ -224,8 +224,8 @@ export function PropertyBar({
           }`}
           onClick={locked ? undefined : () => onResetImageScale?.(imgId)}
           disabled={locked}
-          aria-label={t("roomMap.propertyBar.resetScale")}
-          title={t("roomMap.propertyBar.resetScale")}
+          aria-label={t("roomMap:propertyBar.resetScale")}
+          title={t("roomMap:propertyBar.resetScale")}
         >
           <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M2 8a6 6 0 0 1 10.2-4.2" />
@@ -248,7 +248,7 @@ export function PropertyBar({
             disabled={locked}
             value={parseInt(fields.opacity!, 10)}
             onChange={(e) => onUpdateImageOpacity?.(imgId, parseInt(e.target.value, 10))}
-            aria-label={t("roomMap.inspector.imageOpacityLabel")}
+            aria-label={t("roomMap:inspector.imageOpacityLabel")}
             className="w-12 h-[3px] appearance-none rounded-full bg-[var(--lm-line-2)] accent-[var(--lm-amber)] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--lm-amber)] [&::-webkit-slider-thumb]:cursor-pointer disabled:cursor-not-allowed"
           />
           <span className="w-5 text-right tabular-nums text-[9px] font-medium text-[var(--lm-ink-dim)]">{fields.opacity}</span>

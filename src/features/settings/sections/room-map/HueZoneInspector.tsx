@@ -234,13 +234,13 @@ export function HueZoneInspector({
             style={{ background: borderHex }}
             aria-hidden
           />
-          <span>{t("roomMap.inspector.typeHueZone")}</span>
+          <span>{t("roomMap:inspector.typeHueZone")}</span>
         </span>
         <span className="lm-zone-inspector-h-name" title={zone.name}>
           {zone.name}
         </span>
         <span className="lm-zone-inspector-h-meta" aria-hidden>
-          {t("roomMap.inspector.zoneChannelCount", { count: channelCount })}
+          {t("roomMap:inspector.zoneChannelCount", { count: channelCount })}
         </span>
       </div>
 
@@ -261,7 +261,7 @@ export function HueZoneInspector({
           aria-valuemin={minEdgeM}
           aria-valuemax={maxEdgeM}
           aria-valuenow={currentEdgeM}
-          aria-label={t("roomMap.inspector.zoneEdgeAriaLabel")}
+          aria-label={t("roomMap:inspector.zoneEdgeAriaLabel")}
           data-testid="hue-zone-size-slider"
         />
       </div>
@@ -274,7 +274,7 @@ export function HueZoneInspector({
           className="lm-zone-inspector-pair-label"
           htmlFor={`zone-size-m-${zone.id}`}
         >
-          {t("roomMap.inspector.zoneEdgeShort")}
+          {t("roomMap:inspector.zoneEdgeShort")}
         </label>
         <input
           id={`zone-size-m-${zone.id}`}
@@ -285,7 +285,7 @@ export function HueZoneInspector({
           inputMode="decimal"
           className="lm-zone-inspector-num"
           value={edgeDraft}
-          aria-label={t("roomMap.inspector.zoneEdgeAriaLabel")}
+          aria-label={t("roomMap:inspector.zoneEdgeAriaLabel")}
           disabled={maxEdgeM <= 0}
           data-testid="hue-zone-size-edge-input"
           onFocus={() => setEditingEdge(true)}
@@ -310,7 +310,7 @@ export function HueZoneInspector({
           className="lm-zone-inspector-pair-label lm-zone-inspector-pair-label--hex"
           htmlFor={`zone-hex-${zone.id}`}
         >
-          {t("roomMap.inspector.zoneHexShort")}
+          {t("roomMap:inspector.zoneHexShort")}
         </label>
         <input
           id={`zone-hex-${zone.id}`}
@@ -318,7 +318,7 @@ export function HueZoneInspector({
           spellCheck={false}
           className="lm-zone-inspector-hex"
           value={hexDraft}
-          aria-label={t("roomMap.inspector.zoneHexAriaLabel")}
+          aria-label={t("roomMap:inspector.zoneHexAriaLabel")}
           data-testid="hue-zone-hex-input"
           onFocus={() => setEditingHex(true)}
           onChange={(e) => setHexDraft(e.target.value.toUpperCase())}
@@ -348,8 +348,8 @@ export function HueZoneInspector({
               key={swatch.name}
               type="button"
               role="listitem"
-              title={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
-              aria-label={t("roomMap.zoneProperties.swatchAriaLabel", { name: swatch.name })}
+              title={t("roomMap:zoneProperties.swatchAriaLabel", { name: swatch.name })}
+              aria-label={t("roomMap:zoneProperties.swatchAriaLabel", { name: swatch.name })}
               aria-pressed={active}
               className={`lm-zone-inspector-swatch${active ? " is-active" : ""}`}
               style={{ background: swatch.cssVar }}
@@ -366,14 +366,14 @@ export function HueZoneInspector({
         <HsvColorPicker
           value={borderHex}
           onChange={setBorder}
-          ariaLabel={t("roomMap.zoneProperties.color")}
+          ariaLabel={t("roomMap:zoneProperties.color")}
           hideHex
           compact
         />
       </div>
 
       <p className="lm-zone-inspector-hint">
-        {t("roomMap.inspector.zoneSizeHint")}
+        {t("roomMap:inspector.zoneSizeHint")}
       </p>
     </div>
   );

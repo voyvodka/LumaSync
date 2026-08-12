@@ -2,6 +2,7 @@ import calibration from "./calibration";
 import common from "./common";
 import lights from "./lights";
 import preview from "./preview";
+import roomMap from "./roomMap";
 import settings from "./settings";
 import shell from "./shell";
 import telemetry from "./telemetry";
@@ -13,6 +14,7 @@ export const tr = {
   common,
   lights,
   preview,
+  roomMap,
   settings,
   shell,
   telemetry,

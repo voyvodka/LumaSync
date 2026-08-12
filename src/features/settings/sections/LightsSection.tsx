@@ -222,7 +222,7 @@ export function LightsSection({
       const colorVar = `var(${palette[existing.length % palette.length]})`;
       const newZone: HueZone = {
         id,
-        name: t("roomMap.hueZones.defaultName", { N: String(existing.length + 1) }),
+        name: t("roomMap:hueZones.defaultName", { N: String(existing.length + 1) }),
         entertainmentAreaId: lastHueAreaId,
         centerX: 0,
         centerY: 0,
