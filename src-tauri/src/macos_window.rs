@@ -1,21 +1,6 @@
-// macOS-only window tweaks applied at startup.
-//
-// LumaSync uses a custom amber title bar (Tauri `titleBarStyle: "Overlay"`).
-// In native fullscreen the system draws its own auto-hiding title bar overlay
-// on top of ours — two title bars stacked, ugly. Tauri/tao has an open
-// upstream bug (tauri-apps/tauri#5115, tao#548) that re-applies
-// `NSTitledWindow` styleMask during fullscreen transitions, so a delegate
-// patch loses the race.
-//
-// Two-step fix:
-//   1. `NSWindowCollectionBehavior::FullScreenNone` — disables the ⌃⌘F
-//      shortcut and the Window menu's "Enter Full Screen" item, but leaves
-//      the green title-bar button as a working "zoom" affordance with no
-//      visual change.
-//   2. Explicitly disable the standard zoom button via `setEnabled(false)`
-//      so the green dot renders in its disabled state. Together this kills
-//      every fullscreen pathway visibly and consistently. Manual edge
-//      resize and double-click-to-zoom on the title bar are unaffected.
+// macOS-only window tweaks applied at startup — forbids native fullscreen
+// rather than fighting its title-bar-stacking race. See
+// docs/architecture/ui-and-shell.md.
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;

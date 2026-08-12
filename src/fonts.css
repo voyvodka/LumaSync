@@ -1,29 +1,10 @@
-/* ─────────────────────────────────────────────────────────────────────
-   IBM Plex font manifest (Rev 07 typography).
+/* IBM Plex font manifest (Rev 07 typography). Hand-declared with
+   font-display: block, not @fontsource's swap — see
+   docs/architecture/ui-and-shell.md for why.
 
-   These faces are declared by hand instead of `@import`ing the
-   `@fontsource/ibm-plex-{sans,mono}/<weight>.css` bundles for one reason:
-   every fontsource face ships `font-display: swap`, and a @font-face
-   descriptor cannot be overridden after the fact. `swap` paints the
-   fallback first (Menlo / system-ui / Segoe UI — metrically nothing like
-   Plex) and reflows when the woff2 lands, which this app shows off badly:
-   it opens a webview per calibration overlay, per twin overlay and for the
-   control popup, so the user sees the same reflow over and over.
-
-   `block` is correct here because the fonts are bundled into the binary and
-   served from the local asset protocol — the fetch finishes far inside the
-   ~3 s block period, so text paints once, already in Plex, and never
-   reflows. `optional` would guarantee zero shift but permanently drops the
-   window to the fallback face if a cold first launch misses its ~100 ms
-   budget; losing the design font for a whole window is the worse failure.
-
-   Only latin + latin-ext are declared. Those cover EN and TR (ğ ı ş İ live
-   in latin-ext). Cyrillic/Greek/Vietnamese glyphs in user-entered names
-   fall back to the system font, exactly as CJK and Arabic already do.
-
-   The woff fallbacks are dropped: every Tauri webview (WKWebView, WebView2,
-   WebKitGTK) supports woff2.
-   ───────────────────────────────────────────────────────────────────── */
+   Only latin + latin-ext are declared (covers EN + TR, incl. ğ ı ş İ);
+   other scripts fall back to the system font, same as CJK/Arabic already
+   do. woff fallbacks are dropped — every Tauri webview supports woff2. */
 
 /* IBM Plex Sans — latin */
 @font-face {

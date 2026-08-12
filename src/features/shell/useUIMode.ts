@@ -1,22 +1,6 @@
-/**
- * useUIMode — UI layout mode hook (compact / full).
- *
- * Orchestrates a fully sequential transition between layout modes to eliminate
- * the progressive-clipping artifact that a parallel cross-fade produces when
- * the incoming slot is pinned at its target size while the window is still
- * animating toward that size.
- *
- * Transition phases (single slot, no pinning):
- *   1. Fade the current content out (opacity 1 → 0).
- *   2. Animate the Tauri window to the target mode size. The backdrop is the
- *      only thing visible during this step, so reflow of either layout is
- *      invisible to the user.
- *   3. Swap `currentMode` so the incoming layout mounts at the final size,
- *      wait one paint, then fade it back in (opacity 0 → 1).
- *
- * Re-entrancy: a second `switchUIMode` call while a transition is still
- * running is ignored.
- */
+// useUIMode — compact/full layout mode hook. Sequential transition
+// (fade out → resize → mount + fade in), deliberately not a cross-fade —
+// see docs/architecture/ui-and-shell.md. Re-entrant calls are ignored.
 
 import { useState, useCallback, useRef } from "react";
 import type { UIMode } from "@/shared/contracts/shell";
