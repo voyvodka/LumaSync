@@ -26,10 +26,10 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
 
   return (
     <>
-      <div className="lm-tele-sub-title">{t("telemetry.hue.title")}</div>
+      <div className="lm-tele-sub-title">{t("telemetry:hue.title")}</div>
       <div className="lm-tele-rows">
         <div className="lm-tele-row">
-          <span className="k">{t("telemetry.hue.status")}</span>
+          <span className="k">{t("telemetry:hue.status")}</span>
           <span className={`v ${stateTint(hue.state)}`}>
             {hue.state}
             {hue.uptimeSecs !== null && hue.state === "Running" ? (
@@ -39,12 +39,12 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
         </div>
 
         <div className="lm-tele-row">
-          <span className="k">{t("telemetry.hue.packetRate")}</span>
+          <span className="k">{t("telemetry:hue.packetRate")}</span>
           <span className="v">{hue.packetRate.toFixed(1)} pkt/s</span>
         </div>
 
         <div className="lm-tele-row">
-          <span className="k">{t("telemetry.hue.lastError")}</span>
+          <span className="k">{t("telemetry:hue.lastError")}</span>
           <span className={`v ${hue.lastErrorCode ? "is-crit" : ""}`}>
             {hue.lastErrorCode
               ? `${hue.lastErrorCode}${hue.lastErrorAtSecs !== null ? ` — ${Math.floor(hue.lastErrorAtSecs / 60)}m ago` : ""}`
@@ -53,19 +53,19 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
         </div>
 
         <div className="lm-tele-row">
-          <span className="k">{t("telemetry.hue.reconnects")}</span>
+          <span className="k">{t("telemetry:hue.reconnects")}</span>
           <span className="v">
             {hue.totalReconnects} ({hue.successfulReconnects} ok, {hue.failedReconnects} fail)
           </span>
         </div>
 
         <div className="lm-tele-row">
-          <span className="k">{t("telemetry.hue.dtlsCipher")}</span>
+          <span className="k">{t("telemetry:hue.dtlsCipher")}</span>
           <span className="v">{hue.dtlsCipher ?? "—"}</span>
         </div>
 
         <div className="lm-tele-row">
-          <span className="k">{t("telemetry.hue.connectionAge")}</span>
+          <span className="k">{t("telemetry:hue.connectionAge")}</span>
           <span className="v">{formatDuration(hue.dtlsConnectedAtSecs)}</span>
         </div>
       </div>

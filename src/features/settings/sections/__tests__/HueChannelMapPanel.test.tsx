@@ -83,8 +83,8 @@ describe("CHAN-02: drag to update position", () => {
   it("shows mode toggle with Position and Assign Zone options", () => {
     render(<HueChannelMapPanel {...defaultProps} />);
     // ModePillToggle renders both mode buttons in the panel header
-    expect(screen.getByText("device.hue.channelMap.modPosition")).toBeTruthy();
-    expect(screen.getByText("device.hue.channelMap.modAssignZone")).toBeTruthy();
+    expect(screen.getByText("hue:channelMap.modPosition")).toBeTruthy();
+    expect(screen.getByText("hue:channelMap.modAssignZone")).toBeTruthy();
   });
 
   it("clientToHueCoords is inverse of posToPercent (y-flip correctness)", () => {
@@ -139,7 +139,7 @@ describe("CHAN-04: multi-select and group drag", () => {
     const user = userEvent.setup();
     render(<HueChannelMapPanel {...defaultProps} />);
     // Switch to Position mode first
-    const positionBtn = screen.getByText("device.hue.channelMap.modPosition");
+    const positionBtn = screen.getByText("hue:channelMap.modPosition");
     await user.click(positionBtn);
     // Click first channel dot to select it (dot buttons are labelled "1", "2", "3")
     const dot1 = screen.getAllByRole("button", { name: "1" })[0];

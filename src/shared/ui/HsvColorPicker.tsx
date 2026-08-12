@@ -584,7 +584,7 @@ export function HsvColorPicker({
     <div
       ref={rootRef}
       role="group"
-      aria-label={ariaLabel ?? t("ui.colorPicker.rootAriaLabel")}
+      aria-label={ariaLabel ?? t("common:ui.colorPicker.rootAriaLabel")}
       aria-disabled={disabled}
       className={[
         "flex flex-col",
@@ -624,7 +624,7 @@ export function HsvColorPicker({
             strokeWidth={1.5}
             tabIndex={disabled ? -1 : 0}
             role="slider"
-            aria-label={t("ui.colorPicker.hueLabel")}
+            aria-label={t("common:ui.colorPicker.hueLabel")}
             aria-valuemin={0}
             aria-valuemax={360}
             aria-valuenow={Math.round(hsv.h)}
@@ -689,7 +689,7 @@ export function HsvColorPicker({
             strokeWidth={1.8}
             tabIndex={disabled ? -1 : 0}
             role="slider"
-            aria-label={t("ui.colorPicker.svLabel")}
+            aria-label={t("common:ui.colorPicker.svLabel")}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(hsv.v * 100)}
@@ -706,7 +706,7 @@ export function HsvColorPicker({
           {/* `htmlFor` rather than a wrapping label: the static `#` must not
               leak into the input's accessible name. */}
           <SectionLabel as="label" tone="dim" htmlFor={hexInputId}>
-            {t("ui.colorPicker.hexLabel")}
+            {t("common:ui.colorPicker.hexLabel")}
           </SectionLabel>
           <span
             className={[
@@ -732,7 +732,7 @@ export function HsvColorPicker({
               inputMode="text"
               maxLength={HEX_DIGITS}
               pattern="[0-9A-Fa-f]{6}"
-              placeholder={t("ui.colorPicker.hexPlaceholder")}
+              placeholder={t("common:ui.colorPicker.hexPlaceholder")}
               aria-invalid={!hexDraftComplete}
               className="w-full min-w-0 flex-1 border-0 bg-transparent p-0 font-[inherit] text-[length:inherit] text-[color:var(--lm-ink)] focus:outline-none"
               onChange={(e) => setHexDraft(sanitizeHexInput(e.target.value))}
@@ -756,7 +756,7 @@ export function HsvColorPicker({
           vertical bloat), free-wrap in full mode where space is plenty. */}
       {!hideRecent && recent.length > 0 && (
         <div className="flex flex-col gap-1">
-          <SectionLabel tone="dim">{t("ui.colorPicker.recentColors")}</SectionLabel>
+          <SectionLabel tone="dim">{t("common:ui.colorPicker.recentColors")}</SectionLabel>
           <div
             className={
               compact
@@ -771,7 +771,7 @@ export function HsvColorPicker({
                 type="button"
                 role="listitem"
                 disabled={disabled}
-                aria-label={t("ui.colorPicker.recentItemAriaLabel", { hex })}
+                aria-label={t("common:ui.colorPicker.recentItemAriaLabel", { hex })}
                 title={hex.toUpperCase()}
                 className={[
                   "shrink-0 rounded border border-[color:var(--lm-line-2)] transition-transform hover:scale-110 motion-reduce:transition-none motion-reduce:hover:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60",

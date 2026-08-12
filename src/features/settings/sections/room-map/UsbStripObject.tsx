@@ -300,8 +300,8 @@ export function UsbStripObject({
           <span className="lm-room-usb-status-badge-dot" aria-hidden />
           <span>
             {connectionStatus === "connected"
-              ? t("roomMap.usbStrip.online")
-              : t("roomMap.usbStrip.offline")}
+              ? t("roomMap:usbStrip.online")
+              : t("roomMap:usbStrip.offline")}
           </span>
         </div>
       ) : null}
@@ -370,7 +370,7 @@ export function UsbStripObject({
           onClick={(e) => e.stopPropagation()}
         >
           <label className="text-[10px] text-zinc-400 whitespace-nowrap">
-            {t("roomMap.usbStrip.ledCount")}
+            {t("roomMap:usbStrip.ledCount")}
           </label>
           <input
             type="number"

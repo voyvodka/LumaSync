@@ -67,14 +67,14 @@ function buildObjectList(
   }
 
   if (config.tvAnchor) {
-    entries.push({ id: "tv", type: "tv", label: t("roomMap.objectPanel.tvLabel"), locked: config.tvAnchor.locked });
+    entries.push({ id: "tv", type: "tv", label: t("roomMap:objectPanel.tvLabel"), locked: config.tvAnchor.locked });
   }
 
   for (const f of config.furniture) {
     entries.push({
       id: `furniture-${f.id}`,
       type: "furniture",
-      label: f.label ?? t(`roomMap.furniture.type.${f.type}`),
+      label: f.label ?? t(`roomMap:furniture.type.${f.type}`),
       locked: f.locked,
     });
   }
@@ -83,7 +83,7 @@ function buildObjectList(
     entries.push({
       id: `usb-${s.stripId}`,
       type: "usb",
-      label: t("roomMap.objectPanel.ledLabel", { count: String(s.ledCount) }),
+      label: t("roomMap:objectPanel.ledLabel", { count: String(s.ledCount) }),
       locked: s.locked,
     });
   }
@@ -92,7 +92,7 @@ function buildObjectList(
     entries.push({
       id: `hue-${ch.channelIndex}`,
       type: "hue",
-      label: ch.label ?? t("roomMap.objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
+      label: ch.label ?? t("roomMap:objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
       locked: ch.locked,
       zoneId: ch.zoneId,
     });
@@ -184,8 +184,8 @@ function ObjectRow({
       {onToggleLock && (
         <button
           className="min-h-8 min-w-8 flex items-center justify-center text-[var(--lm-ink-faint)] text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 rounded transition-opacity hover:text-[var(--lm-ink)]"
-          aria-label={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
-          title={entry.locked ? t("roomMap.objectPanel.unlock") : t("roomMap.objectPanel.lock")}
+          aria-label={entry.locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
+          title={entry.locked ? t("roomMap:objectPanel.unlock") : t("roomMap:objectPanel.lock")}
           onClick={(e) => { e.stopPropagation(); onToggleLock(); }}
         >
           {entry.locked ? (
@@ -204,7 +204,7 @@ function ObjectRow({
       {!entry.locked && (
         <button
           className="min-h-8 min-w-8 flex items-center justify-center text-[var(--lm-ink-faint)] text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 rounded transition-opacity hover:text-[var(--lm-red)]"
-          aria-label={t("roomMap.objectPanel.delete")}
+          aria-label={t("roomMap:objectPanel.delete")}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
@@ -235,7 +235,7 @@ function ZoneTab({
   }
 
   function handleCommitEdit(zone: ZoneDefinition, zoneIndex: number) {
-    const name = editValue.trim() || t("roomMap.zones.defaultName", { N: String(zoneIndex + 1) });
+    const name = editValue.trim() || t("roomMap:zones.defaultName", { N: String(zoneIndex + 1) });
     onRenameZone(zone.id, name);
     setEditingZoneId(null);
   }
@@ -244,7 +244,7 @@ function ZoneTab({
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {zones.length === 0 ? (
         <p className="text-[10px] text-[var(--lm-ink-faint)] py-3 text-center">
-          {t("roomMap.zones.emptyPanel")}
+          {t("roomMap:zones.emptyPanel")}
         </p>
       ) : (
         <ul>
@@ -289,7 +289,7 @@ function ZoneTab({
                 </span>
                 <button
                   className="min-h-8 min-w-8 flex items-center justify-center text-[var(--lm-ink-faint)] hover:text-[var(--lm-red)] text-[11px] shrink-0 leading-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 transition-opacity rounded"
-                  aria-label={t("roomMap.objectPanel.delete")}
+                  aria-label={t("roomMap:objectPanel.delete")}
                   onClick={(e) => { e.stopPropagation(); onDeleteZone(zone.id); }}
                 >
                   ×
@@ -303,7 +303,7 @@ function ZoneTab({
         className="mt-1 w-full min-h-8 flex items-center justify-center text-[10px] text-[var(--lm-ink-dim)] hover:text-[var(--lm-ink)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60 rounded"
         onClick={onAddZone}
       >
-        + {t("roomMap.zones.addZoneButton")}
+        + {t("roomMap:zones.addZoneButton")}
       </button>
     </div>
   );
@@ -377,7 +377,7 @@ function renderObjectsWithHueGrouping(
               <ul className="ml-2 border-l border-[var(--lm-line)]/60 pl-1">
                 {zoneRows.length === 0 ? (
                   <li className="px-1.5 py-0.5 text-[9px] italic text-[var(--lm-ink-faint)]">
-                    {t("roomMap.hueZones.groupEmpty")}
+                    {t("roomMap:hueZones.groupEmpty")}
                   </li>
                 ) : (
                   zoneRows.map((entry) => (
@@ -402,7 +402,7 @@ function renderObjectsWithHueGrouping(
         <li className="mt-1.5">
           <SectionLabel as="div" tone="heading" role="heading" aria-level={3}>
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--lm-ink-faint)]" aria-hidden />
-            <span className="flex-1 truncate">{t("roomMap.hueZones.unassignedTitle")}</span>
+            <span className="flex-1 truncate">{t("roomMap:hueZones.unassignedTitle")}</span>
             <span className="text-[9px] text-[var(--lm-ink-faint)]">{unassigned.length}</span>
           </SectionLabel>
           <ul className="ml-2 border-l border-[var(--lm-line)]/60 pl-1">
@@ -468,14 +468,14 @@ export function ObjectListPanel({
           className={`${tabBase} ${activeTab === "objects" ? tabActive : tabInactive}`}
           onClick={() => setActiveTab("objects")}
         >
-          {t("roomMap.objectPanel.objectsTab")}
+          {t("roomMap:objectPanel.objectsTab")}
         </button>
         <button
           type="button"
           className={`${tabBase} ${activeTab === "zones" ? tabActive : tabInactive}`}
           onClick={() => setActiveTab("zones")}
         >
-          {t("roomMap.objectPanel.zonesTab")} {zones.length > 0 && `(${zones.length})`}
+          {t("roomMap:objectPanel.zonesTab")} {zones.length > 0 && `(${zones.length})`}
         </button>
         {hueZoneEditingEnabled && (
           <button
@@ -483,7 +483,7 @@ export function ObjectListPanel({
             className={`${tabBase} ${activeTab === "hueZones" ? tabActive : tabInactive}`}
             onClick={() => setActiveTab("hueZones")}
           >
-            {t("roomMap.objectPanel.hueZonesTab")} {hueZones.length > 0 && `(${hueZones.length})`}
+            {t("roomMap:objectPanel.hueZonesTab")} {hueZones.length > 0 && `(${hueZones.length})`}
           </button>
         )}
       </div>
@@ -493,7 +493,7 @@ export function ObjectListPanel({
         <div className="flex-1 overflow-y-auto px-2 py-1">
           {objects.length === 0 ? (
             <p className="text-[10px] text-[var(--lm-ink-faint)] py-3 text-center">
-              {t("roomMap.objectPanel.empty")}
+              {t("roomMap:objectPanel.empty")}
             </p>
           ) : (
             renderObjectsWithHueGrouping(

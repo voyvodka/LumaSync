@@ -115,17 +115,17 @@ export function ZoneDeriveOverlay({
 
   // Edge label names for badges
   const EDGE_LABELS: Record<"top" | "right" | "bottom" | "left", string> = {
-    top: t("roomMap.edges.top"),
-    right: t("roomMap.edges.right"),
-    bottom: t("roomMap.edges.bottom"),
-    left: t("roomMap.edges.left"),
+    top: t("roomMap:edges.top"),
+    right: t("roomMap:edges.right"),
+    bottom: t("roomMap:edges.bottom"),
+    left: t("roomMap:edges.left"),
   };
 
   return (
     <div
       className="absolute inset-0 pointer-events-none"
       style={{ zIndex: 20 }}
-      aria-label={t("roomMap.zones.deriveSuccess")}
+      aria-label={t("roomMap:zones.deriveSuccess")}
     >
       {/* SVG overlay for edge lines and fill bands */}
       <svg
@@ -195,13 +195,13 @@ export function ZoneDeriveOverlay({
           // eslint-disable-next-line jsx-a11y/no-autofocus
           autoFocus
         >
-          {t("roomMap.zones.confirmDeriveButton")}
+          {t("roomMap:zones.confirmDeriveButton")}
         </button>
         <button
           className="text-zinc-400 hover:text-zinc-200 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
           onClick={onDiscard}
         >
-          {t("roomMap.zones.cancelDeriveButton")}
+          {t("roomMap:zones.cancelDeriveButton")}
         </button>
       </div>
     </div>

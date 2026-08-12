@@ -111,7 +111,7 @@ export function CompactLayout({
   }, []);
   const isAdalight = firmwareProfile === FIRMWARE_PROFILE.ADALIGHT;
   const adalightLockReason = isAdalight
-    ? t("ledSettings.firmwareProfile.brightnessDisabledTooltip")
+    ? t("lights:led.firmwareProfile.brightnessDisabledTooltip")
     : undefined;
 
   const incomingSolid = lightingMode.solid ?? DEFAULT_SOLID;
@@ -206,8 +206,8 @@ export function CompactLayout({
         {activationBlocked && (
           <div className="lm-compact-offline" role="status" aria-live="polite">
             <div className="lm-compact-offline-text">
-              <div className="ttl">{t("general.compact.offline.title")}</div>
-              <div className="sub">{t("general.compact.offline.body")}</div>
+              <div className="ttl">{t("common:compact.offline.title")}</div>
+              <div className="sub">{t("common:compact.offline.body")}</div>
             </div>
             {onOpenDevices && (
               <button
@@ -215,7 +215,7 @@ export function CompactLayout({
                 className="lm-compact-offline-action"
                 onClick={onOpenDevices}
               >
-                {t("general.compact.offline.action")}
+                {t("common:compact.offline.action")}
               </button>
             )}
           </div>
@@ -223,13 +223,13 @@ export function CompactLayout({
 
         {/* ── Mode strip ─────────────────────────────────────────── */}
         <div>
-          <div className="lm-compact-section-title">{t("general.compact.sections.mode")}</div>
+          <div className="lm-compact-section-title">{t("common:compact.sections.mode")}</div>
           <div className="lm-compact-mode-strip">
             <ModeButton
               kind={LIGHTING_MODE_KIND.OFF}
               active={isOff}
               disabled={isModeTransitioning}
-              label={t("general.mode.options.off")}
+              label={t("common:mode.options.off")}
               icon={<IconOff />}
               onClick={handleModeClick}
             />
@@ -237,7 +237,7 @@ export function CompactLayout({
               kind={LIGHTING_MODE_KIND.AMBILIGHT}
               active={isAmbilight}
               disabled={nonOffDisabled}
-              label={t("general.mode.options.ambilight")}
+              label={t("common:mode.options.ambilight")}
               icon={<IconAmbilight />}
               onClick={handleModeClick}
             />
@@ -245,7 +245,7 @@ export function CompactLayout({
               kind={LIGHTING_MODE_KIND.SOLID}
               active={isSolid}
               disabled={nonOffDisabled}
-              label={t("general.mode.options.solid")}
+              label={t("common:mode.options.solid")}
               icon={<IconSolid />}
               onClick={handleModeClick}
             />
@@ -256,7 +256,7 @@ export function CompactLayout({
         {isAmbilight && (
           <div className="lm-compact-card">
             <div className="lm-compact-card-header">
-              <div className="l">{t("general.mode.options.ambilight")}</div>
+              <div className="l">{t("common:mode.options.ambilight")}</div>
             </div>
             <SelfContainedBrightnessRow
               initialPercent={ambilightBrightnessPct}
@@ -281,8 +281,8 @@ export function CompactLayout({
             incoming={incomingSolid}
             disabled={nonOffDisabled}
             onCommit={handleSolidCommit}
-            label={t("general.mode.options.solid")}
-            sublabel={t("general.mode.solidColor")}
+            label={t("common:mode.options.solid")}
+            sublabel={t("common:mode.solidColor")}
             brightnessDisabled={isAdalight}
             brightnessDisabledReason={adalightLockReason}
           />
@@ -291,7 +291,7 @@ export function CompactLayout({
         {/* ── Scene presets ──────────────────────────────────────── */}
         <div>
           <div className="lm-compact-section-title">
-            {t("general.compact.sections.scene")}
+            {t("common:compact.sections.scene")}
           </div>
           <div className="lm-compact-scenes">
             {SCENE_PRESETS.map((preset) => {
@@ -595,7 +595,7 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
       ref={popoverRef}
       role="dialog"
       aria-modal="false"
-      aria-label={t("general.mode.solidColor")}
+      aria-label={t("common:mode.solidColor")}
       className="lm-compact-color-popover"
       style={{
         position: "fixed",
@@ -610,7 +610,7 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
         value={hex}
         onChange={onChange}
         disabled={disabled}
-        ariaLabel={t("general.mode.solidColor")}
+        ariaLabel={t("common:mode.solidColor")}
         compact
       />
     </div>
@@ -622,7 +622,7 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
         ref={triggerRef}
         type="button"
         className={`lm-compact-hero ${disabled ? "is-disabled" : ""}`}
-        aria-label={t("general.mode.solidColor")}
+        aria-label={t("common:mode.solidColor")}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -774,7 +774,7 @@ function SelfContainedBrightnessRow({
   return (
     <div className="lm-compact-slider-row">
       <div className="srow">
-        <span>{t("general.mode.brightness")}</span>
+        <span>{t("common:mode.brightness")}</span>
         <b>{localPercent}%</b>
       </div>
       <input

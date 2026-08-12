@@ -32,7 +32,7 @@ describe("buildHueRuntimeStatusCard", () => {
     expect(model.retry).toEqual({
       remainingAttempts: 2,
       nextAttemptMs: 1500,
-      labelKey: "device.hue.runtime.retry.progress",
+      labelKey: "hue:runtime.retry.progress",
     });
     expect(model.actionHints).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
   });
@@ -71,7 +71,7 @@ describe("buildHueRuntimeStatusCard", () => {
       }),
     });
 
-    expect(model.triggerSourceKey).toBe("device.hue.runtime.triggerSource.device_surface");
+    expect(model.triggerSourceKey).toBe("hue:runtime.triggerSource.device_surface");
   });
 
   it("does not crash when runtime status code is missing", () => {

@@ -932,8 +932,8 @@ function App() {
             void (async () => {
               try {
                 const result = await showNotification({
-                  title: t("trayHint.title"),
-                  body: t("trayHint.body"),
+                  title: t("tray:hint.title"),
+                  body: t("tray:hint.body"),
                   kind: "info",
                 });
                 if (result.status !== "shown") {
@@ -1165,12 +1165,12 @@ function App() {
 
         // Push localized tray labels to Rust
         void updateTrayLabels({
-          openSettings: i18next.t("tray.openSettings"),
-          lightsOff: i18next.t("tray.lightsOff"),
-          resumeLastMode: i18next.t("tray.resumeLastMode"),
-          solidColor: i18next.t("tray.solidColor"),
-          showLedPreview: i18next.t("ledPreview.tray.show"),
-          quit: i18next.t("tray.quit"),
+          openSettings: i18next.t("tray:openSettings"),
+          lightsOff: i18next.t("tray:lightsOff"),
+          resumeLastMode: i18next.t("tray:resumeLastMode"),
+          solidColor: i18next.t("tray:solidColor"),
+          showLedPreview: i18next.t("preview:tray.show"),
+          quit: i18next.t("tray:quit"),
         });
 
         // v1.6 — the LED preview surfaces are NEVER auto-opened on boot. They
@@ -1215,12 +1215,12 @@ function App() {
   useEffect(() => {
     const handler = () => {
       void updateTrayLabels({
-        openSettings: i18next.t("tray.openSettings"),
-        lightsOff: i18next.t("tray.lightsOff"),
-        resumeLastMode: i18next.t("tray.resumeLastMode"),
-        solidColor: i18next.t("tray.solidColor"),
-        showLedPreview: i18next.t("ledPreview.tray.show"),
-        quit: i18next.t("tray.quit"),
+        openSettings: i18next.t("tray:openSettings"),
+        lightsOff: i18next.t("tray:lightsOff"),
+        resumeLastMode: i18next.t("tray:resumeLastMode"),
+        solidColor: i18next.t("tray:solidColor"),
+        showLedPreview: i18next.t("preview:tray.show"),
+        quit: i18next.t("tray:quit"),
       });
     };
     i18next.on("languageChanged", handler);
@@ -2117,7 +2117,7 @@ function App() {
       state: isConnected ? "OK" : "OFF",
       kind: isConnected ? "ok" : "off",
       onReconnect: isConnected ? undefined : openDevicesSection,
-      reconnectAriaLabel: t("statusBar.reconnect.usbAriaLabel"),
+      reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
     },
     {
       label: "HUE",
@@ -2137,7 +2137,7 @@ function App() {
             : "off",
       onReconnect:
         hueStreaming || hueReachable ? undefined : openDevicesSection,
-      reconnectAriaLabel: t("statusBar.reconnect.hueAriaLabel"),
+      reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
     },
   ];
   const statusBarHeight = statusBarHeightPx(currentMode);
@@ -2227,20 +2227,20 @@ function App() {
           className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg"
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px" }}>{t("hotplug.usbDetected")}</span>
+          <span style={{ fontSize: "12px" }}>{t("common:hotplug.usbDetected")}</span>
           <button
             type="button"
             onClick={() => { void handleAcceptUsbTarget(); }}
             style={{ fontSize: "11px", padding: "2px 10px", borderRadius: "4px", background: "var(--lm-amber)", color: "#07080a", fontWeight: 600, border: "none", cursor: "pointer" }}
           >
-            {t("hotplug.addTarget")}
+            {t("common:hotplug.addTarget")}
           </button>
           <button
             type="button"
             onClick={handleDismissUsbSuggest}
             style={{ fontSize: "11px", color: "var(--lm-muted)", background: "transparent", border: "none", cursor: "pointer" }}
           >
-            {t("hotplug.dismiss")}
+            {t("common:hotplug.dismiss")}
           </button>
         </div>
       )}
@@ -2249,7 +2249,7 @@ function App() {
           className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("hotplug.usbDisconnected")}</span>
+          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("common:hotplug.usbDisconnected")}</span>
         </div>
       )}
       {usbUnsupportedNotice && (
@@ -2271,7 +2271,7 @@ function App() {
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
-            {t("hotplug.unsupportedFallback")}
+            {t("common:hotplug.unsupportedFallback")}
           </span>
         </div>
       )}
@@ -2290,9 +2290,9 @@ function App() {
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
-            {t("hotplug.stopFailed", {
+            {t("common:hotplug.stopFailed", {
               targets: stopFailedNotice
-                .map((target) => t(`hotplug.targetLabel.${target}` as const))
+                .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
                 .join(", "),
             })}
           </span>
@@ -2316,8 +2316,8 @@ function App() {
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
             {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
-              ? t("hue.colorNotApplied.noLights")
-              : t("hue.colorNotApplied.streamOffline")}
+              ? t("hue:colorNotApplied.noLights")
+              : t("hue:colorNotApplied.streamOffline")}
           </span>
         </div>
       )}

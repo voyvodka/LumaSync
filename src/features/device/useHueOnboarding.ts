@@ -221,7 +221,7 @@ function resolveManualIpError(value: string): string | null {
     return null;
   }
 
-  return IPV4_PATTERN.test(normalized) ? null : "device.hue.manualIp.invalid";
+  return IPV4_PATTERN.test(normalized) ? null : "hue:manualIp.invalid";
 }
 
 function dedupeBridges(bridges: HueBridgeSummary[]): HueBridgeSummary[] {

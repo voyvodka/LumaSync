@@ -83,7 +83,7 @@ export function HueZoneListPanel({
   }
 
   function handleCommitEdit(zone: HueZone, zoneIndex: number) {
-    const fallback = t("roomMap.hueZones.defaultName", { N: String(zoneIndex + 1) });
+    const fallback = t("roomMap:hueZones.defaultName", { N: String(zoneIndex + 1) });
     const name = editValue.trim() || fallback;
     onRenameZone(zone.id, name);
     setEditingZoneId(null);
@@ -110,7 +110,7 @@ export function HueZoneListPanel({
     <div className="flex-1 overflow-y-auto px-2 py-1">
       {/* Header row with + Add zone CTA */}
       <div className="mb-1 flex items-center justify-between px-1">
-        <SectionLabel tone="muted">{t("roomMap.hueZones.title")}</SectionLabel>
+        <SectionLabel tone="muted">{t("roomMap:hueZones.title")}</SectionLabel>
         <button
           type="button"
           className={`${btnBase} ${
@@ -122,14 +122,14 @@ export function HueZoneListPanel({
           aria-disabled={addZoneDisabled}
           title={addZoneDisabled ? addZoneDisabledTooltip : undefined}
         >
-          {t("roomMap.hueZones.addAction")}
+          {t("roomMap:hueZones.addAction")}
         </button>
       </div>
 
       {/* Empty state */}
       {zones.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-4 text-center">
-          <p className="text-[10px] text-zinc-500">{t("roomMap.hueZones.empty")}</p>
+          <p className="text-[10px] text-zinc-500">{t("roomMap:hueZones.empty")}</p>
           <button
             type="button"
             className={`${btnBase} ${
@@ -141,7 +141,7 @@ export function HueZoneListPanel({
             aria-disabled={addZoneDisabled}
             title={addZoneDisabled ? addZoneDisabledTooltip : undefined}
           >
-            {t("roomMap.hueZones.emptyCta")}
+            {t("roomMap:hueZones.emptyCta")}
           </button>
         </div>
       ) : (
@@ -207,13 +207,13 @@ export function HueZoneListPanel({
                   )}
                   <span className="shrink-0 text-[9px] text-zinc-500">
                     {zoneChannels.length === 1
-                      ? t("roomMap.hueZones.lightCountOne")
-                      : t("roomMap.hueZones.lightCount", { N: String(zoneChannels.length) })}
+                      ? t("roomMap:hueZones.lightCountOne")
+                      : t("roomMap:hueZones.lightCount", { N: String(zoneChannels.length) })}
                   </span>
                   <button
                     type="button"
                     className="shrink-0 rounded text-[11px] leading-none text-zinc-500 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
-                    aria-label={t("roomMap.hueZones.deleteAriaLabel", { name: zone.name })}
+                    aria-label={t("roomMap:hueZones.deleteAriaLabel", { name: zone.name })}
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteZone(zone.id);
@@ -250,7 +250,7 @@ export function HueZoneListPanel({
                         />
                         <span className="flex-1 truncate">
                           {ch.label ??
-                            t("roomMap.hueChannel.defaultLabel", {
+                            t("roomMap:hueChannel.defaultLabel", {
                               index: String(ch.channelIndex + 1),
                             })}
                         </span>
@@ -266,7 +266,7 @@ export function HueZoneListPanel({
           {unassigned.length > 0 && (
             <li className="mt-2 rounded border border-dashed border-zinc-800/60 px-2 py-1">
               <SectionLabel as="div" tone="muted" className="mb-1 flex items-center gap-1.5">
-                {t("roomMap.hueZones.unassignedTitle")}
+                {t("roomMap:hueZones.unassignedTitle")}
                 <span className="text-[9px] text-zinc-600">({unassigned.length})</span>
               </SectionLabel>
               <ul>
@@ -290,7 +290,7 @@ export function HueZoneListPanel({
                     />
                     <span className="flex-1 truncate">
                       {ch.label ??
-                        t("roomMap.hueChannel.defaultLabel", {
+                        t("roomMap:hueChannel.defaultLabel", {
                           index: String(ch.channelIndex + 1),
                         })}
                     </span>

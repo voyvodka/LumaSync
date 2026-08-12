@@ -47,7 +47,7 @@ export function ZoneListPanel({
   }
 
   function handleCommitEdit(zone: ZoneDefinition, zoneIndex: number) {
-    const name = editValue.trim() || t("roomMap.zones.defaultName", { N: String(zoneIndex + 1) });
+    const name = editValue.trim() || t("roomMap:zones.defaultName", { N: String(zoneIndex + 1) });
     onRenameZone(zone.id, name);
     setEditingZoneId(null);
     setEditValue("");
@@ -66,20 +66,20 @@ export function ZoneListPanel({
       {/* Header row */}
       <div className="flex items-center mb-1">
         <span className="text-[11px] font-semibold text-zinc-400">
-          {t("roomMap.zones.panelTitle")}
+          {t("roomMap:zones.panelTitle")}
         </span>
         <button
           className={`${btnBase} ${btnActive} ml-auto`}
           onClick={onAddZone}
         >
-          {t("roomMap.zones.addZoneButton")}
+          {t("roomMap:zones.addZoneButton")}
         </button>
       </div>
 
       {/* Zone list */}
       {zones.length === 0 ? (
         <p className="text-[11px] text-zinc-500 py-2 text-center">
-          {t("roomMap.zones.emptyPanel")}
+          {t("roomMap:zones.emptyPanel")}
         </p>
       ) : (
         <ul>
@@ -135,14 +135,14 @@ export function ZoneListPanel({
                 {/* Light count badge */}
                 <span className="text-[10px] text-zinc-500 shrink-0">
                   {lightCount === 1
-                    ? t("roomMap.zones.lightCountOne")
-                    : t("roomMap.zones.lightCount", { N: String(lightCount) })}
+                    ? t("roomMap:zones.lightCountOne")
+                    : t("roomMap:zones.lightCount", { N: String(lightCount) })}
                 </span>
 
                 {/* Delete button */}
                 <button
                   className="text-zinc-500 text-zinc-500 hover:text-red-400 text-[11px] shrink-0 leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 rounded"
-                  aria-label={t("roomMap.zones.deleteAriaLabel", { name: zone.name })}
+                  aria-label={t("roomMap:zones.deleteAriaLabel", { name: zone.name })}
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteZone(zone.id);

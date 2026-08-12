@@ -81,20 +81,20 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
   return (
     <div className="lm-settings-page">
       <div className="lm-settings-head">
-        <h1>{t("settingsPage.title")}</h1>
-        <div className="lm-settings-head-sub">{t("settingsPage.subtitle")}</div>
+        <h1>{t("settings:title")}</h1>
+        <div className="lm-settings-head-sub">{t("settings:subtitle")}</div>
       </div>
 
       {/* Startup group */}
       <section className="lm-settings-group">
         <div className="lm-settings-group-h">
-          <span className="t">{t("settingsPage.groups.startup.title")}</span>
-          <span className="sub">{t("settingsPage.groups.startup.sub")}</span>
+          <span className="t">{t("settings:groups.startup.title")}</span>
+          <span className="sub">{t("settings:groups.startup.sub")}</span>
         </div>
         <div className="lm-settings-row">
           <div className="lm-settings-row-l">
-            <div className="lm-settings-row-name">{t("startupTray.launchAtLogin")}</div>
-            <div className="lm-settings-row-desc">{t("startupTray.launchAtLoginDescription")}</div>
+            <div className="lm-settings-row-name">{t("settings:startupTray.launchAtLogin")}</div>
+            <div className="lm-settings-row-desc">{t("settings:startupTray.launchAtLoginDescription")}</div>
           </div>
           <div className="lm-settings-row-r">
             <button
@@ -104,7 +104,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
               disabled={startupLoading}
               aria-busy={startupLoading}
               aria-pressed={startupEnabled}
-              aria-label={t("startupTray.launchAtLogin")}
+              aria-label={t("settings:startupTray.launchAtLogin")}
             />
           </div>
         </div>
@@ -113,18 +113,18 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
       {/* Language group */}
       <section className="lm-settings-group">
         <div className="lm-settings-group-h">
-          <span className="t">{t("settingsPage.groups.language.title")}</span>
-          <span className="sub">{t("settingsPage.groups.language.sub")}</span>
+          <span className="t">{t("settings:groups.language.title")}</span>
+          <span className="sub">{t("settings:groups.language.sub")}</span>
         </div>
         <div className="lm-settings-row">
           <div className="lm-settings-row-l">
-            <div className="lm-settings-row-name">{t("settingsPage.language.label")}</div>
-            <div className="lm-settings-row-desc">{t("settingsPage.language.description")}</div>
+            <div className="lm-settings-row-name">{t("settings:language.label")}</div>
+            <div className="lm-settings-row-desc">{t("settings:language.description")}</div>
           </div>
           <div className="lm-settings-row-r">
             <select
               className="lm-settings-select"
-              aria-label={t("settingsPage.language.label")}
+              aria-label={t("settings:language.label")}
               value={currentLanguage}
               onChange={(e) => { void handleLanguageChange(e.target.value as I18nLanguage); }}
             >
@@ -141,13 +141,13 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
       {/* Updates group */}
       <section className="lm-settings-group">
         <div className="lm-settings-group-h">
-          <span className="t">{t("settingsPage.groups.updates.title")}</span>
-          <span className="sub">{t("settingsPage.groups.updates.sub")}</span>
+          <span className="t">{t("settings:groups.updates.title")}</span>
+          <span className="sub">{t("settings:groups.updates.sub")}</span>
         </div>
         <div className="lm-settings-row">
           <div className="lm-settings-row-l">
-            <div className="lm-settings-row-name">{t("updater.checkForUpdates")}</div>
-            <div className="lm-settings-row-desc">{t("updater.checkForUpdatesDescription")}</div>
+            <div className="lm-settings-row-name">{t("updater:checkForUpdates")}</div>
+            <div className="lm-settings-row-desc">{t("updater:checkForUpdatesDescription")}</div>
           </div>
           <div className="lm-settings-row-r flex items-center gap-2">
             {import.meta.env.DEV && devSetUpdaterState && (
@@ -160,7 +160,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
               disabled={isCheckingForUpdates}
               aria-busy={isCheckingForUpdates}
             >
-              {isCheckingForUpdates ? t("updater.checking") : t("updater.checkAction")}
+              {isCheckingForUpdates ? t("updater:checking") : t("updater:checkAction")}
             </button>
           </div>
         </div>
@@ -169,15 +169,15 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
       {/* About group */}
       <section className="lm-settings-group">
         <div className="lm-settings-group-h">
-          <span className="t">{t("settingsPage.groups.about.title")}</span>
-          <span className="sub">{t("settingsPage.groups.about.sub")}</span>
+          <span className="t">{t("settings:groups.about.title")}</span>
+          <span className="sub">{t("settings:groups.about.sub")}</span>
         </div>
         <div className="lm-settings-about">
           <div className="lm-settings-about-logo">L</div>
           <div>
             <div className="lm-settings-about-tx-n">{APP_NAME}</div>
             <div className="lm-settings-about-tx-s">
-              {t("settingsPage.about.tagline")} · <b>com.lumasync.app</b> · {t("settingsPage.about.license")} · <a href="https://lumasync.app" target="_blank" rel="noreferrer noopener">lumasync.app</a>
+              {t("settings:about.tagline")} · <b>com.lumasync.app</b> · {t("settings:about.license")} · <a href="https://lumasync.app" target="_blank" rel="noreferrer noopener">lumasync.app</a>
             </div>
           </div>
           <div className="lm-settings-about-v">v{APP_VERSION}</div>

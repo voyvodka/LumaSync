@@ -106,9 +106,9 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
   // three distinct shortcuts (off / ambilight / solid) so we concatenate
   // them into a single accessible summary.
   const modeGroupAriaLabel = [
-    t("shell.keybind.modeOff"),
-    t("shell.keybind.modeAmbilight"),
-    t("shell.keybind.modeSolid"),
+    t("shell:keybind.modeOff"),
+    t("shell:keybind.modeAmbilight"),
+    t("shell:keybind.modeSolid"),
   ].join(", ");
 
   return (
@@ -127,13 +127,13 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
         <>
           <KbdHint
             keys={[modeModifierBadge, modeDigitsBadge]}
-            label={t("statusBar.kbdMode")}
+            label={t("shell:statusBar.kbdMode")}
             ariaLabel={modeGroupAriaLabel}
           />
           <KbdHint
             keys={settingsDefinition.badge}
-            label={t("statusBar.kbdSettings")}
-            ariaLabel={t("shell.keybind.openSettings")}
+            label={t("shell:statusBar.kbdSettings")}
+            ariaLabel={t("shell:keybind.openSettings")}
           />
           <span className="lm-statusbar-version">v{APP_VERSION}</span>
         </>
@@ -247,31 +247,31 @@ function FpsPill({ isCompact, enabled }: FpsPillProps) {
     kind = "low";
   }
 
-  const label = t("shell.fpsHud.title");
+  const label = t("shell:fpsHud.title");
 
   // Numeric core — either "—" (inactive) or the rounded FPS integer.
   const fpsDisplay = isActive ? `${fpsRounded}` : "—";
 
   // Low-FPS text label (color-only state is an a11y violation). Rendered
   // inline only in full mode so compact stays within its tight budget.
-  const lowFpsLabel = kind === "low" ? t("shell.fpsHud.lowFps") : null;
+  const lowFpsLabel = kind === "low" ? t("shell:fpsHud.lowFps") : null;
 
   // Full-mode latency suffix, skipped until the first sample lands. The "·"
   // rides inside the string so the suffix fits one reserved-width box.
   const latencySuffix =
     !isCompact && latencyRounded !== null
-      ? `· ${latencyRounded}${t("shell.fpsHud.latencyUnit")}`
+      ? `· ${latencyRounded}${t("shell:fpsHud.latencyUnit")}`
       : "";
 
   // Accessible label: describe both FPS and latency explicitly so screen
   // readers do not have to parse the glyph-laden visible text. Falls back
   // to the inactive string when Ambilight is off.
   const ariaLabel = isActive
-    ? t("shell.fpsHud.ariaLabel", {
+    ? t("shell:fpsHud.ariaLabel", {
         fps: fpsRounded,
         latency: latencyRounded ?? 0,
       })
-    : t("shell.fpsHud.inactive");
+    : t("shell:fpsHud.inactive");
 
   return (
     <div className="lm-statusbar-pair" aria-label={ariaLabel}>

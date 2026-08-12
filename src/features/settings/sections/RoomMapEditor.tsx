@@ -345,7 +345,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         y: depthMeters / 2 - 0.3,
         width: 0.6,
         height: 0.6,
-        label: t(`roomMap.furniture.type.${type}`),
+        label: t(`roomMap:furniture.type.${type}`),
       };
       void updateConfig({ furniture: [...config.furniture, newItem] });
     },
@@ -646,7 +646,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const handleAddHueZone = useCallback(() => {
     if (!hueAreaId) return;
     const id = `hue-zone-${crypto.randomUUID()}`;
-    const name = t("roomMap.hueZones.defaultName", { N: String(hueZones.length + 1) });
+    const name = t("roomMap:hueZones.defaultName", { N: String(hueZones.length + 1) });
     const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
     const colorVar = `var(${palette[hueZones.length % palette.length]})`;
     const newZone: HueZone = {
@@ -918,7 +918,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     const canDuplicate = id.startsWith("furniture-") || id.startsWith("usb-");
     if (canDuplicate) {
       actions.push({
-        label: t("roomMap.contextMenu.duplicate"),
+        label: t("roomMap:contextMenu.duplicate"),
         shortcut: isMac ? "\u2318D" : "Ctrl+D",
         onClick: () => handleDuplicate(id),
       });
@@ -928,14 +928,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     if (isFurniture) {
       const furnitureId = id.replace("furniture-", "");
       actions.push({
-        label: t("roomMap.contextMenu.rename"),
+        label: t("roomMap:contextMenu.rename"),
         onClick: () => {
           const current = config.furniture.find((f) => f.id === furnitureId);
           setRenameTarget({ id: furnitureId, currentLabel: current?.label ?? "" });
         },
       });
       actions.push({
-        label: t("roomMap.contextMenu.rotate"),
+        label: t("roomMap:contextMenu.rotate"),
         shortcut: "R",
         onClick: () => {
           setSelectedId(id);
@@ -949,7 +949,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       const imageId = id.replace("img-", "");
       const current = config.imageLayers.find((l) => l.id === imageId);
       actions.push({
-        label: t("roomMap.contextMenu.rename"),
+        label: t("roomMap:contextMenu.rename"),
         onClick: () => {
           setRenameTarget({ id: `img-${imageId}`, currentLabel: current?.label ?? "" });
         },
@@ -957,7 +957,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     }
 
     actions.push({
-      label: t("roomMap.contextMenu.delete"),
+      label: t("roomMap:contextMenu.delete"),
       shortcut: isMac ? "\u232B" : "Del",
       danger: true,
       onClick: () => deleteById(id),
@@ -1296,7 +1296,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             onRenameHueZone={handleRenameHueZone}
             onUpdateHueZone={handleHueZoneUpdate}
             addHueZoneDisabled={!hueAreaId}
-            addHueZoneDisabledTooltip={t("roomMap.hueZones.addDisabledTooltip")}
+            addHueZoneDisabledTooltip={t("roomMap:hueZones.addDisabledTooltip")}
             hueBridgeConfigured={hueBridgeConfigured}
             hueAreaId={hueAreaId}
             onAssignChannelToZone={handleAssignChannelToZone}
@@ -1374,7 +1374,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       {renameTarget && (
         <RenameDialog
           currentLabel={renameTarget.currentLabel}
-          promptText={t("roomMap.contextMenu.renamePrompt")}
+          promptText={t("roomMap:contextMenu.renamePrompt")}
           onConfirm={(newName) => {
             if (renameTarget.id.startsWith("img-")) {
               handleRenameImage(renameTarget.id.replace("img-", ""), newName);
@@ -1389,7 +1389,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
       {error && (
         <div className="px-3 py-1.5 text-[11px] text-red-500">
-          {t("roomMap.persistError")}
+          {t("roomMap:persistError")}
         </div>
       )}
     </div>
@@ -1518,7 +1518,7 @@ function RenameDialog({
             }}
             onClick={onCancel}
           >
-            {t("roomMap.contextMenu.renameCancel")}
+            {t("roomMap:contextMenu.renameCancel")}
           </button>
           <button
             ref={confirmRef}
@@ -1534,7 +1534,7 @@ function RenameDialog({
             }}
             onClick={handleSubmit}
           >
-            {t("roomMap.contextMenu.renameOk")}
+            {t("roomMap:contextMenu.renameOk")}
           </button>
         </div>
       </div>

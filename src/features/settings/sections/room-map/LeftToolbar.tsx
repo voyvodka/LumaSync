@@ -85,7 +85,7 @@ export function LeftToolbar({
     <div className="absolute top-2 left-2 z-50 flex flex-col gap-1 pointer-events-auto">
       <ToolChip
         icon={<IconTv />}
-        label={t("roomMap.toolbar.addTv")}
+        label={t("roomMap:toolbar.addTv")}
         onClick={onAddTv}
         disabled={hasTv}
       />
@@ -93,7 +93,7 @@ export function LeftToolbar({
       <div ref={btnRef} className="relative">
         <ToolChip
           icon={<IconFurniture />}
-          label={t("roomMap.toolbar.addFurniture")}
+          label={t("roomMap:toolbar.addFurniture")}
           onClick={() => setFurnitureOpen((v) => !v)}
         />
         {furnitureOpen && (
@@ -110,7 +110,7 @@ export function LeftToolbar({
                 className="lm-room-toolchip-menu-item"
                 onClick={() => { onAddFurniture(type); close(); }}
               >
-                {t(`roomMap.furniture.type.${type}`)}
+                {t(`roomMap:furniture.type.${type}`)}
               </button>
             ))}
           </div>
@@ -119,19 +119,19 @@ export function LeftToolbar({
 
       <ToolChip
         icon={<IconLed />}
-        label={t("roomMap.toolbar.addUsb")}
+        label={t("roomMap:toolbar.addUsb")}
         onClick={onAddUsb}
       />
 
       <ToolChip
         icon={<IconHue />}
-        label={t("roomMap.toolbar.addHue")}
+        label={t("roomMap:toolbar.addHue")}
         onClick={onAddHue}
       />
 
       <ToolChip
         icon={<IconImage />}
-        label={t("roomMap.toolbar.addImage")}
+        label={t("roomMap:toolbar.addImage")}
         onClick={onAddImage}
       />
     </div>

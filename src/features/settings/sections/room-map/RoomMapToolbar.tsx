@@ -49,15 +49,15 @@ export function RoomMapToolbar({
         }`}
         onClick={deriveDisabled ? undefined : onDeriveZones}
         aria-disabled={deriveDisabled}
-        title={deriveDisabled ? t("roomMap.zones.deriveDisabledTooltip") : undefined}
+        title={deriveDisabled ? t("roomMap:zones.deriveDisabledTooltip") : undefined}
       >
         <IconGrid />
-        <span>{t("roomMap.zones.deriveButton")}</span>
+        <span>{t("roomMap:zones.deriveButton")}</span>
       </button>
 
       {/* + Zone */}
       <button type="button" className={TOOLBAR_BTN} onClick={onAddZone}>
-        <span>{t("roomMap.zones.addZoneButton")}</span>
+        <span>{t("roomMap:zones.addZoneButton")}</span>
         {zoneCount > 0 && <span className="lm-room-toolbar-badge">{zoneCount}</span>}
       </button>
 
@@ -69,8 +69,8 @@ export function RoomMapToolbar({
         className={`${TOOLBAR_BTN} is-icon ${!canUndo ? "is-disabled" : ""}`}
         onClick={canUndo ? onUndo : undefined}
         aria-disabled={!canUndo}
-        aria-label={t("roomMap.toolbar.undo")}
-        title={`${t("roomMap.toolbar.undo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}Z)`}
+        aria-label={t("roomMap:toolbar.undo")}
+        title={`${t("roomMap:toolbar.undo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}Z)`}
       >
         <IconUndo />
       </button>
@@ -79,8 +79,8 @@ export function RoomMapToolbar({
         className={`${TOOLBAR_BTN} is-icon ${!canRedo ? "is-disabled" : ""}`}
         onClick={canRedo ? onRedo : undefined}
         aria-disabled={!canRedo}
-        aria-label={t("roomMap.toolbar.redo")}
-        title={`${t("roomMap.toolbar.redo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}${navigator.platform.includes("Mac") ? "⇧" : "Shift+"}Z)`}
+        aria-label={t("roomMap:toolbar.redo")}
+        title={`${t("roomMap:toolbar.redo")} (${navigator.platform.includes("Mac") ? "⌘" : "Ctrl+"}${navigator.platform.includes("Mac") ? "⇧" : "Shift+"}Z)`}
       >
         <IconRedo />
       </button>
@@ -93,7 +93,7 @@ export function RoomMapToolbar({
         type="button"
         className={`${TOOLBAR_BTN} is-icon ${settingsOpen ? "is-on" : ""}`}
         onClick={onToggleSettings}
-        aria-label={t("roomMap.toolbar.settingsAriaLabel")}
+        aria-label={t("roomMap:toolbar.settingsAriaLabel")}
         aria-pressed={settingsOpen}
       >
         <IconGear />
@@ -113,18 +113,18 @@ function ShortcutsHelpButton() {
   const shift = isMac ? "⇧" : "Shift+";
 
   const shortcuts = [
-    { key: `${mod}Z`, desc: t("roomMap.shortcuts.undo") },
-    { key: `${mod}${shift}Z`, desc: t("roomMap.shortcuts.redo") },
-    { key: `${mod}D`, desc: t("roomMap.shortcuts.duplicate") },
-    { key: `${mod}0`, desc: t("roomMap.shortcuts.fitToView") },
-    { key: "Delete", desc: t("roomMap.shortcuts.delete") },
-    { key: "R", desc: t("roomMap.shortcuts.rotate") },
-    { key: "F", desc: t("roomMap.shortcuts.togglePanel") },
-    { key: "Escape", desc: t("roomMap.shortcuts.deselect") },
-    { key: `${shift}Arrow`, desc: t("roomMap.shortcuts.nudgeLarge") },
-    { key: "Arrow", desc: t("roomMap.shortcuts.nudge") },
-    { key: "Space+Drag", desc: t("roomMap.shortcuts.pan") },
-    { key: t("roomMap.shortcuts.scrollWheel"), desc: t("roomMap.shortcuts.zoom") },
+    { key: `${mod}Z`, desc: t("roomMap:shortcuts.undo") },
+    { key: `${mod}${shift}Z`, desc: t("roomMap:shortcuts.redo") },
+    { key: `${mod}D`, desc: t("roomMap:shortcuts.duplicate") },
+    { key: `${mod}0`, desc: t("roomMap:shortcuts.fitToView") },
+    { key: "Delete", desc: t("roomMap:shortcuts.delete") },
+    { key: "R", desc: t("roomMap:shortcuts.rotate") },
+    { key: "F", desc: t("roomMap:shortcuts.togglePanel") },
+    { key: "Escape", desc: t("roomMap:shortcuts.deselect") },
+    { key: `${shift}Arrow`, desc: t("roomMap:shortcuts.nudgeLarge") },
+    { key: "Arrow", desc: t("roomMap:shortcuts.nudge") },
+    { key: "Space+Drag", desc: t("roomMap:shortcuts.pan") },
+    { key: t("roomMap:shortcuts.scrollWheel"), desc: t("roomMap:shortcuts.zoom") },
   ];
 
   useEffect(() => {
@@ -156,9 +156,9 @@ function ShortcutsHelpButton() {
         type="button"
         className={`${TOOLBAR_BTN} is-icon ${open ? "is-on" : ""}`}
         onClick={() => setOpen((v) => !v)}
-        aria-label={t("roomMap.shortcuts.title")}
+        aria-label={t("roomMap:shortcuts.title")}
         aria-expanded={open}
-        title={t("roomMap.shortcuts.title")}
+        title={t("roomMap:shortcuts.title")}
       >
         <IconInfoAlt />
       </button>
@@ -168,10 +168,10 @@ function ShortcutsHelpButton() {
           className="lm-room-toolbar-popover"
           role="dialog"
           aria-modal="false"
-          aria-label={t("roomMap.shortcuts.title")}
+          aria-label={t("roomMap:shortcuts.title")}
         >
           <h3 className="lm-room-toolbar-popover-h">
-            {t("roomMap.shortcuts.title")}
+            {t("roomMap:shortcuts.title")}
           </h3>
           <div className="lm-room-toolbar-popover-body">
             {shortcuts.map((s) => (

@@ -100,10 +100,10 @@ export function HueAreaPreview() {
                 {group.areas.map((area) => {
                   const active = selectedAreaId === area.id;
                   const readinessLabel = (area.readiness?.ready
-                    ? t("device.hue.readiness.ready")
+                    ? t("hue:readiness.ready")
                     : area.readiness
-                      ? t("device.hue.readiness.notReady")
-                      : t("device.hue.readiness.unknown")) as string;
+                      ? t("hue:readiness.notReady")
+                      : t("hue:readiness.unknown")) as string;
 
                   return (
                     <li key={area.id}>
@@ -134,12 +134,12 @@ export function HueAreaPreview() {
                               {area.activeStreamer && (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-500 dark:bg-amber-500/20 dark:text-amber-400">
                                   <span className="h-1 w-1 animate-pulse rounded-full bg-amber-400" />
-                                  {t("device.hue.areas.activeStreamer")}
+                                  {t("hue:areas.activeStreamer")}
                                 </span>
                               )}
                             </div>
                             <p className="mt-0.5 text-[11px] text-slate-400 dark:text-zinc-500">
-                              {t("device.hue.areas.channels", { count: area.channelCount })}
+                              {t("hue:areas.channels", { count: area.channelCount })}
                             </p>
                           </div>
 
@@ -170,7 +170,7 @@ export function HueAreaPreview() {
               type="button"
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-900 hover:bg-slate-900 hover:text-white dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:border-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
             >
-              {t("device.hue.actions.checkReadiness")}
+              {t("hue:actions.checkReadiness")}
             </button>
           </div>
         ) : null}

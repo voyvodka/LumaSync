@@ -443,14 +443,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     <div className="lm-device-page">
       {/* ── Left category rail ───────────────────────────────── */}
       <nav className="lm-device-rail">
-        <div className="lm-device-rail-h">{t("devicesPage.rail.connected")}</div>
+        <div className="lm-device-rail-h">{t("device:page.rail.connected")}</div>
         <button
           type="button"
           className={`lm-device-cat ${activeCategory === "usb" ? "is-on" : ""}`}
           onClick={() => setActiveCategory("usb")}
         >
           <span className="lm-device-cat-ic"><IconUsb /></span>
-          <span className="lm-device-cat-tx">{t("devicesPage.rail.usbStrips")}</span>
+          <span className="lm-device-cat-tx">{t("device:page.rail.usbStrips")}</span>
           {ports.length > 0 ? <span className="lm-device-cat-cnt">{ports.length}</span> : null}
         </button>
         <button
@@ -459,7 +459,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           onClick={() => setActiveCategory("hue")}
         >
           <span className="lm-device-cat-ic"><IconHueBridgeGlyph /></span>
-          <span className="lm-device-cat-tx">{t("devicesPage.rail.hueBridges")}</span>
+          <span className="lm-device-cat-tx">{t("device:page.rail.hueBridges")}</span>
           {selectedBridge ? <span className="lm-device-cat-cnt">1</span> : null}
         </button>
         <button
@@ -468,7 +468,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           onClick={() => setActiveCategory("wled")}
         >
           <span className="lm-device-cat-ic"><IconWledGlyph /></span>
-          <span className="lm-device-cat-tx">{t("devicesPage.rail.wled")}</span>
+          <span className="lm-device-cat-tx">{t("device:page.rail.wled")}</span>
         </button>
         <button
           type="button"
@@ -476,18 +476,18 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           onClick={() => setActiveCategory("displays")}
         >
           <span className="lm-device-cat-ic"><IconDisplayGlyph /></span>
-          <span className="lm-device-cat-tx">{t("devicesPage.rail.displays")}</span>
+          <span className="lm-device-cat-tx">{t("device:page.rail.displays")}</span>
           {displays.length > 0 ? <span className="lm-device-cat-cnt">{displays.length}</span> : null}
         </button>
 
-        <div className="lm-device-rail-h">{t("devicesPage.rail.other")}</div>
+        <div className="lm-device-rail-h">{t("device:page.rail.other")}</div>
         <button
           type="button"
           className={`lm-device-cat ${activeCategory === "manual" ? "is-on" : ""}`}
           onClick={() => setActiveCategory("manual")}
         >
           <span className="lm-device-cat-ic"><IconPencil /></span>
-          <span className="lm-device-cat-tx">{t("devicesPage.rail.manualEntry")}</span>
+          <span className="lm-device-cat-tx">{t("device:page.rail.manualEntry")}</span>
         </button>
       </nav>
 
@@ -497,11 +497,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         <div className={activeCategory === "usb" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "usb"}>
           <div className="lm-device-head">
             <div>
-              <h1>{t("devicesPage.header.usbTitle")}</h1>
+              <h1>{t("device:page.header.usbTitle")}</h1>
               <div className="lm-device-head-sub">
                 {connectedPort
-                  ? t("devicesPage.header.usbSub", { count: 1 })
-                  : t("devicesPage.header.usbSubNone")}
+                  ? t("device:page.header.usbSub", { count: 1 })
+                  : t("device:page.header.usbSubNone")}
               </div>
             </div>
             <div className="lm-device-head-actions">
@@ -512,13 +512,13 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 disabled={isScanning} aria-busy={isScanning}
               >
                 <IconRefresh />
-                <span>{isScanning ? t("device.actions.scanning") : t("devicesPage.actions.rescan")}</span>
+                <span>{isScanning ? t("device:actions.scanning") : t("device:page.actions.rescan")}</span>
               </button>
             </div>
           </div>
 
           {!isConnected && (
-            <p className="text-[11px] text-zinc-500">{t("device.usbDisconnected")}</p>
+            <p className="text-[11px] text-zinc-500">{t("device:usbDisconnected")}</p>
           )}
 
           {/* W4-I #2 — "Discover ports" is now a collapsible utility,
@@ -534,29 +534,29 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
             onToggle={(e) => setDiscoverPanelOpen((e.currentTarget as HTMLDetailsElement).open)}
           >
             <summary className="lm-device-discover-h">
-              <span>{t("devicesPage.usb.discover.title")}</span>
+              <span>{t("device:page.usb.discover.title")}</span>
               <span className="lm-device-discover-h-count">
                 {ports.length === 1
-                  ? t("devicesPage.usb.discover.countOne")
-                  : t("devicesPage.usb.discover.count", { count: ports.length })}
+                  ? t("device:page.usb.discover.countOne")
+                  : t("device:page.usb.discover.count", { count: ports.length })}
               </span>
             </summary>
             <p className="lm-device-discover-hint">
-              {t("devicesPage.usb.discover.hint")}
+              {t("device:page.usb.discover.hint")}
             </p>
           <div className="lm-device-grid">
             {ports.length === 0 ? (
               <div className="lm-device-empty">
-                <h3>{t("devicesPage.usb.empty.title")}</h3>
-                <p>{t("devicesPage.usb.empty.body")}</p>
+                <h3>{t("device:page.usb.empty.title")}</h3>
+                <p>{t("device:page.usb.empty.body")}</p>
               </div>
             ) : (
               ports.map((port) => {
                 const isConnectedCard = connectedPort === port.portName;
                 const isSelectedCard = selectedPort === port.portName && !isConnectedCard;
                 const pillLabel = isConnectedCard
-                  ? t("devicesPage.usb.pill.online")
-                  : t("devicesPage.usb.pill.discovered");
+                  ? t("device:page.usb.pill.online")
+                  : t("device:page.usb.pill.discovered");
                 const pillClass = isConnectedCard ? "is-ok" : "is-warn";
                 const cardStateClass = isConnectedCard
                   ? "is-on"
@@ -593,21 +593,21 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
 
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.ledCount")}</div>
-                        <div className="lm-dcard-cell-v">{t("devicesPage.usb.stats.na")}</div>
+                        <div className="lm-dcard-cell-k">{t("device:page.usb.stats.ledCount")}</div>
+                        <div className="lm-dcard-cell-v">{t("device:page.usb.stats.na")}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.baud")}</div>
+                        <div className="lm-dcard-cell-k">{t("device:page.usb.stats.baud")}</div>
                         <div className="lm-dcard-cell-v">115200</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.protocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("device:page.usb.stats.protocol")}</div>
                         <div className="lm-dcard-cell-v">LumaSync</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("devicesPage.usb.stats.latency")}</div>
+                        <div className="lm-dcard-cell-k">{t("device:page.usb.stats.latency")}</div>
                         <div className={`lm-dcard-cell-v ${isConnectedCard ? "is-am" : ""}`}>
-                          {t("devicesPage.usb.stats.na")}
+                          {t("device:page.usb.stats.na")}
                         </div>
                       </div>
                     </div>
@@ -623,7 +623,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           }}
                           disabled={healthActionDisabled} aria-busy={isHealthChecking}
                         >
-                          {isHealthChecking ? t("device.healthCheck.runningAction") : t("device.healthCheck.runAction")}
+                          {isHealthChecking ? t("device:healthCheck.runningAction") : t("device:healthCheck.runAction")}
                         </button>
                       </div>
                     ) : (
@@ -638,8 +638,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         disabled={isConnecting && isSelectedCard} aria-busy={isConnecting && isSelectedCard}
                       >
                         {isConnecting && isSelectedCard
-                          ? t("device.actions.connecting")
-                          : t("devicesPage.usb.pairAsStrip")}
+                          ? t("device:actions.connecting")
+                          : t("device:page.usb.pairAsStrip")}
                       </button>
                     )}
                   </div>
@@ -670,7 +670,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   <div key={stepOutcome.step} className="flex items-start gap-2 rounded border border-zinc-700 bg-zinc-900/30 px-2 py-1.5">
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-medium text-zinc-100">
-                        {t(`device.healthCheck.steps.labels.${stepOutcome.step}`)}
+                        {t(`device:healthCheck.steps.labels.${stepOutcome.step}`)}
                       </p>
                       <p className="mt-0.5 text-[10px] text-zinc-400">{stepOutcome.message}</p>
                       {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-zinc-500">{stepOutcome.details}</p> : null}
@@ -682,7 +682,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           : "bg-rose-500/20 text-rose-300"
                       }`}
                     >
-                      {stepOutcome.pass ? t("device.healthCheck.steps.outcome.pass") : t("device.healthCheck.steps.outcome.fail")}
+                      {stepOutcome.pass ? t("device:healthCheck.steps.outcome.pass") : t("device:healthCheck.steps.outcome.fail")}
                     </span>
                   </div>
                 ))}
@@ -690,7 +690,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
             ) : null}
             {statusCard?.code === "SELECTED_PORT_MISSING" ? (
               <p className="mt-1 text-[10px] text-zinc-500">
-                {t("device.port.missingHint", { port: selectedPort ?? "-" })}
+                {t("device:port.missingHint", { port: selectedPort ?? "-" })}
               </p>
             ) : null}
           </div>
@@ -706,16 +706,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               flow). */}
           <div className="lm-paired-strips">
             <div className="lm-paired-strips-h">
-              <span>{t("devicesPage.usb.paired.title")}</span>
+              <span>{t("device:page.usb.paired.title")}</span>
               <span className="lm-paired-strips-h-count">
                 {pairedStrips.length === 1
-                  ? t("devicesPage.usb.paired.countOne")
-                  : t("devicesPage.usb.paired.count", { count: pairedStrips.length })}
+                  ? t("device:page.usb.paired.countOne")
+                  : t("device:page.usb.paired.count", { count: pairedStrips.length })}
               </span>
             </div>
             {pairedStrips.length === 0 ? (
               <div className="lm-paired-strips-empty">
-                {t("devicesPage.usb.paired.empty")}
+                {t("device:page.usb.paired.empty")}
               </div>
             ) : (
               pairedStrips.map((strip) => {
@@ -733,7 +733,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     : connectedPort
                       ? "connected"
                       : "disconnected";
-                const portLabel = strip.portName ?? connectedPort ?? t("devicesPage.usb.paired.noPort");
+                const portLabel = strip.portName ?? connectedPort ?? t("device:page.usb.paired.noPort");
                 const isEditingPort = portEditStripId === strip.stripId;
                 // Eligible ports for this strip's editor: every unpaired
                 // discovered port PLUS the strip's own current port (so
@@ -750,7 +750,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-paired-strip-ic"><IconUsb /></div>
                     <div className="lm-paired-strip-tx">
                       <div className="lm-paired-strip-name">
-                        {t("devicesPage.usb.paired.stripName", { count: strip.ledCount })}
+                        {t("device:page.usb.paired.stripName", { count: strip.ledCount })}
                       </div>
                       {isEditingPort ? (
                         <div className="lm-paired-strip-port-editor">
@@ -758,7 +758,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                             className="lm-paired-strip-form-select"
                             value={portEditDraft ?? ""}
                             onChange={(e) => setPortEditDraft(e.target.value || null)}
-                            aria-label={t("devicesPage.usb.paired.portLabel")}
+                            aria-label={t("device:page.usb.paired.portLabel")}
                             autoFocus
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
@@ -771,7 +771,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           >
                             {portEditOptions.length === 0 ? (
                               <option value="" disabled>
-                                {t("devicesPage.usb.paired.formEmptyAllPaired")}
+                                {t("device:page.usb.paired.formEmptyAllPaired")}
                               </option>
                             ) : (
                               portEditOptions.map((portName) => {
@@ -803,8 +803,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <span className="lm-room-dock-conn-chip-dot" aria-hidden />
                         <span className="lm-room-dock-conn-chip-tx">
                           {stripStatus === "connected"
-                            ? t("devicesPage.usb.pill.online")
-                            : t("devicesPage.usb.paired.offline")}
+                            ? t("device:page.usb.pill.online")
+                            : t("device:page.usb.paired.offline")}
                         </span>
                       </span>
                     ) : null}
@@ -815,7 +815,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           className="lm-paired-strip-action"
                           onClick={handleClosePortEditor}
                         >
-                          {t("devicesPage.usb.paired.changePortCancel")}
+                          {t("device:page.usb.paired.changePortCancel")}
                         </button>
                         <button
                           type="button"
@@ -823,7 +823,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           onClick={() => { void handleSaveStripPort(); }}
                           disabled={!portEditDraft}
                         >
-                          {t("devicesPage.usb.paired.changePortConfirm")}
+                          {t("device:page.usb.paired.changePortConfirm")}
                         </button>
                       </>
                     ) : (
@@ -832,10 +832,10 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           type="button"
                           className="lm-paired-strip-action"
                           onClick={() => handleOpenPortEditor(strip.stripId, strip.portName ?? null)}
-                          aria-label={t("devicesPage.usb.paired.changePortAriaLabel")}
-                          title={t("devicesPage.usb.paired.changePortAriaLabel")}
+                          aria-label={t("device:page.usb.paired.changePortAriaLabel")}
+                          title={t("device:page.usb.paired.changePortAriaLabel")}
                         >
-                          {t("devicesPage.usb.paired.changePort")}
+                          {t("device:page.usb.paired.changePort")}
                         </button>
                         {onNavigateToRoomMap ? (
                           <button
@@ -843,7 +843,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                             className="lm-paired-strip-action"
                             onClick={onNavigateToRoomMap}
                           >
-                            {t("devicesPage.usb.paired.openInMap")}
+                            {t("device:page.usb.paired.openInMap")}
                           </button>
                         ) : null}
                       </>
@@ -871,8 +871,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   <>
                     <span className="lm-paired-strip-form-empty">
                       {ports.length === 0
-                        ? t("devicesPage.usb.paired.formEmptyNoPorts")
-                        : t("devicesPage.usb.paired.formEmptyAllPaired")}
+                        ? t("device:page.usb.paired.formEmptyNoPorts")
+                        : t("device:page.usb.paired.formEmptyAllPaired")}
                     </span>
                     <div className="lm-paired-strip-form-actions">
                       <button
@@ -880,7 +880,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         className="lm-paired-strip-action"
                         onClick={() => setStripFormOpen(false)}
                       >
-                        {t("devicesPage.usb.paired.cancel")}
+                        {t("device:page.usb.paired.cancel")}
                       </button>
                       <button
                         type="button"
@@ -889,8 +889,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         disabled={isScanning} aria-busy={isScanning}
                       >
                         {isScanning
-                          ? t("device.actions.scanning")
-                          : t("devicesPage.usb.paired.rescan")}
+                          ? t("device:actions.scanning")
+                          : t("device:page.usb.paired.rescan")}
                       </button>
                     </div>
                   </>
@@ -900,14 +900,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       className="lm-paired-strip-form-label"
                       htmlFor="paired-strip-port-select"
                     >
-                      {t("devicesPage.usb.paired.portLabel")}
+                      {t("device:page.usb.paired.portLabel")}
                     </label>
                     <select
                       id="paired-strip-port-select"
                       className="lm-paired-strip-form-select"
                       value={stripDraftPortName ?? ""}
                       onChange={(e) => setStripDraftPortName(e.target.value || null)}
-                      aria-label={t("devicesPage.usb.paired.portLabel")}
+                      aria-label={t("device:page.usb.paired.portLabel")}
                     >
                       {availablePortsForPairing
                         .filter((portName) => !pairedPortNames.has(portName))
@@ -927,7 +927,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       className="lm-paired-strip-form-label"
                       htmlFor="paired-strip-led-count"
                     >
-                      {t("devicesPage.usb.paired.ledCountLabel")}
+                      {t("device:page.usb.paired.ledCountLabel")}
                     </label>
                     <input
                       id="paired-strip-led-count"
@@ -954,8 +954,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         type="button"
                         className="lm-paired-strip-action"
                         onClick={() => { void refreshPorts(); }}
-                        title={t("devicesPage.usb.paired.rescan")}
-                        aria-label={t("devicesPage.usb.paired.rescan")}
+                        title={t("device:page.usb.paired.rescan")}
+                        aria-label={t("device:page.usb.paired.rescan")}
                         disabled={isScanning} aria-busy={isScanning}
                       >
                         {isScanning ? "…" : "\u21BB"}
@@ -965,7 +965,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         className="lm-paired-strip-action"
                         onClick={() => setStripFormOpen(false)}
                       >
-                        {t("devicesPage.usb.paired.cancel")}
+                        {t("device:page.usb.paired.cancel")}
                       </button>
                       <button
                         type="button"
@@ -973,7 +973,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         onClick={() => { void handleAddStrip(); }}
                         disabled={!stripDraftPortName}
                       >
-                        {t("devicesPage.usb.paired.confirmAdd")}
+                        {t("device:page.usb.paired.confirmAdd")}
                       </button>
                     </div>
                   </>
@@ -988,20 +988,20 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 title={
                   availablePortsForPairing.length === 0
                     ? ports.length === 0
-                      ? t("devicesPage.usb.paired.addDisabledNoPortsTooltip")
-                      : t("devicesPage.usb.paired.addDisabledAllPairedTooltip")
+                      ? t("device:page.usb.paired.addDisabledNoPortsTooltip")
+                      : t("device:page.usb.paired.addDisabledAllPairedTooltip")
                     : undefined
                 }
               >
                 {pairedStrips.length === 0
-                  ? t("devicesPage.usb.paired.addFirst")
-                  : t("devicesPage.usb.paired.addAnother")}
+                  ? t("device:page.usb.paired.addFirst")
+                  : t("device:page.usb.paired.addAnother")}
               </button>
             )}
 
             {persistError ? (
               <div className="lm-paired-strips-empty" role="status" aria-live="polite">
-                {t("devicesPage.usb.paired.persistError")}
+                {t("device:page.usb.paired.persistError")}
               </div>
             ) : null}
           </div>
@@ -1012,31 +1012,31 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         <div className={activeCategory === "hue" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "hue"}>
           <div className="lm-device-head">
             <div>
-              <h1>{t("devicesPage.header.hueTitle")}</h1>
+              <h1>{t("device:page.header.hueTitle")}</h1>
               <div className="lm-device-head-sub" role="status" aria-live="polite">
                 {hueBridgeState === "streaming"
-                  ? t("device.hue.card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
+                  ? t("hue:card.subtitleStreaming", { area: selectedArea?.name ?? "—" })
                   : hueBridgeState === "idle"
-                  ? `${selectedArea?.name ?? "—"} · ${t("devicesPage.hue.pill.ready").toLowerCase()}`
+                  ? `${selectedArea?.name ?? "—"} · ${t("hue:page.pill.ready").toLowerCase()}`
                   : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton"
-                  ? t("device.hue.wizard.pairingStep")
+                  ? t("hue:wizard.pairingStep")
                   : hueBridgeState === "areaSelect"
-                  ? t("device.hue.wizard.areaStep")
+                  ? t("hue:wizard.areaStep")
                   : hueBridgeState === "authError"
-                  ? t("device.hue.credential.needsRepair")
+                  ? t("hue:credential.needsRepair")
                   : hueBridgeState === "pairingFailed"
-                  ? t("device.hue.wizard.pairingFailed")
+                  ? t("hue:wizard.pairingFailed")
                   : hueBridgeState === "offline"
-                  ? t("device.hue.bridge.unreachable")
+                  ? t("hue:bridge.unreachable")
                   : hueBridgeState === "reconnecting"
-                  ? t("device.hue.runtime.reconnectingTitle")
+                  ? t("hue:runtime.reconnectingTitle")
                   : hueBridgeState === "stale"
-                  ? t("device.hue.runtime.checklist.revalidate")
+                  ? t("hue:runtime.checklist.revalidate")
                   : hueBridgeState === "gateBlocked"
-                  ? t("device.hue.runtime.checklist.title")
+                  ? t("hue:runtime.checklist.title")
                   : hueBridgeState === "stopPartial"
-                  ? t("device.hue.runtime.timeout.title")
-                  : t("devicesPage.header.hueSub")}
+                  ? t("hue:runtime.timeout.title")
+                  : t("device:page.header.hueSub")}
               </div>
             </div>
             <div className="lm-device-head-actions">
@@ -1047,7 +1047,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 disabled={isHueDiscovering} aria-busy={isHueDiscovering}
               >
                 <IconRefresh />
-                <span>{isHueDiscovering ? t("devicesPage.hue.scanning") : hueBridgeState === "offline" ? t("device.hue.wizard.offlineRediscover") : t("devicesPage.hue.scanNetwork")}</span>
+                <span>{isHueDiscovering ? t("hue:page.scanning") : hueBridgeState === "offline" ? t("hue:wizard.offlineRediscover") : t("hue:page.scanNetwork")}</span>
               </button>
             </div>
           </div>
@@ -1061,7 +1061,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 <div className="lm-hue-scan-card">
                   <span className="lm-hue-wait-sp" />
                   <span style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", letterSpacing: "0.04em" }}>
-                    {t("devicesPage.hue.scanningDetail")}
+                    {t("hue:page.scanningDetail")}
                   </span>
                 </div>
               ) : bridges.length > 0 ? (
@@ -1081,7 +1081,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <div className="lm-dcard-tx">
                           <div className="lm-dcard-name">
                             <span>{bridge.name}</span>
-                            <span className="lm-dcard-pill is-warn">{t("devicesPage.hue.pill.discovered")}</span>
+                            <span className="lm-dcard-pill is-warn">{t("hue:page.pill.discovered")}</span>
                           </div>
                           <div className="lm-dcard-sub">{bridge.ip}</div>
                         </div>
@@ -1092,7 +1092,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           className="lm-dcard-act"
                           onClick={(e) => { e.stopPropagation(); selectBridge(bridge.id); }}
                         >
-                          {t("devicesPage.hue.addBridge")}
+                          {t("hue:page.addBridge")}
                         </button>
                       </div>
                     </div>
@@ -1102,11 +1102,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 /* State K2: Discovery failed */
                 <div className="lm-hue-hero">
                   <div className="lm-hue-hero-ic"><IconWifi /></div>
-                  <p className="lm-hue-hero-title">{t("devicesPage.hue.scanFailed")}</p>
-                  <p className="lm-hue-hero-sub">{t("devicesPage.hue.scanFailedBody")}</p>
+                  <p className="lm-hue-hero-title">{t("hue:page.scanFailed")}</p>
+                  <p className="lm-hue-hero-sub">{t("hue:page.scanFailedBody")}</p>
                   <div className="lm-hue-hero-btns">
                     <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                      {t("devicesPage.hue.scanAgain")}
+                      {t("hue:page.scanAgain")}
                     </button>
                   </div>
                 </div>
@@ -1114,11 +1114,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 /* State K1: Discovery empty */
                 <div className="lm-hue-hero">
                   <div className="lm-hue-hero-ic"><IconBridge /></div>
-                  <p className="lm-hue-hero-title">{t("devicesPage.hue.noResult")}</p>
-                  <p className="lm-hue-hero-sub">{t("devicesPage.hue.noResultBody")}</p>
+                  <p className="lm-hue-hero-title">{t("hue:page.noResult")}</p>
+                  <p className="lm-hue-hero-sub">{t("hue:page.noResultBody")}</p>
                   <div className="lm-hue-hero-btns">
                     <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                      {t("devicesPage.hue.scanAgain")}
+                      {t("hue:page.scanAgain")}
                     </button>
                   </div>
                 </div>
@@ -1126,11 +1126,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                 /* State I: Empty hero — initial state */
                 <div className="lm-hue-hero">
                   <div className="lm-hue-hero-ic"><IconBridge /></div>
-                  <p className="lm-hue-hero-title">{t("device.hue.wizard.emptyTitle")}</p>
-                  <p className="lm-hue-hero-sub">{t("device.hue.wizard.emptyBody")}</p>
+                  <p className="lm-hue-hero-title">{t("hue:wizard.emptyTitle")}</p>
+                  <p className="lm-hue-hero-sub">{t("hue:wizard.emptyBody")}</p>
                   <div className="lm-hue-hero-btns">
                     <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }}>
-                      {t("device.hue.wizard.emptyAction")}
+                      {t("hue:wizard.emptyAction")}
                     </button>
                   </div>
                 </div>
@@ -1159,16 +1159,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           hueBridgeState === "offline" || hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error" :
                           " is-warn"
                         }`}>
-                          {hueBridgeState === "streaming" ? t("devicesPage.hue.pill.streaming") :
-                           hueBridgeState === "idle" ? t("devicesPage.hue.pill.ready") :
-                           hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("devicesPage.hue.pill.awaiting") :
-                           hueBridgeState === "pairingFailed" ? t("devicesPage.hue.pill.failed") :
-                           hueBridgeState === "areaSelect" ? t("devicesPage.hue.pill.paired") :
-                           hueBridgeState === "authError" ? t("devicesPage.hue.pill.authError") :
-                           hueBridgeState === "offline" ? t("device.hue.bridge.unreachable") :
-                           hueBridgeState === "reconnecting" ? t("devicesPage.hue.pill.reconnecting") :
-                           hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("devicesPage.hue.pill.awaiting") :
-                           hueBridgeState === "stopPartial" ? t("devicesPage.hue.pill.failed") :
+                          {hueBridgeState === "streaming" ? t("hue:page.pill.streaming") :
+                           hueBridgeState === "idle" ? t("hue:page.pill.ready") :
+                           hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("hue:page.pill.awaiting") :
+                           hueBridgeState === "pairingFailed" ? t("hue:page.pill.failed") :
+                           hueBridgeState === "areaSelect" ? t("hue:page.pill.paired") :
+                           hueBridgeState === "authError" ? t("hue:page.pill.authError") :
+                           hueBridgeState === "offline" ? t("hue:bridge.unreachable") :
+                           hueBridgeState === "reconnecting" ? t("hue:page.pill.reconnecting") :
+                           hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("hue:page.pill.awaiting") :
+                           hueBridgeState === "stopPartial" ? t("hue:page.pill.failed") :
                            ""}
                         </span>
                       </div>
@@ -1183,7 +1183,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <div className="lm-hue-traffic-fill" />
                       </div>
                       <div className="lm-hue-traffic-label">
-                        <span>{t("device.hue.card.trafficLabel")}</span>
+                        <span>{t("hue:card.trafficLabel")}</span>
                         <b>DTLS · 20 Hz</b>
                       </div>
                     </div>
@@ -1194,8 +1194,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-hue-repair is-error">
                       <IconInfo />
                       <div className="lm-hue-repair-tx">
-                        <div className="lm-hue-repair-title">{t("device.hue.credential.needsRepair")}</div>
-                        <div className="lm-hue-repair-sub">{t("device.hue.credential.repairHint")}</div>
+                        <div className="lm-hue-repair-title">{t("hue:credential.needsRepair")}</div>
+                        <div className="lm-hue-repair-sub">{t("hue:credential.repairHint")}</div>
                       </div>
                       <button
                         type="button"
@@ -1203,7 +1203,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         onClick={() => { void pair(); }}
                         disabled={isHuePairing} aria-busy={isHuePairing}
                       >
-                        {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.runtime.actions.repair")}
+                        {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
                       </button>
                     </div>
                   ) : null}
@@ -1212,87 +1212,87 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {hueBridgeState === "streaming" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v is-am">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellRate")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellRate")}</div>
                         <div className="lm-dcard-cell-v is-am">20 Hz</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "idle" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellStatus")}</div>
-                        <div className="lm-dcard-cell-v is-ok">{t("devicesPage.hue.pill.ready")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
+                        <div className="lm-dcard-cell-v is-ok">{t("hue:page.pill.ready")}</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "stale" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v">{selectedArea?.name ?? "—"}</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       {selectedArea?.channelCount !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellCh")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellCh")}</div>
                           <div className="lm-dcard-cell-v">{selectedArea.channelCount}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellStatus")}</div>
-                        <div className="lm-dcard-cell-v is-warn">{t("devicesPage.hue.pill.awaiting")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
+                        <div className="lm-dcard-cell-v is-warn">{t("hue:page.pill.awaiting")}</div>
                       </div>
                     </div>
                   ) : hueBridgeState === "reconnecting" ? (
                     <div className="lm-dcard-body">
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                         <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
                       </div>
                       {hueStatus?.code ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellError")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellError")}</div>
                           <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                         </div>
                       ) : null}
                       {hueRuntimeModel.retry?.remainingAttempts !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellRetries")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellRetries")}</div>
                           <div className="lm-dcard-cell-v is-am">{hueRuntimeModel.retry.remainingAttempts}</div>
                         </div>
                       ) : null}
                       {hueRuntimeModel.retry?.nextAttemptMs !== undefined ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellNext")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellNext")}</div>
                           <div className="lm-dcard-cell-v is-am">{(hueRuntimeModel.retry.nextAttemptMs / 1000).toFixed(1)} s</div>
                         </div>
                       ) : null}
@@ -1301,12 +1301,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellFault")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
                         <div className="lm-dcard-cell-v is-am" style={{ fontSize: "9px" }}>HUE_STOP_PARTIAL</div>
                       </div>
                     </div>
@@ -1314,16 +1314,16 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellProtocol")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                         <div className="lm-dcard-cell-v is-dim">DTLS</div>
                       </div>
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellConfig")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellConfig")}</div>
                         <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>NOT_READY</div>
                       </div>
                     </div>
@@ -1331,17 +1331,17 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-dcard-body">
                       {selectedArea ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellArea")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                           <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                         </div>
                       ) : null}
                       <div className="lm-dcard-cell">
-                        <div className="lm-dcard-cell-k">{t("device.hue.card.cellCredential")}</div>
-                        <div className="lm-dcard-cell-v is-error">{t("device.hue.card.cellCredentialInvalid")}</div>
+                        <div className="lm-dcard-cell-k">{t("hue:card.cellCredential")}</div>
+                        <div className="lm-dcard-cell-v is-error">{t("hue:card.cellCredentialInvalid")}</div>
                       </div>
                       {hueStatus?.code ? (
                         <div className="lm-dcard-cell">
-                          <div className="lm-dcard-cell-k">{t("device.hue.card.cellFault")}</div>
+                          <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
                           <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                         </div>
                       ) : null}
@@ -1355,44 +1355,44 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     <div className="lm-hue-steps">
                       <div className="lm-hue-step is-done">
                         <span className="lm-hue-step-dot"><IconCheck /></span>
-                        <span>{t("device.hue.steps.discover")}</span>
+                        <span>{t("hue:steps.discover")}</span>
                       </div>
                       <div className="lm-hue-step-line is-done" />
                       <div className="lm-hue-step is-active">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.pair")}</span>
+                        <span>{t("hue:steps.pair")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.area")}</span>
+                        <span>{t("hue:steps.area")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.ready")}</span>
+                        <span>{t("hue:steps.ready")}</span>
                       </div>
                     </div>
                   ) : hueBridgeState === "pairingFailed" ? (
                     <div className="lm-hue-steps">
                       <div className="lm-hue-step is-done">
                         <span className="lm-hue-step-dot"><IconCheck /></span>
-                        <span>{t("device.hue.steps.discover")}</span>
+                        <span>{t("hue:steps.discover")}</span>
                       </div>
                       <div className="lm-hue-step-line is-done" />
                       <div className="lm-hue-step is-fail">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.pair")}</span>
+                        <span>{t("hue:steps.pair")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.area")}</span>
+                        <span>{t("hue:steps.area")}</span>
                       </div>
                       <div className="lm-hue-step-line" />
                       <div className="lm-hue-step">
                         <span className="lm-hue-step-dot" />
-                        <span>{t("device.hue.steps.ready")}</span>
+                        <span>{t("hue:steps.ready")}</span>
                       </div>
                     </div>
                   ) : null}
@@ -1401,17 +1401,17 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {hueBridgeState === "pairingLinkButton" ? (
                     <div className="lm-hue-wait">
                       <span className="lm-hue-wait-sp" />
-                      <span>{t("device.hue.pair.linkButtonHint")}</span>
+                      <span>{t("hue:pair.linkButtonHint")}</span>
                     </div>
                   ) : null}
 
                   {/* State D/G: Area selection */}
                   {hueBridgeState === "areaSelect" ? (
                     <div className="lm-hue-areas">
-                      <div className="lm-hue-areas-label">{t("device.hue.areas.selectLabel")}</div>
+                      <div className="lm-hue-areas-label">{t("hue:areas.selectLabel")}</div>
                       {areaGroups.length === 0 ? (
                         <p style={{ fontFamily: "var(--lm-mono)", fontSize: "10px", color: "var(--lm-ink-faint)", padding: "4px 0" }}>
-                          {t("device.hue.areas.empty")}
+                          {t("hue:areas.empty")}
                         </p>
                       ) : (
                         <div className="lm-hue-area-list">
@@ -1425,9 +1425,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                               >
                                 <span className="lm-hue-area-ic" />
                                 <span className="lm-hue-area-name">{area.name}</span>
-                                <span className="lm-hue-area-ch">{t("device.hue.areas.channels", { count: area.channelCount ?? 0 })}</span>
+                                <span className="lm-hue-area-ch">{t("hue:areas.channels", { count: area.channelCount ?? 0 })}</span>
                                 {area.activeStreamer ? (
-                                  <span className="lm-hue-area-badge">{t("device.hue.areas.activeStreamer")}</span>
+                                  <span className="lm-hue-area-badge">{t("hue:areas.activeStreamer")}</span>
                                 ) : null}
                               </button>
                             ))
@@ -1439,8 +1439,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         <div className="lm-hue-repair is-error" style={{ marginTop: "6px" }}>
                           <IconInfo />
                           <div className="lm-hue-repair-tx">
-                            <div className="lm-hue-repair-title">{t("device.hue.areas.conflictTitle")}</div>
-                            <div className="lm-hue-repair-sub">{t("device.hue.areas.conflictHint")}</div>
+                            <div className="lm-hue-repair-title">{t("hue:areas.conflictTitle")}</div>
+                            <div className="lm-hue-repair-sub">{t("hue:areas.conflictHint")}</div>
                           </div>
                         </div>
                       ) : null}
@@ -1451,7 +1451,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           onClick={() => { void revalidateArea(); }}
                           disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                         >
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : `${t("devicesPage.hue.confirmArea")} →`}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : `${t("hue:page.confirmArea")} →`}
                         </button>
                       ) : null}
                     </div>
@@ -1460,10 +1460,10 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {/* State F: Offline reasons */}
                   {hueBridgeState === "offline" ? (
                     <div className="lm-hue-offline">
-                      <div className="lm-hue-offline-title">{t("device.hue.wizard.offlineReasonsTitle")}</div>
-                      <div className="lm-hue-offline-item">{t("device.hue.wizard.offlineReason1")}</div>
-                      <div className="lm-hue-offline-item">{t("device.hue.wizard.offlineReason2")}</div>
-                      <div className="lm-hue-offline-item">{t("device.hue.wizard.offlineReason3")}</div>
+                      <div className="lm-hue-offline-title">{t("hue:wizard.offlineReasonsTitle")}</div>
+                      <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason1")}</div>
+                      <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason2")}</div>
+                      <div className="lm-hue-offline-item">{t("hue:wizard.offlineReason3")}</div>
                     </div>
                   ) : null}
 
@@ -1477,7 +1477,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                               remaining: hueRuntimeModel.retry.remainingAttempts ?? "—",
                               nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "—",
                             })
-                          : t("device.hue.runtime.reconnectingTitle")}
+                          : t("hue:runtime.reconnectingTitle")}
                       </span>
                       <button
                         type="button"
@@ -1485,7 +1485,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }}
                         disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}
                       >
-                        {t("devicesPage.hue.stopRetrying")}
+                        {t("hue:page.stopRetrying")}
                       </button>
                     </div>
                   ) : null}
@@ -1494,14 +1494,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {hueBridgeState === "stale" ? (
                     <div className="lm-hue-stale">
                       <IconInfo />
-                      <span className="lm-hue-stale-tx">{t("device.hue.runtime.checklist.revalidate")}</span>
+                      <span className="lm-hue-stale-tx">{t("hue:runtime.checklist.revalidate")}</span>
                       <button
                         type="button"
                         className="lm-hue-stale-act"
                         onClick={() => { void revalidateArea(); }}
                         disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                       >
-                        {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                        {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                       </button>
                     </div>
                   ) : null}
@@ -1509,11 +1509,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {/* State P: Gate blocked checklist */}
                   {hueBridgeState === "gateBlocked" ? (
                     <div className="lm-hue-checklist">
-                      <div className="lm-hue-checklist-title">{t("device.hue.runtime.checklist.title")}</div>
+                      <div className="lm-hue-checklist-title">{t("hue:runtime.checklist.title")}</div>
                       {isReadinessStale ? (
                         <div className="lm-hue-checklist-item">
                           <IconInfo />
-                          <span>{t("device.hue.runtime.checklist.revalidate")}</span>
+                          <span>{t("hue:runtime.checklist.revalidate")}</span>
                         </div>
                       ) : null}
                       <div className="lm-hue-checklist-btns">
@@ -1523,7 +1523,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                           onClick={() => { void revalidateArea(); }}
                           disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}
                         >
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                       </div>
                     </div>
@@ -1532,7 +1532,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   {/* State Q: Stop timeout fault */}
                   {hueBridgeState === "stopPartial" ? (
                     <div className="lm-hue-fault">
-                      {t("device.hue.runtime.timeout.title")}
+                      {t("hue:runtime.timeout.title")}
                     </div>
                   ) : null}
 
@@ -1541,93 +1541,93 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     {hueBridgeState === "streaming" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                          {t("devicesPage.hue.changeArea")}
+                          {t("hue:page.changeArea")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={isRuntimeMutating || hueStartDisabled} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.reconnectNow")}
+                          {t("hue:page.reconnectNow")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "idle" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                          {t("devicesPage.hue.changeArea")}
+                          {t("hue:page.changeArea")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? (
                       <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                        {t("devicesPage.hue.cancel")}
+                        {t("hue:page.cancel")}
                       </button>
                     ) : hueBridgeState === "areaSelect" ? (
                       <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                        {isLoadingAreas ? t("device.hue.actions.loadingAreas") : t("device.hue.actions.refreshAreas")}
+                        {isLoadingAreas ? t("hue:actions.loadingAreas") : t("hue:actions.refreshAreas")}
                       </button>
                     ) : hueBridgeState === "authError" || hueBridgeState === "pairingFailed" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing} aria-busy={isHuePairing}>
-                          {isHuePairing ? t("device.hue.actions.pairing") : t("device.hue.runtime.actions.repair")}
+                          {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "offline" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void discover(); }} disabled={isHueDiscovering} aria-busy={isHueDiscovering}>
-                          {isHueDiscovering ? t("device.hue.actions.discovering") : t("device.hue.wizard.offlineRediscover")}
+                          {isHueDiscovering ? t("hue:actions.discovering") : t("hue:wizard.offlineRediscover")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { setManualIp(""); }}>
-                          {t("devicesPage.hue.tryDifferentIp")}
+                          {t("hue:page.tryDifferentIp")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "reconnecting" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.reconnectNow")}
+                          {t("hue:page.reconnectNow")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.stopRetrying")}
+                          {t("hue:page.stopRetrying")}
                         </button>
                       </>
                     ) : hueBridgeState === "stale" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void startRuntime(); }} disabled={hueStartDisabled}>
-                          {t("device.hue.actions.start")}
+                          {t("hue:actions.start")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forgotBridge")}
+                          {t("hue:page.forgotBridge")}
                         </button>
                       </>
                     ) : hueBridgeState === "gateBlocked" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void revalidateArea(); }} disabled={hueReadinessDisabled} aria-busy={isCheckingReadiness}>
-                          {isCheckingReadiness ? t("device.hue.actions.checkingReadiness") : t("devicesPage.hue.validate")}
+                          {isCheckingReadiness ? t("hue:actions.checkingReadiness") : t("hue:page.validate")}
                         </button>
                         <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
-                          {t("devicesPage.hue.changeArea")}
+                          {t("hue:page.changeArea")}
                         </button>
                       </>
                     ) : hueBridgeState === "stopPartial" ? (
                       <>
                         <button type="button" className="lm-dcard-act" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
-                          {t("devicesPage.hue.retryStop")}
+                          {t("hue:page.retryStop")}
                         </button>
                         <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
-                          {t("devicesPage.hue.forceForget")}
+                          {t("hue:page.forceForget")}
                         </button>
                       </>
                     ) : null}
@@ -1657,8 +1657,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
             {!selectedBridgeId ? (
               <div className="lm-hue-ip-form">
                 <div>
-                  <div className="lm-hue-ip-form-title">{t("device.hue.manualIp.title")}</div>
-                  <div className="lm-hue-ip-form-sub">{t("device.hue.manualIp.description")}</div>
+                  <div className="lm-hue-ip-form-title">{t("hue:manualIp.title")}</div>
+                  <div className="lm-hue-ip-form-sub">{t("hue:manualIp.description")}</div>
                 </div>
                 <div className="lm-hue-ip-row">
                   <input
@@ -1671,7 +1671,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                         void submitManualIp();
                       }
                     }}
-                    placeholder={t("device.hue.manualIp.placeholder")}
+                    placeholder={t("hue:manualIp.placeholder")}
                   />
                   <button
                     type="button"
@@ -1679,7 +1679,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                     onClick={() => { void submitManualIp(); }}
                     disabled={hueManualIpDisabled}
                   >
-                    {t("devicesPage.hue.enterIp")}
+                    {t("hue:page.enterIp")}
                   </button>
                 </div>
                 {manualIpError ? <div className="lm-hue-ip-error">{t(manualIpError)}</div> : null}
@@ -1698,14 +1698,14 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         <div className={activeCategory === "displays" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "displays"}>
           <div className="lm-device-head">
             <div>
-              <h1>{t("devicesPage.header.displaysTitle")}</h1>
-              <div className="lm-device-head-sub">{t("devicesPage.header.displaysSub")}</div>
+              <h1>{t("device:page.header.displaysTitle")}</h1>
+              <div className="lm-device-head-sub">{t("device:page.header.displaysSub")}</div>
             </div>
           </div>
           <div className="lm-device-grid">
             {displays.length === 0 ? (
               <div className="lm-device-empty">
-                <p>{t("devicesPage.displays.empty")}</p>
+                <p>{t("device:page.displays.empty")}</p>
               </div>
             ) : (
               displays.map((display) => (
@@ -1716,7 +1716,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       <div className="lm-dcard-name">
                         <span>{display.label}</span>
                         {display.isPrimary ? (
-                          <span className="lm-dcard-pill is-ok">{t("devicesPage.displays.primary")}</span>
+                          <span className="lm-dcard-pill is-ok">{t("device:page.displays.primary")}</span>
                         ) : null}
                       </div>
                       <div className="lm-dcard-sub">{`${display.width} × ${display.height}`}</div>
@@ -1724,11 +1724,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                   </div>
                   <div className="lm-dcard-body">
                     <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("devicesPage.displays.cellId")}</div>
+                      <div className="lm-dcard-cell-k">{t("device:page.displays.cellId")}</div>
                       <div className="lm-dcard-cell-v">{display.id}</div>
                     </div>
                     <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("devicesPage.displays.cellScale")}</div>
+                      <div className="lm-dcard-cell-k">{t("device:page.displays.cellScale")}</div>
                       <div className="lm-dcard-cell-v">{(display.scaleFactor ?? 1).toFixed(1)}x</div>
                     </div>
                   </div>
@@ -1742,12 +1742,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         <div className={activeCategory === "manual" ? "lm-device-cat-body" : "lm-device-cat-body hidden"} hidden={activeCategory !== "manual"}>
           <div className="lm-device-head">
             <div>
-              <h1>{t("devicesPage.header.manualTitle")}</h1>
-              <div className="lm-device-head-sub">{t("devicesPage.header.manualSub")}</div>
+              <h1>{t("device:page.header.manualTitle")}</h1>
+              <div className="lm-device-head-sub">{t("device:page.header.manualSub")}</div>
             </div>
           </div>
           <div className="lm-device-empty">
-            <p>{t("devicesPage.manual.body")}</p>
+            <p>{t("device:page.manual.body")}</p>
           </div>
         </div>
       </div>

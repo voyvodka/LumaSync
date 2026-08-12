@@ -156,7 +156,7 @@ describe("ControlPopupApp auto-start", () => {
 
     syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
     rerender(<ControlPopupApp />);
-    await waitFor(() => expect(screen.getByText("ledPreview.status.test")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("preview:status.test")).toBeInTheDocument());
 
     expect(startLedTestPattern).toHaveBeenCalledTimes(1);
   });
@@ -171,7 +171,7 @@ describe("ControlPopupApp auto-start", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.getByRole("alert")).toHaveTextContent(
-      `ledPreview.status.${LED_TEST_STATUS.PATTERN_NO_CALIBRATION}`,
+      `preview:status.${LED_TEST_STATUS.PATTERN_NO_CALIBRATION}`,
     );
     expect(startLedTestPattern).toHaveBeenCalledTimes(1);
   });
@@ -183,7 +183,7 @@ describe("ControlPopupApp immediate apply", () => {
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("radio", { name: /ledPreview\.pattern\.spiral/ }));
+    await user.click(screen.getByRole("radio", { name: /preview:pattern\.spiral/ }));
 
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
     expect(lastStart().pattern.kind).toBe("spiral");
@@ -194,7 +194,7 @@ describe("ControlPopupApp immediate apply", () => {
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("radio", { name: "ledPreview.test.speed.fast" }));
+    await user.click(screen.getByRole("radio", { name: "preview:test.speed.fast" }));
 
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
     expect(lastStart().speed).toBe("fast");
@@ -219,16 +219,16 @@ describe("ControlPopupApp run controls", () => {
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
 
     const assertOnlyClose = () => {
-      expect(screen.queryByRole("button", { name: "ledPreview.test.run" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "ledPreview.test.stop" })).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "ledPreview.control.close" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "preview:test.run" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "preview:test.stop" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "preview:control.close" })).toBeInTheDocument();
     };
 
     assertOnlyClose();
 
     syncState = { ...syncState, preview: previewStatus({ testActive: true, source: "test" }) };
     rerender(<ControlPopupApp />);
-    await waitFor(() => expect(screen.getByText("ledPreview.status.test")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("preview:status.test")).toBeInTheDocument());
     assertOnlyClose();
   });
 
@@ -237,7 +237,7 @@ describe("ControlPopupApp run controls", () => {
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("radio", { name: /ledPreview\.pattern\.chase/ }));
+    await user.click(screen.getByRole("radio", { name: /preview:pattern\.chase/ }));
 
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalledTimes(2));
     expect(lastStart().pattern.kind).toBe("chase");
@@ -249,7 +249,7 @@ describe("ControlPopupApp run controls", () => {
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("button", { name: "ledPreview.control.close" }));
+    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
 
     await waitFor(() => expect(stopLedTestPattern).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(closeLedTwinOverlay).toHaveBeenCalledTimes(1));
@@ -271,10 +271,10 @@ describe("ControlPopupApp run controls", () => {
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
 
     // Hand the light back to a real mode, which disengages the test.
-    await user.click(screen.getByRole("radio", { name: /general\.mode\.options\.ambilight/ }));
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
     await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByRole("button", { name: "ledPreview.control.close" }));
+    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
 
     await waitFor(() => expect(hideLedControlPopup).toHaveBeenCalledTimes(1));
     expect(stopLedTestPattern).not.toHaveBeenCalled();
@@ -288,13 +288,13 @@ describe("ControlPopupApp run controls", () => {
     render(<ControlPopupApp />);
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
 
-    await user.click(screen.getByRole("button", { name: "ledPreview.control.close" }));
+    await user.click(screen.getByRole("button", { name: "preview:control.close" }));
 
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith("show_notification", {
         payload: {
-          title: "ledPreview.title",
-          body: "ledPreview.control.reopenHint",
+          title: "preview:title",
+          body: "preview:control.reopenHint",
           kind: "info",
         },
       }),
@@ -309,7 +309,7 @@ describe("ControlPopupApp run controls", () => {
     await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
     startLedTestPattern.mockClear();
 
-    await user.click(screen.getByRole("radio", { name: /general\.mode\.options\.ambilight/ }));
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
 
     await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
     expect(startLedTestPattern).not.toHaveBeenCalled();
