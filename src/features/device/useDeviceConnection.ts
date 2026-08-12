@@ -11,7 +11,6 @@ import {
 import { shellStore } from "../persistence/shellStore";
 import {
   canConnectSelectedPort,
-  groupAndSortPorts,
   resolveInitialSelection,
   resolveSelectionAfterRefresh,
 } from "./portSelection";
@@ -893,13 +892,11 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
 }
 
 export interface UseDeviceConnectionResult extends DeviceConnectionControllerState {
-  groupedPorts: ReturnType<typeof groupAndSortPorts>;
   isConnected: boolean;
   refreshPorts: () => Promise<void>;
   selectPort: (portName: string | null) => void;
   connectSelectedPort: () => Promise<void>;
   runHealthCheck: () => Promise<void>;
-  connectButtonLabel: "connect" | "reconnect" | "connected";
 }
 
 export function useDeviceConnection(): UseDeviceConnectionResult {
@@ -985,28 +982,12 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
     };
   }, [controller]);
 
-  const groupedPorts = useMemo(() => groupAndSortPorts(state.ports), [state.ports]);
-
-  const connectButtonLabel: "connect" | "reconnect" | "connected" = useMemo(() => {
-    if (state.connectedPort && state.connectedPort === state.selectedPort) {
-      return "connected";
-    }
-
-    if (state.connectedPort && state.connectedPort !== state.selectedPort) {
-      return "reconnect";
-    }
-
-    return "connect";
-  }, [state.connectedPort, state.selectedPort]);
-
   return {
     ...state,
-    groupedPorts,
     isConnected: Boolean(state.connectedPort),
     refreshPorts: controller.refreshPorts,
     selectPort: controller.selectPort,
     connectSelectedPort: controller.connectSelectedPort,
     runHealthCheck: controller.runHealthCheck,
-    connectButtonLabel,
   };
 }
