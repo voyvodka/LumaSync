@@ -14,13 +14,12 @@
  *
  * v1.5 W4-F2 (2026-04-28): the W4-F unification (`Zone` discriminated by
  * `zoneType: "logical" | "hue"`) is rolled forward into a single Hue-only
- * surface. The "logical zone" concept has no clean industry analog and is
- * dropped entirely; only `HueZone` (spatial 3D, mirroring Hue Entertainment
- * Area channels) survives. Future zone kinds — `ScreenZone` (Hyperion-style
- * screen rectangles) and `LedZone` (USB-side grouping) — will land later as
- * separate, explicit-prefix types in their own modules and are NOT wired
- * through this contract. See `.planning/RFCs/v1.5-w4-f-zone-unification.md`
- * "Direction reversal (2026-04-28)".
+ * surface. "Logical zone" was dropped because it has no industry analog —
+ * everyone models screen rectangles, spatial 3D positions, or sink-internal
+ * addressing, never a name plus a channel-index list — and it confused users in
+ * testing. `ScreenZone` and `LedZone` will land later as separately prefixed
+ * types sharing no discriminator with `HueZone`; a bare `Zone` is ambiguous
+ * across three industry namespaces.
  */
 
 // ---------------------------------------------------------------------------
@@ -261,9 +260,7 @@ export interface LegacyHueZone {
  * promote this into a generic `Zone & { zoneType: "logical" }`; the
  * reversal dropped the concept entirely. The interface survives only so
  * the migration shim can detect previously persisted records and DROP
- * them with a `console.warn`. New code paths MUST NOT consume this
- * type. See `.planning/RFCs/v1.5-w4-f-zone-unification.md` "Direction
- * reversal".
+ * them with a `console.warn`. New code paths MUST NOT consume this type.
  */
 export interface ZoneDefinition {
   id: string;
@@ -312,8 +309,7 @@ function isFiniteNumber(value: unknown): value is number {
  * `entertainmentAreaId`, non-finite `centerX/Y/Z` or `scaleX/Y/Z`,
  * non-array `channelIndices`). Migration callers MUST filter `null`
  * results so corrupt records are dropped instead of corrupting the
- * `zones[]` array. See `.planning/RFCs/v1.5-w4-f-zone-unification.md`
- * §7 #1.
+ * `zones[]` array.
  */
 export function migrateLegacyHueZone(legacy: LegacyHueZone): HueZone | null {
   if (!isPlainLegacyRecord(legacy)) {

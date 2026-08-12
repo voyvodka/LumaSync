@@ -12,10 +12,9 @@
  * unified `RoomMapConfig.zones: HueZone[]` array (Hue-only). The brief
  * W4-F unification (logical + Hue under a `zoneType` discriminator) was
  * rolled back; legacy `ZoneDefinition[]` records that may have leaked into
- * `state.roomMap.zones` on dev branches are DROPPED with a single
- * `console.warn` line so the operator can audit the loss. See
- * `.planning/RFCs/v1.5-w4-f-zone-unification.md` "Direction reversal" for
- * the full rationale.
+ * `state.roomMap.zones` on dev branches are DROPPED with a `console.warn` so
+ * the operator can audit the loss. Dropping is safe only because the
+ * unification never shipped — no released build ever persisted these.
  *
  * The pure helper `migrateLegacyHueZone` (in
  * `shared/contracts/roomMap.ts`) does the per-record Hue conversion and

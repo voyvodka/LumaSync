@@ -35,8 +35,9 @@ jobs:
     name: Build and Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # Windows needs ~30 min on a cold cache (vendored openssl + aws-lc-rs), and the
-    # cache save that follows was being cut off mid-write at the old 30.
-    timeout-minutes: 45
+    # cache save that follows was being cut off mid-write at the old 30. Raised
+    # again for the launch smoke test, which relinks the app under a second cfg.
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -91,6 +92,8 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          # xvfb + dbus-x11 are for the launch smoke test, not the build: the app
+          # needs a display to open its window and a session bus for the tray.
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             pkg-config \
@@ -104,7 +107,9 @@ jobs:
             libxrandr-dev \
             libpipewire-0.3-dev \
             libdbus-1-dev \
-            libgbm-dev
+            libgbm-dev \
+            xvfb \
+            dbus-x11
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -148,6 +153,33 @@ jobs:
           cargo build --bin lumasync
           BIN="target/debug/lumasync"
           bash ../scripts/verify/macos-swift-runtime.sh "$BIN"
+
+      - name: Build app for the launch smoke test
+        if: runner.os != 'Windows'
+        # Not `cargo build`: that emits a dev-cfg binary to the same path which
+        # loads the Vite dev URL, so it comes up blank and proves nothing.
+        # `--no-bundle` skips packaging, which launch does not exercise.
+        run: pnpm tauri build --debug --no-bundle
+
+      - name: Launch smoke test (Linux)
+        if: runner.os == 'Linux'
+        env:
+          # Xvfb has no GPU, and WebKit's accelerated compositor and DMA-BUF
+          # renderer both abort without one, taking the webview down with them.
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+        # dbus-run-session gives libayatana-appindicator a session bus to register
+        # the tray against instead of leaving it to GDBus autolaunch.
+        run: xvfb-run -a dbus-run-session -- node scripts/verify/launch-smoke.mjs
+
+      - name: Launch smoke test (macOS)
+        # The runner provides a real desktop session, so the app launches as-is.
+        if: runner.os == 'macOS'
+        run: node scripts/verify/launch-smoke.mjs
+
+      # Windows is NOT covered: on a runner the webview reports the bundle
+      # loaded and then no frontend IPC ever completes. Cause unresolved,
+      # unreproduced on real hardware — a green build says nothing about Windows.
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'

@@ -26,6 +26,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "verify:shell-contracts": "node scripts/verify/phase01-shell-contracts.mjs",
+    "verify:launch-smoke": "node scripts/verify/launch-smoke.mjs",
     "e2e:build": "tauri build --debug --no-bundle --features e2e",
     "e2e": "pnpm e2e:build && wdio run wdio.conf.ts",
     "e2e:run": "wdio run wdio.conf.ts"

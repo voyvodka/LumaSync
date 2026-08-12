@@ -22,6 +22,11 @@ import {
 import { migrateShellState } from "../persistence/migrations";
 import { clamp } from "@/shared/lib/math";
 
+// CI's definition of "the build launches": `scripts/verify/launch-smoke.mjs`
+// greps the app's stdout for this literal, which it reads back out of this file
+// — so renaming the string is safe, inlining it at the call site is not.
+export const STARTUP_READY_MARKER = "[LumaSync] [startup] shell ready";
+
 // ---------------------------------------------------------------------------
 // Store helpers
 // ---------------------------------------------------------------------------
@@ -709,6 +714,9 @@ export async function initWindowLifecycle(opts?: {
       }
       await initWindowGeometryPersistence();
       await initCloseToTrayHint(opts?.onFirstCloseToTray);
+      // Last statement on purpose: everything above is awaited, so the beacon
+      // cannot be reached by a launch that failed any step of it.
+      console.info(STARTUP_READY_MARKER);
     })();
   }
 
