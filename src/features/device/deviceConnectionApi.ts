@@ -6,12 +6,14 @@ import {
   type LedChipType,
 } from "@/shared/contracts/device";
 
+/** Coded result shape shared by the serial command bridge — never throws, always returns this. */
 export interface CommandStatus {
   code: string;
   message: string;
   details: string | null;
 }
 
+/** USB identity of a serial port, when the OS reports one. */
 export interface UsbPortMetadata {
   vid: number;
   pid: number;
@@ -20,6 +22,7 @@ export interface UsbPortMetadata {
   serialNumber: string | null;
 }
 
+/** One enumerated serial port, with the VID/PID allowlist verdict already applied. */
 export interface SerialPortDescriptor {
   name: string;
   kind: string;
@@ -28,11 +31,13 @@ export interface SerialPortDescriptor {
   usb: UsbPortMetadata | null;
 }
 
+/** Result of `listSerialPorts` — every enumerated port plus the call's own status. */
 export interface SerialPortListResponse {
   status: CommandStatus;
   ports: SerialPortDescriptor[];
 }
 
+/** Current serial connection state; `portName` is `null` when nothing is connected. */
 export interface SerialConnectionStatus {
   portName: string | null;
   connected: boolean;
@@ -40,6 +45,7 @@ export interface SerialConnectionStatus {
   updatedAtUnixMs: number;
 }
 
+/** Pass/fail outcome of a single step in the serial health-check sequence. */
 export interface HealthStepResult {
   step: DeviceHealthStep;
   pass: boolean;
@@ -95,10 +101,12 @@ export interface HealthCheckResult {
   advertisedFirmwareProfile?: FirmwareProfile;
 }
 
+/** Enumerate serial ports, filtering out the macOS `tty.*` siblings of each `cu.*` USB device. */
 export async function listSerialPorts(): Promise<SerialPortListResponse> {
   return invoke<SerialPortListResponse>(DEVICE_COMMANDS.LIST_PORTS);
 }
 
+/** Open the named serial port and hand it to the active LED sink. Never throws; check `status.code`. */
 export async function connectSerialPort(
   portName: string,
   chipType?: LedChipType,
@@ -109,10 +117,12 @@ export async function connectSerialPort(
   });
 }
 
+/** Read the last-known serial connection status without touching the port. */
 export async function getSerialConnectionStatus(): Promise<SerialConnectionStatus> {
   return invoke<SerialConnectionStatus>(DEVICE_COMMANDS.GET_CONNECTION_STATUS);
 }
 
+/** Run the handshake-and-back health check on the named port. Never throws; check `steps`/`pass`. */
 export async function runSerialHealthCheck(portName: string): Promise<HealthCheckResult> {
   return invoke<HealthCheckResult>(DEVICE_COMMANDS.RUN_HEALTH_CHECK, { portName });
 }

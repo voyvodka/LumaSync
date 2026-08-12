@@ -6,6 +6,7 @@ import {
   type NotificationResult,
 } from "@/shared/contracts/platform";
 
+/** Injectable `invoke()` signature so platform commands can be unit-tested with a mock transport. */
 export type PlatformInvoker = <T>(command: string, payload?: Record<string, unknown>) => Promise<T>;
 
 // Omit the second arg entirely when there is no payload — GlobalErrorBoundary.test.tsx

@@ -11,12 +11,14 @@ import {
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
 import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
 
+/** Normalized shape every mode-command rejection is mapped to before being thrown. */
 export interface ModeApiError {
   code: string;
   message: string;
   details?: string;
 }
 
+/** Result of a USB lighting-mode command — the mode now in effect plus its coded status. */
 export interface ModeCommandResult {
   active: boolean;
   mode: LightingModeConfig;
@@ -27,6 +29,7 @@ export interface ModeCommandResult {
   };
 }
 
+/** Bridge/credential/area selection needed to start (or restart) the Hue entertainment stream. */
 export interface StartHuePayload {
   bridgeIp: string;
   username: string;
@@ -37,6 +40,7 @@ export interface StartHuePayload {
   channelRegionOverrides?: Record<number, string>;
 }
 
+/** RGB (+ optional brightness) to push to the Hue lights as a static color. */
 export interface HueSolidColorPayload {
   r: number;
   g: number;
@@ -45,6 +49,7 @@ export interface HueSolidColorPayload {
   triggerSource?: HueRuntimeTriggerSource;
 }
 
+/** Last solid color successfully (or pending) applied to the Hue lights. */
 export interface HueSolidColorSnapshot {
   r: number;
   g: number;
@@ -52,6 +57,7 @@ export interface HueSolidColorSnapshot {
   brightness: number;
 }
 
+/** Result of a Hue streaming command — runtime state/status plus the last solid color, if any. */
 export interface HueRuntimeCommandResult {
   active: boolean;
   status: {
@@ -67,6 +73,7 @@ export interface HueRuntimeCommandResult {
   lastSolidColor?: HueSolidColorSnapshot | null;
 }
 
+/** Injectable `invoke()` signature so mode commands can be unit-tested with a mock transport. */
 export type ModeInvoker = <T>(command: string, payload?: Record<string, unknown>) => Promise<T>;
 
 const defaultInvoke: ModeInvoker = (command, payload) => invoke(command, payload);
@@ -91,6 +98,7 @@ function mapModeApiError(error: unknown): ModeApiError {
   };
 }
 
+/** Apply a USB lighting mode (Off/Ambilight/Solid) to the connected device. Throws a `ModeApiError` on failure. */
 export async function setLightingMode(
   payload: LightingModeConfig,
   invoker: ModeInvoker = defaultInvoke,
@@ -104,6 +112,7 @@ export async function setLightingMode(
   }
 }
 
+/** Turn off USB lighting output, superseding any active test pattern. Throws a `ModeApiError` on failure. */
 export async function stopLighting(invoker: ModeInvoker = defaultInvoke): Promise<ModeCommandResult> {
   try {
     return await invoker<ModeCommandResult>(DEVICE_COMMANDS.STOP_LIGHTING);
@@ -112,6 +121,7 @@ export async function stopLighting(invoker: ModeInvoker = defaultInvoke): Promis
   }
 }
 
+/** Read the currently active USB lighting mode without changing it. */
 export async function getLightingModeStatus(invoker: ModeInvoker = defaultInvoke): Promise<ModeCommandResult> {
   try {
     return await invoker<ModeCommandResult>(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS);
@@ -129,6 +139,7 @@ function overridesToList(overrides: Record<number, string>): (string | null)[] |
   return Array.from({ length: channelCount }, (_, i) => overrides[i] ?? null);
 }
 
+/** Start the Hue entertainment stream for the given bridge/area. Throws a `ModeApiError` on failure. */
 export async function startHue(
   payload: StartHuePayload,
   invoker: ModeInvoker = defaultInvoke,
@@ -152,6 +163,7 @@ export async function startHue(
   }
 }
 
+/** Stop the active Hue entertainment stream. Throws a `ModeApiError` on failure. */
 export async function stopHue(
   triggerSource: HueRuntimeTriggerSource = HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
   invoker: ModeInvoker = defaultInvoke,
@@ -165,6 +177,7 @@ export async function stopHue(
   }
 }
 
+/** Stop and re-start the Hue stream in one call — used to pick up new area/credential/channel settings. */
 export async function restartHue(
   payload: StartHuePayload,
   invoker: ModeInvoker = defaultInvoke,
@@ -188,6 +201,7 @@ export async function restartHue(
   }
 }
 
+/** Poll the Hue stream's current runtime state; self-heals if the background sender thread has died. */
 export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): Promise<HueRuntimeCommandResult> {
   try {
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.GET_STREAM_STATUS);
@@ -196,6 +210,7 @@ export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): 
   }
 }
 
+/** Push a static RGB color to the Hue lights; queued for replay if the stream isn't running yet. */
 export async function setHueSolidColor(
   payload: HueSolidColorPayload,
   invoker: ModeInvoker = defaultInvoke,

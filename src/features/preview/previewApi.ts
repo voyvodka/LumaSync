@@ -18,6 +18,7 @@ import {
   type TwinOverlayResult,
 } from "@/shared/contracts/preview";
 
+/** Injectable `invoke()` signature so preview commands can be unit-tested with a mock transport. */
 export type PreviewInvoker = <T>(
   command: string,
   payload?: Record<string, unknown>,
@@ -60,6 +61,7 @@ function idlePreviewStatus(): LedPreviewStatus {
 // Test patterns
 // ---------------------------------------------------------------------------
 
+/** Start a synthetic LED test pattern, overriding whatever lighting mode is currently active. */
 export async function startLedTestPattern(
   payload: StartLedTestPatternPayload,
   invoker: PreviewInvoker = defaultInvoke,
@@ -72,6 +74,7 @@ export async function startLedTestPattern(
   }
 }
 
+/** Stop the active LED test pattern and restore whatever mode it was superseding. */
 export async function stopLedTestPattern(
   invoker: PreviewInvoker = defaultInvoke,
 ): Promise<LedTestPatternResult> {
@@ -85,6 +88,7 @@ export async function stopLedTestPattern(
   }
 }
 
+/** Read the current preview surface state (test pattern, twin overlays, popup visibility). */
 export async function getLedPreviewStatus(
   invoker: PreviewInvoker = defaultInvoke,
 ): Promise<LedPreviewStatus> {
@@ -100,6 +104,7 @@ export async function getLedPreviewStatus(
 // Twin overlay window
 // ---------------------------------------------------------------------------
 
+/** Open the borderless digital-twin overlay window mirroring LED output on the given display. */
 export async function openLedTwinOverlay(
   payload: OpenLedTwinOverlayPayload,
   invoker: PreviewInvoker = defaultInvoke,
@@ -139,6 +144,7 @@ export async function closeLedTwinOverlay(
 // Control popup window
 // ---------------------------------------------------------------------------
 
+/** Create the LED control popup window if it doesn't exist yet, or bring it to front if it does. */
 export async function openLedControlPopup(
   invoker: PreviewInvoker = defaultInvoke,
 ): Promise<ControlPopupResult> {
@@ -150,6 +156,7 @@ export async function openLedControlPopup(
   }
 }
 
+/** Unminimize, show, and focus the LED control popup. Fails if it hasn't been created via `openLedControlPopup` yet. */
 export async function showLedControlPopup(
   invoker: PreviewInvoker = defaultInvoke,
 ): Promise<ControlPopupResult> {
@@ -161,6 +168,7 @@ export async function showLedControlPopup(
   }
 }
 
+/** Hide the LED control popup window without destroying it — `showLedControlPopup` can bring it back. */
 export async function hideLedControlPopup(
   invoker: PreviewInvoker = defaultInvoke,
 ): Promise<ControlPopupResult> {

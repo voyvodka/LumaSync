@@ -13,21 +13,25 @@ import {
   type WledStatusCode,
 } from "@/shared/contracts/device";
 
+/** Coded result shape shared by every WLED sink command — never throws, always returns this. */
 export interface WledCommandStatus {
   code: WledStatusCode | string;
   message: string;
   details?: string | null;
 }
 
+/** Result of `discoverWledDevices` — every WLED instance found (or probed) on the network. */
 export interface WledDiscoveryResponse {
   status: WledCommandStatus;
   devices: WledDeviceInfo[];
 }
 
+/** Result of `connectWledSink`. */
 export interface WledConnectResponse {
   status: WledCommandStatus;
 }
 
+/** Result of `testWledBridge`. */
 export interface WledTestResponse {
   status: WledCommandStatus;
   /** Round-trip latency of the test packet (ms), populated on success. */
