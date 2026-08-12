@@ -1,22 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { TranslationKey } from "@/features/i18n/catalogue";
-
 import {
   HUE_CREDENTIAL_BACKENDS,
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
-  HUE_READINESS_REASON,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
   type HueRuntimeTarget,
   type HueRuntimeTargetTelemetryRow,
-  type HueCredentialStatus,
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
 import { restartHue, startHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
 import { readHueStreamReadiness, readHueStreamStatus } from "./hueReadCache";
+import {
+  applyAreaReadinessSnapshot,
+  flattenAreaGroups,
+  normalizeAreas,
+} from "./model/areaGrouping";
+import { dedupeBridges, normalizeIpValue, resolveManualIpError } from "./model/bridgeIdentity";
+import { deriveStep, toPersistedStep, toStepFromPersisted } from "./model/onboardingStep";
+import { HUE_ONBOARDING_TRANSPORT_CODES as CODE, toErrorDetails } from "./model/onboardingStatusCodes";
+import {
+  DEFAULT_STATE,
+  type HueAreaReadiness,
+  type HueOnboardingState,
+  type HueStep,
+  type UseHueOnboardingResult,
+} from "./model/onboardingTypes";
+import {
+  READINESS_BACKGROUND_REFRESH_MS,
+  READINESS_BLOCKED_REFRESH_MS,
+  READINESS_STALE_MS,
+  RUNTIME_POLL_INTERVAL_MS,
+  RUNTIME_POLL_MIN_INTERVAL_MS,
+  STREAMING_RUNTIME_STATES,
+} from "./model/pollingCadence";
+import { deriveRuntimeTargets } from "./model/runtimeTargets";
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
@@ -24,322 +44,22 @@ import {
   listHueEntertainmentAreas,
   migrateHueCredentials,
   pairHueBridge,
-  type CommandStatus,
-  type HueBridgeSummary,
   type HueAreaChannelInfo,
-  type HueEntertainmentAreaSummary,
   type HuePairingCredentials,
   validateHueCredentials,
   verifyHueBridgeIp,
 } from "./hueOnboardingApi";
 
-const IPV4_PATTERN =
-  /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
-
-type HueStep = "discover" | "pair" | "area" | "ready";
-const READINESS_STALE_MS = 30_000;
-const READINESS_BACKGROUND_REFRESH_MS = 15_000;
-// Tighter cadence used while the selected area is blocked by another
-// active streamer. The user is actively waiting for the foreign session
-// to release, so polling every 3 s keeps the banner from feeling stuck.
-// Once the area becomes free, we fall back to the regular 15 s cadence.
-const READINESS_BLOCKED_REFRESH_MS = 3_000;
-const ACTIVE_STREAMER_REASON = HUE_READINESS_REASON.ACTIVE_STREAMER;
-// Backend `spawn_reconnect_monitor` (`src-tauri/src/commands/hue/reconnect.rs`)
-// already polls the DTLS sender's shutdown signal every 200 ms and flips the
-// runtime state on its own — this frontend poll is a visual-reflection
-// concern only, so a tight 3 s cadence is wasteful HTTPS traffic to the
-// Bridge while the stream is alive. 10 s keeps the Devices-tab badge fresh
-// without piling redundant readiness GETs onto the live DTLS frame stream.
-const RUNTIME_POLL_INTERVAL_MS = 10_000;
-// Floor between two runtime-status reads however they are triggered. Without
-// it every state transition (and every visibility resume) fired an immediate
-// bridge round-trip, so a Idle→Starting→Running burst cost three.
-const RUNTIME_POLL_MIN_INTERVAL_MS = 1_500;
-// Runtime states for which polling makes sense — the stream is alive (or
-// trying to be), so the readiness probe / dead-sender check carry signal.
-// In Idle / Stopping / Failed the backend snapshot is fully owned by the
-// state machine; redundant polling just churns IPC and causes pointless
-// Devices-tab re-renders.
-const STREAMING_RUNTIME_STATES = new Set<HueRuntimeStatus["state"]>([
-  "Starting",
-  "Running",
-  "Reconnecting",
-]);
-
-export interface HueAreaReadiness {
-  ready: boolean;
-  reasons: string[];
-  code: string;
-  message: string;
-  details: string | null;
-}
-
-export interface HueAreaRow extends HueEntertainmentAreaSummary {
-  roomLabel: string;
-  sortRoomKey: string;
-  sortNameKey: string;
-  readiness: HueAreaReadiness | null;
-}
-
-export interface HueAreaGroup {
-  roomName: string;
-  areas: HueAreaRow[];
-}
-
-export interface UseHueOnboardingResult {
-  step: HueStep;
-  bridges: HueBridgeSummary[];
-  selectedBridgeId: string | null;
-  selectedBridge: HueBridgeSummary | null;
-  manualIp: string;
-  manualIpError: TranslationKey | null;
-  credentialState: HueCredentialStatus;
-  /** True when the bridge is registered but cannot be reached (network error, not auth error). */
-  bridgeUnreachable: boolean;
-  credentials: HuePairingCredentials | null;
-  areaGroups: HueAreaGroup[];
-  selectedAreaId: string | null;
-  selectedArea: HueAreaRow | null;
-  canStartHue: boolean;
-  isReadinessStale: boolean;
-  isDiscovering: boolean;
-  isPairing: boolean;
-  isLoadingAreas: boolean;
-  isCheckingReadiness: boolean;
-  isValidatingCredential: boolean;
-  status: CommandStatus | null;
-  runtimeStatus: HueRuntimeStatus | null;
-  runtimeTargets: HueRuntimeTargetTelemetryRow[];
-  isRuntimeMutating: boolean;
-  /** Channels for the currently selected area (empty while loading or no area selected). */
-  areaChannels: HueAreaChannelInfo[];
-  isLoadingChannels: boolean;
-  /** User overrides: channel index → region string. */
-  channelRegionOverrides: Record<number, string>;
-  setChannelRegion: (channelIndex: number, region: string | null) => void;
-  discover: () => Promise<void>;
-  selectBridge: (bridgeId: string | null) => void;
-  setManualIp: (value: string) => void;
-  submitManualIp: () => Promise<void>;
-  pair: () => Promise<void>;
-  refreshAreas: () => Promise<void>;
-  selectArea: (areaId: string | null) => void;
-  revalidateArea: () => Promise<void>;
-  startRuntime: () => Promise<void>;
-  retryRuntimeTarget: (target: HueRuntimeTarget) => Promise<void>;
-}
-
-export function deriveRuntimeTargets(status: HueRuntimeStatus | null): HueRuntimeTargetTelemetryRow[] {
-  if (!status) {
-    return [];
-  }
-
-  const hueTelemetry = status.telemetry?.hue;
-  if (hueTelemetry) {
-    return [
-      {
-        ...hueTelemetry,
-        remainingAttempts: hueTelemetry.remainingAttempts ?? status.remainingAttempts,
-        nextAttemptMs: hueTelemetry.nextAttemptMs ?? status.nextAttemptMs,
-        actionHint: hueTelemetry.actionHint ?? status.actionHint,
-      },
-    ];
-  }
-
-  return [
-    {
-      target: "hue",
-      state: status.state,
-      code: status.code,
-      message: status.message,
-      details: status.details ?? undefined,
-      remainingAttempts: status.remainingAttempts,
-      nextAttemptMs: status.nextAttemptMs,
-      actionHint: status.actionHint,
-    },
-  ];
-}
-
-interface HueOnboardingState {
-  step: HueStep;
-  bridges: HueBridgeSummary[];
-  selectedBridgeId: string | null;
-  manualIp: string;
-  manualIpError: TranslationKey | null;
-  credentialState: HueCredentialStatus;
-  /** Sticky flag: set true only on network-level credential check failure, cleared on successful validation or bridge removal. */
-  bridgeUnreachable: boolean;
-  credentials: HuePairingCredentials | null;
-  areaGroups: HueAreaGroup[];
-  selectedAreaId: string | null;
-  isDiscovering: boolean;
-  isPairing: boolean;
-  isLoadingAreas: boolean;
-  isCheckingReadiness: boolean;
-  isValidatingCredential: boolean;
-  status: CommandStatus | null;
-}
-
-const DEFAULT_STATE: HueOnboardingState = {
-  step: "discover",
-  bridges: [],
-  selectedBridgeId: null,
-  manualIp: "",
-  manualIpError: null,
-  credentialState: HUE_CREDENTIAL_STATUS.UNKNOWN,
-  bridgeUnreachable: false,
-  credentials: null,
-  areaGroups: [],
-  selectedAreaId: null,
-  isDiscovering: false,
-  isPairing: false,
-  isLoadingAreas: false,
-  isCheckingReadiness: false,
-  isValidatingCredential: false,
-  status: null,
-};
-
-function toStepFromPersisted(value: string | undefined): HueStep {
-  if (value === HUE_ONBOARDING_STEP.PAIR) {
-    return "pair";
-  }
-
-  if (value === HUE_ONBOARDING_STEP.AREA_SELECT) {
-    return "area";
-  }
-
-  if (value === HUE_ONBOARDING_STEP.READY) {
-    return "ready";
-  }
-
-  return "discover";
-}
-
-function normalizeIpValue(value: string): string {
-  return value.trim();
-}
-
-function resolveManualIpError(value: string): TranslationKey | null {
-  const normalized = normalizeIpValue(value);
-  if (normalized.length === 0) {
-    return null;
-  }
-
-  return IPV4_PATTERN.test(normalized) ? null : "hue:manualIp.invalid";
-}
-
-function dedupeBridges(bridges: HueBridgeSummary[]): HueBridgeSummary[] {
-  const byId = new Map<string, HueBridgeSummary>();
-  for (const bridge of bridges) {
-    byId.set(bridge.id, bridge);
-  }
-  return Array.from(byId.values());
-}
-
-function normalizeAreas(
-  areas: HueEntertainmentAreaSummary[],
-  readinessById: Map<string, HueAreaReadiness>,
-): HueAreaGroup[] {
-  const rows: HueAreaRow[] = areas.map((area) => {
-    const room = area.roomName?.trim();
-    return {
-      ...area,
-      roomLabel: room && room.length > 0 ? room : "Other rooms",
-      sortRoomKey: (room ?? "other rooms").toLocaleLowerCase(),
-      sortNameKey: area.name.toLocaleLowerCase(),
-      readiness: readinessById.get(area.id) ?? null,
-    };
-  });
-
-  rows.sort((left, right) => {
-    const roomOrder = left.sortRoomKey.localeCompare(right.sortRoomKey);
-    if (roomOrder !== 0) {
-      return roomOrder;
-    }
-
-    return left.sortNameKey.localeCompare(right.sortNameKey);
-  });
-
-  const groups = new Map<string, HueAreaGroup>();
-  for (const row of rows) {
-    const existing = groups.get(row.roomLabel);
-    if (existing) {
-      existing.areas.push(row);
-      continue;
-    }
-
-    groups.set(row.roomLabel, {
-      roomName: row.roomLabel,
-      areas: [row],
-    });
-  }
-
-  return Array.from(groups.values());
-}
-
-function flattenAreaGroups(areaGroups: HueAreaGroup[]): HueAreaRow[] {
-  return areaGroups.flatMap((group) => group.areas);
-}
-
-function applyAreaReadinessSnapshot(
-  areaGroups: HueAreaGroup[],
-  areaId: string,
-  readiness: HueAreaReadiness,
-): HueAreaGroup[] {
-  // The bridge readiness probe re-fetches the entertainment area on every
-  // call, so `reasons` is the freshest signal we have for whether a
-  // foreign streamer is still attached. Mirror that into the area row
-  // so the active-streamer banner (which reads `area.activeStreamer`)
-  // clears as soon as the foreign session disconnects, without the user
-  // having to manually click revalidate (A3.1).
-  const activeStreamer = readiness.reasons.includes(ACTIVE_STREAMER_REASON);
-  return areaGroups.map((group) => ({
-    ...group,
-    areas: group.areas.map((area) =>
-      area.id === areaId
-        ? {
-            ...area,
-            readiness,
-            activeStreamer,
-          }
-        : area,
-    ),
-  }));
-}
-
-function deriveStep(state: Pick<HueOnboardingState, "selectedBridgeId" | "credentialState" | "selectedAreaId" | "areaGroups">): HueStep {
-  if (!state.selectedBridgeId) {
-    return "discover";
-  }
-
-  if (state.credentialState !== HUE_CREDENTIAL_STATUS.VALID) {
-    return "pair";
-  }
-
-  if (!state.selectedAreaId) {
-    return "area";
-  }
-
-  const selectedArea = flattenAreaGroups(state.areaGroups).find((area) => area.id === state.selectedAreaId);
-  if (!selectedArea?.readiness?.ready) {
-    return "area";
-  }
-
-  return "ready";
-}
+export { deriveRuntimeTargets };
+export type {
+  HueAreaGroup,
+  HueAreaReadiness,
+  HueAreaRow,
+  UseHueOnboardingResult,
+} from "./model/onboardingTypes";
 
 async function persistResumeState(step: HueStep): Promise<void> {
-  const mapped =
-    step === "discover"
-      ? HUE_ONBOARDING_STEP.DISCOVER
-      : step === "pair"
-        ? HUE_ONBOARDING_STEP.PAIR
-        : step === "area"
-          ? HUE_ONBOARDING_STEP.AREA_SELECT
-          : HUE_ONBOARDING_STEP.READY;
-
-  await shellStore.save({ hueOnboardingStep: mapped });
+  await shellStore.save({ hueOnboardingStep: toPersistedStep(step) });
 }
 
 /** One-shot cleanup for pre-keychain installs; deliberately not a store
@@ -597,9 +317,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         ...prev,
         isLoadingAreas: false,
         status: {
-          code: "HUE_AREA_LIST_FAILED",
+          code: CODE.AREA_LIST_FAILED,
           message: "Could not list Hue entertainment areas.",
-          details: error instanceof Error ? error.message : String(error),
+          details: toErrorDetails(error),
         },
       }));
     }
@@ -634,9 +354,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         ...prev,
         isDiscovering: false,
         status: {
-          code: "HUE_DISCOVERY_FAILED",
+          code: CODE.DISCOVERY_FAILED,
           message: "Could not discover Hue bridges.",
-          details: error instanceof Error ? error.message : String(error),
+          details: toErrorDetails(error),
         },
       }));
     }
@@ -709,9 +429,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         ...prev,
         isDiscovering: false,
         status: {
-          code: "HUE_IP_UNREACHABLE",
+          code: CODE.IP_UNREACHABLE,
           message: "Could not verify Hue bridge IP.",
-          details: error instanceof Error ? error.message : String(error),
+          details: toErrorDetails(error),
         },
       }));
     }
@@ -769,9 +489,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
         isPairing: false,
         status: {
-          code: "HUE_PAIRING_FAILED",
+          code: CODE.PAIRING_FAILED,
           message: "Pairing request failed.",
-          details: error instanceof Error ? error.message : String(error),
+          details: toErrorDetails(error),
         },
       }));
     }
@@ -823,9 +543,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         ...prev,
         isCheckingReadiness: false,
         status: {
-          code: "HUE_STREAM_READINESS_FAILED",
+          code: CODE.STREAM_READINESS_FAILED,
           message: "Could not evaluate Hue stream readiness.",
-          details: error instanceof Error ? error.message : String(error),
+          details: toErrorDetails(error),
         },
       }));
     }
@@ -1016,9 +736,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
           bridgeUnreachable: true,
           isValidatingCredential: false,
           status: {
-            code: "HUE_CREDENTIAL_CHECK_FAILED",
+            code: CODE.CREDENTIAL_CHECK_FAILED,
             message: "Could not validate saved Hue credentials.",
-            details: error instanceof Error ? error.message : String(error),
+            details: toErrorDetails(error),
           },
         }));
       }
@@ -1044,7 +764,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       const details = error instanceof Error ? error.message : String(error);
       const fallbackStatus: HueRuntimeStatus = {
         state: "Failed",
-        code: "HUE_STREAM_STATUS_UNAVAILABLE",
+        code: CODE.STREAM_STATUS_UNAVAILABLE,
         message: "Could not fetch Hue runtime status.",
         details,
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM,
@@ -1150,9 +870,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       patchState((prev) => ({
         ...prev,
         status: {
-          code: "HUE_STREAM_START_FAILED",
+          code: CODE.STREAM_START_FAILED,
           message: "Could not start Hue stream.",
-          details: error instanceof Error ? error.message : String(error),
+          details: toErrorDetails(error),
         },
       }));
     } finally {
@@ -1183,9 +903,9 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         patchState((prev) => ({
           ...prev,
           status: {
-            code: "HUE_STREAM_RECOVERY_FAILED",
+            code: CODE.STREAM_RECOVERY_FAILED,
             message: "Could not recover Hue stream.",
-            details: error instanceof Error ? error.message : String(error),
+            details: toErrorDetails(error),
           },
         }));
       } finally {
