@@ -1,9 +1,5 @@
-//! Persisted room-map data model — dimensions, Hue channel/zone placements,
-//! USB strip and furniture positions. Mirrors `src/shared/contracts/roomMap.ts`.
-
 use serde::{Deserialize, Serialize};
 
-/// Physical room size used to scale the top-down room-map editor.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomDimensions {
@@ -23,8 +19,6 @@ pub struct ZoneRelativePosition {
     pub z: f64,
 }
 
-/// Room-map placement of one Hue entertainment channel, either in absolute
-/// `x/y/z` or zone-relative coordinates when `zone_id` is set.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueChannelPlacement {
@@ -45,7 +39,6 @@ pub struct HueChannelPlacement {
     pub zone_relative_position: Option<ZoneRelativePosition>,
 }
 
-/// Room-map placement of one USB LED strip run along a wall edge.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbStripPlacement {
@@ -57,8 +50,6 @@ pub struct UsbStripPlacement {
     pub y: f64,
 }
 
-/// Room-map placement of one furniture rectangle, used only as a visual
-/// reference in the editor.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FurniturePlacement {
@@ -71,8 +62,6 @@ pub struct FurniturePlacement {
     pub y: f64,
 }
 
-/// Room-map placement and size of the TV/screen anchor, the reference
-/// rectangle every edge and zone position is relative to.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TvAnchorPlacement {
@@ -126,7 +115,6 @@ pub struct HueZone {
     pub center_color: Option<String>,
 }
 
-/// Full persisted room-map document — dimensions plus every placement kind.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomMapConfig {

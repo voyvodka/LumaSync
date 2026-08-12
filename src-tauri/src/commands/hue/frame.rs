@@ -44,8 +44,6 @@ pub enum HueScreenRegion {
 }
 
 impl HueScreenRegion {
-    /// Lowercase wire string for this region, matching the frontend
-    /// contract's region identifiers.
     pub fn as_str(&self) -> &'static str {
         match self {
             HueScreenRegion::Top => "top",

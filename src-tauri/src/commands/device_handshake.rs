@@ -243,7 +243,6 @@ pub struct TimedSerialPort<P: Read + Write> {
 }
 
 impl<P: Read + Write> TimedSerialPort<P> {
-    /// Wrap a port that already has its per-call read timeout configured.
     pub fn new(inner: P) -> Self {
         Self { inner }
     }

@@ -1,15 +1,12 @@
-//! macOS-only window tweaks applied at startup — forbids native fullscreen
-//! rather than fighting its title-bar-stacking race. See
-//! docs/architecture/ui-and-shell.md.
+// macOS-only window tweaks applied at startup — forbids native fullscreen
+// rather than fighting its title-bar-stacking race. See
+// docs/architecture/ui-and-shell.md.
 
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_app_kit::{NSWindow, NSWindowButton, NSWindowCollectionBehavior};
 use tauri::WebviewWindow;
 
-/// Disable native fullscreen (⌃⌘F and the zoom button) on the main window,
-/// since the app's own overlay windows fight macOS's title-bar-stacking
-/// animation when the main window goes fullscreen.
 pub fn forbid_native_fullscreen(window: &WebviewWindow) {
     let raw = match window.ns_window() {
         Ok(ptr) => ptr,

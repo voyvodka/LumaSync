@@ -378,8 +378,6 @@ fn app_context<R: Runtime>() -> tauri::Context<R> {
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
-/// Build the Tauri app — register plugins, managed state, and IPC commands,
-/// wire the tray, and start the event loop. Never returns until shutdown.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();

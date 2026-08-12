@@ -1233,8 +1233,6 @@ pub enum HueGamutType {
 }
 
 impl HueGamutType {
-    /// Parse a CLIP v2 `gamut_type` string (case-insensitive `"A"`/`"B"`/`"C"`)
-    /// into the matching variant, defaulting to `Other` for anything else.
     pub fn from_clip_str(value: &str) -> Self {
         match value.trim() {
             "A" | "a" => HueGamutType::A,
