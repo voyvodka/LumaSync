@@ -226,18 +226,18 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     try {
       if (shouldEnable) {
         if (displayTarget.blocked) {
-          const reason = displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+          const reason = displayTarget.blockedReason ?? t("calibration:overlay.blockedReasonUnknown");
           const code = displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
-          setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
+          setTestPatternError(t("calibration:overlay.errors.testPatternBlocked", { code, reason }));
           return;
         }
         const switched = await displayTargetRef.current.switchActiveDisplay(undefined, overlayPreviewPayload);
         setDisplayTarget(switched);
         reclaimFocus();
         if (switched.blocked) {
-          const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+          const reason = switched.blockedReason ?? t("calibration:overlay.blockedReasonUnknown");
           const code = switched.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
-          setTestPatternError(t("calibration.overlay.errors.testPatternBlocked", { code, reason }));
+          setTestPatternError(t("calibration:overlay.errors.testPatternBlocked", { code, reason }));
           return;
         }
       }
@@ -252,7 +252,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      setTestPatternError(t("calibration.overlay.errors.testPatternToggleFailed", { reason }));
+      setTestPatternError(t("calibration:overlay.errors.testPatternToggleFailed", { reason }));
       try { const s = await flowRef.current.toggle(false); setTestPattern(s); } catch {}
       try { const c = await displayTargetRef.current.closeActiveDisplay(); setDisplayTarget(c); } catch {}
     }
@@ -278,15 +278,15 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       setDisplayTarget(switched);
       reclaimFocus();
       if (switched.blocked) {
-        const reason = switched.blockedReason ?? t("calibration.overlay.blockedReasonUnknown");
+        const reason = switched.blockedReason ?? t("calibration:overlay.blockedReasonUnknown");
         const code = switched.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED;
-        setTestPatternError(t("calibration.overlay.errors.displaySwitchBlocked", { code, reason }));
+        setTestPatternError(t("calibration:overlay.errors.displaySwitchBlocked", { code, reason }));
       } else {
         setTestPatternError(null);
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      setTestPatternError(t("calibration.overlay.errors.displaySwitchFailed", { reason }));
+      setTestPatternError(t("calibration:overlay.errors.displaySwitchFailed", { reason }));
     }
   }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t]);
 
@@ -412,9 +412,9 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       {(testPatternError || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
         <div className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-950/60 px-3.5 py-2.5">
           {displayTarget.blocked && (
-            <ErrorLine text={t("calibration.overlay.blockedReason", {
+            <ErrorLine text={t("calibration:overlay.blockedReason", {
               code: displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED,
-              reason: displayTarget.blockedReason ?? t("calibration.overlay.blockedReasonUnknown"),
+              reason: displayTarget.blockedReason ?? t("calibration:overlay.blockedReasonUnknown"),
             })} />
           )}
           {testPatternError && <ErrorLine text={testPatternError} />}
@@ -432,7 +432,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
           <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-800 px-6 py-2.5">
             <div className="flex min-w-0 items-baseline gap-2.5">
               <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.16em] text-amber-400">
-                {t("calibration.page.totalStrip")}
+                {t("calibration:page.totalStrip")}
               </span>
               <span className="[font-family:var(--lm-mono)] text-lg font-semibold leading-none text-zinc-100">
                 {totalLeds}
@@ -469,7 +469,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                   <path d="M3 12l3-3 4 4 8-8 3 3" />
                   <path d="M21 6v6h-6" />
                 </svg>
-                {t("calibration.page.reset")}
+                {t("calibration:page.reset")}
               </button>
               <button
                 type="button"
@@ -485,8 +485,8 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                   <path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" />
                 </svg>
                 {testPattern.isEnabled
-                  ? t("calibration.page.stopTestPattern")
-                  : t("calibration.page.runTestPattern")}
+                  ? t("calibration:page.stopTestPattern")
+                  : t("calibration:page.runTestPattern")}
               </button>
             </div>
           </div>
@@ -504,29 +504,29 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                   testPattern.mode === "preview-only" ? "bg-amber-400" : "animate-pulse bg-emerald-400"
                 }`} />
                 {testPattern.mode === "preview-only"
-                  ? t("calibration.overlay.previewOnly")
-                  : t("calibration.overlay.outputActive")}
+                  ? t("calibration:overlay.previewOnly")
+                  : t("calibration:overlay.outputActive")}
               </div>
             )}
           </div>
 
           {/* Edge summary */}
           <div className="grid shrink-0 grid-cols-4 border-t border-zinc-800">
-            <EdgeSummary label={t("calibration.page.edgeTop")} value={counts.top} />
-            <EdgeSummary label={t("calibration.page.edgeRight")} value={counts.right} />
-            <EdgeSummary label={t("calibration.page.edgeBottom")} value={counts.bottom} />
-            <EdgeSummary label={t("calibration.page.edgeLeft")} value={counts.left} />
+            <EdgeSummary label={t("calibration:page.edgeTop")} value={counts.top} />
+            <EdgeSummary label={t("calibration:page.edgeRight")} value={counts.right} />
+            <EdgeSummary label={t("calibration:page.edgeBottom")} value={counts.bottom} />
+            <EdgeSummary label={t("calibration:page.edgeLeft")} value={counts.left} />
           </div>
         </div>
 
         {/* Dock */}
         <div className="flex w-[268px] shrink-0 flex-col border-l border-zinc-800 bg-black/30">
           <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
-          <DockSection title={t("calibration.page.dockCaptureSource")}>
+          <DockSection title={t("calibration:page.dockCaptureSource")}>
             <div className="flex flex-col gap-1.5">
               {displayTarget.displays.length === 0 ? (
                 <div className="rounded-md border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-500">
-                  {t("calibration.overlay.noDisplays")}
+                  {t("calibration:overlay.noDisplays")}
                 </div>
               ) : (
                 displayTarget.displays.map((display) => {
@@ -560,17 +560,17 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
             </div>
           </DockSection>
 
-          <DockSection title={t("calibration.page.dockLedCountPerEdge")}>
+          <DockSection title={t("calibration:page.dockLedCountPerEdge")}>
             <div className="grid grid-cols-2 gap-1.5">
-              <CountStepper label={t("calibration.page.edgeTop")} value={counts.top} onChange={(v) => handleCountChange("top", v)} />
-              <CountStepper label={t("calibration.page.edgeRight")} value={counts.right} onChange={(v) => handleCountChange("right", v)} />
-              <CountStepper label={t("calibration.page.edgeBottom")} value={counts.bottom} onChange={(v) => handleCountChange("bottom", v)} />
-              <CountStepper label={t("calibration.page.edgeLeft")} value={counts.left} onChange={(v) => handleCountChange("left", v)} />
+              <CountStepper label={t("calibration:page.edgeTop")} value={counts.top} onChange={(v) => handleCountChange("top", v)} />
+              <CountStepper label={t("calibration:page.edgeRight")} value={counts.right} onChange={(v) => handleCountChange("right", v)} />
+              <CountStepper label={t("calibration:page.edgeBottom")} value={counts.bottom} onChange={(v) => handleCountChange("bottom", v)} />
+              <CountStepper label={t("calibration:page.edgeLeft")} value={counts.left} onChange={(v) => handleCountChange("left", v)} />
             </div>
           </DockSection>
 
           {counts.bottom > 0 && (
-            <DockSection title={t("calibration.page.dockStandGap")}>
+            <DockSection title={t("calibration:page.dockStandGap")}>
               <StandGapStepper
                 value={bottomMissing}
                 max={counts.bottom}
@@ -579,29 +579,29 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
             </DockSection>
           )}
 
-          <DockSection title={t("calibration.page.dockStartAnchor")}>
+          <DockSection title={t("calibration:page.dockStartAnchor")}>
             <div className="grid grid-cols-4 gap-1">
-              <EdgeTab edge="top" label={t("calibration.page.startEdgeTop")} active={currentEdge === "top"} disabled={counts.top === 0} onClick={handleEdgeChange} />
-              <EdgeTab edge="right" label={t("calibration.page.startEdgeRight")} active={currentEdge === "right"} disabled={counts.right === 0} onClick={handleEdgeChange} />
-              <EdgeTab edge="bottom" label={t("calibration.page.startEdgeBottom")} active={currentEdge === "bottom"} disabled={counts.bottom === 0} onClick={handleEdgeChange} />
-              <EdgeTab edge="left" label={t("calibration.page.startEdgeLeft")} active={currentEdge === "left"} disabled={counts.left === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="top" label={t("calibration:page.startEdgeTop")} active={currentEdge === "top"} disabled={counts.top === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="right" label={t("calibration:page.startEdgeRight")} active={currentEdge === "right"} disabled={counts.right === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="bottom" label={t("calibration:page.startEdgeBottom")} active={currentEdge === "bottom"} disabled={counts.bottom === 0} onClick={handleEdgeChange} />
+              <EdgeTab edge="left" label={t("calibration:page.startEdgeLeft")} active={currentEdge === "left"} disabled={counts.left === 0} onClick={handleEdgeChange} />
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
-              <EndpointButton endpoint="start" label={t("calibration.page.anchorStart")} active={currentEndpoint === "start"} onClick={handleEndpointChange} />
+              <EndpointButton endpoint="start" label={t("calibration:page.anchorStart")} active={currentEndpoint === "start"} onClick={handleEndpointChange} />
               {currentEdge === "bottom" && bottomMissing > 0 && (
                 <>
-                  <EndpointButton endpoint="gap-right" label={t("calibration.page.anchorGapRight")} active={currentEndpoint === "gap-right"} onClick={handleEndpointChange} />
-                  <EndpointButton endpoint="gap-left" label={t("calibration.page.anchorGapLeft")} active={currentEndpoint === "gap-left"} onClick={handleEndpointChange} />
+                  <EndpointButton endpoint="gap-right" label={t("calibration:page.anchorGapRight")} active={currentEndpoint === "gap-right"} onClick={handleEndpointChange} />
+                  <EndpointButton endpoint="gap-left" label={t("calibration:page.anchorGapLeft")} active={currentEndpoint === "gap-left"} onClick={handleEndpointChange} />
                 </>
               )}
-              <EndpointButton endpoint="end" label={t("calibration.page.anchorEnd")} active={currentEndpoint === "end"} onClick={handleEndpointChange} />
+              <EndpointButton endpoint="end" label={t("calibration:page.anchorEnd")} active={currentEndpoint === "end"} onClick={handleEndpointChange} />
             </div>
           </DockSection>
 
-          <DockSection title={t("calibration.page.dockDirection")}>
+          <DockSection title={t("calibration:page.dockDirection")}>
             <div className="grid grid-cols-2 gap-1">
-              <DirectionButton direction="cw" label={t("calibration.page.dockDirectionCw")} active={direction === "cw"} onClick={handleDirectionChange} />
-              <DirectionButton direction="ccw" label={t("calibration.page.dockDirectionCcw")} active={direction === "ccw"} onClick={handleDirectionChange} />
+              <DirectionButton direction="cw" label={t("calibration:page.dockDirectionCw")} active={direction === "cw"} onClick={handleDirectionChange} />
+              <DirectionButton direction="ccw" label={t("calibration:page.dockDirectionCcw")} active={direction === "ccw"} onClick={handleDirectionChange} />
             </div>
           </DockSection>
 
@@ -614,7 +614,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
               onClick={handleClose}
               className="flex-1 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
             >
-              {t("calibration.overlay.cancel")}
+              {t("calibration:overlay.cancel")}
             </button>
             <button
               type="button"
@@ -623,7 +623,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
               onClick={() => void handleSave()}
               className="flex-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
             >
-              {isSaving ? t("calibration.overlay.saving") : t("calibration.overlay.save")}
+              {isSaving ? t("calibration:overlay.saving") : t("calibration:overlay.save")}
             </button>
           </div>
         </div>
@@ -634,10 +634,10 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
         <div className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-xl">
             <h3 className="text-base font-semibold text-zinc-100">
-              {t("calibration.overlay.unsavedTitle")}
+              {t("calibration:overlay.unsavedTitle")}
             </h3>
             <p className="mt-2 text-sm text-zinc-300">
-              {t("calibration.overlay.unsavedDescription")}
+              {t("calibration:overlay.unsavedDescription")}
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -645,7 +645,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                 onClick={() => setEditorState((prev) => keepEditing(prev))}
                 className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-200"
               >
-                {t("calibration.overlay.keepEditing")}
+                {t("calibration:overlay.keepEditing")}
               </button>
               <button
                 type="button"
@@ -657,7 +657,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                 }}
                 className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white"
               >
-                {t("calibration.overlay.discard")}
+                {t("calibration:overlay.discard")}
               </button>
             </div>
           </div>
@@ -746,14 +746,14 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
               inputRef.current?.blur();
             }
           }}
-          aria-label={t("calibration.page.aria.countInput", { label })}
+          aria-label={t("calibration:page.aria.countInput", { label })}
           className="min-w-0 flex-1 bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100 outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
         />
         <div className="flex flex-col gap-0.5">
           <button
             type="button"
             onClick={() => onChange(value + 1)}
-            aria-label={t("calibration.page.aria.countIncrease", { label })}
+            aria-label={t("calibration:page.aria.countIncrease", { label })}
             className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400"
           >
             +
@@ -761,7 +761,7 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
           <button
             type="button"
             onClick={() => onChange(value - 1)}
-            aria-label={t("calibration.page.aria.countDecrease", { label })}
+            aria-label={t("calibration:page.aria.countDecrease", { label })}
             className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400"
           >
             −
@@ -875,7 +875,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
               inputRef.current?.blur();
             }
           }}
-          aria-label={t("calibration.page.aria.gapInput")}
+          aria-label={t("calibration:page.aria.gapInput")}
           className="w-full bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100 outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
         />
       </div>
@@ -885,7 +885,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
           type="button"
           disabled={value >= max}
           onClick={() => onChange(value + 1)}
-          aria-label={t("calibration.page.aria.gapIncrease")}
+          aria-label={t("calibration:page.aria.gapIncrease")}
           className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-35"
         >
           +
@@ -894,7 +894,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
           type="button"
           disabled={value <= 0}
           onClick={() => onChange(value - 1)}
-          aria-label={t("calibration.page.aria.gapDecrease")}
+          aria-label={t("calibration:page.aria.gapDecrease")}
           className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-35"
         >
           −

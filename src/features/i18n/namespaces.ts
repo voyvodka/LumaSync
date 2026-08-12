@@ -1,5 +1,6 @@
 /** Registered i18next namespaces — one module per feature domain under `src/locales/<lang>/`. */
 export const I18N_NAMESPACES = [
+  "calibration",
   "common",
   "lights",
   "preview",

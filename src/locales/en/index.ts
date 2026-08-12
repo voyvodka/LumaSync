@@ -1,3 +1,4 @@
+import calibration from "./calibration";
 import common from "./common";
 import lights from "./lights";
 import preview from "./preview";
@@ -8,6 +9,7 @@ import tray from "./tray";
 import updater from "./updater";
 
 export const en = {
+  calibration,
   common,
   lights,
   preview,
