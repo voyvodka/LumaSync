@@ -1,3 +1,6 @@
+//! LED wire-protocol encoding (LumaSync v1 / Adalight, WS2812B / SK6812) and
+//! the serial-backed `LedSink` that writes the resulting packets over USB.
+
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
@@ -358,6 +361,9 @@ pub fn apply_color_correction_rgb_with_luts(
 // Error type
 // ---------------------------------------------------------------------------
 
+/// Coded failure from the serial output layer — `code` is the stable
+/// machine identifier surfaced across the Tauri IPC boundary, `details` is
+/// optional human context for logs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LedOutputError {
     pub code: &'static str,
@@ -369,6 +375,7 @@ impl LedOutputError {
         Self { code, details }
     }
 
+    /// Render as the `CODE` or `CODE: details` string used in coded error responses.
     pub fn as_reason(&self) -> String {
         match &self.details {
             Some(details) => format!("{}: {}", self.code, details),
@@ -381,6 +388,8 @@ impl LedOutputError {
 // LedPacketSender trait + SerialLedPacketSender
 // ---------------------------------------------------------------------------
 
+/// Low-level write abstraction behind `LedOutputBridge`, so the bridge and
+/// its callers can be tested without opening a real serial port.
 pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
     /// Drop the cached writer for `port_name`. Kept for future explicit
@@ -476,18 +485,23 @@ impl LedPacketSender for SerialLedPacketSender {
 // LedOutputBridge
 // ---------------------------------------------------------------------------
 
+/// Owns the serial packet sender and exposes the encode-agnostic write path
+/// shared by the Solid and Ambilight runtimes and by `SerialSink`.
 #[derive(Clone)]
 pub struct LedOutputBridge {
     sender: Arc<dyn LedPacketSender>,
 }
 
 impl LedOutputBridge {
+    /// Build a bridge backed by the real `serialport` crate.
     pub fn new() -> Self {
         Self {
             sender: Arc::new(SerialLedPacketSender::default()),
         }
     }
 
+    /// Build a bridge over an injected sender, for tests that need to
+    /// observe writes without opening a real port.
     #[cfg(test)]
     pub fn from_sender(sender: Arc<dyn LedPacketSender>) -> Self {
         Self { sender }
@@ -505,6 +519,8 @@ impl LedOutputBridge {
         self.sender.disconnect_session(port_name);
     }
 
+    /// Look up the currently connected port from `connection_state` and
+    /// write `packet` to it. Test-only convenience over `send_packet_to_port`.
     #[cfg(test)]
     pub fn send_packet(
         &self,
@@ -539,6 +555,8 @@ impl LedOutputBridge {
         self.send_packet_to_port(&port_name, packet)
     }
 
+    /// Write `packet` to `port_name`, opening or reusing a cached session on
+    /// the underlying sender as needed.
     pub fn send_packet_to_port(
         &self,
         port_name: &str,
@@ -787,6 +805,8 @@ pub fn encode_sk6812_packet(
 // Test-only helpers used by lighting_mode.rs and led_output tests
 // ---------------------------------------------------------------------------
 
+/// Test helper: encode a single solid RGB colour and write it through the
+/// bridge, mirroring the Solid mode command's output path.
 #[cfg(test)]
 pub fn apply_solid_payload(
     bridge: &LedOutputBridge,
@@ -800,6 +820,8 @@ pub fn apply_solid_payload(
     bridge.send_packet(connection_state, &packet)
 }
 
+/// Test helper: encode a full ambilight frame and write it through the
+/// bridge, mirroring the Ambilight mode command's output path.
 #[cfg(test)]
 pub fn send_ambilight_frame(
     bridge: &LedOutputBridge,

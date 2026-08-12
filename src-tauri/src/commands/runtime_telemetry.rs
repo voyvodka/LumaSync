@@ -1,3 +1,6 @@
+//! Frame-rate and queue-health telemetry surfaced to the frontend — the USB
+//! worker's rolling window plus a point-in-time read of Hue runtime health.
+
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -8,6 +11,8 @@ use super::hue_stream_lifecycle::{acquire_hue_runtime, HueRuntimeStateStore};
 
 const TELEMETRY_WINDOW: Duration = Duration::from_secs(1);
 
+/// Slot-overwrite pressure band, derived from `RuntimeTelemetryWindow`'s
+/// overwrite ratio for the last flush window.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TelemetryQueueHealth {
@@ -16,6 +21,8 @@ pub enum TelemetryQueueHealth {
     Critical,
 }
 
+/// USB output health for the last flushed telemetry window — the
+/// `get_runtime_telemetry` command's `usb` field.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeTelemetrySnapshot {
@@ -49,12 +56,15 @@ impl Default for RuntimeTelemetrySnapshot {
     }
 }
 
+/// Tauri-managed holder for the shared USB telemetry snapshot.
 #[derive(Default)]
 pub struct RuntimeTelemetryState {
     snapshot: Arc<Mutex<RuntimeTelemetrySnapshot>>,
 }
 
 impl RuntimeTelemetryState {
+    /// Clone the `Arc` handle the ambilight worker writes into and the
+    /// `get_runtime_telemetry` command reads from.
     pub fn shared_snapshot(&self) -> SharedRuntimeTelemetry {
         Arc::clone(&self.snapshot)
     }
@@ -62,6 +72,8 @@ impl RuntimeTelemetryState {
 
 pub type SharedRuntimeTelemetry = Arc<Mutex<RuntimeTelemetrySnapshot>>;
 
+/// Point-in-time Hue runtime health — the `get_runtime_telemetry` command's
+/// `hue` field, `None` when Hue has never been active this session.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HueTelemetrySnapshot {
@@ -78,6 +90,7 @@ pub struct HueTelemetrySnapshot {
     pub dtls_connected_at_secs: Option<u64>,
 }
 
+/// Combined telemetry payload returned by the `get_runtime_telemetry` command.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FullTelemetrySnapshot {
@@ -152,6 +165,7 @@ pub fn collect_hue_telemetry(hue_state: &HueRuntimeStateStore) -> Option<HueTele
     })
 }
 
+/// Clone the current snapshot out of the shared lock.
 pub fn read_runtime_telemetry(
     snapshot: &SharedRuntimeTelemetry,
 ) -> Result<RuntimeTelemetrySnapshot, String> {
@@ -161,6 +175,8 @@ pub fn read_runtime_telemetry(
         .map_err(|error| format!("RUNTIME_TELEMETRY_STATE_LOCK_FAILED: {error}"))
 }
 
+/// Replace the shared snapshot with `next`. Called by
+/// `RuntimeTelemetryWindow::flush_if_due` once per window.
 pub fn write_runtime_telemetry(
     snapshot: &SharedRuntimeTelemetry,
     next: RuntimeTelemetrySnapshot,
@@ -172,6 +188,8 @@ pub fn write_runtime_telemetry(
     Ok(())
 }
 
+/// Return the latest USB frame-rate window plus a Hue health snapshot, for
+/// the frontend's telemetry/diagnostics display.
 #[tauri::command]
 pub fn get_runtime_telemetry(
     telemetry_state: State<'_, RuntimeTelemetryState>,
@@ -182,6 +200,8 @@ pub fn get_runtime_telemetry(
     Ok(FullTelemetrySnapshot { usb, hue })
 }
 
+/// Accumulates per-frame counters for one `TELEMETRY_WINDOW` and flushes them
+/// into the shared snapshot as capture/send fps once the window elapses.
 pub struct RuntimeTelemetryWindow {
     started_at: Instant,
     capture_count: u32,
@@ -198,6 +218,7 @@ pub struct RuntimeTelemetryWindow {
 }
 
 impl RuntimeTelemetryWindow {
+    /// Start a fresh counting window anchored at `started_at`.
     pub fn new(started_at: Instant) -> Self {
         Self {
             started_at,
@@ -217,22 +238,28 @@ impl RuntimeTelemetryWindow {
         self.link_constrained = link_constrained;
     }
 
+    /// Count one captured frame toward this window's `capture_fps`.
     pub fn record_capture(&mut self) {
         self.capture_count = self.capture_count.saturating_add(1);
     }
 
+    /// Count one frame actually sent to the sink toward this window's `send_fps`.
     pub fn record_send(&mut self) {
         self.send_count = self.send_count.saturating_add(1);
     }
 
+    /// Count one `RuntimeFrameSlot` overwrite, feeding `queue_health`.
     pub fn record_slot_overwrite(&mut self) {
         self.slot_overwrite_count = self.slot_overwrite_count.saturating_add(1);
     }
 
+    /// Record the latest capture+send EWMA cost, surfaced on the next flush.
     pub fn record_latency(&mut self, ms: f32) {
         self.latest_latency_ms = ms.max(0.0);
     }
 
+    /// Publish accumulated counters to `snapshot` and reset the window, but
+    /// only once `TELEMETRY_WINDOW` has elapsed since the last flush.
     pub fn flush_if_due(
         &mut self,
         now: Instant,
