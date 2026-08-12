@@ -215,6 +215,7 @@ import App from "../App";
 describe("App mode orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     mockIsConnected = true;
     // Default: serial connection status and any other bootstrap invokes.
     // useRuntimeTelemetry is mocked at module level so get_runtime_telemetry
@@ -461,41 +462,6 @@ describe("App mode orchestration", () => {
     expect(screen.getByTestId("active-mode")).toBeInTheDocument();
   });
 
-  it("shows USB suggest banner when USB is plugged in during Hue-only session", async () => {
-    // Setup: Start with targets=["hue"], isConnected=false
-    mockIsConnected = false;
-    invokeMock.mockResolvedValue({ connected: false });
-    loadShellStateMock.mockResolvedValueOnce({
-      lastSection: "general",
-      ledCalibration: null,
-      lightingMode: { kind: "off" },
-      lastOutputTargets: ["hue"],
-      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
-      hueAppKey: "app-user",
-      hueClientKey: "AABBCCDD11223344",
-      lastHueAreaId: "area-1",
-    });
-
-    const { rerender } = render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
-    });
-
-    // Action: Simulate USB being plugged in
-    mockIsConnected = true;
-    await act(async () => {
-      rerender(<App />);
-    });
-
-    // Expect: USB suggest banner appears
-    await waitFor(() => {
-      // Banner text from i18n key "common:hotplug.usbDetected"
-      // In test environment with mocked i18n, the key itself or English text may appear
-      expect(screen.getByTestId("active-mode")).toBeInTheDocument();
-    });
-  });
-
   // ---------------------------------------------------------------------
   // Bug 10C — auto-add "usb" to outputTargets on the first false→true
   // transition of `isConnected`. Pairing IS the user's "I want USB
@@ -637,6 +603,57 @@ describe("App mode orchestration", () => {
     // saveShellState should have been called (target update)
     // The exact call assertion depends on timing, but app should still render
     expect(screen.getByTestId("active-mode")).toBeInTheDocument();
+  });
+
+  // Regression: the unplug drops "usb" from targets in the same commit that
+  // raises the toast, which used to re-run the effect owning the dismissal timer.
+  it("auto-dismisses the USB disconnect toast even though the unplug changes output targets", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockIsConnected = true;
+    invokeMock.mockResolvedValue({ connected: true });
+    loadShellStateMock.mockResolvedValueOnce({
+      lastSection: "general",
+      ledCalibration: {
+        templateId: "monitor-27-16-9",
+        counts: { top: 10, right: 10, bottom: 10, left: 10 },
+        bottomMissing: 0,
+        cornerOwnership: "horizontal",
+        visualPreset: "subtle",
+        startAnchor: "top-start",
+        direction: "cw",
+        totalLeds: 40,
+      },
+      lightingMode: { kind: "off" },
+      lastOutputTargets: ["usb", "hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+
+    const { rerender } = render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("output-targets")).toHaveTextContent("usb,hue");
+    });
+
+    mockIsConnected = false;
+    await act(async () => {
+      rerender(<App />);
+    });
+
+    // Toast is up, and the unplug really did rewrite the target set — that
+    // rewrite is what used to kill the dismissal timer.
+    await waitFor(() => {
+      expect(screen.getByTestId("usb-disconnect-notice")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("output-targets")).toHaveTextContent("hue");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+
+    expect(screen.queryByTestId("usb-disconnect-notice")).not.toBeInTheDocument();
   });
 
   it("handleOutputTargetsChange delta-start: adding hue while usb active calls start_hue_stream", async () => {

@@ -124,6 +124,13 @@ const HUE_STREAM_HEALTH_POLL_MS = 5_000;
 const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 /** Interval for checking bridge reachability when configured but stream is not active. */
 const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
+/** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
+const USB_DISCONNECT_NOTICE_MS = 5_000;
+/**
+ * Marks that first-connect calibration has already been auto-opened. Session-scoped
+ * so a WebView reload does not drop the user back into the editor unprompted.
+ */
+const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
 /**
  * Hard floor on the rate at which non-`force` `setLightingMode` invokes are
  * allowed to reach the Tauri backend. Belt-and-braces backstop for the
@@ -243,7 +250,6 @@ function App() {
   // Hot-plug detection refs/state — separate from wasConnectedRef (per Pitfall 4)
   const prevUsbConnectedRef = useRef<boolean | null>(null); // null = not yet initialized
   const [bootstrapDone, setBootstrapDone] = useState(false);
-  const [showUsbSuggest, setShowUsbSuggest] = useState(false);
   const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
   // Bug 10D — surfaces a one-time non-blocking notice when boot-time
   // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
@@ -266,7 +272,7 @@ function App() {
   // advances when the user actively engages.
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
   const [hasInteractedWithMode, setHasInteractedWithMode] = useState(false);
-  const autoOpenTriggeredRef = useRef(sessionStorage.getItem("lumasync_calibration_opened") === "1");
+  const autoOpenTriggeredRef = useRef(sessionStorage.getItem(CALIBRATION_AUTO_OPENED_KEY) === "1");
   const modeTransitionLockRef = useRef(false);
   const bootstrapRanRef = useRef(false);
   // Auto-updater check is intentionally module-level (not inside the boot
@@ -1359,6 +1365,9 @@ function App() {
 
     if (shouldOpen) {
       autoOpenTriggeredRef.current = true;
+      // The ref is seeded from this key on mount, so the write is what makes the
+      // guard outlive a WebView reload.
+      sessionStorage.setItem(CALIBRATION_AUTO_OPENED_KEY, "1");
       setActiveSection(SECTION_IDS.LED_SETUP);
     }
 
@@ -1506,34 +1515,12 @@ function App() {
   useEffect(() => {
     if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
 
-    let disconnectNoticeTimerId: number | null = null;
-
     const wasConnected = prevUsbConnectedRef.current;
 
     if (wasConnected === false && isConnected) {
-      // Bug 10C — auto-add "usb" to outputTargets on the false→true
-      // transition (manual pair OR physical hot-plug). Pairing IS the
-      // user's "I want USB output" intent; without this fix the Lights
-      // output toggle stays `is-off` until a WebView reload, even though
-      // the StatusBar USB pill flips to OK as soon as
-      // `connectionEvents` propagates the new isConnected.
-      //
-      // We deliberately bypass `handleOutputTargetsChange` here:
-      //   * its delta-start branch is gated on `lightingMode.kind !== OFF`
-      //     (early-return at line ~968), so for a cold-launch pair where
-      //     mode is OFF, the helper would only do `setSelectedOutputTargets`
-      //     plus a `saveShellState`. We replicate that minimal pair below.
-      //   * if a mode is already running, calling delta-start here would
-      //     race against the bootstrap pipeline (start_hue_stream /
-      //     dispatchSetLightingMode) for a target that is also being
-      //     hydrated from persisted lastOutputTargets. Letting the next
-      //     deliberate user action drive that path keeps the contract clean.
-      //
-      // Idempotent: the `includes` guard means a second pair on an
-      // already-targeted USB session is a noop. The legacy
-      // `showUsbSuggest` banner UI below is left in place (state /
-      // handler / JSX / i18n keys) so a future opt-in flow can revive
-      // the prompt; it just never fires on its own anymore.
+      // Pairing is itself the "I want USB output" intent, and the target is
+      // added directly rather than through `handleOutputTargetsChange`.
+      // Both halves are load-bearing — docs/architecture/ui-and-shell.md.
       if (!selectedOutputTargets.includes("usb")) {
         const nextTargets = normalizeOutputTargets([...selectedOutputTargets, "usb"]);
         setSelectedOutputTargets(nextTargets);
@@ -1550,22 +1537,22 @@ function App() {
         if (nextTargets.length > 0) {
           void handleOutputTargetsChange(nextTargets);
           setUsbDisconnectNotice(true);
-          disconnectNoticeTimerId = window.setTimeout(() => setUsbDisconnectNotice(false), 5_000);
         }
         // If no targets remain, keep current targets — mode buttons will show disabled via guard
       }
-      setShowUsbSuggest(false);
     }
 
     prevUsbConnectedRef.current = isConnected;
-
-    return () => {
-      if (disconnectNoticeTimerId !== null) {
-        window.clearTimeout(disconnectNoticeTimerId);
-        disconnectNoticeTimerId = null;
-      }
-    };
   }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
+
+  // Own effect keyed on the flag it clears — the hot-plug effect above re-runs
+  // whenever `selectedOutputTargets` changes, which its own unplug branch causes.
+  // See docs/architecture/ui-and-shell.md.
+  useEffect(() => {
+    if (!usbDisconnectNotice) return;
+    const timerId = window.setTimeout(() => setUsbDisconnectNotice(false), USB_DISCONNECT_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [usbDisconnectNotice]);
 
   // ---------------------------------------------------------------------------
   // Bug 10D — boot-time USB unsupported / missing fallback
@@ -1626,17 +1613,6 @@ function App() {
         unsupportedNoticeTimerId = null;
       }
     };
-  }, []);
-
-  const handleAcceptUsbTarget = useCallback(async () => {
-    setShowUsbSuggest(false);
-    if (!selectedOutputTargets.includes("usb")) {
-      await handleOutputTargetsChange([...selectedOutputTargets, "usb"]);
-    }
-  }, [selectedOutputTargets, handleOutputTargetsChange]);
-
-  const handleDismissUsbSuggest = useCallback(() => {
-    setShowUsbSuggest(false);
   }, []);
 
   const handleLightingModeChange = useCallback(
@@ -2222,34 +2198,15 @@ function App() {
         onDismiss={dismiss}
         onRetry={() => void checkForUpdates()}
       />
-      {showUsbSuggest && (
-        <div
-          className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg px-4 py-3 shadow-lg"
-          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
-        >
-          <span style={{ fontSize: "12px" }}>{t("common:hotplug.usbDetected")}</span>
-          <button
-            type="button"
-            onClick={() => { void handleAcceptUsbTarget(); }}
-            style={{ fontSize: "11px", padding: "2px 10px", borderRadius: "4px", background: "var(--lm-amber)", color: "#07080a", fontWeight: 600, border: "none", cursor: "pointer" }}
-          >
-            {t("common:hotplug.addTarget")}
-          </button>
-          <button
-            type="button"
-            onClick={handleDismissUsbSuggest}
-            style={{ fontSize: "11px", color: "var(--lm-muted)", background: "transparent", border: "none", cursor: "pointer" }}
-          >
-            {t("common:hotplug.dismiss")}
-          </button>
-        </div>
-      )}
       {usbDisconnectNotice && (
         <div
+          data-testid="usb-disconnect-notice"
           className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
+          role="status"
+          aria-live="polite"
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("common:hotplug.usbDisconnected")}</span>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t("common:hotplug.usbDisconnected")}</span>
         </div>
       )}
       {usbUnsupportedNotice && (
@@ -2270,7 +2227,7 @@ function App() {
           }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {t("common:hotplug.unsupportedFallback")}
           </span>
         </div>
@@ -2289,7 +2246,7 @@ function App() {
           }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {t("common:hotplug.stopFailed", {
               targets: stopFailedNotice
                 .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
@@ -2314,7 +2271,7 @@ function App() {
           }}
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
               ? t("hue:colorNotApplied.noLights")
               : t("hue:colorNotApplied.streamOffline")}
