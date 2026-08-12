@@ -702,7 +702,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         // For HUE_PAIRING_FAILED we can't tell, so preserve existing state.
         bridgeUnreachable: response.status.code === "HUE_PAIRING_FAILED" ? prev.bridgeUnreachable : false,
         isPairing: false,
-        status: response.status,
+        // Contract status omits `details`; this hook's state nulls it.
+        status: { ...response.status, details: response.status.details ?? null },
       }));
 
       if (response.credentials) {

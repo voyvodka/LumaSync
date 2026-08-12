@@ -29,6 +29,7 @@ export const HUE_COMMANDS = {
   GET_STREAM_STATUS: "get_hue_stream_status",
   GET_AREA_CHANNELS: "get_hue_area_channels",
   UPDATE_CHANNEL_POSITIONS: "update_hue_channel_positions",
+  MIGRATE_CREDENTIALS: "migrate_hue_credentials",
 } as const;
 
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
@@ -501,6 +502,21 @@ export interface HueBridgeSummary {
 export interface HuePairingCredentials {
   username: string;
   clientKey: string;
+}
+
+export interface HuePairBridgeResponse {
+  status: HueCommandStatus;
+  credentials: HuePairingCredentials | null;
+  /** Absent or unrecognised (Rust can emit `"noop"`) MUST read as legacy: test
+   * `=== "keychain"` explicitly, the only value that permits deleting the PSK. */
+  credentialStorageBackend?: HueCredentialBackend;
+}
+
+/** `backend` reaches `keychain` only once the copy is written AND read back,
+ * so the caller may clear the plaintext copy on that value alone. */
+export interface HueCredentialMigrationResponse {
+  status: HueCommandStatus;
+  backend?: HueCredentialBackend;
 }
 
 export interface HueEntertainmentAreaSummary {
