@@ -1,3 +1,6 @@
+//! USB serial port enumeration, connect/health-check commands, and the
+//! `ActiveSinkRegistry` that hands the built `LedSink` to the ambilight worker.
+
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -50,6 +53,8 @@ const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
     (0x0403, 0x6014), // FT232H (FTDI Hi-Speed Single-Channel)
 ];
 
+/// Generic coded status returned by serial-connection commands: a
+/// machine-readable code, a human message, and optional details.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CommandStatus {
@@ -58,6 +63,8 @@ pub struct CommandStatus {
     pub details: Option<String>,
 }
 
+/// USB identity of a serial port — VID/PID plus whatever the OS driver
+/// reports for manufacturer, product, and serial number.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbPortMetadata {
@@ -68,6 +75,8 @@ pub struct UsbPortMetadata {
     pub serial_number: Option<String>,
 }
 
+/// One enumerated serial port plus whether it matches the supported USB
+/// adapter allowlist.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialPortDescriptor {
@@ -78,6 +87,7 @@ pub struct SerialPortDescriptor {
     pub usb: Option<UsbPortMetadata>,
 }
 
+/// Response from `list_serial_ports`: every enumerated port plus a status code.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialPortListResponse {
@@ -85,6 +95,8 @@ pub struct SerialPortListResponse {
     pub ports: Vec<SerialPortDescriptor>,
 }
 
+/// Current state of the serial connection — port, connected flag, and the
+/// status of the last connect/health attempt.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialConnectionStatus {
@@ -94,6 +106,8 @@ pub struct SerialConnectionStatus {
     pub updated_at_unix_ms: u128,
 }
 
+/// Outcome of one step in the serial health-check ladder (port visible,
+/// supported, opened, handshake).
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthStepResult {
@@ -104,6 +118,8 @@ pub struct HealthStepResult {
     pub details: Option<String>,
 }
 
+/// Full outcome of `run_serial_health_check`: pass/fail per step, plus
+/// round-trip and firmware metadata on a successful handshake.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthCheckResult {
@@ -125,6 +141,7 @@ pub struct HealthCheckResult {
     pub advertised_firmware_profile: Option<FirmwareProfile>,
 }
 
+/// Tauri-managed state holding the most recently recorded serial connection status.
 pub struct SerialConnectionState {
     pub(crate) last_status: Mutex<SerialConnectionStatus>,
 }
@@ -248,6 +265,8 @@ impl ActiveSinkRegistry {
     }
 }
 
+/// List every serial port the OS can see, flagging which ones match the
+/// supported USB adapter allowlist.
 #[tauri::command]
 pub fn list_serial_ports() -> Result<SerialPortListResponse, String> {
     let ports = available_ports().map_err(|error| {
@@ -355,6 +374,8 @@ enum ConnectOutcome {
     },
 }
 
+/// Open the given serial port, run the bootloader settle delay, and
+/// register a fresh `SerialSink` in `ActiveSinkRegistry` on success.
 #[tauri::command]
 pub async fn connect_serial_port(
     port_name: String,
@@ -563,6 +584,7 @@ fn connect_serial_port_blocking(
     }
 }
 
+/// Return the most recently recorded serial connection status.
 #[tauri::command]
 pub fn get_serial_connection_status(
     connection_state: tauri::State<'_, SerialConnectionState>,
@@ -917,6 +939,7 @@ fn handshake_error_ui_message(err: &HandshakeError) -> (String, String) {
     }
 }
 
+/// Build a `CommandStatus` from a code, message, and optional details.
 pub fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
     CommandStatus {
         code: code.to_string(),

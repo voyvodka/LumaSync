@@ -186,6 +186,8 @@ fn build_twin_label() -> String {
 // Command payloads + results
 // ---------------------------------------------------------------------------
 
+/// Request payload for `open_led_twin_overlay`: which display to target and
+/// whether the twin is previewing a test pattern or live output.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenLedTwinOverlayPayload {
@@ -195,6 +197,8 @@ pub struct OpenLedTwinOverlayPayload {
     pub scope: String,
 }
 
+/// Request payload for `close_led_twin_overlay`. Closes every twin overlay
+/// when `display_id` is omitted.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloseLedTwinOverlayPayload {
@@ -202,6 +206,7 @@ pub struct CloseLedTwinOverlayPayload {
     pub display_id: Option<String>,
 }
 
+/// Coded result returned by the twin-overlay open/close commands.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TwinOverlayResult {
@@ -212,6 +217,7 @@ pub struct TwinOverlayResult {
     pub reason: Option<String>,
 }
 
+/// Coded result returned by the control-popup open/show/hide commands.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ControlPopupResult {
@@ -233,6 +239,8 @@ pub struct PreviewModeSnapshot {
     pub active_pattern: Option<TestPatternKind>,
 }
 
+/// Full preview runtime snapshot broadcast on `preview://state-changed` and
+/// returned by `get_led_preview_status`.
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LedPreviewStatus {
@@ -287,6 +295,8 @@ pub fn emit_preview_state_changed<R: Runtime>(app: &AppHandle<R>) {
 // Twin overlay commands
 // ---------------------------------------------------------------------------
 
+/// Open (or move) the digital-twin overlay onto the requested display,
+/// closing any twin already open on that display first.
 #[tauri::command]
 pub fn open_led_twin_overlay<R: Runtime>(
     app: AppHandle<R>,
@@ -394,6 +404,8 @@ pub fn open_led_twin_overlay<R: Runtime>(
     }
 }
 
+/// Close the twin overlay for the requested display, or every open twin
+/// overlay when no display is given.
 #[tauri::command]
 pub fn close_led_twin_overlay<R: Runtime>(
     app: AppHandle<R>,
@@ -457,6 +469,8 @@ fn read_persisted_popup_center<R: Runtime>(app: &AppHandle<R>) -> Option<(f64, f
 const POPUP_WIDTH: f64 = 320.0;
 const POPUP_HEIGHT: f64 = 460.0;
 
+/// Create the interactive control popup window if it doesn't exist yet, or
+/// bring the existing one to the front.
 #[tauri::command]
 pub fn open_led_control_popup<R: Runtime>(
     app: AppHandle<R>,
@@ -517,6 +531,7 @@ pub fn open_led_control_popup<R: Runtime>(
     })
 }
 
+/// Show and focus an already-created control popup window.
 #[tauri::command]
 pub fn show_led_control_popup<R: Runtime>(
     app: AppHandle<R>,
@@ -545,6 +560,7 @@ pub fn show_led_control_popup<R: Runtime>(
     }
 }
 
+/// Hide the control popup window without destroying it.
 #[tauri::command]
 pub fn hide_led_control_popup<R: Runtime>(
     app: AppHandle<R>,

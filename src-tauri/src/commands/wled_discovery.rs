@@ -1,23 +1,23 @@
-/// WLED device discovery and sink connection commands.
-///
-/// v1.5 W1-B3: manual IP path only. mDNS auto-discovery is Wave 2 (W2-A3).
-/// `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` (not `Option<WledDeviceInfo>`)
-/// so the frontend always gets a stable array — empty on failure, `[device]` on success.
-/// This mirrors the Wave 2 mDNS path shape where multiple devices may appear.
-///
-/// Status codes:
-///   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
-///   WLED_DISCOVERY_TIMEOUT     -- HTTP request timed out (2 s).
-///   WLED_DISCOVERY_UNREACHABLE -- Connection refused / network error.
-///   WLED_PROTOCOL_MISMATCH     -- Response body is not valid WLED JSON.
-///   WLED_LED_COUNT_MISMATCH    -- Requested ledCount != device-reported count.
-///   WLED_BRIDGE_UNREACHABLE    -- connect/test: device not reachable.
-///   WLED_CONNECT_OK            -- Sink built and registered.
-///   WLED_TEST_OK               -- Test frame sent without error.
-///   WLED_TEST_SEND_FAILED      -- Test frame UDP send failed.
-///   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
-///                                 unspecified, multicast, or broadcast).
-///   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
+//! WLED device discovery and sink connection commands.
+//!
+//! v1.5 W1-B3: manual IP path only. mDNS auto-discovery is Wave 2 (W2-A3).
+//! `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` (not `Option<WledDeviceInfo>`)
+//! so the frontend always gets a stable array — empty on failure, `[device]` on success.
+//! This mirrors the Wave 2 mDNS path shape where multiple devices may appear.
+//!
+//! Status codes:
+//!   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
+//!   WLED_DISCOVERY_TIMEOUT     -- HTTP request timed out (2 s).
+//!   WLED_DISCOVERY_UNREACHABLE -- Connection refused / network error.
+//!   WLED_PROTOCOL_MISMATCH     -- Response body is not valid WLED JSON.
+//!   WLED_LED_COUNT_MISMATCH    -- Requested ledCount != device-reported count.
+//!   WLED_BRIDGE_UNREACHABLE    -- connect/test: device not reachable.
+//!   WLED_CONNECT_OK            -- Sink built and registered.
+//!   WLED_TEST_OK               -- Test frame sent without error.
+//!   WLED_TEST_SEND_FAILED      -- Test frame UDP send failed.
+//!   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
+//!                                 unspecified, multicast, or broadcast).
+//!   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -30,12 +30,14 @@ use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Request payload for `discover_wled_devices`: the IP to probe.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDiscoveryRequest {
     pub ip: String,
 }
 
+/// A WLED device's self-reported identity, parsed from `/json/info`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDeviceInfo {
@@ -73,6 +75,7 @@ pub struct WledConnectRequest {
     pub protocol: Option<String>,
 }
 
+/// Response from `connect_wled_sink`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledConnectResponse {
@@ -103,6 +106,7 @@ pub struct WledTestResponse {
     pub round_trip_ms: Option<u64>,
 }
 
+/// Coded status shared by every WLED command response.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledCommandStatus {
@@ -286,6 +290,7 @@ fn info_to_device(ip: &str, info: WledInfoResponse) -> WledDeviceInfo {
     }
 }
 
+/// Probe a WLED device's `/json/info` endpoint and report its identity.
 #[tauri::command]
 pub fn discover_wled_devices(request: WledDiscoveryRequest) -> WledDiscoveryResponse {
     match fetch_wled_info(&request.ip) {
@@ -306,6 +311,8 @@ pub fn discover_wled_devices(request: WledDiscoveryRequest) -> WledDiscoveryResp
     }
 }
 
+/// Build and register a `WledUdpSink` for the "usb" output channel,
+/// evicting any previously connected serial or WLED sink.
 #[tauri::command]
 pub fn connect_wled_sink(
     request: WledConnectRequest,
@@ -364,6 +371,8 @@ pub fn connect_wled_sink(
     }
 }
 
+/// Send a one-off red-ramp test frame to a WLED device without registering
+/// it as the active sink.
 #[tauri::command]
 pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
     let device = &request.device;

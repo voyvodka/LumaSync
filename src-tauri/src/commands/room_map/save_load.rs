@@ -1,3 +1,6 @@
+//! Room-map persistence commands: background image copy and Hue channel
+//! position write-back. `save_room_map`/`load_room_map` are still stubs.
+
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
@@ -10,6 +13,7 @@ use tauri_plugin_fs::FsExt;
 use crate::commands::hue_onboarding::CommandStatus;
 use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
 
+/// Response from `save_room_map`.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveRoomMapResponse {
@@ -17,6 +21,8 @@ pub struct SaveRoomMapResponse {
     pub version: u32,
 }
 
+/// Stub — room-map persistence is not implemented yet (Phase 17); always
+/// returns `STUB_NOT_IMPLEMENTED`.
 #[tauri::command]
 pub fn save_room_map(_config: RoomMapConfig) -> SaveRoomMapResponse {
     SaveRoomMapResponse {
@@ -29,6 +35,8 @@ pub fn save_room_map(_config: RoomMapConfig) -> SaveRoomMapResponse {
     }
 }
 
+/// Stub — room-map persistence is not implemented yet (Phase 17); always
+/// returns `STUB_NOT_IMPLEMENTED`.
 #[tauri::command]
 pub fn load_room_map() -> CommandStatus {
     CommandStatus {
@@ -38,6 +46,9 @@ pub fn load_room_map() -> CommandStatus {
     }
 }
 
+/// Copy a user-picked background image into the app data directory under a
+/// random UUID filename, so the room-map editor can reference a stable
+/// in-scope path instead of the original (possibly transient) source path.
 #[tauri::command]
 pub async fn copy_background_image(
     app_handle: tauri::AppHandle,
@@ -75,6 +86,8 @@ pub async fn copy_background_image(
     Ok(dest.to_string_lossy().to_string())
 }
 
+/// Push room-map channel positions to the bridge's entertainment
+/// configuration via a CLIP v2 PUT.
 #[tauri::command]
 pub fn update_hue_channel_positions(
     channels: Vec<HueChannelPlacement>,
