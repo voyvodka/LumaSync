@@ -44,7 +44,7 @@ export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
     <>
       <div className="lm-settings-group-h">
         <span className="t">{t("telemetry:title")}</span>
-        <span className="sub">{t("settingsPage.groups.telemetry.sub")}</span>
+        <span className="sub">{t("settings:groups.telemetry.sub")}</span>
       </div>
 
       <div className="lm-tele-body">

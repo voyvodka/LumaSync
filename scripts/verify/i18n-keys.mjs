@@ -33,7 +33,7 @@ const KNOWN_DYNAMIC_PREFIXES = [
   "preview:status",
   "preview:test.speed",
   "roomMap.furniture.type",
-  "settings.sections",
+  "settings:nav.sections",
   "telemetry:queueHealth",
 ];
 

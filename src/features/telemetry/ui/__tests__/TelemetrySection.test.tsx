@@ -33,10 +33,10 @@ vi.mock("react-i18next", () => ({
         "telemetry:hue.reconnects": "Reconnects",
         "telemetry:hue.dtlsCipher": "DTLS Cipher",
         "telemetry:hue.connectionAge": "Connection Age",
-        "settings.sections.lights": "Lights",
-        "settings.sections.led-setup": "LED Setup",
-        "settings.sections.devices": "Devices",
-        "settings.sections.system": "System",
+        "settings:nav.sections.lights": "Lights",
+        "settings:nav.sections.led-setup": "LED Setup",
+        "settings:nav.sections.devices": "Devices",
+        "settings:nav.sections.system": "System",
         "general.title": "General",
         "general.description": "General application settings.",
         "general.mode.title": "LED mode",
@@ -46,7 +46,7 @@ vi.mock("react-i18next", () => ({
         "general.mode.options.solid": "Solid",
         "general.mode.brightness": "Brightness",
         "general.mode.solidColor": "Solid color",
-        "settingsPage.language.label": "Interface language",
+        "settings:language.label": "Interface language",
       };
 
       return dict[key] ?? key;

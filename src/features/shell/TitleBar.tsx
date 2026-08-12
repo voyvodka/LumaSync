@@ -68,7 +68,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
 
   const toggleVariant = uiMode === "compact" ? "to-full" : "to-compact";
   const toggleTitle = t(
-    toggleVariant === "to-full" ? "settings.switchToFull" : "settings.switchToCompact",
+    toggleVariant === "to-full" ? "settings:nav.switchToFull" : "settings:nav.switchToCompact",
   );
   const handleToggle = () => void onSwitchUIMode(uiMode === "compact" ? "full" : "compact");
 
@@ -129,7 +129,7 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
               onClick={() => onSectionChange(id)}
               data-testid={`section-tab-${id}`}
             >
-              {t(`settings.sections.${id}`)}
+              {t(`settings:nav.sections.${id}`)}
             </button>
           ))}
         </div>
