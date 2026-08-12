@@ -32,7 +32,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     credentials: state.credentials,
     areaId: state.selectedAreaId,
     blocked: core.selectedAreaIsBlocked,
-    paused: state.isValidatingCredential || state.isLoadingAreas,
+    isValidatingCredential: state.isValidatingCredential,
+    isLoadingAreas: state.isLoadingAreas,
     onResult: core.applyBackgroundReadiness,
   });
 

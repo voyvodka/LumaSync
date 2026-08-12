@@ -11,7 +11,10 @@ export interface UseHueReadinessPollingInput {
   /** Taken as a prop rather than read from the area rows, so the
    * active-streamer → 3 s cadence chain stays visible at the call site. */
   blocked: boolean;
-  paused: boolean;
+  /** Kept as two flags rather than one OR'd `paused`, so the effect's dep array
+   * still reacts to each of them the way it did before the split. */
+  isValidatingCredential: boolean;
+  isLoadingAreas: boolean;
   onResult: (areaId: string, response: Awaited<ReturnType<typeof checkHueStreamReadiness>>) => void;
 }
 
@@ -33,11 +36,12 @@ export function useHueReadinessPolling({
   credentials,
   areaId: selectedAreaId,
   blocked,
-  paused,
+  isValidatingCredential,
+  isLoadingAreas,
   onResult,
 }: UseHueReadinessPollingInput): void {
   useEffect(() => {
-    if (!bridge || !credentials || !selectedAreaId || paused) {
+    if (!bridge || !credentials || !selectedAreaId || isValidatingCredential || isLoadingAreas) {
       return;
     }
 
@@ -94,5 +98,5 @@ export function useHueReadinessPolling({
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [blocked, bridge, credentials, onResult, paused, selectedAreaId]);
+  }, [blocked, bridge, credentials, isLoadingAreas, isValidatingCredential, onResult, selectedAreaId]);
 }
