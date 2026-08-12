@@ -92,6 +92,17 @@ export const SERIAL_PORT_LIST_STATUS = {
 export type SerialPortListStatusCode =
   (typeof SERIAL_PORT_LIST_STATUS)[keyof typeof SERIAL_PORT_LIST_STATUS];
 
+/** Serial port open outcome, shared by `connect_serial_port` and the
+ * `CONNECT_AND_VERIFY` health step. `FAILED` is the catch-all arm — Rust's
+ * `connect_error_code` narrows recognised `serialport` errors first. */
+export const SERIAL_CONNECT_STATUS = {
+  OK: "CONNECT_OK",
+  FAILED: "CONNECT_FAILED",
+} as const;
+
+export type SerialConnectStatusCode =
+  (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
+
 export const DEVICE_OPERATION = {
   IDLE: "idle",
   RECOVERY: "recovery",

@@ -3,6 +3,7 @@ import {
   DEVICE_ERROR_CODES,
   DEVICE_OPERATION,
   DEVICE_STATUS,
+  SERIAL_CONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
   type DeviceOperation,
   type DeviceStatus,
@@ -753,7 +754,7 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
         connectedPort: null,
         statusCard: {
           variant: "error",
-          code: "CONNECT_FAILED",
+          code: SERIAL_CONNECT_STATUS.FAILED,
           message: "Could not connect to the selected port.",
           details: error instanceof Error ? error.message : String(error),
         },
