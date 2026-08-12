@@ -30,6 +30,10 @@ vi.mock("../hueOnboardingApi", () => ({
   discoverHueBridges: vi.fn(),
   getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
   listHueEntertainmentAreas: (...args: unknown[]) => listAreasMock(...args),
+  migrateHueCredentials: vi.fn().mockResolvedValue({
+    status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },
+    backend: "plaintext-legacy",
+  }),
   pairHueBridge: vi.fn(),
   validateHueCredentials: (...args: unknown[]) => validateCredentialsMock(...args),
   verifyHueBridgeIp: vi.fn(),

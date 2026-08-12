@@ -609,4 +609,22 @@ describe("migrateShellState — cross-step contract", () => {
     expect(out.roomMap).not.toHaveProperty("hueZones");
     expect(warnSpy).not.toHaveBeenCalled();
   });
+
+  // Deliberately negative: credential cleanup is not a migration concern —
+  // see docs/architecture/hue.md.
+  it("never touches the Hue credential fields at any schema version", () => {
+    for (let version = 1; version <= SHELL_STATE_SCHEMA_VERSION; version += 1) {
+      const state = {
+        schemaVersion: version,
+        hueAppKey: "app-key-abc",
+        hueClientKey: "psk-deadbeef",
+      } as ShellState;
+
+      const out = migrateShellState(state);
+
+      expect(out.hueAppKey).toBe("app-key-abc");
+      expect(out.hueClientKey).toBe("psk-deadbeef");
+      expect(out).not.toHaveProperty("credentialStorageBackend");
+    }
+  });
 });

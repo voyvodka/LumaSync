@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
+import type {
+  HueCredentialMigrationResponse,
+  HuePairBridgeResponse,
+} from "@/shared/contracts/hue";
 
 export interface CommandStatus {
   code: string;
@@ -31,10 +35,10 @@ export interface HuePairingCredentials {
   clientKey: string;
 }
 
-export interface HuePairBridgeResponse {
-  status: CommandStatus;
-  credentials: HuePairingCredentials | null;
-}
+export type {
+  HuePairBridgeResponse,
+  HueCredentialMigrationResponse,
+} from "@/shared/contracts/hue";
 
 export interface HueValidateCredentialsResponse {
   status: CommandStatus;
@@ -74,6 +78,16 @@ export async function verifyHueBridgeIp(bridgeIp: string): Promise<HueVerifyBrid
 
 export async function pairHueBridge(bridgeIp: string): Promise<HuePairBridgeResponse> {
   return invoke<HuePairBridgeResponse>(HUE_COMMANDS.PAIR_BRIDGE, { bridgeIp });
+}
+
+export async function migrateHueCredentials(
+  username: string,
+  clientKey: string,
+): Promise<HueCredentialMigrationResponse> {
+  return invoke<HueCredentialMigrationResponse>(HUE_COMMANDS.MIGRATE_CREDENTIALS, {
+    username,
+    clientKey,
+  });
 }
 
 export async function validateHueCredentials(

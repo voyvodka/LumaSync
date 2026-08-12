@@ -62,6 +62,16 @@ pub struct HuePairBridgeResponse {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct HueCredentialMigrationResponse {
+    pub status: CommandStatus,
+    /// `"keychain"` only once the pair has been written AND read back, which is
+    /// what licenses the caller to delete its plaintext copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct HueValidateCredentialsResponse {
     pub status: CommandStatus,
     pub valid: bool,
@@ -443,6 +453,37 @@ impl PairingTransportError {
             },
             other => Self::Generic(other.to_string()),
         }
+    }
+}
+
+/// Move an existing plaintext credential pair into the OS keychain. Additive
+/// boot cleanup for installs that paired before the keychain landed; the caller
+/// may clear its plaintext copy only when `backend` comes back `"keychain"`.
+#[tauri::command]
+pub fn migrate_hue_credentials(
+    username: String,
+    client_key: String,
+) -> HueCredentialMigrationResponse {
+    let store = super::hue::credential_store::default_store();
+    let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
+        store.as_ref(),
+        &username,
+        &client_key,
+    );
+    let backend = outcome.backend();
+    info!(
+        "[hue-cred] boot migration {}: backend={}",
+        outcome.status_code(),
+        backend.as_str()
+    );
+
+    HueCredentialMigrationResponse {
+        status: command_status(
+            outcome.status_code(),
+            "Hue credential keychain migration completed.",
+            None,
+        ),
+        backend: Some(backend.as_str().to_string()),
     }
 }
 

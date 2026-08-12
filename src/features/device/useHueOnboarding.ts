@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TranslationKey } from "@/features/i18n/catalogue";
 
 import {
+  HUE_CREDENTIAL_BACKENDS,
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
   HUE_READINESS_REASON,
@@ -12,6 +13,7 @@ import {
   type HueRuntimeTargetTelemetryRow,
   type HueCredentialStatus,
 } from "@/shared/contracts/hue";
+import type { ShellState } from "@/shared/contracts/shell";
 import { restartHue, startHue } from "../mode/modeApi";
 import { shellStore } from "../persistence/shellStore";
 import { readHueStreamReadiness, readHueStreamStatus } from "./hueReadCache";
@@ -20,6 +22,7 @@ import {
   discoverHueBridges,
   getHueAreaChannels,
   listHueEntertainmentAreas,
+  migrateHueCredentials,
   pairHueBridge,
   type CommandStatus,
   type HueBridgeSummary,
@@ -337,6 +340,34 @@ async function persistResumeState(step: HueStep): Promise<void> {
           : HUE_ONBOARDING_STEP.READY;
 
   await shellStore.save({ hueOnboardingStep: mapped });
+}
+
+/** One-shot cleanup for pre-keychain installs; deliberately not a store
+ * migration — see docs/architecture/hue.md. */
+async function migrateStoredCredentialsToKeychain(storedState: ShellState): Promise<void> {
+  if (storedState.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN) {
+    return;
+  }
+
+  const username = storedState.hueAppKey;
+  const clientKey = storedState.hueClientKey;
+  if (!username || !clientKey) {
+    return;
+  }
+
+  try {
+    const response = await migrateHueCredentials(username, clientKey);
+    if (response.backend !== HUE_CREDENTIAL_BACKENDS.KEYCHAIN) {
+      return;
+    }
+
+    await shellStore.save({
+      hueClientKey: undefined,
+      credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
+    });
+  } catch (error) {
+    console.warn("[LumaSync] Hue credential keychain migration failed", error);
+  }
 }
 
 export function useHueOnboarding(): UseHueOnboardingResult {
@@ -702,14 +733,24 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         // For HUE_PAIRING_FAILED we can't tell, so preserve existing state.
         bridgeUnreachable: response.status.code === "HUE_PAIRING_FAILED" ? prev.bridgeUnreachable : false,
         isPairing: false,
-        status: response.status,
+        // Contract status omits `details`; this hook's state nulls it.
+        status: { ...response.status, details: response.status.details ?? null },
       }));
 
       if (response.credentials) {
+        // hueAppKey deliberately stays on disk — see docs/architecture/hue.md.
+        const keychainOwnsPsk =
+          response.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;
+
         await shellStore.save({
           lastHueBridge: selectedBridge,
           hueAppKey: response.credentials.username,
-          hueClientKey: response.credentials.clientKey,
+          // `undefined` is dropped by the IPC JSON serialisation, so this
+          // removes the key rather than writing an empty value over it.
+          hueClientKey: keychainOwnsPsk ? undefined : response.credentials.clientKey,
+          credentialStorageBackend: keychainOwnsPsk
+            ? HUE_CREDENTIAL_BACKENDS.KEYCHAIN
+            : HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
           hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
           hueOnboardingStep: HUE_ONBOARDING_STEP.PAIR,
         });
@@ -885,13 +926,13 @@ export function useHueOnboarding(): UseHueOnboardingResult {
       }
 
       const savedBridge = storedState.lastHueBridge ?? null;
-      const savedCredentials =
-        storedState.hueAppKey && storedState.hueClientKey
-          ? {
-              username: storedState.hueAppKey,
-              clientKey: storedState.hueClientKey,
-            }
-          : null;
+      // App key alone; demanding both strands the user — docs/architecture/hue.md.
+      const savedCredentials = storedState.hueAppKey
+        ? {
+            username: storedState.hueAppKey,
+            clientKey: storedState.hueClientKey ?? "",
+          }
+        : null;
 
       const initialReadiness = new Map<string, HueAreaReadiness>();
 
@@ -904,6 +945,8 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         credentialState: storedState.hueCredentialStatus ?? HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
         credentials: savedCredentials,
       }));
+
+      await migrateStoredCredentialsToKeychain(storedState);
 
       if (!savedBridge || !savedCredentials?.username) {
         return;

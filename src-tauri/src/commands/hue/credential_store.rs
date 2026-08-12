@@ -316,8 +316,24 @@ pub fn migrate_hue_credentials_to_keychain(
         return MigrationOutcome::Failed;
     }
 
-    info!("[hue-cred] credentials migrated to keychain");
-    MigrationOutcome::Migrated
+    // Rollback deletes BOTH halves, and the read-back is not optional —
+    // see docs/architecture/hue.md (keychain rollback).
+    match resolve_hue_credentials(store, "", "") {
+        Some(resolved)
+            if resolved.username == username
+                && resolved.client_key == client_key
+                && resolved.backend == CredentialBackend::Keychain =>
+        {
+            info!("[hue-cred] credentials migrated to keychain");
+            MigrationOutcome::Migrated
+        }
+        _ => {
+            warn!("[hue-cred] migration read-back mismatch — rolling back, keeping plaintext");
+            let _ = store.delete(KEY_HUE_APP_KEY);
+            let _ = store.delete(KEY_HUE_CLIENT_KEY);
+            MigrationOutcome::Failed
+        }
+    }
 }
 
 /// Resolved Hue credentials returned by `resolve_hue_credentials`.
@@ -637,6 +653,42 @@ pub(crate) mod tests {
         // Rollback: the orphan app-key entry was cleaned up.
         assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
+        // The frontend keys its delete decision on this value.
+        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+    }
+
+    #[test]
+    fn migration_verifies_readback_before_reporting_migrated() {
+        // A store that acknowledges every write but hands back something else
+        // on read — the exact shape that makes a write acknowledgement an
+        // unsafe basis for deleting the plaintext copy.
+        struct LyingStore {
+            inner: InMemoryStore,
+        }
+        impl SecretStore for LyingStore {
+            fn set(&self, account: &str, value: &str) -> Result<(), String> {
+                self.inner.set(account, value)
+            }
+            fn get(&self, account: &str) -> Result<Option<String>, String> {
+                Ok(self.inner.get(account)?.map(|_| "tampered".to_string()))
+            }
+            fn delete(&self, account: &str) -> Result<(), String> {
+                self.inner.delete(account)
+            }
+            fn backend(&self) -> CredentialBackend {
+                CredentialBackend::Keychain
+            }
+        }
+
+        let store = LyingStore {
+            inner: InMemoryStore::default(),
+        };
+        let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
+        assert_eq!(outcome, MigrationOutcome::Failed);
+        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+        // No half-written entry survives a failed verification.
+        assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
+        assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
     }
 
     // ----------------------- W2-A2 resolver scenarios -----------------------
@@ -647,6 +699,21 @@ pub(crate) mod tests {
         store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
         store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
         let resolved = resolve_hue_credentials(&store, "fb-user", "fb-key").unwrap();
+        assert_eq!(resolved.username, "kc-user");
+        assert_eq!(resolved.client_key, "kc-key");
+        assert_eq!(resolved.backend, CredentialBackend::Keychain);
+    }
+
+    #[test]
+    fn resolver_uses_keychain_when_the_request_carries_no_client_key() {
+        // The post-Phase-1 shape: shell-state.json no longer holds the PSK, so
+        // the start-stream request arrives with an empty client key and the
+        // DTLS sender must still resolve a full pair.
+        let store = InMemoryStore::default();
+        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
+
+        let resolved = resolve_hue_credentials(&store, "kc-user", "").unwrap();
         assert_eq!(resolved.username, "kc-user");
         assert_eq!(resolved.client_key, "kc-key");
         assert_eq!(resolved.backend, CredentialBackend::Keychain);

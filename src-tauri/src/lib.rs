@@ -78,7 +78,7 @@ use commands::device_connection::{
 };
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
-    pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
+    migrate_hue_credentials, pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
 };
 use commands::hue_stream_lifecycle::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
@@ -769,6 +769,7 @@ pub fn run() {
             verify_hue_bridge_ip,
             pair_hue_bridge,
             validate_hue_credentials,
+            migrate_hue_credentials,
             list_hue_entertainment_areas,
             check_hue_stream_readiness,
             start_hue_stream,
