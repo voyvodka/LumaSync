@@ -12,9 +12,9 @@ import type {
 import { shellStore } from "@/features/persistence/shellStore";
 import { listDisplays } from "@/features/calibration/calibrationApi";
 import { buildDeviceStatusCard } from "@/features/device/deviceStatusCard";
-import { buildHueRuntimeStatusCard } from "@/features/device/hueRuntimeStatusCard";
+import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import { useDeviceConnection } from "@/features/device/useDeviceConnection";
-import { useHueOnboarding } from "@/features/device/useHueOnboarding";
+import { useHueOnboarding } from "@/features/hue/useHueOnboarding";
 import { stopHue } from "@/features/mode/modeApi";
 import { HueChannelMapPanel } from "./HueChannelMapPanel";
 import { WledDevicePicker } from "./WledDevicePicker";

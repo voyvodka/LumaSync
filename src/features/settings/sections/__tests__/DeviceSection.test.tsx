@@ -24,7 +24,7 @@ vi.mock("@/features/device/useDeviceConnection", () => ({
   useDeviceConnection: () => useDeviceConnectionMock(),
 }));
 
-vi.mock("@/features/device/useHueOnboarding", () => ({
+vi.mock("@/features/hue/useHueOnboarding", () => ({
   useHueOnboarding: () => useHueOnboardingMock(),
 }));
 

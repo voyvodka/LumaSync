@@ -138,7 +138,7 @@ Each module uses some of `ui/` (React components), `state/` (state machines and 
 
 Two things the directory listing will not tell you:
 
-- **Hue has no feature module.** Its UI lives in `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`, and its contract in `src/shared/contracts/hue.ts`.
+- **`hue` holds no UI.** The module is state, model, and the `invoke()` bridge; the Hue screens live in `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`, and the contract in `src/shared/contracts/hue.ts`.
 - **`onboarding` does not include the room map.** That editor is an advanced surface most users skip; first run must work without it.
 
 ### Rust command modules (`src-tauri/src/commands/`)
