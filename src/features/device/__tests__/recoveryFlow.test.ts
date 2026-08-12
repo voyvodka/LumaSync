@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HealthCheckResult, SerialPortListResponse } from "../deviceConnectionApi";
-import { createDeviceConnectionController } from "../useDeviceConnection";
+import { createDeviceConnectionController } from "../state/deviceConnectionController";
 
 // Every test here installs fake timers; without this the patch leaks to whatever
 // Vitest schedules next on the same worker, and `waitFor` there spins on
