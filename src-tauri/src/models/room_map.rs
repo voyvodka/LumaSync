@@ -1,5 +1,10 @@
+//! Persisted room-map model — room dimensions plus Hue channel, USB strip,
+//! furniture, and TV-anchor placements. Rust mirror of
+//! `src/shared/contracts/roomMap.ts`; the two must move together.
+
 use serde::{Deserialize, Serialize};
 
+/// Physical room size, used to scale the top-down room-map editor.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomDimensions {
@@ -19,6 +24,8 @@ pub struct ZoneRelativePosition {
     pub z: f64,
 }
 
+/// Placement of one Hue entertainment channel — absolute `x/y/z`, or
+/// zone-relative when `zone_id` is set.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueChannelPlacement {
@@ -39,6 +46,7 @@ pub struct HueChannelPlacement {
     pub zone_relative_position: Option<ZoneRelativePosition>,
 }
 
+/// Placement of one USB LED strip run along a wall edge.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UsbStripPlacement {
@@ -50,6 +58,8 @@ pub struct UsbStripPlacement {
     pub y: f64,
 }
 
+/// A furniture rectangle, drawn purely as a visual reference in the editor —
+/// nothing in the lighting path reads it.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct FurniturePlacement {
@@ -62,6 +72,8 @@ pub struct FurniturePlacement {
     pub y: f64,
 }
 
+/// The TV/screen rectangle — the anchor every edge and zone position is
+/// expressed relative to.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TvAnchorPlacement {
@@ -71,18 +83,9 @@ pub struct TvAnchorPlacement {
     pub y: f64,
 }
 
-/// v1.5 W4-F2 Hue zone descriptor — Hue spatial 3D zone tied to one
-/// entertainment area. Mirror of `HueZone` in
-/// `src/shared/contracts/roomMap.ts`.
-///
-/// Channels reference this zone via `HueChannelPlacement.zone_id` and
-/// resolve their world position as `world = center + scale *
-/// zoneRelativePosition`. The bridge per-area cap (10 channels) applies.
-///
-/// The previous unified `Zone` discriminator (W4-F PR1+PR2) was removed in
-/// W4-F2 — see RFC `v1.5-w4-f-zone-unification.md` "Direction reversal"
-/// section. Future zone kinds (`ScreenZone`, `LedZone`) will land as
-/// separate, explicit-prefix struct types in their own modules.
+/// A spatial 3D zone tied to one entertainment area. Channels join via
+/// `HueChannelPlacement.zone_id` and resolve as `world = center + scale *
+/// zoneRelativePosition`. Zones are Hue-only — see docs/architecture/hue.md.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueZone {
@@ -115,6 +118,7 @@ pub struct HueZone {
     pub center_color: Option<String>,
 }
 
+/// The full persisted room-map document — dimensions plus every placement kind.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomMapConfig {
