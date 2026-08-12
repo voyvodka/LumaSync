@@ -124,6 +124,8 @@ const HUE_STREAM_HEALTH_POLL_MS = 5_000;
 const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 /** Interval for checking bridge reachability when configured but stream is not active. */
 const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
+/** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
+const USB_DISCONNECT_NOTICE_MS = 5_000;
 /**
  * Hard floor on the rate at which non-`force` `setLightingMode` invokes are
  * allowed to reach the Tauri backend. Belt-and-braces backstop for the
@@ -1506,8 +1508,6 @@ function App() {
   useEffect(() => {
     if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
 
-    let disconnectNoticeTimerId: number | null = null;
-
     const wasConnected = prevUsbConnectedRef.current;
 
     if (wasConnected === false && isConnected) {
@@ -1550,7 +1550,6 @@ function App() {
         if (nextTargets.length > 0) {
           void handleOutputTargetsChange(nextTargets);
           setUsbDisconnectNotice(true);
-          disconnectNoticeTimerId = window.setTimeout(() => setUsbDisconnectNotice(false), 5_000);
         }
         // If no targets remain, keep current targets — mode buttons will show disabled via guard
       }
@@ -1558,14 +1557,16 @@ function App() {
     }
 
     prevUsbConnectedRef.current = isConnected;
-
-    return () => {
-      if (disconnectNoticeTimerId !== null) {
-        window.clearTimeout(disconnectNoticeTimerId);
-        disconnectNoticeTimerId = null;
-      }
-    };
   }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
+
+  // Own effect keyed on the flag it clears — the hot-plug effect above re-runs
+  // whenever `selectedOutputTargets` changes, which its own unplug branch causes.
+  // See docs/architecture/ui-and-shell.md.
+  useEffect(() => {
+    if (!usbDisconnectNotice) return;
+    const timerId = window.setTimeout(() => setUsbDisconnectNotice(false), USB_DISCONNECT_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [usbDisconnectNotice]);
 
   // ---------------------------------------------------------------------------
   // Bug 10D — boot-time USB unsupported / missing fallback
@@ -2246,10 +2247,13 @@ function App() {
       )}
       {usbDisconnectNotice && (
         <div
+          data-testid="usb-disconnect-notice"
           className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
+          role="status"
+          aria-live="polite"
           style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px", color: "var(--lm-muted)" }}>{t("common:hotplug.usbDisconnected")}</span>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t("common:hotplug.usbDisconnected")}</span>
         </div>
       )}
       {usbUnsupportedNotice && (
