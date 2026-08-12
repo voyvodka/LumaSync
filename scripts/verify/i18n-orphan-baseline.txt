@@ -266,4 +266,4 @@ telemetry:hue.noError
 telemetry:hue.packetRateFormat
 telemetry:hue.reconnectsFormat
 telemetry:hue.uptimeFormat
-updater.actions.showLogs
+updater:actions.showLogs

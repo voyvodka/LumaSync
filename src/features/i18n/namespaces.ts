@@ -3,6 +3,7 @@ export const I18N_NAMESPACES = [
   "shell",
   "telemetry",
   "tray",
+  "updater",
   "legacy",
 ] as const;
 

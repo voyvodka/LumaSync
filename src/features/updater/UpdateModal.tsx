@@ -146,7 +146,7 @@ function AvailableContent({
   const notes = parseReleaseNotes(update.body);
   const currentVersion = update.currentVersion;
   const nextVersion = update.version;
-  const sizeLabel = t("updater.sizeUnknown");
+  const sizeLabel = t("updater:sizeUnknown");
 
   return (
     <>
@@ -155,15 +155,15 @@ function AvailableContent({
           <IconDownload />
         </div>
         <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow">{t("updater.available.eyebrow")}</div>
+          <div className="lm-updater-eyebrow">{t("updater:available.eyebrow")}</div>
           <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater.available.title")}
+            {t("updater:available.title")}
           </div>
         </div>
       </div>
 
       <div className="lm-updater-body">
-        <Trans t={t} i18nKey="updater.available.body" values={{ version: nextVersion }} components={{ b: <b /> }} />
+        <Trans t={t} i18nKey="updater:available.body" values={{ version: nextVersion }} components={{ b: <b /> }} />
       </div>
 
       <div className="lm-updater-verdiff">
@@ -179,7 +179,7 @@ function AvailableContent({
             <span key={idx} className="lm-updater-notes-line">
               {note.kind && (
                 <span className={`lm-updater-tag is-${note.kind === "fix" ? "fix" : "add"}`}>
-                  {note.kind === "fix" ? t("updater.noteKind.fix") : note.kind === "add" ? t("updater.noteKind.add") : t("updater.noteKind.change")}
+                  {note.kind === "fix" ? t("updater:noteKind.fix") : note.kind === "add" ? t("updater:noteKind.add") : t("updater:noteKind.change")}
                 </span>
               )}
               {note.text}
@@ -190,10 +190,10 @@ function AvailableContent({
 
       <div className="lm-updater-actions">
         <button type="button" className="lm-updater-btn-ghost" onClick={onDismiss}>
-          {t("updater.actions.later")}
+          {t("updater:actions.later")}
         </button>
         <button type="button" className="lm-updater-btn-primary" onClick={onInstall}>
-          {t("updater.actions.install")}
+          {t("updater:actions.install")}
         </button>
       </div>
     </>
@@ -227,18 +227,18 @@ function DownloadingContent({
           <IconDownload />
         </div>
         <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow">{t("updater.downloading.eyebrow")}</div>
+          <div className="lm-updater-eyebrow">{t("updater:downloading.eyebrow")}</div>
           <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater.downloading.title", { version })}
+            {t("updater:downloading.title", { version })}
           </div>
         </div>
       </div>
 
-      <div className="lm-updater-body">{t("updater.downloading.body")}</div>
+      <div className="lm-updater-body">{t("updater:downloading.body")}</div>
 
       <div className="lm-updater-prog">
         <div className="lm-updater-prog-row">
-          <span>{t("updater.downloading.progressLabel")}</span>
+          <span>{t("updater:downloading.progressLabel")}</span>
           <b>
             <em>{clamped}</em>%
           </b>
@@ -253,14 +253,14 @@ function DownloadingContent({
           </span>
           <span>{formatSpeed(bytesPerSecond)}</span>
           <span>
-            {t("updater.downloading.etaLabel")} <b>{formatEta(etaSeconds)}</b>
+            {t("updater:downloading.etaLabel")} <b>{formatEta(etaSeconds)}</b>
           </span>
         </div>
       </div>
 
       <div className="lm-updater-actions">
         <button type="button" className="lm-updater-btn-ghost" onClick={onBackground}>
-          {t("updater.actions.background")}
+          {t("updater:actions.background")}
         </button>
       </div>
     </>
@@ -275,9 +275,9 @@ function InstallingContent({ version, onDismiss, t }: { version: string; onDismi
           <IconInstall />
         </div>
         <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow">{t("updater.installing.eyebrow")}</div>
+          <div className="lm-updater-eyebrow">{t("updater:installing.eyebrow")}</div>
           <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater.installing.title")}
+            {t("updater:installing.title")}
           </div>
         </div>
       </div>
@@ -285,9 +285,9 @@ function InstallingContent({ version, onDismiss, t }: { version: string; onDismi
       <div className="lm-updater-spinner" aria-hidden="true" />
 
       <div className="lm-updater-install-txt">
-        <b>{t("updater.installing.verify")}</b>
+        <b>{t("updater:installing.verify")}</b>
         <span>
-          <Trans t={t} i18nKey="updater.installing.body" values={{ version }} components={{ br: <br /> }} />
+          <Trans t={t} i18nKey="updater:installing.body" values={{ version }} components={{ br: <br /> }} />
         </span>
       </div>
 
@@ -320,27 +320,27 @@ function ErrorContent({
           <IconError />
         </div>
         <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow is-error">{t("updater.error.eyebrow")}</div>
+          <div className="lm-updater-eyebrow is-error">{t("updater:error.eyebrow")}</div>
           <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater.error.title")}
+            {t("updater:error.title")}
           </div>
         </div>
       </div>
 
-      <div className="lm-updater-body">{t("updater.error.body")}</div>
+      <div className="lm-updater-body">{t("updater:error.body")}</div>
 
       <div className="lm-updater-errbox">
-        <b>{t("updater.error.boxTitle")}</b>
+        <b>{t("updater:error.boxTitle")}</b>
         {message}
       </div>
 
       <div className="lm-updater-actions">
         <div className="lm-updater-actions-spacer" />
         <button type="button" className="lm-updater-btn-ghost" onClick={onDismiss}>
-          {t("updater.actions.close")}
+          {t("updater:actions.close")}
         </button>
         <button type="button" className="lm-updater-btn-retry" onClick={onRetry}>
-          {t("updater.actions.retry")}
+          {t("updater:actions.retry")}
         </button>
       </div>
     </>

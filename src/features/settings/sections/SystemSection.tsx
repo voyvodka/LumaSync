@@ -146,8 +146,8 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
         </div>
         <div className="lm-settings-row">
           <div className="lm-settings-row-l">
-            <div className="lm-settings-row-name">{t("updater.checkForUpdates")}</div>
-            <div className="lm-settings-row-desc">{t("updater.checkForUpdatesDescription")}</div>
+            <div className="lm-settings-row-name">{t("updater:checkForUpdates")}</div>
+            <div className="lm-settings-row-desc">{t("updater:checkForUpdatesDescription")}</div>
           </div>
           <div className="lm-settings-row-r flex items-center gap-2">
             {import.meta.env.DEV && devSetUpdaterState && (
@@ -160,7 +160,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
               disabled={isCheckingForUpdates}
               aria-busy={isCheckingForUpdates}
             >
-              {isCheckingForUpdates ? t("updater.checking") : t("updater.checkAction")}
+              {isCheckingForUpdates ? t("updater:checking") : t("updater:checkAction")}
             </button>
           </div>
         </div>
