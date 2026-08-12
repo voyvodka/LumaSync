@@ -377,32 +377,8 @@ pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Per-bulb gamut triangle clipping (v1.5 W1-C2 — Hyperion-lead quality gap G1)
-// ---------------------------------------------------------------------------
-//
-// Hue bulbs only emit colours inside their gamut triangle in CIE xy. A
-// computed `(x, y)` outside that triangle is silently clipped by the
-// bridge to the **nearest vertex**, producing a visible hue shift on
-// saturated colours. The proper fix is to project to the **closest
-// point on the triangle's edges** before sending — this is the
-// algorithm Philips publishes for gamut handling and is what Hyperion
-// implements today.
-//
-// Three canonical Hue gamuts (A/B/C) plus an `Other` fallback that
-// passes the input through unchanged. Vertices in CIE xy:
-//
-// - **Gamut A** (early bulbs): R(0.704, 0.296), G(0.2151, 0.7106),
-//   B(0.138, 0.080)
-// - **Gamut B** (Hue v1, 2012-2016): R(0.675, 0.322), G(0.4091, 0.518),
-//   B(0.167, 0.040)
-// - **Gamut C** (modern Color/Ambiance): R(0.692, 0.308), G(0.170, 0.700),
-//   B(0.153, 0.048)
-//
-// `HueGamutType` is re-exported from `super::sender` so the frame
-// builder, the metadata cache, and the sender hot path all share a
-// single enum.
-
+// CIE xy vertices per Hue gamut (A/B/C, `Other` pass-through); see
+// docs/architecture/hue.md for why we clip host-side.
 pub use super::sender::HueGamutType;
 
 /// CIE xy gamut triangle as `[red, green, blue]` vertices.

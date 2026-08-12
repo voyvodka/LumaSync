@@ -52,19 +52,9 @@ import {
   LED_TWIN_OVERLAY_LABEL_PREFIX,
 } from "./shared/contracts/preview";
 
-// Bridge browser `console.log/info/warn/error` to the Rust tauri-plugin-log
-// file sink so frontend output is captured in the same log file Rust writes
-// to (`~/Library/Logs/com.lumasync.app/lumasync-dev.log` on macOS). Without
-// this, frontend `console.*` calls live in the WebView devtools panel only,
-// which makes runtime debugging from outside DevTools impossible. The
-// browser console panel still receives the same entries — we wrap the
-// originals rather than replacing them so source-location attribution is
-// preserved in DevTools.
-//
-// `attachConsole` from @tauri-apps/plugin-log routes Rust logs TO the
-// browser console (the opposite direction we want); the explicit
-// `info`/`warn`/`error` exports invoke the plugin command which lands in
-// the plugin's target chain (Stdout + LogDir).
+// Mirrors console output into the Rust log sink — see
+// docs/architecture/ui-and-shell.md. We wrap the originals (not replace
+// them) so DevTools still shows correct source locations.
 function bridgeConsoleToTauri() {
   const fmt = (args: unknown[]) =>
     args
