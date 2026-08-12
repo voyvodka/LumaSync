@@ -557,8 +557,11 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     [patchState],
   );
 
-  const refreshAreas = useCallback(async () => {
-    if (!selectedBridge || !state.credentials) {
+  // Credentials come in as an argument because `pair()` calls this before its
+  // captured `state.credentials` has caught up — still null on a first pairing,
+  // still the superseded key on a re-pair.
+  const refreshAreasWith = useCallback(async (credentials: HuePairingCredentials | null) => {
+    if (!selectedBridge || !credentials) {
       return;
     }
 
@@ -568,7 +571,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     }));
 
     try {
-      const response = await listHueEntertainmentAreas(selectedBridge.ip, state.credentials.username);
+      const response = await listHueEntertainmentAreas(selectedBridge.ip, credentials.username);
       const normalizedGroups = normalizeAreas(response.areas, readinessById);
 
       patchState((prev) => {
@@ -600,7 +603,11 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         },
       }));
     }
-  }, [patchState, readinessById, selectedBridge, state.credentials]);
+  }, [patchState, readinessById, selectedBridge]);
+
+  const refreshAreas = useCallback(async () => {
+    await refreshAreasWith(state.credentials);
+  }, [refreshAreasWith, state.credentials]);
 
   const discover = useCallback(async () => {
     patchState((prev) => ({
@@ -754,7 +761,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
           hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
           hueOnboardingStep: HUE_ONBOARDING_STEP.PAIR,
         });
-        await refreshAreas();
+        await refreshAreasWith(response.credentials);
       }
     } catch (error) {
       patchState((prev) => ({
@@ -768,7 +775,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
         },
       }));
     }
-  }, [patchState, refreshAreas, selectedBridge]);
+  }, [patchState, refreshAreasWith, selectedBridge]);
 
   const selectArea = useCallback(
     (areaId: string | null) => {

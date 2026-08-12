@@ -15,6 +15,7 @@ https://keepachangelog.com/en/1.1.0/
 - Changing a test pattern's colour or speed no longer restarts its animation from the beginning.
 - Closing the LED preview no longer switches the lights off when the test is not what is driving them.
 - The digital-twin overlay opens on the selected display when launched from LED Setup, and its edge ribbons line up with the LED dots they mirror.
+- Pairing a Hue bridge now fills the entertainment-area list on its own. It arrived empty and needed a manual "Refresh areas" click, and re-pairing a bridge asked for the areas with the application key the bridge had just replaced — so a bridge that had rejected the old key answered a successful pairing with "re-pair is required".
 
 ### Changed
 
