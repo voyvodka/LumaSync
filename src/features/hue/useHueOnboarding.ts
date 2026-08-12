@@ -7,7 +7,6 @@ import {
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
 import { shellStore } from "../persistence/shellStore";
-import { readHueStreamReadiness } from "./hueReadCache";
 import {
   applyAreaReadinessSnapshot,
   flattenAreaGroups,
@@ -23,13 +22,10 @@ import {
   type HueStep,
   type UseHueOnboardingResult,
 } from "./model/onboardingTypes";
-import {
-  READINESS_BACKGROUND_REFRESH_MS,
-  READINESS_BLOCKED_REFRESH_MS,
-  READINESS_STALE_MS,
-} from "./model/pollingCadence";
+import { READINESS_STALE_MS } from "./model/pollingCadence";
 import { deriveRuntimeTargets } from "./model/runtimeTargets";
 import { useHueAreaChannels } from "./state/useHueAreaChannels";
+import { useHueReadinessPolling } from "./state/useHueReadinessPolling";
 import { useHueRuntimeStatus } from "./state/useHueRuntimeStatus";
 import {
   checkHueStreamReadiness,
@@ -485,83 +481,21 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     [state.areaGroups, state.selectedAreaId],
   );
 
-  // Background readiness refresh.
-  //
-  // Two cadences share one effect:
-  //   * 15 s while the selected area is healthy (default polish cadence)
-  //   * 3 s while the area is blocked by a foreign active streamer, so
-  //     the active-streamer banner clears within ~3 s of the foreign
-  //     session disconnecting (A3.1 — previously the banner stayed
-  //     stuck until the user clicked revalidate).
-  //
-  // Visibility-aware: the loop pauses while `document.visibilityState`
-  // is `hidden` (tray window collapsed / minimised) and re-arms with an
-  // immediate tick on `visibilitychange`, mirroring the runtime-status
-  // loop below and `useRuntimeTelemetry`.
-  useEffect(() => {
-    if (!selectedBridge || !state.credentials || !state.selectedAreaId || state.isValidatingCredential || state.isLoadingAreas) {
-      return;
-    }
+  const applyBackgroundReadiness = useCallback(
+    (areaId: string, response: Awaited<ReturnType<typeof checkHueStreamReadiness>>) => {
+      applyReadinessResult(areaId, response, { publishStatus: false, persistReadyStep: false });
+    },
+    [applyReadinessResult],
+  );
 
-    let mounted = true;
-    let timeoutId: number | null = null;
-    let inFlight = false;
-    const bridgeIp = selectedBridge.ip;
-    const username = state.credentials.username;
-    const areaId = state.selectedAreaId;
-    const cadence = selectedAreaIsBlocked
-      ? READINESS_BLOCKED_REFRESH_MS
-      : READINESS_BACKGROUND_REFRESH_MS;
-
-    const tick = async () => {
-      if (!mounted) return;
-      if (inFlight) return;
-      if (document.visibilityState === "hidden") return;
-      inFlight = true;
-      try {
-        const response = await readHueStreamReadiness(bridgeIp, username, areaId);
-        if (!mounted) return;
-        applyReadinessResult(areaId, response, {
-          publishStatus: false,
-          persistReadyStep: false,
-        });
-      } catch {
-        // Background readiness refresh is best-effort.
-      } finally {
-        inFlight = false;
-        scheduleNext();
-      }
-    };
-
-    const scheduleNext = () => {
-      if (!mounted) return;
-      if (document.visibilityState === "hidden") return;
-      if (timeoutId !== null) return;
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        void tick();
-      }, cadence);
-    };
-
-    const handleVisibilityChange = () => {
-      if (!mounted) return;
-      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
-        void tick();
-      }
-    };
-
-    void tick();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      mounted = false;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [applyReadinessResult, selectedAreaIsBlocked, selectedBridge, state.credentials, state.isValidatingCredential, state.isLoadingAreas, state.selectedAreaId]);
+  useHueReadinessPolling({
+    bridge: selectedBridge,
+    credentials: state.credentials,
+    areaId: state.selectedAreaId,
+    blocked: selectedAreaIsBlocked,
+    paused: state.isValidatingCredential || state.isLoadingAreas,
+    onResult: applyBackgroundReadiness,
+  });
 
   useEffect(() => {
     let cancelled = false;
