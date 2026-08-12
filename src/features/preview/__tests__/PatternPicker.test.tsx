@@ -70,7 +70,7 @@ describe("PatternPicker — active tile and aria-checked", () => {
 
     for (const kind of LED_TEST_PATTERN_KIND) {
       // Each tile's text content includes the translation key of the kind.
-      const tile = screen.getByText(`ledPreview.pattern.${kind}`).closest("button");
+      const tile = screen.getByText(`preview:pattern.${kind}`).closest("button");
       expect(tile).not.toBeNull();
       expect(tile?.getAttribute("aria-checked")).toBe(
         kind === "rainbow" ? "true" : "false",
@@ -81,7 +81,7 @@ describe("PatternPicker — active tile and aria-checked", () => {
   it("clicking an unselected tile calls onSelectKind with that kind", () => {
     const { onSelectKind } = renderPicker({ selectedKind: "solid" });
 
-    fireEvent.click(screen.getByText("ledPreview.pattern.chase").closest("button")!);
+    fireEvent.click(screen.getByText("preview:pattern.chase").closest("button")!);
 
     expect(onSelectKind).toHaveBeenCalledWith("chase");
     expect(onSelectKind).toHaveBeenCalledOnce();
@@ -90,7 +90,7 @@ describe("PatternPicker — active tile and aria-checked", () => {
   it("clicking the already-selected tile still calls onSelectKind (idempotent selection)", () => {
     const { onSelectKind } = renderPicker({ selectedKind: "gamut" });
 
-    fireEvent.click(screen.getByText("ledPreview.pattern.gamut").closest("button")!);
+    fireEvent.click(screen.getByText("preview:pattern.gamut").closest("button")!);
 
     expect(onSelectKind).toHaveBeenCalledWith("gamut");
   });
@@ -133,7 +133,7 @@ describe("PatternPicker — speed control", () => {
   it("clicking a speed button calls onSpeedChange with the correct value", () => {
     const { onSpeedChange } = renderPicker({ selectedKind: "rainbow", speed: "med" });
 
-    fireEvent.click(screen.getByText(/ledPreview.test.speed.slow/i));
+    fireEvent.click(screen.getByText(/preview:test.speed.slow/i));
 
     expect(onSpeedChange).toHaveBeenCalledWith("slow");
     expect(onSpeedChange).toHaveBeenCalledOnce();
@@ -145,13 +145,13 @@ describe("PatternPicker — running indicator", () => {
     renderPicker({ running: true });
 
     // The running indicator renders the i18n key inside a span.
-    expect(screen.getByText("ledPreview.test.running")).toBeInTheDocument();
+    expect(screen.getByText("preview:test.running")).toBeInTheDocument();
   });
 
   it("running pulse element is absent when running=false", () => {
     renderPicker({ running: false });
 
-    expect(screen.queryByText("ledPreview.test.running")).not.toBeInTheDocument();
+    expect(screen.queryByText("preview:test.running")).not.toBeInTheDocument();
   });
 });
 
@@ -160,7 +160,7 @@ describe("PatternPicker — disabled prop gates tiles", () => {
     renderPicker({ disabled: true, selectedKind: "chase" });
 
     for (const kind of LED_TEST_PATTERN_KIND) {
-      const tile = screen.getByText(`ledPreview.pattern.${kind}`).closest("button");
+      const tile = screen.getByText(`preview:pattern.${kind}`).closest("button");
       expect(tile).toBeDisabled();
     }
   });
@@ -168,7 +168,7 @@ describe("PatternPicker — disabled prop gates tiles", () => {
   it("clicking a tile does not call onSelectKind when disabled=true", () => {
     const { onSelectKind } = renderPicker({ disabled: true });
 
-    fireEvent.click(screen.getByText("ledPreview.pattern.rainbow").closest("button")!);
+    fireEvent.click(screen.getByText("preview:pattern.rainbow").closest("button")!);
 
     expect(onSelectKind).not.toHaveBeenCalled();
   });

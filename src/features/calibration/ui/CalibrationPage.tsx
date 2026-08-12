@@ -449,7 +449,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
               <button
                 type="button"
                 onClick={() => void handleOpenPreview()}
-                title={t("ledPreview.entry.ledSetupHint")}
+                title={t("preview:entry.ledSetupHint")}
                 className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -458,7 +458,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                   <circle cx="12" cy="11" r="1.2" fill="currentColor" stroke="none" />
                   <circle cx="17" cy="11" r="1.2" fill="currentColor" stroke="none" />
                 </svg>
-                {t("ledPreview.entry.ledSetupButton")}
+                {t("preview:entry.ledSetupButton")}
               </button>
               <button
                 type="button"

@@ -128,7 +128,7 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
   // aria-hidden (it is a decorative ambient mirror).
   useEffect(() => {
     if (typeof document === "undefined") return;
-    document.title = t("ledPreview.twin.ariaLabel");
+    document.title = t("preview:twin.ariaLabel");
     // The twin lives in a transparent OS window, but index.html's global
     // styles paint an opaque app background on <body>. Neutralize it on this
     // window only so the desktop / app behind stays fully visible — the twin
@@ -184,7 +184,7 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
   return (
     <div className="lm-twin-root" aria-hidden="true">
       <div className="lm-twin-scope">
-        {scope === "live" ? t("ledPreview.twin.scopeLive") : t("ledPreview.twin.scopeTest")}
+        {scope === "live" ? t("preview:twin.scopeLive") : t("preview:twin.scopeTest")}
       </div>
 
       {/* Edge ribbons (under the dots) */}

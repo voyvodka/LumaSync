@@ -228,11 +228,11 @@ general.output.status.notConfigured
 general.output.status.notConnected
 general.output.status.ready
 general.output.title
-ledPreview.control.closed
-ledPreview.live.unavailableLinux
 ledSettings.colorCorrection.kelvinHint
 lightsPage.dock.addTooltip
 lightsPage.signal.smoothing.description
+preview:control.closed
+preview:live.unavailableLinux
 roomMap.comingSoon
 roomMap.inspector.channelsLabel
 roomMap.inspector.legacyZoneHint

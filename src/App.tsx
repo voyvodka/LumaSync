@@ -1169,7 +1169,7 @@ function App() {
           lightsOff: i18next.t("tray:lightsOff"),
           resumeLastMode: i18next.t("tray:resumeLastMode"),
           solidColor: i18next.t("tray:solidColor"),
-          showLedPreview: i18next.t("ledPreview.tray.show"),
+          showLedPreview: i18next.t("preview:tray.show"),
           quit: i18next.t("tray:quit"),
         });
 
@@ -1219,7 +1219,7 @@ function App() {
         lightsOff: i18next.t("tray:lightsOff"),
         resumeLastMode: i18next.t("tray:resumeLastMode"),
         solidColor: i18next.t("tray:solidColor"),
-        showLedPreview: i18next.t("ledPreview.tray.show"),
+        showLedPreview: i18next.t("preview:tray.show"),
         quit: i18next.t("tray:quit"),
       });
     };

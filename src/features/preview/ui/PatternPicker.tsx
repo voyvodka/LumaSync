@@ -54,18 +54,18 @@ export function PatternPicker({
   return (
     <div>
       <div className="lm-control-section-title flex items-center justify-between">
-        <span>{t("ledPreview.test.title")}</span>
+        <span>{t("preview:test.title")}</span>
         {running && (
           <span className="inline-flex items-center gap-1.5 text-[var(--lm-amber)]">
             <span className="lm-test-pulse" aria-hidden="true" />
             <span className="[font-family:var(--lm-mono)] text-[9px] tracking-wide">
-              {t("ledPreview.test.running")}
+              {t("preview:test.running")}
             </span>
           </span>
         )}
       </div>
 
-      <div className="lm-pattern-grid" role="radiogroup" aria-label={t("ledPreview.test.title")}>
+      <div className="lm-pattern-grid" role="radiogroup" aria-label={t("preview:test.title")}>
         {LED_TEST_PATTERN_KIND.map((kind) => {
           const on = kind === selectedKind;
           return (
@@ -79,7 +79,7 @@ export function PatternPicker({
               onClick={() => onSelectKind(kind)}
             >
               <span className="swatch" style={{ background: SWATCH[kind] }} aria-hidden="true" />
-              <span>{t(`ledPreview.pattern.${kind}`)}</span>
+              <span>{t(`preview:pattern.${kind}`)}</span>
             </button>
           );
         })}
@@ -88,7 +88,7 @@ export function PatternPicker({
       <div
         className="lm-pattern-speed"
         role="radiogroup"
-        aria-label={t("ledPreview.test.speed.label")}
+        aria-label={t("preview:test.speed.label")}
         aria-disabled={speedDisabled}
       >
         {SPEEDS.map((s) => (
@@ -101,7 +101,7 @@ export function PatternPicker({
             className={s === speed ? "is-on" : ""}
             onClick={() => onSpeedChange(s)}
           >
-            {t(`ledPreview.test.speed.${s}`)}
+            {t(`preview:test.speed.${s}`)}
           </button>
         ))}
       </div>

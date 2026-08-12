@@ -252,7 +252,7 @@ export function ControlPopupApp() {
     (result: LedTestPatternResult, request: TestPatternRunRequest) => {
       const code = result.status.code;
       if (isTestPatternErrorCode(code)) {
-        setRunError(t(`ledPreview.status.${code}`));
+        setRunError(t(`preview:status.${code}`));
         setPreviewOnly(false);
         return;
       }
@@ -416,8 +416,8 @@ export function ControlPopupApp() {
       if (!hintAlreadyShown) {
         try {
           await showNotification({
-            title: t("ledPreview.title"),
-            body: t("ledPreview.control.reopenHint"),
+            title: t("preview:title"),
+            body: t("preview:control.reopenHint"),
             kind: "info",
           });
         } catch (error) {
@@ -434,9 +434,9 @@ export function ControlPopupApp() {
 
   // ── Status chip ──────────────────────────────────────────────────────────
   const chip = testActive
-    ? { cls: "is-test", label: t("ledPreview.status.test") }
+    ? { cls: "is-test", label: t("preview:status.test") }
     : preview?.source === "live"
-      ? { cls: "is-live", label: t("ledPreview.status.live") }
+      ? { cls: "is-live", label: t("preview:status.live") }
       : null;
 
   const hexColor = toHex(draft);
@@ -447,7 +447,7 @@ export function ControlPopupApp() {
       {/* Header — draggable region */}
       <header className="lm-control-header" data-tauri-drag-region>
         <span className="lm-control-title" data-tauri-drag-region>
-          {t("ledPreview.title")}
+          {t("preview:title")}
         </span>
         {chip && (
           <span className={`lm-control-chip ${chip.cls}`} role="status">
@@ -543,12 +543,12 @@ export function ControlPopupApp() {
           {!runError && previewOnly && (
             <p className="lm-control-info" role="status">
               <span className="lm-control-info-dot" aria-hidden="true" />
-              {t("ledPreview.status.LED_TEST_PATTERN_PREVIEW_ONLY")}
+              {t("preview:status.LED_TEST_PATTERN_PREVIEW_ONLY")}
             </p>
           )}
         </div>
 
-        <p className="lm-control-drag-hint">{t("ledPreview.control.dragHint")}</p>
+        <p className="lm-control-drag-hint">{t("preview:control.dragHint")}</p>
       </div>
 
       {/* Test footer — status readout plus the window's only exit. Starting is
@@ -561,18 +561,18 @@ export function ControlPopupApp() {
         )}
         <span className="lm-test-footer-text">
           {!testActive
-            ? t("ledPreview.test.idle")
+            ? t("preview:test.idle")
             : preview?.activePattern
-              ? `${t("ledPreview.test.running")} · ${t(`ledPreview.pattern.${preview.activePattern.kind}`)}`
-              : t("ledPreview.test.running")}
+              ? `${t("preview:test.running")} · ${t(`ledPreview.pattern.${preview.activePattern.kind}`)}`
+              : t("preview:test.running")}
         </span>
         <button
           type="button"
           className="lm-control-close"
           onClick={handleClose}
-          title={t("ledPreview.control.closeHint")}
+          title={t("preview:control.closeHint")}
         >
-          {t("ledPreview.control.close")}
+          {t("preview:control.close")}
         </button>
       </footer>
     </div>
