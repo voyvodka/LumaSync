@@ -3,6 +3,7 @@ import {
   DEVICE_ERROR_CODES,
   DEVICE_OPERATION,
   DEVICE_STATUS,
+  SERIAL_CONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
   type DeviceOperation,
   type DeviceStatus,
@@ -11,7 +12,6 @@ import {
 import { shellStore } from "../persistence/shellStore";
 import {
   canConnectSelectedPort,
-  groupAndSortPorts,
   resolveInitialSelection,
   resolveSelectionAfterRefresh,
 } from "./portSelection";
@@ -736,7 +736,32 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
       statusCard: null,
     }));
 
-    const connection = await deps.connectSerialPort(targetPort);
+    let connection: SerialConnectionStatus;
+    try {
+      connection = await deps.connectSerialPort(targetPort);
+    } catch (error) {
+      // A rejected invoke must still release the one-operation-at-a-time
+      // gate, or the device UI wedges until reload — see runHealthCheck's
+      // catch below for the same shape.
+      if (token !== operationToken) {
+        return;
+      }
+
+      finishOperation(token);
+      setState((prev) => ({
+        ...prev,
+        status: DEVICE_STATUS.ERROR,
+        connectedPort: null,
+        statusCard: {
+          variant: "error",
+          code: SERIAL_CONNECT_STATUS.FAILED,
+          message: "Could not connect to the selected port.",
+          details: error instanceof Error ? error.message : String(error),
+        },
+      }));
+      return;
+    }
+
     if (token !== operationToken) {
       return;
     }
@@ -868,13 +893,11 @@ export function createDeviceConnectionController(deps: DeviceConnectionControlle
 }
 
 export interface UseDeviceConnectionResult extends DeviceConnectionControllerState {
-  groupedPorts: ReturnType<typeof groupAndSortPorts>;
   isConnected: boolean;
   refreshPorts: () => Promise<void>;
   selectPort: (portName: string | null) => void;
   connectSelectedPort: () => Promise<void>;
   runHealthCheck: () => Promise<void>;
-  connectButtonLabel: "connect" | "reconnect" | "connected";
 }
 
 export function useDeviceConnection(): UseDeviceConnectionResult {
@@ -960,28 +983,12 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
     };
   }, [controller]);
 
-  const groupedPorts = useMemo(() => groupAndSortPorts(state.ports), [state.ports]);
-
-  const connectButtonLabel: "connect" | "reconnect" | "connected" = useMemo(() => {
-    if (state.connectedPort && state.connectedPort === state.selectedPort) {
-      return "connected";
-    }
-
-    if (state.connectedPort && state.connectedPort !== state.selectedPort) {
-      return "reconnect";
-    }
-
-    return "connect";
-  }, [state.connectedPort, state.selectedPort]);
-
   return {
     ...state,
-    groupedPorts,
     isConnected: Boolean(state.connectedPort),
     refreshPorts: controller.refreshPorts,
     selectPort: controller.selectPort,
     connectSelectedPort: controller.connectSelectedPort,
     runHealthCheck: controller.runHealthCheck,
-    connectButtonLabel,
   };
 }

@@ -159,6 +159,63 @@ describe("manual connect flow", () => {
     expect(controller.getState().selectedPort).toBe("COM3");
   });
 
+  it("releases the operation gate and surfaces a coded error when connect rejects", async () => {
+    const connectSerialPort = vi.fn().mockRejectedValue(new Error("device disconnected"));
+    const controller = createDeviceConnectionController({
+      listSerialPorts: vi.fn().mockResolvedValue(
+        listResponse([
+          {
+            name: "COM3",
+            kind: "usb",
+            isSupported: true,
+            supportReason: "Supported USB serial adapter",
+            usb: {
+              vid: 0x1a86,
+              pid: 0x7523,
+              manufacturer: null,
+              product: null,
+              serialNumber: null,
+            },
+          },
+        ]),
+      ),
+      connectSerialPort,
+      getSerialConnectionStatus: vi.fn(),
+      persistLastSuccessfulPort: vi.fn(),
+    });
+
+    await controller.initialize();
+    controller.selectPort("COM3");
+
+    await controller.connectSelectedPort();
+
+    expect(connectSerialPort).toHaveBeenCalledTimes(1);
+    expect(controller.getState().activeOperation).toBe("idle");
+    expect(controller.getState().isConnecting).toBe(false);
+    expect(controller.getState().status).toBe("error");
+    expect(controller.getState().statusCard?.variant).toBe("error");
+    expect(controller.getState().statusCard?.code).toBe("CONNECT_FAILED");
+
+    // The gate must be released: a follow-up connect attempt has to actually
+    // run rather than being swallowed by a still-stuck activeOperation.
+    connectSerialPort.mockResolvedValueOnce({
+      connected: true,
+      portName: "COM3",
+      updatedAtUnixMs: Date.now(),
+      status: {
+        code: "CONNECT_OK",
+        message: "Serial port connection attempt succeeded.",
+        details: null,
+      },
+    });
+
+    await controller.connectSelectedPort();
+
+    expect(connectSerialPort).toHaveBeenCalledTimes(2);
+    expect(controller.getState().status).toBe("connected");
+    expect(controller.getState().connectedPort).toBe("COM3");
+  });
+
   it("clears stale selection when selected port is missing after refresh", async () => {
     const listSerialPorts = vi
       .fn<() => Promise<SerialPortListResponse>>()
