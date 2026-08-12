@@ -22,6 +22,13 @@ surfaces as a generic pairing error on a bridge that discovery found without tro
 Re-pairing on a timeout or a 5xx destroys a working pairing and forces the user back to the link
 button for no reason.
 
+**The HTTP fallback must never run on a request whose response carries a secret.** The pairing POST
+returns the DTLS `clientkey`: if that call fell back on a TLS failure the way IP verification and
+credential validation do, an attacker who blackholes TCP/443 could force the downgrade and read the
+pre-shared key off plain HTTP. `send_clip_v1`'s `allow_http_fallback` flag is `false` for that one
+call, and the fallback itself only triggers on a connect-level failure — a TLS handshake failure
+stays fatal, because that handshake failure is exactly the signal such an attacker manufactures.
+
 **Credentials live in the OS keychain, not in the state file.** macOS Keychain, Windows CredMan,
 Linux Secret Service, via `commands/hue/credential_store.rs`. `shell-state.json` no longer holds the
 DTLS pre-shared key.
@@ -38,6 +45,24 @@ through to the keychain; dropping the application key would instead send an empt
 `AUTH_INVALID_RE_PAIR_REQUIRED` — the user is told to re-pair, and nothing anywhere can read the key
 back. **Do not clear `hueAppKey` until those five call sites resolve it keychain-first when the
 request value is empty.** This looks like an unfinished job and is not one.
+
+**The entertainment-area snapshot is cached process-wide, single-flight.** Two independent frontend
+polling loops converge on the same bridge payload through different commands — the App health
+reconciler via `get_hue_stream_status`, the Devices-tab loop via `check_hue_stream_readiness` — and
+the frontend coalescer can only dedupe *within* one command, not across both. `area_cache.rs`
+removes the duplication on this side of the IPC boundary instead: a caller arriving mid-fetch waits
+on the slot and reuses the leader's result, a bridge-side mutation bumps a generation counter so a
+fetch issued before it can never be served after, and every read gating a mutation asks for `Force`
+to bypass the cache outright.
+
+**The area-cache TTL is derived, not tuned — 1.5 s.** `HUE_AREA_CACHE_TTL_MS` in `area_cache.rs`.
+The co-firing this cache exists to remove lands within ~1.1 s of itself every few ticks, and the
+next arrival after that is >2 s away either way, so any TTL at or above ~1.1 s catches all of it and
+a larger one catches nothing more. 1.5 s also matches the frontend's own accepted staleness for the
+same data (`HUE_READINESS_MAX_AGE_MS`), so this layer never becomes the staleness bottleneck.
+Worst-case composed staleness is 3.5 s — below the 5 s health-poll period and well under the
+bridge's ~10 s entertainment inactivity close. The value is purely observational: stream liveness is
+read from the local `is_shutdown_signaled` probe and the reconnect monitor, never from this cache.
 
 **Colour is clipped per-bulb to its gamut.** Hue bulbs come in gamuts A, B, and C, and a colour
 outside a given bulb's triangle is not merely inaccurate — the bridge clamps it somewhere
@@ -67,7 +92,9 @@ half-migrated.
 
 - **`commands/hue_stream_lifecycle.rs` is a re-export shim.** The implementation moved under `commands::hue::*`. Import paths still resolve through it; do not add new code there.
 - **A bridge allows one active entertainment streamer at a time.** `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` in the log means something else holds the session — often a previous instance of this app that did not shut down cleanly, or the official Hue Sync app. It is not a pairing failure and must not be reported as one.
+- **`entertainment_configuration` deactivation can race between three call sites:** the sender thread's own cleanup, the foreground `stop_hue_stream` command, and the reconnect monitor's pre-restart cleanup. Uncoordinated, all three PUT `{"action":"stop"}` to the same area, which the bridge logs as duplicate stale-state mutations and which historically produced the "phantom active streamer" symptom (bug audit A1.3). `DeactivateToken` is the single-shot coordination primitive — whichever caller wins `try_acquire()` performs the PUT, every later caller sees the in-flight bit and no-ops.
 - **`DTLS entertainment stream established` is the line that proves streaming actually started.** Pairing succeeding says nothing about the stream.
+- **Bug H2 — gamut clipping used to discard luminance, not just chroma.** The fix converts RGB to CIE xy plus the input's own luminance (`big_y`), clips the xy point to the bulb's gamut triangle, then converts back using that *same* luminance rather than a hard-coded 1.0. Before the fix, the inverse transform renormalised so the largest channel saturated — preserving hue but discarding brightness, which the frame builder then tried to claw back through the brightness scalar, producing visibly dim saturated content and, on gamut-edge projections, momentary all-zero RGB that drove the ambilight-frame stutter.
 - **Discovery touches the cloud; the manual-IP path does not.** The mDNS/discovery endpoint is the only outbound call in the entire application, and it has a manual fallback precisely so a user can avoid it.
 - **A failed read-back rolls back BOTH keychain halves, never just the bad one.** `migrate_hue_credentials_to_keychain` writes, reads back, compares, and only then reports success; on any mismatch it deletes both entries. Deleting only the mismatched half looks tidier and is wrong — `resolve_hue_credentials` prefers a complete keychain pair over the request fallback, so a stale pair left behind shadows the working plaintext credentials and yields a broken bridge that reports a keychain success. Rolling both back degrades to the plaintext path, which works. The order is fixed: write, read back, *then* clear plaintext. Never clear on a write acknowledgement alone.
 - **Only the literal `"keychain"` licenses deleting the plaintext copy.** An absent `credentialStorageBackend` — every pairing failure path, and any Rust build predating the migration — means there is no evidence the keychain holds anything, and the only safe response to no evidence is to keep the copy. `CredentialBackend::as_str` can also emit `"noop"`, which is outside the TS union. Test for the one permitting value; never switch exhaustively over the union.

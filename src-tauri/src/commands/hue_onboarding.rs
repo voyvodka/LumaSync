@@ -1367,11 +1367,9 @@ fn hue_cloud_http_client() -> Result<Client, String> {
 /// The fallback triggers on transport errors only. Once a bridge answers with
 /// any HTTP status the response is returned untouched so `classify_hue_response`
 /// keeps owning the 403/`error.type` re-pair contract.
-/// `allow_http_fallback` must be `false` for any request whose response carries
-/// a secret. The pairing POST returns the DTLS `clientkey`, so an attacker who
-/// blackholes TCP/443 could otherwise force the downgrade and read the PSK off
-/// the wire. Only connect-level failures fall back — a TLS handshake failure is
-/// exactly the signal an attacker would manufacture, so it stays fatal.
+///
+/// `allow_http_fallback` must stay `false` on the pairing call — it returns the
+/// DTLS `clientkey`. See docs/architecture/hue.md (downgrade-attack constraint).
 async fn send_clip_v1<F>(
     client: &Client,
     bridge_ip: &str,

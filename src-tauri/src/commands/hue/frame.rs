@@ -218,14 +218,8 @@ pub(crate) fn build_huestream_frame(
             .map(|meta| meta.gamut_type)
             .unwrap_or(HueGamutType::Other);
         if !matches!(gamut, HueGamutType::Other) && (r, g, b) != (0, 0, 0) {
-            // Bug H2: feed the input luminance (`big_y`) into the inverse
-            // transform so the gamut-clipped chromaticity preserves the
-            // original sample's brightness rather than collapsing to the
-            // "max channel saturates" envelope. Without this the frame
-            // builder silently dimmed saturated content and could emit
-            // (0, 0, 0) on edge-case projections, producing both the
-            // ambilight-frame stutter and the solid-colour off-flash that
-            // were observed pre-fix.
+            // Bug H2: preserve the input's own luminance through the clip
+            // instead of a hard-coded 1.0. See docs/architecture/hue.md.
             let (xy_x, xy_y, big_y) = rgb_to_xy(r, g, b);
             let clipped = clip_xy_to_gamut((xy_x, xy_y), gamut);
             if (clipped.0 - xy_x).abs() > 1e-9 || (clipped.1 - xy_y).abs() > 1e-9 {
@@ -260,13 +254,10 @@ pub(crate) fn build_huestream_frame(
 /// Returns `(x, y, big_y)` where:
 /// - `(x, y)` is the chromaticity, bridge-ready for the `color.xy` field
 ///   of CLIP v2 light PUTs.
-/// - `big_y` is the absolute CIE luminance of the input sample. It is the
-///   raw Y component prior to chromaticity normalisation, so the inverse
-///   pipeline (`xy_to_rgb`) can preserve the original sample's brightness
-///   instead of collapsing to a "max channel saturates" envelope.
-///
-/// The third return value was added for Bug H2 (gamut-clip luminance loss).
-/// HTTP-fallback callers that only need chromaticity can ignore it.
+/// - `big_y` is the raw Y component prior to chromaticity normalisation, fed
+///   back through `xy_to_rgb` to preserve luminance across a gamut clip (Bug
+///   H2 — see docs/architecture/hue.md). Callers that only need chromaticity
+///   can ignore it.
 pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
     let mut red = f64::from(r) / 255.0;
     let mut green = f64::from(g) / 255.0;
@@ -306,23 +297,10 @@ pub(crate) fn rgb_to_xy(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
 /// Inverse of [`rgb_to_xy`]: recover an sRGB triplet (8-bit per channel)
 /// from a CIE 1931 chromaticity `(x, y)` plus a target luminance
 /// `target_y` (the `big_y` returned by [`rgb_to_xy`]). Uses the Hue-style
-/// XYZ → linear-RGB matrix and gamma encode.
-///
-/// Bug H2: prior to this fix `big_y` was hard-coded to 1.0 and the
-/// resulting linear-RGB triplet was renormalised so the largest channel
-/// saturated. That preserved hue but discarded the original sample's
-/// luminance — which the frame builder then attempted to recover by
-/// applying the brightness scalar on top, producing visibly dim saturated
-/// content and (on EPSILON-edge projections from `clip_xy_to_gamut`)
-/// momentary all-zero RGB tuples that drove the ambilight-frame stutter.
-///
-/// The fix is to feed the input luminance straight back through the
-/// inverse matrix and clamp (rather than divide by max). The output is
-/// intentionally clamped to `[0, 255]` because some chromaticities
-/// outside any Hue gamut land outside the sRGB cube even after
-/// projection — that is acceptable; the gamut clip step upstream is
-/// the one responsible for keeping the chromaticity inside a renderable
-/// triangle.
+/// XYZ → linear-RGB matrix and gamma encode, then clamps to `[0, 255]`
+/// rather than renormalising (Bug H2 — see docs/architecture/hue.md) —
+/// some chromaticities land outside the sRGB cube even after the upstream
+/// gamut clip, and clamping is the correct response to that, not a redo.
 pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
     // Treat negative or near-zero target luminance as "true black". This
     // keeps the EPSILON guard (the channel is unrenderable) but moves it
