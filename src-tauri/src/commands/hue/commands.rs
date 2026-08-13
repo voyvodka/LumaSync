@@ -4,7 +4,7 @@
 //! split. This module owns the seven `#[tauri::command]` entry points
 //! (`start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
 //! `set_hue_solid_color`, `get_hue_stream_status`, `get_hue_area_channels`,
-//! `simulate_hue_fault`) and the `to_legacy_status` legacy compat helper.
+//! `simulate_hue_fault`).
 //! All call sites use the data plane and runtime state machine that now
 //! live in sibling submodules `frame`, `dtls`, `sender`, `state_store`,
 //! `retry`, and `reconnect`.
@@ -37,8 +37,8 @@ use super::sender::{
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
     make_result, queue_solid_color, status_with, HueRuntimeActionHint, HueRuntimeCommandResult,
-    HueRuntimeGateEvidence, HueRuntimeState, HueRuntimeStateStore, HueRuntimeStatus,
-    HueRuntimeTriggerSource, HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
+    HueRuntimeGateEvidence, HueRuntimeState, HueRuntimeStateStore, HueRuntimeTriggerSource,
+    HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -761,15 +761,6 @@ pub async fn get_hue_stream_status(
     let mut owner = acquire_hue_runtime(&runtime_state.runtime);
     flush_pending_solid_color(&mut owner);
     Ok(make_result(&owner))
-}
-
-#[allow(dead_code)]
-fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
-    CommandStatus {
-        code: status.code.clone(),
-        message: status.message.clone(),
-        details: status.details.clone(),
-    }
 }
 
 // ---------------------------------------------------------------------------
