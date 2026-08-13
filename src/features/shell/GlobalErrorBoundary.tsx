@@ -94,11 +94,8 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   }
 
   private handleRestart = () => {
-    // Prefer a real process relaunch through tauri-plugin-process so
-    // tray icon, USB handles and Hue streams all reinitialize cleanly.
-    // Fall back to a WebView reload whenever the plugin surface is
-    // unavailable (non-Tauri test runs, cold-boot before invoke is
-    // ready, or plugin load failure).
+    // A real process relaunch is preferred so the tray icon, USB handles and Hue
+    // streams all reinitialise; the WebView reload is the no-plugin fallback.
     void (async () => {
       try {
         const { relaunch } = await import("@tauri-apps/plugin-process");

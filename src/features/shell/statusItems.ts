@@ -13,14 +13,8 @@ export interface StatusItemsInput {
   onOpenDevices: () => void;
 }
 
-// Derive runtime status items for the bottom StatusBar. Order matches the
-// mockup (CAP / USB / HUE). CAP is "ok" only while ambilight is the active
-// mode — that's the only mode that actually consumes screen frames.
-// v1.5 W2-B1 — Reconnect deep-link to the DEVICES section. Both USB and
-// Hue chips offer the affordance whenever they are not in a healthy state:
-// the icon button rendered inside the StatusBar pill takes the user to
-// the place they can actually fix the issue (re-pair, replug, retry).
-// Every chip pairs its colour with a text state, never colour alone.
+/** Status items for the bottom StatusBar, in mockup order (CAP / USB / HUE).
+ *  Every chip pairs colour with a text state — never colour alone. */
 export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusItem[] {
   const { ambilightActive, usbConnected, hueStreaming, hueReachable, hueConfigured, onOpenDevices } =
     input;

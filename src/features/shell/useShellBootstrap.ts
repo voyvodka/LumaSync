@@ -64,14 +64,9 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // Restore window geometry immediately — before any heavy async work —
         // so the window settles into its saved position without a visible jump.
         await initWindowLifecycle({
-          // A4.1 — Trigger an OS-level notification the first time the
-          // user closes the window, so they know the app is still running
-          // in the tray (matches Spotify / Slack behaviour). The
-          // trayHintShown flag in shellStore guarantees this fires only
-          // once per install. The Rust command is never-throws and
-          // returns a coded status — we log a denied permission as
-          // diagnostic context and silently continue, since the hint is
-          // a nice-to-have, not a blocker for the close flow.
+          // A4.1 — tell the user the app is still running in the tray the first
+          // time they close the window. `trayHintShown` in shellStore keeps it to
+          // once per install; a denied permission is logged, never blocking.
           onFirstCloseToTray: () => {
             void (async () => {
               try {
@@ -131,47 +126,23 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // fired below already carries the calibration — the
         // useEffect that mirrors state->ref has not flushed yet.
         runtimeConfig.setCalibration(hydratedCalibration);
-        // v1.5 W2-B4 — fresh installs land on `undefined`; treat that as
-        // "never completed" so the onboarding banner mounts. Existing
-        // v1.4 users upgrading without the flag also see it once and
-        // can dismiss with one click — no destructive migration.
+        // Fresh installs land on `undefined`; treat that as "never completed" so
+        // the banner mounts once for upgraders too — no destructive migration.
         sink.setHasCompletedOnboarding(state.hasCompletedOnboarding === true);
         // Synchronous prime so the bootstrap set_lighting_mode fired below
         // already honours the persisted display / preset / correction knobs.
         runtimeConfig.prime(state);
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
-        // v1.5 H1 — prime the ambilight ref synchronously so any same-tick
-        // dispatch fired before `setLightingMode(restoredMode)` flushes
-        // (color-correction / firmware-profile / Hue-intensity hot-reload,
-        // USB hot-plug delta-start) still carries the persisted saturation /
-        // blackBorderDetection / smoothing-preset values. The mirror effect
-        // keeps the ref in sync with subsequent state updates.
+        // Prime the ambilight ref synchronously: a same-tick dispatch (hot-reload,
+        // USB hot-plug delta-start) fires before `setLightingMode` flushes and
+        // would otherwise ship backend defaults instead of the persisted knobs.
         runtimeConfig.setAmbilight(restoredMode.ambilight);
         sink.setLightingMode(restoredMode);
 
-        // v1.5 H3 — read live USB connection state but DO NOT strip "usb"
-        // from selectedOutputTargets when the snapshot returns
-        // `connected: false`. Cold launch races against
-        // `tryAutoReconnect`'s 2 s BOOTLOADER_SETTLE_DELAY_MS: ~20-30%
-        // of starts the bootstrap finishes first, sees `connected: false`,
-        // and silently drops the user's persisted USB target. Auto-reconnect
-        // then completes and emits `connected: true` — but "usb" was already
-        // gone from targets state, so the membership check in the hot-plug
-        // reconciler is a noop. End result: the Lights output is silently
-        // disabled until the user toggles it manually.
-        //
-        // Fix (Opsiyon A): keep "usb" in `selectedOutputTargets` regardless
-        // of the bootstrap snapshot. `modeGuard` already shows visual
-        // disabled state when `isConnected === false`, so user clarity is
-        // preserved. The hot-plug reconciler handles the connect-arrival
-        // side: its `includes("usb")` membership check passes once
-        // auto-reconnect emits, and the LED setup section flips to OK.
-        //
-        // `armUsbConnected(bootstrapUsbAvailable)` stays unchanged — it
-        // tracks "was USB physically connected last time we checked", not
-        // "is it in selectedTargets". Without it the false→true transition
-        // would refire on every cold start.
+        // H3 — this snapshot must NOT strip "usb" from the persisted targets;
+        // cold launch races auto-reconnect. See docs/architecture/ui-and-shell.md.
+        // `armUsbConnected` below tracks the snapshot and must not follow suit.
         let bootstrapUsbAvailable = false;
         try {
           const connectionStatus = await getSerialConnectionStatus();
@@ -180,8 +151,6 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
           // Status check failed — leave bootstrapUsbAvailable=false; we
           // still keep restoredTargets as-is below.
         }
-        // Always honour the persisted target set; do NOT strip "usb"
-        // when the bootstrap snapshot reports it offline.
         sink.setSelectedOutputTargets(restoredTargets);
 
         // Initialize hot-plug ref AFTER USB status is known
@@ -190,36 +159,19 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
 
         const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
         sink.setActiveOutputTargets(isActive ? restoredTargets : []);
-        // v1.5 W2-B4 — prime the LIGHTS-step guard from disk. Any persisted
-        // lightingMode (even `off`) means the user picked a mode at some
-        // point, so the onboarding flow should not gate them at step 1
-        // waiting for a fresh click. Truly fresh installs land here with
-        // `state.lightingMode === undefined` and the guard stays false.
+        // Any persisted lightingMode — even `off` — means the user already picked
+        // one, so the onboarding flow must not gate them at step 1.
         if (state.lightingMode !== undefined) {
           sink.setHasInteractedWithMode(true);
         }
         const hueBootstrapConfig = toHueStartConfig(state);
         sink.setHueStartConfig(hueBootstrapConfig);
 
-        // NOTE: we deliberately do NOT call `validateHueCredentials` here.
-        // Setting `hueStartConfig` re-arms the visibility-aware
-        // reachability poll, which fires its own immediate mount tick — so
-        // the first credential probe lands ~1-2 s after this line resolves.
-        // Doing a bootstrap validate call as well meant every launch hit
-        // the Bridge twice (once here, once from the poll's mount tick)
-        // for the same answer. The chip starts as `hueReachable=false` and
-        // flips green on the poll's first successful tick.
+        // Deliberately no `validateHueCredentials` here — setting `hueStartConfig`
+        // re-arms the reachability poll, and doing both probed the bridge twice.
 
-        // Bootstrap path is split in two stages so the persisted Ambilight
-        // payload (saturation / blackBorderDetection / smoothing preset) gets
-        // pushed to Rust on every boot — not only when Hue happens to be one
-        // of the targets. Bug #39: previously the entire restore block was
-        // gated on `targets.includes("hue") && hueBootstrapConfig`, so a
-        // USB-only Ambilight session never re-applied its persisted knobs and
-        // the worker came up with backend defaults (saturation 1.0 / black
-        // borders off). The Hue branch still owns its own `startHue` +
-        // `setHueSolidColor` orchestration; the new outer branch covers any
-        // active mode regardless of the target mix.
+        // Bug #39 — the restore is split so a USB-only Ambilight session also
+        // re-applies its persisted knobs, not just a Hue-targeted one.
         if (isActive) {
           // Filter targets against live USB availability so the Rust USB gate
           // doesn't reject the bootstrap apply on a Hue-only session that
@@ -257,10 +209,8 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
             bootTargets.length > 0
           ) {
-            // USB-only (or Hue-not-configured) Ambilight bootstrap: push the
-            // persisted payload to Rust so saturation / blackBorderDetection /
-            // smoothing preset survive a restart. Without this branch the
-            // worker uses backend defaults until the next manual mode toggle.
+            // Without this branch the worker runs on backend defaults until the
+            // next manual mode toggle.
             try {
               await setLightingMode(runtimeConfig.hydrate({
                 ...restoredMode,
@@ -274,10 +224,8 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             restoredMode.solid &&
             bootTargets.includes("usb")
           ) {
-            // USB-only Solid bootstrap: same rationale as above. The Solid
-            // payload itself is small (RGB + brightness) but going through
-            // setLightingMode keeps the backend's mode state machine aligned
-            // with what the UI is showing on first paint.
+            // Routed through setLightingMode, small as the payload is, to keep the
+            // backend mode machine aligned with what the UI paints first.
             try {
               await setLightingMode(runtimeConfig.hydrate({
                 ...restoredMode,
@@ -292,10 +240,8 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // Push localized tray labels to Rust
         pushTrayLabels();
 
-        // v1.6 — the LED preview surfaces are NEVER auto-opened on boot. They
-        // open only when the user explicitly asks (LED Setup "Test & Preview"
-        // button or the tray "Show LED Preview" item). Persisted visibility is
-        // intentionally not acted on here.
+        // The LED preview surfaces are never auto-opened on boot — persisted
+        // visibility is deliberately not acted on here.
 
         // Mark bootstrap complete — the hot-plug reconciler may now run
         setBootstrapDone(true);

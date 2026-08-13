@@ -45,21 +45,16 @@ export async function loadShellState(): Promise<ShellState> {
   const saved = await store.get<Partial<ShellState>>(SHELL_STORE_KEY);
   if (!saved) return { ...DEFAULT_SHELL_STATE };
 
-  // Merge with defaults to handle new fields added in future phases. The
-  // `schemaVersion` defaults to `1` (NOT the latest) when absent so the
-  // migration shim below can detect a legacy pre-v1.5 snapshot and run the
-  // upgrade. v1.5 W4-F6 — see `migrations.ts`.
+  // `schemaVersion` defaults to `1`, NOT the latest — an absent version is a
+  // legacy snapshot the shim below still has to upgrade.
   const merged: ShellState = {
     ...DEFAULT_SHELL_STATE,
     ...saved,
     schemaVersion: saved.schemaVersion ?? 1,
   };
 
-  // Run the schemaVersion-gated migration shim. Idempotent: states already at
-  // `SHELL_STATE_SCHEMA_VERSION` short-circuit and return unchanged. Wrapped
-  // in try/catch so a single corrupt persisted record cannot brick startup —
-  // on failure we fall back to the unmigrated `merged` shape (warn logged by
-  // the migration helpers themselves) and the next launch retries.
+  // Caught so one corrupt persisted record cannot brick startup: we fall back
+  // to the unmigrated shape and the next launch retries.
   let migrated: ShellState;
   try {
     migrated = migrateShellState(merged);
@@ -72,10 +67,6 @@ export async function loadShellState(): Promise<ShellState> {
   }
 
   // Persist the migrated shape back so subsequent reads skip this branch.
-  // Two trigger conditions:
-  //   1. `saved.schemaVersion === undefined` — legacy pre-v1.5 state on disk.
-  //   2. `migrated.schemaVersion !== saved.schemaVersion` — the shim moved
-  //      the version forward (e.g. 1 → 2 W4-F6 zone unification).
   if (
     saved.schemaVersion === undefined ||
     migrated.schemaVersion !== saved.schemaVersion
@@ -83,10 +74,8 @@ export async function loadShellState(): Promise<ShellState> {
     await store.set(SHELL_STORE_KEY, migrated);
   }
 
-  // `schemaVersion` should always equal the current target after the shim.
-  // If a corruption path bypassed the migration we still hand back the
-  // merged (pre-migration) shape and let the next launch retry; explicitly
-  // surfaced here so the field is never an unsupported intermediate value.
+  // Explicit so the field is never handed out at an intermediate version: if a
+  // corruption path bypassed the shim, return the pre-migration shape instead.
   if (migrated.schemaVersion < SHELL_STATE_SCHEMA_VERSION) {
     return migrated;
   }
@@ -674,30 +663,15 @@ export async function initWindowLifecycle(opts?: {
 }): Promise<void> {
   if (!lifecycleInitPromise) {
     lifecycleInitPromise = (async () => {
-      // Every launch starts in compact — persisted uiMode is intentionally
-      // ignored so the app opens with a predictable tray-style footprint.
-      // `lastFullSize` is still honored later when the user toggles to full.
-      //
-      // The Tauri window is created at compact dimensions via tauri.conf.json
-      // (320×480, visible: false). `tauri-plugin-window-state` is registered
-      // with `skip_initial_state("main")` so it does NOT auto-restore size
-      // or visibility — only position is restored here, from our own
-      // shellStore, which means the user never sees a big→compact flash.
+      // Every launch opens compact and only position is restored here — the
+      // flash-free part of that is in docs/architecture/ui-and-shell.md.
       const win = getCurrentWindow();
-      // Launch always starts in compact (see comment above) — enforce its
-      // floor so OS resize handles respect the compact min from frame 0.
-      // If the user toggles to full later, `resizeToMode` will raise the
-      // floor to full's min when that transition completes.
+      // Compact's floor from frame 0; `resizeToMode` raises it on a toggle to full.
       await applyModeMinSize(win, "compact");
       await restoreWindowState();
       await win.show();
-      // Force the window to the front on launch. Without this, on some
-      // window managers (notably macOS after a cold launch with other
-      // apps already in focus) `show()` reveals the window below the
-      // active program, so the user has to click the dock icon to bring
-      // it forward. `setFocus` explicitly makes the window key/active.
-      // `unminimize` is a no-op on a freshly shown window but covers the
-      // case where the window was last closed while minimized.
+      // `show()` alone can reveal the window *behind* the active app on a cold
+      // launch (notably macOS), leaving the user to click the dock icon.
       try {
         await win.unminimize();
       } catch {
@@ -706,11 +680,9 @@ export async function initWindowLifecycle(opts?: {
       try {
         await win.setFocus();
       } catch {
-        // Non-fatal: focus is cosmetic. Never let a capability/platform
-        // failure here reject the lifecycle promise, because App.tsx
-        // bootstrap awaits it before loading calibration, targets, and
-        // Hue auto-start — an uncaught rejection here would skip all
-        // of that and surface as "calibration required / Hue offline".
+        // Focus is cosmetic and must never reject this promise: bootstrap awaits
+        // it before calibration, targets and Hue, so a throw here would surface
+        // to the user as "calibration required / Hue offline".
       }
       await initWindowGeometryPersistence();
       await initCloseToTrayHint(opts?.onFirstCloseToTray);
