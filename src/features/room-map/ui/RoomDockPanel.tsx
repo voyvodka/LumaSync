@@ -1,42 +1,5 @@
-/**
- * RoomDockPanel — v1.5 right-dock rework (replaces the legacy
- * `ObjectListPanel` + side-by-side `HueZonePropertiesPanel` layout).
- *
- * Why a single dock?
- * - The previous implementation stacked two 180px columns side by side
- *   when a Hue zone was active (`RoomMapEditor.tsx:1167-1174`); on
- *   narrow windows the second column overflowed past the canvas and
- *   broke the layout.
- * - Three peer panels (`ObjectListPanel`, `HueZoneListPanel`,
- *   `HueZonePropertiesPanel`) used inconsistent zinc-* tokens and lived
- *   at three different DOM positions, so the editor read as
- *   "two apps in one window" against the rest of amber Rev 07.
- *
- * Architecture:
- * - Single 240-280px dock, tabbed (Objects / Zones / Hue Zones).
- * - Split body: list (top, scrollable, flex 1) + inspector (bottom,
- *   capped at 50% height, type-aware).
- * - The inspector reads the **active selection** (selected object OR
- *   active zone OR active Hue zone) and renders the matching control:
- *     - Object selected ⇒ position/size/rotation summary + lock toggle
- *     - HueZone active  ⇒ color picker + scaleX/scaleY sliders
- *     - Legacy zone     ⇒ name + channel count summary
- *     - Nothing         ⇒ hint copy ("Select an object or zone…")
- *
- * Behaviour preserved:
- * - All existing CRUD callbacks have the same signatures
- *   (`RoomMapEditor` is unaware of the inner refactor).
- * - Tab IDs and active-tab state stay local; consumers can ignore them.
- * - The 3-panel grouping logic (Hue channels nested under their zone,
- *   "Unassigned" pseudo-bucket) is reproduced 1:1.
- *
- * A11y:
- * - Tab buttons + chips clear the 32px tap floor (`lm-room-dock-tab`).
- * - All actions go through `:focus-visible` + amber soft ring.
- * - Color is paired with text in the inspector chip (never the sole
- *   status signal).
- * - Reduced-motion and forced-colors branches in `styles.css`.
- */
+// Channel-under-zone grouping here is presentation only — `zoneId` is the join
+// key on disk. Dock rationale: docs/architecture/room-map.md.
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -51,14 +14,14 @@ import type {
 import { HueZoneInspector } from "./HueZoneInspector";
 import { HueZonesTab } from "./HueZonesTab";
 import { ObjectsTab } from "./ObjectsTab";
+import { FurnitureInspector } from "./objects/FurnitureInspector";
+import { HueChannelInspector } from "./objects/HueChannelInspector";
+import { ImageLayerInspector } from "./objects/ImageLayerInspector";
+import { TvAnchorInspector } from "./objects/TvAnchorInspector";
 import {
-  FurnitureInspector,
-  HueChannelInspector,
-  ImageLayerInspector,
-  TvAnchorInspector,
   UsbStripInspector,
   type UsbStripConnectionStatus,
-} from "./ObjectInspectors";
+} from "./objects/UsbStripInspector";
 import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
 import {
   furnitureObjectId,
