@@ -1,3 +1,8 @@
+/// Longest capture edge after downscale. Every platform path reads this one
+/// copy — a per-path duplicate drifts silently.
+/// See docs/architecture/capture-and-pipeline.md.
+const MAX_CAPTURE_DIM: u32 = 640;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapturedFrame {
     pub width: u32,
@@ -361,8 +366,7 @@ mod platform {
 
             // CPU-side downscale scaffold — no GPU hint on this platform.
             // See docs/architecture/capture-and-pipeline.md.
-            const MAX_CAPTURE_DIM: u32 = 640;
-            let stride = (width.max(height) / MAX_CAPTURE_DIM).max(1) as usize;
+            let stride = (width.max(height) / super::MAX_CAPTURE_DIM).max(1) as usize;
             let stride_active = stride > 1;
             if stride_active {
                 log::debug!(
@@ -540,9 +544,8 @@ mod platform {
         // for averaging colors in screen regions.
         let native_w = display.width();
         let native_h = display.height();
-        const MAX_CAPTURE_DIM: u32 = 640;
-        let (capture_width, capture_height) = if native_w.max(native_h) > MAX_CAPTURE_DIM {
-            let scale = native_w.max(native_h) / MAX_CAPTURE_DIM;
+        let (capture_width, capture_height) = if native_w.max(native_h) > super::MAX_CAPTURE_DIM {
+            let scale = native_w.max(native_h) / super::MAX_CAPTURE_DIM;
             ((native_w / scale).max(1), (native_h / scale).max(1))
         } else {
             (native_w, native_h)

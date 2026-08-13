@@ -19,9 +19,15 @@ only, so pairing, IP verification, and credential validation must try HTTPS befo
 for older bridges. A plain-HTTP-only client silently fails to reach a Bridge Pro and the failure
 surfaces as a generic pairing error on a bridge that discovery found without trouble.
 
-**Only an HTTP 403 means the credential is dead.** Any other failure is a transport problem.
-Re-pairing on a timeout or a 5xx destroys a working pairing and forces the user back to the link
-button for no reason.
+**Only a 401 or 403 carrying a Hue-shaped auth body means the credential is dead.** Any other
+failure is a transport problem. Re-pairing on a timeout or a 5xx destroys a working pairing and
+forces the user back to the link button for no reason.
+
+Both halves of that rule are load-bearing (`classify_status` in `commands/hue_http.rs`). CLIP v2
+documents 401 alongside 403 for a rejected application key, so keying on 403 alone misses a real
+re-pair. And the body check is not belt-and-braces: a reverse proxy or a captive portal in front
+of the bridge answers with its own 403, and treating that as a dead credential throws away a
+pairing that was fine.
 
 **The HTTP fallback must never run on a request whose response carries a secret.** The pairing POST
 returns the DTLS `clientkey`: if that call fell back on a TLS failure the way IP verification and
