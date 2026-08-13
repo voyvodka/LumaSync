@@ -352,8 +352,9 @@ export const HUE_FAULT_CODES = {
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
 
 /** `simulate_hue_fault` is `#[cfg(debug_assertions)]`-gated; the release build
- * registers a stub that always throws `SIMULATE_NOT_AVAILABLE_IN_RELEASE`.
- * All three arrive as bare `Err(String)`, never a status object. */
+ * registers a stub that reports `SIMULATE_NOT_AVAILABLE_IN_RELEASE`. All three
+ * arrive as the `code` of a `HueCommandStatus` — the command never throws, so
+ * "no stream to fault" is a branch, not a rejected promise. */
 export const HUE_DEBUG_COMMAND_CODES = {
   FAULT_SIMULATED: "HUE_FAULT_SIMULATED",
   NO_ACTIVE_DTLS_STREAM: "NO_ACTIVE_DTLS_STREAM",

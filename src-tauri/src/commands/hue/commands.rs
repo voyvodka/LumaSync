@@ -778,27 +778,42 @@ fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
 
 /// Debug-only: force the active DTLS stream's shutdown signal to fire,
 /// exercising the reconnect monitor without a real bridge fault.
+///
+/// Returns `CommandStatus` rather than `Result<_, String>` on purpose: a Hue
+/// command never throws, so "no stream to fault" has to arrive as a coded
+/// status the caller can branch on, not as a rejected promise. The codes are
+/// declared in `HUE_DEBUG_COMMAND_CODES` in `src/shared/contracts/hue.ts`.
 #[cfg(debug_assertions)]
 #[tauri::command]
-pub fn simulate_hue_fault(
-    runtime_state: State<'_, HueRuntimeStateStore>,
-) -> Result<String, String> {
+pub fn simulate_hue_fault(runtime_state: State<'_, HueRuntimeStateStore>) -> CommandStatus {
     let owner = acquire_hue_runtime(&runtime_state.runtime);
     if let Some(ref stream) = owner.active_stream {
         if stream.uses_dtls {
             // D-11: Fire shutdown signal to trigger reconnect monitor.
             signal_shutdown_complete(&stream.shutdown_signal);
             info!("simulate_hue_fault: shutdown signal fired for active DTLS stream.");
-            return Ok("HUE_FAULT_SIMULATED".to_string());
+            return CommandStatus {
+                code: "HUE_FAULT_SIMULATED".to_string(),
+                message: "Shutdown signal fired on the active DTLS stream.".to_string(),
+                details: None,
+            };
         }
     }
-    Err("NO_ACTIVE_DTLS_STREAM".to_string())
+    CommandStatus {
+        code: "NO_ACTIVE_DTLS_STREAM".to_string(),
+        message: "No active DTLS stream to fault.".to_string(),
+        details: None,
+    }
 }
 
 /// Release stub for `simulate_hue_fault` — always reports the debug-only
-/// command as unavailable.
+/// command as unavailable, as a coded status for the same reason as above.
 #[cfg(not(debug_assertions))]
 #[tauri::command]
-pub fn simulate_hue_fault() -> Result<String, String> {
-    Err("SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string())
+pub fn simulate_hue_fault() -> CommandStatus {
+    CommandStatus {
+        code: "SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string(),
+        message: "Fault simulation is available in debug builds only.".to_string(),
+        details: None,
+    }
 }
