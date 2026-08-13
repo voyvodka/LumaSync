@@ -37,15 +37,12 @@ import {
 import {
   setHueSolidColor,
   setLightingMode,
-  startHue as startHueCommand,
+  startHue,
   stopLighting,
-  stopHue as stopHueCommand,
+  stopHue,
 } from "./features/mode/modeApi";
 import { validateHueCredentials } from "./features/hue/hueOnboardingApi";
-import {
-  invalidateHueStreamStatus,
-  readHueStreamStatus,
-} from "./features/hue/hueReadCache";
+import { readHueStreamStatus } from "./features/hue/hueReadCache";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,
@@ -98,14 +95,6 @@ import {
 } from "./features/preview/previewApi";
 import { showNotification } from "./features/platform/platformApi";
 import { i18next } from "./features/i18n/i18n";
-
-// Wrapped at the import so no call site can forget: a Hue mutation must drop
-// the cached stream status, or the health reconciler below can act on a
-// pre-mutation answer and undo the change the user just made.
-const startHue: typeof startHueCommand = (...args) =>
-  startHueCommand(...args).finally(invalidateHueStreamStatus);
-const stopHue: typeof stopHueCommand = (...args) =>
-  stopHueCommand(...args).finally(invalidateHueStreamStatus);
 
 const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
