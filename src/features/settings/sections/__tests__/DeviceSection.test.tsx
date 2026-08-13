@@ -45,8 +45,23 @@ vi.mock("../WledDevicePicker", () => ({
   WledDevicePicker: () => null,
 }));
 
+// Stand-in for the real panel: surfaces the two props the persist-banner tests
+// care about — the banner it would render, and the save path it would trigger.
 vi.mock("../HueChannelMapPanel", () => ({
-  HueChannelMapPanel: () => null,
+  HueChannelMapPanel: ({
+    persistError,
+    onPositionChange,
+  }: {
+    persistError?: boolean;
+    onPositionChange: (updated: unknown[]) => Promise<void>;
+  }) => (
+    <div>
+      <button type="button" onClick={() => { void onPositionChange([]); }}>
+        stub:moveChannel
+      </button>
+      {persistError ? <span>hue:channelMap.saveError</span> : null}
+    </div>
+  ),
 }));
 
 vi.mock("./control/LedChipTypePicker", () => ({
@@ -379,4 +394,96 @@ describe("DeviceSection USB tab — persistError banner (A3.6)", () => {
       { timeout: 4000, interval: 100 },
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// The USB and Hue persist banners are independent
+// ---------------------------------------------------------------------------
+
+const USB_BANNER = "device:page.usb.paired.persistError";
+const HUE_BANNER = "hue:channelMap.saveError";
+
+describe("DeviceSection — USB and Hue persist banners are independent", () => {
+  beforeEach(async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
+
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [{ portName: "COM3", product: "CH340", manufacturer: "WCH" }],
+    });
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  async function failUsbStripAdd(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByText("device:page.usb.paired.addFirst"));
+    await user.click(await screen.findByText("device:page.usb.paired.confirmAdd"));
+  }
+
+  async function failHueChannelMove(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByText("stub:moveChannel"));
+  }
+
+  it("does not raise the Hue channel-map banner when a USB strip save fails", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
+
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    await failUsbStripAdd(user);
+
+    await waitFor(() => {
+      expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(HUE_BANNER)).not.toBeInTheDocument();
+  });
+
+  it("does not raise the USB strips banner when a Hue channel-position save fails", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockRejectedValueOnce(new Error("disk full"));
+
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    await failHueChannelMove(user);
+
+    await waitFor(() => {
+      expect(screen.getByText(HUE_BANNER)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(USB_BANNER)).not.toBeInTheDocument();
+  });
+
+  // Guards the shared-timer half of the bug: two flags sharing one timer ref
+  // means whichever path fires last cancels the other banner's dismissal.
+  it("dismisses each banner on its own timer when both paths fail in sequence", async () => {
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockRejectedValue(new Error("disk full"));
+
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    await failHueChannelMove(user);
+    await waitFor(() => {
+      expect(screen.getByText(HUE_BANNER)).toBeInTheDocument();
+    });
+    const hueRaisedAt = Date.now();
+
+    // Second failure lands mid-way through the Hue banner's 3 s window.
+    await new Promise((resolve) => setTimeout(resolve, 1500 - (Date.now() - hueRaisedAt)));
+    await failUsbStripAdd(user);
+    await waitFor(() => {
+      expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
+    });
+
+    // The Hue banner must expire ~3 s after it was raised, not be re-armed by
+    // the later USB failure — while the USB banner is still on screen.
+    await waitFor(
+      () => {
+        expect(screen.queryByText(HUE_BANNER)).not.toBeInTheDocument();
+      },
+      { timeout: 3000, interval: 100 },
+    );
+    expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
+  }, 15000);
 });

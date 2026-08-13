@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { DisplayInfo } from "@/shared/contracts/display";
@@ -17,6 +17,7 @@ import { HueBridgesCategory } from "./device/HueBridgesCategory";
 import { ManualEntryCategory } from "./device/ManualEntryCategory";
 import { UsbStripsCategory } from "./device/UsbStripsCategory";
 import { WledCategory } from "./device/WledCategory";
+import { useTransientFlag } from "./device/useTransientFlag";
 import {
   IconUsb,
   IconHueBridgeGlyph,
@@ -53,20 +54,10 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
   const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);
-  const [persistError, setPersistError] = useState(false);
-  const persistErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // One banner flag is shared by the USB and Hue persistence paths, so a
-  // failure on either surface dismisses on the same 3 s timer.
-  const flagPersistError = useCallback(() => {
-    setPersistError(true);
-    if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
-    persistErrorTimerRef.current = setTimeout(() => { setPersistError(false); }, 3000);
-  }, []);
-
-  const clearPersistError = useCallback(() => {
-    setPersistError(false);
-  }, []);
+  // One flag per save path. A USB write failure must not light the banner
+  // inside the Hue channel-map panel, nor re-arm its dismissal timer.
+  const usbPersistError = useTransientFlag();
+  const hueChannelPersistError = useTransientFlag();
 
   // Load placements from shellStore on mount and when selectedAreaId changes
   useEffect(() => {
@@ -78,13 +69,6 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     });
     return () => { cancelled = true; };
   }, [selectedAreaId]);
-
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (persistErrorTimerRef.current) clearTimeout(persistErrorTimerRef.current);
-    };
-  }, []);
 
   // -------------------------------------------------------------------------
   // Phase 7: category rail + displays list
@@ -129,11 +113,12 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
         roomMap: updatedRoomMap,
         roomMapVersion: (current.roomMapVersion ?? 0) + 1,
       });
-      clearPersistError();
-    } catch {
-      flagPersistError();
+      hueChannelPersistError.clear();
+    } catch (e) {
+      console.error("[LumaSync] handlePositionChange failed", e);
+      hueChannelPersistError.raise();
     }
-  }, [flagPersistError, clearPersistError]);
+  }, [hueChannelPersistError]);
 
   return (
     <div className="lm-device-page">
@@ -196,9 +181,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           device={device}
           pairedStrips={pairedStrips}
           setPairedStrips={setPairedStrips}
-          persistError={persistError}
-          flagPersistError={flagPersistError}
-          clearPersistError={clearPersistError}
+          persistError={usbPersistError.active}
+          flagPersistError={usbPersistError.raise}
+          clearPersistError={usbPersistError.clear}
           onNavigateToRoomMap={onNavigateToRoomMap}
         />
 
@@ -207,7 +192,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           hue={hue}
           channelPlacements={channelPlacements}
           onPositionChange={handlePositionChange}
-          persistError={persistError}
+          persistError={hueChannelPersistError.active}
         />
 
         <WledCategory isActive={activeCategory === "wled"} />
