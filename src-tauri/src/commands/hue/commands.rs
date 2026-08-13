@@ -16,7 +16,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{error, info};
+use log::error;
+// Reachable only from the `#[cfg(debug_assertions)]` arm of `simulate_hue_fault`,
+// so an ungated import is an unused-import error under `clippy --release`.
+#[cfg(debug_assertions)]
+use log::info;
 use tauri::State;
 
 use super::super::hue_onboarding::{
@@ -29,10 +33,12 @@ use super::reconnect::{spawn_reconnect_monitor, store_active_stream_context, Sta
 use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
 };
+#[cfg(debug_assertions)]
+use super::sender::signal_shutdown_complete;
 use super::sender::{
     apply_channel_region_overrides, build_hue_sender, deactivate_with_token, fetch_area_channels,
     fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, no_op_sender,
-    settled_shutdown_signal, signal_shutdown_complete, wait_for_shutdown, DeactivateToken,
+    settled_shutdown_signal, wait_for_shutdown, DeactivateToken,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
