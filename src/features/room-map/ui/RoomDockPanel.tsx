@@ -64,6 +64,13 @@ import { buildObjectList, type ObjectRowEntry } from "../model/objectList";
 import { getZoneColor, TYPE_DOT_COLOR } from "../model/zoneColor";
 import { deriveHueAreaState } from "../model/hueAreaState";
 import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
+import {
+  furnitureObjectId,
+  hueChannelObjectId,
+  imageLayerObjectId,
+  parseObjectId,
+  usbStripObjectId,
+} from "../model/objectId";
 
 type DockTab = "objects" | "hueZones";
 
@@ -339,7 +346,10 @@ function ObjectsTab(props: {
           onDelete={() => onDelete(entry.id)}
           onRename={
             entry.type === "furniture"
-              ? (label) => onRenameFurniture(entry.id.replace("furniture-", ""), label)
+              ? (label) => {
+                  const parsed = parseObjectId(entry.id);
+                  if (parsed?.kind === "furniture") onRenameFurniture(parsed.furnitureId, label);
+                }
               : undefined
           }
           onToggleLock={() => onToggleLock(entry.id)}
@@ -1130,7 +1140,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             key={`furniture:${item.id}`}
             item={item}
             onUpdate={(patch) => onUpdateFurniture?.(item.id, patch)}
-            onToggleLock={() => onToggleLock(`furniture-${item.id}`)}
+            onToggleLock={() => onToggleLock(furnitureObjectId(item.id))}
             onRename={(label) => onRenameFurniture(item.id, label)}
           />
         );
@@ -1144,7 +1154,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             connectionStatus={usbConnectionStatus}
             connectedPort={usbConnectedPort}
             onUpdate={(patch) => onUpdateUsbStrip?.(strip.stripId, patch)}
-            onToggleLock={() => onToggleLock(`usb-${strip.stripId}`)}
+            onToggleLock={() => onToggleLock(usbStripObjectId(strip.stripId))}
             onManage={onUsbManage}
           />
         );
@@ -1160,7 +1170,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             onRename={(label) =>
               onRenameHueChannel?.(ch.channelIndex, label)
             }
-            onToggleLock={() => onToggleLock(`hue-${ch.channelIndex}`)}
+            onToggleLock={() => onToggleLock(hueChannelObjectId(ch.channelIndex))}
           />
         );
       }
@@ -1171,7 +1181,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             key={`image:${layer.id}`}
             layer={layer}
             onUpdate={(patch) => onUpdateImageLayer?.(layer.id, patch)}
-            onToggleLock={() => onToggleLock(`img-${layer.id}`)}
+            onToggleLock={() => onToggleLock(imageLayerObjectId(layer.id))}
             onRename={(label) => onRenameImageLayer?.(layer.id, label)}
           />
         );
@@ -1230,7 +1240,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               onRenameHueZone={onRenameHueZone!}
               addHueZoneDisabled={addHueZoneDisabled}
               addHueZoneDisabledTooltip={addHueZoneDisabledTooltip}
-              onSelectChannel={(idx) => onSelect(`hue-${idx}`)}
+              onSelectChannel={(idx) => onSelect(hueChannelObjectId(idx))}
               hueBridgeConfigured={hueBridgeConfigured}
               hueAreaId={hueAreaId}
               onAssignChannelToZone={onAssignChannelToZone}

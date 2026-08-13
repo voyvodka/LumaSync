@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { readFile } from "@tauri-apps/plugin-fs";
 import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
+import { imageLayerObjectId } from "../model/objectId";
 
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
@@ -509,7 +510,7 @@ export function RoomMapCanvas({
               key={layer.id}
               layer={layer}
               zoom={zoom}
-              selected={selectedId === `img-${layer.id}`}
+              selected={selectedId === imageLayerObjectId(layer.id)}
               panMode={panMode}
               onSelect={() => onImageLayerSelect?.(layer.id)}
               onTransformChange={onImageLayerTransformChange}

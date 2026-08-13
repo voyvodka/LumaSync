@@ -1,4 +1,5 @@
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { furnitureObjectId, TV_ANCHOR_OBJECT_ID } from "./objectId";
 
 export interface ObjectRect {
   id: string;
@@ -24,13 +25,13 @@ export const SNAP_THRESHOLD_M = 0.08; // ~5px at typical zoom
 export function getObjectRects(config: RoomMapConfig, excludeId: string): ObjectRect[] {
   const rects: ObjectRect[] = [];
 
-  if (config.tvAnchor && excludeId !== "tv") {
+  if (config.tvAnchor && excludeId !== TV_ANCHOR_OBJECT_ID) {
     const tv = config.tvAnchor;
-    rects.push({ id: "tv", x: tv.x, y: tv.y, w: tv.width, h: tv.height });
+    rects.push({ id: TV_ANCHOR_OBJECT_ID, x: tv.x, y: tv.y, w: tv.width, h: tv.height });
   }
 
   for (const f of config.furniture) {
-    const fId = `furniture-${f.id}`;
+    const fId = furnitureObjectId(f.id);
     if (fId === excludeId) continue;
     rects.push({ id: fId, x: f.x, y: f.y, w: f.width, h: f.height });
   }
