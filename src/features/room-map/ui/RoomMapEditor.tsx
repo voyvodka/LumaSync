@@ -1,6 +1,5 @@
-import { useState, useCallback, useRef, useEffect, useId } from "react";
+import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useRoomMapPersist } from "../state/useRoomMapPersist";
 import { RoomMapCanvas } from "./RoomMapCanvas";
 import { RoomMapToolbar } from "./RoomMapToolbar";
@@ -21,32 +20,24 @@ import {
   usbStripObjectId,
 } from "../model/objectId";
 import { useSnapGuides } from "../state/useSnapGuides";
+import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
+import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
+import { useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
+import { useRoomMapObjects } from "../state/useRoomMapObjects";
+import { ROOM_MAP_PX_PER_METER, useRoomMapViewport } from "../state/useRoomMapViewport";
 import { SnapGuideOverlay } from "./SnapGuideOverlay";
 import { OriginMarker } from "./OriginMarker";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
 import { LeftToolbar } from "./LeftToolbar";
+import { MouseCoordinateDisplay } from "./MouseCoordinateDisplay";
 import { PropertyBar } from "./PropertyBar";
+import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
 import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
-import type {
-  FurniturePlacement,
-  TvAnchorPlacement,
-  UsbStripPlacement,
-  HueChannelPlacement,
-  HueZone,
-  RoomDimensions,
-} from "@/shared/contracts/roomMap";
+import type { RoomDimensions } from "@/shared/contracts/roomMap";
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
-import { shellStore } from "@/features/persistence/shellStore";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
-import {
-  assignChannelToHueZone,
-  copyBackgroundImage,
-  createHueZone,
-  deleteHueZone,
-  updateHueZone,
-} from "../roomMapApi";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
@@ -67,201 +58,84 @@ interface RoomMapEditorProps {
   hueReachable?: boolean;
 }
 
-const MouseCoordinateDisplay = React.memo(function MouseCoordinateDisplay({
-  canvasContainerRef,
-  panOffset,
-  pxPerMeter,
-  zoom,
-  widthMeters,
-  depthMeters,
-}: {
-  canvasContainerRef: React.RefObject<HTMLDivElement | null>;
-  panOffset: { x: number; y: number };
-  pxPerMeter: number;
-  zoom: number;
-  widthMeters: number;
-  depthMeters: number;
-}) {
-  const displayRef = useRef<HTMLDivElement>(null);
-
-  // Store rapidly changing values in a ref to prevent event listener thrashing on every pan/zoom frame
-  const stateRef = useRef({ panOffset, zoom, widthMeters, depthMeters, pxPerMeter });
-  stateRef.current = { panOffset, zoom, widthMeters, depthMeters, pxPerMeter };
-
-  useEffect(() => {
-    const el = canvasContainerRef.current;
-    if (!el) return;
-
-    let ticking = false;
-    let latestEvent: MouseEvent | null = null;
-
-    const updateCoord = () => {
-      if (!latestEvent || !displayRef.current) return;
-      const rect = el.getBoundingClientRect();
-      const { panOffset, pxPerMeter, zoom, widthMeters, depthMeters } = stateRef.current;
-      const mx = (latestEvent.clientX - rect.left - panOffset.x) / (pxPerMeter * zoom);
-      const my = (latestEvent.clientY - rect.top - panOffset.y) / (pxPerMeter * zoom);
-
-      const worldX = mx - widthMeters / 2;
-      const worldY = my - depthMeters / 2;
-
-      displayRef.current.textContent = `x: ${worldX >= 0 ? "+" : ""}${worldX.toFixed(1)}m, y: ${worldY >= 0 ? "+" : ""}${worldY.toFixed(1)}m`;
-      displayRef.current.style.display = "block";
-
-      ticking = false;
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      latestEvent = e;
-      if (!ticking) {
-        requestAnimationFrame(updateCoord);
-        ticking = true;
-      }
-    };
-
-    const handleMouseLeave = () => {
-      latestEvent = null;
-      if (displayRef.current) {
-        displayRef.current.style.display = "none";
-      }
-    };
-
-    el.addEventListener("mousemove", handleMouseMove);
-    el.addEventListener("mouseleave", handleMouseLeave);
-
-    return () => {
-      el.removeEventListener("mousemove", handleMouseMove);
-      el.removeEventListener("mouseleave", handleMouseLeave);
-    };
-  }, [canvasContainerRef]);
-
-  return (
-    <div
-      ref={displayRef}
-      className="absolute bottom-1 right-1 pointer-events-none z-50 rounded bg-black/60 px-1.5 py-0.5 text-[9px] [font-family:var(--lm-mono)] text-white/80 tabular-nums"
-      style={{ display: "none" }}
-    />
-  );
-});
-
 export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
   const { t } = useTranslation();
   const { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [derivePreview, setDerivePreview] = useState<ZoneDeriveResult | null>(null);
-  const [showGrid, setShowGrid] = useState(true);
-  const [gridStrokeWidth, setGridStrokeWidth] = useState(0.5);
-  // W4-J #3 — visibility toggle for Hue zone bounds. Default ON so a
-  // newly authored zone is visible without first selecting it; user
-  // can flip OFF to declutter the canvas while editing other objects.
-  const [showHueZones, setShowHueZones] = useState(true);
-  const gridSettingsLoaded = useRef(false);
-  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(1);
-  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [renameTarget, setRenameTarget] = useState<{ id: string; currentLabel: string } | null>(null);
-  const [spaceHeld, setSpaceHeld] = useState(false);
-
-  // Track space key for pan mode — prevents object drag during space+click
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.key === " " && !e.repeat) setSpaceHeld(true); };
-    const up = (e: KeyboardEvent) => { if (e.key === " ") setSpaceHeld(false); };
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
-  }, []);
-
-  // Load persisted grid + Hue zone visibility settings on mount
-  useEffect(() => {
-    void shellStore.load().then((state) => {
-      if (state.roomMapShowGrid !== undefined) setShowGrid(state.roomMapShowGrid);
-      if (state.roomMapGridStrokeWidth !== undefined) setGridStrokeWidth(state.roomMapGridStrokeWidth);
-      if (state.roomMapShowHueZones !== undefined) setShowHueZones(state.roomMapShowHueZones);
-      gridSettingsLoaded.current = true;
-    });
-  }, []);
-
-  // Persist grid + Hue zone visibility settings when they change (skip initial load)
-  useEffect(() => {
-    if (!gridSettingsLoaded.current) return;
-    void shellStore.save({
-      roomMapShowGrid: showGrid,
-      roomMapGridStrokeWidth: gridStrokeWidth,
-      roomMapShowHueZones: showHueZones,
-    });
-  }, [showGrid, gridStrokeWidth, showHueZones]);
-
-  // Zone management state
-  const [activeHueZoneId, setActiveHueZoneId] = useState<string | null>(null);
-  /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
-  const [hueAreaId, setHueAreaId] = useState<string | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
-
-  // "Configured" is `hueAppKey` (legacy plaintext) OR a keychain backend. The
-  // editor deliberately stops there — anything beyond needs `useHueOnboarding`,
-  // and mounting that state machine here for a header is too much.
-  const [hueBridgeConfigured, setHueBridgeConfigured] = useState(false);
-  // Load the persisted last-selected entertainment area id once. We do not
-  // mount useHueOnboarding here to keep the editor decoupled from the
-  // onboarding state machine; the area id alone is enough to author zones.
-  useEffect(() => {
-    let cancelled = false;
-    void shellStore.load().then((state) => {
-      if (cancelled) return;
-      setHueAreaId(state.lastHueAreaId ?? null);
-      const hasKeychain = state.credentialStorageBackend === "keychain";
-      const hasLegacyKey = !!state.hueAppKey;
-      const hasBridge = !!state.lastHueBridge;
-      setHueBridgeConfigured(hasBridge && (hasKeychain || hasLegacyKey));
-    });
-    return () => { cancelled = true; };
-  }, []);
-
-  // Snap guides
-  const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
-
-  // Context menu
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetId: string } | null>(null);
 
-  const initialFitDone = useRef(false);
+  const {
+    showGrid,
+    setShowGrid,
+    gridStrokeWidth,
+    setGridStrokeWidth,
+    showHueZones,
+    setShowHueZones,
+  } = useRoomMapGridSettings();
 
-  useEffect(() => {
-    const el = canvasContainerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width === 0 || height === 0) return;
-        setCanvasSize({ w: width, h: height });
+  const {
+    hueZones,
+    activeHueZoneId,
+    activeHueZone,
+    hueAreaId,
+    hueBridgeConfigured,
+    handleAddHueZone,
+    handleDeleteHueZone,
+    handleRenameHueZone,
+    handleSelectHueZone,
+    handleAssignChannelToZone,
+    handleHueZoneCenterChange,
+    handleHueZoneUpdate,
+  } = useRoomMapHueZones({ config, updateConfig, setSelectedId, setObjectPanelOpen });
 
-        // Fit-to-view once on the first real measurement from ResizeObserver
-        if (!initialFitDone.current) {
-          initialFitDone.current = true;
-          const { widthMeters: wm, depthMeters: dm } = config.dimensions;
-          const pad = 24;
-          const fitZoom = Math.min(
-            (width - pad * 2) / (wm * 80),
-            (height - pad * 2) / (dm * 80),
-          );
-          const z = Math.max(0.3, Math.min(3, fitZoom));
-          const roomW = wm * 80 * z;
-          const roomH = dm * 80 * z;
-          setZoom(z);
-          setPanOffset({ x: (width - roomW) / 2, y: (height - roomH) / 2 });
-        }
-      }
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
 
-  const { widthMeters, depthMeters } = config.dimensions;
+  const {
+    canvasContainerRef,
+    canvasSize,
+    zoom,
+    setZoom,
+    panOffset,
+    setPanOffset,
+    spaceHeld,
+    fitToView,
+  } = useRoomMapViewport(config.dimensions);
 
   // Same `connectionEvents` bus the Lights and Devices flows use, so a pair or
   // disconnect anywhere in the app re-syncs the editor without a reload.
   const usb = useUsbConnectionStatus();
+
+  const {
+    handleAddTv,
+    handleAddFurniture,
+    handleAddUsb,
+    handleAddHue,
+    deleteById,
+    handleDelete,
+    handleRotate,
+    handleDuplicate,
+    handleArrowNudge,
+    handleUpdatePosition,
+    handleUpdateSize,
+    handleUpdateRotation,
+    handleRenameFurniture,
+  } = useRoomMapObjects({ config, updateConfig, selectedId, setSelectedId });
+
+  const {
+    handleAddImage,
+    handleUpdateImageOpacity,
+    handleUpdateImageScale,
+    handleUpdateImageAspectLock,
+    handleResetImageScale,
+    handleRenameImage,
+  } = useRoomMapImageLayers({ config, updateConfig, setSelectedId });
+
+  const { widthMeters, depthMeters } = config.dimensions;
+
   const usbConnectionStatus = usb.ready
     ? (usb.connectedPort ? "connected" : "disconnected")
     : "unknown";
@@ -280,8 +154,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     onNavigateToDevices?.();
   }, [onNavigateToDevices]);
 
-  // Fixed physical scale — objects always render at this size regardless of canvas
-  const pxPerMeter = 80;
+  const pxPerMeter = ROOM_MAP_PX_PER_METER;
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
   const gridStepPx = gridStepM * pxPerMeter;
 
@@ -322,202 +195,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     setDerivePreview(null);
   }, []);
 
-  // Handlers
-  const handleAddTv = useCallback(() => {
-    const newTv: TvAnchorPlacement = {
-      x: widthMeters / 2 - 0.5,
-      y: 0.3,
-      width: 1.0,
-      height: 0.1,
-    };
-    void updateConfig({ tvAnchor: newTv });
-  }, [widthMeters, updateConfig]);
-
-  const handleAddFurniture = useCallback(
-    (type: FurniturePlacement["type"]) => {
-      const id = `furniture-${crypto.randomUUID()}`;
-      const newItem: FurniturePlacement = {
-        id,
-        type,
-        x: widthMeters / 2 - 0.3,
-        y: depthMeters / 2 - 0.3,
-        width: 0.6,
-        height: 0.6,
-        label: t(`roomMap:furniture.type.${type}`),
-      };
-      void updateConfig({ furniture: [...config.furniture, newItem] });
-    },
-    [widthMeters, depthMeters, config.furniture, updateConfig, t],
-  );
-
-  const handleAddUsb = useCallback(() => {
-    const stripId = `usb-${crypto.randomUUID()}`;
-    const newStrip: UsbStripPlacement = {
-      stripId,
-      startX: 1,
-      startY: 1,
-      endX: widthMeters - 1,
-      endY: 1,
-      ledCount: 60,
-    };
-    void updateConfig({ usbStrips: [...config.usbStrips, newStrip] });
-  }, [widthMeters, config.usbStrips, updateConfig]);
-
-  const handleAddHue = useCallback(() => {
-    const newChannel: HueChannelPlacement = {
-      channelIndex: config.hueChannels.length,
-      x: 0,
-      y: 0,
-      z: 0,
-    };
-    void updateConfig({ hueChannels: [...config.hueChannels, newChannel] });
-  }, [config.hueChannels, updateConfig]);
-
-  const handleAddImage = useCallback(async () => {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
-    });
-    if (selected && typeof selected === "string") {
-      const destPath = await copyBackgroundImage(selected);
-      const fileName = destPath.split("/").pop() ?? "Image";
-      const label = fileName.replace(/\.[^.]+$/, "");
-      const id = crypto.randomUUID();
-      const newLayer = { id, path: destPath, label, offsetX: 0, offsetY: 0, scale: 1 };
-      await updateConfig({ imageLayers: [...config.imageLayers, newLayer] });
-      setSelectedId(imageLayerObjectId(id));
-    }
-  }, [config.imageLayers, updateConfig]);
-
-  const isLocked = useCallback(
-    (id: string): boolean => {
-      const parsed = parseObjectId(id);
-      if (parsed?.kind === "tv") return !!config.tvAnchor?.locked;
-      if (parsed?.kind === "furniture") return !!config.furniture.find((f) => f.id === parsed.furnitureId)?.locked;
-      if (parsed?.kind === "usb") return !!config.usbStrips.find((s) => s.stripId === parsed.stripId)?.locked;
-      // Indexes the array by slot, unlike every other Hue lookup here, which
-      // matches on `channelIndex`. Preserved as-is by the id refactor.
-      if (parsed?.kind === "hue") return !!config.hueChannels[parsed.channelIndex]?.locked;
-      if (parsed?.kind === "image") return !!config.imageLayers.find((l) => l.id === parsed.layerId)?.locked;
-      return false;
-    },
-    [config],
-  );
-
-  const deleteById = useCallback(
-    (id: string) => {
-      if (isLocked(id)) return;
-      const parsed = parseObjectId(id);
-      if (parsed?.kind === "image") {
-        void updateConfig({ imageLayers: config.imageLayers.filter((l) => l.id !== parsed.layerId) });
-      } else if (parsed?.kind === "tv") {
-        void updateConfig({ tvAnchor: undefined });
-      } else if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.filter((f) => f.id !== parsed.furnitureId) });
-      } else if (parsed?.kind === "usb") {
-        void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== parsed.stripId) });
-      }
-      // No Hue-channel branch here on purpose — channels are bridge-managed and
-      // detaching goes through "Move to → Unassigned". See
-      // docs/architecture/room-map.md for the bug that removing one caused.
-      setSelectedId(null);
-    },
-    [config, updateConfig, isLocked],
-  );
-
-  const handleDelete = useCallback(() => {
-    if (!selectedId) return;
-    deleteById(selectedId);
-  }, [selectedId, deleteById]);
-
-  const handleRotate = useCallback(() => {
-    const parsed = selectedId ? parseObjectId(selectedId) : null;
-    if (parsed?.kind !== "furniture") return;
-    const updated = config.furniture.map((f) => {
-      if (f.id !== parsed.furnitureId) return f;
-      const current = f.rotation ?? 0;
-      return { ...f, rotation: (current + 15) % 360 };
-    });
-    void updateConfig({ furniture: updated });
-  }, [selectedId, config.furniture, updateConfig]);
-
-  const handleDuplicate = useCallback(
-    (id: string) => {
-      const offset = 0.2;
-      const parsed = parseObjectId(id);
-      if (parsed?.kind === "furniture") {
-        const src = config.furniture.find((f) => f.id === parsed.furnitureId);
-        if (!src) return;
-        const dup = { ...src, id: crypto.randomUUID(), x: src.x + offset, y: src.y + offset };
-        void updateConfig({ furniture: [...config.furniture, dup] });
-        setSelectedId(furnitureObjectId(dup.id));
-      } else if (parsed?.kind === "usb") {
-        const src = config.usbStrips.find((s) => s.stripId === parsed.stripId);
-        if (!src) return;
-        const dup = { ...src, stripId: crypto.randomUUID(), startX: src.startX + offset, startY: src.startY + offset, endX: src.endX + offset, endY: src.endY + offset };
-        void updateConfig({ usbStrips: [...config.usbStrips, dup] });
-        setSelectedId(usbStripObjectId(dup.stripId));
-      }
-    },
-    [config.furniture, config.usbStrips, updateConfig],
-  );
-
-  const handleArrowNudge = useCallback(
-    (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!selectedId) return;
-      const arrowKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
-      if (!arrowKeys.includes(e.key)) return;
-      e.preventDefault();
-
-      // Metre-based nudge step (0.1m default, 1.0m with Shift)
-      const nudgeM = e.shiftKey ? 1.0 : 0.1;
-      let dx = 0;
-      let dy = 0;
-      if (e.key === "ArrowLeft") dx = -nudgeM;
-      if (e.key === "ArrowRight") dx = nudgeM;
-      if (e.key === "ArrowUp") dy = -nudgeM;
-      if (e.key === "ArrowDown") dy = nudgeM;
-
-      const parsed = parseObjectId(selectedId);
-      if (parsed?.kind === "tv" && config.tvAnchor) {
-        void updateConfig({
-          tvAnchor: { ...config.tvAnchor, x: config.tvAnchor.x + dx, y: config.tvAnchor.y + dy },
-        });
-      } else if (parsed?.kind === "furniture") {
-        void updateConfig({
-          furniture: config.furniture.map((f) =>
-            f.id === parsed.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f,
-          ),
-        });
-      } else if (parsed?.kind === "usb") {
-        void updateConfig({
-          usbStrips: config.usbStrips.map((s) =>
-            s.stripId === parsed.stripId
-              ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
-              : s,
-          ),
-        });
-      } else if (parsed?.kind === "hue") {
-        // Hue channels: nudge in [-1,1] space; step = 0.05
-        const hueStep = 0.05;
-        let hdx = 0;
-        let hdy = 0;
-        if (e.key === "ArrowLeft") hdx = -hueStep;
-        if (e.key === "ArrowRight") hdx = hueStep;
-        // Hue Y: up = positive (towards front), CSS up = negative
-        if (e.key === "ArrowUp") hdy = hueStep;
-        if (e.key === "ArrowDown") hdy = -hueStep;
-        void updateConfig({
-          hueChannels: config.hueChannels.map((ch) =>
-            ch.channelIndex === parsed.channelIndex
-              ? { ...ch, x: Math.max(-1, Math.min(1, ch.x + hdx)), y: Math.max(-1, Math.min(1, ch.y + hdy)) }
-              : ch,
-          ),
-        });
-      }
-    },
-    [selectedId, config, updateConfig],
-  );
+  const handleSelectObject = useCallback((id: string | null) => {
+    setSelectedId(id);
+    if (id !== null) handleSelectHueZone(null);
+  }, [handleSelectHueZone]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -536,21 +217,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       // Fit to view: Cmd+0 (Mac) / Ctrl+0 (Win/Linux)
       if ((e.metaKey || e.ctrlKey) && e.key === "0") {
         e.preventDefault();
-        // Compute zoom level that fits room into canvas with 16px padding
-        const pad = 16;
-        const fitZoom = Math.min(
-          (canvasSize.w - pad * 2) / (widthMeters * pxPerMeter),
-          (canvasSize.h - pad * 2) / (depthMeters * pxPerMeter),
-        );
-        const newZoom = Math.max(0.3, Math.min(3, fitZoom));
-        setZoom(newZoom);
-        // Center the room in the canvas
-        const roomW = widthMeters * pxPerMeter * newZoom;
-        const roomH = depthMeters * pxPerMeter * newZoom;
-        setPanOffset({
-          x: (canvasSize.w - roomW) / 2,
-          y: (canvasSize.h - roomH) / 2,
-        });
+        fitToView(16);
         return;
       }
       // Duplicate: Cmd+D (Mac) / Ctrl+D (Win/Linux)
@@ -574,7 +241,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         handleArrowNudge(e);
       }
     },
-    [handleDelete, handleRotate, handleArrowNudge, handleDuplicate, undo, redo, selectedId, widthMeters, depthMeters, pxPerMeter, canvasSize],
+    [handleDelete, handleRotate, handleArrowNudge, handleDuplicate, undo, redo, selectedId, fitToView],
   );
 
   const handleDimensionsChange = useCallback(
@@ -613,252 +280,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
       void updateConfig(patch);
     },
-    [updateConfig, config, panOffset, widthMeters, depthMeters, zoom],
-  );
-
-  // Hue Zone CRUD. Every handler is local-first and optimistic: a failed invoke
-  // is logged but the local edit stands, because reverting flickers the canvas.
-  // See docs/architecture/room-map.md.
-
-  const hueZones = config.zones;
-
-  const handleAddHueZone = useCallback(() => {
-    if (!hueAreaId) return;
-    const id = `hue-zone-${crypto.randomUUID()}`;
-    const name = t("roomMap:hueZones.defaultName", { N: String(hueZones.length + 1) });
-    const palette = ["--lm-zone-1", "--lm-zone-2", "--lm-zone-3", "--lm-zone-4", "--lm-zone-5", "--lm-zone-6"];
-    const colorVar = `var(${palette[hueZones.length % palette.length]})`;
-    const newZone: HueZone = {
-      id,
-      name,
-      entertainmentAreaId: hueAreaId,
-      centerX: 0,
-      centerY: 0,
-      centerZ: 0,
-      scaleX: 0.5,
-      scaleY: 0.5,
-      scaleZ: 0.5,
-      channelIndices: [],
-      borderColor: colorVar,
-    };
-    void updateConfig({ zones: [...config.zones, newZone] });
-    setActiveHueZoneId(id);
-    setObjectPanelOpen(true);
-
-    // Mirror to backend; never throw — silent-catch ban → log only.
-    void createHueZone({ zone: newZone, existingZones: hueZones }).catch((e) => {
-      console.error("[LumaSync] create_hue_zone failed", e);
-    });
-  }, [hueAreaId, hueZones, config.zones, updateConfig, t]);
-
-  const handleDeleteHueZone = useCallback(
-    (zoneId: string) => {
-      const nextZones = config.zones.filter((z) => z.id !== zoneId);
-      // Detach channels that pointed at this zone — they fall back to legacy absolute placement.
-      const nextChannels = config.hueChannels.map((ch) =>
-        ch.zoneId === zoneId
-          ? { ...ch, zoneId: undefined, zoneRelativePosition: undefined }
-          : ch,
-      );
-      void updateConfig({ zones: nextZones, hueChannels: nextChannels });
-      if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
-
-      void deleteHueZone({ zoneId, existingZones: hueZones, channels: config.hueChannels }).catch((e) => {
-        console.error("[LumaSync] delete_hue_zone failed", e);
-      });
-    },
-    [hueZones, config.zones, config.hueChannels, activeHueZoneId, updateConfig],
-  );
-
-  const handleRenameHueZone = useCallback(
-    (zoneId: string, name: string) => {
-      let renamed: HueZone | undefined;
-      const next = config.zones.map((z) => {
-        if (z.id === zoneId) {
-          renamed = { ...z, name };
-          return renamed;
-        }
-        return z;
-      });
-      void updateConfig({ zones: next });
-      if (renamed) {
-        void updateHueZone({ zone: renamed, existingZones: next }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (rename) failed", e);
-        });
-      }
-    },
-    [config.zones, updateConfig],
-  );
-
-  // Selection is exclusive between concrete objects and Hue zones, so the
-  // inspector and the side-list can never disagree about what is selected.
-  const handleSelectHueZone = useCallback((zoneId: string | null) => {
-    setActiveHueZoneId(zoneId);
-    if (zoneId !== null) setSelectedId(null);
-  }, []);
-
-  const handleSelectObject = useCallback((id: string | null) => {
-    setSelectedId(id);
-    if (id !== null) setActiveHueZoneId(null);
-  }, []);
-
-  // One handler for all three channel→zone paths (both drops and the popover).
-  // It writes three fields that must stay in sync — `zoneId`,
-  // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
-  const handleAssignChannelToZone = useCallback(
-    (channelIndex: number, targetZoneId: string | null) => {
-      const channel = config.hueChannels.find((c) => c.channelIndex === channelIndex);
-      if (!channel) return;
-      // No-op if already in the target bucket — avoids spurious invokes.
-      const currentZoneId = channel.zoneId ?? null;
-      if (currentZoneId === targetZoneId) return;
-
-      // Resolve the entertainment area id we will send to the backend.
-      // Prefer the target zone's value when attaching; on detach, keep the
-      // channel's last known area (or the persisted `hueAreaId` fallback).
-      const targetZone = targetZoneId
-        ? hueZones.find((z) => z.id === targetZoneId)
-        : null;
-      const entertainmentAreaId =
-        targetZone?.entertainmentAreaId ?? hueAreaId ?? "";
-
-      // Default zone-relative position lands on the zone center so the
-      // dot is visible inside the dashed bounds; the user can drag it
-      // afterwards to refine the placement.
-      const nextChannels = config.hueChannels.map((c) =>
-        c.channelIndex === channelIndex
-          ? targetZoneId
-            ? {
-                ...c,
-                zoneId: targetZoneId,
-                zoneRelativePosition: { x: 0, y: 0, z: 0 },
-              }
-            : { ...c, zoneId: undefined, zoneRelativePosition: undefined }
-          : c,
-      );
-      // Keep Hue zones' `channelIndices` in sync — remove from old zone,
-      // add to new zone (idempotent). v1.5 W4-F2: only Hue zones live in
-      // `config.zones`, so the previous `zoneType !== HUE` skip is gone.
-      const nextZones = config.zones.map((z) => {
-        const without = z.channelIndices.filter((i) => i !== channelIndex);
-        if (z.id === targetZoneId) {
-          return { ...z, channelIndices: [...without, channelIndex] };
-        }
-        return { ...z, channelIndices: without };
-      });
-      void updateConfig({ hueChannels: nextChannels, zones: nextZones });
-
-      void assignChannelToHueZone({
-        channelIndex,
-        zoneId: targetZoneId,
-        zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
-        entertainmentAreaId,
-        existingZones: nextZones,
-        channels: nextChannels,
-      }).catch((e) => {
-        console.error("[LumaSync] assign_channel_to_hue_zone failed", e);
-      });
-    },
-    [config.hueChannels, config.zones, hueZones, hueAreaId, updateConfig],
-  );
-
-  // Property bar handlers
-  const handleUpdatePosition = useCallback(
-    (id: string, x: number, y: number) => {
-      const parsed = parseObjectId(id);
-      if (parsed?.kind === "tv" && config.tvAnchor) {
-        void updateConfig({ tvAnchor: { ...config.tvAnchor, x, y } });
-      } else if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, x, y } : f)) });
-      } else if (parsed?.kind === "usb") {
-        void updateConfig({
-          usbStrips: config.usbStrips.map((s) => {
-            if (s.stripId !== parsed.stripId) return s;
-            const dx = x - s.startX;
-            const dy = y - s.startY;
-            return { ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy };
-          }),
-        });
-      } else if (parsed?.kind === "hue") {
-        void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === parsed.channelIndex ? { ...ch, x, y } : ch)) });
-      } else if (parsed?.kind === "image") {
-        void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, offsetX: x, offsetY: y } : l)) });
-      }
-    },
-    [config, updateConfig],
-  );
-
-  const handleUpdateSize = useCallback(
-    (id: string, w: number, h: number) => {
-      const parsed = parseObjectId(id);
-      if (parsed?.kind === "tv" && config.tvAnchor) {
-        void updateConfig({ tvAnchor: { ...config.tvAnchor, width: w, height: h } });
-      } else if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, width: w, height: h } : f)) });
-      }
-    },
-    [config, updateConfig],
-  );
-
-  const handleUpdateRotation = useCallback(
-    (id: string, rotation: number) => {
-      const parsed = parseObjectId(id);
-      if (parsed?.kind === "furniture") {
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, rotation } : f)) });
-      }
-    },
-    [config.furniture, updateConfig],
-  );
-
-  const handleUpdateImageOpacity = useCallback(
-    (imageId: string, opacity: number) => {
-      void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, opacity } : l)) });
-    },
-    [config.imageLayers, updateConfig],
-  );
-
-  const handleUpdateImageScale = useCallback(
-    (imageId: string, sx: number, sy: number) => {
-      void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, scaleX: sx, scaleY: sy } : l)) });
-    },
-    [config.imageLayers, updateConfig],
-  );
-
-  const handleUpdateImageAspectLock = useCallback(
-    (imageId: string, locked: boolean) => {
-      // Just toggle the flag — keep current scaleX/scaleY as-is
-      void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, aspectLocked: locked } : l)) });
-    },
-    [config.imageLayers, updateConfig],
-  );
-
-  const handleResetImageScale = useCallback(
-    (imageId: string) => {
-      const layer = config.imageLayers.find((l) => l.id === imageId);
-      if (!layer) return;
-      // Reset aspect ratio only — unify scaleY to scaleX, keep current size
-      const s = layer.scaleX ?? layer.scale;
-      void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, scaleX: s, scaleY: s } : l)) });
-    },
-    [config.imageLayers, updateConfig],
-  );
-
-  const handleRenameFurniture = useCallback(
-    (id: string, label: string) => {
-      void updateConfig({
-        furniture: config.furniture.map((f) => (f.id === id ? { ...f, label } : f)),
-      });
-    },
-    [config.furniture, updateConfig],
-  );
-
-  const handleRenameImage = useCallback(
-    (imageId: string, label: string) => {
-      void updateConfig({
-        imageLayers: config.imageLayers.map((l) => (l.id === imageId ? { ...l, label } : l)),
-      });
-    },
-    [config.imageLayers, updateConfig],
+    [updateConfig, config, panOffset, widthMeters, depthMeters, zoom, pxPerMeter, setPanOffset],
   );
 
   const handleContextMenu = useCallback(
@@ -925,53 +347,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
     return actions;
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, config.furniture, config.imageLayers, handleRenameFurniture]);
-
-  const activeHueZone: HueZone | null = activeHueZoneId
-    ? hueZones.find((z) => z.id === activeHueZoneId) ?? null
-    : null;
-
-  const handleHueZoneCenterChange = useCallback(
-    (zoneId: string, centerX: number, centerY: number) => {
-      let updated: HueZone | undefined;
-      const next = config.zones.map((z) => {
-        if (z.id === zoneId) {
-          updated = { ...z, centerX, centerY };
-          return updated;
-        }
-        return z;
-      });
-      void updateConfig({ zones: next });
-      if (updated) {
-        void updateHueZone({ zone: updated, existingZones: next }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (center) failed", e);
-        });
-      }
-    },
-    [config.zones, updateConfig],
-  );
-
-  // The patch passes through verbatim — do NOT mirror one axis onto the other.
-  // Zones are physical squares, so the two scales legitimately differ in a
-  // non-square room. See docs/architecture/room-map.md.
-  const handleHueZoneUpdate = useCallback(
-    (zoneId: string, patch: Partial<HueZone>) => {
-      let updated: HueZone | undefined;
-      const next = config.zones.map((z) => {
-        if (z.id === zoneId) {
-          updated = { ...z, ...patch };
-          return updated;
-        }
-        return z;
-      });
-      void updateConfig({ zones: next });
-      if (updated) {
-        void updateHueZone({ zone: updated, existingZones: next }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (props) failed", e);
-        });
-      }
-    },
-    [config.zones, updateConfig],
-  );
 
   if (loading) {
     return (
@@ -1333,150 +708,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
           {t("roomMap:persistError")}
         </div>
       )}
-    </div>
-  );
-}
-
-function RenameDialog({
-  currentLabel,
-  promptText,
-  onConfirm,
-  onCancel,
-}: {
-  currentLabel: string;
-  promptText: string;
-  onConfirm: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const { t } = useTranslation();
-  const [value, setValue] = useState(currentLabel);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
-  // A1.4 — useId() instead of a static "rename-dialog-label" so multiple
-  // RenameDialog instances (or re-mounts) don't collide on the aria-labelledby
-  // target. Pure a11y delta on top of the W4 i18n + role="dialog" pass.
-  const labelId = useId();
-
-  useEffect(() => {
-    inputRef.current?.select();
-  }, []);
-
-  // ESC is bound at document level, not on the input: with it on the input the
-  // dialog became un-cancellable by keyboard as soon as focus moved off.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const order: HTMLElement[] = [inputRef.current, cancelRef.current, confirmRef.current].filter(
-        (el): el is HTMLInputElement | HTMLButtonElement => el !== null,
-      );
-      if (order.length === 0) return;
-      const active = document.activeElement as HTMLElement | null;
-      const idx = active ? order.indexOf(active) : -1;
-      const next = event.shiftKey
-        ? order[(idx <= 0 ? order.length : idx) - 1]
-        : order[(idx + 1) % order.length];
-      if (next && next !== active) {
-        event.preventDefault();
-        next.focus();
-      }
-    };
-    document.addEventListener("keydown", handler, true);
-    return () => document.removeEventListener("keydown", handler, true);
-  }, [onCancel]);
-
-  const handleSubmit = () => {
-    const trimmed = value.trim();
-    if (trimmed) onConfirm(trimmed);
-    else onCancel();
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center"
-      style={{ background: "rgba(7, 8, 10, 0.55)" }}
-      onClick={onCancel}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={labelId}
-    >
-      <div
-        className="lm-settings-group p-4 w-64 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <label
-          id={labelId}
-          className="block text-[11px] font-semibold mb-2"
-          style={{ color: "var(--lm-ink)", fontFamily: "var(--lm-mono)", letterSpacing: "0.04em" }}
-        >
-          {promptText}
-        </label>
-        <input
-          ref={inputRef}
-          type="text"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter") handleSubmit();
-            // ESC handled by document-level trap; stopPropagation still
-            // keeps room-map shortcuts from leaking through Tab/Enter.
-          }}
-          className="w-full rounded px-2 py-1.5 text-sm focus:outline-none"
-          style={{
-            background: "var(--lm-panel-2)",
-            border: "1px solid var(--lm-line-2)",
-            color: "var(--lm-ink)",
-            boxShadow: "var(--lm-focus-ring-soft)",
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = "rgba(255, 176, 32, 0.45)";
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = "var(--lm-line-2)";
-          }}
-          autoFocus
-        />
-        <div className="mt-3 flex justify-end gap-2">
-          <button
-            ref={cancelRef}
-            type="button"
-            className="rounded text-[11px]"
-            style={{
-              minHeight: 28,
-              padding: "4px 10px",
-              color: "var(--lm-ink-dim)",
-              background: "transparent",
-              fontFamily: "var(--lm-mono)",
-              letterSpacing: "0.04em",
-            }}
-            onClick={onCancel}
-          >
-            {t("roomMap:contextMenu.renameCancel")}
-          </button>
-          <button
-            ref={confirmRef}
-            type="button"
-            className="rounded text-[11px] font-semibold"
-            style={{
-              minHeight: 28,
-              padding: "4px 12px",
-              background: "var(--lm-amber)",
-              color: "var(--lm-bg)",
-              fontFamily: "var(--lm-mono)",
-              letterSpacing: "0.04em",
-            }}
-            onClick={handleSubmit}
-          >
-            {t("roomMap:contextMenu.renameOk")}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
