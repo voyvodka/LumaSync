@@ -1723,10 +1723,48 @@ try {
   fail(`EXTRACTION FAILED: cannot load the i18n catalogue (${err.message})`);
 }
 
+// Comment-stripped for the same reason the harvest is: deviceConnectionApi.ts
+// names SerialHealthReport only in a JSDoc, which rescued the whole health-code
+// family through a chain that no executing line supports.
 const runtimeText = runtimeSourceFiles
   .filter((f) => !f.includes("__tests__"))
-  .map((f) => readFileSync(f, "utf-8"))
+  .map((f) => stripComments(readFileSync(f, "utf-8")))
   .join("\n");
+
+// Reachability must be transitive, not direct: NOTIFICATION_RESULT_CODES is read
+// by nothing, yet deleting it breaks NotificationResult, which platformApi uses.
+const declarationBodies = new Map();
+for (const file of contractModuleFiles) {
+  const source = readFileSync(file, "utf-8");
+  const starts = [
+    ...source.matchAll(/^(?:export )?(?:declare )?(?:const|function|type|interface|enum|class) ([A-Za-z_$][\w$]*)/gm),
+  ];
+  starts.forEach((decl, index) => {
+    const end = index + 1 < starts.length ? starts[index + 1].index : source.length;
+    // Comments stripped: a JSDoc listing every code in the union would otherwise
+    // mark the whole family reachable from prose alone.
+    declarationBodies.set(decl[1], stripComments(source.slice(decl.index, end)));
+  });
+}
+const reachable = new Set(
+  [...declarationBodies.keys()].filter((symbol) =>
+    new RegExp(`\\b${symbol}\\b`).test(runtimeText)
+  )
+);
+for (let changed = true; changed; ) {
+  changed = false;
+  for (const symbol of [...reachable]) {
+    const body = declarationBodies.get(symbol);
+    if (!body) continue;
+    for (const candidate of declarationBodies.keys()) {
+      if (reachable.has(candidate)) continue;
+      if (new RegExp(`\\b${candidate}\\b`).test(body)) {
+        reachable.add(candidate);
+        changed = true;
+      }
+    }
+  }
+}
 
 let deadExports = 0;
 for (const file of contractModuleFiles) {
@@ -1734,7 +1772,7 @@ for (const file of contractModuleFiles) {
   const source = readFileSync(file, "utf-8");
   for (const decl of source.matchAll(/^export (const|function) ([A-Za-z_$][\w$]*)/gm)) {
     const [, kind, symbol] = decl;
-    if (new RegExp(`\\b${symbol}\\b`).test(runtimeText)) continue;
+    if (reachable.has(symbol)) continue;
     if (kind === "const") {
       const block = source.slice(decl.index).match(/^export const [\s\S]*?\n\} as const;/);
       const values = block ? [...block[0].matchAll(/"([A-Za-z0-9_-]+)"/g)].map((m) => m[1]) : [];
@@ -1746,16 +1784,16 @@ for (const file of contractModuleFiles) {
       deadExports++;
     } else {
       fail(
-        `UNCONSUMED EXPORT ${entry} — no non-test file outside contracts/ reads it `
-          + `and no dynamic locale key covers it. Wire it up, delete it, or baseline `
-          + `it with the reason.`
+        `UNCONSUMED EXPORT ${entry} — nothing outside contracts/ reaches it, directly `
+          + `or through another contract symbol, and no dynamic locale key covers it. `
+          + `Wire it up, delete it, or baseline it with the reason.`
       );
     }
   }
 }
 for (const entry of deadExportBaseline) {
   const [fileName, symbol] = entry.split(" ");
-  const stillDead = !new RegExp(`\\b${symbol}\\b`).test(runtimeText);
+  const stillDead = !reachable.has(symbol);
   check(
     stillDead,
     `baseline entry "${entry}" still has no runtime consumer`,

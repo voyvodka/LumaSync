@@ -5,9 +5,11 @@
 # was validated field-by-field for months while every hook imported a private
 # fork instead. This ratchet is what makes the check count mean something.
 #
-# CONSUMED means one of: referenced by a non-test file outside its own module,
-# or carrying a locale key under a KNOWN_DYNAMIC_PREFIX (i18n-keys.mjs) so the
-# values are looked up dynamically. A test-only reference does NOT count — the
+# CONSUMED is transitive and comment-blind: a symbol counts as reached when an
+# executing line outside contracts/ names it, or when a contract symbol that is
+# itself reached names it (NOTIFICATION_RESULT_CODES is read by nothing, yet
+# deleting it breaks NotificationResult, which platformApi uses). A JSDoc
+# mention is NOT a reference, and a test-only reference does not count — the
 # telemetry fork had tests too, and they passed against the wrong shape.
 #
 # Ratchet, not a suppression list. This file may only SHRINK: a listed symbol
@@ -32,12 +34,6 @@ hue.ts HUE_DEBUG_COMMAND_CODES
 # away with the commands themselves.
 roomMap.ts ROOM_MAP_PERSISTENCE_STATUS
 
-# Reachable only through describeCaptureFailure, which IS consumed. Exported
-# for the contract tests. Do not un-export to satisfy this file.
-capture.ts AMBILIGHT_CAPTURE_REASON
-capture.ts classifyCaptureFailure
-capture.ts isAmbilightCaptureReason
-
 # Mirrors of Rust state with no reader. SUPPORTED_CONTROLLER_IDS is asserted
 # against the Rust allowlist by this very script and read by nothing else.
 device.ts SUPPORTED_CONTROLLER_IDS
@@ -45,29 +41,30 @@ device.ts DEVICE_STORE_KEYS
 device.ts WLED_DEFAULT_DDP_PORT
 device.ts WLED_DEFAULT_WARLS_PORT
 
-# EN+TR strings exist under device.health.codes.* but no code looks them up,
-# so the health modal shows the raw code. Two of the five also have no Rust
-# producer — see contract-phantom-baseline.txt.
+# The live health surface is `HealthCheckResult` in deviceConnectionApi.ts, and
+# it types `code` as bare `string` — so nothing links these five to the runtime
+# but a JSDoc. EN+TR strings exist and are never looked up. Two also have no
+# Rust producer (contract-phantom-baseline.txt). Typing that field is the fix.
 device.ts SERIAL_HEALTH_CODES
 
 # Hue vocabulary with no reader. HUE_FAULT_CODES is the HUE-NET-xx / HUE-AUTH-xx
-# taxonomy nothing classifies into; the archetype whitelist is applied Rust-side.
+# taxonomy nothing classifies into; the intensity coefficients are applied
+# Rust-side; the archetype sentinel is only used by Rust's whitelist fallback.
 hue.ts HUE_FAULT_CODES
-hue.ts HUE_ROOM_ARCHETYPES
 hue.ts HUE_ARCHETYPE_FALLBACK
 hue.ts HUE_INTENSITY_PRESET_COEFFICIENTS
 hue.ts HUE_RUNTIME_STATUS_FAMILY
-hue.ts HUE_ZONE_STATUS_CODES
-roomMap.ts HUE_ZONE_STATUS_CODES
 
-# The gate codes carry a behavioural contract (`mode` reports the running mode,
-# not the requested one) that no consumer currently reads.
-lighting.ts LIGHTING_MODE_GATE_STATUS
+# The gate predicate carries a behavioural contract (`mode` reports the running
+# mode, not the requested one) that no consumer calls. Its companion map IS
+# reached, spread into LIGHTING_MODE_STATUS.
 lighting.ts isLightingModeGateCode
 
-# platform.ts has exactly one importer (platformApi.ts) and it uses neither.
-platform.ts NOTIFICATION_KINDS
-platform.ts NOTIFICATION_RESULT_CODES
+# Smoothing coefficients applied Rust-side; the frontend sends the preset name.
+lighting.ts LIGHTING_SMOOTHING_PRESET_COEFFICIENTS
 
-roomMap.ts DEFAULT_ROOM_DIMENSIONS
+# platform.ts has one importer and it uses NotificationResult, not this map.
+platform.ts NOTIFICATION_KINDS
+
+# The Rust-side threshold is pinned by this script; no UI reads the TS copy.
 telemetry.ts LINK_CONSTRAINED_FPS_THRESHOLD
