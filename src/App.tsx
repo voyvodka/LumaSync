@@ -13,7 +13,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
-import { StatusBar, statusBarHeightPx, type StatusItem } from "./features/shell/StatusBar";
+import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
+import { buildStatusItems } from "./features/shell/statusItems";
+import { ShellNotices } from "./features/shell/ShellNotices";
 import { OnboardingFlow } from "./features/onboarding/ui/OnboardingFlow";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
 import { UpdateModal } from "./features/updater/UpdateModal";
@@ -85,7 +87,6 @@ import {
 import {
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_TRIGGER_SOURCE,
-  HUE_SOLID_COLOR_STATUS,
   HUE_STATUS,
   isHueSolidColorUnapplied,
   type HueRuntimeTarget,
@@ -1869,49 +1870,19 @@ function App() {
     });
   }, []);
 
-  // Derive runtime status items for the bottom StatusBar. Order matches the
-  // mockup (CAP / USB / HUE). CAP is "ok" only while ambilight is the active
-  // mode — that's the only mode that actually consumes screen frames.
-  // v1.5 W2-B1 — Reconnect deep-link to the DEVICES section. Both USB and
-  // Hue chips offer the affordance whenever they are not in a healthy state:
-  // the icon button rendered inside the StatusBar pill takes the user to
-  // the place they can actually fix the issue (re-pair, replug, retry).
   const openDevicesSection = () => void handleSectionChange(SECTION_IDS.DEVICES);
 
-  const statusItems: StatusItem[] = [
+  const statusItems = buildStatusItems(
     {
-      label: "CAP",
-      state: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT ? "OK" : "—",
-      kind: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT ? "ok" : "idle",
+      ambilightActive: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
+      usbConnected: isConnected,
+      hueStreaming,
+      hueReachable,
+      hueConfigured: hueStartConfig !== null,
+      onOpenDevices: openDevicesSection,
     },
-    {
-      label: "USB",
-      state: isConnected ? "OK" : "OFF",
-      kind: isConnected ? "ok" : "off",
-      onReconnect: isConnected ? undefined : openDevicesSection,
-      reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
-    },
-    {
-      label: "HUE",
-      state: hueStreaming
-        ? "STREAMING"
-        : hueReachable
-          ? "OK"
-          : hueStartConfig
-            ? "IDLE"
-            : "OFF",
-      kind: hueStreaming
-        ? "active"
-        : hueReachable
-          ? "ok"
-          : hueStartConfig
-            ? "idle"
-            : "off",
-      onReconnect:
-        hueStreaming || hueReachable ? undefined : openDevicesSection,
-      reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
-    },
-  ];
+    t,
+  );
   const statusBarHeight = statusBarHeightPx(currentMode);
 
   return (
@@ -1994,87 +1965,12 @@ function App() {
         onDismiss={dismiss}
         onRetry={() => void checkForUpdates()}
       />
-      {usbDisconnectNotice && (
-        <div
-          data-testid="usb-disconnect-notice"
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
-          role="status"
-          aria-live="polite"
-          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
-        >
-          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t("common:hotplug.usbDisconnected")}</span>
-        </div>
-      )}
-      {usbUnsupportedNotice && (
-        <div
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
-          role="status"
-          aria-live="polite"
-          style={{
-            background: "var(--lm-panel-2)",
-            border: "1px solid var(--lm-line-2)",
-            color: "var(--lm-ink)",
-            // Stack above usbDisconnectNotice / stopFailedNotice if any
-            // ever co-fire — boot-time signal should sit highest.
-            transform:
-              usbDisconnectNotice || (stopFailedNotice && stopFailedNotice.length > 0)
-                ? "translateY(-3.5rem)"
-                : undefined,
-          }}
-        >
-          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
-            {t("common:hotplug.unsupportedFallback")}
-          </span>
-        </div>
-      )}
-      {stopFailedNotice && stopFailedNotice.length > 0 && (
-        <div
-          data-testid="stop-failed-notice"
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
-          role="status"
-          aria-live="polite"
-          style={{
-            background: "var(--lm-panel-2)",
-            border: "1px solid var(--lm-red, #f87171)",
-            color: "var(--lm-ink)",
-            // Stack above usbDisconnectNotice if both ever co-fire (rare; sequential).
-            transform: usbDisconnectNotice ? "translateY(-3.5rem)" : undefined,
-          }}
-        >
-          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
-            {t("common:hotplug.stopFailed", {
-              targets: stopFailedNotice
-                .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
-                .join(", "),
-            })}
-          </span>
-        </div>
-      )}
-      {hueColorNotice && (
-        <div
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
-          role="status"
-          aria-live="polite"
-          style={{
-            background: "var(--lm-panel-2)",
-            border: "1px solid var(--lm-amber)",
-            color: "var(--lm-ink)",
-            transform:
-              usbDisconnectNotice || (stopFailedNotice && stopFailedNotice.length > 0)
-                ? "translateY(-3.5rem)"
-                : undefined,
-          }}
-        >
-          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
-          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
-            {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
-              ? t("hue:colorNotApplied.noLights")
-              : t("hue:colorNotApplied.streamOffline")}
-          </span>
-        </div>
-      )}
+      <ShellNotices
+        usbDisconnected={usbDisconnectNotice}
+        usbUnsupported={usbUnsupportedNotice}
+        stopFailedTargets={stopFailedNotice}
+        hueColorNotice={hueColorNotice}
+      />
     </>
   );
 }
