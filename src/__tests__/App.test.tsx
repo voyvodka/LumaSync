@@ -117,12 +117,16 @@ vi.mock("../features/settings/SettingsLayout", () => ({
   SettingsLayout: (props: {
     lightingMode: LightingModeConfig;
     outputTargets: Array<"usb" | "hue">;
+    calibration?: { totalLeds: number };
     onLightingModeChange: (mode: LightingModeConfig) => void;
     onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
   }) => (
     <div>
       <p data-testid="active-mode">{props.lightingMode.kind}</p>
       <p data-testid="output-targets">{props.outputTargets.join(",")}</p>
+      {/* Bootstrap-applied calibration. `active-mode === "off"` is satisfied by
+          the initial state, so it cannot gate a click on bootstrap having run. */}
+      <p data-testid="calibration-leds">{props.calibration?.totalLeds ?? ""}</p>
       <button
         type="button"
         onClick={() => props.onOutputTargetsChange(["hue"])}
@@ -970,6 +974,13 @@ describe("App mode orchestration", () => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
       });
 
+      // The D-05 gate blocks an Ambilight transition while `savedCalibration`
+      // is still undefined, and a blocked transition returns without changing
+      // the mode — so the click must wait for bootstrap to hydrate it.
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+      });
+
       // Slow-path Ambilight transition.
       await act(async () => {
         screen.getByRole("button", { name: "set-ambilight" }).click();
@@ -1033,6 +1044,13 @@ describe("App mode orchestration", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+
+      // The D-05 gate blocks an Ambilight transition while `savedCalibration`
+      // is still undefined, and a blocked transition returns without changing
+      // the mode — so the click must wait for bootstrap to hydrate it.
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("59");
       });
 
       await act(async () => {
