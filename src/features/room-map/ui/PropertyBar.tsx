@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import { parseObjectId } from "../model/objectId";
 import { IconLock, IconUnlock, IconOpacity } from "@/shared/ui/icons";
 
 interface PropertyBarProps {
@@ -33,35 +34,33 @@ interface FieldValues {
 function getFieldValues(config: RoomMapConfig, id: string | null): FieldValues | null {
   if (!id) return null;
 
-  if (id === "tv" && config.tvAnchor) {
+  const parsed = parseObjectId(id);
+
+  if (parsed?.kind === "tv" && config.tvAnchor) {
     const tv = config.tvAnchor;
     return { x: tv.x.toFixed(2), y: tv.y.toFixed(2), w: tv.width.toFixed(2), h: tv.height.toFixed(2), r: "", locked: !!tv.locked };
   }
 
-  if (id.startsWith("furniture-")) {
-    const fId = id.replace("furniture-", "");
-    const f = config.furniture.find((item) => item.id === fId);
+  if (parsed?.kind === "furniture") {
+    const f = config.furniture.find((item) => item.id === parsed.furnitureId);
     if (!f) return null;
     return { x: f.x.toFixed(2), y: f.y.toFixed(2), w: f.width.toFixed(2), h: f.height.toFixed(2), r: String(f.rotation ?? 0), locked: !!f.locked };
   }
 
-  if (id.startsWith("usb-")) {
-    const sId = id.replace("usb-", "");
-    const s = config.usbStrips.find((item) => item.stripId === sId);
+  if (parsed?.kind === "usb") {
+    const s = config.usbStrips.find((item) => item.stripId === parsed.stripId);
     if (!s) return null;
     return { x: s.startX.toFixed(2), y: s.startY.toFixed(2), w: "", h: "", r: "", locked: !!s.locked };
   }
 
-  if (id.startsWith("hue-")) {
-    const idx = parseInt(id.replace("hue-", ""), 10);
-    const ch = config.hueChannels[idx];
+  if (parsed?.kind === "hue") {
+    const ch = config.hueChannels[parsed.channelIndex];
     if (!ch) return null;
     return { x: ch.x.toFixed(2), y: ch.y.toFixed(2), w: "", h: "", r: "", locked: !!ch.locked };
   }
 
-  if (id.startsWith("img-")) {
-    const imgId = id.replace("img-", "");
-    const layer = config.imageLayers.find((l) => l.id === imgId);
+  if (parsed?.kind === "image") {
+    const layer = config.imageLayers.find((l) => l.id === parsed.layerId);
     if (!layer) return null;
     const sx = layer.scaleX ?? layer.scale;
     const sy = layer.scaleY ?? layer.scale;
@@ -146,7 +145,8 @@ export function PropertyBar({
   }
 
   const locked = fields.locked;
-  const imgId = selectedId.startsWith("img-") ? selectedId.replace("img-", "") : null;
+  const parsedSelection = selectedId ? parseObjectId(selectedId) : null;
+  const imgId = parsedSelection?.kind === "image" ? parsedSelection.layerId : null;
 
   if (fields.isImage && imgId) {
     return (

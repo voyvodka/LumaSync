@@ -7,6 +7,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { parseObjectId } from "./objectId";
 
 /**
  * Resolve the active selection from the dock's `selectedId` shape and
@@ -37,22 +38,20 @@ export function resolveInspectorTarget(
   activeHueZoneId: string | null,
 ): InspectorTarget {
   if (selectedId) {
-    if (selectedId === "tv" && config.tvAnchor) {
+    const parsed = parseObjectId(selectedId);
+    if (parsed?.kind === "tv" && config.tvAnchor) {
       return { kind: "tv", tv: config.tvAnchor };
     }
-    if (selectedId.startsWith("furniture-")) {
-      const id = selectedId.replace("furniture-", "");
-      const item = config.furniture.find((f) => f.id === id);
+    if (parsed?.kind === "furniture") {
+      const item = config.furniture.find((f) => f.id === parsed.furnitureId);
       if (item) return { kind: "furniture", item };
     }
-    if (selectedId.startsWith("usb-")) {
-      const id = selectedId.replace("usb-", "");
-      const strip = config.usbStrips.find((s) => s.stripId === id);
+    if (parsed?.kind === "usb") {
+      const strip = config.usbStrips.find((s) => s.stripId === parsed.stripId);
       if (strip) return { kind: "usb", strip };
     }
-    if (selectedId.startsWith("hue-")) {
-      const idx = parseInt(selectedId.replace("hue-", ""), 10);
-      const channel = config.hueChannels.find((c) => c.channelIndex === idx);
+    if (parsed?.kind === "hue") {
+      const channel = config.hueChannels.find((c) => c.channelIndex === parsed.channelIndex);
       if (channel) {
         const zoneName = channel.zoneId
           ? config.zones.find((z) => z.id === channel.zoneId)?.name ?? null
@@ -60,9 +59,8 @@ export function resolveInspectorTarget(
         return { kind: "hueChannel", channel, zoneName };
       }
     }
-    if (selectedId.startsWith("img-")) {
-      const id = selectedId.replace("img-", "");
-      const layer = config.imageLayers.find((l) => l.id === id);
+    if (parsed?.kind === "image") {
+      const layer = config.imageLayers.find((l) => l.id === parsed.layerId);
       if (layer) return { kind: "image", layer };
     }
   }

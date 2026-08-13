@@ -2,6 +2,7 @@ import { useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
+import { hueChannelObjectId } from "../model/objectId";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
@@ -578,7 +579,7 @@ export function HueChannelOverlay({
         // Invert Y: Hue +y = front wall (bottom of canvas)
         const topPx = Number.isFinite(rawTopPx) ? rawTopPx : 0;
 
-        const isSelected = selectedId === `hue-${ch.channelIndex}`;
+        const isSelected = selectedId === hueChannelObjectId(ch.channelIndex);
         const isInActiveZone = activeZoneChannels?.has(ch.channelIndex) ?? false;
         const isAssignedToAnyZone = assignedChannels?.has(ch.channelIndex) ?? false;
 
