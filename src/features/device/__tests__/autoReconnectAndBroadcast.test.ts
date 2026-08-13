@@ -50,7 +50,7 @@ describe("Bug 10A — auto-reconnect on init", () => {
       connected: false,
       portName: null,
       updatedAtUnixMs: Date.now(),
-      status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+      status: { code: "NOT_CONNECTED", message: "Idle", details: null },
     });
 
     const persistLastSuccessfulPort = vi.fn();
@@ -96,7 +96,7 @@ describe("Bug 10A — auto-reconnect on init", () => {
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM3",
@@ -119,7 +119,7 @@ describe("Bug 10A — auto-reconnect on init", () => {
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM3",
@@ -137,7 +137,7 @@ describe("Bug 10A — auto-reconnect on init", () => {
       connected: false,
       portName: "COM3",
       updatedAtUnixMs: Date.now(),
-      status: { code: "CONNECT_BUSY", message: "Port busy", details: null },
+      status: { code: "CONNECT_TIMEOUT", message: "Timed out opening the port", details: null },
     });
 
     const controller = createDeviceConnectionController({
@@ -147,7 +147,7 @@ describe("Bug 10A — auto-reconnect on init", () => {
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM3",
@@ -209,7 +209,7 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       connectionEvents: events,
@@ -240,7 +240,7 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       connectionEvents: events,
@@ -256,7 +256,7 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       })
       .mockResolvedValue({
         connected: true,
@@ -303,7 +303,7 @@ describe("Bug 10B — sibling controller propagation via connectionEvents", () =
       connected: false,
       portName: null,
       updatedAtUnixMs: Date.now(),
-      status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+      status: { code: "NOT_CONNECTED", message: "Idle", details: null },
     });
 
     const sibling = createDeviceConnectionController({

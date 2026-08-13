@@ -72,7 +72,7 @@ function makeController(
       connected: false,
       portName: null,
       updatedAtUnixMs: Date.now(),
-      status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+      status: { code: "NOT_CONNECTED", message: "Idle", details: null },
     }),
     persistLastSuccessfulPort: vi.fn(),
     initialLastSuccessfulPort: persistedPort,
@@ -117,7 +117,7 @@ describe("tryAutoReconnect — PORT_UNSUPPORTED signal", () => {
     expect(received[0].unsupportedReason).toBe("PORT_UNSUPPORTED");
   });
 
-  it("does NOT emit unsupportedReason for transient rejection codes (CONNECT_BUSY)", async () => {
+  it("does NOT emit unsupportedReason for transient rejection codes (CONNECT_TIMEOUT)", async () => {
     const bus = createConnectionEventBus();
     const received: ConnectionEvent[] = [];
     bus.subscribe((e) => received.push(e));
@@ -130,8 +130,8 @@ describe("tryAutoReconnect — PORT_UNSUPPORTED signal", () => {
         portName: "COM3",
         updatedAtUnixMs: Date.now(),
         status: {
-          code: "CONNECT_BUSY",
-          message: "Port is in use",
+          code: "CONNECT_TIMEOUT",
+          message: "Timed out opening the port",
           details: null,
         },
       },
@@ -297,7 +297,7 @@ describe("tryAutoReconnect — connectionEvents not provided", () => {
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "/dev/cu.Bluetooth-Incoming-Port",
@@ -339,7 +339,7 @@ describe("tryAutoReconnect — feature flag off", () => {
         connected: false,
         portName: null,
         updatedAtUnixMs: Date.now(),
-        status: { code: "NO_ACTIVE_SESSION", message: "Idle", details: null },
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
       }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "/dev/cu.Bluetooth-Incoming-Port",

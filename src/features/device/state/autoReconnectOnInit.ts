@@ -65,7 +65,7 @@ export function createAutoReconnectOnInit(
       // selectedOutputTargets and avoid the silent backend
       // DEVICE_NOT_CONNECTED gate on every mode-change. Limited to
       // PORT_UNSUPPORTED / PORT_NOT_FOUND because transient codes
-      // (CONNECT_BUSY, handshake timeout) shouldn't strip the user's
+      // (CONNECT_TIMEOUT, CONNECT_IO_ERROR, CONNECT_FAILED) shouldn't strip the user's
       // persisted output mix.
       if (
         connectionEventsBus &&
