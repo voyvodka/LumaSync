@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { HueRuntimeStatus } from "@/shared/contracts/hue";
+import type { HueOnboardingStatus, HueRuntimeStatusView } from "../onboardingStatusCodes";
 import {
   deriveHueBridgeCardState,
   type HueBridgeCardStateInput,
@@ -17,10 +17,10 @@ const BASE: HueBridgeCardStateInput = {
   isReadinessStale: false,
 };
 
-const runtime = (partial: Partial<HueRuntimeStatus>): HueRuntimeStatus =>
-  ({ state: "Idle", code: "HUE_RUNTIME_IDLE", message: "", details: null, ...partial }) as HueRuntimeStatus;
+const runtime = (partial: Partial<HueRuntimeStatusView>): HueRuntimeStatusView =>
+  ({ state: "Idle", code: "HUE_STREAM_IDLE", message: "", details: null, triggerSource: "system", ...partial });
 
-const status = (code: string) => ({ code, message: "", details: null });
+const status = (code: HueOnboardingStatus["code"]): HueOnboardingStatus => ({ code, message: "", details: null });
 
 describe("deriveHueBridgeCardState", () => {
   it("returns null until a bridge is selected", () => {

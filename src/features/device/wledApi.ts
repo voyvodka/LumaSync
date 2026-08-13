@@ -9,18 +9,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   DEVICE_COMMANDS,
+  type WledCommandStatus,
   type WledDeviceInfo,
   type WledSinkStatus,
-  type WledStatusCode,
   type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
 
-/** Coded result shape shared by every WLED sink command — never throws, always returns this. */
-export interface WledCommandStatus {
-  code: WledStatusCode | string;
-  message: string;
-  details?: string | null;
-}
+export type { WledCommandStatus };
 
 /** Result of `discoverWledDevices` — every WLED instance found (or probed) on the network. */
 export interface WledDiscoveryResponse {

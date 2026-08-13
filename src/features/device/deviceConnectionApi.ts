@@ -4,15 +4,11 @@ import {
   type DeviceHealthStep,
   type FirmwareProfile,
   type LedChipType,
+  type SerialCommandStatus,
   type SerialHealthStepCode,
 } from "@/shared/contracts/device";
 
-/** Coded result shape shared by the serial command bridge — never throws, always returns this. */
-export interface CommandStatus {
-  code: string;
-  message: string;
-  details: string | null;
-}
+export type { SerialCommandStatus };
 
 /** USB identity of a serial port, when the OS reports one. */
 export interface UsbPortMetadata {
@@ -33,7 +29,7 @@ export interface SerialPortDescriptor {
 }
 
 export interface SerialPortListResponse {
-  status: CommandStatus;
+  status: SerialCommandStatus;
   ports: SerialPortDescriptor[];
 }
 
@@ -41,7 +37,7 @@ export interface SerialPortListResponse {
 export interface SerialConnectionStatus {
   portName: string | null;
   connected: boolean;
-  status: CommandStatus;
+  status: SerialCommandStatus;
   updatedAtUnixMs: number;
 }
 

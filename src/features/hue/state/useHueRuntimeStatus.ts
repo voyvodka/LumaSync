@@ -2,14 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   HUE_RUNTIME_TRIGGER_SOURCE,
-  type HueRuntimeStatus,
   type HueRuntimeTarget,
   type HueRuntimeTargetTelemetryRow,
 } from "@/shared/contracts/hue";
 import { restartHue, startHue } from "../../mode/modeApi";
 import { readHueStreamStatus } from "../hueReadCache";
-import type { CommandStatus, HueBridgeSummary, HuePairingCredentials } from "../hueOnboardingApi";
-import { HUE_ONBOARDING_TRANSPORT_CODES as CODE, toErrorDetails } from "../model/onboardingStatusCodes";
+import type { HueBridgeSummary, HuePairingCredentials } from "../hueOnboardingApi";
+import {
+  HUE_ONBOARDING_TRANSPORT_CODES as CODE,
+  toErrorDetails,
+  type HueOnboardingStatus,
+  type HueRuntimeStatusView,
+} from "../model/onboardingStatusCodes";
 import { RUNTIME_POLL_INTERVAL_MS, RUNTIME_POLL_MIN_INTERVAL_MS, STREAMING_RUNTIME_STATES } from "../model/pollingCadence";
 import { deriveRuntimeTargets } from "../model/runtimeTargets";
 
@@ -18,11 +22,11 @@ export interface UseHueRuntimeStatusInput {
   credentials: HuePairingCredentials | null;
   areaId: string | null;
   channelRegionOverrides: Record<number, string>;
-  onError: (status: CommandStatus) => void;
+  onError: (status: HueOnboardingStatus) => void;
 }
 
 export interface UseHueRuntimeStatusResult {
-  runtimeStatus: HueRuntimeStatus | null;
+  runtimeStatus: HueRuntimeStatusView | null;
   runtimeTargets: HueRuntimeTargetTelemetryRow[];
   isRuntimeMutating: boolean;
   startRuntime: () => Promise<void>;
@@ -36,7 +40,7 @@ export function useHueRuntimeStatus({
   channelRegionOverrides,
   onError,
 }: UseHueRuntimeStatusInput): UseHueRuntimeStatusResult {
-  const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatus | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatusView | null>(null);
   /** Survives the runtime-loop effect re-running on every state transition. */
   const lastRuntimePollAtRef = useRef(0);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
@@ -48,12 +52,12 @@ export function useHueRuntimeStatus({
   const pollRuntimeStatus = useCallback(async (options?: { force?: boolean }) => {
     try {
       const result = await readHueStreamStatus(options?.force ? 0 : undefined);
-      const nextStatus = result.status as HueRuntimeStatus;
+      const nextStatus = result.status as HueRuntimeStatusView;
       setRuntimeStatus(nextStatus);
       setRuntimeTargets(deriveRuntimeTargets(nextStatus));
     } catch (error) {
       const details = error instanceof Error ? error.message : String(error);
-      const fallbackStatus: HueRuntimeStatus = {
+      const fallbackStatus: HueRuntimeStatusView = {
         state: "Failed",
         code: CODE.STREAM_STATUS_UNAVAILABLE,
         message: "Could not fetch Hue runtime status.",

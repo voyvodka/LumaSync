@@ -1,11 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { HUE_COMMANDS } from "@/shared/contracts/hue";
+import { HUE_COMMANDS, type HueChannelWritebackStatus } from "@/shared/contracts/hue";
 import {
   HUE_ZONE_COMMANDS,
   ROOM_MAP_COMMANDS,
   type AssignChannelRequest,
-  type CommandStatus,
   type CreateHueZoneRequest,
   type DeleteHueZoneRequest,
   type HueChannelPlacement,
@@ -64,8 +63,8 @@ export interface UpdateHueChannelPositionsPayload {
 export async function updateHueChannelPositions(
   payload: UpdateHueChannelPositionsPayload,
   invoker: RoomMapInvoker = defaultInvoke,
-): Promise<CommandStatus> {
-  return invoker<CommandStatus>(HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS, {
+): Promise<HueChannelWritebackStatus> {
+  return invoker<HueChannelWritebackStatus>(HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS, {
     channels: payload.channels,
     bridgeIp: payload.bridgeIp,
     username: payload.username,

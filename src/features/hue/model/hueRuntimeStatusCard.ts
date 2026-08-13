@@ -1,9 +1,7 @@
-import {
-  HUE_RUNTIME_ACTION_HINT,
-  type HueRuntimeActionHint,
-  type HueRuntimeStatus,
-} from "@/shared/contracts/hue";
+import { HUE_RUNTIME_ACTION_HINT, type HueRuntimeActionHint } from "@/shared/contracts/hue";
 import type { TranslationKey } from "@/features/i18n/catalogue";
+
+import type { HueRuntimeStatusView } from "./onboardingStatusCodes";
 
 export interface HueRuntimeStatusCardRetry {
   remainingAttempts?: number;
@@ -22,10 +20,10 @@ export interface HueRuntimeStatusCardModel {
 }
 
 export interface HueRuntimeStatusCardInput {
-  status: HueRuntimeStatus | null;
+  status: HueRuntimeStatusView | null;
 }
 
-function resolveVariant(status: HueRuntimeStatus): HueRuntimeStatusCardModel["variant"] {
+function resolveVariant(status: HueRuntimeStatusView): HueRuntimeStatusCardModel["variant"] {
   if (status.state === "Running") {
     return "success";
   }
@@ -83,7 +81,7 @@ export function deriveFamilyActionHints(code: string | null | undefined): HueRun
   return [];
 }
 
-function resolveActionHints(status: HueRuntimeStatus): HueRuntimeActionHint[] {
+function resolveActionHints(status: HueRuntimeStatusView): HueRuntimeActionHint[] {
   if (status.actionHint) {
     return [status.actionHint];
   }

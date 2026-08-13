@@ -5,7 +5,7 @@ import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 import { shellStore } from "../../persistence/shellStore";
 import {
   getHueAreaChannels,
-  type CommandStatus,
+  type HueOnboardingCommandStatus,
   type HueAreaChannelInfo,
   type HueBridgeSummary,
   type HuePairingCredentials,
@@ -24,7 +24,7 @@ export function useHueAreaChannels(
   credentials: HuePairingCredentials | null,
   selectedAreaId: string | null,
   /** Invoked when the channel fetch is rejected specifically by a bridge 403. */
-  onAuthInvalid?: (status: CommandStatus) => void,
+  onAuthInvalid?: (status: HueOnboardingCommandStatus) => void,
 ): UseHueAreaChannelsResult {
   const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);

@@ -1,5 +1,5 @@
-import type { HueCredentialStatus, HueRuntimeStatus } from "@/shared/contracts/hue";
-import type { CommandStatus } from "../hueOnboardingApi";
+import type { HueCredentialStatus } from "@/shared/contracts/hue";
+import type { HueOnboardingStatus, HueRuntimeStatusView } from "./onboardingStatusCodes";
 
 export type HueBridgeCardState =
   | "stopPartial"
@@ -17,8 +17,8 @@ export type HueBridgeCardState =
 
 export interface HueBridgeCardStateInput {
   selectedBridgeId: string | null;
-  runtimeStatus: HueRuntimeStatus | null;
-  hueStatus: CommandStatus | null;
+  runtimeStatus: HueRuntimeStatusView | null;
+  hueStatus: HueOnboardingStatus | null;
   credentialState: HueCredentialStatus;
   bridgeUnreachable: boolean;
   isPairing: boolean;

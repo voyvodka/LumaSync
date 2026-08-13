@@ -22,7 +22,7 @@ describe("Hue credential backend wire contract", () => {
   it("accepts an absent backend on the pairing response", () => {
     const backend: HueCredentialBackend | undefined = undefined;
     const response: HuePairBridgeResponse = {
-      status: { code: "HUE_PAIRING_OK", message: "Paired." },
+      status: { code: "HUE_PAIRING_OK", message: "Paired.", details: null },
       credentials: { username: "app-key", clientKey: "psk" },
       credentialStorageBackend: backend,
     };
@@ -38,7 +38,7 @@ describe("Hue credential backend wire contract", () => {
 
     for (const backend of backends) {
       const response: HuePairBridgeResponse = {
-        status: { code: "HUE_PAIRING_OK", message: "Paired." },
+        status: { code: "HUE_PAIRING_OK", message: "Paired.", details: null },
         credentials: null,
         credentialStorageBackend: backend,
       };

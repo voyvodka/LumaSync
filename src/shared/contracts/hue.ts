@@ -7,7 +7,9 @@ import {
   LIGHTING_SMOOTHING_PRESET_COEFFICIENTS,
   type LightingSmoothingPreset,
 } from "./lighting";
+import type { CommandStatusOf } from "./status";
 import {
+  CHANNEL_WRITEBACK_STATUS,
   HUE_ZONE_COMMANDS as ROOM_MAP_HUE_ZONE_COMMANDS,
   HUE_ZONE_STATUS_CODES as ROOM_MAP_HUE_ZONE_STATUS_CODES,
   type HueZone as RoomMapHueZone,
@@ -203,14 +205,9 @@ export const HUE_ONBOARDING_STEP = {
 export type HueOnboardingStep =
   (typeof HUE_ONBOARDING_STEP)[keyof typeof HUE_ONBOARDING_STEP];
 
-/** Coded result shape shared by every Hue command — never throws, always returns this. */
-export interface HueCommandStatus {
-  code: HueStatusCode | string;
-  message: string;
-  /** `null` on the wire (Rust `Option<String>`, no `skip_serializing_if`);
-   * also optional because the type is constructed frontend-side too. */
-  details?: string | null;
-}
+/** Status of the two Hue commands that answer in `HUE_STATUS` terms —
+ * `pair_hue_bridge` and `migrate_hue_credentials`. Never throws. */
+export type HueCommandStatus = CommandStatusOf<HueStatusCode>;
 
 export const HUE_RUNTIME_STATES = {
   IDLE: "Idle",
@@ -286,6 +283,19 @@ export const HUE_RUNTIME_STATUS = {
 export type HueRuntimeStatusCode =
   (typeof HUE_RUNTIME_STATUS)[keyof typeof HUE_RUNTIME_STATUS];
 
+/** Exactly what `state_store.rs::status_with` puts on `HueRuntimeStatus.code`.
+ * The three excluded members do have producers, but on *other* status shapes:
+ * the two `CHANNEL_POSITIONS_*` on the writeback status, `AUTH_INVALID_RE_PAIR_REQUIRED`
+ * on the onboarding one. Solid-colour codes share this shape via `set_hue_solid_color`. */
+export type HueRuntimeWireStatusCode =
+  | Exclude<
+      HueRuntimeStatusCode,
+      | typeof HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED
+      | typeof HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED
+      | typeof HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_FAILED
+    >
+  | HueSolidColorStatusCode;
+
 /**
  * Sentinel inside `HueStreamReadiness.reasons`, which otherwise holds English
  * prose — compare against it, never display it. Not a `status.code`.
@@ -310,6 +320,24 @@ export const HUE_SOLID_COLOR_STATUS = {
 
 export type HueSolidColorStatusCode =
   (typeof HUE_SOLID_COLOR_STATUS)[keyof typeof HUE_SOLID_COLOR_STATUS];
+
+/** Exactly what `hue_onboarding.rs` puts on a discovery / verify / validate /
+ * area-list / readiness `status`. The re-pair code is the one member it borrows
+ * from the runtime family. */
+export type HueOnboardingWireStatusCode =
+  | HueStatusCode
+  | typeof HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
+
+export type HueOnboardingCommandStatus = CommandStatusOf<HueOnboardingWireStatusCode>;
+
+/** Exactly what `room_map/save_load.rs` puts on `update_hue_channel_positions`. */
+export type HueChannelWritebackStatusCode =
+  | (typeof CHANNEL_WRITEBACK_STATUS)[keyof typeof CHANNEL_WRITEBACK_STATUS]
+  | typeof HUE_STATUS.IP_INVALID
+  | typeof HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED
+  | typeof HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED;
+
+export type HueChannelWritebackStatus = CommandStatusOf<HueChannelWritebackStatusCode>;
 
 /**
  * True when the bridge did NOT receive the colour — the picker swatch and the
@@ -452,7 +480,7 @@ export interface HueRuntimeTargetTelemetryRow {
   actionHint?: HueRuntimeActionHint | null;
 }
 
-export interface HueRuntimeStatus extends HueCommandStatus {
+export interface HueRuntimeStatus extends CommandStatusOf<HueRuntimeWireStatusCode> {
   state: HueRuntimeState;
   triggerSource: HueRuntimeTriggerSource;
   remainingAttempts?: number | null;

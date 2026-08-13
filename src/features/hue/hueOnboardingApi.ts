@@ -3,15 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
 import type {
   HueCredentialMigrationResponse,
+  HueOnboardingCommandStatus,
   HuePairBridgeResponse,
 } from "@/shared/contracts/hue";
 
-/** Coded result shape shared by the Hue onboarding commands — never throws, always returns this. */
-export interface CommandStatus {
-  code: string;
-  message: string;
-  details: string | null;
-}
+export type { HueOnboardingCommandStatus };
 
 /** One bridge returned by discovery, before pairing. */
 export interface HueBridgeSummary {
@@ -24,13 +20,13 @@ export interface HueBridgeSummary {
 
 /** Result of `discoverHueBridges` — bridges found via cloud + mDNS, deduped by id. */
 export interface HueDiscoveryResponse {
-  status: CommandStatus;
+  status: HueOnboardingCommandStatus;
   bridges: HueBridgeSummary[];
 }
 
 /** Result of `verifyHueBridgeIp` — the bridge at that address, if the format and reachability check pass. */
 export interface HueVerifyBridgeIpResponse {
-  status: CommandStatus;
+  status: HueOnboardingCommandStatus;
   bridge: HueBridgeSummary | null;
 }
 
@@ -46,7 +42,7 @@ export type {
 
 /** Result of `validateHueCredentials` — whether the stored username/clientKey still authenticate. */
 export interface HueValidateCredentialsResponse {
-  status: CommandStatus;
+  status: HueOnboardingCommandStatus;
   valid: boolean;
 }
 
@@ -59,7 +55,7 @@ export interface HueEntertainmentAreaSummary {
 }
 
 export interface HueEntertainmentAreaListResponse {
-  status: CommandStatus;
+  status: HueOnboardingCommandStatus;
   areas: HueEntertainmentAreaSummary[];
 }
 
@@ -70,7 +66,7 @@ export interface HueStreamReadiness {
 }
 
 export interface HueStreamReadinessResponse {
-  status: CommandStatus;
+  status: HueOnboardingCommandStatus;
   readiness: HueStreamReadiness;
 }
 
