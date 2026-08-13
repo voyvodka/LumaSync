@@ -257,7 +257,7 @@ jobs:
             --log-file "$HOME/.local/share/com.lumasync.app/logs/lumasync.log" \
             --hard-kill
 
-      # Windows has no launch smoke step — see #181 and #197.
+      # Windows has no launch smoke step — see #181.
 
   publish:
     name: Publish release
