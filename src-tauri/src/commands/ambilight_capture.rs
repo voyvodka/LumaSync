@@ -1,6 +1,8 @@
-/// Longest capture edge after downscale. Every platform path reads this one
-/// copy — a per-path duplicate drifts silently.
+/// Longest capture edge after downscale, shared by the Windows and macOS
+/// paths — a per-path duplicate drifts silently. The Linux path does not
+/// downscale at all, which is why this is not `cfg`-free.
 /// See docs/architecture/capture-and-pipeline.md.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 const MAX_CAPTURE_DIM: u32 = 640;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
