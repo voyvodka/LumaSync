@@ -1,6 +1,6 @@
 import { useCallback, useRef, type RefObject } from "react";
 
-import { setLightingMode } from "../modeApi";
+import { setLightingMode, type ModeCommandResult } from "../modeApi";
 import type { LightingModeConfig } from "../model/contracts";
 import { canonicalLightingModeSignature } from "./modePayloadHydration";
 
@@ -17,10 +17,12 @@ import { canonicalLightingModeSignature } from "./modePayloadHydration";
  */
 const SET_LIGHTING_MODE_MIN_INTERVAL_MS = 20;
 
+/** `null` means deduped or cooled down, never asked. A failed ambilight start
+ *  arrives as a resolved `Ok` status, so discarding this return loses it. */
 export type LightingModeDispatcher = (
   mode: LightingModeConfig,
   opts?: { force?: boolean },
-) => Promise<void>;
+) => Promise<ModeCommandResult | null>;
 
 export interface LightingModeDispatch {
   dispatch: LightingModeDispatcher;
@@ -68,13 +70,13 @@ export function useLightingModeDispatch(
       if (!opts.force) {
         // Layer 1 — content dedup. Identical semantic payload? Skip.
         if (lastSentPayloadSignatureRef.current === signature) {
-          return;
+          return null;
         }
         // Layer 2 — temporal cooldown, the backstop against an untraced spam
         // source. Costs nothing legitimate: drags commit at 20 Hz upstream.
         const now = Date.now();
         if (now - lastSetLightingModeAtRef.current < SET_LIGHTING_MODE_MIN_INTERVAL_MS) {
-          return;
+          return null;
         }
         lastSetLightingModeAtRef.current = now;
       } else {
@@ -83,7 +85,7 @@ export function useLightingModeDispatch(
         lastSetLightingModeAtRef.current = Date.now();
       }
       lastSentPayloadSignatureRef.current = signature;
-      await setLightingMode(hydrated);
+      return await setLightingMode(hydrated);
     },
     [hydrate],
   );

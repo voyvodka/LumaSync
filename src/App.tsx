@@ -422,6 +422,7 @@ function App() {
         usbDisconnected={usbDisconnectNotice}
         usbUnsupported={usbUnsupportedNotice}
         stopFailedTargets={mode.stopFailedNotice}
+        startFailure={mode.startFailedNotice}
         hueColorNotice={hueColorNotice}
       />
     </>

@@ -4,7 +4,9 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { isHueStartCodeOk, isHueStopCodeOk, toHueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { loadShellState, saveShellState } from "@/features/shell/windowLifecycle";
+import { describeCaptureFailure, type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
+import { LIGHTING_MODE_STATUS } from "@/shared/contracts/lighting";
 
 import { setHueSolidColor, startHue, stopHue, stopLighting } from "../modeApi";
 import {
@@ -27,6 +29,9 @@ import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
 /** How long the "stop failed for these targets" toast stays up. */
 const STOP_FAILED_NOTICE_MS = 5_000;
 
+/** Longer than the stop toast: this one asks the user to go change a setting. */
+const START_FAILED_NOTICE_MS = 8_000;
+
 export interface LightingModeOrchestratorInput {
   runtimeConfig: ModeRuntimeConfig;
   savedCalibration: LedCalibrationConfig | undefined;
@@ -43,6 +48,7 @@ export interface LightingModeOrchestrator {
   activeOutputTargets: HueRuntimeTarget[];
   isModeTransitioning: boolean;
   stopFailedNotice: HueRuntimeTarget[] | null;
+  startFailedNotice: CaptureFailureNotice | null;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
@@ -81,6 +87,10 @@ export function useLightingModeOrchestrator({
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
   const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
+  // Raised only from the slow path below, which nothing but a user gesture
+  // reaches — bootstrap restore calls `modeApi.setLightingMode` directly, so a
+  // launch against an unplugged display must not toast.
+  const [startFailedNotice, setStartFailedNotice] = useState<CaptureFailureNotice | null>(null);
 
   const modeTransitionLockRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
@@ -245,6 +255,12 @@ export function useLightingModeOrchestrator({
     const timerId = window.setTimeout(() => setStopFailedNotice(null), STOP_FAILED_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [stopFailedNotice]);
+
+  useEffect(() => {
+    if (!startFailedNotice) return;
+    const timerId = window.setTimeout(() => setStartFailedNotice(null), START_FAILED_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [startFailedNotice]);
 
   const handleLightingModeChange = useCallback(
     async (nextMode: LightingModeConfig) => {
@@ -449,7 +465,13 @@ export function useLightingModeOrchestrator({
 
         if (needsLightingModeApply) {
           try {
-            await dispatchSetLightingMode(normalizedNextMode, { force: true });
+            const applyResult = await dispatchSetLightingMode(normalizedNextMode, { force: true });
+            // A failed capture start resolves as `Ok` carrying a status, so it
+            // lands here rather than in the catch below. The reason is free text
+            // in `details`; `describeCaptureFailure` is the only thing that reads it.
+            if (applyResult?.status?.code === LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED) {
+              setStartFailedNotice(describeCaptureFailure(applyResult.status.details));
+            }
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: true };
             }
@@ -530,6 +552,7 @@ export function useLightingModeOrchestrator({
     activeOutputTargets,
     isModeTransitioning,
     stopFailedNotice,
+    startFailedNotice,
     handleLightingModeChange,
     handleOutputTargetsChange,
     dispatch: dispatchSetLightingMode,

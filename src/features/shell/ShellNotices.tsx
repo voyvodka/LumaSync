@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
 
+import { type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 
 export interface ShellNoticesProps {
   usbDisconnected: boolean;
   usbUnsupported: boolean;
   stopFailedTargets: HueRuntimeTarget[] | null;
+  startFailure: CaptureFailureNotice | null;
   hueColorNotice: HueSolidColorStatusCode | null;
 }
 
@@ -17,6 +19,7 @@ export function ShellNotices({
   usbDisconnected,
   usbUnsupported,
   stopFailedTargets,
+  startFailure,
   hueColorNotice,
 }: ShellNoticesProps) {
   const { t } = useTranslation();
@@ -75,6 +78,25 @@ export function ShellNotices({
                 .map((target) => t(`common:hotplug.targetLabel.${target}` as const))
                 .join(", "),
             })}
+          </span>
+        </div>
+      )}
+      {startFailure && (
+        <div
+          data-testid="capture-start-failed-notice"
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-red, #f87171)",
+            color: "var(--lm-ink)",
+            transform: usbDisconnected || stopFailed ? "translateY(-3.5rem)" : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
+            {t(`common:captureFailed.${startFailure.bucket}` as const, { reason: startFailure.reason })}
           </span>
         </div>
       )}
