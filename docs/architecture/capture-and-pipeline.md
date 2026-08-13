@@ -10,19 +10,21 @@ Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mo
 **Capture is per-platform and native.** ScreenCaptureKit on macOS, Windows Graphics Capture on
 Windows, X11 on Linux. Wayland is not supported and needs `xdg-desktop-portal` before it can be.
 
-**Frames are downscaled before analysis — on macOS and Windows.** `MAX_CAPTURE_DIM` in
+**Frames are downscaled before analysis on all three platforms.** `MAX_CAPTURE_DIM` in
 `ambilight_capture.rs` caps the working dimension at 640. Full-resolution analysis buys nothing for
 an output that is at most a few hundred LEDs, and it is the difference between comfortable and
 impossible inside the frame budget.
 
-**The Linux path does not downscale.** It hands the full `xcap` frame to analysis, so a 4K X11
-display iterates roughly thirty times the pixels its macOS equivalent does. That is a gap, not a
-decision — Linux capture has had far less mileage than the other two.
+Only macOS gets it for free: ScreenCaptureKit is asked for the smaller frame, so the reduction
+happens on the GPU before the buffer is handed over. Windows and Linux both receive a whole native
+frame — `windows-capture` 2.0 and `xcap` 0.9 each expose no equivalent of the `output_size` hint —
+and reduce it CPU-side through the shared `downscale_stride` / `subsample_rgb` pair. That is a
+nearest-neighbour scaffold, not the design, and keeping one implementation for both is what stops
+the two paths drifting apart.
 
-On Windows the downscale is CPU-side, not GPU-side. `windows-capture` 2.0 exposes no equivalent of
-ScreenCaptureKit's `output_size` hint, so a 4K capture arrives whole at ~33 MB/frame and gets
-nearest-neighbour strided down on the CPU — a scaffold, not the design. Native 1080p is stride-1, a
-no-op, so the common case pays nothing for it.
+The stride is `longest_edge / 640` clamped to 1, so the cap is approximate rather than exact: a
+1280-wide display strides by 2 down to 640, but a 1279-wide one strides by 1 and passes through
+whole. Displays under 640 are a true no-op.
 
 **`macos-private-api` is enabled**, for fullscreen calibration overlays across all displays. It is
 two private KVC keys (`drawsBackground`, `fullScreenEnabled`), not linked private symbols.
