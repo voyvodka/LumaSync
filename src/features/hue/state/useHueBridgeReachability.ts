@@ -8,19 +8,9 @@ import type { HueStartConfig } from "../model/hueStartConfig";
 /** Interval for checking bridge reachability when configured but stream is not active. */
 const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 
-// ---------------------------------------------------------------------------
-// Bridge reachability poll: validate credentials every 30 s when hue is
-// configured but stream is NOT active. Updates hueReachable so the chip
-// accurately reflects whether the bridge is currently on the same network.
-// While hue is streaming we skip polling — the active stream is proof enough.
-//
-// Visibility-aware (recursive setTimeout, not setInterval): the tray
-// window can be hidden indefinitely with the React tree mounted, so
-// unconditional 30 s ticks would keep firing HTTPS Bridge requests
-// nobody can see. The loop pauses while hidden and resumes with an
-// immediate first tick on `visibilitychange` so the chip refreshes
-// instantly when the user re-opens the window.
-// ---------------------------------------------------------------------------
+// Validates credentials every 30 s while Hue is configured but not streaming —
+// an active stream is proof enough on its own. Visibility-aware, per the
+// convention in docs/architecture/ui-and-shell.md.
 export function useHueBridgeReachability(
   hueStartConfig: HueStartConfig | null,
   hueStreaming: boolean,

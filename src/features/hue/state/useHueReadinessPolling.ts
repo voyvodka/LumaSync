@@ -18,19 +18,9 @@ export interface UseHueReadinessPollingInput {
   onResult: (areaId: string, response: Awaited<ReturnType<typeof checkHueStreamReadiness>>) => void;
 }
 
-// Background readiness refresh.
-//
-// Two cadences share one effect:
-//   * 15 s while the selected area is healthy (default polish cadence)
-//   * 3 s while the area is blocked by a foreign active streamer, so
-//     the active-streamer banner clears within ~3 s of the foreign
-//     session disconnecting (A3.1 — previously the banner stayed
-//     stuck until the user clicked revalidate).
-//
-// Visibility-aware: the loop pauses while `document.visibilityState`
-// is `hidden` (tray window collapsed / minimised) and re-arms with an
-// immediate tick on `visibilitychange`, mirroring the runtime-status
-// loop and `useRuntimeTelemetry`.
+// Two cadences in one effect: 15 s when the area is healthy, 3 s while a foreign
+// active streamer blocks it — the fast one is what clears the banner without the
+// user pressing revalidate. Visibility-aware; see docs/architecture/ui-and-shell.md.
 export function useHueReadinessPolling({
   bridge,
   credentials,
