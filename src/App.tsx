@@ -115,6 +115,8 @@ const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 /** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
 const USB_DISCONNECT_NOTICE_MS = 5_000;
+/** How long the "stop failed for these targets" toast stays up. */
+const STOP_FAILED_NOTICE_MS = 5_000;
 /**
  * Marks that first-connect calibration has already been auto-opened. Session-scoped
  * so a WebView reload does not drop the user back into the editor unprompted.
@@ -1430,7 +1432,6 @@ function App() {
     }
     if (failedToStop.length > 0) {
       setStopFailedNotice(failedToStop);
-      window.setTimeout(() => setStopFailedNotice(null), 5_000);
     }
 
     // Delta-start: for each added target, start the current mode on it
@@ -1542,6 +1543,15 @@ function App() {
     const timerId = window.setTimeout(() => setUsbDisconnectNotice(false), USB_DISCONNECT_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [usbDisconnectNotice]);
+
+  // Same shape as the notice above. The dismissal used to be an untracked
+  // `window.setTimeout` inside the delta-stop path, so nothing cleared it on
+  // unmount and a second failure left two timers racing the same setter.
+  useEffect(() => {
+    if (!stopFailedNotice) return;
+    const timerId = window.setTimeout(() => setStopFailedNotice(null), STOP_FAILED_NOTICE_MS);
+    return () => window.clearTimeout(timerId);
+  }, [stopFailedNotice]);
 
   // ---------------------------------------------------------------------------
   // Bug 10D — boot-time USB unsupported / missing fallback
@@ -2223,6 +2233,7 @@ function App() {
       )}
       {stopFailedNotice && stopFailedNotice.length > 0 && (
         <div
+          data-testid="stop-failed-notice"
           className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"

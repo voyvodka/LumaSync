@@ -771,6 +771,49 @@ describe("App mode orchestration", () => {
     });
   });
 
+  it("auto-dismisses the stop-failed toast after a delta-stop rejection", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    loadShellStateMock.mockResolvedValue({
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: { kind: "solid", solid: { r: 10, g: 20, b: 30, brightness: 0.8 } },
+      lastOutputTargets: ["usb", "hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+    // The delta-stop path retains a target whose stop rejected, and surfaces
+    // the toast. Before the timer got its own effect nothing ever cleared it.
+    stopLightingMock.mockRejectedValue(new Error("port gone"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("solid");
+      });
+
+      await act(async () => {
+        screen.getByRole("button", { name: "set-hue-target" }).click();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("stop-failed-notice")).toBeInTheDocument();
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+
+      expect(screen.queryByTestId("stop-failed-notice")).not.toBeInTheDocument();
+    } finally {
+      errorSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("handleOutputTargetsChange no delta when mode is OFF", async () => {
     loadShellStateMock.mockResolvedValue({
       lastSection: "general",
