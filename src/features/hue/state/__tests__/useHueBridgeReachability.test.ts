@@ -30,7 +30,7 @@ describe("useHueBridgeReachability (INV-30)", () => {
   it("does not poll without a paired bridge", () => {
     const { result } = renderHook(() => useHueBridgeReachability(null, false));
     expect(validateHueCredentialsMock).not.toHaveBeenCalled();
-    expect(result.current).toBe(false);
+    expect(result.current.reachable).toBe(false);
   });
 
   it("does not poll while the stream is live — the stream is its own proof", () => {
@@ -40,7 +40,7 @@ describe("useHueBridgeReachability (INV-30)", () => {
 
   it("ticks immediately on mount and reports a valid credential as reachable", async () => {
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
-    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(result.current.reachable).toBe(true));
     expect(validateHueCredentialsMock).toHaveBeenCalledWith(
       "192.168.1.10",
       "app-user",
@@ -52,14 +52,14 @@ describe("useHueBridgeReachability (INV-30)", () => {
     validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_INVALID" } });
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
     await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalled());
-    expect(result.current).toBe(false);
+    expect(result.current.reachable).toBe(false);
   });
 
   it("reports unreachable when the probe rejects", async () => {
     validateHueCredentialsMock.mockRejectedValue(new Error("network down"));
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
     await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalled());
-    expect(result.current).toBe(false);
+    expect(result.current.reachable).toBe(false);
   });
 
   it("skips the mount tick while the window is hidden and catches up when it returns", async () => {

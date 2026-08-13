@@ -621,6 +621,12 @@
   margin-top: 2px;
   line-height: 1.35;
 }
+.lm-compact-offline-actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .lm-compact-offline-action {
   flex-shrink: 0;
   border: 1px solid rgba(255, 176, 32, 0.4);
@@ -635,6 +641,10 @@
   cursor: pointer;
   font-weight: 500;
   min-height: 32px;
+}
+.lm-compact-offline-action.is-ghost {
+  background: transparent;
+  border-color: rgba(255, 176, 32, 0.25);
 }
 .lm-compact-offline-action:hover {
   background: rgba(255, 176, 32, 0.18);

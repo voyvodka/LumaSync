@@ -22,6 +22,8 @@ const common: Catalogue<typeof enCommon> = {
       title: "Ulaşılabilir çıkış yok",
       body: "Aydınlatma modlarını etkinleştirmek için bir USB LED şerit bağla veya Hue köprüsünü eşleştir.",
       action: "Cihazları aç",
+      stoppedBody: "LumaSync Hue köprüsünü kontrol etmeyi bıraktı — bu ağda yanıt vermedi.",
+      retry: "Yeniden dene",
     },
   },
   mode: {

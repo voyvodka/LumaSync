@@ -9,6 +9,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- LumaSync stops looking for a Hue bridge that is not answering, and says so. On a different Wi-Fi network from the paired bridge, the app kept probing it silently for the whole session with nothing on screen to explain the permanent "no reachable output" state. It now gives up after a minute and a half of unbroken failure and offers a "check again" button; a brief drop on the right network still recovers on its own, because a single success clears the count.
 - The wide window no longer offers Ambilight, Solid and the scene tiles when nothing is connected. Picking one started a mode with nowhere to send frames; the compact window had guarded this all along. The wide window now dims those controls, explains that no output is reachable, and offers a shortcut into Devices — while Off stays available, as always.
 - The room map opens with the room framed and centred in the canvas. It measured the canvas only on the very first render, which happens while the saved map is still loading and the canvas does not exist yet, so the measurement never arrived and every visit started at default zoom in the top-left corner.
 - LED test patterns now run with the output settings the rest of the app uses. They ignored the configured chip type, firmware profile, and colour correction entirely, so an SK6812 RGBW strip was driven through the WS2812B encoder and an Adalight controller through the LumaSync v1 header — the test lit nothing, or the wrong colours, on exactly the hardware it exists to verify.

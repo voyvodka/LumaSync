@@ -1,6 +1,8 @@
 import type { HueRuntimeStatus } from "@/shared/contracts/hue";
 
 export const READINESS_STALE_MS = 30_000;
+/** Bridge-reachability probe cadence while Hue is configured but not streaming. */
+export const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 export const READINESS_BACKGROUND_REFRESH_MS = 15_000;
 // Tighter cadence used while the selected area is blocked by another
 // active streamer. The user is actively waiting for the foreign session
