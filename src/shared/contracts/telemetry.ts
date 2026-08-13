@@ -41,6 +41,24 @@ export interface RuntimeTelemetrySnapshot {
    * {@link LINK_MAX_FPS_ABSENT} means absent — render it as such, never `0 fps`.
    */
   linkMaxFps: number;
+  /** `AmbilightCaptureReason` of the worker's last failed frame, sticky for its
+   *  lifetime. A *start* failure rides `AMBILIGHT_MODE_START_FAILED` instead. */
+  lastCaptureErrorCode: string | null;
+  /** Its age in seconds; every new failure resets it, so a value under
+   *  {@link CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS} means capture is failing *now*. */
+  lastCaptureErrorAtSecs: number | null;
+}
+
+/** Two telemetry windows plus slack — one window can elapse before a fresh
+ *  failure is flushed, so a one-window threshold would flicker. */
+export const CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS = 3;
+
+/** Whether the worker is failing to capture *right now*, as opposed to having
+ *  failed at some point earlier in this worker's life. */
+export function isCaptureFailingNow(snapshot: RuntimeTelemetrySnapshot): boolean {
+  if (snapshot.lastCaptureErrorCode === null) return false;
+  const age = snapshot.lastCaptureErrorAtSecs;
+  return age !== null && age <= CAPTURE_FAILURE_ONGOING_MAX_AGE_SECS;
 }
 
 /** Per-frame Hue entertainment stream health snapshot, sampled for the telemetry HUD. */

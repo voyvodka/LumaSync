@@ -107,6 +107,10 @@ const common: Catalogue<typeof enCommon> = {
     output: "Kullanılabilir LED çıkış portu yok.",
     internal: "Ekran yakalama başarısız ({{reason}}).",
   },
+  captureStalled: {
+    display: "Ekran yakalama durdu — ekran kayboldu. LED Kurulumu'ndan başka birini seçin.",
+    generic: "Ekran yakalama kare göndermeyi durdurdu ({{reason}}).",
+  },
   captureAction: {
     openSettings: "Sistem Ayarları'nı aç",
   },

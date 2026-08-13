@@ -18,6 +18,7 @@ function renderNotices(overrides: Partial<ShellNoticesProps> = {}) {
       usbUnsupported={false}
       stopFailedTargets={null}
       startFailure={null}
+      captureStalled={null}
       hueColorNotice={null}
       onOpenCaptureSettings={onOpenCaptureSettings}
       {...overrides}
@@ -37,6 +38,35 @@ describe("ShellNotices", () => {
 
     await userEvent.click(screen.getByTestId("capture-permission-settings-button"));
     expect(onOpenCaptureSettings).toHaveBeenCalledOnce();
+  });
+
+  it("renders the mid-stream stall notice on its own", () => {
+    renderNotices({
+      captureStalled: {
+        bucket: CAPTURE_FAILURE_BUCKET.DISPLAY,
+        reason: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+      },
+    });
+
+    expect(screen.getByTestId("capture-stalled-notice")).toBeTruthy();
+  });
+
+  it("suppresses the stall notice while a start failure is up", () => {
+    // A failed start means no worker exists, so a stall toast beside it would
+    // be describing a worker that never ran.
+    renderNotices({
+      startFailure: {
+        bucket: CAPTURE_FAILURE_BUCKET.TRANSIENT,
+        reason: "AMBILIGHT_CAPTURE_SESSION_START_FAILED",
+      },
+      captureStalled: {
+        bucket: CAPTURE_FAILURE_BUCKET.DISPLAY,
+        reason: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+      },
+    });
+
+    expect(screen.getByTestId("capture-start-failed-notice")).toBeTruthy();
+    expect(screen.queryByTestId("capture-stalled-notice")).toBeNull();
   });
 
   it.each([

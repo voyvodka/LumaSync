@@ -1578,6 +1578,10 @@ fn start_ambilight_worker(
                 if capture_fail_count <= 5 || capture_fail_count.is_multiple_of(50) {
                     warn!("[ambilight-worker] capture failed #{capture_fail_count}: {e}");
                 }
+                // The success branch owns the only other flush, so without this
+                // one a sustained outage freezes telemetry at the last good frame.
+                telemetry_window.record_capture_error(e, Instant::now());
+                let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
             }
             if let Ok((raw_frame, mut sampled)) = capture_result {
                 // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
@@ -3931,6 +3935,46 @@ mod lighting_mode_tests {
         Arc::new(Mutex::new(RuntimeTelemetrySnapshot::default()))
     }
 
+    /// Warms up once, then fails forever — the display-unplugged-mid-stream
+    /// shape. The first frame must succeed or `start_ambilight_worker` never
+    /// gets past its warm-up retry loop and no worker exists to observe.
+    struct FailsAfterFirstFrameSource {
+        frame: CapturedFrame,
+        served: std::sync::atomic::AtomicBool,
+    }
+
+    impl AmbilightFrameSource for FailsAfterFirstFrameSource {
+        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+            if self.served.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                return Err(AmbilightCaptureError::InvalidFrame(
+                    "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+                ));
+            }
+            Ok(Arc::new(self.frame.clone()))
+        }
+    }
+
+    fn owner_that_fails_after_first_frame() -> LightingRuntimeOwner {
+        LightingRuntimeOwner {
+            active_mode: LightingModeConfig::default(),
+            active_port: None,
+            worker: None,
+            ambilight_live: None,
+            output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
+            preview: Default::default(),
+            frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
+                Ok(Box::new(FailsAfterFirstFrameSource {
+                    frame: CapturedFrame {
+                        width: 2,
+                        height: 2,
+                        pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [100, 110, 120]],
+                    },
+                    served: std::sync::atomic::AtomicBool::new(false),
+                }))
+            }),
+        }
+    }
+
     /// Serialise a worker-touching test against the process-global
     /// `ACTIVE_AMBILIGHT_WORKERS` counter, sharing the SAME lock as the sibling
     /// `tests` module. Hold the returned guard for the whole test body.
@@ -4375,6 +4419,56 @@ mod lighting_mode_tests {
             firmware_profile: None,
             chip_type: None,
         }
+    }
+
+    #[test]
+    fn a_worker_failing_mid_stream_reaches_telemetry() {
+        // The start already returned AMBILIGHT_MODE_STARTED, so a status code
+        // can never carry this — and the only other flush lives on the success
+        // branch, which a failing worker never takes.
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_that_fails_after_first_frame();
+        let telemetry = shared_telemetry();
+
+        let started = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 1.0,
+                ..Default::default()
+            }),
+            true,
+            Some("COM-MIDFAIL"),
+            None,
+            None,
+            Some(Arc::clone(&telemetry)),
+            None,
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+
+        // One TELEMETRY_WINDOW must elapse before the failure path flushes, and
+        // the first flushed window still counts the warm-up frame — the frozen
+        // capture_fps only falls to zero on the window after that.
+        let mut observed = None;
+        for _ in 0..60 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snapshot = telemetry.lock().expect("telemetry lock").clone();
+            if snapshot.last_capture_error_code.is_some() && snapshot.capture_fps == 0.0 {
+                observed = Some(snapshot);
+                break;
+            }
+        }
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
+
+        let snapshot = observed.expect("a mid-stream capture failure must reach telemetry");
+        assert_eq!(
+            snapshot.last_capture_error_code.as_deref(),
+            Some("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
+        );
+        assert_eq!(snapshot.last_capture_error_at_secs, Some(0));
     }
 
     #[test]

@@ -41,6 +41,15 @@ pub struct RuntimeTelemetrySnapshot {
     /// **0.0 means "no serial link in play"** (Hue-only, or before the first
     /// worker start), NOT "zero fps" — render it as absent, never as `0 fps`.
     pub link_max_fps: f32,
+    /// Reason of the worker's most recent failed `capture_frame()`, sticky for
+    /// the worker's lifetime. A start failure never lands here — it is
+    /// `AMBILIGHT_MODE_START_FAILED`'s `details` and the worker never began.
+    pub last_capture_error_code: Option<String>,
+    /// Age of that failure in seconds at flush time. Each new failure resets
+    /// it, so a small value means capture is failing *now*; a growing one
+    /// means it recovered. Reading the code without this is how a display
+    /// unplugged an hour ago looks identical to one unplugged a second ago.
+    pub last_capture_error_at_secs: Option<u64>,
 }
 
 impl Default for RuntimeTelemetrySnapshot {
@@ -52,6 +61,8 @@ impl Default for RuntimeTelemetrySnapshot {
             frame_latency_ms: 0.0,
             link_constrained: false,
             link_max_fps: 0.0,
+            last_capture_error_code: None,
+            last_capture_error_at_secs: None,
         }
     }
 }
@@ -212,6 +223,9 @@ pub struct RuntimeTelemetryWindow {
     /// window.
     link_constrained: bool,
     link_max_fps: f32,
+    /// Last capture failure, sticky across flushes like the link budget: a
+    /// counter reset would erase the only evidence of an ongoing outage.
+    last_capture_error: Option<(String, Instant)>,
 }
 
 impl RuntimeTelemetryWindow {
@@ -224,6 +238,7 @@ impl RuntimeTelemetryWindow {
             latest_latency_ms: 0.0,
             link_constrained: false,
             link_max_fps: 0.0,
+            last_capture_error: None,
         }
     }
 
@@ -251,6 +266,16 @@ impl RuntimeTelemetryWindow {
         self.latest_latency_ms = ms.max(0.0);
     }
 
+    /// Stamp a failed `capture_frame()`. A sustained outage calls this every
+    /// loop iteration, so the reason is only cloned when it actually changes;
+    /// the timestamp always moves, because its whole job is to say "still".
+    pub fn record_capture_error(&mut self, reason: &str, now: Instant) {
+        match &mut self.last_capture_error {
+            Some((code, at)) if code == reason => *at = now,
+            slot => *slot = Some((reason.to_string(), now)),
+        }
+    }
+
     /// Publish accumulated counters to `snapshot` and reset the window, but
     /// only once `TELEMETRY_WINDOW` has elapsed since the last flush.
     pub fn flush_if_due(
@@ -270,6 +295,14 @@ impl RuntimeTelemetryWindow {
             self.slot_overwrite_count as f32 / self.capture_count as f32
         };
 
+        let (last_capture_error_code, last_capture_error_at_secs) = match &self.last_capture_error {
+            Some((code, at)) => (
+                Some(code.clone()),
+                Some(now.saturating_duration_since(*at).as_secs()),
+            ),
+            None => (None, None),
+        };
+
         write_runtime_telemetry(
             snapshot,
             RuntimeTelemetrySnapshot {
@@ -279,6 +312,8 @@ impl RuntimeTelemetryWindow {
                 frame_latency_ms: round_two_decimals(self.latest_latency_ms),
                 link_constrained: self.link_constrained,
                 link_max_fps: round_two_decimals(self.link_max_fps),
+                last_capture_error_code,
+                last_capture_error_at_secs,
             },
         )?;
 
@@ -329,6 +364,8 @@ mod tests {
         // A consumer that ignores both link fields must see today's behaviour.
         assert!(!snapshot.link_constrained);
         assert_eq!(snapshot.link_max_fps, 0.0);
+        assert!(snapshot.last_capture_error_code.is_none());
+        assert!(snapshot.last_capture_error_at_secs.is_none());
     }
 
     #[test]
@@ -416,6 +453,110 @@ mod tests {
         assert_eq!(snapshot.send_fps, 30.0);
         assert_eq!(snapshot.queue_health, TelemetryQueueHealth::Healthy);
         assert_eq!(snapshot.frame_latency_ms, 12.35);
+    }
+
+    #[test]
+    fn capture_error_survives_window_resets_and_ages() {
+        // A display unplugged mid-stream keeps failing; the counters reset each
+        // flush, so a per-window field would erase the only evidence of it.
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+
+        window.record_capture_error("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND", base);
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("first flush should succeed");
+        let first = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert_eq!(
+            first.last_capture_error_code.as_deref(),
+            Some("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
+        );
+        assert_eq!(first.last_capture_error_at_secs, Some(1));
+
+        window
+            .flush_if_due(base + Duration::from_secs(9), &metrics)
+            .expect("second flush should succeed");
+        let second = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert_eq!(
+            second.last_capture_error_code.as_deref(),
+            Some("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
+        );
+        // Age grows once the failures stop — that is how a consumer tells a
+        // recovered worker from one still failing right now.
+        assert_eq!(second.last_capture_error_at_secs, Some(9));
+    }
+
+    #[test]
+    fn repeated_identical_failures_keep_the_age_at_zero() {
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+
+        window.record_capture_error("AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE", base);
+        window.record_capture_error(
+            "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE",
+            base + Duration::from_secs(4),
+        );
+        window
+            .flush_if_due(base + Duration::from_secs(4), &metrics)
+            .expect("flush should succeed");
+
+        let snapshot = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert_eq!(snapshot.last_capture_error_at_secs, Some(0));
+    }
+
+    #[test]
+    fn a_new_reason_replaces_the_previous_one() {
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+
+        window.record_capture_error("AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE", base);
+        window.record_capture_error(
+            "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+            base + Duration::from_secs(1),
+        );
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush should succeed");
+
+        let snapshot = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert_eq!(
+            snapshot.last_capture_error_code.as_deref(),
+            Some("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
+        );
+        assert_eq!(snapshot.last_capture_error_at_secs, Some(0));
+    }
+
+    #[test]
+    fn a_healthy_worker_reports_no_capture_error() {
+        let metrics = shared();
+        let base = Instant::now();
+        let mut window = RuntimeTelemetryWindow::new(base);
+        window.record_capture();
+
+        window
+            .flush_if_due(base + Duration::from_secs(1), &metrics)
+            .expect("flush should succeed");
+
+        let snapshot = read_runtime_telemetry(&metrics).expect("snapshot should be readable");
+        assert!(snapshot.last_capture_error_code.is_none());
+        assert!(snapshot.last_capture_error_at_secs.is_none());
+    }
+
+    #[test]
+    fn capture_error_fields_serialize_as_camel_case() {
+        let json = serde_json::to_string(&RuntimeTelemetrySnapshot::default())
+            .expect("snapshot should serialize");
+        assert!(
+            json.contains("\"lastCaptureErrorCode\":null"),
+            "got: {json}"
+        );
+        assert!(
+            json.contains("\"lastCaptureErrorAtSecs\":null"),
+            "got: {json}"
+        );
     }
 
     #[test]

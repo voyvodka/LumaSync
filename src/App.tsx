@@ -16,6 +16,7 @@ import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
 import { useTrayIntegration } from "./features/shell/useTrayIntegration";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { openScreenCaptureSettings } from "./features/mode/captureApi";
+import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStallNotice";
 import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useModeHotReload } from "./features/mode/state/useModeHotReload";
@@ -275,6 +276,10 @@ function App() {
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
+  const captureStalledNotice = useCaptureStallNotice(
+    lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
+  );
+
   // Shared SettingsLayout props — only `uiMode` differs between the
   // outgoing and incoming cross-fade slots.
   const sharedSettingsLayoutProps = {
@@ -424,6 +429,7 @@ function App() {
         usbUnsupported={usbUnsupportedNotice}
         stopFailedTargets={mode.stopFailedNotice}
         startFailure={mode.startFailedNotice}
+        captureStalled={captureStalledNotice}
         hueColorNotice={hueColorNotice}
         onOpenCaptureSettings={() => void openScreenCaptureSettings()}
       />

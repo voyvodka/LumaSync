@@ -8,6 +8,8 @@ export interface ShellNoticesProps {
   usbUnsupported: boolean;
   stopFailedTargets: HueRuntimeTarget[] | null;
   startFailure: CaptureFailureNotice | null;
+  /** Capture died *after* a successful start — a live condition, not an event. */
+  captureStalled: CaptureFailureNotice | null;
   hueColorNotice: HueSolidColorStatusCode | null;
   /** Deep-links the OS permission pane; only the `permission` bucket offers it. */
   onOpenCaptureSettings: () => void;
@@ -22,11 +24,15 @@ export function ShellNotices({
   usbUnsupported,
   stopFailedTargets,
   startFailure,
+  captureStalled,
   hueColorNotice,
   onOpenCaptureSettings,
 }: ShellNoticesProps) {
   const { t } = useTranslation();
   const stopFailed = stopFailedTargets !== null && stopFailedTargets.length > 0;
+  // A start failure means no worker exists, so the two can never co-fire; the
+  // start toast wins to keep that invariant obvious if one ever does.
+  const stalled = startFailure === null ? captureStalled : null;
 
   return (
     <>
@@ -117,6 +123,27 @@ export function ShellNotices({
               {t("common:captureAction.openSettings")}
             </button>
           )}
+        </div>
+      )}
+      {stalled && (
+        <div
+          data-testid="capture-stalled-notice"
+          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          role="status"
+          aria-live="polite"
+          style={{
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-red, #f87171)",
+            color: "var(--lm-ink)",
+            transform: usbDisconnected || stopFailed ? "translateY(-3.5rem)" : undefined,
+          }}
+        >
+          <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
+            {stalled.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY
+              ? t("common:captureStalled.display")
+              : t("common:captureStalled.generic", { reason: stalled.reason })}
+          </span>
         </div>
       )}
       {hueColorNotice && (
