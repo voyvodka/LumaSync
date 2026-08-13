@@ -174,24 +174,15 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
   const [persistError, setPersistError] = useState(false);
   const persistErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Wave 4-I #2 — inline "Add LED strip" form state. Open one form at
-  // a time and remember the last LED count between adds (most users
-  // author identical-length segments back to back). The dropdown lets
-  // the user pick *any* discovered port (not just `connectedPort`), so
-  // the same surface drives single-port pairing AND multi-port multi-
-  // strip authoring. Duplicate `portName` writes are blocked: each
-  // strip slot owns its own port, and the legacy ambiguity between the
-  // top discovered-ports panel and the bottom paired-strips CTA goes
-  // away.
+  // The LED count persists between adds because segments are usually authored at
+  // identical length. The dropdown offers any discovered port, not just the
+  // connected one, so one surface covers pairing and multi-strip authoring.
   const [stripFormOpen, setStripFormOpen] = useState(false);
   const [stripDraftLedCount, setStripDraftLedCount] = useState("60");
   const [stripDraftPortName, setStripDraftPortName] = useState<string | null>(null);
   const [discoverPanelOpen, setDiscoverPanelOpen] = useState(false);
-  // W4-J #2 — paired-strip port editing state. At most one strip card
-  // can be in edit mode at a time; the dropdown reuses the same port-
-  // filtering rules as the add-strip form (any discovered port that
-  // is unpaired, plus the strip's *own* current port so the user can
-  // safely cancel without flipping the slot off the dropdown).
+  // One card in edit mode at a time. The dropdown includes the strip's own
+  // current port, or cancelling would leave the slot pointing at nothing.
   const [portEditStripId, setPortEditStripId] = useState<string | null>(null);
   const [portEditDraft, setPortEditDraft] = useState<string | null>(null);
 
@@ -219,10 +210,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
   const [activeCategory, setActiveCategory] = useState<DeviceCategory>("usb");
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
 
-  // Wave 4-E — re-hydrate paired strips when this section becomes
-  // visible or the connected port changes. The room-map editor authors
-  // strips on its own surface, so this catches add/remove there
-  // without coupling the two stores.
+  // The room-map editor authors strips on its own surface; re-hydrating here
+  // catches those edits without coupling the two stores.
   useEffect(() => {
     if (activeCategory !== "usb") return;
     let cancelled = false;
@@ -266,18 +255,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     }
   }, []);
 
-  // Wave 4-G #6 — Add a new LED-strip placement bound to the live
-  // connected port. Multiple strips may share the same `portName`
-  // (multi-segment controllers) and each carries its own `stripId`
-  // so the room editor can place / lock / delete them independently.
-  // The default geometry drops the strip at the room centre so the
-  // user can immediately drag the endpoints in the canvas; LED count
-  // comes from the inline form draft.
-  // W4-I #2 — set of port names that already host a paired strip; the
-  // "Add LED strip" dropdown filters these out so the user cannot
-  // author two slots against the same controller. Legacy strips with
-  // no `portName` (pre-W4-G writes) do not occupy a port — they are
-  // fixed up via the canvas when the user assigns a real port.
+  // One strip per controller: these are filtered out of the add dropdown.
+  // Legacy strips with no `portName` occupy nothing and are fixed up from the
+  // canvas when the user assigns a real port.
   const pairedPortNames = new Set(
     pairedStrips.map((s) => s.portName).filter((name): name is string => !!name),
   );
@@ -285,15 +265,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     .map((p) => p.portName)
     .filter((name) => !pairedPortNames.has(name));
 
-  // W4-J #1 — kick off a fresh `list_serial_ports` invoke whenever the
-  // user opens the form. The previous implementation reused the stale
-  // `ports` snapshot from the last manual rescan, which meant a USB
-  // device plugged in *after* the page first rendered never appeared
-  // in the dropdown. Discovery is fire-and-forget so the form opens
-  // immediately; the dropdown re-renders when `useDeviceConnection`
-  // pushes the refreshed port list. Errors are swallowed by the hook
-  // (it logs internally) — we never want a discovery hiccup to block
-  // the strip authoring flow.
+  // Rescan on open, or a device plugged in after first render never shows up.
+  // Fire-and-forget so the form opens immediately; the hook logs its own errors
+  // and a discovery hiccup must not block authoring.
   const handleOpenStripForm = useCallback(() => {
     setStripFormOpen(true);
     // Default the dropdown to the live connected port when it is still
@@ -306,10 +280,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     void refreshPorts();
   }, [connectedPort, availablePortsForPairing, pairedPortNames, refreshPorts]);
 
-  // W4-J #2 — open the port editor for a single strip card. The
-  // dropdown is initialised to the strip's current port so the user
-  // can cancel without losing context; we also fire a fresh
-  // `list_serial_ports` invoke so newly plugged devices show up.
+  // Seeded with the strip's current port so cancelling loses nothing, and
+  // rescans so a newly plugged device is selectable.
   const handleOpenPortEditor = useCallback(
     (stripId: string, currentPort: string | null) => {
       setPortEditStripId(stripId);
@@ -324,11 +296,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
     setPortEditDraft(null);
   }, []);
 
-  // Apply a new portName to a single strip slot. Same shellStore.save
-  // path as `handleAddStrip`; we mutate one element and bump the
-  // version so downstream consumers re-read. Duplicate-port guard is
-  // mandatory — the dropdown filters paired ports out, but a stale
-  // selection (concurrent edit on another tab) still reaches here.
+  // The duplicate-port guard is mandatory even though the dropdown filters
+  // paired ports out: a stale selection from a concurrent edit still lands here.
   const handleSaveStripPort = useCallback(async () => {
     const targetId = portEditStripId;
     const nextPort = portEditDraft;
@@ -705,12 +674,9 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
               </div>
             ) : (
               pairedStrips.map((strip) => {
-                // W4-G #6 — multi-strip aware connection chip. A strip
-                // is `connected` only when its persisted `portName`
-                // matches the live `connectedPort`; legacy strips
-                // without a portName fall back to the W4-E heuristic
-                // (any active port ⇒ connected) so existing maps keep
-                // their badge until the user re-pairs.
+                // Connected means this strip's own port is the live one. Legacy
+                // strips with no `portName` keep the any-active-port heuristic
+                // so existing maps do not lose their badge before a re-pair.
                 const stripStatus: "connected" | "disconnected" =
                   strip.portName
                     ? strip.portName === connectedPort
@@ -721,10 +687,8 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
                       : "disconnected";
                 const portLabel = strip.portName ?? connectedPort ?? t("device:page.usb.paired.noPort");
                 const isEditingPort = portEditStripId === strip.stripId;
-                // Eligible ports for this strip's editor: every unpaired
-                // discovered port PLUS the strip's own current port (so
-                // re-selecting same is a no-op save and cancel keeps a
-                // valid value in the dropdown).
+                // Unpaired ports plus this strip's own, so re-selecting the same
+                // one is a no-op rather than a missing option.
                 const portEditOptions = isEditingPort
                   ? Array.from(new Set([
                       ...(strip.portName ? [strip.portName] : []),

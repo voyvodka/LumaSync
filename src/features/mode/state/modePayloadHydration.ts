@@ -117,10 +117,8 @@ export function withAmbilightSettings(
   const persisted = snapshot.savedAmbilight;
   if (!persisted) return mode;
   const incoming = mode.ambilight;
-  // Caller-wins: anything that looks like an explicit user
-  // commit (non-default saturation / blackBorderDetection /
-  // smoothing preset) is kept. We only stamp when the caller's
-  // payload is absent or carries a fresh-default shape.
+  // Caller-wins: anything that looks like an explicit user commit is kept. We
+  // only stamp when the payload is absent or still carries a fresh-default shape.
   const isFreshDefault =
     !incoming ||
     ((incoming.saturation === undefined || incoming.saturation === 1) &&

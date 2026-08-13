@@ -165,11 +165,8 @@ function ImageLayerView({
   const imgW = naturalSize ? naturalSize.w * localSx : 0;
   const imgH = naturalSize ? naturalSize.h * localSy : 0;
 
-  // Wrapper positions a 32x32 transparent hit zone so the pointer target
-  // meets the a11y tap-target floor. The visible 8x8 handle (rendered as a
-  // child) stays centered on the parent corner via `top/left -16px`.
-  // a11y-exception: canvas resize handles, expert pattern — visible handle
-  // intentionally stays 8x8 so it does not occlude the underlying image.
+  // a11y-exception: the 32x32 hit zone meets the tap-target floor while the
+  // visible handle stays 8x8 so it does not occlude the image beneath it.
   const HIT_ZONE_CLASSES: Record<ResizeCorner, string> = {
     nw: "top-[-16px] left-[-16px] cursor-nwse-resize",
     ne: "top-[-16px] right-[-16px] cursor-nesw-resize",
@@ -464,14 +461,9 @@ export function RoomMapCanvas({
     <RoomMapContext.Provider value={{ pxPerMeter, canvasSize }}>
       <div
         ref={canvasRef}
-        // W4-I bug #5 — `select-none` on the canvas root prevents
-        // browser text selection while the user drags an object. Drag
-        // gestures originate inside this div (objects, zone center,
-        // pan), and the bubbled pointer-move events would otherwise
-        // sweep across `<text>` / chip labels and highlight them. The
-        // input fields inside `RoomDockPanel` are unaffected — they
-        // mount outside this root and keep their native selection
-        // behaviour.
+        // `select-none` because a drag sweeps bubbled pointer-moves across the
+        // `<text>` and chip labels and highlights them. The dock's inputs mount
+        // outside this root, so they keep native selection.
         className={`select-none relative w-full h-full overflow-hidden bg-[var(--lm-bg)] ${spaceHeld ? "cursor-grab" : ""}`}
         onClick={handleBackgroundClick}
         onWheel={handleCanvasWheel}

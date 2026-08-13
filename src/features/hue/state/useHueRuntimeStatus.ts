@@ -65,17 +65,9 @@ export function useHueRuntimeStatus({
     }
   }, []);
 
-  // Runtime-status loop. Two concerns share one effect:
-  //   1) "What's the bridge doing right now?" — fired on mount and on every
-  //      runtime-state change so the Devices tab always opens with a fresh
-  //      answer without a polling delay.
-  //   2) Streaming health watch — recursive setTimeout at
-  //      `RUNTIME_POLL_INTERVAL_MS` cadence, but ONLY while the runtime is
-  //      `Starting` / `Running` / `Reconnecting`. Idle / Stopping / Failed
-  //      get the mount tick and then go silent.
-  // Visibility-aware: the loop pauses while `document.visibilityState` is
-  // `hidden` (tray window collapsed / minimised) and re-arms with an
-  // immediate tick on `visibilitychange`, mirroring `useRuntimeTelemetry`.
+  // Polls only while the runtime is Starting / Running / Reconnecting; the other
+  // states get the mount tick and go silent. Visibility-aware, per the convention
+  // in docs/architecture/ui-and-shell.md.
   const runtimeState = runtimeStatus?.state ?? null;
   useEffect(() => {
     let mounted = true;
@@ -98,11 +90,8 @@ export function useHueRuntimeStatus({
       }
     };
 
-    // `runtimeState` sits in the deps but only ever moves because a poll just
-    // returned it, so the unconditional entry tick re-fetched data we already
-    // held — a Idle→Starting→Running burst cost three bridge round-trips.
-    // Nothing is lost by skipping it: mount and visibility-resume both have a
-    // stale enough `lastRuntimePollAt` to tick normally.
+    // `runtimeState` only ever moves because a poll returned it, so an entry tick
+    // here re-fetches what we hold — three round-trips per Idle→Running burst.
     const tickIfStale = () => {
       if (!mounted) return;
       if (timeoutId !== null || inFlight) return;

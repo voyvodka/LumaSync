@@ -81,10 +81,8 @@ export function TitleBar({ uiMode, onSwitchUIMode, activeSection, onSectionChang
       style={{
         height: `${TITLE_BAR_HEIGHT_PX}px`,
         gap: "20px",
-        // Right edge padding mirrors the mockup (`padding: 0 10px 0 0`) on
-        // mac so the compact toggle never sits flush against the window
-        // corner. On win/linux the custom min/max/close buttons take the
-        // edge, so we let them flush against it for a native feel.
+        // On win/linux the custom min/max/close buttons own the edge and should
+        // sit flush against it; on mac the compact toggle needs the inset.
         paddingRight: isMac ? "10px" : "0",
       }}
     >

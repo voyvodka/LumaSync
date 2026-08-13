@@ -91,10 +91,9 @@ function normaliseHexDraft(raw: string): string | null {
   return `#${withHash.slice(1).toLowerCase()}`;
 }
 
-// W4-I — per-axis cube-space scale band. Mirrors `commands/hue/zone.rs`
-// (`HUE_ZONE_SCALE_MIN` / `HUE_ZONE_SCALE_MAX`). The slider edits a
-// physical edge in metres; we derive cube-space scales from it but
-// still clamp each axis through this band before writing.
+// Mirrors `HUE_ZONE_SCALE_MIN` / `HUE_ZONE_SCALE_MAX` in
+// `commands/room_map/hue_zone.rs` — the two must move together. Each axis is
+// clamped through this band even though the slider edits metres.
 const SCALE_MIN = 0.05;
 const SCALE_MAX = 1;
 
@@ -137,26 +136,16 @@ export function HueZoneInspector({
 
   const safeWidthM = Math.max(0, roomWidthM);
   const safeDepthM = Math.max(0, roomDepthM);
-  // The largest square that still fits inside the room footprint.
-  // This becomes both the slider/input maximum and the metric ceiling
-  // of the zone's edge. When dimensions have not loaded yet we fall
-  // back to `0` — the input is then disabled to avoid divide-by-zero
-  // in the cube-space derivation.
+  // The largest square that fits the room footprint. Falls back to `0` before
+  // dimensions load, which disables the input — the derivation divides by it.
   const maxEdgeM = Math.min(safeWidthM, safeDepthM);
-  // The physical floor mirrors the Rust per-axis floor: `SCALE_MIN`
-  // applied to whichever axis has the smaller room dimension. In a
-  // 5×4 m room that gives `0.05 × 4 = 0.20 m` — small enough to author
-  // a single-bulb zone, large enough that the Hue ±1 cube still has
-  // useful resolution.
+  // `SCALE_MIN` against the smaller room axis, mirroring Rust: 0.20 m in a
+  // 5×4 m room — a single-bulb zone that still has cube resolution left.
   const minEdgeM = SCALE_MIN * maxEdgeM;
   const currentEdgeM = resolvePhysicalEdgeM(zone, safeWidthM, safeDepthM);
 
-  // ── W4-I — single edge-length input drives both axes ─────────────
-  // The slider range is in metres, not a unitless fraction. We convert
-  // the metre value back to per-axis cube-space scales so the bridge
-  // can keep its native ±1 frame. In a square room both axes resolve
-  // to the same scale; in a non-square room they diverge intentionally
-  // so the zone paints as a true physical square on the canvas.
+  // One metre value drives both axes, and in a non-square room they diverge on
+  // purpose so the zone stays a physical square. See docs/architecture/room-map.md.
   const setEdgeM = useCallback(
     (rawMetres: number) => {
       if (maxEdgeM <= 0) return;
@@ -171,10 +160,8 @@ export function HueZoneInspector({
   const [edgeDraft, setEdgeDraft] = useState<string>(currentEdgeM.toFixed(2));
   const [editingEdge, setEditingEdge] = useState(false);
 
-  // Keep the draft in sync with external changes (slider drag, swatch
-  // pick, undo) while the input is *not* focused — same pattern the
-  // PropertyBar's NumberInput uses to avoid clobbering an in-flight
-  // typed value.
+  // Only while unfocused, or an external change clobbers what the user is
+  // part-way through typing.
   useEffect(() => {
     if (!editingEdge) {
       setEdgeDraft(currentEdgeM.toFixed(2));
@@ -193,12 +180,8 @@ export function HueZoneInspector({
     setEdgeM(clampedM);
   }, [edgeDraft, maxEdgeM, minEdgeM, currentEdgeM, setEdgeM]);
 
-  // ── W4-K hex input — Inspector-owned ──────────────────────────────
-  // HsvColorPicker still ships its own hex input by default, but we
-  // pass `hideHex` so we can render it inline next to the EDGE field
-  // and avoid the W4-I overlap. The picker's `recent` strip stays
-  // (we render a uniform RECENT row below the SV ring, same as
-  // before).
+  // `hideHex` because the inspector renders its own hex field inline beside
+  // EDGE; the picker's own would overlap it.
   const [hexDraft, setHexDraft] = useState<string>(borderHex.toUpperCase());
   const [editingHex, setEditingHex] = useState(false);
 

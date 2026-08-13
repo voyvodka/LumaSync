@@ -57,10 +57,8 @@ export function createDeviceConnectionController(
 
     await siblingSync.hydrateFromRustStatus();
 
-    // Bug 10A — if Rust still reports disconnected after hydration AND we
-    // have a remembered port, try once to bring the session back. Has to
-    // run after the initial scan so the visibility check has a fresh ports
-    // list to consult.
+    // Bug 10A — one attempt to bring a remembered port back. Must run after the
+    // initial scan, or the visibility check consults a stale ports list.
     const state = store.getState();
     if (
       autoReconnectOnInit &&

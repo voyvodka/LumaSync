@@ -84,20 +84,11 @@ function App() {
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
-  // v1.5 W2-B4 — first-run onboarding state. The flag is hydrated from
-  // shellStore on bootstrap; a fresh user (`undefined` / `false`) sees
-  // the inline 3-step banner. \`hasInteractedWithMode\` flips true on
-  // the first deliberate mode click after bootstrap so step 1 only
-  // advances when the user actively engages.
+  // Defaults to `true` so a hydrating store never flashes the banner at a user
+  // who has already dismissed it; bootstrap flips it false for a fresh install.
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(true);
   const [hasInteractedWithMode, setHasInteractedWithMode] = useState(false);
   const autoOpenTriggeredRef = useRef(sessionStorage.getItem(CALIBRATION_AUTO_OPENED_KEY) === "1");
-  // Auto-updater check is intentionally module-level (not inside the boot
-  // sequence) so it fires immediately on mount and is not blocked by
-  // shellStore / Hue / USB / DTLS work. The ref is a StrictMode dev-mode
-  // guard: the underlying effect re-runs once during double-mount, this
-  // ref short-circuits the second invocation so we always send exactly
-  // one `check()` request to GitHub Releases.
   const updateCheckRanRef = useRef(false);
 
   const runtimeConfig = useModeRuntimeConfig({ calibration: savedCalibration });
@@ -128,12 +119,9 @@ function App() {
     handleOutputTargetsChange,
   } = mode;
 
-  // Auto-updater poll — fires once on mount, in parallel with the boot
-  // sequence. Previously lived at the tail of `bootstrap()` behind
-  // shellStore + Hue validate + USB reconnect + DTLS handshake, which
-  // pushed the GitHub Releases probe well past the user's first frame.
-  // The ref guard absorbs StrictMode dev double-mount so we never
-  // double-fire `check()`.
+  // Deliberately outside `bootstrap()` — behind shellStore, Hue, USB and DTLS the
+  // release probe landed well past the user's first frame. The ref keeps
+  // StrictMode's double-mount from firing `check()` twice.
   useEffect(() => {
     if (updateCheckRanRef.current) return;
     updateCheckRanRef.current = true;
@@ -201,13 +189,9 @@ function App() {
   });
 
   const handleSectionChange = useCallback(async (sectionId: SectionId) => {
-    // A3.5 — compact mode hosts only LIGHTS (CompactLayout ignores
-    // activeSection). Without this gate, deep-link clicks from the
-    // compact onboarding banner / CTA / tray menu would set
-    // activeSection silently while the user still sees the LIGHTS
-    // panel, leaving them with the "I clicked, nothing happened"
-    // experience. Switching to full first surfaces the destination
-    // section as the SettingsLayout fans out by activeSection.
+    // CompactLayout ignores `activeSection`, so a deep-link from the banner, a
+    // CTA or the tray would set it silently and leave the user staring at the
+    // LIGHTS panel. Switch to full first, or the click appears to do nothing.
     if (currentMode === "compact" && sectionId !== SECTION_IDS.LIGHTS) {
       try {
         await resizeToMode("full");
@@ -245,18 +229,9 @@ function App() {
   }, [isConnected, savedCalibration]);
 
 
-  // ---------------------------------------------------------------------------
-  // Global keyboard shortcuts (G9 — launch-credibility fix).
-  //
-  // Every `<kbd>` cluster rendered by StatusBar / LightsSection comes from
-  // `KEYBIND_REGISTRY`; here is where those badges become actual behaviour.
-  // `useGlobalKeybinds` owns the document-level keydown listener and routes
-  // each KeybindAction to the matching callback below. Disabling the hook
-  // while a UI-mode fade is in flight keeps `⌥1/⌥2/⌥3` from firing during
-  // the 180 ms cross-fade, where the lighting mode buttons would be invisible
-  // anyway — pressing them mid-transition was the main feedback loop that
-  // caused the "ghost mode flash" behaviour in preview builds.
-  // ---------------------------------------------------------------------------
+  // Global keyboard shortcuts — the behaviour behind every `<kbd>` badge in
+  // `KEYBIND_REGISTRY`. The hook is disabled during a UI-mode fade: firing
+  // ⌥1/⌥2/⌥3 mid-transition is what produced the "ghost mode flash".
   const keybindHandlers = useMemo(
     () => ({
       [KEYBIND_ACTIONS.MODE_OFF]: () => {
@@ -275,10 +250,8 @@ function App() {
         });
       },
       [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
-        // ⌘, / Ctrl+, is the canonical "open settings" shortcut across
-        // macOS / Linux / Windows desktop apps. Route to the System section
-        // in full mode; if the user is in compact, switch to full first so
-        // the settings surface is actually visible.
+        // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
+        // platforms; compact has to switch to full or there is nothing to show.
         if (currentMode === "compact") {
           switchUIMode("full");
         }
@@ -327,11 +300,9 @@ function App() {
     onOutputTargetsChange: handleOutputTargetsChange,
     onCalibrationSaved: (config: LedCalibrationConfig) => {
       setSavedCalibration(config);
-      // Prime the ref synchronously so any set_lighting_mode dispatch
-      // that fires before the next effect flush carries the new
-      // calibration's totalLeds. Without this, a calibration save
-      // followed by an immediate mode toggle could race and ship the
-      // prior totalLeds.
+      // Synchronous, because a save followed by an immediate mode toggle
+      // dispatches before the mirror effect flushes and would ship the old
+      // `totalLeds`.
       runtimeConfig.setCalibration(config);
     },
     onCheckForUpdates: checkForUpdates,
@@ -410,10 +381,8 @@ function App() {
           }`}
           style={{
             opacity: isContentVisible ? 1 : 0,
-            // Soft "materialize" — on fade-out the content subtly recedes
-            // (scale down + slight blur) and on fade-in it settles back in
-            // place. Paired with the matched backdrop color this replaces
-            // the "content disappears" feeling with a gentle breathe.
+            // The recede-and-settle is deliberate: with a matched backdrop it
+            // reads as a breathe rather than as content vanishing.
             transform: isContentVisible ? "scale(1)" : "scale(0.985)",
             filter: isContentVisible ? "blur(0px)" : "blur(6px)",
             transformOrigin: "center center",

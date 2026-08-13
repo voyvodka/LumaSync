@@ -199,12 +199,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const [hueAreaId, setHueAreaId] = useState<string | null>(null);
   const [objectPanelOpen, setObjectPanelOpen] = useState(true);
 
-  // Wave 4-B (B1) — track Hue bridge state alongside the area id so the
-  // dock can render a state-aware header (no bridge / no area / ready)
-  // without mounting the full onboarding state machine. We treat
-  // `hueAppKey` (legacy plaintext) OR `credentialStorageBackend === keychain`
-  // as "configured"; reachability beyond that requires `useHueOnboarding`
-  // and is intentionally out of scope for the editor.
+  // "Configured" is `hueAppKey` (legacy plaintext) OR a keychain backend. The
+  // editor deliberately stops there — anything beyond needs `useHueOnboarding`,
+  // and mounting that state machine here for a header is too much.
   const [hueBridgeConfigured, setHueBridgeConfigured] = useState(false);
   // Load the persisted last-selected entertainment area id once. We do not
   // mount useHueOnboarding here to keep the editor decoupled from the
@@ -262,30 +259,23 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const { widthMeters, depthMeters } = config.dimensions;
 
-  // Wave 4-E — live USB connection snapshot for the canvas badge +
-  // UsbStripInspector. The hook subscribes to the same connectionEvents
-  // bus that the LightsSection/Devices flows already use, so a pair or
-  // disconnect anywhere in the app instantly re-syncs the editor.
+  // Same `connectionEvents` bus the Lights and Devices flows use, so a pair or
+  // disconnect anywhere in the app re-syncs the editor without a reload.
   const usb = useUsbConnectionStatus();
   const usbConnectionStatus = usb.ready
     ? (usb.connectedPort ? "connected" : "disconnected")
     : "unknown";
-  // Wave 4-G #4 — Mirror the Hue bridge reachability into the same
-  // chip vocabulary the USB inspector already uses. `undefined` ⇒
-  // we have no source of truth (e.g. SettingsLayout passes nothing in
-  // a legacy embed) so we render no chip; `true` ⇒ connected,
-  // `false` ⇒ disconnected.
+  // `undefined` means no source of truth (a legacy embed passes nothing) and
+  // must render no chip at all — it is not the same as `false`.
   const hueChannelStatus: "connected" | "disconnected" | "unknown" =
     hueReachable === undefined
       ? "unknown"
       : hueReachable
         ? "connected"
         : "disconnected";
-  // Wave 4-E — there is no Rust-side `disconnect_serial_port` yet
-  // (out-of-scope contract change), so the inspector deep-links the
-  // user to Devices where the existing pair / health-check / forget
-  // flow already lives. The shape stays a callback so a future
-  // commit can swap in a true disconnect without touching consumers.
+  // There is no Rust `disconnect_serial_port` yet, so this deep-links to Devices.
+  // Kept as a callback so a real disconnect can replace it without touching
+  // consumers.
   const handleManageUsb = useCallback(() => {
     onNavigateToDevices?.();
   }, [onNavigateToDevices]);
@@ -427,15 +417,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       } else if (parsed?.kind === "usb") {
         void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== parsed.stripId) });
       }
-      // v1.5 W4-F2 manual-test feedback (2026-04-28): Hue channels are
-      // bridge-managed — the user cannot remove them from the LumaSync
-      // side, only the Hue app / bridge can. The previous branch tried
-      // to splice them out of `config.hueChannels` by array index (not
-      // even by `channelIndex`), which both leaked the channel from
-      // its zone in a way the user did not expect and silently shifted
-      // every subsequent channel's array slot. We drop the branch
-      // entirely; zone detach should go through the "Move to →
-      // Unassigned" affordance in the Hue Zones tab instead.
+      // No Hue-channel branch here on purpose — channels are bridge-managed and
+      // detaching goes through "Move to → Unassigned". See
+      // docs/architecture/room-map.md for the bug that removing one caused.
       setSelectedId(null);
     },
     [config, updateConfig, isLocked],
@@ -632,20 +616,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [updateConfig, config, panOffset, widthMeters, depthMeters, zoom],
   );
 
-  // ---------------------------------------------------------------------------
-  // Hue Zone CRUD handlers (v1.5 W1-A5 → W4-F2 Hue-only canonical)
-  // ---------------------------------------------------------------------------
-  // v1.5 W4-F2: only Hue zones live in `config.zones: HueZone[]`. Logical
-  // zones were dropped — see RFC §"Direction reversal". The migration
-  // shim handles the schemaVersion 1→2 fold from legacy `hueZones[]` so
-  // no projection is needed at runtime.
-  //
-  // Each handler optimistically mutates `config.zones` then fires the
-  // matching Tauri command. The local config is the persistence source of
-  // truth; the Tauri side mirrors the change for the runtime sampler. If
-  // the invoke fails we surface the error via console (silent-catch ban)
-  // but keep the local edit so the UI does not flicker — the next save
-  // round will reconcile.
+  // Hue Zone CRUD. Every handler is local-first and optimistic: a failed invoke
+  // is logged but the local edit stands, because reverting flickers the canvas.
+  // See docs/architecture/room-map.md.
 
   const hueZones = config.zones;
 
@@ -717,10 +690,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [config.zones, updateConfig],
   );
 
-  // v1.5 W4-F2 manual-test (2026-04-28) — selection model is exclusive
-  // between concrete objects and Hue zones. Selecting one clears the
-  // other so the bottom inspector + side-list highlights always agree
-  // on a single source of truth.
+  // Selection is exclusive between concrete objects and Hue zones, so the
+  // inspector and the side-list can never disagree about what is selected.
   const handleSelectHueZone = useCallback((zoneId: string | null) => {
     setActiveHueZoneId(zoneId);
     if (zoneId !== null) setSelectedId(null);
@@ -731,22 +702,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     if (id !== null) setActiveHueZoneId(null);
   }, []);
 
-  // ── Wave 4-B (B2/B3) — Channel ↔ zone assignment + cross-zone transfer
-  // ─────────────────────────────────────────────────────────────────────
-  // Single optimistic handler the dock uses for every channel→zone path:
-  //   - drag-drop onto a zone header
-  //   - drag-drop onto the "Unassigned" bucket
-  //   - context "Move to → <zone>" popover
-  // The local config update keeps three derived shapes in sync:
-  //   1. `hueChannels[i].zoneId` — primary join key
-  //   2. `hueChannels[i].zoneRelativePosition` — defaults to (0,0,0) so the
-  //      dot lands on the zone center; user can drag to refine.
-  //   3. `hueZones[*].channelIndices` — denormalized list mirrored for
-  //      runtime sampler; we keep it consistent so frame-builder and
-  //      zone-cap validators do not desync.
-  // The Tauri mirror (`assign_channel_to_zone`) follows the same
-  // silent-catch-banned pattern: we log on failure but keep the local
-  // edit so the UI does not flicker.
+  // One handler for all three channel→zone paths (both drops and the popover).
+  // It writes three fields that must stay in sync — `zoneId`,
+  // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
   const handleAssignChannelToZone = useCallback(
     (channelIndex: number, targetZoneId: string | null) => {
       const channel = config.hueChannels.find((c) => c.channelIndex === channelIndex);
@@ -968,11 +926,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     return actions;
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, config.furniture, config.imageLayers, handleRenameFurniture]);
 
-  // ── v1.5 W1-A6 (W4-F2 Hue-only): derive active Hue zone ────────────
-  // v1.5 W4-F2: `config.zones` is now `HueZone[]` (logical zones were
-  // dropped). Downstream consumers (RoomMapCanvas + HueChannelOverlay)
-  // already accept `HueZone | null` so the lookup is a direct find,
-  // no projection needed.
   const activeHueZone: HueZone | null = activeHueZoneId
     ? hueZones.find((z) => z.id === activeHueZoneId) ?? null
     : null;
@@ -997,19 +950,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     [config.zones, updateConfig],
   );
 
-  // ── v1.5 W1-A8 (W4-F2 Hue-only): Generic Hue zone patch handler ────
-  // Used by HueZoneInspector to update borderColor + per-axis room-
-  // relative scale. Same optimistic pattern as the create / delete /
-  // center handlers — local config first, then mirror via
-  // `update_hue_zone` with silent-catch logging.
-  //
-  // W4-I revision — the W4-C uniform aspect-ratio lock is gone. Zones
-  // are physical 1:1 metric squares now, which in a non-square room
-  // means the Inspector writes asymmetric scaleX / scaleY (edge_m /
-  // roomWidthM and edge_m / roomDepthM). We therefore pass the patch
-  // through verbatim instead of mirroring one axis onto the other.
-  // Rust still validates each axis independently against the [MIN, MAX]
-  // band and the cube-overflow invariant.
+  // The patch passes through verbatim — do NOT mirror one axis onto the other.
+  // Zones are physical squares, so the two scales legitimately differ in a
+  // non-square room. See docs/architecture/room-map.md.
   const handleHueZoneUpdate = useCallback(
     (zoneId: string, patch: Partial<HueZone>) => {
       let updated: HueZone | undefined;
@@ -1127,12 +1070,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
             {/* USB strip SVG overlay + handles */}
             {config.usbStrips.map((strip) => {
-              // W4-G #6 — per-strip connection status. Strips with a
-              // persisted `portName` are graded against the live
-              // `connectedPort` so a controller plugged into a
-              // different port renders OFFLINE. Strips authored before
-              // W4-G (no portName) fall back to the global W4-E
-              // heuristic.
+              // Graded per strip against the live port, so a controller moved to
+              // another port reads OFFLINE. Legacy strips with no `portName`
+              // keep the old any-port-active heuristic.
               const stripStatus: "connected" | "disconnected" | "unknown" = strip.portName
                 ? usb.ready
                   ? strip.portName === usb.connectedPort
@@ -1422,10 +1362,8 @@ function RenameDialog({
     inputRef.current?.select();
   }, []);
 
-  // A1.4 — document-level focus trap + global ESC cancel. Tab cycle:
-  // input → cancel → confirm → input (and Shift-Tab in reverse). ESC from any
-  // focused element triggers cancel — previously only the input handled ESC,
-  // so once focus left the input the dialog became un-cancellable by keyboard.
+  // ESC is bound at document level, not on the input: with it on the input the
+  // dialog became un-cancellable by keyboard as soon as focus moved off.
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
