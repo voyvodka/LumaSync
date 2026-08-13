@@ -15,6 +15,8 @@ interface RuntimeTelemetrySnapshotDto {
   frameLatencyMs: number;
   linkConstrained: boolean;
   linkMaxFps: number;
+  lastCaptureErrorCode: string | null;
+  lastCaptureErrorAtSecs: number | null;
 }
 
 interface HueTelemetrySnapshotDto {
@@ -76,6 +78,16 @@ export function mapRuntimeTelemetrySnapshot(dto: RuntimeTelemetrySnapshotDto): R
     // claiming a measurement no serial link produced.
     linkConstrained: dto.linkConstrained === true,
     linkMaxFps: normalizeFps(dto.linkMaxFps),
+    lastCaptureErrorCode:
+      typeof dto.lastCaptureErrorCode === "string" && dto.lastCaptureErrorCode.length > 0
+        ? dto.lastCaptureErrorCode
+        : null,
+    // An unreadable age must not read as "0 s ago" — that would claim an
+    // ongoing outage the backend never reported.
+    lastCaptureErrorAtSecs:
+      typeof dto.lastCaptureErrorAtSecs === "number" && !Number.isNaN(dto.lastCaptureErrorAtSecs)
+        ? Math.max(0, dto.lastCaptureErrorAtSecs)
+        : null,
   };
 }
 

@@ -28,6 +28,7 @@ mod commands {
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;
+    pub mod screen_capture_permission;
     pub mod test_pattern;
     pub mod wled_discovery;
     pub mod wled_sink;
@@ -80,6 +81,9 @@ use commands::room_map::save_load::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
+use commands::screen_capture_permission::{
+    get_screen_capture_permission, open_screen_capture_settings,
+};
 use commands::wled_discovery::{
     connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
 };
@@ -737,6 +741,8 @@ pub fn run() {
             show_notification,
             request_notification_permission,
             open_log_dir,
+            get_screen_capture_permission,
+            open_screen_capture_settings,
             start_calibration_test_pattern,
             stop_calibration_test_pattern,
             list_displays,

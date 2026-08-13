@@ -34,6 +34,8 @@ function makeSnapshot(captureFps = 60): FullTelemetrySnapshot {
       frameLatencyMs: 12,
       linkConstrained: false,
       linkMaxFps: 0,
+      lastCaptureErrorCode: null,
+      lastCaptureErrorAtSecs: null,
     },
     hue: null,
   };

@@ -11,6 +11,8 @@ function dto(partial: Partial<Parameters<typeof mapRuntimeTelemetrySnapshot>[0]>
     frameLatencyMs: 12,
     linkConstrained: false,
     linkMaxFps: 0,
+    lastCaptureErrorCode: null,
+    lastCaptureErrorAtSecs: null,
     ...partial,
   };
 }

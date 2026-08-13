@@ -1209,7 +1209,7 @@ console.log("\n[ Runtime telemetry — Rust → telemetry.ts field parity ]");
 // Same degradation shape as the lighting harvest: a removed Rust field silently
 // stops being checked. Pin the count so the loop cannot quietly narrow.
 const EXPECTED_TELEMETRY_FIELD_COUNTS = {
-  RuntimeTelemetrySnapshot: 6,
+  RuntimeTelemetrySnapshot: 8,
   HueTelemetrySnapshot: 11,
   FullTelemetrySnapshot: 2,
 };
@@ -1601,7 +1601,7 @@ const emittedCaptureReasons = [
 
 // Pinned, not `> 0`: hoisting a reason into a `const` would hide it from this
 // harvest while the rest still matched. Bump deliberately when one is added.
-const EXPECTED_CAPTURE_REASON_COUNT = 17;
+const EXPECTED_CAPTURE_REASON_COUNT = 18;
 check(
   emittedCaptureReasons.length === EXPECTED_CAPTURE_REASON_COUNT,
   `harvested exactly ${EXPECTED_CAPTURE_REASON_COUNT} capture reasons from the Rust tree`,
@@ -1989,7 +1989,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 34;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 36;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

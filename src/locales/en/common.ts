@@ -104,4 +104,11 @@ export default {
     output: "No LED output port available.",
     internal: "Screen capture failed ({{reason}}).",
   },
+  captureStalled: {
+    display: "Screen capture stopped — the display is gone. Pick another one in LED Setup.",
+    generic: "Screen capture stopped delivering frames ({{reason}}).",
+  },
+  captureAction: {
+    openSettings: "Open System Settings",
+  },
 };
