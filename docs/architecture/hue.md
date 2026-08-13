@@ -42,6 +42,18 @@ DTLS pre-shared key nor the application key — on a platform where the keychain
 not (a Linux box with no D-Bus), `default_store()` degrades to `NoopStore` and both keys stay on
 disk, because the alternative is an app that cannot pair.
 
+**`default_store()` is one process-wide handle with a read cache, and writes evict it.** Every
+resolver call used to allocate a fresh probe entry and re-read the backend, which on a single stream
+start meant two probes and four keychain reads for two accounts — and on macOS each read is another
+chance for the Keychain ACL prompt. `CachedStore` holds each successful read for the process
+lifetime. Three rules keep that safe, and the tests in `credential_store.rs` fail without any of
+them: a write **evicts** rather than populates, so `migrate_hue_credentials_to_keychain` still
+proves itself against the real backend instead of comparing a value to itself; errors are never
+cached, so one flaky D-Bus call cannot pin the session to the plaintext fallback; and a read that
+raced a write is discarded via a generation counter, because a stale key surviving a re-pair is
+worse than the reads the cache removes. The accepted cost: a credential edited outside the app is
+not seen until restart.
+
 **An empty `username` on the wire means "resolve from the OS keychain".** Same idiom as
 `clientKey`, applied to the second secret so there is one rule rather than two. Every CLIP surface
 runs the request value through `effective_hue_app_key` first; a non-empty value is used as-is and

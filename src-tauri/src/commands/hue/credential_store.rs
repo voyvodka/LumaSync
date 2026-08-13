@@ -43,6 +43,8 @@
 //!   keeps the plaintext fallback so the bridge stays usable.
 
 use log::{debug, info, warn};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 /// Service identifier (bundle id) used as the keychain "service" field.
 pub(crate) const KEYCHAIN_SERVICE: &str = "com.lumasync.app";
@@ -215,16 +217,130 @@ impl SecretStore for NoopStore {
 }
 
 // ---------------------------------------------------------------------------
+// CachedStore — process-lifetime read cache in front of a backing store
+// ---------------------------------------------------------------------------
+
+/// Read-through cache over another `SecretStore`.
+///
+/// The resolvers below sit on every CLIP v2 command and on stream start, so
+/// the same two accounts were being fetched dozens of times per session. On
+/// macOS each of those reads is a fresh opportunity for the Keychain ACL
+/// prompt; on every platform it is pointless work. A successful read is held
+/// for the lifetime of the process.
+///
+/// Three rules make the cache safe to hold that long:
+///
+/// - **Writes evict, they never populate.** `migrate_hue_credentials_to_keychain`
+///   proves its own write by reading back, and a cache primed from the value
+///   we just wrote would make that verification vacuous.
+/// - **Errors are never cached**, so one flaky D-Bus call cannot pin the rest
+///   of the session to the plaintext fallback.
+/// - **A read that races a write is discarded** rather than cached — see
+///   `generation`. A stale key surviving a re-pair is worse than the reads
+///   this cache removes.
+///
+/// The cost is that a credential edited outside the app (Keychain Access,
+/// `secret-tool`) is not observed until restart. Nothing in LumaSync writes
+/// these entries except the migration path, which goes through this store.
+pub struct CachedStore {
+    inner: Box<dyn SecretStore>,
+    cache: Mutex<CacheState>,
+}
+
+#[derive(Default)]
+struct CacheState {
+    /// Bumped by every write. A read that began before the write landed sees
+    /// the mismatch and drops its result instead of caching it.
+    generation: u64,
+    entries: HashMap<String, Option<String>>,
+}
+
+impl CachedStore {
+    /// Wrap `inner` in a process-lifetime read cache.
+    pub fn new(inner: Box<dyn SecretStore>) -> Self {
+        Self {
+            inner,
+            cache: Mutex::new(CacheState::default()),
+        }
+    }
+
+    /// The guarded value is a plain map with no invariant a panic could leave
+    /// broken, so recovering from poisoning beats propagating it into a path
+    /// that must never throw.
+    fn lock(&self) -> MutexGuard<'_, CacheState> {
+        self.cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn invalidate(&self) {
+        let mut state = self.lock();
+        state.generation = state.generation.wrapping_add(1);
+        state.entries.clear();
+    }
+}
+
+impl SecretStore for CachedStore {
+    fn set(&self, account: &str, value: &str) -> Result<(), String> {
+        // Evict on failure too: a rejected write may still have landed.
+        let result = self.inner.set(account, value);
+        self.invalidate();
+        result
+    }
+
+    fn get(&self, account: &str) -> Result<Option<String>, String> {
+        let generation = {
+            let state = self.lock();
+            if let Some(cached) = state.entries.get(account) {
+                return Ok(cached.clone());
+            }
+            state.generation
+        };
+
+        let value = self.inner.get(account)?;
+
+        let mut state = self.lock();
+        if state.generation == generation {
+            state.entries.insert(account.to_string(), value.clone());
+        }
+        Ok(value)
+    }
+
+    fn delete(&self, account: &str) -> Result<(), String> {
+        let result = self.inner.delete(account);
+        self.invalidate();
+        result
+    }
+
+    fn backend(&self) -> CredentialBackend {
+        self.inner.backend()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Default factory — tries Keychain, falls back to Noop on platform error
 // ---------------------------------------------------------------------------
 
-/// Construct the platform-appropriate `SecretStore`.
+/// The one store handle for the process. Built once because the probe in
+/// `platform_store` allocates a keychain entry every time it runs, and
+/// because a per-call cache would cache nothing.
+static SHARED_STORE: OnceLock<Arc<CachedStore>> = OnceLock::new();
+
+/// The process-wide `SecretStore`: the platform backend behind a read cache.
+///
+/// Every production credential read and write goes through this handle, which
+/// is what lets the cache invalidate itself on a re-pair.
+pub fn default_store() -> Arc<CachedStore> {
+    Arc::clone(SHARED_STORE.get_or_init(|| Arc::new(CachedStore::new(platform_store()))))
+}
+
+/// Construct the platform-appropriate backing `SecretStore`.
 ///
 /// Probes `KeychainStore` by attempting to allocate a throwaway entry. If
 /// the backend itself is missing (no D-Bus on Linux, sandbox-blocked
 /// Keychain on macOS) we degrade to `NoopStore` so the app keeps running
 /// on the legacy plaintext fallback.
-pub fn default_store() -> Box<dyn SecretStore> {
+fn platform_store() -> Box<dyn SecretStore> {
     let probe = keyring::Entry::new(KEYCHAIN_SERVICE, "__lumasync_probe__");
     match probe {
         Ok(_) => Box::new(KeychainStore::new()),
@@ -471,6 +587,7 @@ pub(crate) mod tests {
         inner: std::sync::Mutex<std::collections::HashMap<String, String>>,
         force_set_failure: std::sync::atomic::AtomicBool,
         force_get_failure: std::sync::atomic::AtomicBool,
+        get_calls: std::sync::atomic::AtomicUsize,
     }
 
     impl InMemoryStore {
@@ -481,6 +598,11 @@ pub(crate) mod tests {
         pub fn fail_next_get(&self) {
             self.force_get_failure
                 .store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        /// How many times the backend was actually asked for a value —
+        /// the number `CachedStore` exists to hold down.
+        pub fn get_calls(&self) -> usize {
+            self.get_calls.load(std::sync::atomic::Ordering::SeqCst)
         }
     }
 
@@ -499,6 +621,8 @@ pub(crate) mod tests {
             Ok(())
         }
         fn get(&self, account: &str) -> Result<Option<String>, String> {
+            self.get_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if self
                 .force_get_failure
                 .swap(false, std::sync::atomic::Ordering::SeqCst)
@@ -886,5 +1010,174 @@ pub(crate) mod tests {
         store.fail_next_get();
         let resolved = resolve_hue_credentials(&store, "fb-user", "fb-key").unwrap();
         assert_eq!(resolved.backend, CredentialBackend::PlaintextLegacy);
+    }
+
+    // ---------------------- CachedStore read-cache scenarios ----------------------
+
+    /// Delegating handle so a test can keep counting the backing store after
+    /// handing ownership of it to `CachedStore`.
+    struct SharedBacking(Arc<InMemoryStore>);
+
+    impl SecretStore for SharedBacking {
+        fn set(&self, account: &str, value: &str) -> Result<(), String> {
+            self.0.set(account, value)
+        }
+        fn get(&self, account: &str) -> Result<Option<String>, String> {
+            self.0.get(account)
+        }
+        fn delete(&self, account: &str) -> Result<(), String> {
+            self.0.delete(account)
+        }
+        fn backend(&self) -> CredentialBackend {
+            self.0.backend()
+        }
+    }
+
+    fn cached_over(backing: &Arc<InMemoryStore>) -> CachedStore {
+        CachedStore::new(Box::new(SharedBacking(Arc::clone(backing))))
+    }
+
+    #[test]
+    fn cached_store_reads_the_backend_once_per_account() {
+        let backing = Arc::new(InMemoryStore::default());
+        backing.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        backing.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
+        let store = cached_over(&backing);
+
+        for _ in 0..20 {
+            let resolved = resolve_hue_credentials(&store, "", "").unwrap();
+            assert_eq!(resolved.username, "kc-user");
+            assert_eq!(resolved.client_key, "kc-key");
+            assert_eq!(resolved.backend, CredentialBackend::Keychain);
+            assert_eq!(resolve_hue_app_key(&store, "").unwrap().username, "kc-user");
+        }
+
+        // Two accounts, one backend read each — not sixty.
+        assert_eq!(backing.get_calls(), 2);
+    }
+
+    #[test]
+    fn cached_store_write_invalidates_the_cached_read() {
+        // The failure this whole cache can introduce: a re-pair issues a new
+        // application key and the app keeps authenticating with the old one.
+        let backing = Arc::new(InMemoryStore::default());
+        backing.set(KEY_HUE_APP_KEY, "old-user").unwrap();
+        let store = cached_over(&backing);
+
+        assert_eq!(
+            resolve_hue_app_key(&store, "").unwrap().username,
+            "old-user"
+        );
+        store.set(KEY_HUE_APP_KEY, "new-user").unwrap();
+        assert_eq!(
+            resolve_hue_app_key(&store, "").unwrap().username,
+            "new-user"
+        );
+    }
+
+    #[test]
+    fn cached_store_delete_invalidates_the_cached_read() {
+        let backing = Arc::new(InMemoryStore::default());
+        backing.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        let store = cached_over(&backing);
+
+        assert_eq!(resolve_hue_app_key(&store, "").unwrap().username, "kc-user");
+        store.delete(KEY_HUE_APP_KEY).unwrap();
+        assert!(resolve_hue_app_key(&store, "").is_none());
+    }
+
+    #[test]
+    fn cached_store_sees_the_first_pairing_after_caching_an_empty_read() {
+        // First run: nothing is stored yet, so the resolvers cache a miss.
+        // The pairing that follows must not be invisible for the session.
+        let backing = Arc::new(InMemoryStore::default());
+        let store = cached_over(&backing);
+
+        assert!(resolve_hue_credentials(&store, "", "").is_none());
+        assert!(resolve_hue_app_key(&store, "").is_none());
+
+        let outcome = migrate_hue_credentials_to_keychain(&store, "fresh-user", "fresh-key");
+        assert_eq!(outcome, MigrationOutcome::Migrated);
+
+        let resolved = resolve_hue_credentials(&store, "", "").unwrap();
+        assert_eq!(resolved.username, "fresh-user");
+        assert_eq!(resolved.client_key, "fresh-key");
+        assert_eq!(resolved.backend, CredentialBackend::Keychain);
+    }
+
+    #[test]
+    fn cached_store_carries_a_re_pair_through_the_migration_path() {
+        // The production shape: stream resolves, user re-pairs, next resolve
+        // must carry the pair the bridge just issued.
+        let backing = Arc::new(InMemoryStore::default());
+        let store = cached_over(&backing);
+
+        assert_eq!(
+            migrate_hue_credentials_to_keychain(&store, "user-1", "key-1"),
+            MigrationOutcome::Migrated
+        );
+        assert_eq!(
+            resolve_hue_credentials(&store, "", "").unwrap().client_key,
+            "key-1"
+        );
+
+        assert_eq!(
+            migrate_hue_credentials_to_keychain(&store, "user-2", "key-2"),
+            MigrationOutcome::Migrated
+        );
+        let resolved = resolve_hue_credentials(&store, "", "").unwrap();
+        assert_eq!(resolved.username, "user-2");
+        assert_eq!(resolved.client_key, "key-2");
+    }
+
+    #[test]
+    fn cached_store_still_verifies_the_migration_read_back() {
+        // Caching a write instead of evicting on it would make the read-back
+        // in `migrate_hue_credentials_to_keychain` compare a value against
+        // itself, and a lying backend would report a successful migration.
+        struct LyingBacking;
+        impl SecretStore for LyingBacking {
+            fn set(&self, _account: &str, _value: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn get(&self, _account: &str) -> Result<Option<String>, String> {
+                Ok(Some("tampered".to_string()))
+            }
+            fn delete(&self, _account: &str) -> Result<(), String> {
+                Ok(())
+            }
+            fn backend(&self) -> CredentialBackend {
+                CredentialBackend::Keychain
+            }
+        }
+
+        let store = CachedStore::new(Box::new(LyingBacking));
+        let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
+        assert_eq!(outcome, MigrationOutcome::Failed);
+        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+    }
+
+    #[test]
+    fn cached_store_does_not_cache_a_backend_error() {
+        let backing = Arc::new(InMemoryStore::default());
+        backing.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        let store = cached_over(&backing);
+
+        backing.fail_next_get();
+        // A transient backend failure degrades to the plaintext fallback ...
+        assert_eq!(
+            resolve_hue_app_key(&store, "fb-user").unwrap().backend,
+            CredentialBackend::PlaintextLegacy
+        );
+        // ... and must not pin the rest of the session to it.
+        let resolved = resolve_hue_app_key(&store, "fb-user").unwrap();
+        assert_eq!(resolved.username, "kc-user");
+        assert_eq!(resolved.backend, CredentialBackend::Keychain);
+    }
+
+    #[test]
+    fn default_store_hands_out_one_shared_handle_per_process() {
+        // Two handles that do not share a cache share no invalidation either.
+        assert!(Arc::ptr_eq(&default_store(), &default_store()));
     }
 }
