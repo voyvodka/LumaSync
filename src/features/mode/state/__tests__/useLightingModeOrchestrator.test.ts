@@ -205,6 +205,117 @@ describe("useLightingModeOrchestrator", () => {
     expect(result.current.isModeTransitioning).toBe(false);
   });
 
+  describe("capture start failures", () => {
+    // D-05 gates a USB target with no calibration before Phase 2 ever runs.
+    const savedCalibration = {
+      totalLeds: 60,
+    } as unknown as LightingModeOrchestratorInput["savedCalibration"];
+
+    function startFailedResult(details: string | null) {
+      return {
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "Ambilight runtime could not start.",
+          details,
+        },
+      };
+    }
+
+    it("classifies a screen-recording denial into the permission bucket", async () => {
+      setLightingModeMock.mockResolvedValue(
+        startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+      );
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toEqual({
+        bucket: "permission",
+        reason: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+      });
+    });
+
+    it("distinguishes a missing display from a denial — the whole point of the union", async () => {
+      setLightingModeMock.mockResolvedValue(
+        startFailedResult("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"),
+      );
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice?.bucket).toBe("display");
+    });
+
+    it("keeps an unknown reason visible instead of dropping it", async () => {
+      setLightingModeMock.mockResolvedValue(startFailedResult("AMBILIGHT_CAPTURE_NOT_YET_INVENTED"));
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toEqual({
+        bucket: "internal",
+        reason: "AMBILIGHT_CAPTURE_NOT_YET_INVENTED",
+      });
+    });
+
+    it("stays silent when the start succeeds", async () => {
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT },
+        status: { code: "AMBILIGHT_MODE_STARTED", message: "Started.", details: null },
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toBeNull();
+    });
+
+    it("does not toast for a bare dispatch — only a user transition raises it", async () => {
+      setLightingModeMock.mockResolvedValue(
+        startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+      );
+      const { result } = harness({ savedCalibration });
+
+      // The hot-reload / bootstrap-shaped path. `useShellBootstrap` goes further
+      // still and calls `modeApi.setLightingMode` without touching this hook.
+      await act(async () => {
+        await result.current.dispatch({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(setLightingModeMock).toHaveBeenCalled();
+      expect(result.current.startFailedNotice).toBeNull();
+    });
+
+    it("auto-dismisses after 8 s", async () => {
+      vi.useFakeTimers();
+      setLightingModeMock.mockResolvedValue(
+        startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+      );
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+      expect(result.current.startFailedNotice).not.toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8_000);
+      });
+      expect(result.current.startFailedNotice).toBeNull();
+    });
+  });
+
   it("routes a USB target with no calibration to the editor instead of dispatching (D-05)", async () => {
     const onRequireCalibration = vi.fn();
     const { result } = harness({ onRequireCalibration, savedCalibration: undefined });

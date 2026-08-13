@@ -16,7 +16,7 @@
 
 import { readFileSync, readdirSync } from "fs";
 import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
@@ -577,12 +577,9 @@ check(
   "MISSING Rust HealthCheckResult.advertised_firmware_profile field"
 );
 
-console.log("\n[ Device sample-LED-frame command ]");
-check(
-  deviceSource.includes(`"sample_led_frame"`),
-  "device command \"sample_led_frame\" defined",
-  "MISSING device command \"sample_led_frame\""
-);
+// `sample_led_frame` was asserted here for four waves. No `#[tauri::command]`
+// ever existed, so the check certified a name that resolved to nothing —
+// the bidirectional command-name parity block below is what replaces it.
 
 // ---------------------------------------------------------------------------
 // Calibration contract (shared extract)
@@ -920,7 +917,6 @@ const wledRustSource = readOrEmpty(WLED_DISCOVERY_FILE, "wled_discovery.rs");
 console.log("\n[ Device WLED status codes (v1.5.2 patch — F4) ]");
 const REQUIRED_WLED_STATUS_CODES = [
   "WLED_DISCOVERY_OK",
-  "WLED_DISCOVERY_EMPTY",
   "WLED_DISCOVERY_TIMEOUT",
   "WLED_BRIDGE_UNREACHABLE",
   "WLED_PROTOCOL_MISMATCH",
@@ -935,27 +931,11 @@ for (const code of REQUIRED_WLED_STATUS_CODES) {
     `WLED_STATUS map contains "${code}" (device.ts)`,
     `MISSING WLED_STATUS entry "${code}" in device.ts`
   );
-}
-// Rust side must also declare every code that the frontend sees.
-for (const code of REQUIRED_WLED_STATUS_CODES) {
-  // Not all codes appear in the discovery file (DISCOVERY_EMPTY is TS-only for
-  // the mDNS path), so we only require the ones that Rust actively emits.
-  const RUST_EMITTED = [
-    "WLED_DISCOVERY_OK",
-    "WLED_DISCOVERY_TIMEOUT",
-    "WLED_BRIDGE_UNREACHABLE",
-    "WLED_PROTOCOL_MISMATCH",
-    "WLED_LED_COUNT_MISMATCH",
-    "WLED_INVALID_IP",
-    "WLED_INVALID_LED_COUNT",
-  ];
-  if (RUST_EMITTED.includes(code)) {
-    check(
-      wledRustSource.includes(`"${code}"`),
-      `Rust wled_discovery.rs emits status code "${code}"`,
-      `MISSING status code "${code}" in wled_discovery.rs`
-    );
-  }
+  check(
+    wledRustSource.includes(`"${code}"`),
+    `Rust wled_discovery.rs emits status code "${code}"`,
+    `MISSING status code "${code}" in wled_discovery.rs`
+  );
 }
 
 console.log("\n[ WLED discovery wire shape — Vec<WledDeviceInfo> (A1.1) ]");
@@ -1479,6 +1459,411 @@ check(
   declaredWithoutProducer.filter((c) => !phantomBaseline.has(c)).length === 0,
   `no new phantoms beyond the ${phantomBaseline.size} baselined`,
   "new phantoms found (listed above)"
+);
+
+// Mirror of the phantom block. The `both trees` check needs a TS consumer, so a
+// code nothing reads yet is invisible to it — that is the gap this closes.
+console.log("\n[ Rust codes with no contract declaration (ratcheted) ]");
+const UNDECLARED_BASELINE_FILE = resolve(__dirname, "contract-undeclared-baseline.txt");
+const undeclaredBaseline = new Set(
+  readOrEmpty(UNDECLARED_BASELINE_FILE, "undeclared baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+
+const emittedWithoutDeclaration = [...rustEmitted]
+  .filter((code) => !contractDeclared.has(code))
+  .sort();
+
+for (const code of emittedWithoutDeclaration) {
+  if (undeclaredBaseline.has(code)) {
+    note(`KNOWN GAP: "${code}" emitted with no contract declaration (baselined)`);
+  } else {
+    fail(
+      `UNDECLARED PRODUCER "${code}" — Rust emits it but no contract declares it. `
+        + `Declare it if the frontend may branch on it; baseline it if it only ever `
+        + `rides status.details or a thrown Err string.`
+    );
+  }
+}
+
+// The half that makes it a ratchet: a baselined code that gains a declaration
+// has been promoted to a discriminator, so its line must go.
+for (const code of undeclaredBaseline) {
+  check(
+    !contractDeclared.has(code),
+    `baseline entry "${code}" still undeclared`,
+    `BASELINE STALE: "${code}" is now declared in a contract — delete its line from `
+      + `contract-undeclared-baseline.txt (the file may only shrink)`
+  );
+}
+check(
+  emittedWithoutDeclaration.filter((c) => !undeclaredBaseline.has(c)).length === 0,
+  `no undeclared producers beyond the ${undeclaredBaseline.size} baselined`,
+  "undeclared producers found (listed above)"
+);
+
+// Name-level twin of the code checks. `sample_led_frame` was asserted present
+// for four waves with no handler behind it; presence is not reachability.
+console.log("\n[ Tauri command names — contracts ↔ generate_handler! parity ]");
+// Registered but intentionally unnamed by any contract. Debug-only, so the
+// frontend must never invoke it.
+const UNCONTRACTED_RUST_COMMANDS = new Set(["simulate_hue_fault"]);
+
+const contractCommandNames = new Map();
+for (const file of tsSourceFiles.filter((f) => f.includes("/shared/contracts/"))) {
+  const src = stripComments(readFileSync(file, "utf-8"));
+  for (const block of src.matchAll(/export const [A-Z0-9_]*COMMANDS\s*=\s*\{([\s\S]*?)\n\}/g)) {
+    for (const entry of block[1].matchAll(/:\s*"([a-z][a-z0-9_]+)"/g)) {
+      contractCommandNames.set(entry[1], file.split("/").pop());
+    }
+  }
+}
+const registeredHandlers = new Set(
+  [...handlerListBlock.matchAll(/^\s*([a-z][a-z0-9_]+)\s*,/gm)].map((m) => m[1])
+);
+
+check(
+  contractCommandNames.size > 0 && registeredHandlers.size > 0,
+  `extracted ${contractCommandNames.size} contract command names / `
+    + `${registeredHandlers.size} registered handlers`,
+  "EXTRACTION FAILED: could not read command names from one or both sides"
+);
+for (const [name, file] of contractCommandNames) {
+  check(
+    registeredHandlers.has(name),
+    `contract command "${name}" (${file}) is registered in generate_handler!`,
+    `PHANTOM COMMAND "${name}" declared in ${file} but absent from generate_handler! — `
+      + `invoke() would resolve to nothing. Delete the declaration or land the handler.`
+  );
+}
+for (const name of registeredHandlers) {
+  if (UNCONTRACTED_RUST_COMMANDS.has(name)) {
+    note(`"${name}" registered with no contract name (allowlisted, debug-only)`);
+    continue;
+  }
+  check(
+    contractCommandNames.has(name),
+    `registered handler "${name}" has a contract name`,
+    `UNCONTRACTED COMMAND "${name}" is registered but no contract declares it — `
+      + `add it to a *_COMMANDS map or to UNCONTRACTED_RUST_COMMANDS with a reason.`
+  );
+}
+
+// `HANDSHAKE` has no underscore, so `harvestCodes` skips it by design. Without
+// this pin the step would silently leave the contract and nothing would notice.
+console.log("\n[ Serial health-check steps — Rust → device.ts parity ]");
+const rustHealthSteps = [
+  ...new Set(
+    [...stripComments(rustHealthSource).matchAll(/step:\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1])
+  ),
+].sort();
+const EXPECTED_HEALTH_STEP_COUNT = 5;
+check(
+  rustHealthSteps.length === EXPECTED_HEALTH_STEP_COUNT,
+  `harvested exactly ${EXPECTED_HEALTH_STEP_COUNT} health steps from device_connection.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_HEALTH_STEP_COUNT} steps, got `
+    + `${rustHealthSteps.length} [${rustHealthSteps.join(", ")}] — update the pin deliberately`
+);
+for (const step of rustHealthSteps) {
+  check(
+    deviceSource.includes(`${step}: "${step}"`),
+    `health step "${step}" declared in device.ts > DEVICE_HEALTH_STEPS`,
+    `UNDECLARED health step "${step}" — device_connection.rs reports it on `
+      + `HealthStepResult.step but DEVICE_HEALTH_STEPS does not declare it`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ambilight capture reasons — derived Rust → capture.ts parity
+// ---------------------------------------------------------------------------
+const CAPTURE_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/capture.ts");
+const RUST_CAPTURE_FILES = [
+  resolve(ROOT, "src-tauri/src/commands/ambilight_capture.rs"),
+  resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs"),
+];
+const captureContractSource = readOrEmpty(CAPTURE_CONTRACT_FILE, "capture contract");
+
+console.log("\n[ Ambilight capture reasons — Rust → capture.ts parity ]");
+const emittedCaptureReasons = [
+  ...new Set(
+    RUST_CAPTURE_FILES.flatMap((file) => {
+      const source = readOrEmpty(file, `rust ${file}`);
+      // These ride `status.details`, never a status code, so `undeclaredInBoth`
+      // is structurally blind to them and this loop is the only guard.
+      // Quoted only: `AMBILIGHT_CAPTURE_ATTEMPTS` is a counter, not a reason.
+      const production = source.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+      return [...production.matchAll(/"(AMBILIGHT_CAPTURE_[A-Z0-9_]+)"/g)].map((m) => m[1]);
+    })
+  ),
+].sort();
+
+// Pinned, not `> 0`: hoisting a reason into a `const` would hide it from this
+// harvest while the rest still matched. Bump deliberately when one is added.
+const EXPECTED_CAPTURE_REASON_COUNT = 17;
+check(
+  emittedCaptureReasons.length === EXPECTED_CAPTURE_REASON_COUNT,
+  `harvested exactly ${EXPECTED_CAPTURE_REASON_COUNT} capture reasons from the Rust tree`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_CAPTURE_REASON_COUNT} capture reasons, got `
+    + `${emittedCaptureReasons.length} [${emittedCaptureReasons.join(", ")}] — a reason was added, `
+    + `removed, or refactored out of a string literal (which this harvest cannot see)`
+);
+for (const reason of emittedCaptureReasons) {
+  check(
+    captureContractSource.includes(`"${reason}"`),
+    `capture reason "${reason}" declared in capture.ts`,
+    `UNDECLARED capture reason "${reason}" — Rust emits it into status.details but `
+      + `capture.ts > AMBILIGHT_CAPTURE_REASON does not declare it, so `
+      + `classifyCaptureFailure() silently buckets it as "internal"`
+  );
+}
+
+// The non-capture tenant of the same field. Derived, not a single hardcoded
+// check: LedOutputError::as_reason() puts every one of these into status.details.
+console.log("\n[ LED output reasons — Rust → capture.ts parity ]");
+const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output.rs");
+const emittedLedOutputReasons = [
+  ...new Set(
+    [
+      ...stripComments(readOrEmpty(LED_OUTPUT_RUST_FILE, "rust led_output"))
+        .split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]
+        .matchAll(/"(LED_OUTPUT_[A-Z0-9_]+)"/g),
+    ].map((m) => m[1])
+  ),
+].sort();
+const EXPECTED_LED_OUTPUT_REASON_COUNT = 7;
+check(
+  emittedLedOutputReasons.length === EXPECTED_LED_OUTPUT_REASON_COUNT,
+  `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_LED_OUTPUT_REASON_COUNT}, got `
+    + `${emittedLedOutputReasons.length} [${emittedLedOutputReasons.join(", ")}] — update the pin deliberately`
+);
+for (const reason of emittedLedOutputReasons) {
+  check(
+    captureContractSource.includes(`"${reason}"`),
+    `LED output reason "${reason}" declared in capture.ts`,
+    `UNDECLARED LED output reason "${reason}" — lighting_mode.rs puts it in the same `
+      + `status.details field as the capture reasons, so classifyCaptureFailure() `
+      + `silently buckets it as "internal"`
+  );
+}
+
+// Same shape again for the Hue DTLS/entertainment transport detail.
+console.log("\n[ Hue transport reasons — Rust → hue.ts parity ]");
+const HUE_TRANSPORT_RUST_FILES = [
+  resolve(ROOT, "src-tauri/src/commands/hue/dtls.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender.rs"),
+];
+const emittedHueTransportReasons = [
+  ...new Set(
+    HUE_TRANSPORT_RUST_FILES.flatMap((file) =>
+      [
+        ...stripComments(readOrEmpty(file, `rust ${file}`))
+          .split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]
+          // `"CODE: detail"` counts: these are format! prefixes, not bare literals.
+          .matchAll(/"((?:DTLS|ENTERTAINMENT|HUE_SENDER)_[A-Z0-9_]+)(?:"|:\s)/g),
+      ].map((m) => m[1])
+    )
+  ),
+].sort();
+const EXPECTED_HUE_TRANSPORT_REASON_COUNT = 13;
+check(
+  emittedHueTransportReasons.length === EXPECTED_HUE_TRANSPORT_REASON_COUNT,
+  `harvested exactly ${EXPECTED_HUE_TRANSPORT_REASON_COUNT} Hue transport reasons`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_HUE_TRANSPORT_REASON_COUNT}, got `
+    + `${emittedHueTransportReasons.length} [${emittedHueTransportReasons.join(", ")}] — update the pin deliberately`
+);
+for (const reason of emittedHueTransportReasons) {
+  check(
+    hueSource.includes(`"${reason}"`),
+    `Hue transport reason "${reason}" declared in hue.ts`,
+    `UNDECLARED Hue transport reason "${reason}" — it rides status.details on a `
+      + `HUE_STREAM_* status but hue.ts > HUE_TRANSPORT_REASON does not name it`
+  );
+}
+
+// Everything above proves a string is DECLARED. These three prove the
+// declaration has a path to the running app — the telemetry fork had neither.
+const contractModuleFiles = walkSourceFiles(resolve(ROOT, "src/shared/contracts"), /\.ts$/);
+const runtimeSourceFiles = tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"));
+
+console.log("\n[ Contract files — runtime import reachability ]");
+for (const file of contractModuleFiles) {
+  const name = file.split("/").pop();
+  const importers = runtimeSourceFiles.filter((f) =>
+    readFileSync(f, "utf-8").includes(`shared/contracts/${name.replace(/\.ts$/, "")}"`)
+  );
+  check(
+    importers.length > 0,
+    `${name} imported by ${importers.length} runtime file(s)`,
+    `ORPHAN CONTRACT "${name}" — no non-test file outside contracts/ imports it. `
+      + `Every check against it is validating a file the app never loads.`
+  );
+}
+
+// A feature may wrap a contract, never fork it: telemetry's private copy drifted
+// two fields and the verifier kept passing against the shared file nobody read.
+console.log("\n[ Feature-local contract modules — no standalone forks ]");
+const featureContractModules = walkSourceFiles(resolve(ROOT, "src/features"), /^contracts\.ts$/);
+for (const file of featureContractModules) {
+  const rel = file.slice(file.indexOf("src/features/"));
+  check(
+    readFileSync(file, "utf-8").includes("@/shared/contracts/"),
+    `${rel} derives from @/shared/contracts/`,
+    `STANDALONE FORK "${rel}" — declares contract shapes without importing or `
+      + `re-exporting @/shared/contracts/. Wrap the shared contract, do not copy it.`
+  );
+}
+
+console.log("\n[ Contract value exports — runtime consumers (ratcheted) ]");
+const DEAD_EXPORT_BASELINE_FILE = resolve(__dirname, "contract-dead-export-baseline.txt");
+const deadExportBaseline = new Set(
+  readOrEmpty(DEAD_EXPORT_BASELINE_FILE, "dead export baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+
+// Dynamic i18n heads are read from i18n-keys.mjs so there is one source of
+// truth: `hue:runtime.codes.${code}` means those codes ARE consumed.
+const i18nVerifierSource = readOrEmpty(
+  resolve(__dirname, "i18n-keys.mjs"),
+  "i18n verifier"
+);
+const dynamicPrefixBlock = i18nVerifierSource.match(
+  /const KNOWN_DYNAMIC_PREFIXES = \[([\s\S]*?)\]/
+);
+const dynamicPrefixes = dynamicPrefixBlock
+  ? [...dynamicPrefixBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+  : [];
+check(
+  dynamicPrefixes.length > 0,
+  `read ${dynamicPrefixes.length} dynamic i18n prefixes from i18n-keys.mjs`,
+  "EXTRACTION FAILED: could not read KNOWN_DYNAMIC_PREFIXES — every const whose "
+    + "values are looked up dynamically would be misreported as dead"
+);
+
+function flattenCatalogue(obj, prefix = "") {
+  const out = [];
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      out.push(...flattenCatalogue(value, path));
+    } else {
+      out.push(path);
+    }
+  }
+  return out;
+}
+
+const dynamicLeafNames = new Set();
+try {
+  const { I18N_NAMESPACES } = await import(
+    pathToFileURL(resolve(ROOT, "src/features/i18n/namespaces.ts")).href
+  );
+  for (const ns of I18N_NAMESPACES) {
+    const mod = await import(
+      pathToFileURL(resolve(ROOT, "src/locales/en", `${ns}.ts`)).href
+    );
+    for (const key of flattenCatalogue(mod.default)) {
+      const lastDot = key.lastIndexOf(".");
+      if (lastDot < 0) continue;
+      if (dynamicPrefixes.includes(`${ns}:${key.slice(0, lastDot)}`)) {
+        dynamicLeafNames.add(key.slice(lastDot + 1));
+      }
+    }
+  }
+} catch (err) {
+  fail(`EXTRACTION FAILED: cannot load the i18n catalogue (${err.message})`);
+}
+
+// Comment-stripped for the same reason the harvest is: deviceConnectionApi.ts
+// names SerialHealthReport only in a JSDoc, which rescued the whole health-code
+// family through a chain that no executing line supports.
+const runtimeText = runtimeSourceFiles
+  .filter((f) => !f.includes("__tests__"))
+  .map((f) => stripComments(readFileSync(f, "utf-8")))
+  .join("\n");
+
+// Reachability must be transitive, not direct: NOTIFICATION_RESULT_CODES is read
+// by nothing, yet deleting it breaks NotificationResult, which platformApi uses.
+const declarationBodies = new Map();
+for (const file of contractModuleFiles) {
+  const source = readFileSync(file, "utf-8");
+  const starts = [
+    ...source.matchAll(/^(?:export )?(?:declare )?(?:const|function|type|interface|enum|class) ([A-Za-z_$][\w$]*)/gm),
+  ];
+  starts.forEach((decl, index) => {
+    const end = index + 1 < starts.length ? starts[index + 1].index : source.length;
+    // Comments stripped: a JSDoc listing every code in the union would otherwise
+    // mark the whole family reachable from prose alone.
+    declarationBodies.set(decl[1], stripComments(source.slice(decl.index, end)));
+  });
+}
+const reachable = new Set(
+  [...declarationBodies.keys()].filter((symbol) =>
+    new RegExp(`\\b${symbol}\\b`).test(runtimeText)
+  )
+);
+for (let changed = true; changed; ) {
+  changed = false;
+  for (const symbol of [...reachable]) {
+    const body = declarationBodies.get(symbol);
+    if (!body) continue;
+    for (const candidate of declarationBodies.keys()) {
+      if (reachable.has(candidate)) continue;
+      if (new RegExp(`\\b${candidate}\\b`).test(body)) {
+        reachable.add(candidate);
+        changed = true;
+      }
+    }
+  }
+}
+
+let deadExports = 0;
+for (const file of contractModuleFiles) {
+  const name = file.split("/").pop();
+  const source = readFileSync(file, "utf-8");
+  for (const decl of source.matchAll(/^export (const|function) ([A-Za-z_$][\w$]*)/gm)) {
+    const [, kind, symbol] = decl;
+    if (reachable.has(symbol)) continue;
+    if (kind === "const") {
+      const block = source.slice(decl.index).match(/^export const [\s\S]*?\n\} as const;/);
+      const values = block ? [...block[0].matchAll(/"([A-Za-z0-9_-]+)"/g)].map((m) => m[1]) : [];
+      if (values.some((value) => dynamicLeafNames.has(value))) continue;
+    }
+    const entry = `${name} ${symbol}`;
+    if (deadExportBaseline.has(entry)) {
+      note(`KNOWN GAP: ${entry} has no runtime consumer (baselined)`);
+      deadExports++;
+    } else {
+      fail(
+        `UNCONSUMED EXPORT ${entry} — nothing outside contracts/ reaches it, directly `
+          + `or through another contract symbol, and no dynamic locale key covers it. `
+          + `Wire it up, delete it, or baseline it with the reason.`
+      );
+    }
+  }
+}
+for (const entry of deadExportBaseline) {
+  const [fileName, symbol] = entry.split(" ");
+  const stillDead = !reachable.has(symbol);
+  check(
+    stillDead,
+    `baseline entry "${entry}" still has no runtime consumer`,
+    `BASELINE STALE: "${entry}" now has a runtime consumer — delete its line from `
+      + `contract-dead-export-baseline.txt (the file may only shrink)`
+  );
+  if (!contractModuleFiles.some((f) => f.endsWith(`/${fileName}`))) {
+    fail(`BASELINE STALE: "${entry}" names ${fileName}, which is not a contract file`);
+  }
+}
+check(
+  deadExports === deadExportBaseline.size,
+  `all ${deadExportBaseline.size} baselined dead exports accounted for`,
+  `BASELINE DRIFT: ${deadExports} baselined entries matched but the file lists `
+    + `${deadExportBaseline.size} — a stale line is hiding a real gap`
 );
 
 // ---------------------------------------------------------------------------

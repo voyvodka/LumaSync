@@ -270,6 +270,15 @@ export const HUE_RUNTIME_STATUS = {
   CHANNEL_POSITIONS_FAILED: "HUE_CHANNEL_POSITIONS_FAILED",
   /** `start_hue_stream` on an already-running stream: idempotent no-op, not an error. */
   START_NOOP_ALREADY_ACTIVE: "HUE_START_NOOP_ALREADY_ACTIVE",
+  /** The store's initial value, before any start has been attempted. */
+  STREAM_IDLE: "HUE_STREAM_IDLE",
+  /** Started, but the area resolved to zero colour-addressable lights —
+   * a success state that still lights nothing, so it carries `Revalidate`. */
+  STREAM_RUNNING_NO_LIGHTS: "HUE_STREAM_RUNNING_NO_LIGHTS",
+  /** The start path unwound before a stream context existed (drop guard). */
+  STREAM_START_ABORTED: "HUE_STREAM_START_ABORTED",
+  /** User cancelled a reconnect workflow — terminal, do not auto-retry. */
+  STOPPED_BY_USER: "HUE_STOPPED_BY_USER",
 } as const;
 
 export type HueRuntimeStatusCode =
@@ -339,6 +348,40 @@ export const HUE_FAULT_CODES = {
 } as const;
 
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
+
+/** `simulate_hue_fault` is `#[cfg(debug_assertions)]`-gated; the release build
+ * registers a stub that always throws `SIMULATE_NOT_AVAILABLE_IN_RELEASE`.
+ * All three arrive as bare `Err(String)`, never a status object. */
+export const HUE_DEBUG_COMMAND_CODES = {
+  FAULT_SIMULATED: "HUE_FAULT_SIMULATED",
+  NO_ACTIVE_DTLS_STREAM: "NO_ACTIVE_DTLS_STREAM",
+  NOT_AVAILABLE_IN_RELEASE: "SIMULATE_NOT_AVAILABLE_IN_RELEASE",
+} as const;
+
+export type HueDebugCommandCode =
+  (typeof HUE_DEBUG_COMMAND_CODES)[keyof typeof HUE_DEBUG_COMMAND_CODES];
+
+/** Reasons riding `status.details` on a `HUE_STREAM_*` status, never codes of
+ *  their own. Naming them keeps a log reader honest; do not branch on them —
+ *  the status code is the discriminator. */
+export const HUE_TRANSPORT_REASON = {
+  DTLS_PSK_DECODE_FAILED: "DTLS_PSK_DECODE_FAILED",
+  DTLS_CONNECTOR_BUILD_FAILED: "DTLS_CONNECTOR_BUILD_FAILED",
+  DTLS_CIPHER_SET_FAILED: "DTLS_CIPHER_SET_FAILED",
+  DTLS_SOCKET_BIND_FAILED: "DTLS_SOCKET_BIND_FAILED",
+  DTLS_SOCKET_CONNECT_FAILED: "DTLS_SOCKET_CONNECT_FAILED",
+  DTLS_SOCKET_TIMEOUT_FAILED: "DTLS_SOCKET_TIMEOUT_FAILED",
+  DTLS_HANDSHAKE_FAILED: "DTLS_HANDSHAKE_FAILED",
+  DTLS_HANDSHAKE_ABANDONED: "DTLS_HANDSHAKE_ABANDONED",
+  ENTERTAINMENT_ACTIVATE_FAILED: "ENTERTAINMENT_ACTIVATE_FAILED",
+  ENTERTAINMENT_ACTIVATE_SEND_FAILED: "ENTERTAINMENT_ACTIVATE_SEND_FAILED",
+  ENTERTAINMENT_DEACTIVATE_FAILED: "ENTERTAINMENT_DEACTIVATE_FAILED",
+  ENTERTAINMENT_DEACTIVATE_SEND_FAILED: "ENTERTAINMENT_DEACTIVATE_SEND_FAILED",
+  HUE_SENDER_INIT_FAILED: "HUE_SENDER_INIT_FAILED",
+} as const;
+
+export type HueTransportReason =
+  (typeof HUE_TRANSPORT_REASON)[keyof typeof HUE_TRANSPORT_REASON];
 
 // ---------------------------------------------------------------------------
 // Credential storage backend (v1.5 W2-A1 / W2-A2)

@@ -30,6 +30,10 @@ const lights: Catalogue<typeof enLights> = {
     delta: "Δ",
     fps: "Σ",
     edgesAria: "Canlı kenar önizlemesi",
+    linkBudget: {
+      constrained: "USB bağlantı sınırı — 115.200 baud hızında bu şerit yaklaşık {{fps}} fps taşıyabiliyor.",
+      hint: "Daha akıcı bir efekt için şeridi kısaltın, iki denetleyiciye bölün ya da çıkışı WLED üzerinden verin.",
+    },
     edges: {
       top: "ÜST · {{count}}",
       bot: "ALT · {{count}}",

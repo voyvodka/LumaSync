@@ -1,0 +1,75 @@
+# Contract value exports (const / function) with no runtime consumer.
+#
+# Why this file exists: a green verifier used to mean "this string appears in
+# this file", never "the runtime reads it". `src/shared/contracts/telemetry.ts`
+# was validated field-by-field for months while every hook imported a private
+# fork instead. This ratchet is what makes the check count mean something.
+#
+# CONSUMED is transitive and comment-blind: a symbol counts as reached when an
+# executing line outside contracts/ names it, or when a contract symbol that is
+# itself reached names it (NOTIFICATION_RESULT_CODES is read by nothing, yet
+# deleting it breaks NotificationResult, which platformApi uses). A JSDoc
+# mention is NOT a reference, and a test-only reference does not count — the
+# telemetry fork had tests too, and they passed against the wrong shape.
+#
+# Ratchet, not a suppression list. This file may only SHRINK: a listed symbol
+# that gains a consumer FAILS the verifier until the line is deleted. A newly
+# unconsumed value export that is not listed here fails immediately.
+#
+# Format: `file.ts SYMBOL`. Blank lines and `#` comments ignored.
+
+# Declared 2026-08-13 alongside the codes Rust already emits. Nothing catches
+# these yet — they are thrown Err(String) prefixes with no handler on the
+# frontend. Each line disappears when something first renders that failure.
+device.ts SERIAL_COMMAND_ERRORS
+display.ts DISPLAY_COMMAND_ERRORS
+lighting.ts LIGHTING_COMMAND_ERRORS
+preview.ts PREVIEW_COMMAND_ERRORS
+telemetry.ts TELEMETRY_COMMAND_ERRORS
+
+# Debug-only command surface; the frontend must never invoke it.
+hue.ts HUE_DEBUG_COMMAND_CODES
+
+# Named so a log reader can identify what arrives in a Hue status.details, but
+# deliberately not branched on — the status code is the discriminator. Unlike
+# the LED_OUTPUT_* family there is no Hue equivalent of classifyCaptureFailure
+# to bucket them into, so nothing reaches this map. One line for 13 codes.
+hue.ts HUE_TRANSPORT_REASON
+
+# Documents that save_room_map / load_room_map are unconditional stubs. Goes
+# away with the commands themselves.
+roomMap.ts ROOM_MAP_PERSISTENCE_STATUS
+
+# Mirrors of Rust state with no reader. SUPPORTED_CONTROLLER_IDS is asserted
+# against the Rust allowlist by this very script and read by nothing else.
+device.ts SUPPORTED_CONTROLLER_IDS
+device.ts DEVICE_STORE_KEYS
+device.ts WLED_DEFAULT_DDP_PORT
+device.ts WLED_DEFAULT_WARLS_PORT
+
+# The live health surface is `HealthCheckResult` in deviceConnectionApi.ts, and
+# it types `code` as bare `string` — so nothing links these five to the runtime
+# but a JSDoc. EN+TR strings exist and are never looked up. Two also have no
+# Rust producer (contract-phantom-baseline.txt). Typing that field is the fix.
+
+# Hue vocabulary with no reader. HUE_FAULT_CODES is the HUE-NET-xx / HUE-AUTH-xx
+# taxonomy nothing classifies into; the intensity coefficients are applied
+# Rust-side; the archetype sentinel is only used by Rust's whitelist fallback.
+hue.ts HUE_FAULT_CODES
+hue.ts HUE_ARCHETYPE_FALLBACK
+hue.ts HUE_INTENSITY_PRESET_COEFFICIENTS
+hue.ts HUE_RUNTIME_STATUS_FAMILY
+
+# The gate predicate carries a behavioural contract (`mode` reports the running
+# mode, not the requested one) that no consumer calls. Its companion map IS
+# reached, spread into LIGHTING_MODE_STATUS.
+lighting.ts isLightingModeGateCode
+
+# Smoothing coefficients applied Rust-side; the frontend sends the preset name.
+lighting.ts LIGHTING_SMOOTHING_PRESET_COEFFICIENTS
+
+# platform.ts has one importer and it uses NotificationResult, not this map.
+platform.ts NOTIFICATION_KINDS
+
+# The Rust-side threshold is pinned by this script; no UI reads the TS copy.
+telemetry.ts LINK_CONSTRAINED_FPS_THRESHOLD

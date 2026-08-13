@@ -14,17 +14,8 @@ export const DEVICE_COMMANDS = {
   GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
   /**
-   * Per-LED sampling frame pump (v1.4 anchor). The Rust handler computes
-   * the next frame's RGB triples from the configured sampling strategy
-   * and streams them through the active `LedSink`. Contract-first: the
-   * command name is reserved here so the frontend can already wire the
-   * sampling playground UI while the Rust handler lands in Wave 2.
-   */
-  SAMPLE_LED_FRAME: "sample_led_frame",
-  /**
-   * v1.5 W1-B1 — passive mDNS / SSDP scan for WLED instances on the LAN.
-   * Returns `WledDeviceInfo[]` so the device picker can list candidates
-   * before the user commits to a sink.
+   * v1.5 W1-B1 — probe a single user-supplied IP's `/json/info` endpoint.
+   * Manual-IP only; not a LAN scan. Returns `WledDeviceInfo[]` (0 or 1).
    */
   DISCOVER_WLED_DEVICES: "discover_wled_devices",
   /**
@@ -94,15 +85,33 @@ export type SerialPortListStatusCode =
   (typeof SERIAL_PORT_LIST_STATUS)[keyof typeof SERIAL_PORT_LIST_STATUS];
 
 /** Serial port open outcome, shared by `connect_serial_port` and the
- * `CONNECT_AND_VERIFY` health step. `FAILED` is the catch-all arm — Rust's
- * `connect_error_code` narrows recognised `serialport` errors first. */
+ * `CONNECT_AND_VERIFY` health step. `FAILED` is the catch-all — Rust's
+ * `connect_error_code` narrows to the others first, plus `PORT_NOT_FOUND`
+ * from {@link DEVICE_ERROR_CODES}. All land on one `status.code`. */
 export const SERIAL_CONNECT_STATUS = {
   OK: "CONNECT_OK",
   FAILED: "CONNECT_FAILED",
+  /** No connect has been attempted yet — the value `SerialConnectionStatus`
+   * carries from first launch until the first `connect_serial_port`. */
+  IDLE: "NOT_CONNECTED",
+  INVALID_INPUT: "CONNECT_INVALID_INPUT",
+  /** Typically a udev/dialout permission gap on Linux, not a user denial. */
+  PERMISSION_DENIED: "CONNECT_PERMISSION_DENIED",
+  TIMEOUT: "CONNECT_TIMEOUT",
+  IO_ERROR: "CONNECT_IO_ERROR",
 } as const;
 
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
+
+/** Thrown by `get_serial_connection_status` as `Err(String)`, formatted
+ * `"CODE: detail"`. A `catch` sees these; a `switch (status.code)` never will. */
+export const SERIAL_COMMAND_ERRORS = {
+  STATUS_READ_FAILED: "STATUS_READ_FAILED",
+} as const;
+
+export type SerialCommandErrorCode =
+  (typeof SERIAL_COMMAND_ERRORS)[keyof typeof SERIAL_COMMAND_ERRORS];
 
 /** In-flight device operation kind, used to gate concurrent UI actions. */
 export const DEVICE_OPERATION = {
@@ -114,11 +123,16 @@ export const DEVICE_OPERATION = {
 
 export type DeviceOperation = (typeof DEVICE_OPERATION)[keyof typeof DEVICE_OPERATION];
 
-/** Ordered stages of the serial health-check flow. */
+/** Ordered stages of the serial health-check flow. `HANDSHAKE` has no
+ * underscore, so the verifier's code harvest cannot see it — the pinned
+ * `step:` harvest is the only thing keeping it declared. */
 export const DEVICE_HEALTH_STEPS = {
   PORT_VISIBLE: "PORT_VISIBLE",
   PORT_SUPPORTED: "PORT_SUPPORTED",
   CONNECT_AND_VERIFY: "CONNECT_AND_VERIFY",
+  HANDSHAKE: "HANDSHAKE",
+  /** Not a stage: the sole step reported when the blocking worker panics. */
+  HEALTH_CHECK_WORKER: "HEALTH_CHECK_WORKER",
 } as const;
 
 export type DeviceHealthStep = (typeof DEVICE_HEALTH_STEPS)[keyof typeof DEVICE_HEALTH_STEPS];
@@ -265,9 +279,30 @@ export const SERIAL_HEALTH_CODES = {
   VERSION_MISMATCH: "SERIAL_HEALTH_VERSION_MISMATCH",
   FIRMWARE_MISMATCH: "SERIAL_HEALTH_FIRMWARE_MISMATCH",
   PROTOCOL_ERROR: "SERIAL_HEALTH_PROTOCOL_ERROR",
+  /** `spawn_blocking` join failure — reported on the `HEALTH_CHECK_WORKER`
+   * step, which replaces the whole step list rather than joining it. */
+  WORKER_PANIC: "SERIAL_HEALTH_WORKER_PANIC",
 } as const;
 
 export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_HEALTH_CODES];
+
+/** Exactly what `run_serial_health_check` puts on `HealthStepResult.code`.
+ * `DeviceHealthStep` is in it because a passing step reports its own name as
+ * its code — `PORT_VISIBLE` passes with code `PORT_VISIBLE`. */
+export type SerialHealthStepWireCode =
+  | SerialHealthCode
+  | SerialConnectStatusCode
+  | SerialPortListStatusCode
+  | DeviceErrorCode
+  | DeviceHealthStep;
+
+/** Frontend-synthesised: the health-check bridge was never injected, so no
+ * command ran. Out of the wire union for the {@link OVERLAY_NO_DISPLAY} reason. */
+export const HEALTH_CHECK_NOT_AVAILABLE = "HEALTH_CHECK_NOT_AVAILABLE" as const;
+
+export type SerialHealthStepCode =
+  | SerialHealthStepWireCode
+  | typeof HEALTH_CHECK_NOT_AVAILABLE;
 
 /**
  * Report returned by `run_serial_health_check`. Exactly one report per
@@ -391,11 +426,9 @@ export interface WledDeviceInfo {
  * `status.code` discriminator.
  */
 export const WLED_STATUS = {
-  /** `discover_wled_devices` succeeded; payload contains zero-or-more `WledDeviceInfo`. */
+  /** `discover_wled_devices` succeeded; payload contains the one probed `WledDeviceInfo`. */
   DISCOVERY_OK: "WLED_DISCOVERY_OK",
-  /** `discover_wled_devices` succeeded but no instances were found within the scan window. */
-  DISCOVERY_EMPTY: "WLED_DISCOVERY_EMPTY",
-  /** `discover_wled_devices` aborted before completion (mDNS/SSDP scan window exhausted). */
+  /** The probed IP did not respond to `/json/info` within the 2s HTTP timeout. */
   DISCOVERY_TIMEOUT: "WLED_DISCOVERY_TIMEOUT",
   /** `connect_wled_sink` / `test_wled_bridge` could not reach the configured IP. */
   BRIDGE_UNREACHABLE: "WLED_BRIDGE_UNREACHABLE",
@@ -431,7 +464,7 @@ export const WLED_STATUS = {
   TEST_OK: "WLED_TEST_OK",
   /** The test packet could not be written to the socket. */
   TEST_SEND_FAILED: "WLED_TEST_SEND_FAILED",
-  /** The scan could not reach the network at all (no interface / socket bind). */
+  /** Connection refused / network-level error probing the configured IP. */
   DISCOVERY_UNREACHABLE: "WLED_DISCOVERY_UNREACHABLE",
   /** The HTTP client could not be constructed — a local fault, not a bridge one. */
   CLIENT_BUILD_FAILED: "WLED_CLIENT_BUILD_FAILED",

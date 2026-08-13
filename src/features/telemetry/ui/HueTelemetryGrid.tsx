@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import type { HueTelemetrySnapshot } from "../model/contracts";
+import type { HueTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 interface HueTelemetryGridProps {
   hue: HueTelemetrySnapshot;

@@ -1,0 +1,55 @@
+# Codes emitted by Rust with no declaration in src/shared/contracts/**.
+#
+# The rule this file encodes: DECLARED = an addressable discriminator the
+# frontend may branch on. BASELINED = diagnostic detail text that only ever
+# rides `status.details` or the tail of a thrown `Err(String)`. If you find
+# yourself wanting to branch on a code listed here, that is the signal to
+# declare it and delete its line — not to read it out of `details`.
+#
+# Ratchet, not a suppression list. This file may only SHRINK: a listed code that
+# gains a contract declaration FAILS the verifier until the line is deleted.
+# A newly emitted code that is not listed here fails immediately.
+#
+# Blank lines and `#` comments ignored. One code per line, sorted within groups.
+
+# NOT EMITTED — harvest artefact. `hue/commands.rs` matches this as a substring
+# of HUE_STREAM_NOT_READY_ACTIVE_STREAMER via `.contains()`; no code is produced.
+# Remove if the harvest ever learns to skip predicate arguments.
+ACTIVE_STREAMER
+
+# `AmbilightCaptureError::as_reason()` reasons that capture.ts deliberately
+# omits: these three come from `sample_led_frame`, a pure helper no command
+# calls, so they cannot reach a frontend. Declare them only if it gains a caller.
+FRAME_DIMENSIONS_INVALID
+FRAME_PIXEL_COUNT_MISMATCH
+LED_COUNT_INVALID
+
+# `LedOutputError::as_reason()` — reaches the frontend only inside
+# `status.details` of AMBILIGHT_MODE_START_FAILED / SOLID_MODE_APPLY_FAILED.
+# Its one addressable sibling, LED_OUTPUT_PORT_UNAVAILABLE, is in capture.ts.
+
+# Hue DTLS transport detail. Every one is wrapped into the `details` of a
+# HUE_STREAM_* status before it crosses the wire; none is ever a discriminator.
+
+# `HueHttpError`'s Display impl — these are the *rendered form* of an error
+# enum, not codes. They land in `details` as the text of the wrapped error.
+HUE_NOT_FOUND
+HUE_RATE_LIMITED
+HUE_SERVER_ERROR
+HUE_TRANSIENT
+
+# Gate/skip reasons carried in `details` alongside a real code: HUE_NOT_READY
+# for the first, a Hue-skipped SOLID_MODE_* status for the second.
+HUE_OUTPUT_CONTEXT_MISSING
+HUE_RUNTIME_GATE_FAILED
+
+# OS keychain failures, wrapped by the caller before reaching a command result.
+KEYCHAIN_DELETE_FAILED
+KEYCHAIN_ENTRY_FAILED
+KEYCHAIN_GET_FAILED
+KEYCHAIN_SET_FAILED
+
+# Internal to their sink/discovery helpers; the caller wraps them.
+CLIENT_INIT
+WLED_SEND_FAILED
+WLED_SOCKET_BIND_FAILED

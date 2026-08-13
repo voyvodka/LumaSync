@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 
 import { shellStore } from "../../persistence/shellStore";
 import {
   getHueAreaChannels,
+  type CommandStatus,
   type HueAreaChannelInfo,
   type HueBridgeSummary,
   type HuePairingCredentials,
 } from "../hueOnboardingApi";
+import { toErrorDetails } from "../model/onboardingStatusCodes";
 
 export interface UseHueAreaChannelsResult {
   areaChannels: HueAreaChannelInfo[];
@@ -19,10 +23,17 @@ export function useHueAreaChannels(
   selectedBridge: HueBridgeSummary | null,
   credentials: HuePairingCredentials | null,
   selectedAreaId: string | null,
+  /** Invoked when the channel fetch is rejected specifically by a bridge 403. */
+  onAuthInvalid?: (status: CommandStatus) => void,
 ): UseHueAreaChannelsResult {
   const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [channelRegionOverrides, setChannelRegionOverrides] = useState<Record<number, string>>({});
+
+  // Held in a ref so an inline callback at the call site cannot widen the fetch
+  // effect's dep array into a refetch-per-render loop.
+  const onAuthInvalidRef = useRef(onAuthInvalid);
+  onAuthInvalidRef.current = onAuthInvalid;
 
   // Load channels whenever the selected area or credentials change.
   useEffect(() => {
@@ -43,9 +54,20 @@ export function useHueAreaChannels(
           setAreaChannels(channels);
         }
       })
-      .catch(() => {
-        if (!cancelled) {
-          setAreaChannels([]);
+      .catch((error: unknown) => {
+        if (cancelled) {
+          return;
+        }
+        setAreaChannels([]);
+        // `get_hue_area_channels` hands the classifier's 403 to the Err arm, so
+        // the re-pair code arrives as a rejection message, not a status object.
+        // Only that exact code escalates — a timeout must not prompt a re-pair.
+        if (toErrorDetails(error) === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED) {
+          onAuthInvalidRef.current?.({
+            code: HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED,
+            message: "The bridge rejected the channel request.",
+            details: null,
+          });
         }
       })
       .finally(() => {

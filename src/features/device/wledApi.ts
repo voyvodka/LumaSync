@@ -36,22 +36,13 @@ export interface WledTestResponse {
   roundTripMs?: number;
 }
 
-/**
- * Trigger a passive mDNS / SSDP scan for WLED instances on the local
- * network. Resolves with `WLED_DISCOVERY_OK` (zero-or-more devices) or a
- * specific failure code (`DISCOVERY_TIMEOUT`, etc.). Never throws.
- *
- * Optional `manualIp` short-circuits the scan and probes a single host
- * via the `/json/info` HTTP endpoint — used by the manual IP picker
- * card when the user already knows their WLED's address.
- */
+/** Probe a single WLED instance's `/json/info` at `ip`. Never throws. */
 export async function discoverWledDevices(
-  manualIp?: string,
+  ip: string,
 ): Promise<WledDiscoveryResponse> {
-  return invoke<WledDiscoveryResponse>(
-    DEVICE_COMMANDS.DISCOVER_WLED_DEVICES,
-    manualIp ? { ip: manualIp } : {},
-  );
+  return invoke<WledDiscoveryResponse>(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, {
+    ip,
+  });
 }
 
 /**

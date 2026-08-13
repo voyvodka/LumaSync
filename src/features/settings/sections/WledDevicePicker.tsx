@@ -59,30 +59,32 @@ export function WledDevicePicker({
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
 
   const validateManualIp = useCallback((value: string): string | null => {
-    if (!value.trim()) return null; // blank = use mDNS scan
+    const trimmed = value.trim();
+    if (!trimmed) return t("device:page.wled.ipRequired");
     // Permissive — accept dotted IPv4 or IPv6 textual.
     const v4 = /^(\d{1,3}\.){3}\d{1,3}$/;
     const v6 = /^[0-9a-fA-F:]+$/;
-    if (!v4.test(value) && !v6.test(value)) {
+    if (!v4.test(trimmed) && !v6.test(trimmed)) {
       return t("device:page.wled.invalidIp");
     }
     return null;
   }, [t]);
 
   const handleDiscover = useCallback(async () => {
+    const trimmed = manualIp.trim();
     const err = validateManualIp(manualIp);
     setManualIpError(err);
     if (err) return;
     setIsDiscovering(true);
     setDiscoveryStatus(null);
     try {
-      const response = await discoverWledDevices(manualIp.trim() || undefined);
+      const response = await discoverWledDevices(trimmed);
       setDiscoveryStatus(response.status);
       setDevices(response.devices ?? []);
     } catch (e) {
       console.error("[LumaSync] discoverWledDevices failed", e);
       setDiscoveryStatus({
-        code: "WLED_DISCOVERY_FAILED",
+        code: WLED_STATUS.DISCOVERY_UNREACHABLE,
         message: String(e),
       });
     } finally {
@@ -183,7 +185,7 @@ export function WledDevicePicker({
           <button
             type="button"
             className="lm-hue-ip-submit"
-            disabled={isDiscovering}
+            disabled={isDiscovering || !manualIp.trim()}
             aria-busy={isDiscovering}
             onClick={() => { void handleDiscover(); }}
           >
@@ -204,9 +206,7 @@ export function WledDevicePicker({
             "mt-2 rounded border px-3 py-2 text-[11px]",
             discoveryStatus.code === WLED_STATUS.DISCOVERY_OK
               ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-200"
-              : discoveryStatus.code === WLED_STATUS.DISCOVERY_EMPTY
-                ? "border-zinc-700 bg-zinc-800/40 text-zinc-300"
-                : "border-rose-500/40 bg-rose-900/20 text-rose-200",
+              : "border-rose-500/40 bg-rose-900/20 text-rose-200",
           ].join(" ")}
         >
           {translateWledStatusCode(discoveryStatus.code, t) ?? discoveryStatus.message}
@@ -336,10 +336,10 @@ function translateWledStatusCode(
   switch (code) {
     case WLED_STATUS.DISCOVERY_OK:
       return t("device:page.wled.status.discoveryOk");
-    case WLED_STATUS.DISCOVERY_EMPTY:
-      return t("device:page.wled.status.discoveryEmpty");
     case WLED_STATUS.DISCOVERY_TIMEOUT:
       return t("device:page.wled.status.discoveryTimeout");
+    case WLED_STATUS.DISCOVERY_UNREACHABLE:
+      return t("device:page.wled.status.discoveryUnreachable");
     case WLED_STATUS.BRIDGE_UNREACHABLE:
       return t("device:page.wled.status.bridgeUnreachable");
     case WLED_STATUS.PROTOCOL_MISMATCH:
@@ -350,6 +350,8 @@ function translateWledStatusCode(
       return t("device:page.wled.status.invalidIp");
     case WLED_STATUS.INVALID_LED_COUNT:
       return t("device:page.wled.status.invalidLedCount");
+    case WLED_STATUS.CLIENT_BUILD_FAILED:
+      return t("device:page.wled.status.clientBuildFailed");
     default:
       return null;
   }

@@ -206,6 +206,11 @@ export default {
       CONFIG_NOT_READY_GATE_BLOCKED: "Start gate blocked because readiness is stale or missing.",
       HUE_STOP_TIMEOUT_PARTIAL: "Stop timed out. Partial-stop cleanup is required.",
       HUE_START_NOOP_ALREADY_ACTIVE: "Hue stream is already running.",
+      HUE_STREAM_IDLE: "Hue runtime is idle.",
+      HUE_STREAM_RUNNING_NO_LIGHTS:
+        "Hue stream started, but no color-addressable lights were found in the selected area.",
+      HUE_STREAM_START_ABORTED: "Hue stream start was aborted before it could be established.",
+      HUE_STOPPED_BY_USER: "Reconnect was stopped by user action.",
       undefined: "Status code unavailable. Waiting for runtime update.",
     },
     retry: {

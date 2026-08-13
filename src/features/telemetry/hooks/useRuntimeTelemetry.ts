@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
+import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { subscribeTelemetry } from "../telemetrySource";
-import type { FullTelemetrySnapshot } from "../model/contracts";
 
 /**
  * Snapshot shape surfaced to consumers (StatusBar FPS pill, future readouts).

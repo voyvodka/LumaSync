@@ -9,10 +9,15 @@ import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/con
 import type { ShellState } from "@/shared/contracts/shell";
 import { LightsSection } from "../LightsSection";
 
-const { shellStateRef, saveMock, createHueZoneMock } = vi.hoisted(() => ({
+const { shellStateRef, saveMock, createHueZoneMock, telemetryMock } = vi.hoisted(() => ({
   shellStateRef: { current: {} as Partial<ShellState> },
   saveMock: vi.fn(),
   createHueZoneMock: vi.fn(),
+  telemetryMock: vi.fn(),
+}));
+
+vi.mock("@/features/telemetry/telemetryApi", () => ({
+  getFullTelemetrySnapshot: () => telemetryMock(),
 }));
 
 vi.mock("@/features/persistence/shellStore", () => ({
@@ -48,6 +53,9 @@ vi.mock("react-i18next", () => ({
         "lights:calibrationBanner.title": "Calibration required",
         "lights:calibrationBanner.sub": "Finish LED layout before enabling this mode.",
         "lights:calibrationBanner.action": "Open calibration",
+        "lights:signal.linkBudget.constrained":
+          "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
+        "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
         "lights:dock.outputs": "Outputs",
         "lights:dock.rows.usbName": "USB",
         "lights:dock.rows.usbType": "CH340",
@@ -303,5 +311,71 @@ describe("LightsSection — Add Hue zone", () => {
     };
     expect(payload.existingZones).toEqual([existingZone]);
     expect(payload.zone.entertainmentAreaId).toBe("area-1");
+  });
+});
+
+describe("LightsSection — serial link budget note", () => {
+  function snapshot(linkConstrained: boolean, linkMaxFps: number) {
+    return {
+      usb: {
+        captureFps: 60,
+        sendFps: 19,
+        queueHealth: "healthy" as const,
+        frameLatencyMs: 12,
+        linkConstrained,
+        linkMaxFps,
+      },
+      hue: null,
+    };
+  }
+
+  function renderAmbilight() {
+    return render(
+      <LightsSection
+        mode={{ kind: "ambilight", ambilight: { brightness: 1 } }}
+        outputTargets={["usb"]}
+        usbConnected={true}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    telemetryMock.mockReset();
+    shellStateRef.current = {};
+  });
+
+  it("explains the shortfall next to the FPS readout when the link is constrained", async () => {
+    telemetryMock.mockResolvedValue(snapshot(true, 19.01));
+    renderAmbilight();
+
+    const note = await screen.findByRole("status");
+    expect(note).toHaveTextContent(
+      "USB link limit — at 115,200 baud this strip carries about 19 fps.",
+    );
+    expect(note).toHaveTextContent("Shorten the strip or output over WLED.");
+  });
+
+  it("stays silent on a session with no serial link, whatever the flag says", async () => {
+    // The 0 sentinel is "no serial link", not "zero fps" — gating on
+    // `linkMaxFps < 30` instead of the helper would show the note here.
+    telemetryMock.mockResolvedValue(snapshot(true, 0));
+    renderAmbilight();
+
+    await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("stays silent on a healthy strip", async () => {
+    telemetryMock.mockResolvedValue(snapshot(false, 58.2));
+    renderAmbilight();
+
+    await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

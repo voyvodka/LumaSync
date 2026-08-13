@@ -26,6 +26,16 @@ export const ROOM_MAP_COMMANDS = {
   COPY_BACKGROUND_IMAGE: "copy_background_image",
 } as const;
 
+/** `save_room_map` and `load_room_map` are unconditional stubs — this is the
+ * only code either one has ever returned. Persistence lives in the shellStore
+ * instead, so both commands are candidates for deletion, not implementation. */
+export const ROOM_MAP_PERSISTENCE_STATUS = {
+  STUB_NOT_IMPLEMENTED: "STUB_NOT_IMPLEMENTED",
+} as const;
+
+export type RoomMapPersistenceStatusCode =
+  (typeof ROOM_MAP_PERSISTENCE_STATUS)[keyof typeof ROOM_MAP_PERSISTENCE_STATUS];
+
 // ---------------------------------------------------------------------------
 // Hue Channel Placement
 // ---------------------------------------------------------------------------
@@ -504,6 +514,8 @@ export interface AssignChannelRequest {
 export const CHANNEL_WRITEBACK_STATUS = {
   SCHEMA_REJECTED: "CHAN_WB_SCHEMA_REJECTED",
   NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
+  /** Area id failed the path-traversal guard before any request was built. */
+  AREA_INVALID: "HUE_AREA_INVALID",
 } as const;
 
 export type ChannelWritebackStatusCode =

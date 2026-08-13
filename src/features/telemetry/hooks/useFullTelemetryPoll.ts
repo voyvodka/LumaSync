@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
+import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { subscribeTelemetry } from "../telemetrySource";
-import type { FullTelemetrySnapshot } from "../model/contracts";
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 

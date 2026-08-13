@@ -69,3 +69,12 @@ export interface FullTelemetrySnapshot {
 export function hasSerialLinkBudget(snapshot: RuntimeTelemetrySnapshot): boolean {
   return snapshot.linkMaxFps > LINK_MAX_FPS_ABSENT;
 }
+
+/** Thrown by `get_runtime_telemetry` as `Err("CODE: detail")` when the snapshot
+ * mutex is poisoned. Polled at 1 Hz, so a `catch` here must not spam. */
+export const TELEMETRY_COMMAND_ERRORS = {
+  STATE_LOCK_FAILED: "RUNTIME_TELEMETRY_STATE_LOCK_FAILED",
+} as const;
+
+export type TelemetryCommandErrorCode =
+  (typeof TELEMETRY_COMMAND_ERRORS)[keyof typeof TELEMETRY_COMMAND_ERRORS];

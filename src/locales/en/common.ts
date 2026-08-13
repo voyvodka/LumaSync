@@ -96,4 +96,12 @@ export default {
       hue: "Hue",
     },
   },
+  captureFailed: {
+    permission: "Screen recording permission is required. Check it in System Settings › Privacy & Security.",
+    display: "The selected display is no longer available. Pick another one in LED Setup.",
+    transient: "Screen capture could not start. Try switching the mode off and on.",
+    unsupported: "Screen capture is not supported on this platform.",
+    output: "No LED output port available.",
+    internal: "Screen capture failed ({{reason}}).",
+  },
 };

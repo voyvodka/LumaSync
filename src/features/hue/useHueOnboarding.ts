@@ -17,7 +17,12 @@ export function useHueOnboarding(): UseHueOnboardingResult {
   const core = useHueOnboardingCore();
   const { state } = core;
 
-  const channels = useHueAreaChannels(core.selectedBridge, state.credentials, state.selectedAreaId);
+  const channels = useHueAreaChannels(
+    core.selectedBridge,
+    state.credentials,
+    state.selectedAreaId,
+    core.publishStatus,
+  );
 
   const runtime = useHueRuntimeStatus({
     bridge: core.selectedBridge,

@@ -86,6 +86,17 @@ export const LIGHTING_MODE_STATUS = {
 export type LightingModeStatusCode =
   (typeof LIGHTING_MODE_STATUS)[keyof typeof LIGHTING_MODE_STATUS];
 
+/** Poisoned-mutex failures thrown by `set_lighting_mode` / `stop_lighting` /
+ * `get_lighting_mode_status` / `start_led_test_pattern` as `Err("CODE: detail")`.
+ * A thrown error, never a `status.code` — the command never got far enough. */
+export const LIGHTING_COMMAND_ERRORS = {
+  CONNECTION_STATE_LOCK_FAILED: "LIGHTING_CONNECTION_STATE_LOCK_FAILED",
+  RUNTIME_STATE_LOCK_FAILED: "LIGHTING_RUNTIME_STATE_LOCK_FAILED",
+} as const;
+
+export type LightingCommandErrorCode =
+  (typeof LIGHTING_COMMAND_ERRORS)[keyof typeof LIGHTING_COMMAND_ERRORS];
+
 /**
  * True when the command was refused before touching any sink — so `mode` in
  * the same result is the running mode, not the requested one.

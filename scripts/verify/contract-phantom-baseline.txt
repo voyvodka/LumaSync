@@ -1,8 +1,12 @@
 # Codes declared in src/shared/contracts/** with no Rust producer.
 #
-# Ratchet, not a suppression list. This file may only SHRINK: a listed code that
-# gains a producer (or is removed) FAILS the verifier until the line is deleted.
-# A new undeclared-producer code that is not listed here fails immediately.
+# Ratchet, not a suppression list. A listed code that gains a producer (or is
+# removed) FAILS the verifier until the line is deleted, and a new undeclared
+# producer that is not listed here fails immediately.
+#
+# The file holds two kinds of entry. MISSING PRODUCER lines are defects and may
+# only SHRINK. "Legitimate" lines are frontend-minted codes that are declared and
+# never on the wire; adding one is allowed, and is the only allowed growth.
 #
 # Blank lines and `#` comments ignored. One code per line, sorted.
 
@@ -10,17 +14,17 @@
 # reports "no display to target, so no command was issued".
 OVERLAY_NO_DISPLAY
 
+# Legitimate, same category: `healthCheck.ts` synthesises a failed step when the
+# health-check bridge was never injected, so no command ran. Added 2026-08-13
+# when typing HealthStepResult.code turned it from a raw literal into a
+# declaration — it was always frontend-minted, just undeclared.
+HEALTH_CHECK_NOT_AVAILABLE
+
 # MISSING PRODUCER — DeviceSection.tsx:254 branches on this to show the
 # "press the link button" card while pairing is in flight. Nothing emits it, so
 # that branch is dead and the prompt only appears after pairing FAILS with
 # HUE_PAIRING_LINK_BUTTON_NOT_PRESSED (line 250). Reported, not fixed.
 HUE_PAIRING_PENDING_LINK_BUTTON
-
-# MISSING PRODUCER — WledDevicePicker.tsx:206,338 style a neutral "no devices
-# found" card and translate `discoveryEmpty` for it. `discover_wled_devices` is
-# a single-IP probe, not the LAN scan its contract JSDoc describes, so it has no
-# empty-result path. Reported, not fixed.
-WLED_DISCOVERY_EMPTY
 
 # No producer, but EN+TR strings exist under device.health.codes.*. The handshake
 # emits OK / WORKER_PANIC / PROTOCOL_ERROR / HANDSHAKE_TIMEOUT only.
