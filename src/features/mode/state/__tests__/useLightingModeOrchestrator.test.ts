@@ -1,7 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND } from "../../model/contracts";
+import { appliedResult } from "@/test/modeCommandResult";
+
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
 import {
   useLightingModeOrchestrator,
   type LightingModeOrchestratorInput,
@@ -61,7 +63,9 @@ function harness(overrides: Partial<LightingModeOrchestratorInput> = {}) {
 describe("useLightingModeOrchestrator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    setLightingModeMock.mockResolvedValue({ active: true });
+    setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+      Promise.resolve(appliedResult(payload)),
+    );
     stopLightingMock.mockResolvedValue({ active: false });
     stopHueMock.mockResolvedValue({
       active: false,
@@ -272,6 +276,60 @@ describe("useLightingModeOrchestrator", () => {
         bucket: "internal",
         reason: "AMBILIGHT_CAPTURE_NOT_YET_INVENTED",
       });
+    });
+
+    it("does not commit or persist a mode the backend refused to start", async () => {
+      setLightingModeMock.mockResolvedValue(
+        startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+      );
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      // Showing ON here also persisted the mode, so the next launch restored a
+      // mode that had never run.
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+      expect(result.current.activeOutputTargets).not.toContain("usb");
+    });
+
+    it("does not commit when a gate refuses while another kind is still live", async () => {
+      // The gate arms return `owner.active_mode` — the RUNNING mode — so `active`
+      // is true here and only the kind mismatch exposes the refusal.
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: LIGHTING_MODE_KIND.SOLID, solid: { r: 1, g: 2, b: 3, brightness: 1 } },
+        status: {
+          code: "DEVICE_NOT_CONNECTED",
+          message: "Cannot apply lighting mode while device is disconnected.",
+          details: null,
+        },
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.lightingMode.kind).not.toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      expect(result.current.activeOutputTargets).not.toContain("usb");
+    });
+
+    it("commits the mode when the backend accepts it", async () => {
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT },
+        status: { code: "AMBILIGHT_MODE_STARTED", message: "Started.", details: null },
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      expect(result.current.activeOutputTargets).toContain("usb");
     });
 
     it("stays silent when the start succeeds", async () => {

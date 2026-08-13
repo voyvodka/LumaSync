@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import type { LightingModeConfig } from "../features/mode/model/contracts";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
+import { appliedResult } from "@/test/modeCommandResult";
 
 const loadShellStateMock = vi.fn();
 const saveShellStateMock = vi.fn();
@@ -254,7 +255,9 @@ describe("App mode orchestration", () => {
     });
     initWindowLifecycleMock.mockResolvedValue(undefined);
     saveShellStateMock.mockResolvedValue(undefined);
-    setLightingModeMock.mockResolvedValue({ active: true });
+    setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+      Promise.resolve(appliedResult(payload)),
+    );
     stopLightingMock.mockResolvedValue({ active: false });
     startHueMock.mockResolvedValue({
       active: true,

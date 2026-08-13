@@ -458,8 +458,9 @@ export function useLightingModeOrchestrator({
         // Phase 2 — this is what starts the ambilight worker, so it must run for
         // Hue-only targets too or the stream comes up with no colour driver.
         const hueStartedOk = targetResults.hue?.ok === true;
-        // A transient Hue failure still starts the worker: it runs without Hue
-        // context and the stream auto-reconnects within ~30 s.
+        // A transient Hue failure still attempts the start — the worker can run
+        // without Hue context and reconnect within ~30 s. If the backend gates it
+        // instead, the commit below refuses and the UI stays off, not ON.
         const hueTransientFail =
           !hueStartedOk &&
           normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
@@ -468,6 +469,10 @@ export function useLightingModeOrchestrator({
           runtimePlan.startTargets.includes("usb") ||
           (runtimePlan.startTargets.includes("hue") && hueStartedOk) ||
           hueTransientFail;
+
+        // Set by Phase 2 when the backend reports it is not running the requested
+        // mode, so Phase 3's commit below can refuse to record a mode that never ran.
+        let applyRefused = false;
 
         if (needsLightingModeApply) {
           // Advisory probe, never a gate: the OS prompt only appears from the
@@ -487,11 +492,24 @@ export function useLightingModeOrchestrator({
             if (applyResult?.status?.code === LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED) {
               setStartFailedNotice(describeCaptureFailure(applyResult.status.details));
             }
-            if (runtimePlan.startTargets.includes("usb")) {
+            // `mode` reports the RUNNING mode, so a gate refusal while another
+            // kind is live reads as refused too — `active` alone would not.
+            // `!== null` is load-bearing: a deduped dispatch means never asked.
+            if (applyResult !== null && applyResult.mode.kind !== normalizedNextMode.kind) {
+              applyRefused = true;
+              if (runtimePlan.startTargets.includes("usb")) {
+                targetResults.usb = {
+                  ok: false,
+                  code: applyResult.status.code,
+                  message: applyResult.status.message,
+                };
+              }
+            } else if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: true };
             }
           } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
+            applyRefused = true;
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: false, code: "USB_MODE_APPLY_FAILED", message: reason };
             }
@@ -522,9 +540,9 @@ export function useLightingModeOrchestrator({
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
         setActiveOutputTargets(merged.activeTargets);
         // Only reflect user intent in the UI when at least one backend command was
-        // issued. If all targets were gate-blocked (e.g. Hue config missing), the
-        // mode stays unchanged so the UI matches actual backend state.
-        if (needsLightingModeApply) {
+        // issued and the backend accepted it. A gate-blocked or failed start must
+        // not be shown as ON, nor persisted for the next launch to restore.
+        if (needsLightingModeApply && !applyRefused) {
           setLightingModeState(normalizedNextMode);
           scheduleLightingModePersist(normalizedNextMode);
         }
