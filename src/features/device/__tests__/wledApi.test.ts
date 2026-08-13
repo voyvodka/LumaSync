@@ -86,20 +86,6 @@ describe("discoverWledDevices", () => {
     );
   });
 
-  it("happy path: invokes discover_wled_devices with empty object when no manualIp", async () => {
-    invokeMock.mockResolvedValueOnce({
-      status: makeStatus(WLED_STATUS.DISCOVERY_OK),
-      devices: [],
-    });
-
-    await discoverWledDevices();
-
-    expect(invokeMock).toHaveBeenCalledWith(
-      DEVICE_COMMANDS.DISCOVER_WLED_DEVICES,
-      {},
-    );
-  });
-
   it("coded failure: resolves (does not throw) with WLED_DISCOVERY_TIMEOUT + empty devices", async () => {
     const response: WledDiscoveryResponse = {
       status: makeStatus(WLED_STATUS.DISCOVERY_TIMEOUT, "WLED device did not respond."),
@@ -114,16 +100,16 @@ describe("discoverWledDevices", () => {
     // never-throws contract: must have resolved, not thrown
   });
 
-  it("coded failure: resolves with WLED_DISCOVERY_EMPTY + empty devices array", async () => {
+  it("coded failure: resolves (does not throw) with WLED_DISCOVERY_UNREACHABLE + empty devices", async () => {
     const response: WledDiscoveryResponse = {
-      status: makeStatus(WLED_STATUS.DISCOVERY_EMPTY, "No WLED devices found."),
+      status: makeStatus(WLED_STATUS.DISCOVERY_UNREACHABLE, "Could not reach WLED device."),
       devices: [],
     };
     invokeMock.mockResolvedValueOnce(response);
 
     const result = await discoverWledDevices("10.0.0.5");
 
-    expect(result.status.code).toBe(WLED_STATUS.DISCOVERY_EMPTY);
+    expect(result.status.code).toBe(WLED_STATUS.DISCOVERY_UNREACHABLE);
     expect(result.devices).toEqual([]);
   });
 

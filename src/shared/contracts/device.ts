@@ -22,9 +22,8 @@ export const DEVICE_COMMANDS = {
    */
   SAMPLE_LED_FRAME: "sample_led_frame",
   /**
-   * v1.5 W1-B1 — passive mDNS / SSDP scan for WLED instances on the LAN.
-   * Returns `WledDeviceInfo[]` so the device picker can list candidates
-   * before the user commits to a sink.
+   * v1.5 W1-B1 — probe a single user-supplied IP's `/json/info` endpoint.
+   * Manual-IP only; not a LAN scan. Returns `WledDeviceInfo[]` (0 or 1).
    */
   DISCOVER_WLED_DEVICES: "discover_wled_devices",
   /**
@@ -391,11 +390,9 @@ export interface WledDeviceInfo {
  * `status.code` discriminator.
  */
 export const WLED_STATUS = {
-  /** `discover_wled_devices` succeeded; payload contains zero-or-more `WledDeviceInfo`. */
+  /** `discover_wled_devices` succeeded; payload contains the one probed `WledDeviceInfo`. */
   DISCOVERY_OK: "WLED_DISCOVERY_OK",
-  /** `discover_wled_devices` succeeded but no instances were found within the scan window. */
-  DISCOVERY_EMPTY: "WLED_DISCOVERY_EMPTY",
-  /** `discover_wled_devices` aborted before completion (mDNS/SSDP scan window exhausted). */
+  /** The probed IP did not respond to `/json/info` within the 2s HTTP timeout. */
   DISCOVERY_TIMEOUT: "WLED_DISCOVERY_TIMEOUT",
   /** `connect_wled_sink` / `test_wled_bridge` could not reach the configured IP. */
   BRIDGE_UNREACHABLE: "WLED_BRIDGE_UNREACHABLE",
@@ -431,7 +428,7 @@ export const WLED_STATUS = {
   TEST_OK: "WLED_TEST_OK",
   /** The test packet could not be written to the socket. */
   TEST_SEND_FAILED: "WLED_TEST_SEND_FAILED",
-  /** The scan could not reach the network at all (no interface / socket bind). */
+  /** Connection refused / network-level error probing the configured IP. */
   DISCOVERY_UNREACHABLE: "WLED_DISCOVERY_UNREACHABLE",
   /** The HTTP client could not be constructed — a local fault, not a bridge one. */
   CLIENT_BUILD_FAILED: "WLED_CLIENT_BUILD_FAILED",

@@ -920,7 +920,6 @@ const wledRustSource = readOrEmpty(WLED_DISCOVERY_FILE, "wled_discovery.rs");
 console.log("\n[ Device WLED status codes (v1.5.2 patch — F4) ]");
 const REQUIRED_WLED_STATUS_CODES = [
   "WLED_DISCOVERY_OK",
-  "WLED_DISCOVERY_EMPTY",
   "WLED_DISCOVERY_TIMEOUT",
   "WLED_BRIDGE_UNREACHABLE",
   "WLED_PROTOCOL_MISMATCH",
@@ -935,27 +934,11 @@ for (const code of REQUIRED_WLED_STATUS_CODES) {
     `WLED_STATUS map contains "${code}" (device.ts)`,
     `MISSING WLED_STATUS entry "${code}" in device.ts`
   );
-}
-// Rust side must also declare every code that the frontend sees.
-for (const code of REQUIRED_WLED_STATUS_CODES) {
-  // Not all codes appear in the discovery file (DISCOVERY_EMPTY is TS-only for
-  // the mDNS path), so we only require the ones that Rust actively emits.
-  const RUST_EMITTED = [
-    "WLED_DISCOVERY_OK",
-    "WLED_DISCOVERY_TIMEOUT",
-    "WLED_BRIDGE_UNREACHABLE",
-    "WLED_PROTOCOL_MISMATCH",
-    "WLED_LED_COUNT_MISMATCH",
-    "WLED_INVALID_IP",
-    "WLED_INVALID_LED_COUNT",
-  ];
-  if (RUST_EMITTED.includes(code)) {
-    check(
-      wledRustSource.includes(`"${code}"`),
-      `Rust wled_discovery.rs emits status code "${code}"`,
-      `MISSING status code "${code}" in wled_discovery.rs`
-    );
-  }
+  check(
+    wledRustSource.includes(`"${code}"`),
+    `Rust wled_discovery.rs emits status code "${code}"`,
+    `MISSING status code "${code}" in wled_discovery.rs`
+  );
 }
 
 console.log("\n[ WLED discovery wire shape — Vec<WledDeviceInfo> (A1.1) ]");
