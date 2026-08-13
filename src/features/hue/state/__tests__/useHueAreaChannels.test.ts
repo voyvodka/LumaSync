@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+
 import { useHueAreaChannels } from "../useHueAreaChannels";
 
 const shellLoadMock = vi.fn();
@@ -57,6 +59,49 @@ describe("useHueAreaChannels", () => {
 
     await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
     expect(result.current.areaChannels).toEqual([]);
+  });
+
+  it("reports a 403 rejection as the declared re-pair status", async () => {
+    // Tauri rejects with the raw Err string, not an Error instance.
+    getAreaChannelsMock.mockRejectedValue(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED);
+    const onAuthInvalid = vi.fn();
+
+    const { result } = renderHook(() =>
+      useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1", onAuthInvalid),
+    );
+
+    await waitFor(() => expect(onAuthInvalid).toHaveBeenCalledTimes(1));
+    expect(onAuthInvalid).toHaveBeenCalledWith({
+      code: HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED,
+      message: expect.any(String),
+      details: null,
+    });
+    expect(result.current.areaChannels).toEqual([]);
+  });
+
+  it("leaves an unrecognised rejection as a silent empty list", async () => {
+    getAreaChannelsMock.mockRejectedValue(new Error("bridge unreachable"));
+    const onAuthInvalid = vi.fn();
+
+    const { result } = renderHook(() =>
+      useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1", onAuthInvalid),
+    );
+
+    await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
+    expect(onAuthInvalid).not.toHaveBeenCalled();
+    expect(result.current.areaChannels).toEqual([]);
+  });
+
+  it("does not refetch when the callback identity changes every render", async () => {
+    const { rerender } = renderHook(() =>
+      useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1", () => {}),
+    );
+
+    await waitFor(() => expect(getAreaChannelsMock).toHaveBeenCalledTimes(1));
+    rerender();
+    rerender();
+
+    expect(getAreaChannelsMock).toHaveBeenCalledTimes(1);
   });
 
   it("hydrates overrides for the selected area from the store", async () => {
