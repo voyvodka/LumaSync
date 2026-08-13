@@ -42,21 +42,31 @@ function bridgeConsoleToTauri() {
   const originalWarn = console.warn.bind(console);
   const originalError = console.error.bind(console);
 
+  // A dead bridge used to be invisible — see #181, where the Rust sink stayed
+  // empty on Windows while the webview console was fine. Report once, through
+  // the unwrapped console.error so it cannot recurse.
+  let bridgeFailed = false;
+  const onBridgeFailure = (err: unknown) => {
+    if (bridgeFailed) return;
+    bridgeFailed = true;
+    originalError("[LumaSync] console→log bridge failed; Rust log sink is missing frontend lines:", err);
+  };
+
   console.info = (...args: unknown[]) => {
     originalInfo(...args);
-    void logInfo(fmt(args)).catch(() => {});
+    void logInfo(fmt(args)).catch(onBridgeFailure);
   };
   console.log = (...args: unknown[]) => {
     originalLog(...args);
-    void logInfo(fmt(args)).catch(() => {});
+    void logInfo(fmt(args)).catch(onBridgeFailure);
   };
   console.warn = (...args: unknown[]) => {
     originalWarn(...args);
-    void logWarn(fmt(args)).catch(() => {});
+    void logWarn(fmt(args)).catch(onBridgeFailure);
   };
   console.error = (...args: unknown[]) => {
     originalError(...args);
-    void logError(fmt(args)).catch(() => {});
+    void logError(fmt(args)).catch(onBridgeFailure);
   };
 }
 
