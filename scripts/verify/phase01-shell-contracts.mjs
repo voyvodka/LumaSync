@@ -577,12 +577,9 @@ check(
   "MISSING Rust HealthCheckResult.advertised_firmware_profile field"
 );
 
-console.log("\n[ Device sample-LED-frame command ]");
-check(
-  deviceSource.includes(`"sample_led_frame"`),
-  "device command \"sample_led_frame\" defined",
-  "MISSING device command \"sample_led_frame\""
-);
+// `sample_led_frame` was asserted here for four waves. No `#[tauri::command]`
+// ever existed, so the check certified a name that resolved to nothing —
+// the bidirectional command-name parity block below is what replaces it.
 
 // ---------------------------------------------------------------------------
 // Calibration contract (shared extract)

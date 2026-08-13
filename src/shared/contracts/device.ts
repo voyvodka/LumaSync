@@ -14,14 +14,6 @@ export const DEVICE_COMMANDS = {
   GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
   /**
-   * Per-LED sampling frame pump (v1.4 anchor). The Rust handler computes
-   * the next frame's RGB triples from the configured sampling strategy
-   * and streams them through the active `LedSink`. Contract-first: the
-   * command name is reserved here so the frontend can already wire the
-   * sampling playground UI while the Rust handler lands in Wave 2.
-   */
-  SAMPLE_LED_FRAME: "sample_led_frame",
-  /**
    * v1.5 W1-B1 — probe a single user-supplied IP's `/json/info` endpoint.
    * Manual-IP only; not a LAN scan. Returns `WledDeviceInfo[]` (0 or 1).
    */
