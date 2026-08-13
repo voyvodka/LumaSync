@@ -1298,6 +1298,91 @@ for (const code of rustPortCodes) {
 }
 
 // ---------------------------------------------------------------------------
+// Wire unions — emitted set must EQUAL the declared union, not merely be
+// contained by it. Containment let a phantom member sit in a union forever.
+// ---------------------------------------------------------------------------
+console.log("\n[ Wire status unions — emitted set === declared union ]");
+
+/** Members of an `export const NAME = { ... } as const;` block. */
+function constMembers(source, name) {
+  const block = source.match(new RegExp(`export const ${name}\\s*=\\s*\\{([\\s\\S]*?)\\n\\} as const;`));
+  return block ? [...block[1].matchAll(/:\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]) : [];
+}
+
+function checkWireUnion(label, emitted, declared, pinnedCount) {
+  const emittedSet = [...new Set(emitted)].sort();
+  const declaredSet = [...new Set(declared)].sort();
+  check(
+    emittedSet.length === pinnedCount,
+    `${label}: harvested exactly ${pinnedCount} emitted codes`,
+    `HARVEST COUNT DRIFT (${label}): expected ${pinnedCount}, got ${emittedSet.length} `
+      + `[${emittedSet.join(", ")}] — a code was added, removed, or hoisted into a `
+      + `constant the literal harvest cannot see. Bump the pin deliberately.`
+  );
+  for (const code of emittedSet.filter((c) => !declaredSet.includes(c))) {
+    fail(`${label}: Rust emits "${code}" but the wire union does not include it`);
+  }
+  for (const code of declaredSet.filter((c) => !emittedSet.includes(c))) {
+    fail(
+      `${label}: the wire union declares "${code}" but no Rust producer puts it on `
+        + `this shape — drop it from the union or wire up the producer`
+    );
+  }
+  check(
+    emittedSet.join(",") === declaredSet.join(","),
+    `${label}: emitted set equals the declared union (${emittedSet.length} codes)`,
+    `${label}: wire union and emitted set differ (listed above)`
+  );
+}
+
+const rustSerialProduction = stripComments(rustHealthSource);
+checkWireUnion(
+  "SerialCommandStatusCode",
+  [
+    ...[...rustSerialProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    // The last `command_status` arm passes `connect_error_code(&error)`, so its
+    // match arms are part of the same wire union.
+    ...[...(rustSerialProduction.match(/fn connect_error_code[\s\S]*?\n\}/) ?? [""])[0]
+      .matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+  ],
+  [
+    ...constMembers(deviceSource, "SERIAL_PORT_LIST_STATUS"),
+    ...constMembers(deviceSource, "SERIAL_CONNECT_STATUS"),
+    "PORT_NOT_FOUND",
+    "PORT_UNSUPPORTED",
+  ],
+  11
+);
+
+checkWireUnion(
+  "WledWireStatusCode",
+  [...stripComments(wledRustSource).matchAll(/WledCommandStatus::(?:ok|err)\(\s*"([A-Z][A-Z0-9_]*)"/g)]
+    .map((m) => m[1]),
+  constMembers(deviceSource, "WLED_STATUS").filter((c) => c !== "WLED_SINK_NOT_STARTED"),
+  12
+);
+
+const rustHueRuntimeSource = walkSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"), /\.rs$/)
+  .map((f) => stripComments(readFileSync(f, "utf-8").split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]))
+  .join("\n");
+const HUE_RUNTIME_NOT_ON_THIS_SHAPE = [
+  "AUTH_INVALID_RE_PAIR_REQUIRED",
+  "HUE_CHANNEL_POSITIONS_UPDATED",
+  "HUE_CHANNEL_POSITIONS_FAILED",
+];
+checkWireUnion(
+  "HueRuntimeWireStatusCode",
+  [...rustHueRuntimeSource.matchAll(/status_with\(\s*[^,]+,\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+  [
+    ...constMembers(hueSource, "HUE_RUNTIME_STATUS").filter(
+      (c) => !HUE_RUNTIME_NOT_ON_THIS_SHAPE.includes(c)
+    ),
+    ...constMembers(hueSource, "HUE_SOLID_COLOR_STATUS"),
+  ],
+  19
+);
+
+// ---------------------------------------------------------------------------
 // Highest severity: a code both trees use and neither declares. Both sides
 // believe they own it and neither is authoritative — how a word-swap survives.
 // ---------------------------------------------------------------------------
@@ -1881,6 +1966,10 @@ console.log("\n[ Nullability parity — Rust Option ↔ TS null/optional ]");
  */
 const NULLABILITY_NAME_ALIASES = {
   HueEntertainmentArea: "HueEntertainmentAreaSummary",
+  // The four coded-status structs all mirror the one generic envelope.
+  CommandStatus: "CommandStatusOf",
+  WledCommandStatus: "CommandStatusOf",
+  HueCommandStatus: "CommandStatusOf",
 };
 
 /**
@@ -1937,11 +2026,14 @@ const contractInterfaces = new Map();
 for (const file of contractModuleFiles) {
   const src = readFileSync(file, "utf-8");
   for (const m of src.matchAll(
-    /export interface (\w+)(?:\s+extends\s+([\w,\s]+?))?\s*\{([\s\S]*?)\n\}/g
+    /export interface (\w+)(?:<[^>]*>)?(?:\s+extends\s+([\w,\s<>]+?))?\s*\{([\s\S]*?)\n\}/g
   )) {
     contractInterfaces.set(m[1], {
       file: file.split("/").pop(),
-      parents: (m[2] ?? "").split(",").map((p) => p.trim()).filter(Boolean),
+      parents: (m[2] ?? "")
+        .split(",")
+        .map((p) => p.trim().replace(/<.*>$/, ""))
+        .filter(Boolean),
       body: m[3],
     });
   }
@@ -1976,7 +2068,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 31;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 32;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,
