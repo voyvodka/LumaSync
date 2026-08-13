@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeTarget,
-  type HueRuntimeTargetTelemetryRow,
 } from "@/shared/contracts/hue";
 import { restartHue, startHue } from "../../mode/modeApi";
 import { readHueStreamStatus } from "../hueReadCache";
@@ -15,7 +14,7 @@ import {
   type HueRuntimeStatusView,
 } from "../model/onboardingStatusCodes";
 import { RUNTIME_POLL_INTERVAL_MS, RUNTIME_POLL_MIN_INTERVAL_MS, STREAMING_RUNTIME_STATES } from "../model/pollingCadence";
-import { deriveRuntimeTargets } from "../model/runtimeTargets";
+import { deriveRuntimeTargets, type HueRuntimeTargetRow } from "../model/runtimeTargets";
 
 export interface UseHueRuntimeStatusInput {
   bridge: HueBridgeSummary | null;
@@ -27,7 +26,7 @@ export interface UseHueRuntimeStatusInput {
 
 export interface UseHueRuntimeStatusResult {
   runtimeStatus: HueRuntimeStatusView | null;
-  runtimeTargets: HueRuntimeTargetTelemetryRow[];
+  runtimeTargets: HueRuntimeTargetRow[];
   isRuntimeMutating: boolean;
   startRuntime: () => Promise<void>;
   retryRuntimeTarget: (target: HueRuntimeTarget) => Promise<void>;
@@ -43,7 +42,7 @@ export function useHueRuntimeStatus({
   const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatusView | null>(null);
   /** Survives the runtime-loop effect re-running on every state transition. */
   const lastRuntimePollAtRef = useRef(0);
-  const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetTelemetryRow[]>([]);
+  const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetRow[]>([]);
   const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
 
   // `force` bypasses the shared read cache. Mandatory after a mutation: a

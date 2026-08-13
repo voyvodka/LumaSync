@@ -4,7 +4,6 @@ import {
   HUE_CREDENTIAL_STATUS,
   type HueCredentialStatus,
   type HueRuntimeTarget,
-  type HueRuntimeTargetTelemetryRow,
 } from "@/shared/contracts/hue";
 import type {
   HueAreaChannelInfo,
@@ -13,6 +12,7 @@ import type {
   HuePairingCredentials,
 } from "../hueOnboardingApi";
 import type { HueOnboardingStatus, HueRuntimeStatusView } from "./onboardingStatusCodes";
+import type { HueRuntimeTargetRow } from "./runtimeTargets";
 
 export type HueStep = "discover" | "pair" | "area" | "ready";
 
@@ -59,7 +59,7 @@ export interface UseHueOnboardingResult {
   isValidatingCredential: boolean;
   status: HueOnboardingStatus | null;
   runtimeStatus: HueRuntimeStatusView | null;
-  runtimeTargets: HueRuntimeTargetTelemetryRow[];
+  runtimeTargets: HueRuntimeTargetRow[];
   isRuntimeMutating: boolean;
   /** Channels for the currently selected area (empty while loading or no area selected). */
   areaChannels: HueAreaChannelInfo[];

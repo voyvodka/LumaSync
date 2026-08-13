@@ -469,10 +469,12 @@ export const DEFAULT_HUE_INTENSITY_PRESET: LightingSmoothingPreset =
 /** Which output surface a runtime telemetry row describes. */
 export type HueRuntimeTarget = "hue" | "usb";
 
-export interface HueRuntimeTargetTelemetryRow {
+/** Frontend-derived from the runtime status — no Rust producer. `TCode` widens
+ * for the caller that also holds a minted code. */
+export interface HueRuntimeTargetTelemetryRow<TCode extends string = HueRuntimeWireStatusCode> {
   target: HueRuntimeTarget;
   state: HueRuntimeState;
-  code: HueRuntimeStatusCode | string;
+  code: TCode;
   message: string;
   details?: string | null;
   remainingAttempts?: number | null;

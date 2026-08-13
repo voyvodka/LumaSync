@@ -63,11 +63,11 @@ describe("modeApi Hue mutations invalidate the shared status cache", () => {
 
   it("invalidates even when the mutation rejects", async () => {
     await readHueStreamStatus();
-    invokeMock.mockRejectedValueOnce({ code: "HUE_STREAM_START_FAILED", message: "bridge busy" });
+    // A bare string is what `Result<_, String>` actually rejects with, so the
+    // normalised code is UNKNOWN — the subject here is the invalidation.
+    invokeMock.mockRejectedValueOnce("HUE_STREAM_START_FAILED: bridge busy");
 
-    await expect(startHue(START_PAYLOAD)).rejects.toMatchObject({
-      code: "HUE_STREAM_START_FAILED",
-    });
+    await expect(startHue(START_PAYLOAD)).rejects.toMatchObject({ code: "UNKNOWN" });
     await readHueStreamStatus();
 
     expect(statusRoundTrips()).toBe(2);
