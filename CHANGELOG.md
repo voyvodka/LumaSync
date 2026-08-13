@@ -23,6 +23,10 @@ https://keepachangelog.com/en/1.1.0/
 - Runtime telemetry in Settings adopts the amber Rev 07 design language it had been left out of.
 - The interface language picker is a dropdown that lists each language by its own name.
 
+### Security
+
+- Cleared the `extract-zip` symlink path-traversal advisory (GHSA-jmr9-qjv8-65gv), which reached the tree through the WebdriverIO E2E toolchain (dev-only). The package is unmaintained and its last release is the vulnerable one, so the exit is pinning its parent `@puppeteer/browsers` to 3.x, which dropped the dependency outright.
+
 ## [1.5.4] — 2026-08-10
 
 ### Fixed
