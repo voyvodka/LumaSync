@@ -1504,6 +1504,77 @@ check(
   "undeclared producers found (listed above)"
 );
 
+// Name-level twin of the code checks. `sample_led_frame` was asserted present
+// for four waves with no handler behind it; presence is not reachability.
+console.log("\n[ Tauri command names — contracts ↔ generate_handler! parity ]");
+// Registered but intentionally unnamed by any contract. Debug-only, so the
+// frontend must never invoke it.
+const UNCONTRACTED_RUST_COMMANDS = new Set(["simulate_hue_fault"]);
+
+const contractCommandNames = new Map();
+for (const file of tsSourceFiles.filter((f) => f.includes("/shared/contracts/"))) {
+  const src = stripComments(readFileSync(file, "utf-8"));
+  for (const block of src.matchAll(/export const [A-Z0-9_]*COMMANDS\s*=\s*\{([\s\S]*?)\n\}/g)) {
+    for (const entry of block[1].matchAll(/:\s*"([a-z][a-z0-9_]+)"/g)) {
+      contractCommandNames.set(entry[1], file.split("/").pop());
+    }
+  }
+}
+const registeredHandlers = new Set(
+  [...handlerListBlock.matchAll(/^\s*([a-z][a-z0-9_]+)\s*,/gm)].map((m) => m[1])
+);
+
+check(
+  contractCommandNames.size > 0 && registeredHandlers.size > 0,
+  `extracted ${contractCommandNames.size} contract command names / `
+    + `${registeredHandlers.size} registered handlers`,
+  "EXTRACTION FAILED: could not read command names from one or both sides"
+);
+for (const [name, file] of contractCommandNames) {
+  check(
+    registeredHandlers.has(name),
+    `contract command "${name}" (${file}) is registered in generate_handler!`,
+    `PHANTOM COMMAND "${name}" declared in ${file} but absent from generate_handler! — `
+      + `invoke() would resolve to nothing. Delete the declaration or land the handler.`
+  );
+}
+for (const name of registeredHandlers) {
+  if (UNCONTRACTED_RUST_COMMANDS.has(name)) {
+    note(`"${name}" registered with no contract name (allowlisted, debug-only)`);
+    continue;
+  }
+  check(
+    contractCommandNames.has(name),
+    `registered handler "${name}" has a contract name`,
+    `UNCONTRACTED COMMAND "${name}" is registered but no contract declares it — `
+      + `add it to a *_COMMANDS map or to UNCONTRACTED_RUST_COMMANDS with a reason.`
+  );
+}
+
+// `HANDSHAKE` has no underscore, so `harvestCodes` skips it by design. Without
+// this pin the step would silently leave the contract and nothing would notice.
+console.log("\n[ Serial health-check steps — Rust → device.ts parity ]");
+const rustHealthSteps = [
+  ...new Set(
+    [...stripComments(rustHealthSource).matchAll(/step:\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1])
+  ),
+].sort();
+const EXPECTED_HEALTH_STEP_COUNT = 5;
+check(
+  rustHealthSteps.length === EXPECTED_HEALTH_STEP_COUNT,
+  `harvested exactly ${EXPECTED_HEALTH_STEP_COUNT} health steps from device_connection.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_HEALTH_STEP_COUNT} steps, got `
+    + `${rustHealthSteps.length} [${rustHealthSteps.join(", ")}] — update the pin deliberately`
+);
+for (const step of rustHealthSteps) {
+  check(
+    deviceSource.includes(`${step}: "${step}"`),
+    `health step "${step}" declared in device.ts > DEVICE_HEALTH_STEPS`,
+    `UNDECLARED health step "${step}" — device_connection.rs reports it on `
+      + `HealthStepResult.step but DEVICE_HEALTH_STEPS does not declare it`
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Ambilight capture reasons — derived Rust → capture.ts parity
 // ---------------------------------------------------------------------------
