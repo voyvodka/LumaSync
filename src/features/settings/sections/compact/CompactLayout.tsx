@@ -87,13 +87,9 @@ export function CompactLayout({
 }: CompactLayoutProps) {
   const { t } = useTranslation();
 
-  // v1.5 W2 fix #41 — Adalight brightness lock parity with full settings.
-  // Hydrate the persisted firmware profile so the compact Solid card can
-  // disable the brightness slider exactly like SolidColorPanel does in
-  // full mode. Without this, the user could nudge brightness in compact
-  // and the firmware would silently swallow the byte (Adalight wire
-  // format has no brightness field) — divergent UX between the two
-  // surfaces of the same runtime.
+  // Needed for brightness-lock parity with full mode: the Adalight wire format
+  // has no brightness field, so without this the compact slider moves and the
+  // firmware silently swallows the byte.
   const [firmwareProfile, setFirmwareProfile] = useState<FirmwareProfile | undefined>(undefined);
   useEffect(() => {
     let cancelled = false;
@@ -121,10 +117,8 @@ export function CompactLayout({
   const isSolid = lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
   const isAmbilight = lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
 
-  // Gate non-Off modes behind "at least one output is actually reachable".
-  // Without this, Ambilight happily transitions into a running state even
-  // when no USB/Hue target is connected — the worker spins up but has
-  // nowhere to send frames.
+  // Without this gate the worker spins up with nowhere to send frames — a
+  // running Ambilight state and no reachable output.
   const hasAnyOutput = usbConnected || (hueConfigured && hueReachable);
   const activationBlocked = !hasAnyOutput;
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
@@ -173,10 +167,8 @@ export function CompactLayout({
     [outputTargets, onLightingModeChange],
   );
 
-  // Click → SOLID mode with the preset RGB. When we're already in SOLID
-  // the user's current brightness is preserved so manual tweaks survive;
-  // otherwise the preset's own brightness is used so a fresh scene hits
-  // the intended mood on entry.
+  // Already in SOLID keeps the user's brightness so manual tweaks survive;
+  // entering fresh takes the preset's own so the scene lands as intended.
   const handleScenePresetClick = useCallback(
     (preset: ScenePreset) => {
       onLightingModeChange({
@@ -351,16 +343,9 @@ function ModeButton({ kind, active, disabled, label, icon, onClick }: ModeButton
   );
 }
 
-// ────────────────────────────────────────────────────────────────
-// CompactSolidSection — Solid mode card (hero color tile + slider)
-// ────────────────────────────────────────────────────────────────
-//
-// IMPORTANT — why the solid draft lives in this child, not in
-// CompactLayout: hoisting it caused every brightness pointer tick to
-// reconcile the mode strip, scene row and card together. Pushing
-// ownership down isolates re-renders to the slider itself (the
-// throttled commit only fires at 20 Hz, mirroring the full-mode
-// pattern).
+/** Solid mode card. The draft lives here rather than in `CompactLayout` on
+ *  purpose — hoisted, every brightness tick reconciled the mode strip and
+ *  scene row too. */
 
 const BRIGHTNESS_COMMIT_MIN_INTERVAL_MS = 50;
 
@@ -462,26 +447,8 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
   const edgeColor = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.18)";
   const eyeBg = isLight ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.28)";
 
-  // v1.5 W1-A7 — open the SVG-native HSV picker in a small popover
-  // anchored to the hero card. The native <input type="color"> is gone;
-  // see HsvColorPicker for the replacement (keyboard nav + recent colors).
-  //
-  // v1.5 W2 fix #42 — popover is rendered through React.createPortal into
-  // document.body so the surrounding `.lm-compact-body { overflow: auto }`
-  // and `.lm-compact { overflow: hidden }` chain can no longer clip it.
-  // Position is computed from the trigger's getBoundingClientRect() and
-  // refreshed on resize / scroll so the popover tracks the hero tile while
-  // the user adjusts the brightness slider underneath.
-  //
-  // v1.5 W2 fix #43 — when the window is too short to fit the popover at
-  // either anchor (compact 320×480 with the 8-swatch RECENT row pushes
-  // ~290 px tall), the popover now clamps its own height to the viewport
-  // and scrolls internally instead of overflowing off-screen. The position
-  // is computed from a *measured* popover height rather than the
-  // POPOVER_FALLBACK_HEIGHT_PX constant — important because the recent
-  // strip mounts lazily and the picker grows after first paint. A
-  // useLayoutEffect re-measure follows the initial paint so the second
-  // commit lands at the final, post-measurement coordinates.
+  // Portalled and positioned from a measured height, both load-bearing at
+  // 320×480 — see docs/architecture/ui-and-shell.md.
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -526,10 +493,8 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
           window.innerHeight - renderHeight - POPOVER_VIEWPORT_MARGIN_PX,
         );
     let left = rect.left + rect.width / 2 - POPOVER_WIDTH_PX / 2;
-    // Clamp horizontally so the popover does not leak off-window. The
-    // 320 px compact frame is narrow enough that center-anchoring rarely
-    // overflows, but resizing the window mid-open made the picker flush
-    // against the right edge of the viewport without this clamp.
+    // Centre-anchoring rarely overflows at 320 px, but resizing the window while
+    // the popover is open pushes it flush against the right edge without this.
     const maxLeft = window.innerWidth - POPOVER_WIDTH_PX - POPOVER_VIEWPORT_MARGIN_PX;
     if (left < POPOVER_VIEWPORT_MARGIN_PX) left = POPOVER_VIEWPORT_MARGIN_PX;
     if (left > maxLeft) left = Math.max(POPOVER_VIEWPORT_MARGIN_PX, maxLeft);
@@ -566,12 +531,8 @@ function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps
     };
   }, [open, recomputePosition]);
 
-  // Two-pass positioning: the first render uses the fallback estimate, then
-  // useLayoutEffect re-runs synchronously after the popover has been laid
-  // out so the second pass uses the *measured* height. This is what fixes
-  // the off-by-N gap when the recent-colors strip pushes the picker past
-  // the estimate. Plus a ResizeObserver re-measures if the picker grows
-  // mid-open (e.g. the first time a swatch lands in the recent row).
+  // Second pass of the two-pass positioning — the fallback estimate is only
+  // ever what the first, invisible render uses.
   useLayoutEffect(() => {
     if (!open) return;
     recomputePosition();
@@ -666,15 +627,8 @@ function EyedropperIcon() {
   );
 }
 
-// ────────────────────────────────────────────────────────────────
-// SelfContainedBrightnessRow — throttled <input type=range>
-// ────────────────────────────────────────────────────────────────
-//
-// Owns its own visible percentage in local state and only notifies the
-// parent through a 20 Hz throttled `onCommit`. `initialPercent` seeds
-// the state and re-syncs when the external value drifts (mode switch,
-// scene click) but ONLY while the user is not dragging — a pointer
-// guard prevents echo commits from snapping the thumb mid-drag.
+/** Throttled range input. `initialPercent` re-syncs on external drift, but only
+ *  while the user is not dragging — otherwise an echo commit snaps the thumb. */
 
 interface SelfContainedBrightnessRowProps {
   initialPercent: number;
