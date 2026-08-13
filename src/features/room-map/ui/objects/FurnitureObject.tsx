@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
+import { furnitureObjectId } from "../../model/objectId";
 import type { SnapResult } from "../../state/useSnapGuides";
 
 const FURNITURE_COLORS: Record<
@@ -115,7 +116,7 @@ export function FurnitureObject({
     setLocalX(newX);
     setLocalY(newY);
     if (onSnapDragMove) {
-      snapResultRef.current = onSnapDragMove(`furniture-${placement.id}`, newX, newY, localW, localH);
+      snapResultRef.current = onSnapDragMove(furnitureObjectId(placement.id), newX, newY, localW, localH);
     }
   };
 

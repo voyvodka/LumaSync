@@ -1,5 +1,12 @@
 import type { TFunction } from "i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import {
+  furnitureObjectId,
+  hueChannelObjectId,
+  imageLayerObjectId,
+  TV_ANCHOR_OBJECT_ID,
+  usbStripObjectId,
+} from "./objectId";
 
 export type RoomObjectType = "tv" | "furniture" | "usb" | "hue" | "image";
 
@@ -18,7 +25,7 @@ export function buildObjectList(
   const rows: ObjectRowEntry[] = [];
   for (const layer of config.imageLayers) {
     rows.push({
-      id: `img-${layer.id}`,
+      id: imageLayerObjectId(layer.id),
       type: "image",
       label: layer.label,
       locked: layer.locked,
@@ -26,7 +33,7 @@ export function buildObjectList(
   }
   if (config.tvAnchor) {
     rows.push({
-      id: "tv",
+      id: TV_ANCHOR_OBJECT_ID,
       type: "tv",
       label: t("roomMap:objectPanel.tvLabel"),
       locked: config.tvAnchor.locked,
@@ -34,7 +41,7 @@ export function buildObjectList(
   }
   for (const f of config.furniture) {
     rows.push({
-      id: `furniture-${f.id}`,
+      id: furnitureObjectId(f.id),
       type: "furniture",
       label: f.label ?? t(`roomMap:furniture.type.${f.type}`),
       locked: f.locked,
@@ -42,7 +49,7 @@ export function buildObjectList(
   }
   for (const s of config.usbStrips) {
     rows.push({
-      id: `usb-${s.stripId}`,
+      id: usbStripObjectId(s.stripId),
       type: "usb",
       label: t("roomMap:objectPanel.ledLabel", { count: String(s.ledCount) }),
       locked: s.locked,
@@ -50,7 +57,7 @@ export function buildObjectList(
   }
   for (const ch of config.hueChannels) {
     rows.push({
-      id: `hue-${ch.channelIndex}`,
+      id: hueChannelObjectId(ch.channelIndex),
       type: "hue",
       label: ch.label ?? t("roomMap:objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
       locked: ch.locked,

@@ -12,6 +12,14 @@ import { UsbStripObject } from "./objects/UsbStripObject";
 import { HueChannelOverlay } from "./HueChannelOverlay";
 import { RoomDockPanel } from "./RoomDockPanel";
 import { deriveZones, type ZoneDeriveResult } from "../model/deriveZones";
+import {
+  furnitureObjectId,
+  hueChannelObjectId,
+  imageLayerObjectId,
+  parseObjectId,
+  TV_ANCHOR_OBJECT_ID,
+  usbStripObjectId,
+} from "../model/objectId";
 import { useSnapGuides } from "../state/useSnapGuides";
 import { SnapGuideOverlay } from "./SnapGuideOverlay";
 import { OriginMarker } from "./OriginMarker";
@@ -387,17 +395,20 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       const id = crypto.randomUUID();
       const newLayer = { id, path: destPath, label, offsetX: 0, offsetY: 0, scale: 1 };
       await updateConfig({ imageLayers: [...config.imageLayers, newLayer] });
-      setSelectedId(`img-${id}`);
+      setSelectedId(imageLayerObjectId(id));
     }
   }, [config.imageLayers, updateConfig]);
 
   const isLocked = useCallback(
     (id: string): boolean => {
-      if (id === "tv") return !!config.tvAnchor?.locked;
-      if (id.startsWith("furniture-")) return !!config.furniture.find((f) => f.id === id.replace("furniture-", ""))?.locked;
-      if (id.startsWith("usb-")) return !!config.usbStrips.find((s) => s.stripId === id.replace("usb-", ""))?.locked;
-      if (id.startsWith("hue-")) { const idx = parseInt(id.replace("hue-", ""), 10); return !!config.hueChannels[idx]?.locked; }
-      if (id.startsWith("img-")) return !!config.imageLayers.find((l) => l.id === id.replace("img-", ""))?.locked;
+      const parsed = parseObjectId(id);
+      if (parsed?.kind === "tv") return !!config.tvAnchor?.locked;
+      if (parsed?.kind === "furniture") return !!config.furniture.find((f) => f.id === parsed.furnitureId)?.locked;
+      if (parsed?.kind === "usb") return !!config.usbStrips.find((s) => s.stripId === parsed.stripId)?.locked;
+      // Indexes the array by slot, unlike every other Hue lookup here, which
+      // matches on `channelIndex`. Preserved as-is by the id refactor.
+      if (parsed?.kind === "hue") return !!config.hueChannels[parsed.channelIndex]?.locked;
+      if (parsed?.kind === "image") return !!config.imageLayers.find((l) => l.id === parsed.layerId)?.locked;
       return false;
     },
     [config],
@@ -406,17 +417,15 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const deleteById = useCallback(
     (id: string) => {
       if (isLocked(id)) return;
-      if (id.startsWith("img-")) {
-        const imgId = id.replace("img-", "");
-        void updateConfig({ imageLayers: config.imageLayers.filter((l) => l.id !== imgId) });
-      } else if (id === "tv") {
+      const parsed = parseObjectId(id);
+      if (parsed?.kind === "image") {
+        void updateConfig({ imageLayers: config.imageLayers.filter((l) => l.id !== parsed.layerId) });
+      } else if (parsed?.kind === "tv") {
         void updateConfig({ tvAnchor: undefined });
-      } else if (id.startsWith("furniture-")) {
-        const fId = id.replace("furniture-", "");
-        void updateConfig({ furniture: config.furniture.filter((f) => f.id !== fId) });
-      } else if (id.startsWith("usb-")) {
-        const sId = id.replace("usb-", "");
-        void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== sId) });
+      } else if (parsed?.kind === "furniture") {
+        void updateConfig({ furniture: config.furniture.filter((f) => f.id !== parsed.furnitureId) });
+      } else if (parsed?.kind === "usb") {
+        void updateConfig({ usbStrips: config.usbStrips.filter((s) => s.stripId !== parsed.stripId) });
       }
       // v1.5 W4-F2 manual-test feedback (2026-04-28): Hue channels are
       // bridge-managed — the user cannot remove them from the LumaSync
@@ -438,10 +447,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   }, [selectedId, deleteById]);
 
   const handleRotate = useCallback(() => {
-    if (!selectedId || !selectedId.startsWith("furniture-")) return;
-    const fId = selectedId.replace("furniture-", "");
+    const parsed = selectedId ? parseObjectId(selectedId) : null;
+    if (parsed?.kind !== "furniture") return;
     const updated = config.furniture.map((f) => {
-      if (f.id !== fId) return f;
+      if (f.id !== parsed.furnitureId) return f;
       const current = f.rotation ?? 0;
       return { ...f, rotation: (current + 15) % 360 };
     });
@@ -451,20 +460,19 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const handleDuplicate = useCallback(
     (id: string) => {
       const offset = 0.2;
-      if (id.startsWith("furniture-")) {
-        const fId = id.replace("furniture-", "");
-        const src = config.furniture.find((f) => f.id === fId);
+      const parsed = parseObjectId(id);
+      if (parsed?.kind === "furniture") {
+        const src = config.furniture.find((f) => f.id === parsed.furnitureId);
         if (!src) return;
         const dup = { ...src, id: crypto.randomUUID(), x: src.x + offset, y: src.y + offset };
         void updateConfig({ furniture: [...config.furniture, dup] });
-        setSelectedId(`furniture-${dup.id}`);
-      } else if (id.startsWith("usb-")) {
-        const sId = id.replace("usb-", "");
-        const src = config.usbStrips.find((s) => s.stripId === sId);
+        setSelectedId(furnitureObjectId(dup.id));
+      } else if (parsed?.kind === "usb") {
+        const src = config.usbStrips.find((s) => s.stripId === parsed.stripId);
         if (!src) return;
         const dup = { ...src, stripId: crypto.randomUUID(), startX: src.startX + offset, startY: src.startY + offset, endX: src.endX + offset, endY: src.endY + offset };
         void updateConfig({ usbStrips: [...config.usbStrips, dup] });
-        setSelectedId(`usb-${dup.stripId}`);
+        setSelectedId(usbStripObjectId(dup.stripId));
       }
     },
     [config.furniture, config.usbStrips, updateConfig],
@@ -486,28 +494,26 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       if (e.key === "ArrowUp") dy = -nudgeM;
       if (e.key === "ArrowDown") dy = nudgeM;
 
-      if (selectedId === "tv" && config.tvAnchor) {
+      const parsed = parseObjectId(selectedId);
+      if (parsed?.kind === "tv" && config.tvAnchor) {
         void updateConfig({
           tvAnchor: { ...config.tvAnchor, x: config.tvAnchor.x + dx, y: config.tvAnchor.y + dy },
         });
-      } else if (selectedId.startsWith("furniture-")) {
-        const fId = selectedId.replace("furniture-", "");
+      } else if (parsed?.kind === "furniture") {
         void updateConfig({
           furniture: config.furniture.map((f) =>
-            f.id === fId ? { ...f, x: f.x + dx, y: f.y + dy } : f,
+            f.id === parsed.furnitureId ? { ...f, x: f.x + dx, y: f.y + dy } : f,
           ),
         });
-      } else if (selectedId.startsWith("usb-")) {
-        const sId = selectedId.replace("usb-", "");
+      } else if (parsed?.kind === "usb") {
         void updateConfig({
           usbStrips: config.usbStrips.map((s) =>
-            s.stripId === sId
+            s.stripId === parsed.stripId
               ? { ...s, startX: s.startX + dx, startY: s.startY + dy, endX: s.endX + dx, endY: s.endY + dy }
               : s,
           ),
         });
-      } else if (selectedId.startsWith("hue-")) {
-        const idx = parseInt(selectedId.replace("hue-", ""), 10);
+      } else if (parsed?.kind === "hue") {
         // Hue channels: nudge in [-1,1] space; step = 0.05
         const hueStep = 0.05;
         let hdx = 0;
@@ -519,7 +525,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         if (e.key === "ArrowDown") hdy = -hueStep;
         void updateConfig({
           hueChannels: config.hueChannels.map((ch) =>
-            ch.channelIndex === idx
+            ch.channelIndex === parsed.channelIndex
               ? { ...ch, x: Math.max(-1, Math.min(1, ch.x + hdx)), y: Math.max(-1, Math.min(1, ch.y + hdy)) }
               : ch,
           ),
@@ -801,27 +807,24 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   // Property bar handlers
   const handleUpdatePosition = useCallback(
     (id: string, x: number, y: number) => {
-      if (id === "tv" && config.tvAnchor) {
+      const parsed = parseObjectId(id);
+      if (parsed?.kind === "tv" && config.tvAnchor) {
         void updateConfig({ tvAnchor: { ...config.tvAnchor, x, y } });
-      } else if (id.startsWith("furniture-")) {
-        const fId = id.replace("furniture-", "");
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === fId ? { ...f, x, y } : f)) });
-      } else if (id.startsWith("usb-")) {
-        const sId = id.replace("usb-", "");
+      } else if (parsed?.kind === "furniture") {
+        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, x, y } : f)) });
+      } else if (parsed?.kind === "usb") {
         void updateConfig({
           usbStrips: config.usbStrips.map((s) => {
-            if (s.stripId !== sId) return s;
+            if (s.stripId !== parsed.stripId) return s;
             const dx = x - s.startX;
             const dy = y - s.startY;
             return { ...s, startX: x, startY: y, endX: s.endX + dx, endY: s.endY + dy };
           }),
         });
-      } else if (id.startsWith("hue-")) {
-        const idx = parseInt(id.replace("hue-", ""), 10);
-        void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === idx ? { ...ch, x, y } : ch)) });
-      } else if (id.startsWith("img-")) {
-        const imgId = id.replace("img-", "");
-        void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imgId ? { ...l, offsetX: x, offsetY: y } : l)) });
+      } else if (parsed?.kind === "hue") {
+        void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === parsed.channelIndex ? { ...ch, x, y } : ch)) });
+      } else if (parsed?.kind === "image") {
+        void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, offsetX: x, offsetY: y } : l)) });
       }
     },
     [config, updateConfig],
@@ -829,11 +832,11 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const handleUpdateSize = useCallback(
     (id: string, w: number, h: number) => {
-      if (id === "tv" && config.tvAnchor) {
+      const parsed = parseObjectId(id);
+      if (parsed?.kind === "tv" && config.tvAnchor) {
         void updateConfig({ tvAnchor: { ...config.tvAnchor, width: w, height: h } });
-      } else if (id.startsWith("furniture-")) {
-        const fId = id.replace("furniture-", "");
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === fId ? { ...f, width: w, height: h } : f)) });
+      } else if (parsed?.kind === "furniture") {
+        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, width: w, height: h } : f)) });
       }
     },
     [config, updateConfig],
@@ -841,9 +844,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const handleUpdateRotation = useCallback(
     (id: string, rotation: number) => {
-      if (id.startsWith("furniture-")) {
-        const fId = id.replace("furniture-", "");
-        void updateConfig({ furniture: config.furniture.map((f) => (f.id === fId ? { ...f, rotation } : f)) });
+      const parsed = parseObjectId(id);
+      if (parsed?.kind === "furniture") {
+        void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, rotation } : f)) });
       }
     },
     [config.furniture, updateConfig],
@@ -915,7 +918,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     const isMac = navigator.platform.includes("Mac");
     const actions: ContextMenuAction[] = [];
 
-    const canDuplicate = id.startsWith("furniture-") || id.startsWith("usb-");
+    const parsed = parseObjectId(id);
+    const canDuplicate = parsed?.kind === "furniture" || parsed?.kind === "usb";
     if (canDuplicate) {
       actions.push({
         label: t("roomMap:contextMenu.duplicate"),
@@ -924,9 +928,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
     }
 
-    const isFurniture = id.startsWith("furniture-");
-    if (isFurniture) {
-      const furnitureId = id.replace("furniture-", "");
+    if (parsed?.kind === "furniture") {
+      const furnitureId = parsed.furnitureId;
       actions.push({
         label: t("roomMap:contextMenu.rename"),
         onClick: () => {
@@ -944,14 +947,13 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
     }
 
-    const isImage = id.startsWith("img-");
-    if (isImage) {
-      const imageId = id.replace("img-", "");
+    if (parsed?.kind === "image") {
+      const imageId = parsed.layerId;
       const current = config.imageLayers.find((l) => l.id === imageId);
       actions.push({
         label: t("roomMap:contextMenu.rename"),
         onClick: () => {
-          setRenameTarget({ id: `img-${imageId}`, currentLabel: current?.label ?? "" });
+          setRenameTarget({ id: imageLayerObjectId(imageId), currentLabel: current?.label ?? "" });
         },
       });
     }
@@ -1107,7 +1109,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 ),
               });
             }}
-            onImageLayerSelect={(id) => setSelectedId(`img-${id}`)}
+            onImageLayerSelect={(id) => setSelectedId(imageLayerObjectId(id))}
             zoom={zoom}
             panOffset={panOffset}
             onZoomChange={setZoom}
@@ -1143,11 +1145,11 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 key={strip.stripId}
                 placement={strip}
                 pxPerMeter={pxPerMeter}
-                selected={selectedId === `usb-${strip.stripId}`}
+                selected={selectedId === usbStripObjectId(strip.stripId)}
                 zoom={zoom}
                 panMode={spaceHeld}
                 connectionStatus={stripStatus}
-                onSelect={(id) => setSelectedId(`usb-${id}`)}
+                onSelect={(id) => setSelectedId(usbStripObjectId(id))}
                 onChange={(updated) => {
                   const next = config.usbStrips.map((s) =>
                     s.stripId === updated.stripId ? updated : s,
@@ -1164,12 +1166,12 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 key={f.id}
                 placement={f}
                 pxPerMeter={pxPerMeter}
-                selected={selectedId === `furniture-${f.id}`}
+                selected={selectedId === furnitureObjectId(f.id)}
                 gridStepPx={gridStepPx}
                 snapEnabled={showGrid}
                 zoom={zoom}
                 panMode={spaceHeld}
-                onSelect={(id) => setSelectedId(`furniture-${id}`)}
+                onSelect={(id) => setSelectedId(furnitureObjectId(id))}
                 onChange={(updated) => {
                   const next = config.furniture.map((item) =>
                     item.id === updated.id ? updated : item,
@@ -1186,12 +1188,12 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
               <TvAnchorObject
                 placement={config.tvAnchor}
                 pxPerMeter={pxPerMeter}
-                selected={selectedId === "tv"}
+                selected={selectedId === TV_ANCHOR_OBJECT_ID}
                 gridStepPx={gridStepPx}
                 snapEnabled={showGrid}
                 zoom={zoom}
                 panMode={spaceHeld}
-                onSelect={() => setSelectedId("tv")}
+                onSelect={() => setSelectedId(TV_ANCHOR_OBJECT_ID)}
                 onChange={(updated) => void updateConfig({ tvAnchor: updated })}
                 onSnapDragMove={snapDragMove}
                 onSnapDragEnd={snapDragEnd}
@@ -1216,7 +1218,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 roomDepthM={depthMeters}
                 zoom={zoom}
                 selectedId={selectedId}
-                onSelect={(idx) => setSelectedId(`hue-${idx}`)}
+                onSelect={(idx) => setSelectedId(hueChannelObjectId(idx))}
                 onChange={(updated) => {
                   const next = config.hueChannels.map((ch) =>
                     ch.channelIndex === updated.channelIndex ? updated : ch,
@@ -1272,20 +1274,17 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             onDelete={deleteById}
             onRenameFurniture={handleRenameFurniture}
             onToggleLock={(id) => {
-              if (id === "tv" && config.tvAnchor) {
+              const parsed = parseObjectId(id);
+              if (parsed?.kind === "tv" && config.tvAnchor) {
                 void updateConfig({ tvAnchor: { ...config.tvAnchor, locked: !config.tvAnchor.locked } });
-              } else if (id.startsWith("furniture-")) {
-                const fId = id.replace("furniture-", "");
-                void updateConfig({ furniture: config.furniture.map((f) => (f.id === fId ? { ...f, locked: !f.locked } : f)) });
-              } else if (id.startsWith("usb-")) {
-                const sId = id.replace("usb-", "");
-                void updateConfig({ usbStrips: config.usbStrips.map((s) => (s.stripId === sId ? { ...s, locked: !s.locked } : s)) });
-              } else if (id.startsWith("hue-")) {
-                const idx = parseInt(id.replace("hue-", ""), 10);
-                void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === idx ? { ...ch, locked: !ch.locked } : ch)) });
-              } else if (id.startsWith("img-")) {
-                const imgId = id.replace("img-", "");
-                void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === imgId ? { ...l, locked: !l.locked } : l)) });
+              } else if (parsed?.kind === "furniture") {
+                void updateConfig({ furniture: config.furniture.map((f) => (f.id === parsed.furnitureId ? { ...f, locked: !f.locked } : f)) });
+              } else if (parsed?.kind === "usb") {
+                void updateConfig({ usbStrips: config.usbStrips.map((s) => (s.stripId === parsed.stripId ? { ...s, locked: !s.locked } : s)) });
+              } else if (parsed?.kind === "hue") {
+                void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === parsed.channelIndex ? { ...ch, locked: !ch.locked } : ch)) });
+              } else if (parsed?.kind === "image") {
+                void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, locked: !l.locked } : l)) });
               }
             }}
             hueZones={hueZones}
@@ -1376,8 +1375,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
           currentLabel={renameTarget.currentLabel}
           promptText={t("roomMap:contextMenu.renamePrompt")}
           onConfirm={(newName) => {
-            if (renameTarget.id.startsWith("img-")) {
-              handleRenameImage(renameTarget.id.replace("img-", ""), newName);
+            // Image rows carry a prefixed object id here; furniture rows carry a bare id.
+            const parsed = parseObjectId(renameTarget.id);
+            if (parsed?.kind === "image") {
+              handleRenameImage(parsed.layerId, newName);
             } else {
               handleRenameFurniture(renameTarget.id, newName);
             }
