@@ -96,6 +96,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const {
     canvasContainerRef,
+    setCanvasContainer,
     canvasSize,
     zoom,
     setZoom,
@@ -386,7 +387,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       <div className="flex flex-1 min-h-0">
         <div
           className="relative flex-1"
-          ref={canvasContainerRef}
+          ref={setCanvasContainer}
         >
           {/* Floating tool chips — top-left of canvas */}
           <LeftToolbar

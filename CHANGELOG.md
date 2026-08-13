@@ -9,6 +9,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The room map opens with the room framed and centred in the canvas. It measured the canvas only on the very first render, which happens while the saved map is still loading and the canvas does not exist yet, so the measurement never arrived and every visit started at default zoom in the top-left corner.
 - LED test patterns now run with the output settings the rest of the app uses. They ignored the configured chip type, firmware profile, and colour correction entirely, so an SK6812 RGBW strip was driven through the WS2812B encoder and an Adalight controller through the LumaSync v1 header — the test lit nothing, or the wrong colours, on exactly the hardware it exists to verify.
 - Test patterns reach a WLED strip, and stopping one restores the previous mode. On a WLED-only setup the test was reported as preview-only and never lit the strip, and Stop was silently rejected, leaving the pattern running with no way to end it.
 - The chase pattern is a comet: a full-brightness head with a trailing fade, holding its speed and size the whole way round. It previously skipped LEDs at the medium and fast speeds, ran nearly three times faster along the long edges than the short ones, and reached the strip at a fraction of the requested brightness.
