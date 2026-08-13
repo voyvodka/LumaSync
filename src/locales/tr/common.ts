@@ -18,6 +18,11 @@ const common: Catalogue<typeof enCommon> = {
     },
     noDevices: "Kullanılabilir cihaz yok",
     noDevicesHint: "Ayarlar'dan cihazlarını bağla",
+    offline: {
+      title: "Ulaşılabilir çıkış yok",
+      body: "Aydınlatma modlarını etkinleştirmek için bir USB LED şerit bağla veya Hue köprüsünü eşleştir.",
+      action: "Cihazları aç",
+    },
   },
   mode: {
     title: "LED modu",
@@ -52,11 +57,6 @@ const common: Catalogue<typeof enCommon> = {
       music: "Müzik",
       chill: "Sakin",
       read: "Okuma",
-    },
-    offline: {
-      title: "Ulaşılabilir çıkış yok",
-      body: "Aydınlatma modlarını etkinleştirmek için bir USB LED şerit bağla veya Hue köprüsünü eşleştir.",
-      action: "Cihazları aç",
     },
   },
   ui: {

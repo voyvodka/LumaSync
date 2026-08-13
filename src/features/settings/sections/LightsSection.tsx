@@ -83,6 +83,8 @@ interface LightsSectionProps {
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
   onOpenCalibration: () => void;
+  /** Deep-link into DEVICES from the offline banner — full-mode twin of `CompactLayout.onOpenDevices`. */
+  onOpenDevices?: () => void;
   /**
    * Fired when the user picks a new Hue intensity preset. The parent
    * persists to shellStore AND hot-reloads the running worker so the new
@@ -135,6 +137,7 @@ export function LightsSection({
   onModeChange,
   onOutputTargetsChange,
   onOpenCalibration,
+  onOpenDevices,
   onHueIntensityPresetChange,
   onColorCorrectionChange,
   onFirmwareProfileChange,
@@ -142,6 +145,10 @@ export function LightsSection({
   const { t } = useTranslation();
   const lockState = getLightsModeLockState(modeLockReason);
   const modeSelectorDisabled = lockState.showReason || isModeTransitioning;
+  // Without a reachable sink an activated mode spins up a worker with nowhere to
+  // send frames; a configured-but-offline bridge is not one, hence the two Hue terms.
+  const outputMissing = !(usbConnected || (hueConfigured && hueReachable));
+  const nonOffModeDisabled = modeSelectorDisabled || outputMissing;
   const normalizedMode = normalizeLightingModeConfig(mode);
   const activeKind = normalizedMode.kind;
   const isOff = activeKind === LIGHTING_MODE_KIND.OFF;
@@ -368,6 +375,23 @@ export function LightsSection({
     <div className="lm-lights-page">
       {/* ── Center column ─────────────────────────────────────────────── */}
       <div className="lm-lights-center">
+        {/* Kept separate from the calibration banner: a calibrated strip that is
+            merely unplugged must not be told to go and calibrate, and vice versa. */}
+        {outputMissing && (
+          <OnboardingBanner
+            title={t("common:output.offline.title")}
+            body={t("common:output.offline.body")}
+            primaryAction={
+              onOpenDevices
+                ? {
+                    label: t("common:output.offline.action"),
+                    onClick: onOpenDevices,
+                  }
+                : undefined
+            }
+          />
+        )}
+
         {lockState.showReason && (
           <OnboardingBanner
             title={t("lights:calibrationBanner.title")}
@@ -402,7 +426,7 @@ export function LightsSection({
             <button
               type="button"
               className={`lm-mbtn ${isAmbilight ? "is-on" : ""}`}
-              disabled={modeSelectorDisabled}
+              disabled={nonOffModeDisabled}
               aria-pressed={isAmbilight}
               onClick={() =>
                 onModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: incomingAmbilight })
@@ -422,7 +446,7 @@ export function LightsSection({
             <button
               type="button"
               className={`lm-mbtn ${isSolid ? "is-on" : ""}`}
-              disabled={modeSelectorDisabled}
+              disabled={nonOffModeDisabled}
               aria-pressed={isSolid}
               onClick={() =>
                 onModeChange({
@@ -620,7 +644,7 @@ export function LightsSection({
                 <button
                   key={preset.id}
                   type="button"
-                  disabled={modeSelectorDisabled}
+                  disabled={nonOffModeDisabled}
                   className={`lm-sc ${isSelected ? "is-sel" : ""}`}
                   style={{ background: preset.gradient }}
                   aria-pressed={isSelected}

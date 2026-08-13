@@ -199,8 +199,8 @@ export function CompactLayout({
         {activationBlocked && (
           <div className="lm-compact-offline" role="status" aria-live="polite">
             <div className="lm-compact-offline-text">
-              <div className="ttl">{t("common:compact.offline.title")}</div>
-              <div className="sub">{t("common:compact.offline.body")}</div>
+              <div className="ttl">{t("common:output.offline.title")}</div>
+              <div className="sub">{t("common:output.offline.body")}</div>
             </div>
             {onOpenDevices && (
               <button
@@ -208,7 +208,7 @@ export function CompactLayout({
                 className="lm-compact-offline-action"
                 onClick={onOpenDevices}
               >
-                {t("common:compact.offline.action")}
+                {t("common:output.offline.action")}
               </button>
             )}
           </div>

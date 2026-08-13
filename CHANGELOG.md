@@ -9,6 +9,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The wide window no longer offers Ambilight, Solid and the scene tiles when nothing is connected. Picking one started a mode with nowhere to send frames; the compact window had guarded this all along. The wide window now dims those controls, explains that no output is reachable, and offers a shortcut into Devices — while Off stays available, as always.
 - The room map opens with the room framed and centred in the canvas. It measured the canvas only on the very first render, which happens while the saved map is still loading and the canvas does not exist yet, so the measurement never arrived and every visit started at default zoom in the top-left corner.
 - LED test patterns now run with the output settings the rest of the app uses. They ignored the configured chip type, firmware profile, and colour correction entirely, so an SK6812 RGBW strip was driven through the WS2812B encoder and an Adalight controller through the LumaSync v1 header — the test lit nothing, or the wrong colours, on exactly the hardware it exists to verify.
 - Test patterns reach a WLED strip, and stopping one restores the previous mode. On a WLED-only setup the test was reported as preview-only and never lit the strip, and Stop was silently rejected, leaving the pattern running with no way to end it.
