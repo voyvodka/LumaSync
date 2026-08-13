@@ -99,6 +99,14 @@ const common: Catalogue<typeof enCommon> = {
       hue: "Hue",
     },
   },
+  captureFailed: {
+    permission: "Ekran kaydı izni gerekli. Sistem Ayarları › Gizlilik ve Güvenlik bölümünden kontrol edin.",
+    display: "Seçili ekran artık kullanılamıyor. LED Kurulumu'ndan başka birini seçin.",
+    transient: "Ekran yakalama başlatılamadı. Modu kapatıp açmayı deneyin.",
+    unsupported: "Ekran yakalama bu platformda desteklenmiyor.",
+    output: "Kullanılabilir LED çıkış portu yok.",
+    internal: "Ekran yakalama başarısız ({{reason}}).",
+  },
 };
 
 export default common;
