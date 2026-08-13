@@ -102,7 +102,12 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
   }
 
   const status = input.status;
-  const hasRetry = typeof status.remainingAttempts === "number" || typeof status.nextAttemptMs === "number";
+  // The wire sends `null`, not an absent key. Project it to `undefined` here so
+  // the flag and the values it guards can never disagree.
+  const remainingAttempts =
+    typeof status.remainingAttempts === "number" ? status.remainingAttempts : undefined;
+  const nextAttemptMs = typeof status.nextAttemptMs === "number" ? status.nextAttemptMs : undefined;
+  const hasRetry = remainingAttempts !== undefined || nextAttemptMs !== undefined;
 
   return {
     variant: resolveVariant(status),
@@ -114,8 +119,8 @@ export function buildHueRuntimeStatusCard(input: HueRuntimeStatusCardInput): Hue
     actionHints: resolveActionHints(status),
     retry: hasRetry
       ? {
-          remainingAttempts: status.remainingAttempts,
-          nextAttemptMs: status.nextAttemptMs,
+          remainingAttempts,
+          nextAttemptMs,
           labelKey: "hue:runtime.retry.progress",
         }
       : undefined,

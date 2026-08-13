@@ -18,8 +18,8 @@ export interface HueBridgeSummary {
   id: string;
   ip: string;
   name: string;
-  modelId?: string;
-  softwareVersion?: string;
+  modelId?: string | null;
+  softwareVersion?: string | null;
 }
 
 /** Result of `discoverHueBridges` — bridges found via cloud + mDNS, deduped by id. */
@@ -53,9 +53,9 @@ export interface HueValidateCredentialsResponse {
 export interface HueEntertainmentAreaSummary {
   id: string;
   name: string;
-  roomName?: string;
-  channelCount?: number;
-  activeStreamer?: boolean;
+  roomName?: string | null;
+  channelCount: number;
+  activeStreamer: boolean;
 }
 
 export interface HueEntertainmentAreaListResponse {

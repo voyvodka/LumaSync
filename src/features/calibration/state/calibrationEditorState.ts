@@ -21,7 +21,7 @@ export interface CalibrationEditorState {
 }
 
 interface EditorConfigPatch {
-  templateId?: string;
+  templateId?: string | null;
   counts?: Partial<LedSegmentCounts>;
   bottomMissing?: number;
   cornerOwnership?: CornerOwnership;

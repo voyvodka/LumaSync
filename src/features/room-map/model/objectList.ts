@@ -15,7 +15,7 @@ export interface ObjectRowEntry {
   type: RoomObjectType;
   label: string;
   locked?: boolean;
-  zoneId?: string;
+  zoneId?: string | null;
 }
 
 export function buildObjectList(
