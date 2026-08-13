@@ -16,7 +16,7 @@
 
 import { readFileSync, readdirSync } from "fs";
 import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../..");
@@ -1626,6 +1626,151 @@ check(
   `LED_OUTPUT_PORT_UNAVAILABLE declared in capture.ts`,
   `MISSING LED_OUTPUT_PORT_UNAVAILABLE in capture.ts — lighting_mode.rs puts it in `
     + `the same status.details field as the capture reasons`
+);
+
+// Everything above proves a string is DECLARED. These three prove the
+// declaration has a path to the running app — the telemetry fork had neither.
+const contractModuleFiles = walkSourceFiles(resolve(ROOT, "src/shared/contracts"), /\.ts$/);
+const runtimeSourceFiles = tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"));
+
+console.log("\n[ Contract files — runtime import reachability ]");
+for (const file of contractModuleFiles) {
+  const name = file.split("/").pop();
+  const importers = runtimeSourceFiles.filter((f) =>
+    readFileSync(f, "utf-8").includes(`shared/contracts/${name.replace(/\.ts$/, "")}"`)
+  );
+  check(
+    importers.length > 0,
+    `${name} imported by ${importers.length} runtime file(s)`,
+    `ORPHAN CONTRACT "${name}" — no non-test file outside contracts/ imports it. `
+      + `Every check against it is validating a file the app never loads.`
+  );
+}
+
+// A feature may wrap a contract, never fork it: telemetry's private copy drifted
+// two fields and the verifier kept passing against the shared file nobody read.
+console.log("\n[ Feature-local contract modules — no standalone forks ]");
+const featureContractModules = walkSourceFiles(resolve(ROOT, "src/features"), /^contracts\.ts$/);
+for (const file of featureContractModules) {
+  const rel = file.slice(file.indexOf("src/features/"));
+  check(
+    readFileSync(file, "utf-8").includes("@/shared/contracts/"),
+    `${rel} derives from @/shared/contracts/`,
+    `STANDALONE FORK "${rel}" — declares contract shapes without importing or `
+      + `re-exporting @/shared/contracts/. Wrap the shared contract, do not copy it.`
+  );
+}
+
+console.log("\n[ Contract value exports — runtime consumers (ratcheted) ]");
+const DEAD_EXPORT_BASELINE_FILE = resolve(__dirname, "contract-dead-export-baseline.txt");
+const deadExportBaseline = new Set(
+  readOrEmpty(DEAD_EXPORT_BASELINE_FILE, "dead export baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+
+// Dynamic i18n heads are read from i18n-keys.mjs so there is one source of
+// truth: `hue:runtime.codes.${code}` means those codes ARE consumed.
+const i18nVerifierSource = readOrEmpty(
+  resolve(__dirname, "i18n-keys.mjs"),
+  "i18n verifier"
+);
+const dynamicPrefixBlock = i18nVerifierSource.match(
+  /const KNOWN_DYNAMIC_PREFIXES = \[([\s\S]*?)\]/
+);
+const dynamicPrefixes = dynamicPrefixBlock
+  ? [...dynamicPrefixBlock[1].matchAll(/"([^"]+)"/g)].map((m) => m[1])
+  : [];
+check(
+  dynamicPrefixes.length > 0,
+  `read ${dynamicPrefixes.length} dynamic i18n prefixes from i18n-keys.mjs`,
+  "EXTRACTION FAILED: could not read KNOWN_DYNAMIC_PREFIXES — every const whose "
+    + "values are looked up dynamically would be misreported as dead"
+);
+
+function flattenCatalogue(obj, prefix = "") {
+  const out = [];
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      out.push(...flattenCatalogue(value, path));
+    } else {
+      out.push(path);
+    }
+  }
+  return out;
+}
+
+const dynamicLeafNames = new Set();
+try {
+  const { I18N_NAMESPACES } = await import(
+    pathToFileURL(resolve(ROOT, "src/features/i18n/namespaces.ts")).href
+  );
+  for (const ns of I18N_NAMESPACES) {
+    const mod = await import(
+      pathToFileURL(resolve(ROOT, "src/locales/en", `${ns}.ts`)).href
+    );
+    for (const key of flattenCatalogue(mod.default)) {
+      const lastDot = key.lastIndexOf(".");
+      if (lastDot < 0) continue;
+      if (dynamicPrefixes.includes(`${ns}:${key.slice(0, lastDot)}`)) {
+        dynamicLeafNames.add(key.slice(lastDot + 1));
+      }
+    }
+  }
+} catch (err) {
+  fail(`EXTRACTION FAILED: cannot load the i18n catalogue (${err.message})`);
+}
+
+const runtimeText = runtimeSourceFiles
+  .filter((f) => !f.includes("__tests__"))
+  .map((f) => readFileSync(f, "utf-8"))
+  .join("\n");
+
+let deadExports = 0;
+for (const file of contractModuleFiles) {
+  const name = file.split("/").pop();
+  const source = readFileSync(file, "utf-8");
+  for (const decl of source.matchAll(/^export (const|function) ([A-Za-z_$][\w$]*)/gm)) {
+    const [, kind, symbol] = decl;
+    if (new RegExp(`\\b${symbol}\\b`).test(runtimeText)) continue;
+    if (kind === "const") {
+      const block = source.slice(decl.index).match(/^export const [\s\S]*?\n\} as const;/);
+      const values = block ? [...block[0].matchAll(/"([A-Za-z0-9_-]+)"/g)].map((m) => m[1]) : [];
+      if (values.some((value) => dynamicLeafNames.has(value))) continue;
+    }
+    const entry = `${name} ${symbol}`;
+    if (deadExportBaseline.has(entry)) {
+      note(`KNOWN GAP: ${entry} has no runtime consumer (baselined)`);
+      deadExports++;
+    } else {
+      fail(
+        `UNCONSUMED EXPORT ${entry} — no non-test file outside contracts/ reads it `
+          + `and no dynamic locale key covers it. Wire it up, delete it, or baseline `
+          + `it with the reason.`
+      );
+    }
+  }
+}
+for (const entry of deadExportBaseline) {
+  const [fileName, symbol] = entry.split(" ");
+  const stillDead = !new RegExp(`\\b${symbol}\\b`).test(runtimeText);
+  check(
+    stillDead,
+    `baseline entry "${entry}" still has no runtime consumer`,
+    `BASELINE STALE: "${entry}" now has a runtime consumer — delete its line from `
+      + `contract-dead-export-baseline.txt (the file may only shrink)`
+  );
+  if (!contractModuleFiles.some((f) => f.endsWith(`/${fileName}`))) {
+    fail(`BASELINE STALE: "${entry}" names ${fileName}, which is not a contract file`);
+  }
+}
+check(
+  deadExports === deadExportBaseline.size,
+  `all ${deadExportBaseline.size} baselined dead exports accounted for`,
+  `BASELINE DRIFT: ${deadExports} baselined entries matched but the file lists `
+    + `${deadExportBaseline.size} — a stale line is hiding a real gap`
 );
 
 // ---------------------------------------------------------------------------
