@@ -1,4 +1,3 @@
-import { useCallback, useRef, useState } from "react";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 
 export interface ObjectRect {
@@ -20,9 +19,9 @@ export interface SnapResult {
   guides: SnapGuide[];
 }
 
-const SNAP_THRESHOLD_M = 0.08; // ~5px at typical zoom
+export const SNAP_THRESHOLD_M = 0.08; // ~5px at typical zoom
 
-function getObjectRects(config: RoomMapConfig, excludeId: string): ObjectRect[] {
+export function getObjectRects(config: RoomMapConfig, excludeId: string): ObjectRect[] {
   const rects: ObjectRect[] = [];
 
   if (config.tvAnchor && excludeId !== "tv") {
@@ -44,7 +43,7 @@ function getObjectRects(config: RoomMapConfig, excludeId: string): ObjectRect[] 
   return rects;
 }
 
-function computeSnap(
+export function computeSnap(
   dragging: ObjectRect,
   others: ObjectRect[],
   threshold: number,
@@ -116,33 +115,4 @@ function computeSnap(
   if (bestDy >= threshold) snapY = null;
 
   return { snapX, snapY, guides };
-}
-
-export interface UseSnapGuidesReturn {
-  guides: SnapGuide[];
-  onDragMove: (id: string, x: number, y: number, w: number, h: number) => SnapResult;
-  onDragEnd: () => void;
-}
-
-export function useSnapGuides(config: RoomMapConfig): UseSnapGuidesReturn {
-  const [guides, setGuides] = useState<SnapGuide[]>([]);
-  const configRef = useRef(config);
-  configRef.current = config;
-
-  const onDragMove = useCallback(
-    (id: string, x: number, y: number, w: number, h: number): SnapResult => {
-      const others = getObjectRects(configRef.current, id);
-      const dragging: ObjectRect = { id, x, y, w, h };
-      const result = computeSnap(dragging, others, SNAP_THRESHOLD_M);
-      setGuides(result.guides);
-      return result;
-    },
-    [],
-  );
-
-  const onDragEnd = useCallback(() => {
-    setGuides([]);
-  }, []);
-
-  return { guides, onDragMove, onDragEnd };
 }

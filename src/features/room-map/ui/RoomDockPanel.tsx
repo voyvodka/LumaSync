@@ -39,7 +39,6 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import type {
@@ -59,9 +58,12 @@ import {
   ImageLayerInspector,
   TvAnchorInspector,
   UsbStripInspector,
-  resolveInspectorTarget,
   type UsbStripConnectionStatus,
 } from "./ObjectInspectors";
+import { buildObjectList, type ObjectRowEntry } from "../model/objectList";
+import { getZoneColor, TYPE_DOT_COLOR } from "../model/zoneColor";
+import { deriveHueAreaState } from "../model/hueAreaState";
+import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
 
 type DockTab = "objects" | "hueZones";
 
@@ -148,87 +150,6 @@ interface RoomDockPanelProps {
    * inspector already exposes. `unknown` (default) ⇒ no chip rendered.
    */
   hueChannelStatus?: UsbStripConnectionStatus;
-}
-
-/* ── helpers ─────────────────────────────────────────────────────── */
-
-interface ObjectRowEntry {
-  id: string;
-  type: "tv" | "furniture" | "usb" | "hue" | "image";
-  label: string;
-  locked?: boolean;
-  zoneId?: string;
-}
-
-const ZONE_TOKENS = [
-  "var(--lm-zone-1)",
-  "var(--lm-zone-2)",
-  "var(--lm-zone-3)",
-  "var(--lm-zone-4)",
-  "var(--lm-zone-5)",
-  "var(--lm-zone-6)",
-];
-
-const TYPE_DOT_COLOR: Record<ObjectRowEntry["type"], string> = {
-  tv: "var(--lm-zone-3)", // purple
-  furniture: "var(--lm-amber)",
-  usb: "var(--lm-zone-6)", // cyan
-  hue: "var(--lm-ink-dim)",
-  image: "var(--lm-ink-faint)",
-};
-
-function getZoneColor(zone: { borderColor?: string }, index: number): string {
-  if (zone.borderColor) return zone.borderColor;
-  return ZONE_TOKENS[index % ZONE_TOKENS.length];
-}
-
-function buildObjectList(
-  config: RoomMapConfig,
-  t: TFunction,
-): ObjectRowEntry[] {
-  const rows: ObjectRowEntry[] = [];
-  for (const layer of config.imageLayers) {
-    rows.push({
-      id: `img-${layer.id}`,
-      type: "image",
-      label: layer.label,
-      locked: layer.locked,
-    });
-  }
-  if (config.tvAnchor) {
-    rows.push({
-      id: "tv",
-      type: "tv",
-      label: t("roomMap:objectPanel.tvLabel"),
-      locked: config.tvAnchor.locked,
-    });
-  }
-  for (const f of config.furniture) {
-    rows.push({
-      id: `furniture-${f.id}`,
-      type: "furniture",
-      label: f.label ?? t(`roomMap:furniture.type.${f.type}`),
-      locked: f.locked,
-    });
-  }
-  for (const s of config.usbStrips) {
-    rows.push({
-      id: `usb-${s.stripId}`,
-      type: "usb",
-      label: t("roomMap:objectPanel.ledLabel", { count: String(s.ledCount) }),
-      locked: s.locked,
-    });
-  }
-  for (const ch of config.hueChannels) {
-    rows.push({
-      id: `hue-${ch.channelIndex}`,
-      type: "hue",
-      label: ch.label ?? t("roomMap:objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
-      locked: ch.locked,
-      zoneId: ch.zoneId,
-    });
-  }
-  return rows;
 }
 
 /* ── object row ─────────────────────────────────────────────────── */
@@ -524,33 +445,6 @@ function ObjectsTab(props: {
       )}
     </ul>
   );
-}
-
-interface HueAreaState {
-  kind: "not-configured" | "no-area" | "ready";
-  /** True when an entertainment area id is persisted but no bridge cred is on file. */
-  orphanedAreaId: boolean;
-}
-
-function deriveHueAreaState(
-  hueBridgeConfigured: boolean,
-  hueAreaId: string | null | undefined,
-): HueAreaState {
-  if (!hueBridgeConfigured) {
-    return {
-      kind: "not-configured",
-      // Surface the "you have an old area id but no bridge to talk to"
-      // case so the strip can show a slightly different copy and a
-      // clear "re-pair" CTA. The persisted area id is kept (we do NOT
-      // clear it here) — the user may simply be offline, and dropping
-      // the id would force them to re-pick after every disconnect.
-      orphanedAreaId: !!hueAreaId,
-    };
-  }
-  if (!hueAreaId) {
-    return { kind: "no-area", orphanedAreaId: false };
-  }
-  return { kind: "ready", orphanedAreaId: false };
 }
 
 /**

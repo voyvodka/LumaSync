@@ -17,7 +17,7 @@ import {
   type ScenePreset,
 } from "@/features/mode/model/scenePresets";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
-import { createHueZone } from "@/features/settings/sections/room-map/roomMapApi";
+import { createHueZone } from "@/features/room-map/roomMapApi";
 import type { HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type { DisplayInfo } from "@/shared/contracts/display";

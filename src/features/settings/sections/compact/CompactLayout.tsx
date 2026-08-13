@@ -37,6 +37,7 @@ import { FIRMWARE_PROFILE, type FirmwareProfile } from "@/shared/contracts/devic
 import { SCENE_PRESETS, type ScenePreset } from "@/features/mode/model/scenePresets";
 import { LightingSmoothingPresetControl } from "../control/LightingSmoothingPresetControl";
 import { shellStore } from "@/features/persistence/shellStore";
+import { HERO_LIGHT_TILE_THRESHOLD, perceivedLuminance, rgbToHex } from "./colorMath";
 
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
@@ -442,15 +443,6 @@ interface HeroColorCardProps {
   onChange: (hex: string) => void;
 }
 
-function rgbToHex({ r, g, b }: { r: number; g: number; b: number }): string {
-  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
-}
-
-/** Rec. 709 relative luminance — picks black or white text against tile bg. */
-function perceivedLuminance({ r, g, b }: { r: number; g: number; b: number }): number {
-  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-}
-
 /** Popover sizing constants used to clamp the position into the viewport.
  *  Width matches the rendered HsvColorPicker(compact) + 12 px wrapper padding.
  *  The height is now dynamically measured (see `useLayoutEffect` below) so
@@ -464,7 +456,7 @@ const POPOVER_VIEWPORT_MARGIN_PX = 8;
 function HeroColorCard({ rgb, disabled, sublabel, onChange }: HeroColorCardProps) {
   const { t } = useTranslation();
   const hex = rgbToHex(rgb);
-  const isLight = perceivedLuminance(rgb) > 0.62;
+  const isLight = perceivedLuminance(rgb) > HERO_LIGHT_TILE_THRESHOLD;
   const textColor = isLight ? "rgba(0,0,0,0.82)" : "rgba(255,255,255,0.92)";
   const subTextColor = isLight ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.65)";
   const edgeColor = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.18)";

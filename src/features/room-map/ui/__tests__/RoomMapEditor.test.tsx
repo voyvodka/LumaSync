@@ -14,7 +14,7 @@ import React from "react";
 import { render, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { RoomMapEditor } from "@/features/settings/sections/RoomMapEditor";
+import { RoomMapEditor } from "../RoomMapEditor";
 
 // ---------------------------------------------------------------------------
 // Module-level mocks
@@ -48,7 +48,7 @@ vi.mock("@/features/device/useUsbConnectionStatus", () => ({
   useUsbConnectionStatus: () => ({ ready: false }),
 }));
 
-vi.mock("../useRoomMapPersist", () => ({
+vi.mock("../../state/useRoomMapPersist", () => ({
   useRoomMapPersist: () => ({
     config: {
       dimensions: { widthMeters: 5, depthMeters: 4 },
@@ -93,15 +93,15 @@ vi.mock("../RoomMapEmptyHint", () => ({
   RoomMapEmptyHint: () => null,
 }));
 
-vi.mock("../FurnitureObject", () => ({
+vi.mock("../objects/FurnitureObject", () => ({
   FurnitureObject: () => null,
 }));
 
-vi.mock("../TvAnchorObject", () => ({
+vi.mock("../objects/TvAnchorObject", () => ({
   TvAnchorObject: () => null,
 }));
 
-vi.mock("../UsbStripObject", () => ({
+vi.mock("../objects/UsbStripObject", () => ({
   UsbStripObject: () => null,
 }));
 
@@ -113,11 +113,11 @@ vi.mock("../RoomDockPanel", () => ({
   RoomDockPanel: () => <div data-testid="room-dock-panel" />,
 }));
 
-vi.mock("../deriveZones", () => ({
+vi.mock("../../model/deriveZones", () => ({
   deriveZones: vi.fn().mockReturnValue({ zones: [], warnings: [] }),
 }));
 
-vi.mock("../useSnapGuides", () => ({
+vi.mock("../../state/useSnapGuides", () => ({
   useSnapGuides: () => [],
 }));
 

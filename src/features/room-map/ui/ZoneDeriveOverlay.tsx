@@ -9,7 +9,7 @@
 
 import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
-import type { ZoneDeriveResult } from "./deriveZones";
+import type { ZoneDeriveResult } from "../model/deriveZones";
 
 // ---------------------------------------------------------------------------
 // Edge palette (per UI-SPEC Zone Edge Palette)

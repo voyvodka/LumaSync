@@ -1,25 +1,25 @@
 import { useState, useCallback, useRef, useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useRoomMapPersist } from "./room-map/useRoomMapPersist";
-import { RoomMapCanvas } from "./room-map/RoomMapCanvas";
-import { RoomMapToolbar } from "./room-map/RoomMapToolbar";
-import { RoomMapSettingsPopover } from "./room-map/RoomMapSettingsPopover";
-import { RoomMapEmptyHint } from "./room-map/RoomMapEmptyHint";
-import { FurnitureObject } from "./room-map/FurnitureObject";
-import { TvAnchorObject } from "./room-map/TvAnchorObject";
-import { UsbStripObject } from "./room-map/UsbStripObject";
-import { HueChannelOverlay } from "./room-map/HueChannelOverlay";
-import { RoomDockPanel } from "./room-map/RoomDockPanel";
-import { deriveZones, type ZoneDeriveResult } from "./room-map/deriveZones";
-import { useSnapGuides } from "./room-map/useSnapGuides";
-import { SnapGuideOverlay } from "./room-map/SnapGuideOverlay";
-import { OriginMarker } from "./room-map/OriginMarker";
-import { ContextMenu, type ContextMenuAction } from "./room-map/ContextMenu";
-import { LeftToolbar } from "./room-map/LeftToolbar";
-import { PropertyBar } from "./room-map/PropertyBar";
-import { TemplateSelector } from "./room-map/TemplateSelector";
-import { ZoneDeriveOverlay } from "./room-map/ZoneDeriveOverlay";
+import { useRoomMapPersist } from "../state/useRoomMapPersist";
+import { RoomMapCanvas } from "./RoomMapCanvas";
+import { RoomMapToolbar } from "./RoomMapToolbar";
+import { RoomMapSettingsPopover } from "./RoomMapSettingsPopover";
+import { RoomMapEmptyHint } from "./RoomMapEmptyHint";
+import { FurnitureObject } from "./objects/FurnitureObject";
+import { TvAnchorObject } from "./objects/TvAnchorObject";
+import { UsbStripObject } from "./objects/UsbStripObject";
+import { HueChannelOverlay } from "./HueChannelOverlay";
+import { RoomDockPanel } from "./RoomDockPanel";
+import { deriveZones, type ZoneDeriveResult } from "../model/deriveZones";
+import { useSnapGuides } from "../state/useSnapGuides";
+import { SnapGuideOverlay } from "./SnapGuideOverlay";
+import { OriginMarker } from "./OriginMarker";
+import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
+import { LeftToolbar } from "./LeftToolbar";
+import { PropertyBar } from "./PropertyBar";
+import { TemplateSelector } from "./TemplateSelector";
+import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
 import type {
   FurniturePlacement,
   TvAnchorPlacement,
@@ -38,7 +38,7 @@ import {
   createHueZone,
   deleteHueZone,
   updateHueZone,
-} from "./room-map/roomMapApi";
+} from "../roomMapApi";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;

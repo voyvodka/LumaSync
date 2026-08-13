@@ -8,7 +8,7 @@ import {
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
 import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
-import { updateHueChannelPositions } from "@/features/settings/sections/room-map/roomMapApi";
+import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
 
 const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
 type Region = (typeof REGIONS)[number];
