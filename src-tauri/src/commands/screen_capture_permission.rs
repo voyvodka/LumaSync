@@ -41,6 +41,9 @@ impl ScreenCaptureAccess {
     }
 
     /// True when capture cannot possibly work until the user acts.
+    // Unused on any platform whose backend has no consent gate — not a
+    // macOS-only concern: a Wayland/PipeWire portal path calls it on day one.
+    #[allow(dead_code)]
     pub fn blocks_capture(self) -> bool {
         matches!(self, Self::Denied)
     }
@@ -103,6 +106,10 @@ pub fn preflight_screen_capture_access() -> ScreenCaptureAccess {
 /// Preflight, then request once if the answer was negative. Reserved for the
 /// capture start path: the request arm is what makes the OS prompt appear on
 /// first run, so no other caller may take this branch.
+// Same reason as `blocks_capture`: only a consent-gated backend calls this, and
+// today only macOS has one. This allow also covers `imp::request`, which the
+// lint treats as reachable again once its sole caller is an allowed root.
+#[allow(dead_code)]
 pub fn ensure_screen_capture_access() -> ScreenCaptureAccess {
     match imp::preflight() {
         ScreenCaptureAccess::Granted => ScreenCaptureAccess::Granted,
@@ -210,6 +217,23 @@ mod tests {
         assert_eq!(
             ensure_screen_capture_access(),
             ScreenCaptureAccess::NotRequired
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn no_settings_pane_is_offered_where_there_is_nothing_to_grant() {
+        // Drives the UNSUPPORTED early-return in `open_screen_capture_settings`.
+        // A `Some` here would send Linux/Windows at an `x-apple.` URL.
+        assert!(imp::SETTINGS_URL.is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_points_at_the_screen_recording_pane() {
+        assert_eq!(
+            imp::SETTINGS_URL,
+            Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
         );
     }
 
