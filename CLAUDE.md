@@ -205,6 +205,37 @@ Before opening a PR, run `pnpm check:all` — it is what CI runs, and it is a su
 4 and 5. Running the four individually is not the same thing; that gap is how a green local tree
 still fails the build.
 
+## Refactor discipline
+
+Learned across the v1.5 frontend decomposition, where each of these cost a cycle before it was
+written down. They apply to any structural change, by any session.
+
+- **A plan document is stale until proven otherwise.** Every design in that series described a tree
+  that had moved — line citations off by 50, files already deleted, bugs already fixed by an
+  intervening PR. Audit the design against current `main` and re-derive every line number and file
+  list before editing. Following a stale plan reopens closed work or cuts the wrong line.
+- **"Behaviour unchanged" is a claim to prove, not assert.** Diff the exported surface against
+  `main` and say it is byte-identical because you diffed it. Where a guard is the point of the
+  change, break the guard and confirm the test fails — a test that passes against broken code was
+  never protecting anything.
+- **Invariant comments travel verbatim with the code they guard.** A comment explaining why an
+  ordering, a sticky flag, or a narrow error-code list must not be "simplified" is the only thing
+  stopping the next split from dropping the rule. The comment-guard hook will object when you move
+  one; overriding it is correct in exactly that case and nowhere else.
+- **An empty import graph does not prove a file is dead.** Ask what the file references that
+  nothing else does. A module with zero importers was the sole consumer of twenty catalogue keys;
+  deleting it orphaned all twenty and failed CI.
+- **One writer per checkout.** Two agents in one working tree corrupts both and makes a
+  behaviour-neutral claim unverifiable. Check `git status` before switching branches, and never run
+  `git add -A`, `git commit -a`, `git checkout -- .`, `git restore .`, `git reset --hard`,
+  `git clean` or `git stash` — other sessions keep uncommitted work here.
+- **Do not stack a PR on an unmerged branch.** `main` squash-merges, so when the base lands its
+  commits collapse and the stacked branch goes `DIRTY` with add/add conflicts. Wait for the base,
+  or cherry-pick onto fresh `main` and open a new PR — rebasing would need a force-push.
+- **A locally measured flake rate is not evidence.** This machine runs several sessions against 12
+  cores and `vitest` has no worker cap, so the same tree gives 0 failures in one batch of 20 and 2
+  in the next. Reproduce the mechanism instead — force the lag, mutate the code — and quote that.
+
 ## Debugging: Live Log Analysis
 
 Prefer the `debug-runtime` skill — it encodes the clean-restart, capture, and
