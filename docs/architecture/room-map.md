@@ -50,6 +50,14 @@ axis onto the other, and Rust validates each axis on its own against the `HUE_ZO
 (`src-tauri/src/commands/room_map/hue_zone.rs`). The frontend mirrors that band as a clamp; the two
 constants have to move together.
 
+**The editor has one dock, and it deliberately has no Properties tab.** Object list, zone list and
+zone properties used to be three peer panels at three different DOM positions; when a Hue zone was
+active two of them sat side by side as 180 px columns, and on a narrow window the second one
+overflowed past the canvas. They are now a single tabbed dock whose lower half is a type-aware
+inspector. A Properties tab existed briefly and was dropped: the same inspector was already mounted
+in the split body, so the tab could only ever render a "pick something" hint. Re-adding a tab per
+object type recreates that redundancy — the inspector swaps on the active selection instead.
+
 ## Gotchas
 
 - **WKWebView strips custom MIME types from a cross-element drag payload.** A channel dragged onto a
