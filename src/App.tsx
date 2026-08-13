@@ -31,7 +31,7 @@ import {
 } from "./features/calibration/state/entryFlow";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
 import { getSerialConnectionStatus } from "./features/device/deviceConnectionApi";
-import { connectionEvents } from "./features/device/connectionEvents";
+import { useUsbTargetReconciler } from "./features/device/state/useUsbTargetReconciler";
 import {
   canEnableLedMode,
   MODE_GUARD_REASONS,
@@ -105,8 +105,6 @@ const HUE_STREAM_HEALTH_POLL_MS = 5_000;
  * before any network call, so it costs one IPC hop and no bridge traffic.
  */
 const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
-/** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
-const USB_DISCONNECT_NOTICE_MS = 5_000;
 /** How long the "stop failed for these targets" toast stays up. */
 const STOP_FAILED_NOTICE_MS = 5_000;
 /**
@@ -149,16 +147,7 @@ function App() {
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
-  // Hot-plug detection refs/state — separate from wasConnectedRef (per Pitfall 4)
-  const prevUsbConnectedRef = useRef<boolean | null>(null); // null = not yet initialized
   const [bootstrapDone, setBootstrapDone] = useState(false);
-  const [usbDisconnectNotice, setUsbDisconnectNotice] = useState(false);
-  // Bug 10D — surfaces a one-time non-blocking notice when boot-time
-  // auto-reconnect rejects with PORT_UNSUPPORTED / PORT_NOT_FOUND, so
-  // the user understands why we just dropped them into Hue-only mode.
-  // Distinct from `usbDisconnectNotice` (which fires on a runtime
-  // unplug) so the copy can be specific.
-  const [usbUnsupportedNotice, setUsbUnsupportedNotice] = useState(false);
   // A1.2 — surfaces the targets whose stop_lighting / stop_hue_stream invoke
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
@@ -519,7 +508,7 @@ function App() {
 
         // Initialize hot-plug ref AFTER USB status is known
         // This prevents false "USB detected" events on startup
-        prevUsbConnectedRef.current = bootstrapUsbAvailable;
+        armUsbConnected(bootstrapUsbAvailable);
 
         const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
         setActiveOutputTargets(isActive ? restoredTargets : []);
@@ -851,51 +840,17 @@ function App() {
     }
   }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus]);
 
-  // ---------------------------------------------------------------------------
-  // Hot-plug detection: USB plug/unplug target management (D-07, D-08)
-  // Guard: only runs after bootstrap has initialized prevUsbConnectedRef
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
-
-    const wasConnected = prevUsbConnectedRef.current;
-
-    if (wasConnected === false && isConnected) {
-      // Pairing is itself the "I want USB output" intent, and the target is
-      // added directly rather than through `handleOutputTargetsChange`.
-      // Both halves are load-bearing — docs/architecture/ui-and-shell.md.
-      if (!selectedOutputTargets.includes("usb")) {
-        const nextTargets = normalizeOutputTargets([...selectedOutputTargets, "usb"]);
-        setSelectedOutputTargets(nextTargets);
-        void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
-          console.error("[LumaSync] saveShellState(lastOutputTargets) on auto-add failed:", err);
-        });
-      }
-    }
-
-    if (wasConnected === true && !isConnected) {
-      // USB just unplugged (D-08) — silently drop from targets
-      if (selectedOutputTargets.includes("usb")) {
-        const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
-        if (nextTargets.length > 0) {
-          void handleOutputTargetsChange(nextTargets);
-          setUsbDisconnectNotice(true);
-        }
-        // If no targets remain, keep current targets — mode buttons will show disabled via guard
-      }
-    }
-
-    prevUsbConnectedRef.current = isConnected;
-  }, [isConnected, selectedOutputTargets, handleOutputTargetsChange, bootstrapDone]);
-
-  // Own effect keyed on the flag it clears — the hot-plug effect above re-runs
-  // whenever `selectedOutputTargets` changes, which its own unplug branch causes.
-  // See docs/architecture/ui-and-shell.md.
-  useEffect(() => {
-    if (!usbDisconnectNotice) return;
-    const timerId = window.setTimeout(() => setUsbDisconnectNotice(false), USB_DISCONNECT_NOTICE_MS);
-    return () => window.clearTimeout(timerId);
-  }, [usbDisconnectNotice]);
+  const { usbDisconnectNotice, usbUnsupportedNotice, armUsbConnected } =
+    useUsbTargetReconciler({
+      isConnected,
+      bootstrapDone,
+      selectedOutputTargets,
+      selectedOutputTargetsRef,
+      hueStartConfigRef,
+      onAutoAddUsbTarget: setSelectedOutputTargets,
+      onDropUsbTarget: handleOutputTargetsChange,
+      onFallbackTargets: setSelectedOutputTargets,
+    });
 
   // Same shape as the notice above. The dismissal used to be an untracked
   // `window.setTimeout` inside the delta-stop path, so nothing cleared it on
@@ -905,67 +860,6 @@ function App() {
     const timerId = window.setTimeout(() => setStopFailedNotice(null), STOP_FAILED_NOTICE_MS);
     return () => window.clearTimeout(timerId);
   }, [stopFailedNotice]);
-
-  // ---------------------------------------------------------------------------
-  // Bug 10D — boot-time USB unsupported / missing fallback
-  //
-  // After commit 72fba5b ("reject non-USB serial ports up-front") the
-  // backend rejects previously-accepted phantom ports (e.g.
-  // /dev/cu.Bluetooth-Incoming-Port on macOS). Auto-reconnect on init
-  // emits the rejection code via `connectionEvents`, but `selectedOutputTargets`
-  // still includes "usb", so every subsequent `set_lighting_mode` invoke
-  // hits the Rust USB gate and returns `DEVICE_NOT_CONNECTED` silently.
-  // From the user's seat, "Ambilight does nothing".
-  //
-  // Fix: subscribe to the bus once, drop "usb" from targets on the
-  // PORT_UNSUPPORTED / PORT_NOT_FOUND signal, persist via the existing
-  // shellStore facade, and surface a one-time toast. We deliberately do
-  // NOT call `handleOutputTargetsChange` (its delta-stop branch tries to
-  // invoke `stop_lighting`, which is meaningless when nothing is running
-  // — boot path is always at OFF until the user picks a mode).
-  // ---------------------------------------------------------------------------
-  useEffect(() => {
-    let unsupportedNoticeTimerId: number | null = null;
-    const unsubscribe = connectionEvents.subscribe((event) => {
-      if (event.connected || !event.unsupportedReason) return;
-      const currentTargets = selectedOutputTargetsRef.current;
-      const includedUsb = currentTargets.includes("usb");
-      // Use the raw filter result. `normalizeOutputTargets([])` reverts to
-      // DEFAULT_OUTPUT_TARGETS (= ["usb"]) which would silently re-add the
-      // very target we are trying to drop, defeating the fallback.
-      const filtered = currentTargets.filter((t) => t !== "usb") as HueRuntimeTarget[];
-      // If the user has a paired Hue bridge and hue is not already in the
-      // surviving targets, auto-add "hue" so Ambilight / Solid actually
-      // produces output instead of leaving the user stranded at the OFF
-      // state with no available sink. This also covers the case where a
-      // prior session already auto-deselected USB and persisted `[]` —
-      // boot lands here with `currentTargets === []`, no USB to drop, but
-      // Hue must still get auto-added or the user has zero output sinks
-      // and "ambilight does nothing" silently repeats.
-      const huePaired = hueStartConfigRef.current !== null;
-      const wantsHueAutoAdd = huePaired && !filtered.includes("hue");
-      // If we have nothing to do (USB not in targets and no hue auto-add
-      // needed) skip without persisting / toasting.
-      if (!includedUsb && !wantsHueAutoAdd) return;
-      const nextTargets: HueRuntimeTarget[] = wantsHueAutoAdd ? ["hue"] : filtered;
-      setSelectedOutputTargets(nextTargets);
-      void saveShellState({ lastOutputTargets: nextTargets }).catch((err) => {
-        console.error(
-          "[LumaSync] saveShellState(lastOutputTargets) on unsupported-port fallback failed:",
-          err,
-        );
-      });
-      setUsbUnsupportedNotice(true);
-      unsupportedNoticeTimerId = window.setTimeout(() => setUsbUnsupportedNotice(false), 6_000);
-    });
-    return () => {
-      unsubscribe();
-      if (unsupportedNoticeTimerId !== null) {
-        window.clearTimeout(unsupportedNoticeTimerId);
-        unsupportedNoticeTimerId = null;
-      }
-    };
-  }, []);
 
   const handleLightingModeChange = useCallback(
     async (nextMode: LightingModeConfig) => {
