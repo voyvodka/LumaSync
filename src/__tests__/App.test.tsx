@@ -211,10 +211,14 @@ vi.mock("../features/settings/SettingsLayout", () => ({
 }));
 
 import App from "../App";
+import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
 
 describe("App mode orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Module-level cache: without this a prior test's status leaks into the
+    // next one, since the mocked modeApi never invalidates the way the real one does.
+    __resetHueReadCacheForTests();
     vi.useRealTimers();
     mockIsConnected = true;
     // Default: serial connection status and any other bootstrap invokes.

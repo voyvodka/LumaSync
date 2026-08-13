@@ -9,6 +9,9 @@ import {
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
+// Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
+// neither side calls across the cycle at module-eval time.
+import { invalidateHueStreamStatus } from "../hue/hueReadCache";
 import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
 
 /** Normalized shape every mode-command rejection is mapped to before being thrown. */
@@ -157,6 +160,10 @@ export async function startHue(
     });
   } catch (error) {
     throw mapModeApiError(error);
+  } finally {
+    // Attached to the command, not to a call site: a stale status lets the App
+    // health reconciler act on a pre-mutation answer and undo what just happened.
+    invalidateHueStreamStatus();
   }
 }
 
@@ -171,6 +178,8 @@ export async function stopHue(
     });
   } catch (error) {
     throw mapModeApiError(error);
+  } finally {
+    invalidateHueStreamStatus();
   }
 }
 
@@ -195,6 +204,8 @@ export async function restartHue(
     });
   } catch (error) {
     throw mapModeApiError(error);
+  } finally {
+    invalidateHueStreamStatus();
   }
 }
 
