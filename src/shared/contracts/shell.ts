@@ -185,9 +185,8 @@ export interface ShellState {
    * Last bridge that successfully completed Hue onboarding checks.
    */
   lastHueBridge?: HueBridgeSummary;
-  /**
-   * Persisted Hue pairing username (application key) for reconnect-safe reuse.
-   */
+  /** Legacy plaintext Hue application key. Absent once the keychain owns it —
+   * absent is a paired state, not an unpaired one. */
   hueAppKey?: string;
   /**
    * Persisted Hue client key required for entertainment streaming.

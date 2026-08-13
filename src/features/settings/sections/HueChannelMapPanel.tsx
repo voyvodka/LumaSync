@@ -29,7 +29,8 @@ interface Props {
   persistError?: boolean;
   /** Bridge IP for write-back (CHAN-05). */
   bridgeIp?: string;
-  /** Hue application key (username) for write-back (CHAN-05). */
+  /** Hue application key for write-back (CHAN-05). `""` means "resolve from
+   * the OS keychain"; only `undefined` means no pairing exists. */
   username?: string;
   /** Entertainment area ID for write-back (CHAN-05). */
   areaId?: string;
@@ -340,7 +341,7 @@ export function HueChannelMapPanel({
   // -------------------------------------------------------------------------
 
   const handleSaveToBridge = useCallback(async () => {
-    if (!bridgeIp || !username || !areaId) return;
+    if (!bridgeIp || username === undefined || !areaId) return;
     const confirmed = window.confirm(t("hue:channelMap.saveConfirm", { ip: bridgeIp }));
     if (!confirmed) return;
 
@@ -568,7 +569,7 @@ export function HueChannelMapPanel({
         ? t("hue:channelMap.hintPositionModeSelected")
         : t("hue:channelMap.hintPositionMode");
 
-  const hasSaveAction = Boolean(bridgeIp && username && areaId);
+  const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
 
   return (
     <section

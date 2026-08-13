@@ -15,6 +15,9 @@ import {
   type HueZoneStatusCode as RoomMapHueZoneStatusCode,
 } from "./roomMap";
 
+/** On every command carrying a `username`, `""` means "resolve from the OS
+ * keychain" (same idiom as `clientKey`) and a non-empty value is the legacy
+ * fallback. Resolving nothing ⇒ `AUTH_INVALID_RE_PAIR_REQUIRED`. */
 export const HUE_COMMANDS = {
   DISCOVER_BRIDGES: "discover_hue_bridges",
   VERIFY_BRIDGE_IP: "verify_hue_bridge_ip",

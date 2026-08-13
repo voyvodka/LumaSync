@@ -9,6 +9,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use super::hue::area_cache::{invalidate_hue_area_cache, read_area_snapshot, HueReadFreshness};
+use super::hue::credential_store::effective_hue_app_key;
+
+/// `details` for the "nothing resolved" arms. The reused
+/// `AUTH_INVALID_RE_PAIR_REQUIRED` message asserts the bridge returned a 403,
+/// which is not what happened here — the distinction lives in `details` rather
+/// than in a new code, because a new code would fall through every shipped
+/// `switch` into the default branch and render the wrong card.
+const NO_APP_KEY_DETAILS: &str =
+    "No Hue application key in the OS keychain or the request payload.";
+
 use super::hue_http::{classify_hue_response, HueHttpFault};
 
 /// Uniform coded status returned by every Hue onboarding command; never
@@ -528,6 +538,20 @@ pub async fn validate_hue_credentials(
         };
     }
 
+    // An empty `username` means "resolve from the OS keychain"; a non-empty one
+    // is the legacy plaintext value and still wins nothing over the keychain.
+    let username = effective_hue_app_key(&username);
+    if username.is_empty() {
+        return HueValidateCredentialsResponse {
+            status: command_status(
+                "HUE_CREDENTIAL_INVALID",
+                "No stored Hue application key. Re-pair the bridge to continue.",
+                Some(NO_APP_KEY_DETAILS.to_string()),
+            ),
+            valid: false,
+        };
+    }
+
     let client = match hue_http_client() {
         Ok(client) => client,
         Err(error) => {
@@ -602,6 +626,18 @@ pub async fn list_hue_entertainment_areas(
                 "HUE_IP_INVALID",
                 "Bridge IP is not a valid IPv4 address.",
                 Some("Use a value like 192.168.1.50".to_string()),
+            ),
+            areas: Vec::new(),
+        };
+    }
+
+    let username = effective_hue_app_key(&username);
+    if username.is_empty() {
+        return HueEntertainmentAreaListResponse {
+            status: command_status(
+                "AUTH_INVALID_RE_PAIR_REQUIRED",
+                "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                Some(NO_APP_KEY_DETAILS.to_string()),
             ),
             areas: Vec::new(),
         };
@@ -694,6 +730,21 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
             readiness: HueStreamReadiness {
                 ready: false,
                 reasons: vec!["Invalid bridge IP address format.".to_string()],
+            },
+        };
+    }
+
+    let username = effective_hue_app_key(&username);
+    if username.is_empty() {
+        return HueStreamReadinessResponse {
+            status: command_status(
+                "AUTH_INVALID_RE_PAIR_REQUIRED",
+                "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                Some(NO_APP_KEY_DETAILS.to_string()),
+            ),
+            readiness: HueStreamReadiness {
+                ready: false,
+                reasons: vec!["No stored Hue application key.".to_string()],
             },
         };
     }

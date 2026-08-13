@@ -86,6 +86,12 @@ mod hue {
                 "stub"
             }
         }
+        /// Pass-through stub: this harness has no keychain, so the request
+        /// value is the resolved value — the same answer `NoopStore` gives.
+        pub fn effective_hue_app_key(fallback_username: &str) -> String {
+            fallback_username.to_string()
+        }
+
         #[allow(dead_code)]
         pub fn migrate_hue_credentials_to_keychain(
             _store: &StubStore,
