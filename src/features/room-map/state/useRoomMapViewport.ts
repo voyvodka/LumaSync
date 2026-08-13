@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { RefCallback } from "react";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
 
 /** Fixed physical scale — objects always render at this size regardless of canvas. */
@@ -6,6 +7,8 @@ export const ROOM_MAP_PX_PER_METER = 80;
 
 export interface UseRoomMapViewportReturn {
   canvasContainerRef: React.RefObject<HTMLDivElement | null>;
+  /** Attach to the canvas container's `ref` — plain reads go through `canvasContainerRef`. */
+  setCanvasContainer: RefCallback<HTMLDivElement>;
   canvasSize: { w: number; h: number };
   zoom: number;
   setZoom: React.Dispatch<React.SetStateAction<number>>;
@@ -20,9 +23,15 @@ export interface UseRoomMapViewportReturn {
 export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewportReturn {
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [spaceHeld, setSpaceHeld] = useState(false);
+
+  const setCanvasContainer = useCallback<RefCallback<HTMLDivElement>>((el) => {
+    canvasContainerRef.current = el;
+    setCanvasEl(el);
+  }, []);
 
   // Track space key for pan mode — prevents object drag during space+click
   useEffect(() => {
@@ -46,34 +55,38 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
 
   const initialFitDone = useRef(false);
 
-  // Mount-only on purpose: `dimensions` is captured from the first render, so
-  // the one-shot fit uses the dimensions the editor started with. Re-running on
-  // every dimension change would re-fit the view out from under the user.
+  // Snapshotted at first render on purpose: the one-shot fit must frame the
+  // dimensions the editor started with. Reading the live value would re-fit the
+  // view out from under a user who is editing the room size.
+  const initialDimensionsRef = useRef(dimensions);
+
+  // Keyed on the element, not on mount: the editor renders a loading placeholder
+  // first, so the container appears a commit or two late and a mount-only effect
+  // would observe nothing. `initialFitDone` is what keeps the fit one-shot.
   useEffect(() => {
-    const el = canvasContainerRef.current;
-    if (!el) return;
+    if (!canvasEl) return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) return;
         setCanvasSize({ w: width, h: height });
 
-        // Fit-to-view once on the first real measurement from ResizeObserver
         if (!initialFitDone.current) {
           initialFitDone.current = true;
-          const { widthMeters: wm, depthMeters: dm } = dimensions;
+          const { widthMeters: wm, depthMeters: dm } = initialDimensionsRef.current;
           const fit = computeFit(width, height, wm, dm, 24);
           setZoom(fit.zoom);
           setPanOffset(fit.panOffset);
         }
       }
     });
-    ro.observe(el);
+    ro.observe(canvasEl);
     return () => ro.disconnect();
-  }, []);
+  }, [canvasEl]);
 
   return {
     canvasContainerRef,
+    setCanvasContainer,
     canvasSize,
     zoom,
     setZoom,

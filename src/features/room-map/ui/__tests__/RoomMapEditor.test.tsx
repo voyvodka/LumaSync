@@ -48,6 +48,9 @@ vi.mock("@/features/device/useUsbConnectionStatus", () => ({
   useUsbConnectionStatus: () => ({ ready: false }),
 }));
 
+// Mutable so a test can start the editor in its loading state and flip it.
+const persistState = vi.hoisted(() => ({ loading: false }));
+
 vi.mock("../../state/useRoomMapPersist", () => ({
   useRoomMapPersist: () => ({
     config: {
@@ -70,7 +73,7 @@ vi.mock("../../state/useRoomMapPersist", () => ({
     // canUndo: true bypasses the isEmpty && !canUndo early-return to TemplateSelector
     canUndo: true,
     canRedo: false,
-    loading: false,
+    loading: persistState.loading,
     error: null,
   }),
 }));
@@ -148,6 +151,54 @@ vi.mock("../TemplateSelector", () => ({
 vi.mock("../ZoneDeriveOverlay", () => ({
   ZoneDeriveOverlay: () => null,
 }));
+
+// ---------------------------------------------------------------------------
+// Fit-to-view wiring
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — canvas container observation", () => {
+  // happy-dom has no layout engine, so the observer is stubbed; this proves the
+  // element is handed over, not that a real measurement arrives.
+  class StubResizeObserver {
+    static observed: Element[] = [];
+    constructor(_cb: ResizeObserverCallback) {}
+    observe(el: Element) {
+      StubResizeObserver.observed.push(el);
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    StubResizeObserver.observed = [];
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+    persistState.loading = false;
+  });
+
+  it("observes the canvas container that appears once the stored map has loaded", async () => {
+    persistState.loading = true;
+    const { rerender, container } = render(<RoomMapEditor />);
+
+    expect(StubResizeObserver.observed).toHaveLength(0);
+
+    persistState.loading = false;
+    await act(async () => {
+      rerender(<RoomMapEditor />);
+    });
+
+    // The container div is the one MouseCoordinateDisplay measures against.
+    const canvasContainer = container.querySelector(".relative.flex-1");
+    expect(canvasContainer).not.toBeNull();
+    expect(StubResizeObserver.observed).toContain(canvasContainer);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // F8 — MouseCoordinateDisplay event-listener stability tests
