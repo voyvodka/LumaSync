@@ -7,8 +7,8 @@
  * immediate tick on resume, and last-known snapshot surviving a failed tick.
  */
 
+import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { getFullTelemetrySnapshot } from "./telemetryApi";
-import type { FullTelemetrySnapshot } from "./model/contracts";
 
 export interface TelemetrySourceState {
   snapshot: FullTelemetrySnapshot | null;

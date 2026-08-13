@@ -8,6 +8,12 @@ const telemetry: Catalogue<typeof enTelemetry> = {
     captureFps: "Capture FPS",
     sendFps: "Send FPS",
     queueHealth: "Kuyruk sağlığı",
+    linkMaxFps: "Bağlantı üst sınırı",
+  },
+  link: {
+    fpsFormat: "{{fps}} fps",
+    absent: "—",
+    absentTitle: "Bu oturumda seri bağlantı yok",
   },
   queueHealth: {
     healthy: "Sağlıklı",

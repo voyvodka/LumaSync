@@ -27,6 +27,10 @@ export default {
     delta: "Δ",
     fps: "Σ",
     edgesAria: "Live edge preview",
+    linkBudget: {
+      constrained: "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
+      hint: "Shorten the strip, split it across two controllers, or output over WLED for a smoother effect.",
+    },
     edges: {
       top: "TOP · {{count}}",
       bot: "BOT · {{count}}",

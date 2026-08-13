@@ -5,6 +5,12 @@ export default {
     captureFps: "Capture FPS",
     sendFps: "Send FPS",
     queueHealth: "Queue health",
+    linkMaxFps: "Link max",
+  },
+  link: {
+    fpsFormat: "{{fps}} fps",
+    absent: "—",
+    absentTitle: "No serial link in this session",
   },
   queueHealth: {
     healthy: "Healthy",

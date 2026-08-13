@@ -6,13 +6,15 @@ import {
   type FullTelemetrySnapshot,
   type HueTelemetrySnapshot,
   type RuntimeTelemetrySnapshot,
-} from "./model/contracts";
+} from "@/shared/contracts/telemetry";
 
 interface RuntimeTelemetrySnapshotDto {
   captureFps: number;
   sendFps: number;
   queueHealth: string;
   frameLatencyMs: number;
+  linkConstrained: boolean;
+  linkMaxFps: number;
 }
 
 interface HueTelemetrySnapshotDto {
@@ -69,6 +71,11 @@ export function mapRuntimeTelemetrySnapshot(dto: RuntimeTelemetrySnapshotDto): R
     sendFps: normalizeFps(dto.sendFps),
     queueHealth: normalizeQueueHealth(dto.queueHealth),
     frameLatencyMs: normalizeLatencyMs(dto.frameLatencyMs),
+    // normalizeFps floors a garbled or negative reading at 0, which is exactly
+    // LINK_MAX_FPS_ABSENT — so an unreadable budget renders as "—" rather than
+    // claiming a measurement no serial link produced.
+    linkConstrained: dto.linkConstrained === true,
+    linkMaxFps: normalizeFps(dto.linkMaxFps),
   };
 }
 

@@ -15,7 +15,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FullTelemetrySnapshot } from "../model/contracts";
+import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 const getFullTelemetrySnapshotMock = vi.fn();
 
@@ -27,7 +27,14 @@ import { __resetTelemetrySourceForTests, subscribeTelemetry } from "../telemetry
 
 function makeSnapshot(captureFps = 60): FullTelemetrySnapshot {
   return {
-    usb: { captureFps, sendFps: captureFps - 2, queueHealth: "healthy", frameLatencyMs: 12 },
+    usb: {
+      captureFps,
+      sendFps: captureFps - 2,
+      queueHealth: "healthy",
+      frameLatencyMs: 12,
+      linkConstrained: false,
+      linkMaxFps: 0,
+    },
     hue: null,
   };
 }

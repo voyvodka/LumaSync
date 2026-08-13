@@ -13,13 +13,17 @@ vi.mock("@/features/telemetry/telemetryApi", () => ({
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     i18n: { language: "en" },
-    t: (key: string) => {
+    t: (key: string, opts?: Record<string, unknown>) => {
       const dict: Record<string, string> = {
         "telemetry:title": "Runtime telemetry",
         "telemetry:description": "Live runtime quality metrics.",
         "telemetry:metrics.captureFps": "Capture FPS",
         "telemetry:metrics.sendFps": "Send FPS",
         "telemetry:metrics.queueHealth": "Queue health",
+        "telemetry:metrics.linkMaxFps": "Link max",
+        "telemetry:link.fpsFormat": "{{fps}} fps",
+        "telemetry:link.absent": "—",
+        "telemetry:link.absentTitle": "No serial link in this session",
         "telemetry:queueHealth.healthy": "Healthy",
         "telemetry:queueHealth.warning": "Warning",
         "telemetry:queueHealth.critical": "Critical",
@@ -49,7 +53,9 @@ vi.mock("react-i18next", () => ({
         "settings:language.label": "Interface language",
       };
 
-      return dict[key] ?? key;
+      const template = dict[key] ?? key;
+      if (!opts) return template;
+      return template.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(opts[name] ?? ""));
     },
   }),
 }));
@@ -163,6 +169,48 @@ describe("TelemetrySection", () => {
     });
 
     expect(screen.queryByText("Hue Stream")).not.toBeInTheDocument();
+  });
+
+  it("renders the link ceiling as absent, never as 0 fps, without a serial link", async () => {
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: {
+        captureFps: 60,
+        sendFps: 58,
+        queueHealth: "healthy",
+        frameLatencyMs: 12,
+        linkConstrained: false,
+        linkMaxFps: 0,
+      },
+      hue: null,
+    });
+
+    render(<TelemetrySection usbConnected={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Link max")).toBeInTheDocument();
+    });
+
+    expect(screen.getByLabelText("No serial link in this session")).toHaveTextContent("—");
+    expect(screen.queryByText("0.00 fps")).not.toBeInTheDocument();
+  });
+
+  it("tints the link ceiling as a warning when the strip is link-constrained", async () => {
+    getFullTelemetrySnapshotMock.mockResolvedValue({
+      usb: {
+        captureFps: 60,
+        sendFps: 19,
+        queueHealth: "healthy",
+        frameLatencyMs: 12,
+        linkConstrained: true,
+        linkMaxFps: 19.01,
+      },
+      hue: null,
+    });
+
+    render(<TelemetrySection usbConnected={true} />);
+
+    const value = await screen.findByText("19.01 fps");
+    expect(value).toHaveClass("is-warn");
   });
 
   it("renders error fallback when telemetry request fails", async () => {

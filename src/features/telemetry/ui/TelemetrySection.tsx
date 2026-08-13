@@ -1,5 +1,9 @@
 import { useTranslation } from "react-i18next";
 
+import {
+  hasSerialLinkBudget,
+  type RuntimeTelemetrySnapshot,
+} from "@/shared/contracts/telemetry";
 import { useFullTelemetryPoll } from "../hooks/useFullTelemetryPoll";
 import { HueTelemetryGrid } from "./HueTelemetryGrid";
 
@@ -15,6 +19,32 @@ function queueHealthTint(health: string): string {
   if (health === "warning") return "is-warn";
   if (health === "critical") return "is-crit";
   return "";
+}
+
+interface LinkMaxTileProps {
+  usb: RuntimeTelemetrySnapshot;
+}
+
+/** Absent — Hue-only, WLED-only, pre-worker — renders "—", never "0 fps": the
+ *  sentinel carries no measurement. */
+function LinkMaxTile({ usb }: LinkMaxTileProps) {
+  const { t } = useTranslation();
+  const present = hasSerialLinkBudget(usb);
+
+  return (
+    <article className="lm-tele-tile">
+      <span className="k">{t("telemetry:metrics.linkMaxFps")}</span>
+      {present ? (
+        <span className={`v ${usb.linkConstrained ? "is-warn" : ""}`}>
+          {t("telemetry:link.fpsFormat", { fps: usb.linkMaxFps.toFixed(2) })}
+        </span>
+      ) : (
+        <span className="v" title={t("telemetry:link.absentTitle")} aria-label={t("telemetry:link.absentTitle")}>
+          {t("telemetry:link.absent")}
+        </span>
+      )}
+    </article>
+  );
 }
 
 interface TelemetrySectionProps {
@@ -74,6 +104,7 @@ export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
                 {t(`telemetry:queueHealth.${snapshot.usb.queueHealth}`)}
               </span>
             </article>
+            <LinkMaxTile usb={snapshot.usb} />
           </div>
         ) : null}
 

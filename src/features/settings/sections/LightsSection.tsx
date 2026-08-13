@@ -35,6 +35,7 @@ import {
 import { listDisplays } from "@/features/calibration/calibrationApi";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
+import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
 import { shellStore } from "@/features/persistence/shellStore";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
@@ -322,6 +323,12 @@ export function LightsSection({
   const latencyLabel = liveUsb ? `${Math.round(liveUsb.frameLatencyMs)}ms` : "—";
   const fpsLabel = liveUsb ? `${Math.round(liveUsb.sendFps)} fps` : "—";
 
+  // Gate on the flag, never on `linkMaxFps < 30` — the 0 sentinel means "no
+  // serial link this session", so a raw comparison would paint every Hue-only
+  // and WLED-only session as maximally constrained.
+  const linkConstrained =
+    liveUsb !== null && hasSerialLinkBudget(liveUsb) && liveUsb.linkConstrained;
+
   // Primary display info for the edge center tile. Loaded once on mount.
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
   useEffect(() => {
@@ -482,6 +489,22 @@ export function LightsSection({
                 </span>
               </span>
             </div>
+            {/* role="status", never "alert": `linkMaxFps` is derived once at
+                worker start from LED count + chip type and never re-sampled,
+                so this is a steady-state condition, announced once. */}
+            {linkConstrained && liveUsb ? (
+              <div className="lm-signal-note" role="status">
+                <span className="lm-signal-note-dot" aria-hidden />
+                <span>
+                  <b>
+                    {t("lights:signal.linkBudget.constrained", {
+                      fps: Math.round(liveUsb.linkMaxFps),
+                    })}
+                  </b>{" "}
+                  {t("lights:signal.linkBudget.hint")}
+                </span>
+              </div>
+            ) : null}
             <EdgeSignalGrid
               isAmbilight={isAmbilight}
               counts={counts}

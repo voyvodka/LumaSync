@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { FullTelemetrySnapshot } from "@/features/telemetry/model/contracts";
+import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 
 const getFullTelemetrySnapshotMock = vi.fn();
 
@@ -18,6 +18,8 @@ function makeSnapshot(partial?: Partial<FullTelemetrySnapshot["usb"]>): FullTele
       sendFps: 58,
       queueHealth: "healthy",
       frameLatencyMs: 12,
+      linkConstrained: false,
+      linkMaxFps: 0,
       ...partial,
     },
     hue: null,

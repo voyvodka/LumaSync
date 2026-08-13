@@ -3049,6 +3049,35 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Serial link-budget note. Amber, not red: a baud ceiling is a limit the user
+   can act on, not a failure. Deliberately un-animated — the value behind it is
+   computed once at worker start and never re-sampled, so a fade-in would fire
+   on every mode toggle for text that has not changed. */
+.lm-signal-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 14px 10px;
+  border-top: 1px solid var(--lm-line);
+  background: rgba(255, 176, 32, 0.06);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim);
+}
+.lm-signal-note-dot {
+  flex-shrink: 0;
+  margin-top: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--lm-amber);
+}
+.lm-signal-note b {
+  color: var(--lm-amber);
+  font-weight: 500;
+}
+
 .lm-edges {
   display: grid;
   grid-template-columns: 30px 1fr 30px;
@@ -6818,7 +6847,7 @@ body {
 
 .lm-tele-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 @media (max-width: 560px) {
@@ -6922,11 +6951,15 @@ body {
   .lm-control-chip,
   .lm-control-start,
   .lm-control-stop,
-  .lm-control-info {
+  .lm-control-info,
+  .lm-signal-note {
     border-color: CanvasText;
     forced-color-adjust: none;
   }
-  .lm-test-dot {
+  /* The dot is the link note's non-colour indicator — without this the amber
+     fill disappears and the row loses its leading marker entirely. */
+  .lm-test-dot,
+  .lm-signal-note-dot {
     background: CanvasText;
   }
   .lm-control-mbtn.is-on,
