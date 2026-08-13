@@ -1461,6 +1461,49 @@ check(
   "new phantoms found (listed above)"
 );
 
+// Mirror of the phantom block. The `both trees` check needs a TS consumer, so a
+// code nothing reads yet is invisible to it — that is the gap this closes.
+console.log("\n[ Rust codes with no contract declaration (ratcheted) ]");
+const UNDECLARED_BASELINE_FILE = resolve(__dirname, "contract-undeclared-baseline.txt");
+const undeclaredBaseline = new Set(
+  readOrEmpty(UNDECLARED_BASELINE_FILE, "undeclared baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+
+const emittedWithoutDeclaration = [...rustEmitted]
+  .filter((code) => !contractDeclared.has(code))
+  .sort();
+
+for (const code of emittedWithoutDeclaration) {
+  if (undeclaredBaseline.has(code)) {
+    note(`KNOWN GAP: "${code}" emitted with no contract declaration (baselined)`);
+  } else {
+    fail(
+      `UNDECLARED PRODUCER "${code}" — Rust emits it but no contract declares it. `
+        + `Declare it if the frontend may branch on it; baseline it if it only ever `
+        + `rides status.details or a thrown Err string.`
+    );
+  }
+}
+
+// The half that makes it a ratchet: a baselined code that gains a declaration
+// has been promoted to a discriminator, so its line must go.
+for (const code of undeclaredBaseline) {
+  check(
+    !contractDeclared.has(code),
+    `baseline entry "${code}" still undeclared`,
+    `BASELINE STALE: "${code}" is now declared in a contract — delete its line from `
+      + `contract-undeclared-baseline.txt (the file may only shrink)`
+  );
+}
+check(
+  emittedWithoutDeclaration.filter((c) => !undeclaredBaseline.has(c)).length === 0,
+  `no undeclared producers beyond the ${undeclaredBaseline.size} baselined`,
+  "undeclared producers found (listed above)"
+);
+
 // ---------------------------------------------------------------------------
 // Ambilight capture reasons — derived Rust → capture.ts parity
 // ---------------------------------------------------------------------------
