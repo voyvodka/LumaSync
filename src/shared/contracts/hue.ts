@@ -358,6 +358,28 @@ export const HUE_DEBUG_COMMAND_CODES = {
 export type HueDebugCommandCode =
   (typeof HUE_DEBUG_COMMAND_CODES)[keyof typeof HUE_DEBUG_COMMAND_CODES];
 
+/** Reasons riding `status.details` on a `HUE_STREAM_*` status, never codes of
+ *  their own. Naming them keeps a log reader honest; do not branch on them —
+ *  the status code is the discriminator. */
+export const HUE_TRANSPORT_REASON = {
+  DTLS_PSK_DECODE_FAILED: "DTLS_PSK_DECODE_FAILED",
+  DTLS_CONNECTOR_BUILD_FAILED: "DTLS_CONNECTOR_BUILD_FAILED",
+  DTLS_CIPHER_SET_FAILED: "DTLS_CIPHER_SET_FAILED",
+  DTLS_SOCKET_BIND_FAILED: "DTLS_SOCKET_BIND_FAILED",
+  DTLS_SOCKET_CONNECT_FAILED: "DTLS_SOCKET_CONNECT_FAILED",
+  DTLS_SOCKET_TIMEOUT_FAILED: "DTLS_SOCKET_TIMEOUT_FAILED",
+  DTLS_HANDSHAKE_FAILED: "DTLS_HANDSHAKE_FAILED",
+  DTLS_HANDSHAKE_ABANDONED: "DTLS_HANDSHAKE_ABANDONED",
+  ENTERTAINMENT_ACTIVATE_FAILED: "ENTERTAINMENT_ACTIVATE_FAILED",
+  ENTERTAINMENT_ACTIVATE_SEND_FAILED: "ENTERTAINMENT_ACTIVATE_SEND_FAILED",
+  ENTERTAINMENT_DEACTIVATE_FAILED: "ENTERTAINMENT_DEACTIVATE_FAILED",
+  ENTERTAINMENT_DEACTIVATE_SEND_FAILED: "ENTERTAINMENT_DEACTIVATE_SEND_FAILED",
+  HUE_SENDER_INIT_FAILED: "HUE_SENDER_INIT_FAILED",
+} as const;
+
+export type HueTransportReason =
+  (typeof HUE_TRANSPORT_REASON)[keyof typeof HUE_TRANSPORT_REASON];
+
 // ---------------------------------------------------------------------------
 // Credential storage backend (v1.5 W2-A1 / W2-A2)
 // ---------------------------------------------------------------------------

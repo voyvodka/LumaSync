@@ -1619,14 +1619,69 @@ for (const reason of emittedCaptureReasons) {
   );
 }
 
-// The non-capture tenant of the same field. Declared in capture.ts so a reader
-// of `details` can name everything that arrives there.
+// The non-capture tenant of the same field. Derived, not a single hardcoded
+// check: LedOutputError::as_reason() puts every one of these into status.details.
+console.log("\n[ LED output reasons — Rust → capture.ts parity ]");
+const LED_OUTPUT_RUST_FILE = resolve(ROOT, "src-tauri/src/commands/led_output.rs");
+const emittedLedOutputReasons = [
+  ...new Set(
+    [
+      ...stripComments(readOrEmpty(LED_OUTPUT_RUST_FILE, "rust led_output"))
+        .split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]
+        .matchAll(/"(LED_OUTPUT_[A-Z0-9_]+)"/g),
+    ].map((m) => m[1])
+  ),
+].sort();
+const EXPECTED_LED_OUTPUT_REASON_COUNT = 7;
 check(
-  captureContractSource.includes(`"LED_OUTPUT_PORT_UNAVAILABLE"`),
-  `LED_OUTPUT_PORT_UNAVAILABLE declared in capture.ts`,
-  `MISSING LED_OUTPUT_PORT_UNAVAILABLE in capture.ts — lighting_mode.rs puts it in `
-    + `the same status.details field as the capture reasons`
+  emittedLedOutputReasons.length === EXPECTED_LED_OUTPUT_REASON_COUNT,
+  `harvested exactly ${EXPECTED_LED_OUTPUT_REASON_COUNT} LED output reasons from led_output.rs`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_LED_OUTPUT_REASON_COUNT}, got `
+    + `${emittedLedOutputReasons.length} [${emittedLedOutputReasons.join(", ")}] — update the pin deliberately`
 );
+for (const reason of emittedLedOutputReasons) {
+  check(
+    captureContractSource.includes(`"${reason}"`),
+    `LED output reason "${reason}" declared in capture.ts`,
+    `UNDECLARED LED output reason "${reason}" — lighting_mode.rs puts it in the same `
+      + `status.details field as the capture reasons, so classifyCaptureFailure() `
+      + `silently buckets it as "internal"`
+  );
+}
+
+// Same shape again for the Hue DTLS/entertainment transport detail.
+console.log("\n[ Hue transport reasons — Rust → hue.ts parity ]");
+const HUE_TRANSPORT_RUST_FILES = [
+  resolve(ROOT, "src-tauri/src/commands/hue/dtls.rs"),
+  resolve(ROOT, "src-tauri/src/commands/hue/sender.rs"),
+];
+const emittedHueTransportReasons = [
+  ...new Set(
+    HUE_TRANSPORT_RUST_FILES.flatMap((file) =>
+      [
+        ...stripComments(readOrEmpty(file, `rust ${file}`))
+          .split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]
+          // `"CODE: detail"` counts: these are format! prefixes, not bare literals.
+          .matchAll(/"((?:DTLS|ENTERTAINMENT|HUE_SENDER)_[A-Z0-9_]+)(?:"|:\s)/g),
+      ].map((m) => m[1])
+    )
+  ),
+].sort();
+const EXPECTED_HUE_TRANSPORT_REASON_COUNT = 13;
+check(
+  emittedHueTransportReasons.length === EXPECTED_HUE_TRANSPORT_REASON_COUNT,
+  `harvested exactly ${EXPECTED_HUE_TRANSPORT_REASON_COUNT} Hue transport reasons`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_HUE_TRANSPORT_REASON_COUNT}, got `
+    + `${emittedHueTransportReasons.length} [${emittedHueTransportReasons.join(", ")}] — update the pin deliberately`
+);
+for (const reason of emittedHueTransportReasons) {
+  check(
+    hueSource.includes(`"${reason}"`),
+    `Hue transport reason "${reason}" declared in hue.ts`,
+    `UNDECLARED Hue transport reason "${reason}" — it rides status.details on a `
+      + `HUE_STREAM_* status but hue.ts > HUE_TRANSPORT_REASON does not name it`
+  );
+}
 
 // Everything above proves a string is DECLARED. These three prove the
 // declaration has a path to the running app — the telemetry fork had neither.

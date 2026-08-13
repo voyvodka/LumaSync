@@ -30,6 +30,12 @@ telemetry.ts TELEMETRY_COMMAND_ERRORS
 # Debug-only command surface; the frontend must never invoke it.
 hue.ts HUE_DEBUG_COMMAND_CODES
 
+# Named so a log reader can identify what arrives in a Hue status.details, but
+# deliberately not branched on — the status code is the discriminator. Unlike
+# the LED_OUTPUT_* family there is no Hue equivalent of classifyCaptureFailure
+# to bucket them into, so nothing reaches this map. One line for 13 codes.
+hue.ts HUE_TRANSPORT_REASON
+
 # Documents that save_room_map / load_room_map are unconditional stubs. Goes
 # away with the commands themselves.
 roomMap.ts ROOM_MAP_PERSISTENCE_STATUS
