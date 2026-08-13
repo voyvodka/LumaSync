@@ -469,6 +469,10 @@ export function useLightingModeOrchestrator({
           (runtimePlan.startTargets.includes("hue") && hueStartedOk) ||
           hueTransientFail;
 
+        // Set by Phase 2 when the backend reports it is not running the requested
+        // mode, so Phase 3's commit below can refuse to record a mode that never ran.
+        let applyRefused = false;
+
         if (needsLightingModeApply) {
           // Advisory probe, never a gate: the OS prompt only appears from the
           // Rust start path below, so short-circuiting here would leave a
@@ -487,11 +491,24 @@ export function useLightingModeOrchestrator({
             if (applyResult?.status?.code === LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED) {
               setStartFailedNotice(describeCaptureFailure(applyResult.status.details));
             }
-            if (runtimePlan.startTargets.includes("usb")) {
+            // The backend's own verdict, not an allowlist of failure codes that
+            // would go stale on the next one. `!== null` is load-bearing: a
+            // deduped or cooled-down dispatch returns `null` — never asked, not refused.
+            if (applyResult !== null && !applyResult.active) {
+              applyRefused = true;
+              if (runtimePlan.startTargets.includes("usb")) {
+                targetResults.usb = {
+                  ok: false,
+                  code: applyResult.status.code,
+                  message: applyResult.status.message,
+                };
+              }
+            } else if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: true };
             }
           } catch (error) {
             const reason = error instanceof Error ? error.message : String(error);
+            applyRefused = true;
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: false, code: "USB_MODE_APPLY_FAILED", message: reason };
             }
@@ -522,9 +539,9 @@ export function useLightingModeOrchestrator({
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
         setActiveOutputTargets(merged.activeTargets);
         // Only reflect user intent in the UI when at least one backend command was
-        // issued. If all targets were gate-blocked (e.g. Hue config missing), the
-        // mode stays unchanged so the UI matches actual backend state.
-        if (needsLightingModeApply) {
+        // issued and the backend accepted it. A gate-blocked or failed start must
+        // not be shown as ON, nor persisted for the next launch to restore.
+        if (needsLightingModeApply && !applyRefused) {
           setLightingModeState(normalizedNextMode);
           scheduleLightingModePersist(normalizedNextMode);
         }

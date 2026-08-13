@@ -274,6 +274,38 @@ describe("useLightingModeOrchestrator", () => {
       });
     });
 
+    it("does not commit or persist a mode the backend refused to start", async () => {
+      setLightingModeMock.mockResolvedValue(
+        startFailedResult("AMBILIGHT_CAPTURE_PERMISSION_DENIED"),
+      );
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      // Showing ON here also persisted the mode, so the next launch restored a
+      // mode that had never run.
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+      expect(result.current.activeOutputTargets).not.toContain("usb");
+    });
+
+    it("commits the mode when the backend accepts it", async () => {
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: LIGHTING_MODE_KIND.AMBILIGHT },
+        status: { code: "AMBILIGHT_MODE_STARTED", message: "Started.", details: null },
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      expect(result.current.activeOutputTargets).toContain("usb");
+    });
+
     it("stays silent when the start succeeds", async () => {
       setLightingModeMock.mockResolvedValue({
         active: true,
