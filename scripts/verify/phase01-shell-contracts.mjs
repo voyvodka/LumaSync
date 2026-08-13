@@ -1408,15 +1408,18 @@ function stripComments(source) {
     .join("\n");
 }
 
-/** Never "simplify" back to `split(...)[0]`: three files carry production code
- *  after a test module, and truncating there hid two commands and five codes in
- *  calibration.rs from every ratchet. Column-0 `}` beats a brace counter. */
+/** Never "simplify" back to `split(...)[0]`: production code follows a test
+ *  module in two files, and truncating there hid three registered commands and
+ *  five codes from every ratchet. Column-0 `}` beats a brace counter. */
 function stripRustTestModules(source) {
   const lines = source.split("\n");
   const kept = [];
   let inTestModule = false;
   for (let i = 0; i < lines.length; i++) {
-    if (!inTestModule && /^#\[cfg\(test\)\]\s*$/.test(lines[i]) && /^mod\s+\w+/.test(lines[i + 1] ?? "")) {
+    // `mod name {` opens a body to skip; `mod name;` declares one living in
+    // another file and has none. Skipping on the declaration runs to the next
+    // column-0 `}` and eats whatever it belongs to (lib.rs 48→115).
+    if (!inTestModule && /^#\[cfg\(test\)\]\s*$/.test(lines[i]) && /^mod\s+\w+\s*\{/.test(lines[i + 1] ?? "")) {
       inTestModule = true;
       continue;
     }
