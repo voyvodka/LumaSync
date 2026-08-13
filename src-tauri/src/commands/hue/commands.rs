@@ -4,7 +4,7 @@
 //! split. This module owns the seven `#[tauri::command]` entry points
 //! (`start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
 //! `set_hue_solid_color`, `get_hue_stream_status`, `get_hue_area_channels`,
-//! `simulate_hue_fault`) and the `to_legacy_status` legacy compat helper.
+//! `simulate_hue_fault`).
 //! All call sites use the data plane and runtime state machine that now
 //! live in sibling submodules `frame`, `dtls`, `sender`, `state_store`,
 //! `retry`, and `reconnect`.
@@ -16,7 +16,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{error, info};
+use log::error;
+// Reachable only from the `#[cfg(debug_assertions)]` arm of `simulate_hue_fault`,
+// so an ungated import is an unused-import error under `clippy --release`.
+#[cfg(debug_assertions)]
+use log::info;
 use tauri::State;
 
 use super::super::hue_onboarding::{
@@ -29,16 +33,18 @@ use super::reconnect::{spawn_reconnect_monitor, store_active_stream_context, Sta
 use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
 };
+#[cfg(debug_assertions)]
+use super::sender::signal_shutdown_complete;
 use super::sender::{
     apply_channel_region_overrides, build_hue_sender, deactivate_with_token, fetch_area_channels,
     fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, no_op_sender,
-    settled_shutdown_signal, signal_shutdown_complete, wait_for_shutdown, DeactivateToken,
+    settled_shutdown_signal, wait_for_shutdown, DeactivateToken,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
     make_result, queue_solid_color, status_with, HueRuntimeActionHint, HueRuntimeCommandResult,
-    HueRuntimeGateEvidence, HueRuntimeState, HueRuntimeStateStore, HueRuntimeStatus,
-    HueRuntimeTriggerSource, HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
+    HueRuntimeGateEvidence, HueRuntimeState, HueRuntimeStateStore, HueRuntimeTriggerSource,
+    HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -763,42 +769,48 @@ pub async fn get_hue_stream_status(
     Ok(make_result(&owner))
 }
 
-#[allow(dead_code)]
-fn to_legacy_status(status: &HueRuntimeStatus) -> CommandStatus {
-    CommandStatus {
-        code: status.code.clone(),
-        message: status.message.clone(),
-        details: status.details.clone(),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // simulate_hue_fault — debug-only command (D-10, D-11)
 // ---------------------------------------------------------------------------
 
 /// Debug-only: force the active DTLS stream's shutdown signal to fire,
 /// exercising the reconnect monitor without a real bridge fault.
+///
+/// Returns `CommandStatus` rather than `Result<_, String>` on purpose: a Hue
+/// command never throws, so "no stream to fault" has to arrive as a coded
+/// status the caller can branch on, not as a rejected promise. The codes are
+/// declared in `HUE_DEBUG_COMMAND_CODES` in `src/shared/contracts/hue.ts`.
 #[cfg(debug_assertions)]
 #[tauri::command]
-pub fn simulate_hue_fault(
-    runtime_state: State<'_, HueRuntimeStateStore>,
-) -> Result<String, String> {
+pub fn simulate_hue_fault(runtime_state: State<'_, HueRuntimeStateStore>) -> CommandStatus {
     let owner = acquire_hue_runtime(&runtime_state.runtime);
     if let Some(ref stream) = owner.active_stream {
         if stream.uses_dtls {
             // D-11: Fire shutdown signal to trigger reconnect monitor.
             signal_shutdown_complete(&stream.shutdown_signal);
             info!("simulate_hue_fault: shutdown signal fired for active DTLS stream.");
-            return Ok("HUE_FAULT_SIMULATED".to_string());
+            return CommandStatus {
+                code: "HUE_FAULT_SIMULATED".to_string(),
+                message: "Shutdown signal fired on the active DTLS stream.".to_string(),
+                details: None,
+            };
         }
     }
-    Err("NO_ACTIVE_DTLS_STREAM".to_string())
+    CommandStatus {
+        code: "NO_ACTIVE_DTLS_STREAM".to_string(),
+        message: "No active DTLS stream to fault.".to_string(),
+        details: None,
+    }
 }
 
 /// Release stub for `simulate_hue_fault` — always reports the debug-only
-/// command as unavailable.
+/// command as unavailable, as a coded status for the same reason as above.
 #[cfg(not(debug_assertions))]
 #[tauri::command]
-pub fn simulate_hue_fault() -> Result<String, String> {
-    Err("SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string())
+pub fn simulate_hue_fault() -> CommandStatus {
+    CommandStatus {
+        code: "SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string(),
+        message: "Fault simulation is available in debug builds only.".to_string(),
+        details: None,
+    }
 }

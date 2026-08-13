@@ -1670,6 +1670,33 @@ for (const reason of emittedHueTransportReasons) {
   );
 }
 
+// `simulate_hue_fault` is allowlisted as uncontracted above, so no code check
+// reaches it — this is the only guard against a relapse to `Err(String)`.
+console.log("\n[ Debug-only Hue command — never-throw return shape ]");
+const hueCommandsRustSource = stripComments(
+  readOrEmpty(resolve(ROOT, "src-tauri/src/commands/hue/commands.rs"), "rust hue/commands")
+);
+const simulateReturnTypes = [
+  ...hueCommandsRustSource.matchAll(
+    /pub fn simulate_hue_fault\s*\([\s\S]*?\)\s*->\s*([^{]+?)\s*\{/g
+  ),
+].map((m) => m[1].trim());
+check(
+  simulateReturnTypes.length === 2,
+  "harvested both simulate_hue_fault arms (debug + release stub)",
+  `HARVEST DRIFT: expected 2 simulate_hue_fault signatures, got `
+    + `${simulateReturnTypes.length} — the cfg-gated pair changed shape`
+);
+for (const returnType of simulateReturnTypes) {
+  check(
+    returnType === "CommandStatus",
+    `simulate_hue_fault arm returns CommandStatus`,
+    `NEVER-THROW VIOLATION: a simulate_hue_fault arm returns "${returnType}" — its `
+      + `HUE_DEBUG_COMMAND_CODES would reach the caller as a rejected promise `
+      + `instead of a code to branch on`
+  );
+}
+
 // Everything above proves a string is DECLARED. These three prove the
 // declaration has a path to the running app — the telemetry fork had neither.
 const contractModuleFiles = walkSourceFiles(resolve(ROOT, "src/shared/contracts"), /\.ts$/);
