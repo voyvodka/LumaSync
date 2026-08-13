@@ -214,6 +214,11 @@ const device: Catalogue<typeof enDevice> = {
         discovered: "BULUNDU",
         connected: "AKTIF",
       },
+      restore: {
+        restoring: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanılıyor...",
+        restored: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanıldı.",
+        failed: "{{ip}} adresindeki kayıtlı WLED cihazına yeniden bağlanılamadı.",
+      },
       status: {
         discoveryOk: "Tarama tamamlandı.",
         discoveryTimeout: "Tarama süresi içinde hiçbir cihaz yanıt vermedi.",
