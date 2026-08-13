@@ -23,6 +23,7 @@ use super::super::hue_onboarding::{
     check_hue_stream_readiness, check_hue_stream_readiness_with_freshness, CommandStatus,
 };
 use super::area_cache::HueReadFreshness;
+use super::credential_store::effective_hue_app_key;
 use super::frame::HueAreaChannelInfo;
 use super::reconnect::{spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard};
 use super::retry::{
@@ -69,7 +70,9 @@ pub async fn get_hue_area_channels(
     if let Some(info) = channels_to_info_via_owner(&runtime_state, &area_id) {
         return Ok(info);
     }
-    // Slow path: fetch directly from bridge (no lock held).
+    // Slow path: fetch directly from bridge (no lock held). An empty `username`
+    // means "resolve from the OS keychain".
+    let username = effective_hue_app_key(&username);
     let channels = fetch_area_channels(&bridge_ip, &username, &area_id).await?;
     Ok(super::frame::channels_to_info(&channels))
 }
@@ -79,9 +82,14 @@ pub async fn get_hue_area_channels(
 /// stream context.
 #[tauri::command]
 pub async fn start_hue_stream(
-    request: StartHueStreamRequest,
+    mut request: StartHueStreamRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
+    // MUST precede the readiness call and the `credentials_valid` evidence —
+    // every downstream reader, including the stored `ActiveHueStream`, takes
+    // the key from this one field. See docs/architecture/hue.md.
+    request.username = effective_hue_app_key(&request.username);
+
     let trigger = request
         .trigger_source
         .clone()
@@ -350,9 +358,12 @@ pub fn stop_hue_stream(
 /// request — used when an area/channel change requires a full reconnect.
 #[tauri::command]
 pub async fn restart_hue_stream(
-    request: StartHueStreamRequest,
+    mut request: StartHueStreamRequest,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
+    // Same ordering rule as `start_hue_stream` — resolve before any reader.
+    request.username = effective_hue_app_key(&request.username);
+
     let trigger = request
         .trigger_source
         .clone()

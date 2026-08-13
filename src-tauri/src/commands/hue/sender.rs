@@ -1068,6 +1068,16 @@ pub(crate) fn build_hue_sender_with_counter(
         &request.username,
         &request.client_key,
     );
+    // Halves from different pairings; only reachable via external keychain
+    // tampering, so report and carry on rather than attempting recovery.
+    if matches!(
+        resolved.as_ref().map(|r| r.backend),
+        Some(super::credential_store::CredentialBackend::PlaintextLegacy)
+    ) && super::credential_store::resolve_hue_app_key(store.as_ref(), "").is_some()
+    {
+        warn!("[hue-cred] keychain holds an app key but the DTLS pair resolved from plaintext");
+    }
+
     let (resolved_username, resolved_client_key) = match resolved {
         Some(r) => (r.username, r.client_key),
         None => (request.username.clone(), request.client_key.clone()),

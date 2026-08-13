@@ -31,21 +31,31 @@ call, and the fallback itself only triggers on a connect-level failure — a TLS
 stays fatal, because that handshake failure is exactly the signal such an attacker manufactures.
 
 **Credentials live in the OS keychain, not in the state file.** macOS Keychain, Windows CredMan,
-Linux Secret Service, via `commands/hue/credential_store.rs`. `shell-state.json` no longer holds the
-DTLS pre-shared key.
+Linux Secret Service, via `commands/hue/credential_store.rs`. `shell-state.json` holds neither the
+DTLS pre-shared key nor the application key — on a platform where the keychain works. Where it does
+not (a Linux box with no D-Bus), `default_store()` degrades to `NoopStore` and both keys stay on
+disk, because the alternative is an app that cannot pair.
 
-**The application key is still written to disk, and the asymmetry is deliberate.**
-`resolve_hue_credentials` is the only function that reads the keychain, and it has exactly one
-caller: the DTLS sender build in `commands/hue/sender.rs`. Every other bridge call —
-`validate_hue_credentials`, `list_hue_entertainment_areas`, `check_hue_stream_readiness`,
-`get_hue_area_channels`, and `start_hue_stream`'s internal readiness check — takes the application
-key as an argument from the frontend and never consults the keychain. So the pre-shared key can be
-dropped from disk today, because an empty client key in the start request makes the sender fall
-through to the keychain; dropping the application key would instead send an empty
-`hue-application-key` header, draw a 403, and let the shared classifier promote it to
-`AUTH_INVALID_RE_PAIR_REQUIRED` — the user is told to re-pair, and nothing anywhere can read the key
-back. **Do not clear `hueAppKey` until those five call sites resolve it keychain-first when the
-request value is empty.** This looks like an unfinished job and is not one.
+**An empty `username` on the wire means "resolve from the OS keychain".** Same idiom as
+`clientKey`, applied to the second secret so there is one rule rather than two. Every CLIP surface
+runs the request value through `effective_hue_app_key` first; a non-empty value is used as-is and
+remains the legacy fallback. Resolving nothing yields `AUTH_INVALID_RE_PAIR_REQUIRED` rather than a
+new status code — a new code would fall through every shipped `switch` into the default branch and
+render the wrong card, so the "we never called the bridge" distinction is carried in `details`.
+
+**`start_hue_stream` and `restart_hue_stream` resolve before anything else runs.** The overwrite of
+`request.username` sits above the readiness call and above the `credentials_valid` gate evidence,
+which is computed from that same field. Resolving after either one makes an empty request username
+refuse the start with no error the user can act on. Everything downstream is then free: the stored
+`ActiveHueStream.username` carries the resolved key, so `stop_hue_stream`, `get_hue_stream_status`,
+the deactivate PUTs and the whole reconnect monitor need no credential handling of their own.
+
+**The app-key lookup is a sibling of `resolve_hue_credentials`, not a relaxation of it.**
+`resolve_hue_app_key` accepts a keychain holding only the application key; `resolve_hue_credentials`
+must keep refusing that shape, because a `Keychain`-labelled result with an empty `client_key` would
+drive the DTLS handshake into a PSK negotiation with no key — a hard connect failure replacing a
+working legacy path. The ~10 lines of overlap are the price of not touching the DTLS path inside a
+credential change.
 
 **The entertainment-area snapshot is cached process-wide, single-flight.** Two independent frontend
 polling loops converge on the same bridge payload through different commands — the App health
@@ -99,5 +109,5 @@ half-migrated.
 - **Discovery touches the cloud; the manual-IP path does not.** The mDNS/discovery endpoint is the only outbound call in the entire application, and it has a manual fallback precisely so a user can avoid it.
 - **A failed read-back rolls back BOTH keychain halves, never just the bad one.** `migrate_hue_credentials_to_keychain` writes, reads back, compares, and only then reports success; on any mismatch it deletes both entries. Deleting only the mismatched half looks tidier and is wrong — `resolve_hue_credentials` prefers a complete keychain pair over the request fallback, so a stale pair left behind shadows the working plaintext credentials and yields a broken bridge that reports a keychain success. Rolling both back degrades to the plaintext path, which works. The order is fixed: write, read back, *then* clear plaintext. Never clear on a write acknowledgement alone.
 - **Only the literal `"keychain"` licenses deleting the plaintext copy.** An absent `credentialStorageBackend` — every pairing failure path, and any Rust build predating the migration — means there is no evidence the keychain holds anything, and the only safe response to no evidence is to keep the copy. `CredentialBackend::as_str` can also emit `"noop"`, which is outside the TS union. Test for the one permitting value; never switch exhaustively over the union.
-- **The boot restore keys on the application key alone.** Requiring both keys was right only while both were on disk. Once the PSK moved to the keychain, that condition made every launch after the first restore no credentials at all and drop the bridge card to `NEEDS_REPAIR`. The empty client key it passes downstream is exactly what makes the sender resolve the pair from the keychain.
+- **"Paired" is `hueAppKey || credentialStorageBackend === "keychain"`, never the app key alone.** The same trap caught the client key one release earlier: a condition that reads a *present secret on disk* as proof of pairing silently reports "unpaired" the moment that secret legitimately moves to the keychain. Both `toHueStartConfig` and the `useHueOnboardingCore` boot restore carry the two-armed predicate; getting it wrong there kills Hue at boot and on every seamless target switch with no status code and no toast, because both call sites read `null` as "no bridge configured" and skip. The empty username and client key they pass downstream are exactly what make Rust resolve from the keychain.
 - **Credential cleanup is not a store migration.** `migrateShellState` is a pure function with no Tauri access, so it can never prove the keychain holds a copy before deleting the plaintext one — on a machine with a locked or unavailable keychain that would destroy the pairing. The one-shot cleanup for old installs is a Tauri command called at boot instead, and it clears nothing unless the response comes back `keychain`.

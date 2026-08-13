@@ -96,15 +96,15 @@ describe("useHueOnboarding credential persistence", () => {
     vi.clearAllMocks();
   });
 
-  it("never writes the plaintext PSK when the keychain owns it", async () => {
+  it("writes neither secret in plaintext when the keychain owns them", async () => {
     const saved = await pairWith(HUE_CREDENTIAL_BACKENDS.KEYCHAIN);
 
     expect(saved.hueClientKey).toBeUndefined();
-    expect(saved.hueAppKey).toBe("app-key-abc");
+    expect(saved.hueAppKey).toBeUndefined();
     expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.KEYCHAIN);
   });
 
-  it("keeps the plaintext PSK when the keychain was unavailable", async () => {
+  it("keeps both plaintext secrets when the keychain was unavailable", async () => {
     const saved = await pairWith(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
 
     expect(saved.hueClientKey).toBe("psk-deadbeef");
@@ -112,19 +112,21 @@ describe("useHueOnboarding credential persistence", () => {
     expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
   });
 
-  it("treats an absent backend as legacy and keeps the plaintext PSK", async () => {
+  it("treats an absent backend as legacy and keeps both plaintext secrets", async () => {
     const saved = await pairWith(undefined);
 
     expect(saved.hueClientKey).toBe("psk-deadbeef");
+    expect(saved.hueAppKey).toBe("app-key-abc");
     expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
   });
 
-  it("treats an unrecognised backend as legacy and keeps the plaintext PSK", async () => {
+  it("treats an unrecognised backend as legacy and keeps both plaintext secrets", async () => {
     // Rust's CredentialBackend::as_str can emit "noop", which is outside the
     // TS union — it must never be read as permission to delete.
     const saved = await pairWith("noop");
 
     expect(saved.hueClientKey).toBe("psk-deadbeef");
+    expect(saved.hueAppKey).toBe("app-key-abc");
     expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
   });
 
@@ -169,7 +171,39 @@ describe("useHueOnboarding credential persistence", () => {
     expect(migrateCredentialsMock).not.toHaveBeenCalled();
   });
 
-  it("clears the stored PSK at boot only once the migration proves the keychain holds it", async () => {
+  it("restores a keychain-backed pairing whose app key is no longer on disk", async () => {
+    shellLoadMock.mockResolvedValue({
+      lastHueBridge: BRIDGE,
+      credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
+      hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
+    });
+    validateCredentialsMock.mockResolvedValue({
+      status: { code: "HUE_CREDENTIAL_OK", message: "ok" },
+      valid: true,
+    });
+
+    const { result } = renderHook(() => useHueOnboarding());
+
+    // The empty username is the signal that Rust must resolve the key itself.
+    await waitFor(() => expect(validateCredentialsMock).toHaveBeenCalledWith(BRIDGE.ip, "", ""));
+    await waitFor(() => expect(listAreasMock).toHaveBeenCalledWith(BRIDGE.ip, ""));
+    await waitFor(() =>
+      expect(result.current.credentialState).not.toBe(HUE_CREDENTIAL_STATUS.NEEDS_REPAIR),
+    );
+    expect(result.current.credentials?.username).toBe("");
+  });
+
+  it("stays unpaired when neither an app key nor a keychain backend is stored", async () => {
+    shellLoadMock.mockResolvedValue({ lastHueBridge: BRIDGE });
+
+    const { result } = renderHook(() => useHueOnboarding());
+
+    await waitFor(() => expect(shellLoadMock).toHaveBeenCalled());
+    expect(validateCredentialsMock).not.toHaveBeenCalled();
+    expect(result.current.credentials).toBeNull();
+  });
+
+  it("clears both stored secrets at boot only once the migration proves the keychain holds them", async () => {
     shellLoadMock.mockResolvedValue({
       lastHueBridge: BRIDGE,
       hueAppKey: "app-key-abc",
@@ -189,6 +223,7 @@ describe("useHueOnboarding credential persistence", () => {
     await waitFor(() => expect(migrateCredentialsMock).toHaveBeenCalledWith("app-key-abc", "psk-deadbeef"));
     await waitFor(() =>
       expect(shellSaveMock).toHaveBeenCalledWith({
+        hueAppKey: undefined,
         hueClientKey: undefined,
         credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
       }),

@@ -399,6 +399,62 @@ pub fn resolve_hue_credentials(
     None
 }
 
+/// Resolved application key returned by `resolve_hue_app_key`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedHueAppKey {
+    pub username: String,
+    pub backend: CredentialBackend,
+}
+
+/// Resolve the Hue application key alone, keychain-first.
+///
+/// The CLIP v2 HTTP surface never touches the DTLS pre-shared key, so it must
+/// not be gated on the client key being present — that is what
+/// `resolve_hue_credentials` requires, and why it cannot serve this path.
+/// Relaxing that both-keys rule instead of adding this sibling would let a
+/// half-populated keychain drive the DTLS handshake into a PSK negotiation
+/// with no key; `resolver_falls_through_when_keychain_holds_only_one_half`
+/// pins that behaviour.
+///
+/// `fallback_username` is the request-supplied value, kept for legacy installs
+/// and for platforms where `default_store()` degraded to `NoopStore`.
+pub fn resolve_hue_app_key(
+    store: &dyn SecretStore,
+    fallback_username: &str,
+) -> Option<ResolvedHueAppKey> {
+    if let Some(username) = store.get(KEY_HUE_APP_KEY).ok().flatten() {
+        if !username.is_empty() {
+            debug!("[hue-cred] app key resolved from keychain");
+            return Some(ResolvedHueAppKey {
+                username,
+                backend: CredentialBackend::Keychain,
+            });
+        }
+    }
+
+    if !fallback_username.is_empty() {
+        debug!("[hue-cred] app key resolved from plaintext fallback (legacy user)");
+        return Some(ResolvedHueAppKey {
+            username: fallback_username.to_string(),
+            backend: CredentialBackend::PlaintextLegacy,
+        });
+    }
+
+    debug!("[hue-cred] no application key available — re-pair required");
+    None
+}
+
+/// Keychain-first application key for the CLIP v2 command surface, or `""`
+/// when neither the keychain nor the request carries one.
+///
+/// Returning a bare `String` keeps the call sites flat — each of them already
+/// has an "empty username" arm to surface `AUTH_INVALID_RE_PAIR_REQUIRED`.
+pub fn effective_hue_app_key(fallback_username: &str) -> String {
+    resolve_hue_app_key(default_store().as_ref(), fallback_username)
+        .map(|resolved| resolved.username)
+        .unwrap_or_default()
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -752,6 +808,71 @@ pub(crate) mod tests {
         let store = InMemoryStore::default();
         store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
         let resolved = resolve_hue_credentials(&store, "fb-user", "fb-key").unwrap();
+        assert_eq!(resolved.username, "fb-user");
+        assert_eq!(resolved.backend, CredentialBackend::PlaintextLegacy);
+    }
+
+    // -------------------- app-key-only resolver scenarios --------------------
+
+    #[test]
+    fn app_key_resolver_prefers_keychain_over_the_request_value() {
+        let store = InMemoryStore::default();
+        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        let resolved = resolve_hue_app_key(&store, "fb-user").unwrap();
+        assert_eq!(resolved.username, "kc-user");
+        assert_eq!(resolved.backend, CredentialBackend::Keychain);
+    }
+
+    #[test]
+    fn app_key_resolver_accepts_a_keychain_holding_no_client_key() {
+        // The case `resolve_hue_credentials` must keep refusing: the CLIP v2
+        // HTTP surface needs only the application key, so a keychain without
+        // the DTLS PSK is authoritative here and is not there.
+        let store = InMemoryStore::default();
+        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+
+        assert_eq!(
+            resolve_hue_app_key(&store, "").unwrap().backend,
+            CredentialBackend::Keychain
+        );
+        assert_eq!(
+            resolve_hue_credentials(&store, "fb-user", "fb-key")
+                .unwrap()
+                .backend,
+            CredentialBackend::PlaintextLegacy
+        );
+    }
+
+    #[test]
+    fn app_key_resolver_falls_back_to_the_request_on_a_keychain_miss() {
+        let store = NoopStore::new();
+        let resolved = resolve_hue_app_key(&store, "legacy-user").unwrap();
+        assert_eq!(resolved.username, "legacy-user");
+        assert_eq!(resolved.backend, CredentialBackend::PlaintextLegacy);
+    }
+
+    #[test]
+    fn app_key_resolver_returns_none_when_neither_source_has_a_key() {
+        let store = InMemoryStore::default();
+        assert!(resolve_hue_app_key(&store, "").is_none());
+        assert!(resolve_hue_app_key(&NoopStore::new(), "").is_none());
+    }
+
+    #[test]
+    fn app_key_resolver_ignores_an_empty_keychain_entry() {
+        let store = InMemoryStore::default();
+        store.set(KEY_HUE_APP_KEY, "").unwrap();
+        let resolved = resolve_hue_app_key(&store, "fb-user").unwrap();
+        assert_eq!(resolved.username, "fb-user");
+        assert_eq!(resolved.backend, CredentialBackend::PlaintextLegacy);
+    }
+
+    #[test]
+    fn app_key_resolver_treats_get_failure_as_keychain_miss() {
+        let store = InMemoryStore::default();
+        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
+        store.fail_next_get();
+        let resolved = resolve_hue_app_key(&store, "fb-user").unwrap();
         assert_eq!(resolved.username, "fb-user");
         assert_eq!(resolved.backend, CredentialBackend::PlaintextLegacy);
     }

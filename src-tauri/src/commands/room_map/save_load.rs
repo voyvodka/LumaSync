@@ -10,6 +10,7 @@ use serde_json::json;
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
+use crate::commands::hue::credential_store::effective_hue_app_key;
 use crate::commands::hue_onboarding::CommandStatus;
 use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
 
@@ -120,6 +121,19 @@ pub fn update_hue_channel_positions(
             code: "HUE_AREA_INVALID".to_string(),
             message: "Invalid area ID format.".to_string(),
             details: None,
+        };
+    }
+
+    // An empty `username` means "resolve from the OS keychain".
+    let username = effective_hue_app_key(&username);
+    if username.is_empty() {
+        return CommandStatus {
+            code: "AUTH_INVALID_RE_PAIR_REQUIRED".to_string(),
+            message: "Hue bridge rejected our credentials. Re-pair the bridge to continue."
+                .to_string(),
+            details: Some(
+                "No Hue application key in the OS keychain or the request payload.".to_string(),
+            ),
         };
     }
 

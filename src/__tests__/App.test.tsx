@@ -393,6 +393,43 @@ describe("App mode orchestration", () => {
     expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
   });
 
+  it("starts hue for a keychain install whose secrets are no longer on disk", async () => {
+    // The point of the keychain migration: neither key is in shell-state.json,
+    // and Rust resolves them from the empty username/clientKey signal.
+    const keychainState = {
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: { kind: "off" },
+      lastOutputTargets: ["hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      credentialStorageBackend: "keychain",
+      lastHueAreaId: "area-1",
+    };
+    loadShellStateMock.mockResolvedValue(keychainState);
+
+    startHueMock.mockResolvedValueOnce({
+      active: true,
+      status: { code: "HUE_STREAM_RUNNING", message: "Running" },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("output-targets")).toHaveTextContent("hue");
+    });
+
+    await act(async () => {
+      screen.getByRole("button", { name: "set-solid" }).click();
+    });
+
+    expect(startHueMock).toHaveBeenCalledWith({
+      bridgeIp: "192.168.1.10",
+      username: "",
+      clientKey: "",
+      areaId: "area-1",
+    });
+  });
+
   it("repeated set-solid: first call starts hue, second falls into the quick fast path", async () => {
     // Off → Solid is a full transition that opens the Hue stream.
     // Solid → Solid is a "quick adjustment" (App.tsx ~L716) that pushes the

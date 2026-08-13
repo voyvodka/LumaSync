@@ -82,6 +82,7 @@ async function migrateStoredCredentialsToKeychain(storedState: ShellState): Prom
     }
 
     await shellStore.save({
+      hueAppKey: undefined,
       hueClientKey: undefined,
       credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
     });
@@ -388,17 +389,17 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
       }));
 
       if (response.credentials) {
-        // hueAppKey deliberately stays on disk — see docs/architecture/hue.md.
-        const keychainOwnsPsk =
+        // Only the literal `"keychain"` licenses the delete — see docs/architecture/hue.md.
+        const keychainOwnsCredentials =
           response.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;
 
         await shellStore.save({
           lastHueBridge: selectedBridge,
-          hueAppKey: response.credentials.username,
           // `undefined` is dropped by the IPC JSON serialisation, so this
           // removes the key rather than writing an empty value over it.
-          hueClientKey: keychainOwnsPsk ? undefined : response.credentials.clientKey,
-          credentialStorageBackend: keychainOwnsPsk
+          hueAppKey: keychainOwnsCredentials ? undefined : response.credentials.username,
+          hueClientKey: keychainOwnsCredentials ? undefined : response.credentials.clientKey,
+          credentialStorageBackend: keychainOwnsCredentials
             ? HUE_CREDENTIAL_BACKENDS.KEYCHAIN
             : HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
           hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
@@ -504,10 +505,14 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
       }
 
       const savedBridge = storedState.lastHueBridge ?? null;
-      // App key alone; demanding both strands the user — docs/architecture/hue.md.
-      const savedCredentials = storedState.hueAppKey
+      // An empty app key is the keychain signal, not "unpaired" — keying off it
+      // would skip boot validation entirely. See docs/architecture/hue.md.
+      const isPaired =
+        !!storedState.hueAppKey ||
+        storedState.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;
+      const savedCredentials = isPaired
         ? {
-            username: storedState.hueAppKey,
+            username: storedState.hueAppKey ?? "",
             clientKey: storedState.hueClientKey ?? "",
           }
         : null;
@@ -526,7 +531,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
 
       await migrateStoredCredentialsToKeychain(storedState);
 
-      if (!savedBridge || !savedCredentials?.username) {
+      if (!savedBridge || !savedCredentials) {
         return;
       }
 

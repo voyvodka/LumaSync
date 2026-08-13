@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { HUE_CREDENTIAL_BACKENDS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 import { isHueStartCodeOk, isHueStopCodeOk, toHueStartConfig } from "../hueStartConfig";
 
 describe("toHueStartConfig", () => {
@@ -36,11 +36,36 @@ describe("toHueStartConfig", () => {
     });
   });
 
-  it("returns null when bridge, app key or area is missing or blank", () => {
+  it("returns null when bridge or area is missing", () => {
     expect(toHueStartConfig({ ...complete, lastHueBridge: undefined })).toBeNull();
-    expect(toHueStartConfig({ ...complete, hueAppKey: undefined })).toBeNull();
     expect(toHueStartConfig({ ...complete, lastHueAreaId: undefined })).toBeNull();
+  });
+
+  it("returns null when no app key and no keychain backend prove a pairing", () => {
+    expect(toHueStartConfig({ ...complete, hueAppKey: undefined })).toBeNull();
     expect(toHueStartConfig({ ...complete, hueAppKey: "   " })).toBeNull();
+    expect(
+      toHueStartConfig({
+        ...complete,
+        hueAppKey: undefined,
+        credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
+      }),
+    ).toBeNull();
+  });
+
+  it("projects an empty username when the keychain owns the app key", () => {
+    expect(
+      toHueStartConfig({
+        lastHueBridge: { ip: "192.168.1.10" },
+        lastHueAreaId: "area-1",
+        credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
+      }),
+    ).toEqual({
+      bridgeIp: "192.168.1.10",
+      username: "",
+      clientKey: "",
+      areaId: "area-1",
+    });
   });
 
   it("tolerates a missing client key — DTLS falls back to the HTTP path", () => {
