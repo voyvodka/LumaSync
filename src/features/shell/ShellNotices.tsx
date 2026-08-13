@@ -57,7 +57,6 @@ export function ShellNotices({
       )}
       {stopFailed && stopFailedTargets && (
         <div
-          data-testid="stop-failed-notice"
           className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"

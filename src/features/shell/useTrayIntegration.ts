@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { i18next } from "@/features/i18n/i18n";
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/model/contracts";
@@ -19,8 +19,7 @@ import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import { loadShellState, saveShellState } from "./windowLifecycle";
 
 export interface TrayIntegrationInput {
-  /** Assigned during render by the shell so a tray event never hits a stale handler. */
-  lightingModeChangeRef: RefObject<((mode: LightingModeConfig) => Promise<void>) | null>;
+  onLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   lightingModeRef: RefObject<LightingModeConfig>;
   lastNonOffModeRef: RefObject<LightingModeConfig | null>;
   selectedOutputTargetsRef: RefObject<HueRuntimeTarget[]>;
@@ -43,12 +42,17 @@ function pushTrayLabels() {
  * rather than state, which is what keeps the `[]` dep arrays honest.
  */
 export function useTrayIntegration({
-  lightingModeChangeRef,
+  onLightingModeChange,
   lightingModeRef,
   lastNonOffModeRef,
   selectedOutputTargetsRef,
   getSelectedDisplayId,
 }: TrayIntegrationInput): void {
+  // Assigned during render, never in an effect: a tray event arriving before
+  // the effect flush must still reach the current handler.
+  const lightingModeChangeRef = useRef(onLightingModeChange);
+  lightingModeChangeRef.current = onLightingModeChange;
+
   // Register i18n languageChanged hook to re-push tray labels
   useEffect(() => {
     const handler = () => pushTrayLabels();
