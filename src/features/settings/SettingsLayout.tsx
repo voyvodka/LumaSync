@@ -125,6 +125,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onModeChange={onLightingModeChange}
               onOutputTargetsChange={onOutputTargetsChange}
               onOpenCalibration={() => void onSectionChange(SECTION_IDS.LED_SETUP)}
+              onOpenDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
               onHueIntensityPresetChange={onHueIntensityPresetChange}
               onColorCorrectionChange={onColorCorrectionChange}
               onFirmwareProfileChange={onFirmwareProfileChange}

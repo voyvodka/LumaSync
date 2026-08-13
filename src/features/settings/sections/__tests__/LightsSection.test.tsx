@@ -53,6 +53,10 @@ vi.mock("react-i18next", () => ({
         "lights:calibrationBanner.title": "Calibration required",
         "lights:calibrationBanner.sub": "Finish LED layout before enabling this mode.",
         "lights:calibrationBanner.action": "Open calibration",
+        "common:output.offline.title": "No reachable output",
+        "common:output.offline.body":
+          "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
+        "common:output.offline.action": "Open devices",
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
@@ -66,6 +70,11 @@ vi.mock("react-i18next", () => ({
         "lights:dock.addHueZoneTooltip": "Add a Hue zone",
         "lights:dock.addDisabledTooltip": "Finish Hue setup first",
         "roomMap:hueZones.defaultName": "Zone {{N}}",
+        "common:compact.scenes.movie": "Movie",
+        "common:compact.scenes.game": "Game",
+        "common:compact.scenes.music": "Music",
+        "common:compact.scenes.chill": "Chill",
+        "common:compact.scenes.read": "Read",
         "common:mode.brightness": "Brightness",
         "common:mode.solidColor": "Solid color",
         "common:ui.colorPicker.hexLabel": "HEX",
@@ -212,6 +221,107 @@ describe("LightsSection", () => {
     await user.click(screen.getByRole("button", { name: /HUE/ }));
 
     expect(onOutputTargetsChange).toHaveBeenCalledWith(["usb", "hue"]);
+  });
+});
+
+// Guard parity with CompactLayout: a mode that needs somewhere to send frames
+// must stay unreachable while nothing is connected, and the user must be told
+// why. Off is exempt — parking the outputs is always safe.
+describe("LightsSection — output availability gate", () => {
+  function renderWithOutputs(
+    props: Partial<{
+      usbConnected: boolean;
+      hueConfigured: boolean;
+      hueReachable: boolean;
+      onOpenDevices: () => void;
+      onModeChange: (next: LightingModeConfig) => void;
+    }> = {},
+  ) {
+    return render(
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        usbConnected={props.usbConnected ?? false}
+        hueConfigured={props.hueConfigured ?? false}
+        hueReachable={props.hueReachable ?? false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={props.onModeChange ?? vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+        onOpenDevices={props.onOpenDevices}
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    shellStateRef.current = {};
+  });
+
+  it("disables the non-Off modes and explains why when nothing is connected", async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    const onOpenDevices = vi.fn();
+    renderWithOutputs({ onModeChange, onOpenDevices });
+
+    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
+    // Off parks the outputs — always safe, never gated on having one.
+    expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
+
+    expect(screen.getByText("No reachable output")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open devices" }));
+    expect(onOpenDevices).toHaveBeenCalledOnce();
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("blocks scene presets too — every scene tile activates SOLID", () => {
+    renderWithOutputs();
+
+    for (const label of ["Movie", "Game", "Music", "Chill", "Read"]) {
+      expect(screen.getByRole("button", { name: label })).toBeDisabled();
+    }
+  });
+
+  it("treats a configured-but-unreachable bridge as no output", () => {
+    renderWithOutputs({ hueConfigured: true, hueReachable: false });
+
+    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByText("No reachable output")).toBeInTheDocument();
+  });
+
+  it("enables the non-Off modes once a reachable bridge is the only output", () => {
+    renderWithOutputs({ hueConfigured: true, hueReachable: true });
+
+    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Solid/ })).toBeEnabled();
+    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
+  });
+
+  it("keeps the calibration reason distinct from the offline reason", () => {
+    render(
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        usbConnected={true}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+        onOpenDevices={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Calibration required")).toBeInTheDocument();
+    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
   });
 });
 

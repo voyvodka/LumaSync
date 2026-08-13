@@ -15,6 +15,12 @@ export default {
     },
     noDevices: "No devices available",
     noDevicesHint: "Connect your devices in Settings",
+    // Shared by the compact banner and the full-mode Lights banner.
+    offline: {
+      title: "No reachable output",
+      body: "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
+      action: "Open devices",
+    },
   },
   mode: {
     title: "LED mode",
@@ -49,11 +55,6 @@ export default {
       music: "Music",
       chill: "Chill",
       read: "Read",
-    },
-    offline: {
-      title: "No reachable output",
-      body: "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
-      action: "Open devices",
     },
   },
   ui: {
