@@ -1,9 +1,67 @@
-/// Longest capture edge after downscale, shared by the Windows and macOS
-/// paths — a per-path duplicate drifts silently. The Linux path does not
-/// downscale at all, which is why this is not `cfg`-free.
+/// Longest capture edge after downscale, shared by all three capture paths —
+/// a per-path duplicate drifts silently. The `cfg` still names the platforms
+/// that downscale, so an unsupported-platform build does not carry it.
 /// See docs/architecture/capture-and-pipeline.md.
-#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
 const MAX_CAPTURE_DIM: u32 = 640;
+
+/// Nearest-neighbour subsample step that brings the longest edge under
+/// [`MAX_CAPTURE_DIM`]. Clamps to 1, so a display already under the cap is
+/// copied through unchanged.
+///
+/// Windows and Linux both receive a whole native frame and must reduce it
+/// CPU-side; macOS asks ScreenCaptureKit for the smaller frame instead and
+/// never calls this.
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+fn downscale_stride(width: u32, height: u32) -> usize {
+    (width.max(height) / MAX_CAPTURE_DIM).max(1) as usize
+}
+
+/// Dimensions a `width`×`height` frame collapses to under `stride`.
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+fn downscaled_dimensions(width: u32, height: u32, stride: usize) -> (u32, u32) {
+    (
+        (width as usize).div_ceil(stride) as u32,
+        (height as usize).div_ceil(stride) as u32,
+    )
+}
+
+/// Drop the fourth byte of every source pixel, keeping every `stride`-th
+/// pixel on both axes.
+///
+/// `src` must be exactly `width * height * 4` bytes; callers slice it to that
+/// length after their own buffer-length guard, which is what makes the
+/// indexing below total.
+///
+/// Channel-agnostic on purpose. `windows-capture` delivers BGRA and `xcap`
+/// delivers RGBA, and both paths have always taken bytes 0..3 in source
+/// order — this keeps that behaviour rather than quietly changing it.
+#[cfg(any(target_os = "windows", target_os = "linux", test))]
+fn subsample_rgb(src: &[u8], width: usize, height: usize, stride: usize) -> Vec<[u8; 3]> {
+    debug_assert_eq!(src.len(), width.saturating_mul(height).saturating_mul(4));
+
+    let (dst_w, dst_h) = downscaled_dimensions(width as u32, height as u32, stride);
+    let mut pixels_rgb = Vec::with_capacity((dst_w as usize).saturating_mul(dst_h as usize));
+
+    // Stride 1 keeps the original tight loop; the strided walk skips rows and
+    // columns so a 3840×2160 frame collapses to ~640×360 on the host CPU.
+    if stride == 1 {
+        for pixel in src.chunks_exact(4) {
+            pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+        }
+    } else {
+        let row_bytes = width.saturating_mul(4);
+        for y in (0..height).step_by(stride) {
+            let row_start = y.saturating_mul(row_bytes);
+            for x in (0..width).step_by(stride) {
+                let offset = row_start + x.saturating_mul(4);
+                pixels_rgb.push([src[offset], src[offset + 1], src[offset + 2]]);
+            }
+        }
+    }
+
+    pixels_rgb
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapturedFrame {
@@ -368,56 +426,25 @@ mod platform {
 
             // CPU-side downscale scaffold — no GPU hint on this platform.
             // See docs/architecture/capture-and-pipeline.md.
-            let stride = (width.max(height) / super::MAX_CAPTURE_DIM).max(1) as usize;
-            let stride_active = stride > 1;
-            if stride_active {
+            let stride = super::downscale_stride(width, height);
+            let (out_w, out_h) = super::downscaled_dimensions(width, height, stride);
+            if stride > 1 {
                 log::debug!(
                     "[ambilight-capture/windows] 4K downscale active: src={}x{} stride={} → ~{}x{}",
                     width,
                     height,
                     stride,
-                    width as usize / stride,
-                    height as usize / stride,
+                    out_w,
+                    out_h,
                 );
             }
 
-            let src_w = width as usize;
-            let src_h = height as usize;
-            let dst_w = src_w.div_ceil(stride);
-            let dst_h = src_h.div_ceil(stride);
-            let mut pixels_rgb = Vec::with_capacity(dst_w.saturating_mul(dst_h));
-
-            // Stride-1 keeps the original tight loop (one allocation, one
-            // BGRA-vs-RGBA-agnostic copy). Stride-N walks rows + cols by
-            // `stride` so a 3840×2160 frame collapses to ~640×360 on the
-            // host CPU — the smallest impact we can land before a real
-            // hardware downscale path goes in.
-            if !stride_active {
-                for pixel in raw_pixels[..expected_len].chunks_exact(4) {
-                    pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
-                }
-            } else {
-                let row_bytes = src_w.saturating_mul(4);
-                for y in (0..src_h).step_by(stride) {
-                    let row_start = y.saturating_mul(row_bytes);
-                    for x in (0..src_w).step_by(stride) {
-                        let offset = row_start + x.saturating_mul(4);
-                        if offset + 3 < raw_pixels.len() {
-                            pixels_rgb.push([
-                                raw_pixels[offset],
-                                raw_pixels[offset + 1],
-                                raw_pixels[offset + 2],
-                            ]);
-                        }
-                    }
-                }
-            }
-
-            let (out_w, out_h) = if stride_active {
-                (dst_w as u32, dst_h as u32)
-            } else {
-                (width, height)
-            };
+            let pixels_rgb = super::subsample_rgb(
+                &raw_pixels[..expected_len],
+                width as usize,
+                height as usize,
+                stride,
+            );
 
             let mut frame_guard = self
                 .latest_frame
@@ -763,7 +790,10 @@ mod platform {
         display_id: Option<&str>,
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         let monitor = resolve_monitor(display_id)?;
-        Ok(Box::new(LinuxFrameSource { monitor }))
+        Ok(Box::new(LinuxFrameSource {
+            monitor,
+            downscale_logged: false,
+        }))
     }
 
     /// Pull-mode frame source. xcap does not expose a streaming/callback
@@ -780,6 +810,9 @@ mod platform {
     /// (Platform GAP 1b).
     struct LinuxFrameSource {
         monitor: Monitor,
+        /// Pull mode runs ~20×/s, so Windows' per-frame downscale log would
+        /// be 20 lines a second here. One line per frame source says as much.
+        downscale_logged: bool,
     }
 
     impl AmbilightFrameSource for LinuxFrameSource {
@@ -808,17 +841,32 @@ mod platform {
                 ));
             }
 
-            // xcap returns RGBA on every backend (X11 + Wayland). Drop the
-            // alpha channel; the ambilight sampler operates on RGB.
-            let mut pixels_rgb =
-                Vec::with_capacity((width as usize).saturating_mul(height as usize));
-            for pixel in raw_pixels[..expected_len].chunks_exact(4) {
-                pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
+            // CPU-side downscale — xcap has no output-size hint, so this is
+            // the same stride arithmetic the Windows path runs.
+            let stride = super::downscale_stride(width, height);
+            let (out_w, out_h) = super::downscaled_dimensions(width, height, stride);
+            if stride > 1 && !self.downscale_logged {
+                self.downscale_logged = true;
+                log::debug!(
+                    "[ambilight-capture/linux] downscale active: src={}x{} stride={} → ~{}x{}",
+                    width,
+                    height,
+                    stride,
+                    out_w,
+                    out_h,
+                );
             }
 
+            let pixels_rgb = super::subsample_rgb(
+                &raw_pixels[..expected_len],
+                width as usize,
+                height as usize,
+                stride,
+            );
+
             Ok(Arc::new(CapturedFrame {
-                width,
-                height,
+                width: out_w,
+                height: out_h,
                 pixels_rgb,
             }))
         }
@@ -1028,8 +1076,9 @@ mod tests {
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     use super::create_live_frame_source;
     use super::{
-        sample_led_frame, select_display_index, AmbilightCaptureError, AmbilightFrameSource,
-        CapturedFrame, DisplayCandidate, SamplingCalibration,
+        downscale_stride, downscaled_dimensions, sample_led_frame, select_display_index,
+        subsample_rgb, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
+        DisplayCandidate, SamplingCalibration, MAX_CAPTURE_DIM,
     };
 
     struct SingleFrameSource {
@@ -1115,6 +1164,110 @@ mod tests {
             error.as_reason(),
             "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM".to_string()
         );
+    }
+
+    // ------------------------------------------------------------------
+    // CPU-side downscale shared by the Windows and Linux capture paths
+    // ------------------------------------------------------------------
+
+    /// Synthetic tightly-packed 4-byte-per-pixel buffer where every pixel
+    /// encodes its own `(x, y)` so a subsample can be checked positionally.
+    fn coordinate_buffer(width: usize, height: usize) -> Vec<u8> {
+        let mut buffer = Vec::with_capacity(width * height * 4);
+        for y in 0..height {
+            for x in 0..width {
+                buffer.extend_from_slice(&[x as u8, y as u8, 200, 255]);
+            }
+        }
+        buffer
+    }
+
+    #[test]
+    fn downscale_stride_clamps_to_one_for_displays_under_the_cap() {
+        assert_eq!(downscale_stride(640, 480), 1);
+        assert_eq!(downscale_stride(500, 400), 1);
+        assert_eq!(downscale_stride(1024, 768), 1);
+    }
+
+    #[test]
+    fn downscale_stride_scales_with_the_longest_edge() {
+        assert_eq!(downscale_stride(3840, 2160), 6);
+        assert_eq!(downscale_stride(2560, 1080), 4);
+        // Portrait: the longest edge drives the stride regardless of axis.
+        assert_eq!(downscale_stride(1080, 3840), 6);
+    }
+
+    #[test]
+    fn downscaled_dimensions_round_up_on_non_square_frames() {
+        assert_eq!(downscaled_dimensions(3840, 2160, 6), (640, 360));
+        assert_eq!(downscaled_dimensions(2560, 1080, 4), (640, 270));
+        // 2000 / 3 and 700 / 3 both have remainders — neither may truncate,
+        // or the reported dimensions stop matching the emitted pixel count.
+        assert_eq!(downscaled_dimensions(2000, 700, 3), (667, 234));
+        assert_eq!(downscaled_dimensions(1024, 768, 1), (1024, 768));
+    }
+
+    #[test]
+    fn subsample_at_stride_one_only_drops_the_alpha_byte() {
+        let width = 5;
+        let height = 3;
+        let buffer = coordinate_buffer(width, height);
+
+        let pixels = subsample_rgb(&buffer, width, height, 1);
+
+        assert_eq!(pixels.len(), width * height);
+        assert_eq!(pixels[0], [0, 0, 200]);
+        assert_eq!(pixels[width * height - 1], [4, 2, 200]);
+    }
+
+    #[test]
+    fn subsample_keeps_every_stride_th_pixel_on_both_axes() {
+        let width = 8;
+        let height = 4;
+        let buffer = coordinate_buffer(width, height);
+
+        let pixels = subsample_rgb(&buffer, width, height, 2);
+
+        let (dst_w, dst_h) = downscaled_dimensions(width as u32, height as u32, 2);
+        assert_eq!((dst_w, dst_h), (4, 2));
+        assert_eq!(pixels.len(), (dst_w * dst_h) as usize);
+        let sampled: Vec<[u8; 2]> = pixels.iter().map(|p| [p[0], p[1]]).collect();
+        assert_eq!(
+            sampled,
+            vec![
+                [0, 0],
+                [2, 0],
+                [4, 0],
+                [6, 0],
+                [0, 2],
+                [2, 2],
+                [4, 2],
+                [6, 2],
+            ]
+        );
+    }
+
+    #[test]
+    fn subsample_pixel_count_matches_the_reported_dimensions_when_rounding_up() {
+        // 7 and 5 are both indivisible by 3, so a truncating dst_w/dst_h
+        // would leave the frame narrower than the pixels it carries and
+        // every downstream row index would slip.
+        let width = 7;
+        let height = 5;
+        let stride = 3;
+        let buffer = coordinate_buffer(width, height);
+
+        let pixels = subsample_rgb(&buffer, width, height, stride);
+        let (dst_w, dst_h) = downscaled_dimensions(width as u32, height as u32, stride);
+
+        assert_eq!((dst_w, dst_h), (3, 2));
+        assert_eq!(pixels.len(), (dst_w * dst_h) as usize);
+    }
+
+    #[test]
+    fn a_4k_frame_collapses_below_the_capture_cap() {
+        let (dst_w, dst_h) = downscaled_dimensions(3840, 2160, downscale_stride(3840, 2160));
+        assert!(dst_w.max(dst_h) <= MAX_CAPTURE_DIM);
     }
 
     // ------------------------------------------------------------------

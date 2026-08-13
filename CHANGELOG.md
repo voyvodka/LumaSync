@@ -26,6 +26,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Linux screen capture now downscales each frame before analysing it, as macOS and Windows already did. A 4K X11 display was handing all 8.3 million of its pixels to the analysis pass twenty times a second and now walks about 230 thousand — that ratio is arithmetic read off the code, not a measurement: nobody has run it on Linux hardware, which stays the least-exercised of the three platforms.
 - The LED preview popup has one always-available close control, and reopens where it was last dragged.
 - Runtime telemetry in Settings adopts the amber Rev 07 design language it had been left out of.
 - The interface language picker is a dropdown that lists each language by its own name.
