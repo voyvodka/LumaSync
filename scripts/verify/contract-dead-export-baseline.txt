@@ -12,9 +12,15 @@
 # mention is NOT a reference, and a test-only reference does not count — the
 # telemetry fork had tests too, and they passed against the wrong shape.
 #
-# Ratchet, not a suppression list. This file may only SHRINK: a listed symbol
-# that gains a consumer FAILS the verifier until the line is deleted. A newly
-# unconsumed value export that is not listed here fails immediately.
+# Ratchet, not a suppression list. A listed symbol that gains a consumer FAILS
+# the verifier until the line is deleted, and a newly unconsumed value export
+# that is not listed here fails immediately.
+#
+# The file holds two kinds of entry. MISSING CONSUMER lines are defects — a
+# symbol the runtime ought to read and does not — and may only SHRINK. Lines for
+# an export declared ahead of its consumer are the one allowed growth: declaring
+# the code Rust already emits is the correct move even when nothing renders that
+# failure yet, and the line goes the moment something first does.
 #
 # Format: `file.ts SYMBOL`. Blank lines and `#` comments ignored.
 

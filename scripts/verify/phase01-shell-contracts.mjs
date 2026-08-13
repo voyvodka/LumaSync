@@ -1408,9 +1408,9 @@ function stripComments(source) {
     .join("\n");
 }
 
-/** Cut each `#[cfg(test)] mod` block, keeping what follows — truncating at the
- *  first one hid two commands and five codes at the tail of calibration.rs.
- *  Closes on a column-0 `}` so a `format!("{x}")` cannot unbalance a counter. */
+/** Never "simplify" back to `split(...)[0]`: three files carry production code
+ *  after a test module, and truncating there hid two commands and five codes in
+ *  calibration.rs from every ratchet. Column-0 `}` beats a brace counter. */
 function stripRustTestModules(source) {
   const lines = source.split("\n");
   const kept = [];
