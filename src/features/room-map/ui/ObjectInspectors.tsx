@@ -54,16 +54,9 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { TYPE_DOT_COLOR } from "../model/zoneColor";
 
 /* ── shared helpers ─────────────────────────────────────────────── */
-
-const TYPE_DOT_COLOR = {
-  tv: "var(--lm-zone-3)",
-  furniture: "var(--lm-amber)",
-  usb: "var(--lm-zone-6)",
-  hue: "var(--lm-ink-dim)",
-  image: "var(--lm-ink-faint)",
-} as const;
 
 const FURNITURE_TYPES: FurniturePlacement["type"][] = ["sofa", "table", "chair", "other"];
 
