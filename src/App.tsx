@@ -15,6 +15,8 @@ import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
 import { useLightingModePersistence } from "./features/mode/state/useLightingModePersistence";
+import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
+import { useLightingModeDispatch } from "./features/mode/state/useLightingModeDispatch";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import { buildStatusItems } from "./features/shell/statusItems";
@@ -38,14 +40,8 @@ import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
   normalizeOutputTargets,
-  type AmbilightPayload,
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
-import {
-  canonicalLightingModeSignature,
-  hydrateModePayload as hydrateModePayloadWith,
-  type ModeRuntimeConfigSnapshot,
-} from "./features/mode/state/modePayloadHydration";
 import {
   isHueStartCodeOk,
   isHueStopCodeOk,
@@ -91,8 +87,8 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeTarget,
 } from "./shared/contracts/hue";
-import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
-import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./shared/contracts/device";
+import type { HueIntensityPreset } from "./shared/contracts/hue";
+import type { ColorCorrectionConfig, FirmwareProfile } from "./shared/contracts/device";
 import {
   listenTrayLightsOff,
   listenTrayResumeLastMode,
@@ -141,7 +137,6 @@ const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
  * brightness slider at 50 ms (20 Hz), so legit user actions never get
  * dropped by this floor.
  */
-const SET_LIGHTING_MODE_MIN_INTERVAL_MS = 20;
 
 function App() {
   const { t } = useTranslation();
@@ -199,88 +194,11 @@ function App() {
   // one `check()` request to GitHub Releases.
   const updateCheckRanRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
-  /**
-   * Idempotent dispatch guard for `setLightingMode` (v1.5 fix #45).
-   * Quick-adjustment paths (Solid drag, Ambilight knob nudge) and the
-   * hot-reload effects (color correction / firmware profile / lighting
-   * smoothing preset) all funnel through `setLightingMode`. A stuck
-   * subscriber or a re-render storm can land the same payload many
-   * times in a row; we hash each outgoing payload and skip the invoke
-   * when the signature matches the last one we already sent. The Rust
-   * backend is itself idempotent, but skipping the round-trip keeps
-   * the IPC channel quiet and the worker fast-path uncluttered. Reset
-   * to null on every confirmed mode transition so the next dispatch
-   * after a real mode change always reaches the backend.
-   */
-  const lastSentPayloadSignatureRef = useRef<string | null>(null);
-  /**
-   * Wall-clock timestamp (ms) of the last `setLightingMode` invoke that
-   * actually reached the Tauri backend. Pairs with the signature ref to
-   * enforce `SET_LIGHTING_MODE_MIN_INTERVAL_MS` as a temporal floor on
-   * non-`force` dispatches. See `dispatchSetLightingMode` for the full
-   * rationale.
-   */
-  const lastSetLightingModeAtRef = useRef<number>(0);
   const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
   // Tray quick-action refs — always hold latest values for use in stable listeners
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
   const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
   const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
-  // Lets the Hue health reconciler re-apply the mode without taking
-  // `dispatchSetLightingMode` as a dep (which would restart the poll loop).
-  const dispatchLightingModeRef = useRef<
-    ((next: LightingModeConfig, options?: { force?: boolean }) => Promise<unknown>) | null
-  >(null);
-  // Capture display chosen by the user (v1.4 Platform GAP 2). Cached in a
-  // ref so every set_lighting_mode call can inject it without awaiting
-  // shellStore on the hot path. Hydrated on bootstrap and refreshed when
-  // the calibration surface signals a change via onSaved.
-  const selectedDisplayIdRef = useRef<string | undefined>(undefined);
-  // Unified lighting smoothing preset (v1.4). Cached alongside the display
-  // id for the same reason — every set_lighting_mode call stamps it into
-  // `ambilight.lightingSmoothingPreset` without a synchronous shellStore
-  // round-trip on the drag path. Named `hueIntensityPresetRef` historically;
-  // kept under that name so the bootstrap + onChange wiring reads unchanged
-  // while the payload field migrates to the unified name.
-  const hueIntensityPresetRef = useRef<HueIntensityPreset>(DEFAULT_HUE_INTENSITY_PRESET);
-  // Per-channel color correction (v1.4 G4). Cached so every set_lighting_mode
-  // call can inject it without a synchronous shellStore round-trip. Hydrated on
-  // bootstrap and updated when the settings panel signals a change.
-  const colorCorrectionRef = useRef<ColorCorrectionConfig | undefined>(undefined);
-  // Firmware encoding profile (v1.4 G11). Same caching rationale as
-  // colorCorrectionRef — injected into every outgoing LightingModeConfig.
-  const firmwareProfileRef = useRef<FirmwareProfile | undefined>(undefined);
-  // LED chip type (v1.5 G3). Same caching rationale — the worker sizes its
-  // wire packets from this, so it must ride along on every outgoing config.
-  const chipTypeRef = useRef<LedChipType | undefined>(undefined);
-  // Persisted LED calibration (v1.4 USB per-LED sampling anchor). Same
-  // caching rationale as colorCorrectionRef — every outgoing
-  // set_lighting_mode payload stamps it onto `ledCalibration` so the
-  // Rust ambilight worker and the Solid encoder both size their USB
-  // packets correctly. Without this stamp the backend's `total_leds`
-  // falls back to 1 and only LED #0 reflects screen content.
-  const savedCalibrationRef = useRef<LedCalibrationConfig | undefined>(undefined);
-  /**
-   * Persisted ambilight settings (v1.5 H1 fix — bug H1).
-   *
-   * The bootstrap pipeline already dispatches the correctly-restored
-   * `restoredMode.ambilight` payload, but the very next render cycle
-   * fires hot-reload effects (color correction / firmware profile /
-   * Hue intensity preset) and the USB hot-plug delta-start branch
-   * which all read `lightingMode` *from React state via closure*. At
-   * that moment `setLightingModeState(restoredMode)` may not have
-   * flushed yet, so the closure captures `{ kind: OFF }` (or a
-   * fresh-default ambilight payload) and re-dispatches a stripped
-   * payload — wiping the user's saturation / blackBorderDetection /
-   * smoothing-preset values until the next manual mode toggle.
-   *
-   * Mirroring the persisted ambilight payload into a ref lets the
-   * `withAmbilightSettings` hydrator stamp those values onto every
-   * outgoing dispatch the moment the user-intent kind is Ambilight,
-   * regardless of which closure produced the payload. Caller-wins for
-   * non-default explicit values so slider commits never get clobbered.
-   */
-  const savedAmbilightRef = useRef<AmbilightPayload | undefined>(undefined);
   /**
    * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
    * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
@@ -289,100 +207,14 @@ function App() {
    */
   const hueSolidSyncedRef = useRef(false);
 
-  /**
-   * Snapshot of the seven runtime-config refs, taken once per dispatch and
-   * handed to the pure hydrators in `modePayloadHydration.ts`.
-   */
-  const readRuntimeConfigSnapshot = useCallback(
-    (): ModeRuntimeConfigSnapshot => ({
-      selectedDisplayId: selectedDisplayIdRef.current,
-      lightingSmoothingPreset: hueIntensityPresetRef.current,
-      colorCorrection: colorCorrectionRef.current,
-      firmwareProfile: firmwareProfileRef.current,
-      chipType: chipTypeRef.current,
-      savedCalibration: savedCalibrationRef.current,
-      savedAmbilight: savedAmbilightRef.current,
-    }),
-    [],
-  );
+  const runtimeConfig = useModeRuntimeConfig({ calibration: savedCalibration });
+  const hydrateModePayload = runtimeConfig.hydrate;
 
-  const hydrateModePayload = useCallback(
-    (mode: LightingModeConfig): LightingModeConfig =>
-      hydrateModePayloadWith(mode, readRuntimeConfigSnapshot()),
-    [readRuntimeConfigSnapshot],
-  );
-
-  /**
-   * Idempotent funnel for every `setLightingMode` Tauri invoke (v1.5
-   * fix #45 + Ambilight-spam follow-up).
-   *
-   * Every direct call site — quick adjustments, hot-reload effects
-   * (color correction / firmware profile / lighting smoothing preset),
-   * delta-start re-applies in `handleOutputTargetsChange`, slow-path
-   * mode transitions — funnels through this helper so a stuck
-   * subscriber, re-render storm, or React-19-StrictMode double-fire can
-   * never spam the IPC bus with identical payloads. The Rust backend is
-   * itself idempotent for matching kinds, but skipping the round-trip
-   * keeps the worker fast-path uncluttered and the dev terminal
-   * readable.
-   *
-   * `force: true` is reserved for paths where the backend may need a
-   * forced re-apply even when the FE signature matches — e.g. the
-   * delta-start re-apply after `startHue` succeeds (worker has to pick
-   * up the now-live Hue context) and the slow-path mode-kind
-   * transition (the prior signature is stale by definition). Force
-   * always **updates** the ref so a subsequent identical fire from a
-   * hot-reload effect is still skipped.
-   */
-  const dispatchSetLightingMode = useCallback(
-    async (
-      mode: LightingModeConfig,
-      opts: { force?: boolean } = {},
-    ): Promise<void> => {
-      const hydrated = hydrateModePayload(mode);
-      // Content-based signature: order-independent key sort eliminates the
-      // false-negative dedup that happened when `hydrateModePayload`'s
-      // spread chain produced a different key insertion order across
-      // back-to-back identical fires (Ambilight-mode spam regression — the
-      // hot-reload paths in particular re-stamp `colorCorrection` /
-      // `firmwareProfile` last, which moves them to the end of the object
-      // every other call). See `canonicalLightingModeSignature` for the
-      // full rationale.
-      const signature = canonicalLightingModeSignature(hydrated);
-      if (!opts.force) {
-        // Layer 1 — content dedup. Identical semantic payload? Skip.
-        if (lastSentPayloadSignatureRef.current === signature) {
-          return;
-        }
-        // Layer 2 — temporal cooldown. Belt-and-braces for any unknown
-        // 50–60 Hz spam source we have not traced yet (re-render storm,
-        // stuck subscriber, future regression). The Rust handler is
-        // idempotent for ambilight settings updates but takes the full
-        // worker tear-down + restart path whenever any of its own
-        // equality gates fail (targets / displayId / led_calibration /
-        // color_correction / firmware_profile), so even a few stray
-        // mismatches per second visibly stutter the strip. Capping the
-        // dispatch rate at 50 Hz protects the worker without slowing
-        // legitimate quick adjustments — drag commits across the app are
-        // already throttled to 20 Hz upstream.
-        const now = Date.now();
-        if (now - lastSetLightingModeAtRef.current < SET_LIGHTING_MODE_MIN_INTERVAL_MS) {
-          return;
-        }
-        lastSetLightingModeAtRef.current = now;
-      } else {
-        // `force` path still updates the cooldown clock so a follow-up
-        // non-force fire 1 ms later is correctly cooled. Without this the
-        // very next quick adjustment after a slow-path transition could
-        // sneak through during the cooldown window.
-        lastSetLightingModeAtRef.current = Date.now();
-      }
-      lastSentPayloadSignatureRef.current = signature;
-      await setLightingMode(hydrated);
-    },
-    [hydrateModePayload],
-  );
-  dispatchLightingModeRef.current = dispatchSetLightingMode;
+  const {
+    dispatch: dispatchSetLightingMode,
+    resetSignature: resetLightingModeSignature,
+    dispatchRef: dispatchLightingModeRef,
+  } = useLightingModeDispatch(hydrateModePayload);
 
   const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
     useHueSolidColorNotice();
@@ -638,27 +470,15 @@ function App() {
         // Prime the ref synchronously so the bootstrap set_lighting_mode
         // fired below already carries the calibration — the
         // useEffect that mirrors state->ref has not flushed yet.
-        savedCalibrationRef.current = hydratedCalibration;
+        runtimeConfig.setCalibration(hydratedCalibration);
         // v1.5 W2-B4 — fresh installs land on \`undefined\`; treat that as
         // "never completed" so the onboarding banner mounts. Existing
         // v1.4 users upgrading without the flag also see it once and
         // can dismiss with one click — no destructive migration.
         setHasCompletedOnboarding(state.hasCompletedOnboarding === true);
-        // Hydrate capture-source ref so the bootstrap set_lighting_mode
-        // call (below) honours the user's persisted display selection.
-        selectedDisplayIdRef.current =
-          typeof state.selectedDisplayId === "string" && state.selectedDisplayId.length > 0
-            ? state.selectedDisplayId
-            : undefined;
-        // Hydrate Hue intensity preset ref. Absent ⇒ DEFAULT_HUE_INTENSITY_PRESET
-        // so the ambilight worker always receives a deterministic preset.
-        hueIntensityPresetRef.current =
-          state.lightingIntensityPreset ?? DEFAULT_HUE_INTENSITY_PRESET;
-        // Hydrate color correction and firmware profile refs (v1.4 G4 / G11).
-        // Absent in persisted state ⇒ refs stay undefined; backend defaults apply.
-        colorCorrectionRef.current = state.colorCorrection;
-        firmwareProfileRef.current = state.firmwareProfile;
-        chipTypeRef.current = state.selectedChipType;
+        // Synchronous prime so the bootstrap set_lighting_mode fired below
+        // already honours the persisted display / preset / correction knobs.
+        runtimeConfig.prime(state);
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);
         // v1.5 H1 — prime savedAmbilightRef synchronously so any same-tick
@@ -667,7 +487,7 @@ function App() {
         // USB hot-plug delta-start) still carries the persisted saturation /
         // blackBorderDetection / smoothing-preset values. The mirror effect
         // below keeps the ref in sync with subsequent state updates.
-        savedAmbilightRef.current = restoredMode.ambilight;
+        runtimeConfig.setAmbilight(restoredMode.ambilight);
         setLightingModeState(restoredMode);
 
         // v1.5 H3 — read live USB connection state but DO NOT strip "usb"
@@ -852,11 +672,10 @@ function App() {
   // The ref is also primed at bootstrap (windowLifecycle hydration)
   // and on the calibration save callback so the very first dispatch
   // after either path already carries the right `totalLeds`.
-  useEffect(() => { savedCalibrationRef.current = savedCalibration; }, [savedCalibration]);
   // v1.5 H1 — keep `savedAmbilightRef` aligned with the live ambilight
   // payload so subsequent dispatches (after the bootstrap prime) read
   // the user's most recent slider commits, not stale post-bootstrap data.
-  useEffect(() => { savedAmbilightRef.current = lightingMode.ambilight; }, [lightingMode.ambilight]);
+  useEffect(() => { runtimeConfig.setAmbilight(lightingMode.ambilight); }, [runtimeConfig, lightingMode.ambilight]);
   useEffect(() => {
     if (lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
       lastNonOffModeRef.current = lightingMode;
@@ -950,7 +769,7 @@ function App() {
           await saveShellState({ ledPreviewPopupVisible: true });
           const state = await loadShellState();
           if (state.ledTwinEnabledTest) {
-            await openLedTwinOverlay({ scope: "test", displayId: selectedDisplayIdRef.current });
+            await openLedTwinOverlay({ scope: "test", displayId: runtimeConfig.getSelectedDisplayId() });
           }
         } catch (err) {
           console.error("[LumaSync] tray show-led-preview handler failed:", err);
@@ -1375,7 +1194,7 @@ function App() {
       // Reset the dedupe signature: a kind transition changes the payload
       // shape so the next quick adjustment after this completes must
       // always reach the backend.
-      lastSentPayloadSignatureRef.current = null;
+      resetLightingModeSignature();
       setIsModeTransitioning(true);
 
       // D-05: USB target requires calibration; Hue-only does not
@@ -1664,13 +1483,13 @@ function App() {
       // calibration's totalLeds. Without this, a calibration save
       // followed by an immediate mode toggle could race and ship the
       // prior totalLeds.
-      savedCalibrationRef.current = config;
+      runtimeConfig.setCalibration(config);
     },
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
     onHueIntensityPresetChange: (preset: HueIntensityPreset) => {
-      hueIntensityPresetRef.current = preset;
+      runtimeConfig.setLightingSmoothingPreset(preset);
       // Hot-reload an in-flight ambilight worker so the new preset takes
       // effect without a mode switch. For non-ambilight modes the preset
       // simply rides along on the next start_lighting_mode dispatch.
@@ -1692,7 +1511,7 @@ function App() {
       // the Rust encoder path runs color correction before every sink.
       // Routed through `dispatchSetLightingMode` so an identical re-fire
       // is dropped — see Hue intensity preset comment for the why.
-      colorCorrectionRef.current = next;
+      runtimeConfig.setColorCorrection(next);
       void dispatchSetLightingMode(lightingMode).catch((error) => {
         console.error("[LumaSync] Failed to hot-reload color correction:", error);
       });
@@ -1706,7 +1525,7 @@ function App() {
       // `dispatchSetLightingMode` (force=true) so the backend always
       // sees the new profile bytes even when the FE signature happened
       // to match a prior fire.
-      firmwareProfileRef.current = next;
+      runtimeConfig.setFirmwareProfile(next);
       void dispatchSetLightingMode(lightingMode, { force: true }).catch((error) => {
         console.error("[LumaSync] Failed to hot-reload firmware profile:", error);
       });
