@@ -26,12 +26,9 @@ export function useModeHotReload(
   return {
     onHueIntensityPresetChange: (preset: HueIntensityPreset) => {
       runtimeConfig.setLightingSmoothingPreset(preset);
-      // Hot-reload an in-flight ambilight worker so the new preset takes
-      // effect without a mode switch. For non-ambilight modes the preset
-      // simply rides along on the next start_lighting_mode dispatch.
-      // Routed through the dispatch funnel so back-to-back identical
-      // fires (re-render storm, double subscribe) collapse to a single
-      // backend invoke instead of spamming the IPC bus.
+      // Hot-reload so an in-flight worker picks the preset up without a mode
+      // switch; non-ambilight modes just ride the next dispatch. Through the
+      // funnel, so an identical re-fire collapses instead of spamming IPC.
       if (lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
         void dispatch(lightingMode).catch((error) => {
           console.error("[LumaSync] Failed to hot-reload Hue intensity preset:", error);
@@ -39,27 +36,18 @@ export function useModeHotReload(
       }
     },
     onColorCorrectionChange: (next: ColorCorrectionConfig) => {
-      // ColorCorrectionPanel already persisted via shellStore.save() on
-      // commit; we mirror the new config into the ref so the very next
-      // outgoing set_lighting_mode payload carries it, then hot-reload
-      // any in-flight worker so USB + Hue sinks pick up the new pipeline
-      // without a mode toggle. Solid / off modes also benefit because
-      // the Rust encoder path runs color correction before every sink.
-      // Routed through the dispatch funnel so an identical re-fire is
-      // dropped — see the Hue intensity preset comment for the why.
+      // The panel already persisted; mirroring into the ref is what makes the
+      // next payload carry it. Solid and off benefit too — Rust runs colour
+      // correction before every sink, not only the ambilight one.
       runtimeConfig.setColorCorrection(next);
       void dispatch(lightingMode).catch((error) => {
         console.error("[LumaSync] Failed to hot-reload color correction:", error);
       });
     },
     onFirmwareProfileChange: (next: FirmwareProfile) => {
-      // FirmwareProfilePicker already persisted via shellStore.save() on
-      // commit; mirror into the ref + trigger a worker restart with the
-      // new protocol. Changing firmware profile is a wire-format change
-      // on the Rust side so a silent flicker is expected — the USB
-      // encoder pipeline rebuilds before the next frame. Dispatched with
-      // force=true so the backend always sees the new profile bytes even
-      // when the FE signature happened to match a prior fire.
+      // A firmware-profile change is a wire-format change, so the flicker while
+      // the encoder pipeline rebuilds is expected. `force` is mandatory here:
+      // the payload signature can match a prior fire while the bytes differ.
       runtimeConfig.setFirmwareProfile(next);
       void dispatch(lightingMode, { force: true }).catch((error) => {
         console.error("[LumaSync] Failed to hot-reload firmware profile:", error);

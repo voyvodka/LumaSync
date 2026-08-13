@@ -57,11 +57,9 @@ export function createSiblingSync(
   };
 
   const subscribeToSiblings = () => {
-    // Bug 10B — subscribe to sibling controllers' connection events. The
-    // emit happens in the controller that *did* the pair (typically the
-    // DEVICES section). Other live controllers (App-level, drives the
-    // Lights/StatusBar surface) re-pull Rust status so their UI mirrors
-    // the real session state without waiting for a WebView reload.
+    // Bug 10B — the controller that did the pair emits; every other live
+    // controller re-pulls Rust status instead of waiting for a WebView reload.
+    // Two mounts is deliberate — see docs/architecture/device-output.md.
     if (connectionEventsBus && !unsubscribeFromEvents) {
       unsubscribeFromEvents = connectionEventsBus.subscribe(() => {
         // Defer to the microtask queue so the emitting controller's own

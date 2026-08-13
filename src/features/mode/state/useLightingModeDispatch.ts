@@ -62,41 +62,24 @@ export function useLightingModeDispatch(
   const dispatch = useCallback<LightingModeDispatcher>(
     async (mode, opts = {}) => {
       const hydrated = hydrate(mode);
-      // Content-based signature: order-independent key sort eliminates the
-      // false-negative dedup that happened when `hydrateModePayload`'s
-      // spread chain produced a different key insertion order across
-      // back-to-back identical fires (Ambilight-mode spam regression — the
-      // hot-reload paths in particular re-stamp `colorCorrection` /
-      // `firmwareProfile` last, which moves them to the end of the object
-      // every other call). See `canonicalLightingModeSignature` for the
-      // full rationale.
+      // Key order must not matter — `hydrateModePayload`'s spread chain reorders
+      // identical payloads. See docs/architecture/ui-and-shell.md.
       const signature = canonicalLightingModeSignature(hydrated);
       if (!opts.force) {
         // Layer 1 — content dedup. Identical semantic payload? Skip.
         if (lastSentPayloadSignatureRef.current === signature) {
           return;
         }
-        // Layer 2 — temporal cooldown. Belt-and-braces for any unknown
-        // 50–60 Hz spam source we have not traced yet (re-render storm,
-        // stuck subscriber, future regression). The Rust handler is
-        // idempotent for ambilight settings updates but takes the full
-        // worker tear-down + restart path whenever any of its own
-        // equality gates fail (targets / displayId / led_calibration /
-        // color_correction / firmware_profile), so even a few stray
-        // mismatches per second visibly stutter the strip. Capping the
-        // dispatch rate at 50 Hz protects the worker without slowing
-        // legitimate quick adjustments — drag commits across the app are
-        // already throttled to 20 Hz upstream.
+        // Layer 2 — temporal cooldown, the backstop against an untraced spam
+        // source. Costs nothing legitimate: drags commit at 20 Hz upstream.
         const now = Date.now();
         if (now - lastSetLightingModeAtRef.current < SET_LIGHTING_MODE_MIN_INTERVAL_MS) {
           return;
         }
         lastSetLightingModeAtRef.current = now;
       } else {
-        // `force` path still updates the cooldown clock so a follow-up
-        // non-force fire 1 ms later is correctly cooled. Without this the
-        // very next quick adjustment after a slow-path transition could
-        // sneak through during the cooldown window.
+        // `force` still stamps the clock, or the first quick adjustment after a
+        // slow-path transition slips through the cooldown window.
         lastSetLightingModeAtRef.current = Date.now();
       }
       lastSentPayloadSignatureRef.current = signature;

@@ -59,10 +59,8 @@ export function useUsbTargetReconciler({
     prevUsbConnectedRef.current = connected;
   }, []);
 
-  // ---------------------------------------------------------------------------
-  // Hot-plug detection: USB plug/unplug target management (D-07, D-08)
-  // Guard: only runs after bootstrap has initialized prevUsbConnectedRef
-  // ---------------------------------------------------------------------------
+  // Hot-plug detection. Gated on `bootstrapDone` because `prevUsbConnectedRef`
+  // is meaningless until bootstrap has armed it.
   useEffect(() => {
     if (!bootstrapDone) return; // Skip until bootstrap sets ref and flag
 
@@ -105,24 +103,9 @@ export function useUsbTargetReconciler({
     return () => window.clearTimeout(timerId);
   }, [usbDisconnectNotice]);
 
-  // ---------------------------------------------------------------------------
-  // Bug 10D — boot-time USB unsupported / missing fallback
-  //
-  // After commit 72fba5b ("reject non-USB serial ports up-front") the
-  // backend rejects previously-accepted phantom ports (e.g.
-  // /dev/cu.Bluetooth-Incoming-Port on macOS). Auto-reconnect on init
-  // emits the rejection code via `connectionEvents`, but `selectedOutputTargets`
-  // still includes "usb", so every subsequent `set_lighting_mode` invoke
-  // hits the Rust USB gate and returns `DEVICE_NOT_CONNECTED` silently.
-  // From the user's seat, "Ambilight does nothing".
-  //
-  // Fix: subscribe to the bus once, drop "usb" from targets on the
-  // PORT_UNSUPPORTED / PORT_NOT_FOUND signal, persist via the existing
-  // shellStore facade, and surface a one-time toast. We deliberately do
-  // NOT call `handleOutputTargetsChange` (its delta-stop branch tries to
-  // invoke `stop_lighting`, which is meaningless when nothing is running
-  // — boot path is always at OFF until the user picks a mode).
-  // ---------------------------------------------------------------------------
+  // Bug 10D — drop "usb" when auto-reconnect reports the port structurally
+  // unavailable, or every later mode change dies silently in the Rust gate. Why
+  // only those codes, and not via `handleOutputTargetsChange`: ui-and-shell.md.
   useEffect(() => {
     let unsupportedNoticeTimerId: number | null = null;
     const unsubscribe = connectionEvents.subscribe((event) => {
@@ -133,14 +116,9 @@ export function useUsbTargetReconciler({
       // DEFAULT_OUTPUT_TARGETS (= ["usb"]) which would silently re-add the
       // very target we are trying to drop, defeating the fallback.
       const filtered = currentTargets.filter((t) => t !== "usb") as HueRuntimeTarget[];
-      // If the user has a paired Hue bridge and hue is not already in the
-      // surviving targets, auto-add "hue" so Ambilight / Solid actually
-      // produces output instead of leaving the user stranded at the OFF
-      // state with no available sink. This also covers the case where a
-      // prior session already auto-deselected USB and persisted `[]` —
-      // boot lands here with `currentTargets === []`, no USB to drop, but
-      // Hue must still get auto-added or the user has zero output sinks
-      // and "ambilight does nothing" silently repeats.
+      // Auto-add Hue so the user is not left with zero sinks. This also has to
+      // fire when a prior session already persisted `[]` — there is no USB left
+      // to drop, but without Hue the silent no-output state simply repeats.
       const huePaired = hueStartConfigRef.current !== null;
       const wantsHueAutoAdd = huePaired && !filtered.includes("hue");
       // If we have nothing to do (USB not in targets and no hue auto-add

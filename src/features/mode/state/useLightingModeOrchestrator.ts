@@ -132,14 +132,9 @@ export function useLightingModeOrchestrator({
     const addedTargets = normalizedTargets.filter((t) => !prevTargets.includes(t));
     const removedTargets = prevTargets.filter((t) => !normalizedTargets.includes(t));
 
-    // Delta-stop: for each removed target that is currently active, stop it.
-    // A1.2 (v1.5.2): track per-target outcome via Promise.allSettled — only
-    // successfully-stopped targets get pulled from active membership. A failed
-    // stop leaves the chip active so the user can retry (and the next
-    // dispatch sees a truthful activeOutputTargets), instead of the previous
-    // behaviour where Promise.all + silent catch dropped the target from UI
-    // state while the backend stream was still alive (root cause of the
-    // HUE_STREAM_NOT_READY_ACTIVE_STREAMER 403 on the next start).
+    // Per-target outcome, not `Promise.all`: only a target that actually stopped
+    // leaves active membership. Dropping one from the UI while its backend stream
+    // lived on is what produced HUE_STREAM_NOT_READY_ACTIVE_STREAMER next start.
     type StopOutcome = { target: HueRuntimeTarget; ok: boolean };
     const stopResults = await Promise.allSettled(
       removedTargets.map(async (target): Promise<StopOutcome> => {
@@ -260,13 +255,8 @@ export function useLightingModeOrchestrator({
         targets: selectedOutputTargets,
       });
 
-      // Quick adjustment: same mode kind → pure config nudge (color/brightness).
-      // We intentionally DO NOT require `isSameTargetSet(selected, active)` here.
-      // If selected != active we still take the quick path and push the update
-      // to whatever IS currently active; falling through to the full transition
-      // path just to "reconcile" targets would flip `isModeTransitioning = true`,
-      // which disables the brightness slider mid-drag and makes the browser
-      // release pointer capture — symptom: drag breaks after a single commit.
+      // Deliberately NOT gated on `isSameTargetSet(selected, active)` — see
+      // docs/architecture/ui-and-shell.md. Reconciling targets here breaks drags.
       const isQuickSolidAdjustment =
         normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
         lightingMode.kind === LIGHTING_MODE_KIND.SOLID;
@@ -275,34 +265,16 @@ export function useLightingModeOrchestrator({
         lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
       const isQuickAdjustment = isQuickSolidAdjustment || isQuickAmbilightAdjustment;
 
-      // v1.5 fix #45 — quick adjustments BYPASS the transition lock-gate.
-      //
-      // Previously every dispatch was gated behind `modeTransitionLockRef`,
-      // which queued every drag-tick into `pendingModeChangeRef` while a
-      // slow-path transition was in flight. On lock release the queued
-      // payload kicked off a new slow-path run (because the kind had
-      // changed during the wait), set `isModeTransitioning = true`, and a
-      // burst of follow-up drag ticks immediately re-queued behind that
-      // new transition — leaving the UI with `isModeTransitioning` flipped
-      // permanently true and every dock toggle disabled.
-      //
-      // Quick adjustments are idempotent live updates: same mode kind, just
-      // a config nudge. They never need to coexist with a transition lock,
-      // so we let them dispatch unconditionally and leave the lock-gate
-      // strictly for kind-changing transitions.
+      // fix #45 — quick adjustments dispatch unconditionally; the lock-gate is
+      // strictly for kind-changing transitions. Queueing them behind it wedged
+      // `isModeTransitioning` true. See docs/architecture/ui-and-shell.md.
       if (!isQuickAdjustment && modeTransitionLockRef.current) {
         pendingModeChangeRef.current = nextMode;
         return;
       }
 
-      // Idempotent dispatch — skip the Tauri invoke when the outgoing
-      // payload signature matches the last one we already sent. Keeps a
-      // stuck subscriber or re-render storm from drowning the IPC bus
-      // even though the throttle further upstream should already keep
-      // call rate sane. Both quick paths now route through
-      // `dispatchSetLightingMode` so the dedup ref is the single source
-      // of truth — see the helper definition above for why the same
-      // funnel covers hot-reload effects + delta-start re-applies.
+      // Every path routes through `dispatchSetLightingMode` so its dedup ref stays
+      // the single source of truth — hot-reload and delta-start re-applies too.
 
       if (isQuickSolidAdjustment && normalizedNextMode.solid) {
         setLightingModeState(normalizedNextMode);
@@ -334,13 +306,9 @@ export function useLightingModeOrchestrator({
         return;
       }
 
-      // Fast path: ambilight already running and only settings changed (brightness,
-      // smoothing, black border) — send live update without the full transition flow.
-      // The Rust backend detects this case and updates live atomics in-place
-      // (AMBILIGHT_MODE_UPDATED) without touching the worker or SCStream.
-      // Same reasoning as isQuickSolidAdjustment — see note above. An ambilight
-      // brightness nudge during a drag must never promote to the full transition
-      // path just because target reconciliation is pending.
+      // Rust updates live atomics in place for this case (AMBILIGHT_MODE_UPDATED),
+      // leaving the worker and SCStream alone. Same drag reasoning as the solid
+      // quick path above: a pending target reconcile must not promote it.
       if (isQuickAmbilightAdjustment) {
         setLightingModeState(normalizedNextMode);
         scheduleLightingModePersist(normalizedNextMode);
@@ -441,10 +409,8 @@ export function useLightingModeOrchestrator({
 
         const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
 
-        // Phase 1: Start Hue streaming session FIRST.
-        // setLightingMode (Phase 2) calls snapshot_hue_output_context() on the backend,
-        // which must find an active stream to hand the ambilight worker a valid Hue context.
-        // Calling startHue after setLightingMode would leave hue_output=None in the worker.
+        // Phase 1 must precede Phase 2: `snapshot_hue_output_context()` needs a
+        // live stream to hand the worker, or it comes up with `hue_output=None`.
         if (runtimePlan.startTargets.includes("hue")) {
           if (!runtimeHueStartConfig) {
             targetResults.hue = {
@@ -467,17 +433,11 @@ export function useLightingModeOrchestrator({
           }
         }
 
-        // Phase 2: Apply lighting mode to backend.
-        // Runs when: USB target is requested, OR Hue target started successfully.
-        // For Hue-only targets this call starts the ambilight worker (which was
-        // previously never called, leaving the Hue stream with no color driver).
-        // For USB+Hue, Hue stream is now live so snapshot_hue_output_context()
-        // returns a valid context and the worker can send to both outputs.
+        // Phase 2 — this is what starts the ambilight worker, so it must run for
+        // Hue-only targets too or the stream comes up with no colour driver.
         const hueStartedOk = targetResults.hue?.ok === true;
-        // For Ambilight mode with a transient Hue failure (e.g. bridge has a stale
-        // session — CONFIG_NOT_READY_GATE_BLOCKED): still start the backend worker.
-        // The worker runs without Hue context initially; the stream auto-reconnects
-        // in ~30s and the user can re-select Ambilight to pick up colors.
+        // A transient Hue failure still starts the worker: it runs without Hue
+        // context and the stream auto-reconnects within ~30 s.
         const hueTransientFail =
           !hueStartedOk &&
           normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
