@@ -286,6 +286,24 @@ export const SERIAL_HEALTH_CODES = {
 
 export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_HEALTH_CODES];
 
+/** Exactly what `run_serial_health_check` puts on `HealthStepResult.code`.
+ * `DeviceHealthStep` is in it because a passing step reports its own name as
+ * its code — `PORT_VISIBLE` passes with code `PORT_VISIBLE`. */
+export type SerialHealthStepWireCode =
+  | SerialHealthCode
+  | SerialConnectStatusCode
+  | SerialPortListStatusCode
+  | DeviceErrorCode
+  | DeviceHealthStep;
+
+/** Frontend-synthesised: the health-check bridge was never injected, so no
+ * command ran. Out of the wire union for the {@link OVERLAY_NO_DISPLAY} reason. */
+export const HEALTH_CHECK_NOT_AVAILABLE = "HEALTH_CHECK_NOT_AVAILABLE" as const;
+
+export type SerialHealthStepCode =
+  | SerialHealthStepWireCode
+  | typeof HEALTH_CHECK_NOT_AVAILABLE;
+
 /**
  * Report returned by `run_serial_health_check`. Exactly one report per
  * invocation; the `step` field records the last health-check stage that

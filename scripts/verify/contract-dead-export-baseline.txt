@@ -45,7 +45,6 @@ device.ts WLED_DEFAULT_WARLS_PORT
 # it types `code` as bare `string` — so nothing links these five to the runtime
 # but a JSDoc. EN+TR strings exist and are never looked up. Two also have no
 # Rust producer (contract-phantom-baseline.txt). Typing that field is the fix.
-device.ts SERIAL_HEALTH_CODES
 
 # Hue vocabulary with no reader. HUE_FAULT_CODES is the HUE-NET-xx / HUE-AUTH-xx
 # taxonomy nothing classifies into; the intensity coefficients are applied

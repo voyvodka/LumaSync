@@ -74,7 +74,7 @@ describe("device status card mapping", () => {
         pass: true,
         checkedAtUnixMs: Date.now(),
         steps: [
-          { step: "CONNECT_AND_VERIFY", pass: true, code: "CONNECTED", message: "connected", details: null },
+          { step: "CONNECT_AND_VERIFY", pass: true, code: "CONNECT_OK", message: "connected", details: null },
           { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "visible", details: null },
           { step: "PORT_SUPPORTED", pass: true, code: "PORT_SUPPORTED", message: "supported", details: null },
         ],

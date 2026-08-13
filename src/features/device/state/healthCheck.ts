@@ -1,4 +1,8 @@
-import { DEVICE_OPERATION, DEVICE_STATUS } from "@/shared/contracts/device";
+import {
+  DEVICE_OPERATION,
+  DEVICE_STATUS,
+  HEALTH_CHECK_NOT_AVAILABLE,
+} from "@/shared/contracts/device";
 import type { HealthCheckResult } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import type { ConnectionStore } from "./connectionStore";
@@ -23,7 +27,7 @@ export function createHealthCheck(
         {
           step: "PORT_VISIBLE",
           pass: false,
-          code: "HEALTH_CHECK_NOT_AVAILABLE",
+          code: HEALTH_CHECK_NOT_AVAILABLE,
           message: "Health check bridge is not configured.",
           details: "Missing runSerialHealthCheck dependency.",
         },

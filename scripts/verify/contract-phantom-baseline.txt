@@ -10,6 +10,12 @@
 # reports "no display to target, so no command was issued".
 OVERLAY_NO_DISPLAY
 
+# Legitimate, same category: `healthCheck.ts` synthesises a failed step when the
+# health-check bridge was never injected, so no command ran. Added 2026-08-13
+# when typing HealthStepResult.code turned it from a raw literal into a
+# declaration — it was always frontend-minted, just undeclared.
+HEALTH_CHECK_NOT_AVAILABLE
+
 # MISSING PRODUCER — DeviceSection.tsx:254 branches on this to show the
 # "press the link button" card while pairing is in flight. Nothing emits it, so
 # that branch is dead and the prompt only appears after pairing FAILS with

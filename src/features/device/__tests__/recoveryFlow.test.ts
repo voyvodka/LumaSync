@@ -26,9 +26,9 @@ function createHealthPass(): HealthCheckResult {
     pass: true,
     checkedAtUnixMs: Date.now(),
     steps: [
-      { step: "PORT_VISIBLE", pass: true, code: "OK", message: "ok", details: null },
-      { step: "PORT_SUPPORTED", pass: true, code: "OK", message: "ok", details: null },
-      { step: "CONNECT_AND_VERIFY", pass: true, code: "OK", message: "ok", details: null },
+      { step: "PORT_VISIBLE", pass: true, code: "PORT_VISIBLE", message: "ok", details: null },
+      { step: "PORT_SUPPORTED", pass: true, code: "PORT_SUPPORTED", message: "ok", details: null },
+      { step: "CONNECT_AND_VERIFY", pass: true, code: "CONNECT_OK", message: "ok", details: null },
     ],
   };
 }

@@ -4,6 +4,7 @@ import {
   type DeviceHealthStep,
   type FirmwareProfile,
   type LedChipType,
+  type SerialHealthStepCode,
 } from "@/shared/contracts/device";
 
 /** Coded result shape shared by the serial command bridge — never throws, always returns this. */
@@ -47,7 +48,7 @@ export interface SerialConnectionStatus {
 export interface HealthStepResult {
   step: DeviceHealthStep;
   pass: boolean;
-  code: string;
+  code: SerialHealthStepCode;
   message: string;
   details: string | null;
 }
