@@ -1362,7 +1362,7 @@ checkWireUnion(
   12
 );
 
-const rustHueRuntimeSource = walkSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"), /\.rs$/)
+const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
   .map((f) => stripComments(readFileSync(f, "utf-8").split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]))
   .join("\n");
 const HUE_RUNTIME_NOT_ON_THIS_SHAPE = [
@@ -1396,6 +1396,29 @@ function walkSourceFiles(dir, match, out = []) {
     else if (match.test(entry.name)) out.push(full);
   }
   return out;
+}
+
+/** Rust files reached only through a `#[cfg(test)] mod name;` declaration. Their
+ *  codes are emitted by integration tests, not by a command — `ipc_tests/` was
+ *  claiming nine as production. Keyed on the declaration, so a second one needs
+ *  no edit here; there is no directory-name convention to lean on. */
+function rustTestOnlyPaths(root) {
+  const paths = new Set();
+  for (const file of walkSourceFiles(root, /\.rs$/)) {
+    for (const m of readFileSync(file, "utf-8").matchAll(/^#\[cfg\(test\)\]\s*\nmod\s+(\w+)\s*;/gm)) {
+      paths.add(resolve(dirname(file), `${m[1]}.rs`));
+      paths.add(resolve(dirname(file), m[1]));
+    }
+  }
+  return paths;
+}
+
+/** Production Rust: the crate minus the test-only modules above. */
+function walkRustSourceFiles(root) {
+  const testOnly = rustTestOnlyPaths(resolve(ROOT, "src-tauri/src"));
+  return walkSourceFiles(root, /\.rs$/).filter(
+    (file) => ![...testOnly].some((p) => file === p || file.startsWith(`${p}/`))
+  );
 }
 
 // A prose mention is not a declaration — the miss that hid DEVICE_NOT_CONNECTED
@@ -1453,7 +1476,7 @@ const tsSourceFiles = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/);
 // Whole crate, not just `commands/`: `network/mdns.rs` emits the HUE_MDNS_*
 // codes, and a narrower root reports them as phantoms.
 const rustEmitted = harvestCodes(
-  walkSourceFiles(resolve(ROOT, "src-tauri/src"), /\.rs$/)
+  walkRustSourceFiles(resolve(ROOT, "src-tauri/src"))
 );
 const tsReferenced = harvestCodes(
   tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"))
@@ -2029,7 +2052,7 @@ function rustFieldsWithAttrs(body) {
 
 /** Collect every Serialize-deriving `pub struct` across the Rust tree. */
 const rustSerializableStructs = new Map();
-for (const file of walkSourceFiles(resolve(ROOT, "src-tauri/src"), /\.rs$/)) {
+for (const file of walkRustSourceFiles(resolve(ROOT, "src-tauri/src"))) {
   const src = readFileSync(file, "utf-8");
   for (const m of src.matchAll(
     /((?:#\[[^\]]*\]\s*)+)pub struct (\w+)\s*\{([\s\S]*?)\n\}/g
