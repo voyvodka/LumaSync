@@ -29,11 +29,24 @@ import {
   MODE_GUARD_REASONS,
 } from "./features/mode/state/modeGuard";
 import {
+  DEFAULT_OUTPUT_TARGETS,
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
+  normalizeOutputTargets,
   type AmbilightPayload,
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
+import {
+  canonicalLightingModeSignature,
+  hydrateModePayload as hydrateModePayloadWith,
+  type ModeRuntimeConfigSnapshot,
+} from "./features/mode/state/modePayloadHydration";
+import {
+  isHueStartCodeOk,
+  isHueStopCodeOk,
+  toHueStartConfig,
+  type HueStartConfig,
+} from "./features/hue/model/hueStartConfig";
 import {
   setHueSolidColor,
   setLightingMode,
@@ -71,7 +84,6 @@ import {
 } from "./shared/contracts/shell";
 import {
   HUE_RUNTIME_STATES,
-  HUE_RUNTIME_STATUS,
   HUE_RUNTIME_TRIGGER_SOURCE,
   HUE_SOLID_COLOR_STATUS,
   HUE_STATUS,
@@ -96,7 +108,6 @@ import {
 import { showNotification } from "./features/platform/platformApi";
 import { i18next } from "./features/i18n/i18n";
 
-const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
 const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
 /**
  * Cadence while the stream is alive. NOT a local read: `get_hue_stream_status`
@@ -134,85 +145,6 @@ const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
  * dropped by this floor.
  */
 const SET_LIGHTING_MODE_MIN_INTERVAL_MS = 20;
-
-/**
- * Stable, key-sorted JSON serialisation of a `LightingModeConfig`. The
- * earlier `JSON.stringify(hydrated)` signature was *content* equal across
- * identical re-fires but *string* unequal whenever the spread chain in
- * `hydrateModePayload` produced a different key insertion order — typical
- * for hot-reload paths that re-stamp `colorCorrection` / `firmwareProfile`
- * after the ambilight worker is already live. Two payloads with the same
- * semantic content but a different key order therefore slipped past the
- * idempotent dedup, reached the Rust handler, and any field whose Rust-side
- * `==` check failed (targets, displayId, led_calibration, color_correction,
- * firmware_profile — see `apply_mode_change` fast-path gate) caused a full
- * worker tear-down + restart instead of an in-place atomic update.
- *
- * Replacing the signature with a canonical, recursively key-sorted form
- * makes the dedup ref behave like deep-equality without paying for a deep
- * compare on every dispatch.
- */
-function canonicalLightingModeSignature(value: unknown): string {
-  return JSON.stringify(value, (_key, val) => {
-    if (val && typeof val === "object" && !Array.isArray(val)) {
-      const sorted: Record<string, unknown> = {};
-      for (const k of Object.keys(val).sort()) {
-        const v = (val as Record<string, unknown>)[k];
-        if (v !== undefined) sorted[k] = v;
-      }
-      return sorted;
-    }
-    return val;
-  });
-}
-
-interface HueStartConfig {
-  bridgeIp: string;
-  username: string;
-  clientKey: string;
-  areaId: string;
-}
-
-function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
-  // First-install case (`undefined` / non-array shape from the persisted
-  // store): fall back to DEFAULT_OUTPUT_TARGETS so a fresh user lands on a
-  // sensible primary output. An EXPLICIT empty array means the user (or the
-  // unsupported-USB auto-fallback) has cleared targets — respect that and
-  // return `[]`. The previous unconditional DEFAULT fallback re-added the
-  // very target we had just removed and stranded the auto-deselect path.
-  if (!Array.isArray(value)) return [...DEFAULT_OUTPUT_TARGETS];
-  const targetSet = new Set(
-    value.filter((t): t is HueRuntimeTarget => t === "usb" || t === "hue"),
-  );
-  return ["usb", "hue"].filter((t): t is HueRuntimeTarget => targetSet.has(t as HueRuntimeTarget));
-}
-
-function toHueStartConfig(state: {
-  lastHueBridge?: { ip: string };
-  hueAppKey?: string;
-  hueClientKey?: string;
-  lastHueAreaId?: string;
-}): HueStartConfig | null {
-  const bridgeIp = state.lastHueBridge?.ip?.trim();
-  const username = state.hueAppKey?.trim();
-  const clientKey = state.hueClientKey?.trim() ?? "";
-  const areaId = state.lastHueAreaId?.trim();
-  if (!bridgeIp || !username || !areaId) return null;
-  return { bridgeIp, username, clientKey, areaId };
-}
-
-function isHueStartCodeOk(code: string): boolean {
-  return (
-    code === HUE_RUNTIME_STATUS.STREAM_RUNNING ||
-    code === HUE_RUNTIME_STATUS.STREAM_RUNNING_DTLS ||
-    code === HUE_RUNTIME_STATUS.STREAM_STARTING ||
-    code === HUE_RUNTIME_STATUS.START_NOOP_ALREADY_ACTIVE
-  );
-}
-
-function isHueStopCodeOk(code: string): boolean {
-  return code === HUE_RUNTIME_STATUS.STREAM_STOPPED;
-}
 
 function App() {
   const { t } = useTranslation();
@@ -366,161 +298,26 @@ function App() {
   const hueSolidSyncedRef = useRef(false);
 
   /**
-   * Inject the persisted capture-source display id into an outgoing
-   * LightingModeConfig payload (v1.4 Platform GAP 2). The ambilight
-   * worker uses this id to bind its SCStream / windows-capture session
-   * to the selected monitor; an absent or unknown id falls back to the
-   * OS primary on the backend, so we only stamp the field when it is
-   * actually set.
+   * Snapshot of the seven runtime-config refs, taken once per dispatch and
+   * handed to the pure hydrators in `modePayloadHydration.ts`.
    */
-  const withSelectedDisplayId = useCallback(
-    (mode: LightingModeConfig): LightingModeConfig => {
-      const id = selectedDisplayIdRef.current;
-      if (!id || id.length === 0) return mode;
-      return { ...mode, displayId: id };
-    },
-    [],
-  );
-
-  /**
-   * Stamp the unified lighting smoothing preset onto the ambilight payload
-   * of an outgoing LightingModeConfig (v1.4 unification). Only ambilight
-   * runs use the preset — solid / off payloads pass through untouched. The
-   * preset is a property of `AmbilightPayload` today so this helper mirrors
-   * the shape the Rust `set_lighting_mode` handler expects; it drives both
-   * the USB and the Hue EWMA coefficients on the worker.
-   */
-  const withAmbilightLightingSmoothingPreset = useCallback(
-    (mode: LightingModeConfig): LightingModeConfig => {
-      if (mode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return mode;
-      const preset = hueIntensityPresetRef.current;
-      const base: AmbilightPayload = mode.ambilight ?? { brightness: 1 };
-      const nextAmbilight: AmbilightPayload = {
-        ...base,
-        lightingSmoothingPreset: preset,
-      };
-      return { ...mode, ambilight: nextAmbilight };
-    },
-    [],
-  );
-
-  /**
-   * Stamp color correction and firmware profile onto any outgoing
-   * LightingModeConfig. Both fields are top-level (not nested inside ambilight)
-   * so they apply to all modes (ambilight, solid, off). Absent refs leave the
-   * fields undefined — the Rust backend applies its own defaults via
-   * #[serde(default)] so no runtime error occurs.
-   */
-  const withColorCorrectionAndFirmwareProfile = useCallback(
-    (mode: LightingModeConfig): LightingModeConfig => ({
-      ...mode,
+  const readRuntimeConfigSnapshot = useCallback(
+    (): ModeRuntimeConfigSnapshot => ({
+      selectedDisplayId: selectedDisplayIdRef.current,
+      lightingSmoothingPreset: hueIntensityPresetRef.current,
       colorCorrection: colorCorrectionRef.current,
       firmwareProfile: firmwareProfileRef.current,
       chipType: chipTypeRef.current,
+      savedCalibration: savedCalibrationRef.current,
+      savedAmbilight: savedAmbilightRef.current,
     }),
     [],
   );
 
-  /**
-   * Stamp the persisted ambilight settings onto an outgoing
-   * LightingModeConfig payload (v1.5 H1 fix — bug H1).
-   *
-   * The bootstrap path dispatches the correctly-restored payload, but
-   * subsequent same-tick effects (color-correction / firmware-profile
-   * / Hue-intensity hot-reload, USB hot-plug delta-start) read
-   * `lightingMode` from a stale React closure. Without a ref-backed
-   * hydrator those re-dispatches strip the user's persisted
-   * saturation / blackBorderDetection / smoothing-preset values.
-   *
-   * Behaviour:
-   *  - Only fires when `mode.kind === AMBILIGHT` (off / solid pass
-   *    through untouched — those modes don't carry ambilight).
-   *  - Caller-wins: if the caller already supplied an explicit
-   *    non-default ambilight payload (e.g. an in-flight slider commit
-   *    from `LightsSection`), we keep it.
-   *  - Stamps from `savedAmbilightRef.current` only when the caller
-   *    payload is undefined or matches the fresh-default shape
-   *    (saturation 1.0, blackBorderDetection false, smoothing absent).
-   *  - Brightness is treated as a real value: a freshly-defaulted
-   *    `{ brightness: 1 }` payload is still considered "fresh"
-   *    because every other knob is at default.
-   */
-  const withAmbilightSettings = useCallback(
-    (mode: LightingModeConfig): LightingModeConfig => {
-      if (mode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return mode;
-      const persisted = savedAmbilightRef.current;
-      if (!persisted) return mode;
-      const incoming = mode.ambilight;
-      // Caller-wins: anything that looks like an explicit user
-      // commit (non-default saturation / blackBorderDetection /
-      // smoothing preset) is kept. We only stamp when the caller's
-      // payload is absent or carries a fresh-default shape.
-      const isFreshDefault =
-        !incoming ||
-        ((incoming.saturation === undefined || incoming.saturation === 1) &&
-          (incoming.blackBorderDetection === undefined ||
-            incoming.blackBorderDetection === false) &&
-          incoming.lightingSmoothingPreset === undefined &&
-          (incoming.smoothingAlpha === undefined || incoming.smoothingAlpha === 0.35));
-      if (!isFreshDefault) return mode;
-      // Stamp persisted values, but preserve any explicit brightness
-      // the caller supplied — brightness is a top-level slider that
-      // can legitimately be 1.0 in the persisted state too.
-      const merged: AmbilightPayload = {
-        ...persisted,
-        brightness:
-          incoming?.brightness !== undefined ? incoming.brightness : persisted.brightness,
-      };
-      return { ...mode, ambilight: merged };
-    },
-    [],
-  );
-
-  /**
-   * Stamp the persisted LED calibration onto an outgoing
-   * LightingModeConfig payload. The Rust backend uses
-   * `ledCalibration.totalLeds` to size every emitted USB frame for both
-   * Solid and Ambilight modes; without this stamp the backend falls
-   * back to a 1-LED slice and only LED #0 reflects strip output.
-   *
-   * Behaviour:
-   *  - If the caller already provided `ledCalibration` on the incoming
-   *    mode, we keep that explicit value (caller-wins so test patterns
-   *    or future overrides are not clobbered).
-   *  - Otherwise we stamp `savedCalibrationRef.current` if present.
-   *  - When the user has never run calibration the ref is `undefined`,
-   *    so the field stays absent and the backend keeps its existing
-   *    legacy 1-LED fallback (no regression).
-   */
-  const withLedCalibration = useCallback(
-    (mode: LightingModeConfig): LightingModeConfig => {
-      if (mode.ledCalibration) return mode;
-      const calibration = savedCalibrationRef.current;
-      if (!calibration) return mode;
-      return { ...mode, ledCalibration: calibration };
-    },
-    [],
-  );
-
-  /**
-   * Compose display id + Hue intensity preset + color correction + firmware profile
-   * + LED calibration in a single helper so every call site stays short. Ordering
-   * is safe because each helper stamps non-overlapping fields.
-   */
   const hydrateModePayload = useCallback(
     (mode: LightingModeConfig): LightingModeConfig =>
-      withColorCorrectionAndFirmwareProfile(
-        withAmbilightLightingSmoothingPreset(
-          withLedCalibration(withAmbilightSettings(withSelectedDisplayId(mode))),
-        ),
-      ),
-    [
-      withSelectedDisplayId,
-      withAmbilightSettings,
-      withLedCalibration,
-      withAmbilightLightingSmoothingPreset,
-      withColorCorrectionAndFirmwareProfile,
-    ],
+      hydrateModePayloadWith(mode, readRuntimeConfigSnapshot()),
+    [readRuntimeConfigSnapshot],
   );
 
   const lastPendingModeRef = useRef<LightingModeConfig | null>(null);

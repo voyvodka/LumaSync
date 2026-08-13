@@ -297,3 +297,21 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
 export function resolveDefaultTargets(targets?: HueRuntimeTarget[]): HueRuntimeTarget[] {
   return targets && targets.length > 0 ? targets : ["usb"];
 }
+
+/** Output sink a fresh install starts on. */
+export const DEFAULT_OUTPUT_TARGETS: HueRuntimeTarget[] = ["usb"];
+
+/** Coerce a persisted output-target list into a deduped, stably ordered `usb,hue` set. */
+export function normalizeOutputTargets(value: unknown): HueRuntimeTarget[] {
+  // First-install case (`undefined` / non-array shape from the persisted
+  // store): fall back to DEFAULT_OUTPUT_TARGETS so a fresh user lands on a
+  // sensible primary output. An EXPLICIT empty array means the user (or the
+  // unsupported-USB auto-fallback) has cleared targets — respect that and
+  // return `[]`. The previous unconditional DEFAULT fallback re-added the
+  // very target we had just removed and stranded the auto-deselect path.
+  if (!Array.isArray(value)) return [...DEFAULT_OUTPUT_TARGETS];
+  const targetSet = new Set(
+    value.filter((t): t is HueRuntimeTarget => t === "usb" || t === "hue"),
+  );
+  return ["usb", "hue"].filter((t): t is HueRuntimeTarget => targetSet.has(t as HueRuntimeTarget));
+}

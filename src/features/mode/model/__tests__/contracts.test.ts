@@ -14,6 +14,7 @@ import {
   LIGHTING_MODE_KIND,
   isLightingModeKind,
   normalizeAmbilightPayload,
+  normalizeOutputTargets,
   normalizeSolidColorPayload,
 } from "../contracts";
 
@@ -189,5 +190,35 @@ describe("lighting mode contracts", () => {
 
     expect(telemetry.hue.target).toBe("hue");
     expect(telemetry.aggregate.activeTargets).toContain("usb");
+  });
+});
+
+describe("normalizeOutputTargets (INV-33)", () => {
+  it("treats a non-array as first install and returns the default", () => {
+    expect(normalizeOutputTargets(undefined)).toEqual(["usb"]);
+    expect(normalizeOutputTargets(null)).toEqual(["usb"]);
+    expect(normalizeOutputTargets("usb")).toEqual(["usb"]);
+  });
+
+  it("treats an explicit empty array as intentional and returns it", () => {
+    // The unsupported-port fallback relies on this: reverting `[]` to the
+    // default would re-add the very target it is trying to drop.
+    expect(normalizeOutputTargets([])).toEqual([]);
+  });
+
+  it("dedupes and returns a stable usb,hue order", () => {
+    expect(normalizeOutputTargets(["hue", "usb"])).toEqual(["usb", "hue"]);
+    expect(normalizeOutputTargets(["usb", "usb", "hue"])).toEqual(["usb", "hue"]);
+  });
+
+  it("drops unknown target values", () => {
+    expect(normalizeOutputTargets(["usb", "wled", 3, null])).toEqual(["usb"]);
+    expect(normalizeOutputTargets(["wled"])).toEqual([]);
+  });
+
+  it("returns a fresh array so the default is never mutated by a caller", () => {
+    const first = normalizeOutputTargets(undefined);
+    first.push("hue");
+    expect(normalizeOutputTargets(undefined)).toEqual(["usb"]);
   });
 });
