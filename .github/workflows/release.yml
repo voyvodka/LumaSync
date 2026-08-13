@@ -257,56 +257,7 @@ jobs:
             --log-file "$HOME/.local/share/com.lumasync.app/logs/lumasync.log" \
             --hard-kill
 
-      # Disabled, not deleted: the same app never completes a frontend IPC on a
-      # Windows runner (see ci.yml), so this would block every release on a fault
-      # nobody has reproduced on real hardware yet. Re-enable once that is settled.
-      - name: Launch smoke test on the installed .msi
-        if: false && matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $msi = Get-ChildItem src-tauri\target\release\bundle\msi\*.msi `
-                   -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $msi) { throw 'no .msi under src-tauri\target\release\bundle\msi' }
-
-          $installLog = Join-Path $env:RUNNER_TEMP 'msi-install.log'
-          $run = Start-Process msiexec -Wait -PassThru -ArgumentList `
-            '/i', "`"$($msi.FullName)`"", '/qn', '/norestart', '/l*v', "`"$installLog`""
-          if ($run.ExitCode -ne 0) {
-            Get-Content $installLog -Tail 40
-            throw "silent install failed with exit code $($run.ExitCode)"
-          }
-
-          # Discover rather than assume the WiX template's Program Files layout.
-          # msiexec always writes an uninstall key, which also carries the product
-          # code needed to remove it again.
-          # -ErrorAction SilentlyContinue throughout: one unreadable sibling key
-          # would otherwise abort the whole step under $ErrorActionPreference.
-          $key = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
-                               'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall' `
-                   -ErrorAction SilentlyContinue |
-                 ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } |
-                 Where-Object { $_.DisplayName -eq 'LumaSync' } | Select-Object -First 1
-          if (-not $key) { throw 'LumaSync has no uninstall key after a successful install' }
-
-          $roots = @($key.InstallLocation, $env:ProgramFiles, ${env:ProgramFiles(x86)},
-                     "$env:LOCALAPPDATA\Programs") | Where-Object { $_ -and (Test-Path $_) }
-          $exe = Get-ChildItem -Path $roots -Filter 'LumaSync.exe' -Recurse -Depth 2 `
-                   -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $exe) { throw "installed LumaSync.exe not found under: $($roots -join ', ')" }
-          Write-Host "installed at $($exe.FullName)"
-
-          try {
-            # A release build is linked as a GUI subsystem app, so stdout may not
-            # survive; --log-file gives the marker a second, certain route.
-            node scripts/verify/launch-smoke.mjs `
-              --binary "$($exe.FullName)" `
-              --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync.log" `
-              --hard-kill
-            if ($LASTEXITCODE -ne 0) { throw 'launch smoke test failed' }
-          } finally {
-            Start-Process msiexec -Wait -ArgumentList '/x', $key.PSChildName, '/qn', '/norestart'
-          }
+      # Windows has no launch smoke step — see #181 and #197.
 
   publish:
     name: Publish release

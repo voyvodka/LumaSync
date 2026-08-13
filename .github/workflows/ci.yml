@@ -177,9 +177,7 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify/launch-smoke.mjs
 
-      # Windows is NOT covered: on a runner the webview reports the bundle
-      # loaded and then no frontend IPC ever completes. Cause unresolved,
-      # unreproduced on real hardware — a green build says nothing about Windows.
+      # Windows has no launch smoke step — see #181 and #197.
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'
