@@ -10,6 +10,9 @@ allowBuilds:
 # < 7.29.0 (SOCKS5 cross-origin routing, TLS cert validation bypass, et al.).
 # serialize-javascript: mocha still pins ^6.0.2 as of 11.8.0, which GHSA-5c6j-r48x-rmvq
 # (RCE) and GHSA-qj8w-gfj5-8c6v both cover; 7.0.5 is the first release clear of the pair.
+# @puppeteer/browsers: 2.x pulls extract-zip (GHSA-jmr9-qjv8-65gv), which is
+# unmaintained and has no patched release — bumping the parent is the only exit.
 overrides:
   undici: "^7.29.0"
   serialize-javascript: "^7.1.0"
+  "@puppeteer/browsers": "^3.2.0"
