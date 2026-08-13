@@ -414,10 +414,10 @@ export const WLED_DEFAULT_WARLS_PORT = 21324 as const;
  */
 export interface WledDeviceInfo {
   ip: string;
-  mac?: string;
+  mac?: string | null;
   ledCount: number;
-  name?: string;
-  version?: string;
+  name?: string | null;
+  version?: string | null;
 }
 
 /**

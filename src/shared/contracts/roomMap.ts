@@ -59,20 +59,20 @@ export interface HueChannelPlacement {
   /** Height: -1=floor, +1=ceiling */
   z: number;
   /** Optional user-assigned label */
-  label?: string;
+  label?: string | null;
   locked?: boolean;
   /**
    * v1.5 W1-A1 — when present, this channel is logically grouped under the
    * referenced `HueZone`. Absent ⇒ legacy absolute placement.
    */
-  zoneId?: string;
+  zoneId?: string | null;
   /**
    * v1.5 W1-A1 — zone-relative position in [-1, 1] × [-1, 1] × [-1, 1]
    * coordinates. Authoritative when `zoneId` is set; ignored otherwise.
    * The world-space `x/y/z` above are derived from this via
    * `HueZone.center + HueZone.scale * zoneRelativePosition`.
    */
-  zoneRelativePosition?: ZoneRelativePosition;
+  zoneRelativePosition?: ZoneRelativePosition | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,14 +203,14 @@ export interface HueZone {
    * to the amber Rev 07 token when absent. The runtime sampler ignores
    * this field.
    */
-  borderColor?: string;
+  borderColor?: string | null;
   /**
    * @deprecated v1.5 — collapsed onto `borderColor` after manual testing
    * showed the dual-color affordance was confusing. Kept on the contract
    * so previously persisted configs deserialise without loss; new
    * authoring flows MUST NOT write this field.
    */
-  centerColor?: string;
+  centerColor?: string | null;
 }
 
 // ---------------------------------------------------------------------------

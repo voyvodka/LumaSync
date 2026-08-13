@@ -207,7 +207,9 @@ export type HueOnboardingStep =
 export interface HueCommandStatus {
   code: HueStatusCode | string;
   message: string;
-  details?: string;
+  /** `null` on the wire (Rust `Option<String>`, no `skip_serializing_if`);
+   * also optional because the type is constructed frontend-side too. */
+  details?: string | null;
 }
 
 export const HUE_RUNTIME_STATES = {
@@ -506,10 +508,10 @@ export interface HueRuntimeTargetTelemetryRow {
   state: HueRuntimeState;
   code: HueRuntimeStatusCode | string;
   message: string;
-  details?: string;
-  remainingAttempts?: number;
-  nextAttemptMs?: number;
-  actionHint?: HueRuntimeActionHint;
+  details?: string | null;
+  remainingAttempts?: number | null;
+  nextAttemptMs?: number | null;
+  actionHint?: HueRuntimeActionHint | null;
 }
 
 export interface HueRuntimeAggregateTelemetry {
@@ -527,9 +529,9 @@ export interface HueRuntimeTelemetry {
 export interface HueRuntimeStatus extends HueCommandStatus {
   state: HueRuntimeState;
   triggerSource: HueRuntimeTriggerSource;
-  remainingAttempts?: number;
-  nextAttemptMs?: number;
-  actionHint?: HueRuntimeActionHint;
+  remainingAttempts?: number | null;
+  nextAttemptMs?: number | null;
+  actionHint?: HueRuntimeActionHint | null;
   telemetry?: HueRuntimeTelemetry;
 }
 
@@ -538,8 +540,8 @@ export interface HueBridgeSummary {
   id: string;
   ip: string;
   name: string;
-  modelId?: string;
-  softwareVersion?: string;
+  modelId?: string | null;
+  softwareVersion?: string | null;
 }
 
 export interface HuePairingCredentials {
@@ -566,16 +568,18 @@ export interface HueCredentialMigrationResponse {
 export interface HueEntertainmentAreaSummary {
   id: string;
   name: string;
-  roomName?: string;
+  roomName?: string | null;
   /**
    * Bridge-reported archetype for the parent room, if any. Separate from
    * `roomName` because users often rename rooms but keep the archetype
    * (e.g. archetype "living_room" with name "Studio"). Falls back to
    * `HUE_ARCHETYPE_FALLBACK` when unrecognized.
    */
-  archetype?: HueRoomArchetype;
-  channelCount?: number;
-  activeStreamer?: boolean;
+  archetype?: HueRoomArchetype | null;
+  /** Non-`Option` in Rust — always on the wire. */
+  channelCount: number;
+  /** Non-`Option` in Rust — always on the wire. */
+  activeStreamer: boolean;
 }
 
 /** Result of `check_hue_stream_readiness` — whether starting the stream would succeed. */
