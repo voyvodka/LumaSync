@@ -17,7 +17,7 @@ export const TYPE_DOT_COLOR: Record<RoomObjectType, string> = {
   image: "var(--lm-ink-faint)",
 };
 
-export function getZoneColor(zone: { borderColor?: string }, index: number): string {
+export function getZoneColor(zone: { borderColor?: string | null }, index: number): string {
   if (zone.borderColor) return zone.borderColor;
   return ZONE_TOKENS[index % ZONE_TOKENS.length];
 }

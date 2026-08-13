@@ -44,7 +44,6 @@ roomMap.ts ROOM_MAP_PERSISTENCE_STATUS
 # against the Rust allowlist by this very script and read by nothing else.
 device.ts SUPPORTED_CONTROLLER_IDS
 device.ts DEVICE_STORE_KEYS
-device.ts WLED_DEFAULT_DDP_PORT
 device.ts WLED_DEFAULT_WARLS_PORT
 
 # The live health surface is `HealthCheckResult` in deviceConnectionApi.ts, and

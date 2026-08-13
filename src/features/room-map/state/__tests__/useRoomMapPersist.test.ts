@@ -84,6 +84,38 @@ describe("useRoomMapPersist (ROOM-07)", () => {
     expect(result.current.config).toEqual(DEFAULT_ROOM_MAP);
   });
 
+  it("ROOM-07: logs to the console sink when shellStore.load rejects", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoad.mockRejectedValue(new Error("store unavailable"));
+
+    const { result } = renderHook(() => useRoomMapPersist());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("[LumaSync] Room map load failed: store unavailable"),
+    );
+    consoleError.mockRestore();
+  });
+
+  it("ROOM-07: logs to the console sink when shellStore.save rejects", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockLoad.mockResolvedValue({} as ShellState);
+    mockSave.mockRejectedValue(new Error("disk full"));
+
+    const { result } = renderHook(() => useRoomMapPersist());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.resetConfig();
+    });
+
+    expect(result.current.error).toContain("disk full");
+    expect(consoleError).toHaveBeenCalledWith(
+      expect.stringContaining("[LumaSync] Room map save failed: disk full"),
+    );
+    consoleError.mockRestore();
+  });
+
   it("ROOM-07: updateConfig merges partial and calls shellStore.save", async () => {
     mockLoad.mockResolvedValue({} as ShellState);
     mockSave.mockResolvedValue(undefined);

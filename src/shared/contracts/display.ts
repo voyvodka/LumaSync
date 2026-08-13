@@ -29,7 +29,7 @@ export interface OverlayPreviewPayload {
   cornerOwnership: "horizontal" | "vertical";
   visualPreset: "subtle" | "vivid";
   sequence: OverlayPreviewSequenceItem[];
-  frameMs?: number;
+  frameMs?: number | null;
   /**
    * Optional display the preview targets. When absent the backend uses the
    * previously-opened overlay display or primary as fallback. Added in v1.4
@@ -97,5 +97,5 @@ export interface DisplayOverlayCommandResult {
   ok: boolean;
   code: DisplayOverlayStatusCode;
   message: string;
-  reason?: string;
+  reason?: string | null;
 }

@@ -6,7 +6,13 @@ import {
   flattenAreaGroups,
   normalizeAreas,
 } from "../areaGrouping";
+import type { HueEntertainmentAreaSummary } from "../../hueOnboardingApi";
 import type { HueAreaReadiness } from "../onboardingTypes";
+
+const area = (
+  fields: Pick<HueEntertainmentAreaSummary, "id" | "name"> &
+    Partial<HueEntertainmentAreaSummary>,
+): HueEntertainmentAreaSummary => ({ channelCount: 0, activeStreamer: false, ...fields });
 
 const readiness = (ready: boolean, reasons: string[] = []): HueAreaReadiness => ({
   ready,
@@ -20,9 +26,9 @@ describe("normalizeAreas", () => {
   it("groups by room and sorts by room then area name", () => {
     const groups = normalizeAreas(
       [
-        { id: "3", name: "Zeta", roomName: "Salon" },
-        { id: "1", name: "Alpha", roomName: "Bedroom" },
-        { id: "2", name: "Beta", roomName: "Salon" },
+        area({ id: "3", name: "Zeta", roomName: "Salon" }),
+        area({ id: "1", name: "Alpha", roomName: "Bedroom" }),
+        area({ id: "2", name: "Beta", roomName: "Salon" }),
       ],
       new Map(),
     );
@@ -34,8 +40,8 @@ describe("normalizeAreas", () => {
   it("falls back to 'Other rooms' for a missing or blank room name", () => {
     const groups = normalizeAreas(
       [
-        { id: "1", name: "Alpha" },
-        { id: "2", name: "Beta", roomName: "   " },
+        area({ id: "1", name: "Alpha" }),
+        area({ id: "2", name: "Beta", roomName: "   " }),
       ],
       new Map(),
     );
@@ -51,8 +57,8 @@ describe("normalizeAreas", () => {
   it("attaches a known readiness snapshot and leaves unknown ones null", () => {
     const groups = normalizeAreas(
       [
-        { id: "1", name: "Alpha", roomName: "Salon" },
-        { id: "2", name: "Beta", roomName: "Salon" },
+        area({ id: "1", name: "Alpha", roomName: "Salon" }),
+        area({ id: "2", name: "Beta", roomName: "Salon" }),
       ],
       new Map([["1", readiness(true)]]),
     );
@@ -66,8 +72,8 @@ describe("flattenAreaGroups", () => {
   it("returns every area across groups, in group order", () => {
     const groups = normalizeAreas(
       [
-        { id: "1", name: "Alpha", roomName: "Bedroom" },
-        { id: "2", name: "Beta", roomName: "Salon" },
+        area({ id: "1", name: "Alpha", roomName: "Bedroom" }),
+        area({ id: "2", name: "Beta", roomName: "Salon" }),
       ],
       new Map(),
     );
@@ -80,8 +86,8 @@ describe("applyAreaReadinessSnapshot", () => {
   const groups = () =>
     normalizeAreas(
       [
-        { id: "1", name: "Alpha", roomName: "Salon" },
-        { id: "2", name: "Beta", roomName: "Salon" },
+        area({ id: "1", name: "Alpha", roomName: "Salon" }),
+        area({ id: "2", name: "Beta", roomName: "Salon" }),
       ],
       new Map(),
     );
@@ -105,7 +111,9 @@ describe("applyAreaReadinessSnapshot", () => {
     const next = applyAreaReadinessSnapshot(groups(), "1", readiness(true));
 
     expect(next[0]?.areas[1]?.readiness).toBeNull();
-    expect(next[0]?.areas[1]?.activeStreamer).toBeUndefined();
+    // The bridge always sends `activeStreamer`, so "untouched" is the incoming
+    // `false`, not an absent key.
+    expect(next[0]?.areas[1]?.activeStreamer).toBe(false);
   });
 
   it("is a no-op for an unknown area id", () => {

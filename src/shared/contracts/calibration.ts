@@ -48,7 +48,7 @@ export interface LedSegmentCounts {
  * and consumed by capture, preview, and mode runtime surfaces.
  */
 export interface LedCalibrationConfig {
-  templateId?: string;
+  templateId?: string | null;
   counts: LedSegmentCounts;
   bottomMissing: number;
   cornerOwnership: CornerOwnership;

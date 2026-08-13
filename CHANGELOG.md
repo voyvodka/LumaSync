@@ -9,6 +9,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The room map opens with the room framed and centred in the canvas. It measured the canvas only on the very first render, which happens while the saved map is still loading and the canvas does not exist yet, so the measurement never arrived and every visit started at default zoom in the top-left corner.
 - LED test patterns now run with the output settings the rest of the app uses. They ignored the configured chip type, firmware profile, and colour correction entirely, so an SK6812 RGBW strip was driven through the WS2812B encoder and an Adalight controller through the LumaSync v1 header — the test lit nothing, or the wrong colours, on exactly the hardware it exists to verify.
 - Test patterns reach a WLED strip, and stopping one restores the previous mode. On a WLED-only setup the test was reported as preview-only and never lit the strip, and Stop was silently rejected, leaving the pattern running with no way to end it.
 - The chase pattern is a comet: a full-brightness head with a trailing fade, holding its speed and size the whole way round. It previously skipped LEDs at the medium and fast speeds, ran nearly three times faster along the long edges than the short ones, and reached the strip at a fraction of the requested brightness.
@@ -16,6 +17,8 @@ https://keepachangelog.com/en/1.1.0/
 - Closing the LED preview no longer switches the lights off when the test is not what is driving them.
 - The digital-twin overlay opens on the selected display when launched from LED Setup, and its edge ribbons line up with the LED dots they mirror.
 - Stopping the Hue stream from the Devices tab no longer has the app put it straight back. That button reached the stream through a path that left the cached stream status untouched, so the health check running moments later could still read "running" and restore Hue as an active output — undoing the stop the user had just asked for.
+- A save failure now raises its warning on the surface that failed. One "could not be saved" flag was shared between the USB strip list and the Hue channel map, so failing to add a strip put a "position not saved" warning inside the Hue panel, and a failed channel move accused the USB strips of not saving — with whichever failed last resetting the other banner's timer.
+- Adding a floor plan to the room map says so when it fails. A rejected file picker or a failed copy left the map unchanged with nothing on screen and nothing in the log, so the click simply appeared to do nothing.
 - Pairing a Hue bridge now fills the entertainment-area list on its own. It arrived empty and needed a manual "Refresh areas" click, and re-pairing a bridge asked for the areas with the application key the bridge had just replaced — so a bridge that had rejected the old key answered a successful pairing with "re-pair is required".
 
 ### Changed

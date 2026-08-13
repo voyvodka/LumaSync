@@ -104,6 +104,25 @@ pub struct WledTestResponse {
     pub round_trip_ms: Option<u64>,
 }
 
+/// The `WledSinkConfig` currently registered, in the frontend's
+/// `WledUdpSinkConfig` shape.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WledSinkSnapshot {
+    pub ip: String,
+    pub port: u16,
+    pub led_count: u16,
+    pub protocol: String,
+}
+
+/// Response from `get_wled_sink_status`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WledSinkStatusResponse {
+    pub connected: bool,
+    pub sink: Option<WledSinkSnapshot>,
+}
+
 /// Coded status shared by every WLED command response.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -160,6 +179,15 @@ fn default_port_for(protocol: WledProtocol) -> u16 {
     match protocol {
         WledProtocol::Ddp => 4048,
         WledProtocol::Warls => 21324,
+    }
+}
+
+/// Inverse of `parse_protocol` — must stay in sync with the
+/// `WledUdpSinkConfig["protocol"]` union in `src/shared/contracts/device.ts`.
+fn protocol_to_str(protocol: WledProtocol) -> &'static str {
+    match protocol {
+        WledProtocol::Ddp => "ddp",
+        WledProtocol::Warls => "warls",
     }
 }
 
@@ -369,6 +397,38 @@ pub fn connect_wled_sink(
     }
 }
 
+/// Report the WLED sink currently bound to the "usb" output channel.
+///
+/// Reads `wled_config`, not `sink` — the stored trait object is decorative
+/// (see `ActiveSinkRegistry`), and a serial connect clears the config, which
+/// is exactly the eviction the frontend needs to observe.
+#[tauri::command]
+pub fn get_wled_sink_status(
+    sink_registry: tauri::State<'_, ActiveSinkRegistry>,
+) -> WledSinkStatusResponse {
+    let config = sink_registry
+        .wled_config
+        .lock()
+        .ok()
+        .and_then(|guard| *guard);
+
+    match config {
+        Some(cfg) => WledSinkStatusResponse {
+            connected: true,
+            sink: Some(WledSinkSnapshot {
+                ip: cfg.ip.to_string(),
+                port: cfg.port,
+                led_count: cfg.led_count,
+                protocol: protocol_to_str(cfg.protocol).to_string(),
+            }),
+        },
+        None => WledSinkStatusResponse {
+            connected: false,
+            sink: None,
+        },
+    }
+}
+
 /// Send a one-off red-ramp test frame to a WLED device without registering
 /// it as the active sink.
 #[tauri::command]
@@ -478,6 +538,17 @@ mod tests {
     #[test]
     fn default_port_warls_is_21324() {
         assert_eq!(default_port_for(WledProtocol::Warls), 21324);
+    }
+
+    // Round-trips because the frontend persists what this emits and replays it
+    // through `parse_protocol` on the next launch.
+    #[test]
+    fn protocol_to_str_round_trips_through_parse_protocol() {
+        use super::protocol_to_str;
+        for protocol in [WledProtocol::Ddp, WledProtocol::Warls] {
+            let encoded = protocol_to_str(protocol);
+            assert_eq!(parse_protocol(Some(encoded)), protocol, "{encoded}");
+        }
     }
 
     #[test]

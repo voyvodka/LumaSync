@@ -84,7 +84,9 @@ use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::screen_capture_permission::{
     get_screen_capture_permission, open_screen_capture_settings,
 };
-use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
+use commands::wled_discovery::{
+    connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
+};
 
 /// Label of the primary settings webview window. Defined in
 /// `tauri.conf.json` (`app.windows[].label = "main"`). Hot-path Rust→JS
@@ -759,6 +761,7 @@ pub fn run() {
             discover_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
+            get_wled_sink_status,
             start_led_test_pattern,
             stop_led_test_pattern,
             get_led_preview_status,

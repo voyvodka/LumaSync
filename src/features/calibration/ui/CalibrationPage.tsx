@@ -253,8 +253,21 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       setTestPatternError(t("calibration:overlay.errors.testPatternToggleFailed", { reason }));
-      try { const s = await flowRef.current.toggle(false); setTestPattern(s); } catch {}
-      try { const c = await displayTargetRef.current.closeActiveDisplay(); setDisplayTarget(c); } catch {}
+      // Best-effort rollback: testPatternError above already tells the user what
+      // failed, so a failing rollback must not overwrite it with a second message.
+      // Logged at debug level so the swallow is still visible in the log sink.
+      try {
+        const s = await flowRef.current.toggle(false);
+        setTestPattern(s);
+      } catch (rollbackError) {
+        console.debug(`[LumaSync] Test pattern rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+      try {
+        const c = await displayTargetRef.current.closeActiveDisplay();
+        setDisplayTarget(c);
+      } catch (rollbackError) {
+        console.debug(`[LumaSync] Overlay close after failure did not complete: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
     }
   }, [testPattern.isEnabled, displayTarget, overlayPreviewPayload, t]);
 

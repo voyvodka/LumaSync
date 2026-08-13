@@ -96,6 +96,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const {
     canvasContainerRef,
+    setCanvasContainer,
     canvasSize,
     zoom,
     setZoom,
@@ -127,6 +128,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const {
     handleAddImage,
+    imageError,
     handleUpdateImageOpacity,
     handleUpdateImageScale,
     handleUpdateImageAspectLock,
@@ -386,7 +388,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       <div className="flex flex-1 min-h-0">
         <div
           className="relative flex-1"
-          ref={canvasContainerRef}
+          ref={setCanvasContainer}
         >
           {/* Floating tool chips — top-left of canvas */}
           <LeftToolbar
@@ -704,8 +706,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       )}
 
       {error && (
-        <div className="px-3 py-1.5 text-[11px] text-red-500">
+        <div className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
           {t("roomMap:persistError")}
+        </div>
+      )}
+
+      {imageError && (
+        <div role="alert" className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
+          {t("roomMap:imageImportError")}
         </div>
       )}
     </div>

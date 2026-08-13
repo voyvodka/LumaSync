@@ -23,7 +23,10 @@ function stateWith(overrides: {
     selectedBridgeId: "selectedBridgeId" in overrides ? overrides.selectedBridgeId ?? null : "bridge-1",
     credentialState: (overrides.credentialState ?? HUE_CREDENTIAL_STATUS.VALID) as never,
     selectedAreaId: "selectedAreaId" in overrides ? overrides.selectedAreaId ?? null : "area-1",
-    areaGroups: normalizeAreas([{ id: "area-1", name: "Alpha", roomName: "Salon" }], readinessById),
+    areaGroups: normalizeAreas(
+      [{ id: "area-1", name: "Alpha", roomName: "Salon", channelCount: 0, activeStreamer: false }],
+      readinessById,
+    ),
   };
 }
 

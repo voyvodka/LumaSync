@@ -10,7 +10,9 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   DEVICE_COMMANDS,
   type WledDeviceInfo,
+  type WledSinkStatus,
   type WledStatusCode,
+  type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
 
 /** Coded result shape shared by every WLED sink command — never throws, always returns this. */
@@ -29,6 +31,12 @@ export interface WledDiscoveryResponse {
 export interface WledConnectResponse {
   status: WledCommandStatus;
 }
+
+/**
+ * Port / protocol overrides for a connect. Omitted ⇒ Rust falls back to DDP
+ * on 4048, so a restore must pass the persisted pair rather than rely on it.
+ */
+export type WledTransportOverride = Pick<WledUdpSinkConfig, "port" | "protocol">;
 
 export interface WledTestResponse {
   status: WledCommandStatus;
@@ -52,10 +60,21 @@ export async function discoverWledDevices(
  */
 export async function connectWledSink(
   device: WledDeviceInfo,
+  transport?: WledTransportOverride,
 ): Promise<WledConnectResponse> {
   return invoke<WledConnectResponse>(DEVICE_COMMANDS.CONNECT_WLED_SINK, {
     device,
+    port: transport?.port,
+    protocol: transport?.protocol,
   });
+}
+
+/**
+ * Ask Rust which WLED sink is bound right now. Distinct from reading
+ * `ShellState.lastWledSink`, which is only the restore intent.
+ */
+export async function getWledSinkStatus(): Promise<WledSinkStatus> {
+  return invoke<WledSinkStatus>(DEVICE_COMMANDS.GET_WLED_SINK_STATUS);
 }
 
 /**

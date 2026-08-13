@@ -76,7 +76,7 @@ const ZONE_PALETTE: Array<{ name: string; hex: string; cssVar: string }> = [
   { name: "cyan", hex: "#06b6d4", cssVar: "var(--lm-zone-6)" },
 ];
 
-function resolveDisplayHex(value: string | undefined, fallback: string): string {
+function resolveDisplayHex(value: string | null | undefined, fallback: string): string {
   if (!value) return fallback;
   if (/^#[0-9a-fA-F]{6}$/.test(value)) return value;
   const palette = ZONE_PALETTE.find((p) => p.cssVar === value);

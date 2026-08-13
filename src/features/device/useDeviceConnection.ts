@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { LedChipType } from "@/shared/contracts/device";
 import { shellStore } from "../persistence/shellStore";
+import { persistSerialPort } from "./outputChannelPersistence";
 import {
   connectSerialPort,
   getSerialConnectionStatus,
@@ -74,7 +75,7 @@ export function useDeviceConnection(): UseDeviceConnectionResult {
         getSerialConnectionStatus,
         runSerialHealthCheck,
         persistLastSuccessfulPort: async (portName: string) => {
-          await shellStore.save({ lastSuccessfulPort: portName });
+          await persistSerialPort((partial) => shellStore.save(partial), portName);
         },
         initialLastSuccessfulPort,
         // Bug 10A — opt the live React hook into auto-reconnect so the user

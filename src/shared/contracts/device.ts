@@ -31,6 +31,8 @@ export const DEVICE_COMMANDS = {
    * `WLED_LED_COUNT_MISMATCH` instead of generic transport errors.
    */
   TEST_WLED_BRIDGE: "test_wled_bridge",
+  /** Registry snapshot of the bound WLED sink. `lastWledSink` is intent; this is what Rust holds — they diverge when a boot restore fails or serial evicts WLED. */
+  GET_WLED_SINK_STATUS: "get_wled_sink_status",
 } as const;
 
 export const DEVICE_STATUS = {
@@ -414,10 +416,16 @@ export const WLED_DEFAULT_WARLS_PORT = 21324 as const;
  */
 export interface WledDeviceInfo {
   ip: string;
-  mac?: string;
+  mac?: string | null;
   ledCount: number;
-  name?: string;
-  version?: string;
+  name?: string | null;
+  version?: string | null;
+}
+
+/** Snapshot from `get_wled_sink_status`. `sink` is `null` once a serial connect has evicted WLED, even while `lastWledSink` stays populated. */
+export interface WledSinkStatus {
+  connected: boolean;
+  sink: WledUdpSinkConfig | null;
 }
 
 /**
