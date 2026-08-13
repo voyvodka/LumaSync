@@ -20,6 +20,8 @@ import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig
 import { useLightingModeDispatch } from "./features/mode/state/useLightingModeDispatch";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
+import { useHueStreamHealth } from "./features/hue/state/useHueStreamHealth";
+import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
 import { buildStatusItems } from "./features/shell/statusItems";
 import { ShellNotices } from "./features/shell/ShellNotices";
 import { OnboardingFlow } from "./features/onboarding/ui/OnboardingFlow";
@@ -56,7 +58,6 @@ import {
   stopLighting,
   stopHue,
 } from "./features/mode/modeApi";
-import { readHueStreamStatus } from "./features/hue/hueReadCache";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,
@@ -84,7 +85,6 @@ import {
   type SectionId,
 } from "./shared/contracts/shell";
 import {
-  HUE_RUNTIME_STATES,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeTarget,
 } from "./shared/contracts/hue";
@@ -92,19 +92,6 @@ import type { HueIntensityPreset } from "./shared/contracts/hue";
 import type { ColorCorrectionConfig, FirmwareProfile } from "./shared/contracts/device";
 import { showNotification } from "./features/platform/platformApi";
 
-/**
- * Cadence while the stream is alive. NOT a local read: `get_hue_stream_status`
- * runs a full `check_hue_stream_readiness` round-trip against the bridge on
- * the alive path (`commands/hue/commands.rs`), so this is real bridge traffic
- * — hence the shared `readHueStreamStatus` cache.
- */
-const HUE_STREAM_HEALTH_POLL_MS = 5_000;
-/**
- * Cadence once the stream is dead. Polling continues so the target can be
- * restored without a mode transition; on THIS path the backend short-circuits
- * before any network call, so it costs one IPC hop and no bridge traffic.
- */
-const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
 /** How long the "stop failed for these targets" toast stays up. */
 const STOP_FAILED_NOTICE_MS = 5_000;
 /**
@@ -176,13 +163,6 @@ function App() {
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
   const lastNonOffModeRef = useRef<LightingModeConfig | null>(null);
   const selectedOutputTargetsRef = useRef<HueRuntimeTarget[]>(selectedOutputTargets);
-  /**
-   * hueSolidSyncedRef — "Bootstrap solid color sync" bayrağı.
-   * Hue Running state'e her girişte bir kez lastSolidColor push edilir,
-   * ardından true yapılır. Running dışına çıkınca false sıfırlanır.
-   * Kullanıcı renk değiştirirken bu bayrak DOKUNULMAZ — loop'u önler.
-   */
-  const hueSolidSyncedRef = useRef(false);
 
   const runtimeConfig = useModeRuntimeConfig({ calibration: savedCalibration });
   const hydrateModePayload = runtimeConfig.hydrate;
@@ -214,161 +194,24 @@ function App() {
     activeOutputTargetsRef.current = activeOutputTargets;
   }, [activeOutputTargets]);
 
-  // Two-way Hue health reconciler. The restore direction is the fix: the poll
-  // used to `return` on the first dead reading, stranding "hue" out of
-  // `activeOutputTargets` forever so every Solid colour change was dropped.
   const hueTargetSelected = selectedOutputTargets.includes("hue");
-  useEffect(() => {
-    if (!hueTargetSelected) return;
-
-    let active = true;
-    let timerId: number | null = null;
-    let inFlight = false;
-
-    const poll = async () => {
-      if (!active) return;
-      if (inFlight) return;
-      // Visibility-aware: the tray window can be hidden indefinitely with the
-      // React tree mounted. Skip backend polling while hidden and resume with
-      // an immediate tick on `visibilitychange`.
-      if (document.visibilityState === "hidden") return;
-      inFlight = true;
-      let nextDelayMs = HUE_STREAM_HEALTH_POLL_MS;
-      try {
-        const result = await readHueStreamStatus();
-        if (!active) return;
-
-        const backendDead =
-          result.status.state === HUE_RUNTIME_STATES.FAILED ||
-          result.status.state === HUE_RUNTIME_STATES.IDLE;
-        const targetActive = activeOutputTargetsRef.current.includes("hue");
-        nextDelayMs = backendDead
-          ? HUE_STREAM_HEALTH_RECOVERY_POLL_MS
-          : HUE_STREAM_HEALTH_POLL_MS;
-
-        if (backendDead && targetActive) {
-          console.warn(
-            `[LumaSync] Hue stream health check: backend reported ${result.status.state}. ` +
-              `Message: ${result.status.message}. Removing "hue" from active targets.`,
-          );
-          setActiveOutputTargets((prev) => prev.filter((t) => t !== "hue"));
-        } else if (!backendDead && !targetActive) {
-          const mode = lightingModeRef.current;
-          if (mode.kind !== LIGHTING_MODE_KIND.OFF) {
-            console.info(
-              `[LumaSync] Hue stream recovered (${result.status.state}). Restoring "hue" as an active target.`,
-            );
-            setActiveOutputTargets((prev) =>
-              prev.includes("hue") ? prev : [...prev, "hue" as HueRuntimeTarget],
-            );
-            // The running ambilight worker captured `hue_output=None` when the
-            // stream was down; only a forced re-apply hands it the live context.
-            void dispatchLightingModeRef.current?.(
-              { ...mode, targets: selectedOutputTargetsRef.current },
-              { force: true },
-            ).catch((error) => {
-              console.error("[LumaSync] Hue recovery mode re-apply failed:", error);
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("[LumaSync] Hue stream health poll failed (transient, keeping target):", err);
-      } finally {
-        inFlight = false;
-      }
-
-      scheduleNext(nextDelayMs);
-    };
-
-    const scheduleNext = (delayMs: number) => {
-      if (!active) return;
-      if (document.visibilityState === "hidden") return;
-      if (timerId !== null) return;
-      timerId = window.setTimeout(() => {
-        timerId = null;
-        void poll();
-      }, delayMs);
-    };
-
-    const handleVisibilityChange = () => {
-      if (!active) return;
-      if (document.visibilityState === "visible" && timerId === null && !inFlight) {
-        void poll();
-      }
-    };
-
-    void poll();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      active = false;
-      if (timerId !== null) {
-        window.clearTimeout(timerId);
-        timerId = null;
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [hueTargetSelected]);
+  useHueStreamHealth({
+    hueTargetSelected,
+    activeOutputTargetsRef,
+    lightingModeRef,
+    selectedOutputTargetsRef,
+    dispatchRef: dispatchLightingModeRef,
+    setActiveOutputTargets,
+  });
 
   const hueStreaming = activeOutputTargets.includes("hue");
   const hueReachable = useHueBridgeReachability(hueStartConfig, hueStreaming);
 
-  // ---------------------------------------------------------------------------
-  // Hue solid color bootstrap sync (Hue → UI yönünde okuma).
-  //
-  // Hue Running'e her girişte BİR KEZ backend'den lastSolidColor okunur:
-  //   - "hue" activeOutputTargets'a girince VE hueSolidSyncedRef false ise
-  //     → getHueStreamStatus() çağır → lastSolidColor varsa
-  //       → setLightingModeState({ kind: SOLID, solid: lastSolidColor }) yap.
-  //     → bayrağı true yap (loop'u önler).
-  //   - "hue" activeOutputTargets'tan çıkınca (stop/fail)
-  //     → bayrağı false sıfırla (sonraki bağlantı için hazırla).
-  //
-  // Kullanıcı renk değiştirince (isQuickSolidAdjustment yolu) bu bayrak
-  // DOKUNULMAZ — bu sayede UI'dan gelen değişiklik backend'den override edilmez.
-  // ---------------------------------------------------------------------------
-  const prevHueActiveRef = useRef(false);
-  useEffect(() => {
-    const hueNowActive = activeOutputTargets.includes("hue");
-
-    if (!hueNowActive && prevHueActiveRef.current) {
-      // Hue Running → başka state: bayrağı sıfırla
-      hueSolidSyncedRef.current = false;
-    }
-
-    if (hueNowActive && !hueSolidSyncedRef.current) {
-      // Hue Running'e yeni girdi ve henüz sync yapılmadı
-      hueSolidSyncedRef.current = true;
-      void readHueStreamStatus()
-        .then((result) => {
-          const snap = result.lastSolidColor;
-          // Guard: only adopt the bridge's lastSolidColor when the UI is
-          // (still) in SOLID mode. Without this check, a persisted Ambilight
-          // session bootstrapping with hue_targets included would have the
-          // UI silently flipped to Solid the moment the stream came up —
-          // surfacing as bug #43 (LEDs animate, UI shows Solid) and
-          // racing the active ambilight worker (bug #44).
-          if (snap && lightingModeRef.current.kind === LIGHTING_MODE_KIND.SOLID) {
-            setLightingModeState({
-              kind: LIGHTING_MODE_KIND.SOLID,
-              solid: {
-                r: snap.r,
-                g: snap.g,
-                b: snap.b,
-                brightness: snap.brightness,
-              },
-            });
-          }
-        })
-        .catch((error) => {
-          console.error("[LumaSync] Bootstrap solid color read failed:", error);
-          // Başarısız olursa sonraki bağlantıda tekrar denensin
-          hueSolidSyncedRef.current = false;
-        });
-    }
-
-    prevHueActiveRef.current = hueNowActive;
-  }, [activeOutputTargets]);
+  useHueSolidBootstrapSync({
+    activeOutputTargets,
+    lightingModeRef,
+    onAdoptSolid: (solid) => setLightingModeState({ kind: LIGHTING_MODE_KIND.SOLID, solid }),
+  });
 
   useEffect(() => {
     // StrictMode guard: prevent double bootstrap in dev mode.
