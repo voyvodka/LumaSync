@@ -1,6 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { appliedResult } from "@/test/modeCommandResult";
+
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
 import { useLightingModeDispatch } from "../useLightingModeDispatch";
 
@@ -21,7 +23,9 @@ describe("useLightingModeDispatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    setLightingModeMock.mockResolvedValue({ active: true });
+    setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+      Promise.resolve(appliedResult(payload)),
+    );
   });
 
   afterEach(() => {

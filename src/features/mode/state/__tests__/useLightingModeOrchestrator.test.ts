@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { appliedResult } from "@/test/modeCommandResult";
+
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
 import {
   useLightingModeOrchestrator,
@@ -8,22 +10,6 @@ import {
 } from "../useLightingModeOrchestrator";
 
 const setLightingModeMock = vi.fn();
-
-/** Full `ModeCommandResult`: the backend echoes the mode it is now running, and
- *  the orchestrator reads that echo to decide whether the start was accepted. */
-function appliedResult(payload: LightingModeConfig) {
-  const code =
-    payload.kind === LIGHTING_MODE_KIND.OFF
-      ? "LIGHTING_MODE_STOPPED"
-      : payload.kind === LIGHTING_MODE_KIND.SOLID
-        ? "SOLID_MODE_APPLIED"
-        : "AMBILIGHT_MODE_STARTED";
-  return {
-    active: payload.kind !== LIGHTING_MODE_KIND.OFF,
-    mode: payload,
-    status: { code, message: "Applied.", details: null },
-  };
-}
 const stopLightingMock = vi.fn();
 const stopHueMock = vi.fn();
 const startHueMock = vi.fn();
