@@ -1,6 +1,7 @@
 import { useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import { findHueChannel } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 
@@ -237,7 +238,7 @@ export function HueChannelOverlay({
     // Clamp through the bound zone on every drag, selected or not — see
     // docs/architecture/room-map.md. `allHueZones` is canonical; the fallback to
     // `activeHueZone` covers callers that do not pass the full list.
-    const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
+    const ch = findHueChannel(channelsRef.current, dr.channelIndex);
     let boundZone = ch?.zoneId
       ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
       : null;
@@ -276,7 +277,7 @@ export function HueChannelOverlay({
 
     e.currentTarget.releasePointerCapture(e.pointerId);
 
-    const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
+    const ch = findHueChannel(channelsRef.current, dr.channelIndex);
     if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
       // Write-back is zone-relative for ANY bound channel, not just the active
       // one — the third of the three paths that must agree on the parent zone.

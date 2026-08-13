@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import {
   CHANNEL_WRITEBACK_STATUS,
+  findHueChannel,
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
 import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
@@ -63,7 +64,7 @@ function clientToHueCoords(clientX: number, clientY: number, canvasRect: DOMRect
 
 /** Merge bridge-reported position with persisted placement. Fallback to bridge data + z=0. */
 function resolvePlacement(ch: HueAreaChannelInfo, placements: HueChannelPlacement[]): { x: number; y: number; z: number } {
-  const saved = placements.find((p) => p.channelIndex === ch.index);
+  const saved = findHueChannel(placements, ch.index);
   return saved
     ? { x: saved.x, y: saved.y, z: saved.z }
     : { x: ch.positionX, y: ch.positionY, z: 0 };
@@ -196,7 +197,7 @@ function ChannelDetailStrip({
   // Show last selected channel's values
   const selectedArr = [...selectedChannels];
   const lastSelected = selectedArr[selectedArr.length - 1]!;
-  const placement = channelPlacements.find((p) => p.channelIndex === lastSelected);
+  const placement = findHueChannel(channelPlacements, lastSelected);
   const chInfo = channels.find((c) => c.index === lastSelected);
   const channelIndexLabel = String((chInfo?.index ?? lastSelected) + 1);
   const z = placement?.z ?? 0;
@@ -417,11 +418,11 @@ export function HueChannelMapPanel({
 
       const groupStart = new Map<number, { x: number; y: number }>();
       for (const idx of effectiveSelected) {
-        const p = channelPlacements.find((cp) => cp.channelIndex === idx);
+        const p = findHueChannel(channelPlacements, idx);
         if (p) groupStart.set(idx, { x: p.x, y: p.y });
       }
 
-      const placement = channelPlacements.find((p) => p.channelIndex === channelIndex);
+      const placement = findHueChannel(channelPlacements, channelIndex);
       if (!placement) return;
 
       dragStateRef.current = {
@@ -622,7 +623,7 @@ export function HueChannelMapPanel({
 
           {/* Channel dots */}
           {channels.map((ch) => {
-            const placement = channelPlacements.find((p) => p.channelIndex === ch.index);
+            const placement = findHueChannel(channelPlacements, ch.index);
             const px = placement?.x ?? ch.positionX;
             const py = placement?.y ?? ch.positionY;
             const { left, top } = posToPercent(px, py);

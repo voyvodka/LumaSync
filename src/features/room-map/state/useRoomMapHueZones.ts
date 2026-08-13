@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { shellStore } from "@/features/persistence/shellStore";
 import type { HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
+import { findHueChannel } from "@/shared/contracts/roomMap";
 import {
   assignChannelToHueZone,
   createHueZone,
@@ -147,7 +148,7 @@ export function useRoomMapHueZones({
   // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
   const handleAssignChannelToZone = useCallback(
     (channelIndex: number, targetZoneId: string | null) => {
-      const channel = config.hueChannels.find((c) => c.channelIndex === channelIndex);
+      const channel = findHueChannel(config.hueChannels, channelIndex);
       if (!channel) return;
       // No-op if already in the target bucket — avoids spurious invokes.
       const currentZoneId = channel.zoneId ?? null;

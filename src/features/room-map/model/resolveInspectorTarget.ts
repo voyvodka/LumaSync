@@ -7,6 +7,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { findHueChannel } from "@/shared/contracts/roomMap";
 import { parseObjectId } from "./objectId";
 
 /**
@@ -51,7 +52,7 @@ export function resolveInspectorTarget(
       if (strip) return { kind: "usb", strip };
     }
     if (parsed?.kind === "hue") {
-      const channel = config.hueChannels.find((c) => c.channelIndex === parsed.channelIndex);
+      const channel = findHueChannel(config.hueChannels, parsed.channelIndex);
       if (channel) {
         const zoneName = channel.zoneId
           ? config.zones.find((z) => z.id === channel.zoneId)?.name ?? null
