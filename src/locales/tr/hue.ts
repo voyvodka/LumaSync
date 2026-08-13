@@ -209,6 +209,11 @@ const hue: Catalogue<typeof enHue> = {
       CONFIG_NOT_READY_GATE_BLOCKED: "Başlatma kapı kontrolden geçmedi; hazırlık stale veya eksik.",
       HUE_STOP_TIMEOUT_PARTIAL: "Durdurma zaman aşımına uğradı. Kısmi durdurma temizliği gerekli.",
       HUE_START_NOOP_ALREADY_ACTIVE: "Hue yayını zaten çalışıyor.",
+      HUE_STREAM_IDLE: "Hue çalışma zamanı boşta.",
+      HUE_STREAM_RUNNING_NO_LIGHTS:
+        "Hue yayını başladı ancak seçili alanda renk verilebilen ışık bulunamadı.",
+      HUE_STREAM_START_ABORTED: "Hue yayını kurulamadan iptal edildi.",
+      HUE_STOPPED_BY_USER: "Yeniden bağlanma kullanıcı tarafından durduruldu.",
       undefined: "Durum kodu alınamadı. Son durum bilgisi bekleniyor.",
     },
     retry: {
