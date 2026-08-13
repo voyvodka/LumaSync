@@ -94,8 +94,11 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
       .then((result) => {
         if (!cancelled) setDisplays(result);
       })
-      .catch(() => {
-        if (!cancelled) setDisplays([]);
+      .catch((error) => {
+        if (cancelled) return;
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`[LumaSync] Display list unavailable: ${reason}`);
+        setDisplays([]);
       });
     return () => { cancelled = true; };
   }, []);

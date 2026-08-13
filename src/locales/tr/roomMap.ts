@@ -47,6 +47,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     resetMapConfirm: "Sıfırlamayı onayla?",
   },
   persistError: "Harita kaydedilemedi. Değişiklikler yeniden başlatmada kaybolabilir.",
+  imageImportError: "Görsel eklenemedi. Ayrıntılar için günlüğe bakın.",
   usbStrip: {
     ledCount: "LED sayısı",
     online: "BAĞLI",

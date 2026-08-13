@@ -18,6 +18,7 @@ https://keepachangelog.com/en/1.1.0/
 - The digital-twin overlay opens on the selected display when launched from LED Setup, and its edge ribbons line up with the LED dots they mirror.
 - Stopping the Hue stream from the Devices tab no longer has the app put it straight back. That button reached the stream through a path that left the cached stream status untouched, so the health check running moments later could still read "running" and restore Hue as an active output — undoing the stop the user had just asked for.
 - A save failure now raises its warning on the surface that failed. One "could not be saved" flag was shared between the USB strip list and the Hue channel map, so failing to add a strip put a "position not saved" warning inside the Hue panel, and a failed channel move accused the USB strips of not saving — with whichever failed last resetting the other banner's timer.
+- Adding a floor plan to the room map says so when it fails. A rejected file picker or a failed copy left the map unchanged with nothing on screen and nothing in the log, so the click simply appeared to do nothing.
 - Pairing a Hue bridge now fills the entertainment-area list on its own. It arrived empty and needed a manual "Refresh areas" click, and re-pairing a bridge asked for the areas with the application key the bridge had just replaced — so a bridge that had rejected the old key answered a successful pairing with "re-pair is required".
 
 ### Changed

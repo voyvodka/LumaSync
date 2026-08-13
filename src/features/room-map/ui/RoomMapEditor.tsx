@@ -128,6 +128,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   const {
     handleAddImage,
+    imageError,
     handleUpdateImageOpacity,
     handleUpdateImageScale,
     handleUpdateImageAspectLock,
@@ -705,8 +706,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       )}
 
       {error && (
-        <div className="px-3 py-1.5 text-[11px] text-red-500">
+        <div className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
           {t("roomMap:persistError")}
+        </div>
+      )}
+
+      {imageError && (
+        <div role="alert" className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
+          {t("roomMap:imageImportError")}
         </div>
       )}
     </div>

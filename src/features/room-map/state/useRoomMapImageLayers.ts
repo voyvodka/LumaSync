@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
@@ -12,6 +12,8 @@ export interface UseRoomMapImageLayersArgs {
 
 export interface UseRoomMapImageLayersReturn {
   handleAddImage: () => Promise<void>;
+  /** Set when the last import attempt failed; cleared when a new one starts. */
+  imageError: string | null;
   handleUpdateImageOpacity: (imageId: string, opacity: number) => void;
   handleUpdateImageScale: (imageId: string, sx: number, sy: number) => void;
   handleUpdateImageAspectLock: (imageId: string, locked: boolean) => void;
@@ -25,19 +27,28 @@ export function useRoomMapImageLayers({
   updateConfig,
   setSelectedId,
 }: UseRoomMapImageLayersArgs): UseRoomMapImageLayersReturn {
+  const [imageError, setImageError] = useState<string | null>(null);
+
   const handleAddImage = useCallback(async () => {
-    const selected = await open({
-      multiple: false,
-      filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
-    });
-    if (selected && typeof selected === "string") {
-      const destPath = await copyBackgroundImage(selected);
-      const fileName = destPath.split("/").pop() ?? "Image";
-      const label = fileName.replace(/\.[^.]+$/, "");
-      const id = crypto.randomUUID();
-      const newLayer = { id, path: destPath, label, offsetX: 0, offsetY: 0, scale: 1 };
-      await updateConfig({ imageLayers: [...config.imageLayers, newLayer] });
-      setSelectedId(imageLayerObjectId(id));
+    setImageError(null);
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg"] }],
+      });
+      if (selected && typeof selected === "string") {
+        const destPath = await copyBackgroundImage(selected);
+        const fileName = destPath.split("/").pop() ?? "Image";
+        const label = fileName.replace(/\.[^.]+$/, "");
+        const id = crypto.randomUUID();
+        const newLayer = { id, path: destPath, label, offsetX: 0, offsetY: 0, scale: 1 };
+        await updateConfig({ imageLayers: [...config.imageLayers, newLayer] });
+        setSelectedId(imageLayerObjectId(id));
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[LumaSync] Room map image import failed: ${reason}`);
+      setImageError(reason);
     }
   }, [config.imageLayers, updateConfig, setSelectedId]);
 
@@ -85,6 +96,7 @@ export function useRoomMapImageLayers({
 
   return {
     handleAddImage,
+    imageError,
     handleUpdateImageOpacity,
     handleUpdateImageScale,
     handleUpdateImageAspectLock,
