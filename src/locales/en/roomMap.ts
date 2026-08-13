@@ -44,6 +44,7 @@ export default {
     resetMapConfirm: "Confirm reset?",
   },
   persistError: "Map could not be saved. Changes may be lost on restart.",
+  imageImportError: "Image could not be added. Check the log for details.",
   usbStrip: {
     ledCount: "LED count",
     online: "ONLINE",

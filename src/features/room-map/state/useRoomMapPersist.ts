@@ -68,6 +68,8 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
       })
       .catch((err) => {
         if (cancelled) return;
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error(`[LumaSync] Room map load failed: ${reason}`);
         setError(String(err));
         setLoading(false);
       });
@@ -82,6 +84,8 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
       await shellStore.save({ roomMap: next, roomMapVersion: versionRef.current });
       setError(null);
     } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[LumaSync] Room map save failed: ${reason}`);
       setError(String(err));
     }
   }, []);
