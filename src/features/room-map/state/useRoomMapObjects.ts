@@ -7,6 +7,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
+import { findHueChannel } from "@/shared/contracts/roomMap";
 import {
   furnitureObjectId,
   parseObjectId,
@@ -103,9 +104,7 @@ export function useRoomMapObjects({
       if (parsed?.kind === "tv") return !!config.tvAnchor?.locked;
       if (parsed?.kind === "furniture") return !!config.furniture.find((f) => f.id === parsed.furnitureId)?.locked;
       if (parsed?.kind === "usb") return !!config.usbStrips.find((s) => s.stripId === parsed.stripId)?.locked;
-      // Indexes the array by slot, unlike every other Hue lookup here, which
-      // matches on `channelIndex`. Preserved as-is by the id refactor.
-      if (parsed?.kind === "hue") return !!config.hueChannels[parsed.channelIndex]?.locked;
+      if (parsed?.kind === "hue") return !!findHueChannel(config.hueChannels, parsed.channelIndex)?.locked;
       if (parsed?.kind === "image") return !!config.imageLayers.find((l) => l.id === parsed.layerId)?.locked;
       return false;
     },

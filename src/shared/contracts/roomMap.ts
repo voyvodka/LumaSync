@@ -75,6 +75,15 @@ export interface HueChannelPlacement {
   zoneRelativePosition?: ZoneRelativePosition | null;
 }
 
+/** Never index `hueChannels` by array position — `channelIndex` is bridge-assigned
+ * and room maps written by v1.4.0 and earlier are gapped (docs/architecture/room-map.md). */
+export function findHueChannel(
+  channels: readonly HueChannelPlacement[],
+  channelIndex: number,
+): HueChannelPlacement | undefined {
+  return channels.find((c) => c.channelIndex === channelIndex);
+}
+
 // ---------------------------------------------------------------------------
 // USB Strip Placement
 // ---------------------------------------------------------------------------
