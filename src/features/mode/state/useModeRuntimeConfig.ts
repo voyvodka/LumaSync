@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
@@ -112,14 +112,28 @@ export function useModeRuntimeConfig(input: {
     savedCalibrationRef.current = input.calibration;
   }, [input.calibration]);
 
-  return {
-    hydrate,
-    prime,
-    setCalibration,
-    setAmbilight,
-    setLightingSmoothingPreset,
-    setColorCorrection,
-    setFirmwareProfile,
-    getSelectedDisplayId,
-  };
+  // Stable identity: every member is a `[]`-dep callback, and consumers put
+  // this object in dep arrays that must not churn on every render.
+  return useMemo(
+    () => ({
+      hydrate,
+      prime,
+      setCalibration,
+      setAmbilight,
+      setLightingSmoothingPreset,
+      setColorCorrection,
+      setFirmwareProfile,
+      getSelectedDisplayId,
+    }),
+    [
+      hydrate,
+      prime,
+      setCalibration,
+      setAmbilight,
+      setLightingSmoothingPreset,
+      setColorCorrection,
+      setFirmwareProfile,
+      getSelectedDisplayId,
+    ],
+  );
 }

@@ -17,6 +17,7 @@ import { useTrayIntegration } from "./features/shell/useTrayIntegration";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
 import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
+import { useModeHotReload } from "./features/mode/state/useModeHotReload";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import { useHueStreamHealth } from "./features/hue/state/useHueStreamHealth";
@@ -57,8 +58,6 @@ import {
   SECTION_IDS,
   type SectionId,
 } from "./shared/contracts/shell";
-import type { HueIntensityPreset } from "./shared/contracts/hue";
-import type { ColorCorrectionConfig, FirmwareProfile } from "./shared/contracts/device";
 
 /**
  * Marks that first-connect calibration has already been auto-opened. Session-scoped
@@ -298,6 +297,8 @@ function App() {
 
   useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
 
+  const hotReload = useModeHotReload(runtimeConfig, mode.dispatch, lightingMode);
+
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 
   // Shared SettingsLayout props — only `uiMode` differs between the
@@ -336,48 +337,7 @@ function App() {
     onCheckForUpdates: checkForUpdates,
     isCheckingForUpdates: updaterState.status === "checking",
     devSetUpdaterState,
-    onHueIntensityPresetChange: (preset: HueIntensityPreset) => {
-      runtimeConfig.setLightingSmoothingPreset(preset);
-      // Hot-reload an in-flight ambilight worker so the new preset takes
-      // effect without a mode switch. For non-ambilight modes the preset
-      // simply rides along on the next start_lighting_mode dispatch.
-      // Routed through `dispatchSetLightingMode` so back-to-back identical
-      // fires (re-render storm, double subscribe) collapse to a single
-      // backend invoke instead of spamming the IPC bus.
-      if (lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
-        void mode.dispatch(lightingMode).catch((error) => {
-          console.error("[LumaSync] Failed to hot-reload Hue intensity preset:", error);
-        });
-      }
-    },
-    onColorCorrectionChange: (next: ColorCorrectionConfig) => {
-      // ColorCorrectionPanel already persisted via shellStore.save() on
-      // commit; we mirror the new config into the ref so the very next
-      // outgoing set_lighting_mode payload carries it, then hot-reload
-      // any in-flight worker so USB + Hue sinks pick up the new pipeline
-      // without a mode toggle. Solid / off modes also benefit because
-      // the Rust encoder path runs color correction before every sink.
-      // Routed through `dispatchSetLightingMode` so an identical re-fire
-      // is dropped — see Hue intensity preset comment for the why.
-      runtimeConfig.setColorCorrection(next);
-      void mode.dispatch(lightingMode).catch((error) => {
-        console.error("[LumaSync] Failed to hot-reload color correction:", error);
-      });
-    },
-    onFirmwareProfileChange: (next: FirmwareProfile) => {
-      // FirmwareProfilePicker already persisted via shellStore.save() on
-      // commit; mirror into the ref + trigger a worker restart with the
-      // new protocol. Changing firmware profile is a wire-format change
-      // on the Rust side so a silent flicker is expected — the USB
-      // encoder pipeline rebuilds before the next frame. Routed through
-      // `dispatchSetLightingMode` (force=true) so the backend always
-      // sees the new profile bytes even when the FE signature happened
-      // to match a prior fire.
-      runtimeConfig.setFirmwareProfile(next);
-      void mode.dispatch(lightingMode, { force: true }).catch((error) => {
-        console.error("[LumaSync] Failed to hot-reload firmware profile:", error);
-      });
-    },
+    ...hotReload,
     // v1.5 W2-B1 — compact-mode "no reachable output" banner deep-link.
     // The full-mode shell already exposes DEVICES through the sidebar, so
     // this prop is consumed exclusively by `<CompactLayout>`.
