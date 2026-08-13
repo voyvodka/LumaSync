@@ -15,8 +15,8 @@
 //!
 //! Persistence: the canonical zone list lives in `RoomMapConfig.zones`
 //! (`Vec<HueZone>`) on the frontend `shellStore`. These commands do not
-//! persist on their own — the frontend round-trips the mutated
-//! `RoomMapConfig` back to `save_room_map`. Each command therefore takes
+//! persist on their own — the frontend writes the mutated `RoomMapConfig`
+//! back through the shellStore. Each command therefore takes
 //! the current `Vec<HueZone>` (and, when relevant, `Vec<HueChannelPlacement>`)
 //! as input and returns the mutated copy plus a `CommandStatus` carrying
 //! a stable `HUE_ZONE_*` code from `src/shared/contracts/roomMap.ts`.
@@ -132,7 +132,7 @@ pub struct AssignChannelRequest {
 
 /// Common response for the four zone authoring commands. The mutated
 /// arrays are echoed back so the frontend can write them straight into
-/// the next `save_room_map` payload without re-merging.
+/// the next shellStore write without re-merging.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueZoneCommandResult {
