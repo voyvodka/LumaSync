@@ -177,7 +177,7 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify/launch-smoke.mjs
 
-      # Windows has no launch smoke step — see #181 and #197.
+      # Windows has no launch smoke step — see #181.
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'
