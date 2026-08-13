@@ -25,7 +25,7 @@ vi.mock("@/features/persistence/shellStore", () => ({
   },
 }));
 
-vi.mock("@/features/settings/sections/room-map/roomMapApi", () => ({
+vi.mock("@/features/room-map/roomMapApi", () => ({
   createHueZone: (...args: unknown[]) => {
     createHueZoneMock(...args);
     return Promise.resolve({ status: { code: "HUE_ZONE_CREATED", message: "", details: null }, zones: [], channels: [] });

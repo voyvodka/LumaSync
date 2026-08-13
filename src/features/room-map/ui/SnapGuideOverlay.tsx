@@ -1,4 +1,4 @@
-import type { SnapGuide } from "./useSnapGuides";
+import type { SnapGuide } from "../state/useSnapGuides";
 
 interface SnapGuideOverlayProps {
   guides: SnapGuide[];

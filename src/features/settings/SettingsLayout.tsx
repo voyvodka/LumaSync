@@ -10,7 +10,7 @@ import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
-import { RoomMapEditor } from "./sections/RoomMapEditor";
+import { RoomMapEditor } from "@/features/room-map/ui/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
 import { CompactLayout } from "./sections/compact/CompactLayout";
 
