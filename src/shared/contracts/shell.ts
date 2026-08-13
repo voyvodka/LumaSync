@@ -1,5 +1,10 @@
 import type { LedCalibrationConfig } from "./calibration";
-import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./device";
+import type {
+  ColorCorrectionConfig,
+  FirmwareProfile,
+  LedChipType,
+  WledUdpSinkConfig,
+} from "./device";
 import type { DisplayId } from "./display";
 import type { LedTestPattern } from "./preview";
 import type { LightingModeConfig } from "@/features/mode/model/contracts";
@@ -166,6 +171,8 @@ export interface ShellState {
    * Updated only after a successful connection attempt.
    */
   lastSuccessfulPort?: string;
+  /** WLED sink re-bound on next launch. MUTUALLY EXCLUSIVE with `lastSuccessfulPort` — both set races at boot and serial always wins; see docs/architecture/device-output.md. */
+  lastWledSink?: WledUdpSinkConfig;
   /**
    * Last saved LED calibration model.
    * Absent until user completes calibration flow.

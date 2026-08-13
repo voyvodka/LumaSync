@@ -211,6 +211,11 @@ export default {
         discovered: "DISCOVERED",
         connected: "ACTIVE",
       },
+      restore: {
+        restoring: "Reconnecting to the saved WLED device at {{ip}}...",
+        restored: "Reconnected to the saved WLED device at {{ip}}.",
+        failed: "Could not reconnect to the saved WLED device at {{ip}}.",
+      },
       status: {
         discoveryOk: "Discovery completed.",
         discoveryTimeout: "Discovery timed out before any device responded.",

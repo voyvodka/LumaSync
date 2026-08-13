@@ -80,7 +80,9 @@ use commands::room_map::save_load::{
     copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
 };
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
-use commands::wled_discovery::{connect_wled_sink, discover_wled_devices, test_wled_bridge};
+use commands::wled_discovery::{
+    connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
+};
 
 /// Label of the primary settings webview window. Defined in
 /// `tauri.conf.json` (`app.windows[].label = "main"`). Hot-path Rust→JS
@@ -753,6 +755,7 @@ pub fn run() {
             discover_wled_devices,
             connect_wled_sink,
             test_wled_bridge,
+            get_wled_sink_status,
             start_led_test_pattern,
             stop_led_test_pattern,
             get_led_preview_status,

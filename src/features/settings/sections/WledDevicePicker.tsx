@@ -18,13 +18,14 @@
  *   - Errors / status notes use `role="status"` + `aria-live="polite"`
  *     so screen readers announce result changes.
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import {
   WLED_STATUS,
   type WledDeviceInfo,
+  type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
 import {
   connectWledSink,
@@ -32,10 +33,15 @@ import {
   testWledBridge,
   type WledCommandStatus,
 } from "@/features/device/wledApi";
+import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
 
 interface WledDevicePickerProps {
   /** Currently active sink reference (used to highlight the connected card). */
   activeWledIp?: string | null;
+  /** Persisted restore intent — outlives a failed restore, so the saved IP can be offered back. */
+  savedSink?: WledUdpSinkConfig | null;
+  /** Outcome of the boot-time restore, rendered so an unreachable device is never silent. */
+  restoreOutcome?: WledRestoreOutcome;
   /** Fired after a successful connect so the parent can persist the sink ref. */
   onConnected?: (device: WledDeviceInfo) => void;
 }
@@ -47,6 +53,8 @@ type RowState =
 
 export function WledDevicePicker({
   activeWledIp = null,
+  savedSink = null,
+  restoreOutcome = { kind: "idle" },
   onConnected,
 }: WledDevicePickerProps) {
   const { t } = useTranslation();
@@ -57,6 +65,15 @@ export function WledDevicePicker({
     useState<WledCommandStatus | null>(null);
   const [devices, setDevices] = useState<WledDeviceInfo[]>([]);
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
+  const [ipPrefilled, setIpPrefilled] = useState(false);
+
+  // A failed restore should cost one click to retry, not a re-typed IP.
+  // Fires once and never overwrites what the user has already entered.
+  useEffect(() => {
+    if (ipPrefilled || !savedSink) return;
+    setIpPrefilled(true);
+    setManualIp((current) => (current.length > 0 ? current : savedSink.ip));
+  }, [ipPrefilled, savedSink]);
 
   const validateManualIp = useCallback((value: string): string | null => {
     const trimmed = value.trim();
@@ -154,6 +171,8 @@ export function WledDevicePicker({
           </div>
         </div>
       </div>
+
+      <WledRestoreBanner outcome={restoreOutcome} t={t} />
 
       {/* Manual IP + discover row */}
       <div className="lm-hue-ip-form">
@@ -324,6 +343,49 @@ export function WledDevicePicker({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** Reports the boot restore. A saved device that never came back must say so here — nothing else in the UI would. */
+function WledRestoreBanner({
+  outcome,
+  t,
+}: {
+  outcome: WledRestoreOutcome;
+  t: TFunction;
+}) {
+  if (outcome.kind === "idle" || outcome.kind === "no-saved-device") return null;
+
+  const tone =
+    outcome.kind === "failed"
+      ? "border-rose-500/40 bg-rose-900/20 text-rose-200"
+      : outcome.kind === "restored"
+        ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-200"
+        : "border-amber-500/40 bg-amber-900/20 text-amber-200";
+
+  // Keep every `t()` call out of a template literal — the i18n orphan
+  // verifier consumes a backtick literal whole and never sees a key inside it.
+  const headline =
+    outcome.kind === "restoring"
+      ? t("device:page.wled.restore.restoring", { ip: outcome.sink.ip })
+      : outcome.kind === "restored"
+        ? t("device:page.wled.restore.restored", { ip: outcome.sink.ip })
+        : t("device:page.wled.restore.failed", { ip: outcome.sink.ip });
+
+  const reason =
+    outcome.kind === "failed"
+      ? translateWledStatusCode(outcome.status.code, t) ?? outcome.status.message
+      : null;
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={["mb-2 rounded border px-3 py-2 text-[11px]", tone].join(" ")}
+    >
+      {headline}
+      {reason ? " " + reason : null}
     </div>
   );
 }
