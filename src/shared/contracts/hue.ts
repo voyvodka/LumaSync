@@ -413,69 +413,6 @@ export type HueCredentialBackend =
   (typeof HUE_CREDENTIAL_BACKENDS)[keyof typeof HUE_CREDENTIAL_BACKENDS];
 
 // ---------------------------------------------------------------------------
-// Hue room archetypes (v1.4 — CLIP v2 whitelist)
-// ---------------------------------------------------------------------------
-
-/**
- * Hue CLIP v2 room archetypes. The bridge stamps one of these on every
- * room so the frontend can pick a meaningful icon / copy ("living_room"
- * → sofa icon). Values below mirror the CLIP v2 spec; `other` is the
- * fallback any unrecognized archetype maps to so the UI never shows an
- * empty / raw identifier string.
- *
- * Archetype is returned separately from `roomName` because a user can
- * (and often does) override the display name while keeping the semantic
- * archetype — we want both signals.
- */
-export const HUE_ROOM_ARCHETYPES = [
-  "living_room",
-  "kitchen",
-  "dining",
-  "bedroom",
-  "kids_bedroom",
-  "bathroom",
-  "nursery",
-  "recreation",
-  "office",
-  "gym",
-  "hallway",
-  "toilet",
-  "front_door",
-  "garage",
-  "terrace",
-  "garden",
-  "driveway",
-  "carport",
-  "home",
-  "downstairs",
-  "upstairs",
-  "top_floor",
-  "attic",
-  "guest_room",
-  "staircase",
-  "lounge",
-  "man_cave",
-  "computer",
-  "studio",
-  "music",
-  "tv",
-  "reading",
-  "closet",
-  "storage",
-  "laundry_room",
-  "balcony",
-  "porch",
-  "barbecue",
-  "pool",
-  "other",
-] as const;
-
-export type HueRoomArchetype = (typeof HUE_ROOM_ARCHETYPES)[number];
-
-/** Sentinel returned when the bridge advertises an archetype the whitelist does not know. */
-export const HUE_ARCHETYPE_FALLBACK: HueRoomArchetype = "other";
-
-// ---------------------------------------------------------------------------
 // Hue intensity presets (v1.4 — deprecated aliases, unified in v1.4)
 // ---------------------------------------------------------------------------
 
@@ -515,25 +452,12 @@ export interface HueRuntimeTargetTelemetryRow {
   actionHint?: HueRuntimeActionHint | null;
 }
 
-export interface HueRuntimeAggregateTelemetry {
-  activeTargets: HueRuntimeTarget[];
-  runningCount: number;
-  reconnectingCount: number;
-  failedCount: number;
-}
-
-export interface HueRuntimeTelemetry {
-  hue: HueRuntimeTargetTelemetryRow;
-  aggregate: HueRuntimeAggregateTelemetry;
-}
-
 export interface HueRuntimeStatus extends HueCommandStatus {
   state: HueRuntimeState;
   triggerSource: HueRuntimeTriggerSource;
   remainingAttempts?: number | null;
   nextAttemptMs?: number | null;
   actionHint?: HueRuntimeActionHint | null;
-  telemetry?: HueRuntimeTelemetry;
 }
 
 /** One bridge returned by discovery, before pairing. */
@@ -570,13 +494,6 @@ export interface HueEntertainmentAreaSummary {
   id: string;
   name: string;
   roomName?: string | null;
-  /**
-   * Bridge-reported archetype for the parent room, if any. Separate from
-   * `roomName` because users often rename rooms but keep the archetype
-   * (e.g. archetype "living_room" with name "Studio"). Falls back to
-   * `HUE_ARCHETYPE_FALLBACK` when unrecognized.
-   */
-  archetype?: HueRoomArchetype | null;
   /** Non-`Option` in Rust — always on the wire. */
   channelCount: number;
   /** Non-`Option` in Rust — always on the wire. */

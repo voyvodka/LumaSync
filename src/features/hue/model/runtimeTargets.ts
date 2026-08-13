@@ -5,18 +5,6 @@ export function deriveRuntimeTargets(status: HueRuntimeStatus | null): HueRuntim
     return [];
   }
 
-  const hueTelemetry = status.telemetry?.hue;
-  if (hueTelemetry) {
-    return [
-      {
-        ...hueTelemetry,
-        remainingAttempts: hueTelemetry.remainingAttempts ?? status.remainingAttempts,
-        nextAttemptMs: hueTelemetry.nextAttemptMs ?? status.nextAttemptMs,
-        actionHint: hueTelemetry.actionHint ?? status.actionHint,
-      },
-    ];
-  }
-
   return [
     {
       target: "hue",

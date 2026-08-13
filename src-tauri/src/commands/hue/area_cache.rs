@@ -211,7 +211,6 @@ mod tests {
             id: id.to_string(),
             name: format!("Area {id}"),
             room_name: None,
-            archetype: None,
             channel_count: 3,
             active_streamer,
         }

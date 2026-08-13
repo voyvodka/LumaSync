@@ -103,19 +103,13 @@ pub struct HueValidateCredentialsResponse {
     pub valid: bool,
 }
 
-/// One bridge-side Entertainment Area, enriched with its room archetype for
-/// the frontend area picker.
+/// One bridge-side Entertainment Area, as shown in the frontend area picker.
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueEntertainmentArea {
     pub id: String,
     pub name: String,
     pub room_name: Option<String>,
-    /// Bridge room archetype (CLIP v2). Whitelist-mirrored by the frontend
-    /// contract `HUE_ROOM_ARCHETYPES`; unknown values are remapped to
-    /// `"other"` on the Rust side so the UI never sees a raw identifier
-    /// the whitelist does not cover.
-    pub archetype: Option<String>,
     pub channel_count: usize,
     pub active_streamer: bool,
 }
@@ -1128,22 +1122,9 @@ async fn fetch_hue_entertainment_areas(
 
     let client = hue_http_client().map_err(AreaListError::Other)?;
 
-    // Fetch entertainment_configuration and room resources in parallel to
-    // enrich each area with its bridge-reported archetype. Two parallel
-    // GETs stay comfortably under the CLIP v2 soft rate limit (~3 req/s).
-    let entertainment_fut = fetch_entertainment_payload(&client, bridge_ip, username);
-    let rooms_fut = fetch_room_payload(&client, bridge_ip, username);
-    let (entertainment_res, rooms_res) = tokio::join!(entertainment_fut, rooms_fut);
+    let entertainment_payload = fetch_entertainment_payload(&client, bridge_ip, username).await?;
 
-    let entertainment_payload = entertainment_res?;
-    // Room fetch failure must not fail the whole command — archetype is
-    // an enrichment signal, not a correctness signal. Missing rooms just
-    // means archetype ends up `None` (UI falls back to "other").
-    let room_index = rooms_res
-        .map(build_room_archetype_index)
-        .unwrap_or_default();
-
-    parse_area_list_payload(&entertainment_payload, &room_index).map_err(AreaListError::Other)
+    parse_area_list_payload(&entertainment_payload).map_err(AreaListError::Other)
 }
 
 async fn fetch_entertainment_payload(
@@ -1152,32 +1133,6 @@ async fn fetch_entertainment_payload(
     username: &str,
 ) -> Result<String, AreaListError> {
     let endpoint = format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration");
-    let raw = client
-        .get(endpoint)
-        .header("hue-application-key", username)
-        .send()
-        .await
-        .map_err(|e| AreaListError::Other(e.to_string()))?;
-
-    let response = classify_hue_response(raw)
-        .await
-        .map_err(|fault| match fault {
-            HueHttpFault::AuthInvalid => AreaListError::AuthInvalid,
-            other => AreaListError::Other(other.to_string()),
-        })?;
-
-    response
-        .text()
-        .await
-        .map_err(|e| AreaListError::Other(e.to_string()))
-}
-
-async fn fetch_room_payload(
-    client: &Client,
-    bridge_ip: &str,
-    username: &str,
-) -> Result<String, AreaListError> {
-    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/room");
     let raw = client
         .get(endpoint)
         .header("hue-application-key", username)
@@ -1211,100 +1166,9 @@ pub(crate) enum AreaListError {
     Other(String),
 }
 
-/// Build a `{service_rid → archetype}` map from a CLIP v2 `/resource/room`
-/// payload. Each room's `services[]` lists the light/grouped_light services
-/// that belong to it; matching entertainment-configuration services by
-/// `rid` yields the room's archetype for each area.
-pub fn build_room_archetype_index(payload: String) -> std::collections::HashMap<String, String> {
-    let mut index = std::collections::HashMap::new();
-    let Ok(value) = serde_json::from_str::<Value>(&payload) else {
-        return index;
-    };
-    let Some(data) = value.get("data").and_then(|value| value.as_array()) else {
-        return index;
-    };
-
-    for room in data {
-        let archetype = room
-            .get("metadata")
-            .and_then(|metadata| metadata.get("archetype"))
-            .and_then(|value| value.as_str())
-            .map(normalize_archetype);
-        let Some(archetype) = archetype else {
-            continue;
-        };
-        let Some(services) = room.get("services").and_then(|value| value.as_array()) else {
-            continue;
-        };
-        for service in services {
-            if let Some(rid) = service.get("rid").and_then(|value| value.as_str()) {
-                index.insert(rid.to_string(), archetype.clone());
-            }
-        }
-    }
-
-    index
-}
-
-/// Normalize a bridge-reported archetype into the frontend whitelist.
-/// Unknown archetypes collapse onto `"other"` so the UI never renders
-/// a raw identifier the `HUE_ROOM_ARCHETYPES` whitelist does not cover.
-fn normalize_archetype(raw: &str) -> String {
-    const ARCHETYPES: &[&str] = &[
-        "living_room",
-        "kitchen",
-        "dining",
-        "bedroom",
-        "kids_bedroom",
-        "bathroom",
-        "nursery",
-        "recreation",
-        "office",
-        "gym",
-        "hallway",
-        "toilet",
-        "front_door",
-        "garage",
-        "terrace",
-        "garden",
-        "driveway",
-        "carport",
-        "home",
-        "downstairs",
-        "upstairs",
-        "top_floor",
-        "attic",
-        "guest_room",
-        "staircase",
-        "lounge",
-        "man_cave",
-        "computer",
-        "studio",
-        "music",
-        "tv",
-        "reading",
-        "closet",
-        "storage",
-        "laundry_room",
-        "balcony",
-        "porch",
-        "barbecue",
-        "pool",
-        "other",
-    ];
-    if ARCHETYPES.contains(&raw) {
-        raw.to_string()
-    } else {
-        "other".to_string()
-    }
-}
-
 /// Parse a CLIP v2 `entertainment_configuration` payload into
-/// `HueEntertainmentArea` entries, joined against the room archetype index.
-pub fn parse_area_list_payload(
-    payload: &str,
-    room_index: &std::collections::HashMap<String, String>,
-) -> Result<Vec<HueEntertainmentArea>, String> {
+/// `HueEntertainmentArea` entries.
+pub fn parse_area_list_payload(payload: &str) -> Result<Vec<HueEntertainmentArea>, String> {
     let parsed: Value = serde_json::from_str(payload).map_err(|error| error.to_string())?;
     let data = parsed
         .get("data")
@@ -1334,35 +1198,10 @@ pub fn parse_area_list_payload(
                 .get("active_streamer")
                 .is_some_and(|active| !active.is_null());
 
-            // Match any service referenced by this entertainment config
-            // against the room→archetype index. First hit wins — a single
-            // area rarely spans multiple archetypes, and when it does the
-            // first room is already the semantically closest one.
-            let archetype = area
-                .get("light_services")
-                .and_then(|value| value.as_array())
-                .into_iter()
-                .flatten()
-                .chain(
-                    area.get("locations")
-                        .and_then(|loc| loc.get("service_locations"))
-                        .and_then(|value| value.as_array())
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|entry| entry.get("service")),
-                )
-                .filter_map(|entry| entry.get("rid").and_then(|rid| rid.as_str()))
-                .find_map(|rid| room_index.get(rid).cloned());
-
-            // Preserve the room's display name if we can find one in the
-            // index by reusing the same resolution above. The CLIP v2
-            // `/resource/room` payload carries both archetype and name
-            // side by side so one traversal is enough for both signals.
             HueEntertainmentArea {
                 id,
                 name,
                 room_name: None,
-                archetype,
                 channel_count,
                 active_streamer,
             }

@@ -47,22 +47,6 @@ function runtimeStatusFixture() {
     triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
     remainingAttempts: 2,
     nextAttemptMs: 1200,
-    telemetry: {
-      hue: {
-        target: "hue",
-        state: "Reconnecting",
-        code: "TRANSIENT_RETRY_SCHEDULED",
-        message: "Retry scheduled",
-        remainingAttempts: 2,
-        nextAttemptMs: 1200,
-      },
-      aggregate: {
-        activeTargets: ["hue"],
-        runningCount: 0,
-        reconnectingCount: 1,
-        failedCount: 0,
-      },
-    },
   };
 }
 
@@ -142,7 +126,7 @@ describe("useHueOnboarding runtime wiring", () => {
     setTimeoutSpy.mockRestore();
   });
 
-  it("maps telemetry to runtimeTargets with retry metadata", async () => {
+  it("maps runtime status to runtimeTargets with retry metadata", async () => {
     const hookModule = await import("../useHueOnboarding");
 
     const rows = hookModule.deriveRuntimeTargets(runtimeStatusFixture() as never);

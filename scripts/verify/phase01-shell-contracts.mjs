@@ -339,24 +339,6 @@ check(
   "MISSING backwards-compat HUE_PAIRING_FAILED"
 );
 
-console.log("\n[ Hue room archetypes ]");
-check(
-  hueSource.includes("HUE_ROOM_ARCHETYPES"),
-  "HUE_ROOM_ARCHETYPES whitelist exported",
-  "MISSING HUE_ROOM_ARCHETYPES whitelist"
-);
-check(
-  hueSource.includes("HUE_ARCHETYPE_FALLBACK"),
-  "HUE_ARCHETYPE_FALLBACK sentinel exported",
-  "MISSING HUE_ARCHETYPE_FALLBACK sentinel"
-);
-// `other` must be present so the whitelist can fall back safely.
-check(
-  hueSource.includes(`"other"`),
-  "HUE_ROOM_ARCHETYPES contains \"other\" fallback",
-  "MISSING \"other\" fallback in HUE_ROOM_ARCHETYPES"
-);
-
 console.log("\n[ Hue intensity preset ]");
 check(
   hueSource.includes("HUE_INTENSITY_PRESET_COEFFICIENTS"),
