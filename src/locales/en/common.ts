@@ -20,6 +20,8 @@ export default {
       title: "No reachable output",
       body: "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
       action: "Open devices",
+      stoppedBody: "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
+      retry: "Check again",
     },
   },
   mode: {

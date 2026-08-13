@@ -25,6 +25,9 @@ interface SettingsLayoutProps {
   usbConnected: boolean;
   hueConfigured: boolean;
   hueReachable?: boolean;
+  /** The Hue bridge probe stopped after a sustained outage; surfaces a retry in the offline banner. */
+  hueProbeGaveUp?: boolean;
+  onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
@@ -71,6 +74,8 @@ export const SettingsLayout = memo(function SettingsLayout({
   usbConnected,
   hueConfigured,
   hueReachable = true,
+  hueProbeGaveUp = false,
+  onRetryHueProbe,
   hueStreaming,
   modeLockReason,
   isModeTransitioning = false,
@@ -96,6 +101,8 @@ export const SettingsLayout = memo(function SettingsLayout({
         usbConnected={usbConnected}
         hueConfigured={hueConfigured}
         hueReachable={hueReachable}
+        hueProbeGaveUp={hueProbeGaveUp}
+        onRetryHueProbe={onRetryHueProbe}
         isModeTransitioning={isModeTransitioning}
         modeLockReason={modeLockReason}
         onLightingModeChange={onLightingModeChange}
@@ -118,6 +125,8 @@ export const SettingsLayout = memo(function SettingsLayout({
               usbConnected={usbConnected}
               hueConfigured={hueConfigured}
               hueReachable={hueReachable}
+              hueProbeGaveUp={hueProbeGaveUp}
+              onRetryHueProbe={onRetryHueProbe}
               hueStreaming={hueStreaming}
               calibration={calibration}
               modeLockReason={modeLockReason}

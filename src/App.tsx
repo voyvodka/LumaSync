@@ -144,7 +144,8 @@ function App() {
   });
 
   const hueStreaming = activeOutputTargets.includes("hue");
-  const hueReachable = useHueBridgeReachability(hueStartConfig, hueStreaming);
+  const hueProbe = useHueBridgeReachability(hueStartConfig, hueStreaming);
+  const hueReachable = hueProbe.reachable;
 
   useHueSolidBootstrapSync({
     activeOutputTargets,
@@ -295,6 +296,8 @@ function App() {
     usbConnected: isConnected,
     hueConfigured: hueStartConfig !== null,
     hueReachable: hueReachable || hueStreaming,
+    hueProbeGaveUp: hueProbe.gaveUp,
+    onRetryHueProbe: hueProbe.retry,
     hueStreaming,
     modeLockReason:
       modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED

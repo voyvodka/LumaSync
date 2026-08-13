@@ -76,6 +76,9 @@ interface LightsSectionProps {
   usbConnected: boolean;
   hueConfigured: boolean;
   hueReachable?: boolean;
+  /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
+  hueProbeGaveUp?: boolean;
+  onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   calibration?: LedCalibrationConfig;
   modeLockReason: ModeGuardReason | null;
@@ -130,6 +133,8 @@ export function LightsSection({
   usbConnected,
   hueConfigured,
   hueReachable = true,
+  hueProbeGaveUp = false,
+  onRetryHueProbe,
   hueStreaming,
   calibration,
   modeLockReason,
@@ -380,12 +385,24 @@ export function LightsSection({
         {outputMissing && (
           <OnboardingBanner
             title={t("common:output.offline.title")}
-            body={t("common:output.offline.body")}
+            body={
+              hueProbeGaveUp
+                ? t("common:output.offline.stoppedBody")
+                : t("common:output.offline.body")
+            }
             primaryAction={
               onOpenDevices
                 ? {
                     label: t("common:output.offline.action"),
                     onClick: onOpenDevices,
+                  }
+                : undefined
+            }
+            secondaryAction={
+              hueProbeGaveUp && onRetryHueProbe
+                ? {
+                    label: t("common:output.offline.retry"),
+                    onClick: onRetryHueProbe,
                   }
                 : undefined
             }

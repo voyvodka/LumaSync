@@ -45,6 +45,9 @@ interface CompactLayoutProps {
   usbConnected: boolean;
   hueConfigured: boolean;
   hueReachable: boolean;
+  /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
+  hueProbeGaveUp?: boolean;
+  onRetryHueProbe?: () => void;
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (next: LightingModeConfig) => void;
@@ -79,6 +82,8 @@ export function CompactLayout({
   usbConnected,
   hueConfigured,
   hueReachable,
+  hueProbeGaveUp = false,
+  onRetryHueProbe,
   isModeTransitioning,
   modeLockReason,
   onLightingModeChange,
@@ -200,17 +205,32 @@ export function CompactLayout({
           <div className="lm-compact-offline" role="status" aria-live="polite">
             <div className="lm-compact-offline-text">
               <div className="ttl">{t("common:output.offline.title")}</div>
-              <div className="sub">{t("common:output.offline.body")}</div>
+              <div className="sub">
+                {hueProbeGaveUp
+                  ? t("common:output.offline.stoppedBody")
+                  : t("common:output.offline.body")}
+              </div>
             </div>
-            {onOpenDevices && (
-              <button
-                type="button"
-                className="lm-compact-offline-action"
-                onClick={onOpenDevices}
-              >
-                {t("common:output.offline.action")}
-              </button>
-            )}
+            <div className="lm-compact-offline-actions">
+              {onOpenDevices && (
+                <button
+                  type="button"
+                  className="lm-compact-offline-action"
+                  onClick={onOpenDevices}
+                >
+                  {t("common:output.offline.action")}
+                </button>
+              )}
+              {hueProbeGaveUp && onRetryHueProbe && (
+                <button
+                  type="button"
+                  className="lm-compact-offline-action is-ghost"
+                  onClick={onRetryHueProbe}
+                >
+                  {t("common:output.offline.retry")}
+                </button>
+              )}
+            </div>
           </div>
         )}
 

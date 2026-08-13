@@ -57,6 +57,9 @@ vi.mock("react-i18next", () => ({
         "common:output.offline.body":
           "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
         "common:output.offline.action": "Open devices",
+        "common:output.offline.stoppedBody":
+          "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
+        "common:output.offline.retry": "Check again",
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
@@ -233,6 +236,8 @@ describe("LightsSection — output availability gate", () => {
       usbConnected: boolean;
       hueConfigured: boolean;
       hueReachable: boolean;
+      hueProbeGaveUp: boolean;
+      onRetryHueProbe: () => void;
       onOpenDevices: () => void;
       onModeChange: (next: LightingModeConfig) => void;
     }> = {},
@@ -244,6 +249,8 @@ describe("LightsSection — output availability gate", () => {
         usbConnected={props.usbConnected ?? false}
         hueConfigured={props.hueConfigured ?? false}
         hueReachable={props.hueReachable ?? false}
+        hueProbeGaveUp={props.hueProbeGaveUp ?? false}
+        onRetryHueProbe={props.onRetryHueProbe}
         hueStreaming={false}
         modeLockReason={null}
         onModeChange={props.onModeChange ?? vi.fn()}
@@ -279,6 +286,32 @@ describe("LightsSection — output availability gate", () => {
     await user.click(screen.getByRole("button", { name: "Open devices" }));
     expect(onOpenDevices).toHaveBeenCalledOnce();
     expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("offers a manual retry once the bridge probe has given up", async () => {
+    const user = userEvent.setup();
+    const onRetryHueProbe = vi.fn();
+    renderWithOutputs({ hueConfigured: true, hueProbeGaveUp: true, onRetryHueProbe });
+
+    expect(
+      screen.getByText(
+        "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Check again" }));
+    expect(onRetryHueProbe).toHaveBeenCalledOnce();
+  });
+
+  it("hides the retry while the probe is still trying", () => {
+    renderWithOutputs({ hueConfigured: true, onRetryHueProbe: vi.fn() });
+
+    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Connect a USB LED strip or pair a Hue bridge to enable lighting modes.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("blocks scene presets too — every scene tile activates SOLID", () => {

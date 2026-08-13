@@ -105,6 +105,30 @@ deleted is worse than the original bug — but here nothing in any released buil
 id and reuses `migrateLegacyHueZone`, so a corrupt record is dropped with a warning rather than
 half-migrated.
 
+**Background bridge polling gives up; it never re-discovers on its own.** Two frontend loops probe
+the bridge while nothing is streaming — `useHueBridgeReachability` (30 s, feeds the "no reachable
+output" banner) and `useHueReadinessPolling` (15 s, 3 s while a foreign streamer holds the area).
+Both used to retry forever, so a bridge paired on another Wi-Fi network was polled for the whole
+session with nothing on screen to say so. They now share one failure budget
+(`model/pollBudget.ts`): **4 consecutive failures *and* a 90 s unbroken streak**, after which the
+loop stops and the banner offers a manual retry.
+
+Both terms are load-bearing. A count alone gives up after 12 s on the 3 s blocked cadence; a
+duration alone gives up on the first failed tick of a slow one. Telling a user their bridge is gone
+because the Wi-Fi hiccupped for ten seconds is worse than the over-polling being fixed, so any
+success resets the streak — two failures, a success, then two more is not four failures.
+
+Only a bridge that did not *answer* counts (`HUE_CREDENTIAL_CHECK_FAILED`,
+`HUE_STREAM_READINESS_FAILED`, or a rejected `invoke`). `HUE_CREDENTIAL_INVALID` and
+`HUE_STREAM_NOT_READY` are answers from a reachable bridge, with their own recovery paths (re-pair,
+release the area) — counting them would put a "check again" button in front of a problem retrying
+cannot fix.
+
+There is deliberately **no network-change listener** and no slow background heartbeat: the app
+retries on launch, which covers returning to the right network later. The retry gesture is shared
+through a module store (`state/huePollRestart.ts`) because the two loops live in different React
+trees from the control that re-arms them.
+
 ## Gotchas
 
 - **`commands/hue_stream_lifecycle.rs` is a re-export shim.** The implementation moved under `commands::hue::*`. Import paths still resolve through it; do not add new code there.
