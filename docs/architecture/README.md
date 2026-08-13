@@ -31,8 +31,13 @@ These bind every area, so they are stated once here rather than repeated in each
 
 **No outbound telemetry, analytics SDK, or third-party crash reporting** — including the
 privacy-first ones. Any feedback path must be user-initiated, user-inspectable, and abortable.
-Hue's discovery endpoint is the only outbound call in the application, and it has a manual-IP
-fallback.
+Nothing about the user or their screen ever leaves the machine.
+
+Three outbound calls exist, and they are the whole list. Hue's cloud discovery endpoint, which
+has a manual-IP fallback precisely so it can be avoided. WLED discovery, LAN-only
+(`commands/wled_discovery.rs`). And the update check, which polls the GitHub Releases endpoint in
+`src-tauri/tauri.conf.json` on startup — unconditional today, with no manual fallback. Adding a
+fourth is a decision, not an implementation detail.
 
 **The capture-to-output path has a per-frame budget.** A regression in it is a defect, not a
 tuning matter. See [`capture-and-pipeline.md`](capture-and-pipeline.md).
