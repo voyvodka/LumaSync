@@ -916,102 +916,71 @@ describe("App mode orchestration", () => {
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
   });
 
-  // The slow-path Ambilight transition asserts on `active-mode` after
-  // `setLightingModeState` has flushed, which requires the mocked
-  // `loadShellState` chain inside `handleLightingModeChange` to settle
-  // through several `await` points. On the GitHub-hosted Linux + Windows
-  // runners the jsdom event-loop deterministically times this out at 8 s
-  // (release.yml v1.5.0 push surfaced the same hang on `windows-latest`)
-  // while macOS and every developer machine we've tried settle in well
-  // under 100 ms. The failure is environment-specific, not a regression
-  // in the canonical-signature dedup the test guards. Gate it to macOS
-  // until we land a `vi.useFakeTimers` driven rewrite.
-  const ciHostPlatform = (globalThis as { process?: { platform?: string } }).process
-    ?.platform;
-  const itOnlyOnMac =
-    ciHostPlatform === "linux" || ciHostPlatform === "win32" ? it.skip : it;
-
-  itOnlyOnMac(
-    "ambilight idempotency: key-reordered payload with same content does not re-invoke set_lighting_mode",
+  it(
+    "ambilight idempotency: three real re-fires past the cooldown still collapse to one dispatch",
     async () => {
-      // Regression for the Ambilight-mode 50 Hz spam observed in real
-      // hardware testing on 2026-04-26. Earlier session added a dedup ref
-      // hashed via `JSON.stringify(hydrated)`, but the spread chain in
-      // `hydrateModePayload` re-orders object keys whenever a hot-reload
-      // path re-stamps `colorCorrection` / `firmwareProfile` after the
-      // ambilight worker is already live. Two payloads with the same
-      // semantic content but a different key insertion order produced
-      // *different* signatures, slipped past the guard, and forced
-      // `apply_mode_change` to take the full worker tear-down + restart
-      // path because some of its own equality gates (targets / displayId
-      // / led_calibration / color_correction / firmware_profile) saw a
-      // mismatch.
-      //
-      // The fix: replace the signature with `canonicalLightingModeSignature`
-      // — a recursively key-sorted, undefined-stripped JSON form. This
-      // test fires the same logical Ambilight payload twice with
-      // *different sub-field key order* and asserts that the backend sees
-      // exactly one invoke after the slow-path transition.
-      loadShellStateMock.mockResolvedValue({
-        lastSection: "general",
-        ledCalibration: {
-          templateId: "monitor-27-16-9",
-          counts: { top: 10, right: 10, bottom: 10, left: 10 },
-          bottomMissing: 0,
-          cornerOwnership: "horizontal",
-          visualPreset: "subtle",
-          startAnchor: "top-start",
-          direction: "cw",
-          totalLeds: 40,
-        },
-        lightingMode: { kind: "off" },
-        lastOutputTargets: ["usb"],
-      });
+      // Key reordering can't reach canonicalLightingModeSignature here — normalizeLightingModeConfig
+      // rebuilds the payload with fixed field order first. That invariant lives at unit level:
+      // modePayloadHydration.test.ts > is key-order independent.
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        loadShellStateMock.mockResolvedValue({
+          lastSection: "general",
+          ledCalibration: {
+            templateId: "monitor-27-16-9",
+            counts: { top: 10, right: 10, bottom: 10, left: 10 },
+            bottomMissing: 0,
+            cornerOwnership: "horizontal",
+            visualPreset: "subtle",
+            startAnchor: "top-start",
+            direction: "cw",
+            totalLeds: 40,
+          },
+          lightingMode: { kind: "off" },
+          lastOutputTargets: ["usb"],
+        });
 
-      render(<App />);
+        render(<App />);
 
-      await waitFor(() => {
-        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
-      });
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        });
 
-      // The D-05 gate blocks an Ambilight transition while `savedCalibration`
-      // is still undefined, and a blocked transition returns without changing
-      // the mode — so the click must wait for bootstrap to hydrate it.
-      await waitFor(() => {
-        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
-      });
+        // The D-05 gate blocks an Ambilight transition while `savedCalibration`
+        // is still undefined, and a blocked transition returns without changing
+        // the mode — so the click must wait for bootstrap to hydrate it.
+        await waitFor(() => {
+          expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+        });
 
-      // Slow-path Ambilight transition.
-      await act(async () => {
-        screen.getByRole("button", { name: "set-ambilight" }).click();
-      });
+        // Slow-path Ambilight transition.
+        await act(async () => {
+          screen.getByRole("button", { name: "set-ambilight" }).click();
+        });
 
-      await waitFor(
-        () => {
+        await waitFor(() => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
-        },
-        { timeout: 8000 },
-      );
+        });
 
-      expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+        expect(setLightingModeMock).toHaveBeenCalledTimes(1);
 
-      // Same Ambilight payload, but ambilight sub-fields listed in a
-      // different order. The canonical signature must collapse this onto
-      // the prior dispatch and skip the backend invoke.
-      await act(async () => {
-        screen.getByRole("button", { name: "set-ambilight-reordered" }).click();
-        screen.getByRole("button", { name: "set-ambilight-reordered" }).click();
-        screen.getByRole("button", { name: "set-ambilight-reordered" }).click();
-      });
+        // Reordered payload, fired three times past the cooldown each time.
+        for (let i = 0; i < 3; i += 1) {
+          await vi.advanceTimersByTimeAsync(25);
+          await act(async () => {
+            screen.getByRole("button", { name: "set-ambilight-reordered" }).click();
+          });
+        }
 
-      // Still exactly one — the canonical signature dedup catches all
-      // three reordered re-fires even though `JSON.stringify` would
-      // produce three different strings for them.
-      expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+        // Still exactly one — content dedup collapses all three real re-fires.
+        expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
     },
   );
 
-  itOnlyOnMac(
+  it(
     "ambilight 1-LED bug fix: dispatched payload carries persisted ledCalibration with full totalLeds",
     async () => {
       // Regression for the Ambilight 1-LED bug observed during 2026-04-26
@@ -1057,12 +1026,9 @@ describe("App mode orchestration", () => {
         screen.getByRole("button", { name: "set-ambilight" }).click();
       });
 
-      await waitFor(
-        () => {
-          expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
-        },
-        { timeout: 8000 },
-      );
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+      });
 
       expect(setLightingModeMock).toHaveBeenCalledWith(
         expect.objectContaining({
