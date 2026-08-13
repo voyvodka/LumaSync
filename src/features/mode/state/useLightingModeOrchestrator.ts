@@ -4,10 +4,16 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { isHueStartCodeOk, isHueStopCodeOk, toHueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { loadShellState, saveShellState } from "@/features/shell/windowLifecycle";
-import { describeCaptureFailure, type CaptureFailureNotice } from "@/shared/contracts/capture";
+import {
+  AMBILIGHT_CAPTURE_REASON,
+  describeCaptureFailure,
+  isScreenCaptureBlocked,
+  type CaptureFailureNotice,
+} from "@/shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
 import { LIGHTING_MODE_STATUS } from "@/shared/contracts/lighting";
 
+import { getScreenCapturePermission } from "../captureApi";
 import { setHueSolidColor, startHue, stopHue, stopLighting } from "../modeApi";
 import {
   DEFAULT_OUTPUT_TARGETS,
@@ -464,6 +470,15 @@ export function useLightingModeOrchestrator({
           hueTransientFail;
 
         if (needsLightingModeApply) {
+          // Advisory probe, never a gate: the OS prompt only appears from the
+          // Rust start path below, so short-circuiting here would leave a
+          // first-run user unable to ever grant the permission.
+          if (normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
+            const permission = await getScreenCapturePermission();
+            if (isScreenCaptureBlocked(permission.code)) {
+              setStartFailedNotice(describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.PERMISSION_DENIED));
+            }
+          }
           try {
             const applyResult = await dispatchSetLightingMode(normalizedNextMode, { force: true });
             // A failed capture start resolves as `Ok` carrying a status, so it

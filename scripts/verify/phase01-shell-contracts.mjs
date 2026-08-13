@@ -1601,7 +1601,7 @@ const emittedCaptureReasons = [
 
 // Pinned, not `> 0`: hoisting a reason into a `const` would hide it from this
 // harvest while the rest still matched. Bump deliberately when one is added.
-const EXPECTED_CAPTURE_REASON_COUNT = 17;
+const EXPECTED_CAPTURE_REASON_COUNT = 18;
 check(
   emittedCaptureReasons.length === EXPECTED_CAPTURE_REASON_COUNT,
   `harvested exactly ${EXPECTED_CAPTURE_REASON_COUNT} capture reasons from the Rust tree`,

@@ -104,4 +104,7 @@ export default {
     output: "No LED output port available.",
     internal: "Screen capture failed ({{reason}}).",
   },
+  captureAction: {
+    openSettings: "Open System Settings",
+  },
 };

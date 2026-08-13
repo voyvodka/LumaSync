@@ -435,6 +435,7 @@ mod platform {
     use screencapturekit::cv::CVPixelBufferLockFlags;
     use screencapturekit::prelude::*;
 
+    use super::super::screen_capture_permission::ensure_screen_capture_access;
     use super::{
         select_display_index, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
         DisplayCandidate,
@@ -454,8 +455,17 @@ mod platform {
     /// persisted id stops matching and we revert to primary via
     /// `CGMainDisplayID`.
     fn select_display(display_id: Option<&str>) -> Result<SCDisplay, AmbilightCaptureError> {
+        // The only caller allowed to prompt — see screen_capture_permission.
+        if ensure_screen_capture_access().blocks_capture() {
+            return Err(AmbilightCaptureError::InvalidFrame(
+                "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+            ));
+        }
+
+        // Permission is granted, so a failure here is ScreenCaptureKit itself
+        // (typically a wedged `replayd`), never consent.
         let content = SCShareableContent::get().map_err(|_| {
-            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_PERMISSION_DENIED")
+            AmbilightCaptureError::InvalidFrame("AMBILIGHT_CAPTURE_SHAREABLE_CONTENT_FAILED")
         })?;
 
         let displays = content.displays();

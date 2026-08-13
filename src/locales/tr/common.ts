@@ -107,6 +107,9 @@ const common: Catalogue<typeof enCommon> = {
     output: "Kullanılabilir LED çıkış portu yok.",
     internal: "Ekran yakalama başarısız ({{reason}}).",
   },
+  captureAction: {
+    openSettings: "Sistem Ayarları'nı aç",
+  },
 };
 
 export default common;

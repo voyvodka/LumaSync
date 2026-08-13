@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { type CaptureFailureNotice } from "@/shared/contracts/capture";
+import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 
 export interface ShellNoticesProps {
@@ -9,6 +9,8 @@ export interface ShellNoticesProps {
   stopFailedTargets: HueRuntimeTarget[] | null;
   startFailure: CaptureFailureNotice | null;
   hueColorNotice: HueSolidColorStatusCode | null;
+  /** Deep-links the OS permission pane; only the `permission` bucket offers it. */
+  onOpenCaptureSettings: () => void;
 }
 
 /**
@@ -21,6 +23,7 @@ export function ShellNotices({
   stopFailedTargets,
   startFailure,
   hueColorNotice,
+  onOpenCaptureSettings,
 }: ShellNoticesProps) {
   const { t } = useTranslation();
   const stopFailed = stopFailedTargets !== null && stopFailedTargets.length > 0;
@@ -98,6 +101,22 @@ export function ShellNotices({
           <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {t(`common:captureFailed.${startFailure.bucket}` as const, { reason: startFailure.reason })}
           </span>
+          {startFailure.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION && (
+            <button
+              type="button"
+              data-testid="capture-permission-settings-button"
+              onClick={onOpenCaptureSettings}
+              className="rounded px-2 py-1"
+              style={{
+                fontSize: "12px",
+                color: "var(--lm-amber)",
+                border: "1px solid var(--lm-line-2)",
+                background: "transparent",
+              }}
+            >
+              {t("common:captureAction.openSettings")}
+            </button>
+          )}
         </div>
       )}
       {hueColorNotice && (

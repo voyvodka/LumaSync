@@ -25,13 +25,30 @@ two private KVC keys (`drawsBackground`, `fullScreenEnabled`), not linked privat
 **One capture worker drives every configured output at once.** Hue, serial, and WLED are fed from
 the same frame rather than each running its own capture.
 
+**The macOS screen-recording permission is probed, never inferred.**
+`src-tauri/src/commands/screen_capture_permission.rs` owns two CoreGraphics calls with very
+different side effects, and the split between them is the whole design:
+
+- `CGPreflightScreenCaptureAccess` is a pure query. It never prompts, is safe to call repeatedly,
+  and cannot distinguish "denied" from "never asked" — which is why the copy says *check this
+  permission*, never *you denied it*.
+- `CGRequestScreenCaptureAccess` prompts when the decision is undetermined, and the system shows
+  that prompt **once per binary, for the life of the install**. Denied thereafter, it returns
+  false without prompting.
+
+So `get_screen_capture_permission` (the command the UI calls before enabling Ambilight) preflights
+only, and `select_display` on the capture start path is the *single* caller allowed to request. A
+UI that gated the start on the preflight answer would short-circuit before the request ever ran,
+and a first-run user would never be asked at all. That ordering is load-bearing, not stylistic.
+
 **Smoothing is an EWMA per light, selected by preset.** `LightingSmoothingPreset` in
 `src/shared/contracts/lighting.ts` maps three names to three fixed alpha values, applied uniformly
 to every sink. `HueIntensityPreset` is a deprecated alias kept so pre-v1.4 call sites compile.
 
 ## Gotchas
 
-- **`AMBILIGHT_CAPTURE_PERMISSION_DENIED` means the macOS Screen Recording permission is missing**, not that capture is broken. It needs a user trip to System Settings, and the app cannot grant it.
+- **`AMBILIGHT_CAPTURE_PERMISSION_DENIED` means the macOS Screen Recording permission is missing**, not that capture is broken. It needs a user trip to System Settings, and the app cannot grant it. It is now only produced after a real preflight; a ScreenCaptureKit failure *with* permission granted is `AMBILIGHT_CAPTURE_SHAREABLE_CONTENT_FAILED` instead, usually a wedged `replayd`.
+- **`list_displays` needs no permission, so a denied user still sees a full display picker.** It reads Tauri's `available_monitors()`, not ScreenCaptureKit. The picker being populated proves nothing about whether capture will produce frames.
 - **Worker lifecycle is traceable in the log and should be read before guessing.** `[apply_mode_change]` for mode activation, `[ambilight-worker]` for the capture worker, `[stop-worker]` and `[stop_previous]` for teardown.
 - **A frontend payload arriving without an LED count falls back to the persisted value.** The line `led_calibration fallback engaged — payload_total_leds=0` means the frontend sent nothing usable and the backend read `shell-state.json` instead. The fallback is deliberate — an invalid external input gets an explicit fallback, never a silent default — but it firing on every startup would mean something upstream is wrong.
 - **Windows' capture-control `Drop` detaches its stop onto its own thread.** `CaptureControl::stop()` both signals and joins the WGC message-loop thread, an indeterminate wait. That `Drop` runs on the Tauri command thread during a mode switch, so calling `stop()` inline would freeze the caller — falsifying the non-blocking contract the macOS sibling (`MacOSLiveFrameSource`) already honours. No grace-period sleep is needed the way macOS needs 150 ms: that sleep guards a DispatchQueue ref-count race specific to `SCStream`, which `windows-capture` has no equivalent of.

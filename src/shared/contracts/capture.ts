@@ -2,7 +2,10 @@
  *  `SOLID_MODE_APPLY_FAILED`, never codes of their own. The `LED_OUTPUT_*` family
  *  shares the field without being capture reasons — see `LedOutputError::as_reason`. */
 export const AMBILIGHT_CAPTURE_REASON = {
+  /** Only ever produced after a real `CGPreflightScreenCaptureAccess` probe. */
   PERMISSION_DENIED: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+  /** ScreenCaptureKit failed *with* permission granted — not a consent problem. */
+  SHAREABLE_CONTENT_FAILED: "AMBILIGHT_CAPTURE_SHAREABLE_CONTENT_FAILED",
   MONITOR_NOT_FOUND: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
   UNSUPPORTED_PLATFORM: "AMBILIGHT_CAPTURE_UNSUPPORTED_PLATFORM",
   FRAME_UNAVAILABLE: "AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE",
@@ -31,10 +34,10 @@ export const AMBILIGHT_CAPTURE_REASON = {
 export type AmbilightCaptureReason =
   (typeof AMBILIGHT_CAPTURE_REASON)[keyof typeof AMBILIGHT_CAPTURE_REASON];
 
-/** What the user can do about it — 24 reasons, 6 buckets, because most are log-only. */
+/** What the user can do about it — 25 reasons, 6 buckets, because most are log-only. */
 export const CAPTURE_FAILURE_BUCKET = {
-  /** macOS screen recording. Rust infers this from one failing call, so copy must
-   *  read "check this permission", never "you denied it". */
+  /** macOS screen recording. The preflight cannot separate "denied" from "never
+   *  asked", so copy must read "check this permission", never "you denied it". */
   PERMISSION: "permission",
   /** The chosen display is gone; pick another. */
   DISPLAY: "display",
@@ -59,6 +62,8 @@ const BUCKET_BY_REASON: Readonly<Record<AmbilightCaptureReason, CaptureFailureBu
   // Two different underlying causes on two platforms, neither nameable from
   // here; "toggle it off and on" is the only honest advice either way.
   [AMBILIGHT_CAPTURE_REASON.SESSION_START_FAILED]: CAPTURE_FAILURE_BUCKET.TRANSIENT,
+  // Usually a wedged `replayd`, which a restart of the stream does clear.
+  [AMBILIGHT_CAPTURE_REASON.SHAREABLE_CONTENT_FAILED]: CAPTURE_FAILURE_BUCKET.TRANSIENT,
   [AMBILIGHT_CAPTURE_REASON.FRAME_LOCK_FAILED]: CAPTURE_FAILURE_BUCKET.INTERNAL,
   [AMBILIGHT_CAPTURE_REASON.FRAME_BUFFER_FAILED]: CAPTURE_FAILURE_BUCKET.INTERNAL,
   [AMBILIGHT_CAPTURE_REASON.PIXEL_BUFFER_INVALID]: CAPTURE_FAILURE_BUCKET.INTERNAL,
@@ -109,4 +114,53 @@ export function describeCaptureFailure(details: string | null | undefined): Capt
     bucket: classifyCaptureFailure(details),
     reason: details?.trim() ?? "",
   };
+}
+
+// ---------------------------------------------------------------------------
+// Screen-recording permission (macOS TCC)
+// ---------------------------------------------------------------------------
+
+export const CAPTURE_COMMANDS = {
+  /** Non-prompting probe. Never throws; safe to call before every start. */
+  GET_SCREEN_CAPTURE_PERMISSION: "get_screen_capture_permission",
+  /** Deep-links the Screen Recording pane. No-op code off macOS. */
+  OPEN_SCREEN_CAPTURE_SETTINGS: "open_screen_capture_settings",
+} as const;
+
+export type CaptureCommandId = (typeof CAPTURE_COMMANDS)[keyof typeof CAPTURE_COMMANDS];
+
+export const SCREEN_CAPTURE_PERMISSION_STATUS = {
+  GRANTED: "SCREEN_CAPTURE_PERMISSION_GRANTED",
+  /** Denied **or** never asked — `CGPreflightScreenCaptureAccess` cannot tell
+   *  the two apart, so copy must stay "check this", never "you denied it". */
+  DENIED: "SCREEN_CAPTURE_PERMISSION_DENIED",
+  /** Windows / X11: no consent gate exists, so there is nothing to offer. */
+  NOT_REQUIRED: "SCREEN_CAPTURE_PERMISSION_NOT_REQUIRED",
+} as const;
+
+export type ScreenCapturePermissionCode =
+  (typeof SCREEN_CAPTURE_PERMISSION_STATUS)[keyof typeof SCREEN_CAPTURE_PERMISSION_STATUS];
+
+export interface ScreenCapturePermissionResult {
+  code: ScreenCapturePermissionCode;
+}
+
+export const SCREEN_CAPTURE_SETTINGS_STATUS = {
+  OPENED: "SCREEN_CAPTURE_SETTINGS_OPENED",
+  UNSUPPORTED: "SCREEN_CAPTURE_SETTINGS_UNSUPPORTED",
+  OPEN_FAILED: "SCREEN_CAPTURE_SETTINGS_OPEN_FAILED",
+} as const;
+
+export type ScreenCaptureSettingsCode =
+  (typeof SCREEN_CAPTURE_SETTINGS_STATUS)[keyof typeof SCREEN_CAPTURE_SETTINGS_STATUS];
+
+export interface ScreenCaptureSettingsResult {
+  code: ScreenCaptureSettingsCode;
+  message: string | null;
+}
+
+/** Only `DENIED` means the user has something to fix — `NOT_REQUIRED` must
+ *  never raise a permission notice on a platform that has no such permission. */
+export function isScreenCaptureBlocked(code: string): boolean {
+  return code === SCREEN_CAPTURE_PERMISSION_STATUS.DENIED;
 }

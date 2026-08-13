@@ -15,6 +15,7 @@ import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
 import { useTrayIntegration } from "./features/shell/useTrayIntegration";
 import { useShellBootstrap } from "./features/shell/useShellBootstrap";
+import { openScreenCaptureSettings } from "./features/mode/captureApi";
 import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useModeHotReload } from "./features/mode/state/useModeHotReload";
@@ -424,6 +425,7 @@ function App() {
         stopFailedTargets={mode.stopFailedNotice}
         startFailure={mode.startFailedNotice}
         hueColorNotice={hueColorNotice}
+        onOpenCaptureSettings={() => void openScreenCaptureSettings()}
       />
     </>
   );

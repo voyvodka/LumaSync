@@ -14,6 +14,11 @@ const startHueMock = vi.fn();
 const setHueSolidColorMock = vi.fn();
 const saveShellStateMock = vi.fn();
 const loadShellStateMock = vi.fn();
+const getScreenCapturePermissionMock = vi.fn();
+
+vi.mock("../../captureApi", () => ({
+  getScreenCapturePermission: () => getScreenCapturePermissionMock(),
+}));
 
 vi.mock("../../modeApi", () => ({
   setLightingMode: (payload: unknown) => setLightingModeMock(payload),
@@ -64,6 +69,9 @@ describe("useLightingModeOrchestrator", () => {
     });
     saveShellStateMock.mockResolvedValue(undefined);
     loadShellStateMock.mockResolvedValue({});
+    getScreenCapturePermissionMock.mockResolvedValue({
+      code: "SCREEN_CAPTURE_PERMISSION_GRANTED",
+    });
   });
 
   afterEach(() => {
@@ -313,6 +321,67 @@ describe("useLightingModeOrchestrator", () => {
         await vi.advanceTimersByTimeAsync(8_000);
       });
       expect(result.current.startFailedNotice).toBeNull();
+    });
+  });
+
+  describe("screen-recording preflight", () => {
+    const savedCalibration = {
+      totalLeds: 60,
+    } as unknown as LightingModeOrchestratorInput["savedCalibration"];
+
+    it("raises the permission notice before the start is attempted", async () => {
+      getScreenCapturePermissionMock.mockResolvedValue({
+        code: "SCREEN_CAPTURE_PERMISSION_DENIED",
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toEqual({
+        bucket: "permission",
+        reason: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+      });
+    });
+
+    it("still dispatches the start when denied — the OS prompt only fires there", async () => {
+      getScreenCapturePermissionMock.mockResolvedValue({
+        code: "SCREEN_CAPTURE_PERMISSION_DENIED",
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(setLightingModeMock).toHaveBeenCalled();
+    });
+
+    it("stays silent on a platform with no consent gate", async () => {
+      getScreenCapturePermissionMock.mockResolvedValue({
+        code: "SCREEN_CAPTURE_PERMISSION_NOT_REQUIRED",
+      });
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toBeNull();
+    });
+
+    it("does not probe for a Solid transition — nothing captures the screen", async () => {
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({
+          kind: LIGHTING_MODE_KIND.SOLID,
+          solid: { r: 1, g: 2, b: 3, brightness: 1 },
+        });
+      });
+
+      expect(getScreenCapturePermissionMock).not.toHaveBeenCalled();
     });
   });
 
