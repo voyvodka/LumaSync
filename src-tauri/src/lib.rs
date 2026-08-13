@@ -77,9 +77,7 @@ use commands::platform::open_log_dir;
 use commands::room_map::hue_zone::{
     assign_channel_to_hue_zone, create_hue_zone, delete_hue_zone, update_hue_zone,
 };
-use commands::room_map::save_load::{
-    copy_background_image, load_room_map, save_room_map, update_hue_channel_positions,
-};
+use commands::room_map::save_load::{copy_background_image, update_hue_channel_positions};
 use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::screen_capture_permission::{
     get_screen_capture_permission, open_screen_capture_settings,
@@ -749,8 +747,6 @@ pub fn run() {
             open_display_overlay,
             close_display_overlay,
             update_display_overlay_preview,
-            save_room_map,
-            load_room_map,
             copy_background_image,
             update_hue_channel_positions,
             create_hue_zone,

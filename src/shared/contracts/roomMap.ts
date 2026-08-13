@@ -20,21 +20,12 @@
 // Room Map Commands
 // ---------------------------------------------------------------------------
 
+/** Room-map persistence is not on this surface — the config round-trips through
+ * the shellStore (`useRoomMapPersist`), so the only room-map command is the
+ * background-image copy, which needs filesystem access the webview lacks. */
 export const ROOM_MAP_COMMANDS = {
-  SAVE: "save_room_map",
-  LOAD: "load_room_map",
   COPY_BACKGROUND_IMAGE: "copy_background_image",
 } as const;
-
-/** `save_room_map` and `load_room_map` are unconditional stubs — this is the
- * only code either one has ever returned. Persistence lives in the shellStore
- * instead, so both commands are candidates for deletion, not implementation. */
-export const ROOM_MAP_PERSISTENCE_STATUS = {
-  STUB_NOT_IMPLEMENTED: "STUB_NOT_IMPLEMENTED",
-} as const;
-
-export type RoomMapPersistenceStatusCode =
-  (typeof ROOM_MAP_PERSISTENCE_STATUS)[keyof typeof ROOM_MAP_PERSISTENCE_STATUS];
 
 // ---------------------------------------------------------------------------
 // Hue Channel Placement
@@ -477,7 +468,7 @@ export interface CommandStatus {
   details: string | null;
 }
 
-/** Response for the four Hue zone authoring commands; `zones`/`channels` are echoed back for the next `save_room_map`. */
+/** Response for the four Hue zone authoring commands; `zones`/`channels` are echoed back for the next shellStore write. */
 export interface HueZoneCommandResult {
   status: {
     code: HueZoneStatusCode;
