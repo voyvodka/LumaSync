@@ -1,8 +1,12 @@
 # Codes declared in src/shared/contracts/** with no Rust producer.
 #
-# Ratchet, not a suppression list. This file may only SHRINK: a listed code that
-# gains a producer (or is removed) FAILS the verifier until the line is deleted.
-# A new undeclared-producer code that is not listed here fails immediately.
+# Ratchet, not a suppression list. A listed code that gains a producer (or is
+# removed) FAILS the verifier until the line is deleted, and a new undeclared
+# producer that is not listed here fails immediately.
+#
+# The file holds two kinds of entry. MISSING PRODUCER lines are defects and may
+# only SHRINK. "Legitimate" lines are frontend-minted codes that are declared and
+# never on the wire; adding one is allowed, and is the only allowed growth.
 #
 # Blank lines and `#` comments ignored. One code per line, sorted.
 
