@@ -116,12 +116,8 @@ interface RoomDockPanelProps {
    */
   onNavigateToDevices?: () => void;
 
-  // ── Wave 4-D inspector hooks ──────────────────────────────────────
-  // Type-aware inspectors live in `ObjectInspectors.tsx` and call back
-  // through these patches. Each callback is optional so the dock keeps
-  // working under read-only embeds (e.g. previews) — when a callback is
-  // missing, the inspector still renders but the affected control is
-  // disabled.
+  // Every inspector callback is optional on purpose: a read-only embed still
+  // renders the inspector, with the affected control disabled.
   /** Patch a furniture placement by id (rotation, type, w/h). */
   onUpdateFurniture?: (id: string, patch: Partial<FurniturePlacement>) => void;
   /** Patch the TV anchor (single instance, no id). */
@@ -135,7 +131,6 @@ interface RoomDockPanelProps {
   /** Rename an image layer by id. */
   onRenameImageLayer?: (id: string, label: string) => void;
 
-  // ── Wave 4-E props ────────────────────────────────────────────────
   /**
    * Currently bound USB port name; null when nothing is connected.
    * Drives the connection chip rendered in `UsbStripInspector`.
@@ -149,12 +144,9 @@ interface RoomDockPanelProps {
   /** Drop the active USB connection (Disconnect button in inspector). */
   onUsbManage?: () => void;
 
-  // ── Wave 4-G #4 — Hue bridge reachability mirror ─────────────────
   /**
-   * App-level Hue reachability snapshot. Forwarded into
-   * `HueChannelInspector` so the channel inspector renders the same
-   * "Bridge online / Bridge offline" chip vocabulary the USB strip
-   * inspector already exposes. `unknown` (default) ⇒ no chip rendered.
+   * App-level Hue reachability, forwarded so `HueChannelInspector` uses the same
+   * chip vocabulary as the USB strip inspector. `unknown` ⇒ no chip rendered.
    */
   hueChannelStatus?: UsbStripConnectionStatus;
 }
@@ -614,23 +606,9 @@ function HueZonesTab(props: {
 
   const dragSupported = !!onAssignChannelToZone;
 
-  // ── Wave 4-G #3 — DnD MIME fallback + onDragEnter ───────────────
-  // Manual test on macOS WebKit (Tauri WKWebView) showed the channel
-  // never landed on the drop target. Two issues piled up:
-  //   1. Custom MIME types (`application/x-lumasync-channel`) are
-  //      stripped from the drag dataTransfer payload by WKWebView's
-  //      security model on cross-element drops, so `getData()`
-  //      returned an empty string and the drop fell through.
-  //   2. Chrome / WebKit both require `preventDefault()` inside
-  //      `onDragEnter` for the drop target to register; otherwise the
-  //      browser cancels the drop with a "no" cursor before
-  //      `onDragOver` ever fires.
-  // The fix mirrors the channel index in BOTH the custom MIME (so a
-  // future agent can sniff for our payload) and `text/plain` (so
-  // WebKit always has a readable string), and wires `onDragEnter` to
-  // call `preventDefault()` in addition to `onDragOver`. Falls back to
-  // the in-memory `dragChannelIndex` if the dataTransfer is empty for
-  // any reason.
+  // The index goes into `text/plain` as well as the custom MIME, and
+  // `onDragEnter` must `preventDefault()` too — WKWebView strips the custom type
+  // and the drop dies without either. See docs/architecture/room-map.md.
   const CHANNEL_MIME = "application/x-lumasync-channel";
 
   const channelDragProps = (ch: HueChannelPlacement) => {
@@ -1076,10 +1054,8 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
 
   const [activeTab, setActiveTab] = useState<DockTab>("objects");
 
-  // Wave 4-D — resolve the active inspector target once. Hue zone wins
-  // (W4-C surface), then the selected object, then empty. v1.5 W4-F2:
-  // logical zones were dropped; dispatcher now reads only Hue zones
-  // from `config.zones[]`.
+  // Resolved once; the priority order and why it was swapped are on
+  // `resolveInspectorTarget` itself.
   const inspectorTarget = resolveInspectorTarget(
     config,
     selectedId,
@@ -1096,17 +1072,9 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     },
   ];
 
-  // W4-I #3 — `key` per selection forces React to unmount the previous
-  // inspector instance and remount a fresh one when the user moves
-  // between objects of the same kind. Without the key the dispatcher
-  // returns the same component identity for two different USB strips
-  // (or two image layers, etc.) and the inner `InspectorNumberField`
-  // local state — which holds the in-flight typed string — leaks from
-  // the previously selected object. Manual report (W4-I bug #3): two
-  // strips on different ports both showed the values of whichever
-  // strip was selected last. The key is `${kind}:${id}` so it changes
-  // any time the active selection swaps to a different concrete
-  // object, even when the kind is unchanged.
+  // `${kind}:${id}`, not just the kind — without the remount, the number field's
+  // in-flight typed string leaks between two objects of the same kind. See
+  // docs/architecture/room-map.md.
   const renderInspector = () => {
     switch (inspectorTarget.kind) {
       case "hueZone": {

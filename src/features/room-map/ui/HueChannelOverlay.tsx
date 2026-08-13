@@ -185,10 +185,8 @@ export function HueChannelOverlay({
   const activeHueZoneRef = useRef(activeHueZone);
   activeHueZoneRef.current = activeHueZone;
 
-  // Manual-test (2026-04-28): channel drag must clamp through the
-  // bound zone's bounds whether or not that zone is selected. Keep a
-  // ref to the full zone list so the drag handler can resolve
-  // `ch.zoneId` → bounding zone without re-running on every render.
+  // The full list, not just the active zone — the drag handler must resolve
+  // `ch.zoneId` for passive zones too. See docs/architecture/room-map.md.
   const allHueZonesRef = useRef(allHueZones ?? []);
   allHueZonesRef.current = allHueZones ?? [];
 
@@ -236,17 +234,9 @@ export function HueChannelOverlay({
     let relX: number | null = null;
     let relY: number | null = null;
 
-    // v1.5 W4-F2 manual-test (2026-04-28): channels bound to a Hue
-    // zone must clamp through that zone's bounding box on EVERY drag,
-    // regardless of whether the zone is the active selection. The
-    // earlier path only enforced the bound when the zone was active —
-    // selecting another zone (or no zone) let the dot drift outside
-    // its parent's box, breaking the zone-relative coordinate
-    // contract on the next save.
-    //
-    // Resolution order: full `allHueZones` list (canonical) → fallback
-    // to `activeHueZone` so callers that don't pass the full list (or
-    // legacy tests) still clamp the active zone correctly.
+    // Clamp through the bound zone on every drag, selected or not — see
+    // docs/architecture/room-map.md. `allHueZones` is canonical; the fallback to
+    // `activeHueZone` covers callers that do not pass the full list.
     const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
     let boundZone = ch?.zoneId
       ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
@@ -267,10 +257,8 @@ export function HueChannelOverlay({
     dr.currentRelX = relX;
     dr.currentRelY = relY;
 
-    // Imperative DOM update for smooth drag — avoids re-render. NaN
-    // guards mirror the render-path defaults (W4-F2 manual-test fix):
-    // a stale ref or zero-room dimension must never stamp `NaN` onto
-    // `style.left/top` mid-drag.
+    // Imperative, to avoid a re-render per move. The NaN guards mirror the
+    // render path — this bypasses it, so it does not inherit them.
     const wrapper = dr.element?.parentElement;
     if (wrapper) {
       const rawLeft = hueToMetres(newX, widthRef.current) * ppmRef.current;
@@ -290,13 +278,9 @@ export function HueChannelOverlay({
 
     const ch = channelsRef.current.find((c) => c.channelIndex === dr.channelIndex);
     if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
-      // v1.5 W4-F2 manual-test (2026-04-28): persist zone-relative
-      // coords for ANY channel bound to a zone, not just the active
-      // one. The clamp in `handlePointerMove` already wrote the
-      // bounded `currentRelX/Y` into `dragRef`, so we just need to
-      // make sure we read them back here whenever `ch.zoneId` is set
-      // and resolves to a known zone (with the same fallback to
-      // `activeHueZone` the move handler uses).
+      // Write-back is zone-relative for ANY bound channel, not just the active
+      // one — the third of the three paths that must agree on the parent zone.
+      // `handlePointerMove` already clamped the values into `dragRef`.
       let boundZone = ch.zoneId
         ? allHueZonesRef.current.find((z) => z.id === ch.zoneId) ?? null
         : null;
@@ -341,11 +325,8 @@ export function HueChannelOverlay({
     return { leftPx, rightPx, topPx, bottomPx, centerLeftPx, centerTopPx, color };
   };
   const zoneBoundsBox = activeHueZone ? computeZoneBoundsBox(activeHueZone) : null;
-  // W4-J #3 — passive zones (every zone except the active one) render
-  // dimmer and without the center-drag handle so the user can see the
-  // full layout at a glance. The active zone keeps full chrome and is
-  // matched by id so the drag-time DOM lookup
-  // (`[data-zone-bounds-id=...]`) still resolves a single element.
+  // Passive zones render dimmer and without the centre handle. Matched by id,
+  // so the drag-time `[data-zone-bounds-id=...]` lookup stays single-element.
   const passiveZones = hidePassiveZoneBounds
     ? []
     : (allHueZones ?? []).filter(
@@ -409,10 +390,8 @@ export function HueChannelOverlay({
               top: zoneBoundsBox.topPx,
               width: zoneBoundsBox.rightPx - zoneBoundsBox.leftPx,
               height: zoneBoundsBox.bottomPx - zoneBoundsBox.topPx,
-              // Wave 4-B (B4) — softer border + lighter fill so the
-              // dashed outline reads as a hint, not a frame. The pinned
-              // zone label chip carries the identity signal; the canvas
-              // tint just nudges the eye towards the bounds.
+              // Deliberately soft: the label chip carries zone identity, so the
+              // outline should read as a hint rather than a frame.
               border: `1px dashed color-mix(in srgb, ${zoneBoundsBox.color} 60%, transparent)`,
               background: `color-mix(in srgb, ${zoneBoundsBox.color} 2%, transparent)`,
               zIndex: 18,
@@ -448,11 +427,8 @@ export function HueChannelOverlay({
               const halfScaleX = Math.abs(activeHueZone.scaleX);
               const halfScaleY = Math.abs(activeHueZone.scaleY);
 
-              // Bug #50/#52(b) — collect every DOM node that must follow
-              // the center: the dashed bounds box AND each channel dot
-              // bound to this zone. Cache their start positions so we can
-              // apply the delta imperatively during pointermove without
-              // a React re-render per move event.
+              // Bugs #50/#52(b) — the bounds box AND every dot bound to this zone
+              // have to follow the centre. See docs/architecture/room-map.md.
               const overlayRoot = target.parentElement;
               const boundsEl = overlayRoot?.querySelector<HTMLDivElement>(
                 `[data-zone-bounds-id="${zoneId}"]`,
@@ -510,10 +486,8 @@ export function HueChannelOverlay({
                   boundsEl.style.left = `${boundsStart.left + deltaLeftPx}px`;
                   boundsEl.style.top = `${boundsStart.top + deltaTopPx}px`;
                 }
-                // Bug #52(b) — every bound channel dot follows by the
-                // same delta. Their persisted zoneRelativePosition is
-                // unchanged; only the world position they project to
-                // moves with the zone.
+                // `zoneRelativePosition` is unchanged — only the world position
+                // it projects to moves with the zone.
                 for (const c of channelStarts) {
                   c.el.style.left = `${c.left + deltaLeftPx}px`;
                   c.el.style.top = `${c.top + deltaTopPx}px`;
@@ -539,13 +513,8 @@ export function HueChannelOverlay({
       )}
 
       {channels.map((ch) => {
-        // ── v1.5 W1-A6 (W4-F2 manual-test 2026-04-28): derive world
-        // position from zone-relative coordinates whenever the channel
-        // is bound to a known Hue zone, regardless of whether that zone
-        // is the active selection. Without this every passive zone's
-        // channels would render at their stale absolute `ch.x/y` coords
-        // and visibly drift away from their parent zone box once the
-        // user moved the zone center.
+        // Render from zone-relative coords for any bound channel: the absolute
+        // `ch.x/y` is stale leftover and passive zones would visibly drift.
         let worldX = ch.x;
         let worldY = ch.y;
         let boundZone = ch.zoneId
@@ -566,13 +535,8 @@ export function HueChannelOverlay({
             1,
           );
         }
-        // v1.5 W4-F2 manual-test (2026-04-28): if any input is NaN
-        // (e.g. an `update_hue_zone` invoke failed mid-drag and left the
-        // zone center stale, or `pxPerMeter` is briefly 0 during mount),
-        // fall back to 0 instead of letting React stamp `NaN` onto the
-        // element's `style.left` — that triggers the
-        // `setValueForStyle: NaN is invalid for left` warning and the
-        // dot drifts off-canvas.
+        // NaN has real sources here (failed mid-drag invoke, `pxPerMeter` 0 at
+        // mount) and React would stamp it into `style.left`. See room-map.md.
         const rawLeftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
         const rawTopPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
         const leftPx = Number.isFinite(rawLeftPx) ? rawLeftPx : 0;

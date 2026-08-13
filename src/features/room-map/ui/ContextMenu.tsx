@@ -38,10 +38,8 @@ export function ContextMenu({ x, y, actions, onClose }: ContextMenuProps) {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    // 8 px breathing room around every viewport edge — large enough to
-    // dodge titlebar / status-bar chrome while still letting the menu
-    // hug the cursor on small windows. Matches `ls-design-language`'s
-    // safe-zone guidance for floating panels.
+    // Enough to clear the titlebar and status-bar chrome without stopping the
+    // menu hugging the cursor at compact width.
     const pad = 8;
     let left = x;
     let top = y;
