@@ -70,6 +70,7 @@ export default {
         PORT_SUPPORTED: "Port support",
         CONNECT_AND_VERIFY: "Connect and verify",
         HANDSHAKE: "Firmware handshake",
+        HEALTH_CHECK_WORKER: "Health check worker",
       },
       outcome: {
         pass: "Pass",

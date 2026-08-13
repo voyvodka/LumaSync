@@ -73,6 +73,7 @@ const device: Catalogue<typeof enDevice> = {
         PORT_SUPPORTED: "Port desteği",
         CONNECT_AND_VERIFY: "Bağlan ve doğrula",
         HANDSHAKE: "Firmware el sıkışması",
+        HEALTH_CHECK_WORKER: "Sağlık kontrolü işçisi",
       },
       outcome: {
         pass: "Geçti",

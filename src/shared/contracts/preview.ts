@@ -255,6 +255,16 @@ export const CONTROL_POPUP_STATUS = {
 export type ControlPopupStatusCode =
   (typeof CONTROL_POPUP_STATUS)[keyof typeof CONTROL_POPUP_STATUS];
 
+/** Thrown as `Err("CODE: detail")` before any status object is built, so a
+ * `switch` on {@link TWIN_OVERLAY_STATUS} will never see them. */
+export const PREVIEW_COMMAND_ERRORS = {
+  TWIN_STATE_LOCK_FAILED: "LED_TWIN_STATE_LOCK_FAILED",
+  TWIN_OVERLAY_SERIALIZE: "TWIN_OVERLAY_SERIALIZE",
+} as const;
+
+export type PreviewCommandErrorCode =
+  (typeof PREVIEW_COMMAND_ERRORS)[keyof typeof PREVIEW_COMMAND_ERRORS];
+
 // ---------------------------------------------------------------------------
 // Window labels + event names
 // ---------------------------------------------------------------------------

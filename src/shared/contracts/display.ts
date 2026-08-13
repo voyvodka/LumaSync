@@ -69,6 +69,24 @@ export type DisplayOverlayStatusCode =
  * out of {@link DISPLAY_OVERLAY_STATUS} so that union stays exactly the wire set. */
 export const OVERLAY_NO_DISPLAY = "OVERLAY_NO_DISPLAY" as const;
 
+/** Thrown by `list_displays` / `open_display_overlay` / `close_display_overlay` /
+ * `update_display_overlay_preview` as `Err("CODE: detail")`. Rejected before any
+ * `overlay_result` is built, which is why they are not in {@link DISPLAY_OVERLAY_STATUS}. */
+export const DISPLAY_COMMAND_ERRORS = {
+  DISPLAY_LIST_FAILED: "DISPLAY_LIST_FAILED",
+  OVERLAY_STATE_LOCK_FAILED: "OVERLAY_STATE_LOCK_FAILED",
+  OVERLAY_PREVIEW_EVAL_FAILED: "OVERLAY_PREVIEW_EVAL_FAILED",
+  OVERLAY_PREVIEW_SERIALIZE_FAILED: "OVERLAY_PREVIEW_SERIALIZE_FAILED",
+  OVERLAY_WINDOW_OPEN_FAILED: "OVERLAY_WINDOW_OPEN_FAILED",
+  OVERLAY_WINDOW_POSITION_FAILED: "OVERLAY_WINDOW_POSITION_FAILED",
+  OVERLAY_WINDOW_SIZE_FAILED: "OVERLAY_WINDOW_SIZE_FAILED",
+  OVERLAY_WINDOW_CLICKTHROUGH_FAILED: "OVERLAY_WINDOW_CLICKTHROUGH_FAILED",
+  OVERLAY_WINDOW_CLOSE_FAILED: "OVERLAY_WINDOW_CLOSE_FAILED",
+} as const;
+
+export type DisplayCommandErrorCode =
+  (typeof DISPLAY_COMMAND_ERRORS)[keyof typeof DISPLAY_COMMAND_ERRORS];
+
 /** What `DisplayTargetSnapshot.blockedCode` can hold: a wire code, or the
  * frontend's own "there was nothing to open". */
 export type DisplayTargetBlockedCode =

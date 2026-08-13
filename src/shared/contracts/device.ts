@@ -85,15 +85,33 @@ export type SerialPortListStatusCode =
   (typeof SERIAL_PORT_LIST_STATUS)[keyof typeof SERIAL_PORT_LIST_STATUS];
 
 /** Serial port open outcome, shared by `connect_serial_port` and the
- * `CONNECT_AND_VERIFY` health step. `FAILED` is the catch-all arm — Rust's
- * `connect_error_code` narrows recognised `serialport` errors first. */
+ * `CONNECT_AND_VERIFY` health step. `FAILED` is the catch-all — Rust's
+ * `connect_error_code` narrows to the others first, plus `PORT_NOT_FOUND`
+ * from {@link DEVICE_ERROR_CODES}. All land on one `status.code`. */
 export const SERIAL_CONNECT_STATUS = {
   OK: "CONNECT_OK",
   FAILED: "CONNECT_FAILED",
+  /** No connect has been attempted yet — the value `SerialConnectionStatus`
+   * carries from first launch until the first `connect_serial_port`. */
+  IDLE: "NOT_CONNECTED",
+  INVALID_INPUT: "CONNECT_INVALID_INPUT",
+  /** Typically a udev/dialout permission gap on Linux, not a user denial. */
+  PERMISSION_DENIED: "CONNECT_PERMISSION_DENIED",
+  TIMEOUT: "CONNECT_TIMEOUT",
+  IO_ERROR: "CONNECT_IO_ERROR",
 } as const;
 
 export type SerialConnectStatusCode =
   (typeof SERIAL_CONNECT_STATUS)[keyof typeof SERIAL_CONNECT_STATUS];
+
+/** Thrown by `get_serial_connection_status` as `Err(String)`, formatted
+ * `"CODE: detail"`. A `catch` sees these; a `switch (status.code)` never will. */
+export const SERIAL_COMMAND_ERRORS = {
+  STATUS_READ_FAILED: "STATUS_READ_FAILED",
+} as const;
+
+export type SerialCommandErrorCode =
+  (typeof SERIAL_COMMAND_ERRORS)[keyof typeof SERIAL_COMMAND_ERRORS];
 
 /** In-flight device operation kind, used to gate concurrent UI actions. */
 export const DEVICE_OPERATION = {
@@ -105,11 +123,16 @@ export const DEVICE_OPERATION = {
 
 export type DeviceOperation = (typeof DEVICE_OPERATION)[keyof typeof DEVICE_OPERATION];
 
-/** Ordered stages of the serial health-check flow. */
+/** Ordered stages of the serial health-check flow. `HANDSHAKE` has no
+ * underscore, so the verifier's code harvest cannot see it — the pinned
+ * `step:` harvest is the only thing keeping it declared. */
 export const DEVICE_HEALTH_STEPS = {
   PORT_VISIBLE: "PORT_VISIBLE",
   PORT_SUPPORTED: "PORT_SUPPORTED",
   CONNECT_AND_VERIFY: "CONNECT_AND_VERIFY",
+  HANDSHAKE: "HANDSHAKE",
+  /** Not a stage: the sole step reported when the blocking worker panics. */
+  HEALTH_CHECK_WORKER: "HEALTH_CHECK_WORKER",
 } as const;
 
 export type DeviceHealthStep = (typeof DEVICE_HEALTH_STEPS)[keyof typeof DEVICE_HEALTH_STEPS];
@@ -256,6 +279,9 @@ export const SERIAL_HEALTH_CODES = {
   VERSION_MISMATCH: "SERIAL_HEALTH_VERSION_MISMATCH",
   FIRMWARE_MISMATCH: "SERIAL_HEALTH_FIRMWARE_MISMATCH",
   PROTOCOL_ERROR: "SERIAL_HEALTH_PROTOCOL_ERROR",
+  /** `spawn_blocking` join failure — reported on the `HEALTH_CHECK_WORKER`
+   * step, which replaces the whole step list rather than joining it. */
+  WORKER_PANIC: "SERIAL_HEALTH_WORKER_PANIC",
 } as const;
 
 export type SerialHealthCode = (typeof SERIAL_HEALTH_CODES)[keyof typeof SERIAL_HEALTH_CODES];
