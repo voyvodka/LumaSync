@@ -1408,13 +1408,32 @@ function stripComments(source) {
     .join("\n");
 }
 
+/** Cut each `#[cfg(test)] mod` block, keeping what follows — truncating at the
+ *  first one hid two commands and five codes at the tail of calibration.rs.
+ *  Closes on a column-0 `}` so a `format!("{x}")` cannot unbalance a counter. */
+function stripRustTestModules(source) {
+  const lines = source.split("\n");
+  const kept = [];
+  let inTestModule = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (!inTestModule && /^#\[cfg\(test\)\]\s*$/.test(lines[i]) && /^mod\s+\w+/.test(lines[i + 1] ?? "")) {
+      inTestModule = true;
+      continue;
+    }
+    if (inTestModule) {
+      if (lines[i] === "}") inTestModule = false;
+      continue;
+    }
+    kept.push(lines[i]);
+  }
+  return kept.join("\n");
+}
+
 function harvestCodes(files) {
   const found = new Set();
   for (const file of files) {
     let text = stripComments(readFileSync(file, "utf-8"));
-    // The test MODULE, not any `#[cfg(test)]` — four files carry that attribute
-    // on a plain item, which truncated lighting_mode.rs at line 58 of ~3400.
-    if (file.endsWith(".rs")) text = text.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+    if (file.endsWith(".rs")) text = stripRustTestModules(text);
     // `"CODE: detail"` counts too — Err arms carry the code as a prefix (#42).
     for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})(?:"|:\s)/g)) {
       const code = m[1];

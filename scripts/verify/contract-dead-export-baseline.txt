@@ -21,6 +21,7 @@
 # Declared 2026-08-13 alongside the codes Rust already emits. Nothing catches
 # these yet — they are thrown Err(String) prefixes with no handler on the
 # frontend. Each line disappears when something first renders that failure.
+calibration.ts CALIBRATION_COMMAND_ERRORS
 device.ts SERIAL_COMMAND_ERRORS
 display.ts DISPLAY_COMMAND_ERRORS
 lighting.ts LIGHTING_COMMAND_ERRORS
@@ -41,11 +42,6 @@ hue.ts HUE_TRANSPORT_REASON
 device.ts SUPPORTED_CONTROLLER_IDS
 device.ts DEVICE_STORE_KEYS
 device.ts WLED_DEFAULT_WARLS_PORT
-
-# The live health surface is `HealthCheckResult` in deviceConnectionApi.ts, and
-# it types `code` as bare `string` — so nothing links these five to the runtime
-# but a JSDoc. EN+TR strings exist and are never looked up. Two also have no
-# Rust producer (contract-phantom-baseline.txt). Typing that field is the fix.
 
 # Hue vocabulary with no reader. HUE_FAULT_CODES is the HUE-NET-xx / HUE-AUTH-xx
 # taxonomy nothing classifies into; the intensity coefficients are applied
