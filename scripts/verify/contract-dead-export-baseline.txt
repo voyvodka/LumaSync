@@ -49,9 +49,8 @@ device.ts WLED_DEFAULT_WARLS_PORT
 
 # Hue vocabulary with no reader. HUE_FAULT_CODES is the HUE-NET-xx / HUE-AUTH-xx
 # taxonomy nothing classifies into; the intensity coefficients are applied
-# Rust-side; the archetype sentinel is only used by Rust's whitelist fallback.
+# Rust-side.
 hue.ts HUE_FAULT_CODES
-hue.ts HUE_ARCHETYPE_FALLBACK
 hue.ts HUE_INTENSITY_PRESET_COEFFICIENTS
 hue.ts HUE_RUNTIME_STATUS_FAMILY
 

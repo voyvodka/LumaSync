@@ -123,12 +123,10 @@ mod network {
 #[allow(dead_code)]
 mod hue_onboarding;
 
-use std::collections::HashMap;
-
 use hue_http::{is_hue_unauthorized_body, HueHttpFault};
 use hue_onboarding::{
-    build_room_archetype_index, parse_area_list_payload, parse_credentials_validation_payload,
-    parse_discovery_payload, parse_pairing_payload, verify_hue_bridge_ip_input,
+    parse_area_list_payload, parse_credentials_validation_payload, parse_discovery_payload,
+    parse_pairing_payload, verify_hue_bridge_ip_input,
 };
 
 #[test]
@@ -220,138 +218,24 @@ fn pair_hue_bridge_unknown_error_type_falls_through_to_failed() {
     assert_eq!(response.status.code, "HUE_PAIRING_FAILED");
 }
 
-// ---------------------------------------------------------------------------
-// G7 — room archetype enrichment (v1.4 Wave 3)
-// ---------------------------------------------------------------------------
-//
-// `build_room_archetype_index` maps every service rid referenced by a
-// CLIP v2 /resource/room payload to its parent room's archetype; then
-// `parse_area_list_payload` consumes that index to annotate each
-// entertainment area. Cover both golden paths and the whitelist
-// fallback for archetypes the frontend contract does not know.
-
 #[test]
-fn build_room_archetype_index_maps_service_rids() {
-    let payload = r#"{
-      "data": [
-        {
-          "id": "room-1",
-          "metadata": {"name": "Living", "archetype": "living_room"},
-          "services": [
-            {"rid": "svc-a", "rtype": "grouped_light"},
-            {"rid": "svc-b", "rtype": "light"}
-          ]
-        },
-        {
-          "id": "room-2",
-          "metadata": {"name": "Studio", "archetype": "man_cave"},
-          "services": [
-            {"rid": "svc-c", "rtype": "grouped_light"}
-          ]
-        }
-      ]
-    }"#;
-
-    let index = build_room_archetype_index(payload.to_string());
-    assert_eq!(index.get("svc-a"), Some(&"living_room".to_string()));
-    assert_eq!(index.get("svc-b"), Some(&"living_room".to_string()));
-    assert_eq!(index.get("svc-c"), Some(&"man_cave".to_string()));
-}
-
-#[test]
-fn build_room_archetype_index_normalizes_unknown_archetype_to_other() {
-    let payload = r#"{
-      "data": [
-        {
-          "id": "room-1",
-          "metadata": {"name": "Strange", "archetype": "space_station"},
-          "services": [{"rid": "svc-x", "rtype": "grouped_light"}]
-        }
-      ]
-    }"#;
-
-    let index = build_room_archetype_index(payload.to_string());
-    assert_eq!(index.get("svc-x"), Some(&"other".to_string()));
-}
-
-#[test]
-fn build_room_archetype_index_tolerates_malformed_payload() {
-    assert!(build_room_archetype_index(String::new()).is_empty());
-    assert!(build_room_archetype_index("not json".to_string()).is_empty());
-    assert!(build_room_archetype_index("{}".to_string()).is_empty());
-}
-
-#[test]
-fn parse_area_list_payload_enriches_area_with_archetype_from_index() {
+fn parse_area_list_payload_maps_core_area_fields() {
     let area_payload = r#"{
       "data": [
         {
           "id": "area-1",
           "metadata": {"name": "Living TV"},
-          "channels": [{"channel_id": 0}, {"channel_id": 1}],
-          "light_services": [
-            {"rid": "svc-a", "rtype": "light"}
-          ]
+          "channels": [{"channel_id": 0}, {"channel_id": 1}]
         }
       ]
     }"#;
 
-    let mut index = HashMap::new();
-    index.insert("svc-a".to_string(), "living_room".to_string());
-
-    let areas = parse_area_list_payload(area_payload, &index).expect("area list should parse");
+    let areas = parse_area_list_payload(area_payload).expect("area list should parse");
     assert_eq!(areas.len(), 1);
     assert_eq!(areas[0].id, "area-1");
     assert_eq!(areas[0].name, "Living TV");
-    assert_eq!(areas[0].archetype.as_deref(), Some("living_room"));
     assert_eq!(areas[0].channel_count, 2);
     assert!(!areas[0].active_streamer);
-}
-
-#[test]
-fn parse_area_list_payload_leaves_archetype_none_when_no_service_matches() {
-    let area_payload = r#"{
-      "data": [
-        {
-          "id": "area-1",
-          "metadata": {"name": "Orphan"},
-          "channels": [],
-          "light_services": [{"rid": "svc-unknown", "rtype": "light"}]
-        }
-      ]
-    }"#;
-
-    let index = HashMap::new();
-    let areas = parse_area_list_payload(area_payload, &index).expect("area list should parse");
-    assert_eq!(areas.len(), 1);
-    assert!(areas[0].archetype.is_none());
-}
-
-#[test]
-fn parse_area_list_payload_resolves_archetype_via_service_locations() {
-    // CLIP v2 sometimes nests the service reference inside
-    // locations.service_locations[].service instead of light_services —
-    // cover that path explicitly.
-    let area_payload = r#"{
-      "data": [
-        {
-          "id": "area-1",
-          "metadata": {"name": "Legacy"},
-          "channels": [],
-          "locations": {
-            "service_locations": [
-              {"service": {"rid": "svc-a", "rtype": "light"}}
-            ]
-          }
-        }
-      ]
-    }"#;
-
-    let mut index = HashMap::new();
-    index.insert("svc-a".to_string(), "bedroom".to_string());
-
-    let areas = parse_area_list_payload(area_payload, &index).expect("area list should parse");
-    assert_eq!(areas[0].archetype.as_deref(), Some("bedroom"));
 }
 
 #[test]

@@ -7,7 +7,6 @@ import {
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeStatus,
-  type HueRuntimeTelemetry,
 } from "@/shared/contracts/hue";
 import { type ShellState } from "@/shared/contracts/shell";
 import {
@@ -172,25 +171,6 @@ describe("lighting mode contracts", () => {
     expect(runtimeStatus.triggerSource).toBe("mode_control");
   });
 
-  it("keeps Hue target and aggregate telemetry rows in one typed runtime contract", () => {
-    const telemetry: HueRuntimeTelemetry = {
-      hue: {
-        target: "hue",
-        state: "Running",
-        code: "HUE_STREAM_RUNNING",
-        message: "Hue stream is active.",
-      },
-      aggregate: {
-        activeTargets: ["hue", "usb"],
-        runningCount: 2,
-        reconnectingCount: 0,
-        failedCount: 0,
-      },
-    };
-
-    expect(telemetry.hue.target).toBe("hue");
-    expect(telemetry.aggregate.activeTargets).toContain("usb");
-  });
 });
 
 describe("normalizeOutputTargets (INV-33)", () => {
