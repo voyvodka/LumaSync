@@ -14,6 +14,9 @@ import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
 import { TitleBar, TITLE_BAR_HEIGHT_PX } from "./features/shell/TitleBar";
 import { StatusBar, statusBarHeightPx } from "./features/shell/StatusBar";
+import { useLightingModePersistence } from "./features/mode/state/useLightingModePersistence";
+import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
+import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import { buildStatusItems } from "./features/shell/statusItems";
 import { ShellNotices } from "./features/shell/ShellNotices";
 import { OnboardingFlow } from "./features/onboarding/ui/OnboardingFlow";
@@ -56,7 +59,6 @@ import {
   stopLighting,
   stopHue,
 } from "./features/mode/modeApi";
-import { validateHueCredentials } from "./features/hue/hueOnboardingApi";
 import { readHueStreamStatus } from "./features/hue/hueReadCache";
 import {
   applyRuntimeResultToTargets,
@@ -87,10 +89,7 @@ import {
 import {
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_TRIGGER_SOURCE,
-  HUE_STATUS,
-  isHueSolidColorUnapplied,
   type HueRuntimeTarget,
-  type HueSolidColorStatusCode,
 } from "./shared/contracts/hue";
 import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "./shared/contracts/hue";
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "./shared/contracts/device";
@@ -109,7 +108,6 @@ import {
 import { showNotification } from "./features/platform/platformApi";
 import { i18next } from "./features/i18n/i18n";
 
-const LIGHTING_MODE_PERSIST_DEBOUNCE_MS = 300;
 /**
  * Cadence while the stream is alive. NOT a local read: `get_hue_stream_status`
  * runs a full `check_hue_stream_readiness` round-trip against the bridge on
@@ -123,8 +121,6 @@ const HUE_STREAM_HEALTH_POLL_MS = 5_000;
  * before any network call, so it costs one IPC hop and no bridge traffic.
  */
 const HUE_STREAM_HEALTH_RECOVERY_POLL_MS = 15_000;
-/** Interval for checking bridge reachability when configured but stream is not active. */
-const HUE_BRIDGE_REACHABILITY_POLL_MS = 30_000;
 /** How long the "USB unplugged, continuing with remaining targets" toast stays up. */
 const USB_DISCONNECT_NOTICE_MS = 5_000;
 /** How long the "stop failed for these targets" toast stays up. */
@@ -167,7 +163,6 @@ function App() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  const [hueReachable, setHueReachable] = useState(false);
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   const { isConnected } = useDeviceConnection();
   const wasConnectedRef = useRef(false);
@@ -185,9 +180,6 @@ function App() {
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
   const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
-  /** Set when a Solid colour was accepted by the runtime but never reached the bridge. */
-  const [hueColorNotice, setHueColorNotice] = useState<HueSolidColorStatusCode | null>(null);
-  const hueColorNoticeTimeoutRef = useRef<number | null>(null);
 
   // v1.5 W2-B4 — first-run onboarding state. The flag is hydrated from
   // shellStore on bootstrap; a fresh user (`undefined` / `false`) sees
@@ -229,7 +221,6 @@ function App() {
    * rationale.
    */
   const lastSetLightingModeAtRef = useRef<number>(0);
-  const persistLightingModeTimeoutRef = useRef<number | null>(null);
   const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
   // Tray quick-action refs — always hold latest values for use in stable listeners
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
@@ -321,8 +312,6 @@ function App() {
     [readRuntimeConfigSnapshot],
   );
 
-  const lastPendingModeRef = useRef<LightingModeConfig | null>(null);
-
   /**
    * Idempotent funnel for every `setLightingMode` Tauri invoke (v1.5
    * fix #45 + Ambilight-spam follow-up).
@@ -395,47 +384,8 @@ function App() {
   );
   dispatchLightingModeRef.current = dispatchSetLightingMode;
 
-  // Surfaces the one outcome the user cannot otherwise see: the picker moved,
-  // the bulbs did not. Queued-pending-stream stays silent — it self-resolves.
-  const reportHueSolidColorStatus = useCallback((code: string) => {
-    if (hueColorNoticeTimeoutRef.current !== null) {
-      window.clearTimeout(hueColorNoticeTimeoutRef.current);
-      hueColorNoticeTimeoutRef.current = null;
-    }
-    if (!isHueSolidColorUnapplied(code)) {
-      setHueColorNotice(null);
-      return;
-    }
-    console.warn(`[LumaSync] Hue solid color not applied: ${code}`);
-    setHueColorNotice(code as HueSolidColorStatusCode);
-    hueColorNoticeTimeoutRef.current = window.setTimeout(() => {
-      hueColorNoticeTimeoutRef.current = null;
-      setHueColorNotice(null);
-    }, 5_000);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (hueColorNoticeTimeoutRef.current !== null) {
-        window.clearTimeout(hueColorNoticeTimeoutRef.current);
-      }
-    },
-    [],
-  );
-
-  const scheduleLightingModePersist = useCallback((mode: LightingModeConfig) => {
-    lastPendingModeRef.current = mode;
-    if (persistLightingModeTimeoutRef.current !== null) {
-      window.clearTimeout(persistLightingModeTimeoutRef.current);
-      persistLightingModeTimeoutRef.current = null;
-    }
-    persistLightingModeTimeoutRef.current = window.setTimeout(() => {
-      persistLightingModeTimeoutRef.current = null;
-      const pending = lastPendingModeRef.current;
-      lastPendingModeRef.current = null;
-      if (pending) void saveShellState({ lightingMode: pending });
-    }, LIGHTING_MODE_PERSIST_DEBOUNCE_MS);
-  }, []);
+  const { notice: hueColorNotice, report: reportHueSolidColorStatus } =
+    useHueSolidColorNotice();
 
   // Auto-updater poll — fires once on mount, in parallel with the boot
   // sequence. Previously lived at the tail of `bootstrap()` behind
@@ -449,31 +399,7 @@ function App() {
     void checkForUpdates();
   }, [checkForUpdates]);
 
-  // Flush pending lighting-mode persist on page hide / visibility change /
-  // unmount so a Cmd+R or tray-close right after a slider move does not
-  // discard the in-flight debounced write. Mirrors the pattern used for
-  // window geometry persistence elsewhere in the shell.
-  useEffect(() => {
-    const flush = () => {
-      if (persistLightingModeTimeoutRef.current !== null) {
-        window.clearTimeout(persistLightingModeTimeoutRef.current);
-        persistLightingModeTimeoutRef.current = null;
-      }
-      const pending = lastPendingModeRef.current;
-      lastPendingModeRef.current = null;
-      if (pending) void saveShellState({ lightingMode: pending });
-    };
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "hidden") flush();
-    };
-    window.addEventListener("pagehide", flush);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      flush();
-    };
-  }, []);
+  const scheduleLightingModePersist = useLightingModePersistence();
 
   useEffect(() => {
     activeOutputTargetsRef.current = activeOutputTargets;
@@ -575,77 +501,8 @@ function App() {
     };
   }, [hueTargetSelected]);
 
-  // ---------------------------------------------------------------------------
-  // Bridge reachability poll: validate credentials every 30 s when hue is
-  // configured but stream is NOT active. Updates hueReachable so the chip
-  // accurately reflects whether the bridge is currently on the same network.
-  // While hue is streaming we skip polling — the active stream is proof enough.
-  //
-  // Visibility-aware (recursive setTimeout, not setInterval): the tray
-  // window can be hidden indefinitely with the React tree mounted, so
-  // unconditional 30 s ticks would keep firing HTTPS Bridge requests
-  // nobody can see. The loop pauses while hidden and resumes with an
-  // immediate first tick on `visibilitychange` so the chip refreshes
-  // instantly when the user re-opens the window.
-  // ---------------------------------------------------------------------------
   const hueStreaming = activeOutputTargets.includes("hue");
-  useEffect(() => {
-    if (!hueStartConfig || hueStreaming) return;
-
-    let mounted = true;
-    let timeoutId: number | null = null;
-    let inFlight = false;
-
-    const tick = async () => {
-      if (!mounted) return;
-      if (inFlight) return;
-      if (document.visibilityState === "hidden") return;
-      inFlight = true;
-      try {
-        const validation = await validateHueCredentials(
-          hueStartConfig.bridgeIp,
-          hueStartConfig.username,
-          hueStartConfig.clientKey,
-        );
-        if (!mounted) return;
-        setHueReachable(validation.status.code === HUE_STATUS.CREDENTIAL_VALID);
-      } catch {
-        if (mounted) setHueReachable(false);
-      } finally {
-        inFlight = false;
-        scheduleNext();
-      }
-    };
-
-    const scheduleNext = () => {
-      if (!mounted) return;
-      if (document.visibilityState === "hidden") return;
-      if (timeoutId !== null) return;
-      timeoutId = window.setTimeout(() => {
-        timeoutId = null;
-        void tick();
-      }, HUE_BRIDGE_REACHABILITY_POLL_MS);
-    };
-
-    const handleVisibilityChange = () => {
-      if (!mounted) return;
-      if (document.visibilityState === "visible" && timeoutId === null && !inFlight) {
-        void tick();
-      }
-    };
-
-    void tick();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      mounted = false;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [hueStartConfig, hueStreaming]);
+  const hueReachable = useHueBridgeReachability(hueStartConfig, hueStreaming);
 
   // ---------------------------------------------------------------------------
   // Hue solid color bootstrap sync (Hue → UI yönünde okuma).
