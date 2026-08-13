@@ -48,15 +48,30 @@ describe("modeApi wrappers", () => {
 
   it("maps invoke errors to code/message/details shape", async () => {
     const invokeMock = vi.fn().mockRejectedValue({
-      code: "MODE_INVALID",
+      code: "PORT_UNSUPPORTED",
       message: "Invalid mode payload",
       details: "solid payload missing rgb values",
     } satisfies ModeApiError);
 
     await expect(setLightingMode(SOLID_MODE, invokeMock)).rejects.toEqual({
-      code: "MODE_INVALID",
+      code: "PORT_UNSUPPORTED",
       message: "Invalid mode payload",
       details: "solid payload missing rgb values",
+    });
+  });
+
+  // Was asserted with "MODE_INVALID", a code no producer emits. Relaying an
+  // undeclared code would put an unhandleable value on ModeApiError.code.
+  it("collapses an undeclared code on a structured rejection to UNKNOWN", async () => {
+    const invokeMock = vi.fn().mockRejectedValue({
+      code: "MODE_DEFINITELY_INVALID",
+      message: "Invalid mode payload",
+    });
+
+    await expect(setLightingMode(SOLID_MODE, invokeMock)).rejects.toEqual({
+      code: "UNKNOWN",
+      message: "Invalid mode payload",
+      details: undefined,
     });
   });
 

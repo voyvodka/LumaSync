@@ -61,6 +61,7 @@ export async function restoreWledSink(
       status: {
         code: WLED_STATUS.DISCOVERY_UNREACHABLE,
         message: String(err),
+        details: null,
       },
     });
   }
@@ -89,6 +90,7 @@ export async function restoreWledSink(
       status: {
         code: WLED_STATUS.BRIDGE_UNREACHABLE,
         message: String(err),
+        details: null,
       },
     });
   }

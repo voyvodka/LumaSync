@@ -15,7 +15,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEVICE_COMMANDS,
   WLED_STATUS,
+  type WledCommandStatus,
   type WledDeviceInfo,
+  type WledWireStatusCode,
 } from "@/shared/contracts/device";
 import {
   connectWledSink,
@@ -51,7 +53,7 @@ const DEVICE_OK: WledDeviceInfo = {
   version: "0.14.0",
 };
 
-function makeStatus(code: string, message = "ok") {
+function makeStatus(code: WledWireStatusCode, message = "ok"): WledCommandStatus {
   return { code, message, details: null };
 }
 

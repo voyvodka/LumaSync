@@ -1,11 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { DEVICE_COMMANDS } from "@/shared/contracts/device";
+import {
+  DEVICE_COMMANDS,
+  DEVICE_ERROR_CODES,
+  type DeviceErrorCode,
+} from "@/shared/contracts/device";
 import {
   HUE_COMMANDS,
   HUE_RUNTIME_TRIGGER_SOURCE,
-  type HueRuntimeActionHint,
-  type HueRuntimeState,
+  type HueRuntimeStatus,
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
@@ -16,9 +19,16 @@ import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/co
 
 /** Normalized shape every mode-command rejection is mapped to before being thrown. */
 export interface ModeApiError {
-  code: string;
+  code: DeviceErrorCode;
   message: string;
   details?: string;
+}
+
+function isDeviceErrorCode(value: unknown): value is DeviceErrorCode {
+  return (
+    typeof value === "string" &&
+    (Object.values(DEVICE_ERROR_CODES) as string[]).includes(value)
+  );
 }
 
 export interface ModeCommandResult {
@@ -60,16 +70,7 @@ export interface HueSolidColorSnapshot {
 
 export interface HueRuntimeCommandResult {
   active: boolean;
-  status: {
-    state: HueRuntimeState;
-    code: string;
-    message: string;
-    details: string | null;
-    triggerSource: HueRuntimeTriggerSource;
-    remainingAttempts?: number;
-    nextAttemptMs?: number;
-    actionHint?: HueRuntimeActionHint;
-  };
+  status: HueRuntimeStatus;
   lastSolidColor?: HueSolidColorSnapshot | null;
 }
 
@@ -87,7 +88,10 @@ function mapModeApiError(error: unknown): ModeApiError {
   }
 
   const data = error as Record<string, unknown>;
-  const code = typeof data.code === "string" ? data.code : "UNKNOWN";
+  // Relayed only when it names a declared code. Every mode/Hue command is
+  // `Result<_, String>`, so this branch is currently unreachable — a rejection
+  // arrives as a bare string and never carries `.code`.
+  const code = isDeviceErrorCode(data.code) ? data.code : DEVICE_ERROR_CODES.UNKNOWN;
   const message = typeof data.message === "string" ? data.message : "Lighting mode command failed";
   const details = typeof data.details === "string" ? data.details : undefined;
 

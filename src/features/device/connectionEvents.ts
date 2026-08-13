@@ -30,7 +30,7 @@ export interface ConnectionEvent {
    * Optional rejection reason — only populated by the boot-time
    * `tryAutoReconnect` path when `connected === false` AND the rejection
    * means USB is structurally unavailable for this session. Other
-   * rejection paths (CONNECT_BUSY, handshake timeout) deliberately do
+   * rejection paths (CONNECT_TIMEOUT, CONNECT_IO_ERROR, CONNECT_FAILED) deliberately do
    * NOT set this so the caller doesn't strip USB on transient failures.
    */
   readonly unsupportedReason?: ConnectionRejectionCode;

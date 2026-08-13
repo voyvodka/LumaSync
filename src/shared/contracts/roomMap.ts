@@ -461,13 +461,6 @@ export type HueZoneStatusCode =
 // Hue Zone command payloads (mirrors `commands/room_map/hue_zone.rs`)
 // ---------------------------------------------------------------------------
 
-/** Generic coded command result — mirrors Rust's `CommandStatus`. */
-export interface CommandStatus {
-  code: string;
-  message: string;
-  details: string | null;
-}
-
 /** Response for the four Hue zone authoring commands; `zones`/`channels` are echoed back for the next shellStore write. */
 export interface HueZoneCommandResult {
   status: {

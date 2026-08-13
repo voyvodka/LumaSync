@@ -13,6 +13,16 @@ touching either side; it checks that Rust handlers match the frontend definition
 alongside the human-readable message. Never a bare string error, and never a code invented at the
 call site — a code that exists in one place cannot be handled, translated, or searched for.
 
+**One status envelope, parameterised by a wire union.** `CommandStatusOf<TCode>` in
+`src/shared/contracts/status.ts` is the only coded-status shape; each domain aliases it with its
+own union. `TCode` is always the *wire* union — exactly the set the Rust producer puts on that
+shape, no more. Codes the frontend mints (a transport rejection, a synthesised "no command ran")
+live in a separate union that widens the wire one at the consumer holding both, so a
+frontend-invented code can never pose as something the backend can send. `SerialHealthStepWireCode`
+/ `SerialHealthStepCode` and `HueOnboardingWireStatusCode` / `HueOnboardingStatus` are the two
+worked examples. `SomeCode | string` is banned outright: it reads as typed and admits everything,
+which is harder to spot than a bare `string`.
+
 **Failures are never swallowed.** An empty `catch {}` is a defect here, not a shortcut. Log with
 the `[LumaSync]` prefix. In Rust, return coded context through a status object or
 `Result<_, String>`. For invalid external input, prefer an explicit fallback value over a silent
@@ -32,6 +42,7 @@ enforces it, so a key added to one and not the other fails the suite.
 
 ## Gotchas
 
+- **A wire union is checked for *equality* with the emitted set, not containment.** `verify:shell-contracts` harvests the codes Rust puts on each status shape and fails in both directions — an emitted code missing from the union, and a union member no producer emits. Containment alone is what let a declared-but-unemitted member sit in a union indefinitely.
 - **A green verifier means every status code crossing the boundary is *declared*, not that it is *correct*.** It is a drift guard, not a coverage score. A code can be declared, returned, and still be the wrong code.
 - **Hue credentials are not in `shell-state.json`.** They live in the OS keychain — see [`hue.md`](hue.md).
 - **The `2 → 3` window-geometry migration derives a centre that sits ~14 px high on macOS, and that is accepted, not a bug.** The legacy `windowX/Y/Width/Height` fields stored the *inner* content size, but macOS adds ~28 px of title bar to the *outer* rect, and the derived centre can only use what was persisted. The bias self-corrects on the very next move or resize, because the rewritten `persistWindowState` path measures the outer size from then on. Do not "fix" the one-shot migration by reaching for a chrome height — it is platform-dependent and not knowable from persisted state alone.

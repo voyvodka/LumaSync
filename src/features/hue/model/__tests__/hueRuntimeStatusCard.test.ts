@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  HUE_RUNTIME_ACTION_HINT,
-  HUE_RUNTIME_TRIGGER_SOURCE,
-  type HueRuntimeStatus,
-} from "@/shared/contracts/hue";
+import { HUE_RUNTIME_ACTION_HINT, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
+import type { HueRuntimeStatusView } from "../onboardingStatusCodes";
 import { buildHueRuntimeStatusCard, deriveFamilyActionHints } from "../hueRuntimeStatusCard";
 
-function createStatus(partial: Partial<HueRuntimeStatus>): HueRuntimeStatus {
+function createStatus(partial: Partial<HueRuntimeStatusView>): HueRuntimeStatusView {
   return {
     state: "Running",
     code: "HUE_STREAM_RUNNING",
     message: "Hue stream is active.",
+    details: null,
     triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
     ...partial,
   };
@@ -77,23 +75,28 @@ describe("buildHueRuntimeStatusCard", () => {
   it("does not crash when runtime status code is missing", () => {
     const model = buildHueRuntimeStatusCard({
       status: createStatus({
-        code: undefined as unknown as string,
+        code: undefined as unknown as HueRuntimeStatusView["code"],
       }),
     });
 
     expect(model.actionHints).toEqual([]);
   });
 
-  it("produces variant: error when state is Failed with HUE-NET code", () => {
+  // Was asserted with `HUE-NET-01`, which no producer can put on a runtime
+  // status; the family mapping itself is still covered in deriveFamilyActionHints.
+  it("produces variant: error when state is Failed", () => {
     const model = buildHueRuntimeStatusCard({
       status: createStatus({
         state: "Failed",
-        code: "HUE-NET-01",
+        code: "TRANSIENT_RETRY_EXHAUSTED",
       }),
     });
 
     expect(model.variant).toBe("error");
-    expect(model.actionHints).toEqual([HUE_RUNTIME_ACTION_HINT.RECONNECT]);
+    expect(model.actionHints).toEqual([
+      HUE_RUNTIME_ACTION_HINT.RETRY,
+      HUE_RUNTIME_ACTION_HINT.RECONNECT,
+    ]);
   });
 
   it("surfaces RETRY action hint when stop request times out partially", () => {

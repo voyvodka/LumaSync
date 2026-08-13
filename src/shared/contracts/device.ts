@@ -2,6 +2,8 @@
  * Device connection contracts for frontend <-> backend command bridge.
  */
 
+import type { CommandStatusOf } from "./status";
+
 export const DEVICE_COMMANDS = {
   LIST_PORTS: "list_serial_ports",
   CONNECT_PORT: "connect_serial_port",
@@ -114,6 +116,17 @@ export const SERIAL_COMMAND_ERRORS = {
 
 export type SerialCommandErrorCode =
   (typeof SERIAL_COMMAND_ERRORS)[keyof typeof SERIAL_COMMAND_ERRORS];
+
+/** Exactly what `device_connection.rs` puts on `SerialPortListResponse.status`
+ * and `SerialConnectionStatus.status`. `UNKNOWN` is out — it is minted by
+ * `mapModeApiError` and never crosses this wire. */
+export type SerialCommandStatusCode =
+  | SerialPortListStatusCode
+  | SerialConnectStatusCode
+  | typeof DEVICE_ERROR_CODES.PORT_NOT_FOUND
+  | typeof DEVICE_ERROR_CODES.PORT_UNSUPPORTED;
+
+export type SerialCommandStatus = CommandStatusOf<SerialCommandStatusCode>;
 
 /** In-flight device operation kind, used to gate concurrent UI actions. */
 export const DEVICE_OPERATION = {
@@ -481,3 +494,10 @@ export const WLED_STATUS = {
 } as const;
 
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];
+
+/** Exactly what `wled_discovery.rs` puts on a WLED command `status`.
+ * `WLED_SINK_NOT_STARTED` is excluded: `wled_sink.rs` returns it as an
+ * `Err(String)` prefix, so a `switch (status.code)` can never see it. */
+export type WledWireStatusCode = Exclude<WledStatusCode, typeof WLED_STATUS.SINK_NOT_STARTED>;
+
+export type WledCommandStatus = CommandStatusOf<WledWireStatusCode>;

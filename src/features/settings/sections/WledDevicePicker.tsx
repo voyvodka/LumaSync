@@ -103,6 +103,7 @@ export function WledDevicePicker({
       setDiscoveryStatus({
         code: WLED_STATUS.DISCOVERY_UNREACHABLE,
         message: String(e),
+        details: null,
       });
     } finally {
       setIsDiscovering(false);
@@ -130,7 +131,11 @@ export function WledDevicePicker({
           ...prev,
           [device.ip]: {
             kind: "result",
-            status: { code: "WLED_BRIDGE_UNREACHABLE", message: String(e) },
+            status: {
+              code: WLED_STATUS.BRIDGE_UNREACHABLE,
+              message: String(e),
+              details: null,
+            },
           },
         }));
       }
@@ -155,7 +160,11 @@ export function WledDevicePicker({
         ...prev,
         [device.ip]: {
           kind: "result",
-          status: { code: "WLED_BRIDGE_UNREACHABLE", message: String(e) },
+          status: {
+              code: WLED_STATUS.BRIDGE_UNREACHABLE,
+              message: String(e),
+              details: null,
+            },
         },
       }));
     }

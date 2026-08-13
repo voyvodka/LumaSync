@@ -1,6 +1,10 @@
-import type { HueRuntimeStatus, HueRuntimeTargetTelemetryRow } from "@/shared/contracts/hue";
+import type { HueRuntimeTargetTelemetryRow } from "@/shared/contracts/hue";
 
-export function deriveRuntimeTargets(status: HueRuntimeStatus | null): HueRuntimeTargetTelemetryRow[] {
+import type { HueRuntimeStatusView } from "./onboardingStatusCodes";
+
+export type HueRuntimeTargetRow = HueRuntimeTargetTelemetryRow<HueRuntimeStatusView["code"]>;
+
+export function deriveRuntimeTargets(status: HueRuntimeStatusView | null): HueRuntimeTargetRow[] {
   if (!status) {
     return [];
   }

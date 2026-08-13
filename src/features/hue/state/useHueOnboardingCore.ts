@@ -14,7 +14,11 @@ import {
 } from "../model/areaGrouping";
 import { dedupeBridges, normalizeIpValue, resolveManualIpError } from "../model/bridgeIdentity";
 import { deriveStep, toPersistedStep, toStepFromPersisted } from "../model/onboardingStep";
-import { HUE_ONBOARDING_TRANSPORT_CODES as CODE, toErrorDetails } from "../model/onboardingStatusCodes";
+import {
+  HUE_ONBOARDING_TRANSPORT_CODES as CODE,
+  toErrorDetails,
+  type HueOnboardingStatus,
+} from "../model/onboardingStatusCodes";
 import {
   DEFAULT_STATE,
   type HueAreaReadiness,
@@ -29,7 +33,6 @@ import {
   listHueEntertainmentAreas,
   migrateHueCredentials,
   pairHueBridge,
-  type CommandStatus,
   type HueBridgeSummary,
   type HuePairingCredentials,
   validateHueCredentials,
@@ -43,7 +46,7 @@ export interface UseHueOnboardingCoreResult {
   isReadinessStale: boolean;
   canStartHue: boolean;
   selectedAreaIsBlocked: boolean;
-  publishStatus: (status: CommandStatus) => void;
+  publishStatus: (status: HueOnboardingStatus) => void;
   applyBackgroundReadiness: (
     areaId: string,
     response: Awaited<ReturnType<typeof checkHueStreamReadiness>>,
@@ -147,7 +150,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
   }, []);
 
   const publishStatus = useCallback(
-    (status: CommandStatus) => {
+    (status: HueOnboardingStatus) => {
       patchState((prev) => ({ ...prev, status }));
     },
     [patchState],

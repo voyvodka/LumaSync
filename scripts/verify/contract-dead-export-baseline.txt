@@ -12,15 +12,22 @@
 # mention is NOT a reference, and a test-only reference does not count — the
 # telemetry fork had tests too, and they passed against the wrong shape.
 #
-# Ratchet, not a suppression list. This file may only SHRINK: a listed symbol
-# that gains a consumer FAILS the verifier until the line is deleted. A newly
-# unconsumed value export that is not listed here fails immediately.
+# Ratchet, not a suppression list. A listed symbol that gains a consumer FAILS
+# the verifier until the line is deleted, and a newly unconsumed value export
+# that is not listed here fails immediately.
+#
+# The file holds two kinds of entry. MISSING CONSUMER lines are defects — a
+# symbol the runtime ought to read and does not — and may only SHRINK. Lines for
+# an export declared ahead of its consumer are the one allowed growth: declaring
+# the code Rust already emits is the correct move even when nothing renders that
+# failure yet, and the line goes the moment something first does.
 #
 # Format: `file.ts SYMBOL`. Blank lines and `#` comments ignored.
 
 # Declared 2026-08-13 alongside the codes Rust already emits. Nothing catches
 # these yet — they are thrown Err(String) prefixes with no handler on the
 # frontend. Each line disappears when something first renders that failure.
+calibration.ts CALIBRATION_COMMAND_ERRORS
 device.ts SERIAL_COMMAND_ERRORS
 display.ts DISPLAY_COMMAND_ERRORS
 lighting.ts LIGHTING_COMMAND_ERRORS
@@ -41,11 +48,6 @@ hue.ts HUE_TRANSPORT_REASON
 device.ts SUPPORTED_CONTROLLER_IDS
 device.ts DEVICE_STORE_KEYS
 device.ts WLED_DEFAULT_WARLS_PORT
-
-# The live health surface is `HealthCheckResult` in deviceConnectionApi.ts, and
-# it types `code` as bare `string` — so nothing links these five to the runtime
-# but a JSDoc. EN+TR strings exist and are never looked up. Two also have no
-# Rust producer (contract-phantom-baseline.txt). Typing that field is the fix.
 
 # Hue vocabulary with no reader. HUE_FAULT_CODES is the HUE-NET-xx / HUE-AUTH-xx
 # taxonomy nothing classifies into; the intensity coefficients are applied

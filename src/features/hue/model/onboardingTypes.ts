@@ -3,17 +3,16 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import {
   HUE_CREDENTIAL_STATUS,
   type HueCredentialStatus,
-  type HueRuntimeStatus,
   type HueRuntimeTarget,
-  type HueRuntimeTargetTelemetryRow,
 } from "@/shared/contracts/hue";
 import type {
-  CommandStatus,
   HueAreaChannelInfo,
   HueBridgeSummary,
   HueEntertainmentAreaSummary,
   HuePairingCredentials,
 } from "../hueOnboardingApi";
+import type { HueOnboardingStatus, HueRuntimeStatusView } from "./onboardingStatusCodes";
+import type { HueRuntimeTargetRow } from "./runtimeTargets";
 
 export type HueStep = "discover" | "pair" | "area" | "ready";
 
@@ -58,9 +57,9 @@ export interface UseHueOnboardingResult {
   isLoadingAreas: boolean;
   isCheckingReadiness: boolean;
   isValidatingCredential: boolean;
-  status: CommandStatus | null;
-  runtimeStatus: HueRuntimeStatus | null;
-  runtimeTargets: HueRuntimeTargetTelemetryRow[];
+  status: HueOnboardingStatus | null;
+  runtimeStatus: HueRuntimeStatusView | null;
+  runtimeTargets: HueRuntimeTargetRow[];
   isRuntimeMutating: boolean;
   /** Channels for the currently selected area (empty while loading or no area selected). */
   areaChannels: HueAreaChannelInfo[];
@@ -99,7 +98,7 @@ export interface HueOnboardingState {
   isLoadingAreas: boolean;
   isCheckingReadiness: boolean;
   isValidatingCredential: boolean;
-  status: CommandStatus | null;
+  status: HueOnboardingStatus | null;
 }
 
 export const DEFAULT_STATE: HueOnboardingState = {

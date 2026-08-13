@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import type { CalibrationTestPatternStatus } from "@/shared/contracts/calibration";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import {
   DISPLAY_OVERLAY_COMMANDS,
@@ -20,11 +21,7 @@ export interface CalibrationTestPatternStartPayload {
 export interface CalibrationTestPatternResult {
   active: boolean;
   previewOnly: boolean;
-  status: {
-    code: string;
-    message: string;
-    details?: string;
-  };
+  status: CalibrationTestPatternStatus;
 }
 
 /**

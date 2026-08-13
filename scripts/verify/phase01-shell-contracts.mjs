@@ -1298,6 +1298,91 @@ for (const code of rustPortCodes) {
 }
 
 // ---------------------------------------------------------------------------
+// Wire unions — emitted set must EQUAL the declared union, not merely be
+// contained by it. Containment let a phantom member sit in a union forever.
+// ---------------------------------------------------------------------------
+console.log("\n[ Wire status unions — emitted set === declared union ]");
+
+/** Members of an `export const NAME = { ... } as const;` block. */
+function constMembers(source, name) {
+  const block = source.match(new RegExp(`export const ${name}\\s*=\\s*\\{([\\s\\S]*?)\\n\\} as const;`));
+  return block ? [...block[1].matchAll(/:\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]) : [];
+}
+
+function checkWireUnion(label, emitted, declared, pinnedCount) {
+  const emittedSet = [...new Set(emitted)].sort();
+  const declaredSet = [...new Set(declared)].sort();
+  check(
+    emittedSet.length === pinnedCount,
+    `${label}: harvested exactly ${pinnedCount} emitted codes`,
+    `HARVEST COUNT DRIFT (${label}): expected ${pinnedCount}, got ${emittedSet.length} `
+      + `[${emittedSet.join(", ")}] — a code was added, removed, or hoisted into a `
+      + `constant the literal harvest cannot see. Bump the pin deliberately.`
+  );
+  for (const code of emittedSet.filter((c) => !declaredSet.includes(c))) {
+    fail(`${label}: Rust emits "${code}" but the wire union does not include it`);
+  }
+  for (const code of declaredSet.filter((c) => !emittedSet.includes(c))) {
+    fail(
+      `${label}: the wire union declares "${code}" but no Rust producer puts it on `
+        + `this shape — drop it from the union or wire up the producer`
+    );
+  }
+  check(
+    emittedSet.join(",") === declaredSet.join(","),
+    `${label}: emitted set equals the declared union (${emittedSet.length} codes)`,
+    `${label}: wire union and emitted set differ (listed above)`
+  );
+}
+
+const rustSerialProduction = stripComments(rustHealthSource);
+checkWireUnion(
+  "SerialCommandStatusCode",
+  [
+    ...[...rustSerialProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    // The last `command_status` arm passes `connect_error_code(&error)`, so its
+    // match arms are part of the same wire union.
+    ...[...(rustSerialProduction.match(/fn connect_error_code[\s\S]*?\n\}/) ?? [""])[0]
+      .matchAll(/"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+  ],
+  [
+    ...constMembers(deviceSource, "SERIAL_PORT_LIST_STATUS"),
+    ...constMembers(deviceSource, "SERIAL_CONNECT_STATUS"),
+    "PORT_NOT_FOUND",
+    "PORT_UNSUPPORTED",
+  ],
+  11
+);
+
+checkWireUnion(
+  "WledWireStatusCode",
+  [...stripComments(wledRustSource).matchAll(/WledCommandStatus::(?:ok|err)\(\s*"([A-Z][A-Z0-9_]*)"/g)]
+    .map((m) => m[1]),
+  constMembers(deviceSource, "WLED_STATUS").filter((c) => c !== "WLED_SINK_NOT_STARTED"),
+  12
+);
+
+const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
+  .map((f) => stripComments(readFileSync(f, "utf-8").split(/\n#\[cfg\(test\)\]\s*\nmod /)[0]))
+  .join("\n");
+const HUE_RUNTIME_NOT_ON_THIS_SHAPE = [
+  "AUTH_INVALID_RE_PAIR_REQUIRED",
+  "HUE_CHANNEL_POSITIONS_UPDATED",
+  "HUE_CHANNEL_POSITIONS_FAILED",
+];
+checkWireUnion(
+  "HueRuntimeWireStatusCode",
+  [...rustHueRuntimeSource.matchAll(/status_with\(\s*[^,]+,\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+  [
+    ...constMembers(hueSource, "HUE_RUNTIME_STATUS").filter(
+      (c) => !HUE_RUNTIME_NOT_ON_THIS_SHAPE.includes(c)
+    ),
+    ...constMembers(hueSource, "HUE_SOLID_COLOR_STATUS"),
+  ],
+  19
+);
+
+// ---------------------------------------------------------------------------
 // Highest severity: a code both trees use and neither declares. Both sides
 // believe they own it and neither is authoritative — how a word-swap survives.
 // ---------------------------------------------------------------------------
@@ -1313,6 +1398,29 @@ function walkSourceFiles(dir, match, out = []) {
   return out;
 }
 
+/** Rust files reached only through a `#[cfg(test)] mod name;` declaration. Their
+ *  codes are emitted by integration tests, not by a command — `ipc_tests/` was
+ *  claiming nine as production. Keyed on the declaration, so a second one needs
+ *  no edit here; there is no directory-name convention to lean on. */
+function rustTestOnlyPaths(root) {
+  const paths = new Set();
+  for (const file of walkSourceFiles(root, /\.rs$/)) {
+    for (const m of readFileSync(file, "utf-8").matchAll(/^#\[cfg\(test\)\]\s*\nmod\s+(\w+)\s*;/gm)) {
+      paths.add(resolve(dirname(file), `${m[1]}.rs`));
+      paths.add(resolve(dirname(file), m[1]));
+    }
+  }
+  return paths;
+}
+
+/** Production Rust: the crate minus the test-only modules above. */
+function walkRustSourceFiles(root) {
+  const testOnly = rustTestOnlyPaths(resolve(ROOT, "src-tauri/src"));
+  return walkSourceFiles(root, /\.rs$/).filter(
+    (file) => ![...testOnly].some((p) => file === p || file.startsWith(`${p}/`))
+  );
+}
+
 // A prose mention is not a declaration — the miss that hid DEVICE_NOT_CONNECTED
 // behind three comments. Biased toward false positives on purpose.
 function stripComments(source) {
@@ -1323,13 +1431,35 @@ function stripComments(source) {
     .join("\n");
 }
 
+/** Never "simplify" back to `split(...)[0]`: production code follows a test
+ *  module in two files, and truncating there hid three registered commands and
+ *  five codes from every ratchet. Column-0 `}` beats a brace counter. */
+function stripRustTestModules(source) {
+  const lines = source.split("\n");
+  const kept = [];
+  let inTestModule = false;
+  for (let i = 0; i < lines.length; i++) {
+    // `mod name {` opens a body to skip; `mod name;` declares one living in
+    // another file and has none. Skipping on the declaration runs to the next
+    // column-0 `}` and eats whatever it belongs to (lib.rs 48→115).
+    if (!inTestModule && /^#\[cfg\(test\)\]\s*$/.test(lines[i]) && /^mod\s+\w+\s*\{/.test(lines[i + 1] ?? "")) {
+      inTestModule = true;
+      continue;
+    }
+    if (inTestModule) {
+      if (lines[i] === "}") inTestModule = false;
+      continue;
+    }
+    kept.push(lines[i]);
+  }
+  return kept.join("\n");
+}
+
 function harvestCodes(files) {
   const found = new Set();
   for (const file of files) {
     let text = stripComments(readFileSync(file, "utf-8"));
-    // The test MODULE, not any `#[cfg(test)]` — four files carry that attribute
-    // on a plain item, which truncated lighting_mode.rs at line 58 of ~3400.
-    if (file.endsWith(".rs")) text = text.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+    if (file.endsWith(".rs")) text = stripRustTestModules(text);
     // `"CODE: detail"` counts too — Err arms carry the code as a prefix (#42).
     for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})(?:"|:\s)/g)) {
       const code = m[1];
@@ -1346,7 +1476,7 @@ const tsSourceFiles = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/);
 // Whole crate, not just `commands/`: `network/mdns.rs` emits the HUE_MDNS_*
 // codes, and a narrower root reports them as phantoms.
 const rustEmitted = harvestCodes(
-  walkSourceFiles(resolve(ROOT, "src-tauri/src"), /\.rs$/)
+  walkRustSourceFiles(resolve(ROOT, "src-tauri/src"))
 );
 const tsReferenced = harvestCodes(
   tsSourceFiles.filter((f) => !f.includes("/shared/contracts/"))
@@ -1881,6 +2011,10 @@ console.log("\n[ Nullability parity — Rust Option ↔ TS null/optional ]");
  */
 const NULLABILITY_NAME_ALIASES = {
   HueEntertainmentArea: "HueEntertainmentAreaSummary",
+  // The four coded-status structs all mirror the one generic envelope.
+  CommandStatus: "CommandStatusOf",
+  WledCommandStatus: "CommandStatusOf",
+  HueCommandStatus: "CommandStatusOf",
 };
 
 /**
@@ -1918,7 +2052,7 @@ function rustFieldsWithAttrs(body) {
 
 /** Collect every Serialize-deriving `pub struct` across the Rust tree. */
 const rustSerializableStructs = new Map();
-for (const file of walkSourceFiles(resolve(ROOT, "src-tauri/src"), /\.rs$/)) {
+for (const file of walkRustSourceFiles(resolve(ROOT, "src-tauri/src"))) {
   const src = readFileSync(file, "utf-8");
   for (const m of src.matchAll(
     /((?:#\[[^\]]*\]\s*)+)pub struct (\w+)\s*\{([\s\S]*?)\n\}/g
@@ -1937,11 +2071,14 @@ const contractInterfaces = new Map();
 for (const file of contractModuleFiles) {
   const src = readFileSync(file, "utf-8");
   for (const m of src.matchAll(
-    /export interface (\w+)(?:\s+extends\s+([\w,\s]+?))?\s*\{([\s\S]*?)\n\}/g
+    /export interface (\w+)(?:<[^>]*>)?(?:\s+extends\s+([\w,\s<>]+?))?\s*\{([\s\S]*?)\n\}/g
   )) {
     contractInterfaces.set(m[1], {
       file: file.split("/").pop(),
-      parents: (m[2] ?? "").split(",").map((p) => p.trim()).filter(Boolean),
+      parents: (m[2] ?? "")
+        .split(",")
+        .map((p) => p.trim().replace(/<.*>$/, ""))
+        .filter(Boolean),
       body: m[3],
     });
   }
@@ -1976,7 +2113,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 31;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 32;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,
