@@ -458,8 +458,9 @@ export function useLightingModeOrchestrator({
         // Phase 2 — this is what starts the ambilight worker, so it must run for
         // Hue-only targets too or the stream comes up with no colour driver.
         const hueStartedOk = targetResults.hue?.ok === true;
-        // A transient Hue failure still starts the worker: it runs without Hue
-        // context and the stream auto-reconnects within ~30 s.
+        // A transient Hue failure still attempts the start — the worker can run
+        // without Hue context and reconnect within ~30 s. If the backend gates it
+        // instead, the commit below refuses and the UI stays off, not ON.
         const hueTransientFail =
           !hueStartedOk &&
           normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
@@ -491,10 +492,10 @@ export function useLightingModeOrchestrator({
             if (applyResult?.status?.code === LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED) {
               setStartFailedNotice(describeCaptureFailure(applyResult.status.details));
             }
-            // The backend's own verdict, not an allowlist of failure codes that
-            // would go stale on the next one. `!== null` is load-bearing: a
-            // deduped or cooled-down dispatch returns `null` — never asked, not refused.
-            if (applyResult !== null && !applyResult.active) {
+            // `mode` reports the RUNNING mode, so a gate refusal while another
+            // kind is live reads as refused too — `active` alone would not.
+            // `!== null` is load-bearing: a deduped dispatch means never asked.
+            if (applyResult !== null && applyResult.mode.kind !== normalizedNextMode.kind) {
               applyRefused = true;
               if (runtimePlan.startTargets.includes("usb")) {
                 targetResults.usb = {

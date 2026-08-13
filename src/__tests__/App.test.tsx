@@ -8,6 +8,22 @@ const loadShellStateMock = vi.fn();
 const saveShellStateMock = vi.fn();
 const initWindowLifecycleMock = vi.fn();
 const setLightingModeMock = vi.fn();
+
+/** Full `ModeCommandResult`: the backend echoes the mode it is now running, and
+ *  the orchestrator reads that echo to decide whether the start was accepted. */
+function appliedResult(payload: LightingModeConfig) {
+  const code =
+    payload.kind === "off"
+      ? "LIGHTING_MODE_STOPPED"
+      : payload.kind === "solid"
+        ? "SOLID_MODE_APPLIED"
+        : "AMBILIGHT_MODE_STARTED";
+  return {
+    active: payload.kind !== "off",
+    mode: payload,
+    status: { code, message: "Applied.", details: null },
+  };
+}
 const stopLightingMock = vi.fn();
 const startHueMock = vi.fn();
 const stopHueMock = vi.fn();
@@ -254,7 +270,9 @@ describe("App mode orchestration", () => {
     });
     initWindowLifecycleMock.mockResolvedValue(undefined);
     saveShellStateMock.mockResolvedValue(undefined);
-    setLightingModeMock.mockResolvedValue({ active: true });
+    setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+      Promise.resolve(appliedResult(payload)),
+    );
     stopLightingMock.mockResolvedValue({ active: false });
     startHueMock.mockResolvedValue({
       active: true,
