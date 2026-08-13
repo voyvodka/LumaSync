@@ -1,0 +1,75 @@
+import type {
+  FurniturePlacement,
+  HueChannelPlacement,
+  HueZone,
+  ImageLayer,
+  RoomMapConfig,
+  TvAnchorPlacement,
+  UsbStripPlacement,
+} from "@/shared/contracts/roomMap";
+
+/**
+ * Resolve the active selection from the dock's `selectedId` shape and
+ * the active Hue-zone id.
+ *
+ * v1.5 W4-F2 manual-test (2026-04-28) — priority swap: a concrete
+ * object selection wins over `activeHueZoneId` so clicking a TV /
+ * furniture / strip / channel / image row in the Objects list
+ * routes its inspector into the dock even when a Hue zone is the
+ * current zone selection. The Hue zone inspector is reserved for
+ * the case where the user picks a zone (no concrete object selected).
+ *
+ * Logical zones were dropped — see RFC §"Direction reversal" — so
+ * the dispatcher reads exclusively from `config.zones: HueZone[]`.
+ */
+export type InspectorTarget =
+  | { kind: "hueZone"; zone: HueZone }
+  | { kind: "tv"; tv: TvAnchorPlacement }
+  | { kind: "furniture"; item: FurniturePlacement }
+  | { kind: "usb"; strip: UsbStripPlacement }
+  | { kind: "hueChannel"; channel: HueChannelPlacement; zoneName: string | null }
+  | { kind: "image"; layer: ImageLayer }
+  | { kind: "empty" };
+
+export function resolveInspectorTarget(
+  config: RoomMapConfig,
+  selectedId: string | null,
+  activeHueZoneId: string | null,
+): InspectorTarget {
+  if (selectedId) {
+    if (selectedId === "tv" && config.tvAnchor) {
+      return { kind: "tv", tv: config.tvAnchor };
+    }
+    if (selectedId.startsWith("furniture-")) {
+      const id = selectedId.replace("furniture-", "");
+      const item = config.furniture.find((f) => f.id === id);
+      if (item) return { kind: "furniture", item };
+    }
+    if (selectedId.startsWith("usb-")) {
+      const id = selectedId.replace("usb-", "");
+      const strip = config.usbStrips.find((s) => s.stripId === id);
+      if (strip) return { kind: "usb", strip };
+    }
+    if (selectedId.startsWith("hue-")) {
+      const idx = parseInt(selectedId.replace("hue-", ""), 10);
+      const channel = config.hueChannels.find((c) => c.channelIndex === idx);
+      if (channel) {
+        const zoneName = channel.zoneId
+          ? config.zones.find((z) => z.id === channel.zoneId)?.name ?? null
+          : null;
+        return { kind: "hueChannel", channel, zoneName };
+      }
+    }
+    if (selectedId.startsWith("img-")) {
+      const id = selectedId.replace("img-", "");
+      const layer = config.imageLayers.find((l) => l.id === id);
+      if (layer) return { kind: "image", layer };
+    }
+  }
+  // No concrete object selected — fall back to the active Hue zone.
+  if (activeHueZoneId) {
+    const zone = config.zones.find((z) => z.id === activeHueZoneId);
+    if (zone) return { kind: "hueZone", zone };
+  }
+  return { kind: "empty" };
+}

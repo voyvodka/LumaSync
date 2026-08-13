@@ -58,12 +58,12 @@ import {
   ImageLayerInspector,
   TvAnchorInspector,
   UsbStripInspector,
-  resolveInspectorTarget,
   type UsbStripConnectionStatus,
 } from "./ObjectInspectors";
 import { buildObjectList, type ObjectRowEntry } from "../model/objectList";
 import { getZoneColor, TYPE_DOT_COLOR } from "../model/zoneColor";
 import { deriveHueAreaState } from "../model/hueAreaState";
+import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
 
 type DockTab = "objects" | "hueZones";
 
