@@ -10,9 +10,14 @@ Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mo
 **Capture is per-platform and native.** ScreenCaptureKit on macOS, Windows Graphics Capture on
 Windows, X11 on Linux. Wayland is not supported and needs `xdg-desktop-portal` before it can be.
 
-**Frames are downscaled before analysis.** `MAX_CAPTURE_DIM` in `ambilight_capture.rs` caps the
-working dimension at 640. Full-resolution analysis buys nothing for an output that is at most a few
-hundred LEDs, and it is the difference between comfortable and impossible inside the frame budget.
+**Frames are downscaled before analysis — on macOS and Windows.** `MAX_CAPTURE_DIM` in
+`ambilight_capture.rs` caps the working dimension at 640. Full-resolution analysis buys nothing for
+an output that is at most a few hundred LEDs, and it is the difference between comfortable and
+impossible inside the frame budget.
+
+**The Linux path does not downscale.** It hands the full `xcap` frame to analysis, so a 4K X11
+display iterates roughly thirty times the pixels its macOS equivalent does. That is a gap, not a
+decision — Linux capture has had far less mileage than the other two.
 
 On Windows the downscale is CPU-side, not GPU-side. `windows-capture` 2.0 exposes no equivalent of
 ScreenCaptureKit's `output_size` hint, so a 4K capture arrives whole at ~33 MB/frame and gets

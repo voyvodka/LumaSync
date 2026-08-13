@@ -678,19 +678,6 @@ for (const typeName of REQUIRED_ROOM_MAP_TYPES) {
   );
 }
 
-console.log("\n[ Room map commands ]");
-const REQUIRED_ROOM_MAP_COMMANDS = [
-  "save_room_map",
-  "load_room_map",
-];
-for (const cmd of REQUIRED_ROOM_MAP_COMMANDS) {
-  check(
-    roomMapSource.includes(`"${cmd}"`),
-    `room map command "${cmd}" defined`,
-    `MISSING room map command "${cmd}" in roomMap.ts`
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Hue zone surface (v1.5 W4-F2 — Hue-only after the direction reversal)
 // ---------------------------------------------------------------------------
@@ -1892,18 +1879,9 @@ const NULLABILITY_NAME_ALIASES = {
  * pin below forces a new pair into one list or the other, so this cannot become
  * a silent dumping ground.
  */
-const NULLABILITY_EXCLUDED_PAIRS = {
-  // `save_room_map` / `load_room_map` are unconditional stubs the frontend
-  // never invokes (see ROOM_MAP_PERSISTENCE_STATUS in roomMap.ts), so these
-  // four Rust structs are deserialised by nothing. They have already drifted
-  // structurally — Rust `FurniturePlacement` carries name/widthMeters/
-  // depthMeters against the contract's type/width/height — and churning the
-  // editor to match a struct with no reader would buy nothing.
-  RoomMapConfig: "save_room_map is a stub; the Rust mirror has no reader",
-  FurniturePlacement: "reachable only through RoomMapConfig",
-  UsbStripPlacement: "reachable only through RoomMapConfig",
-  TvAnchorPlacement: "reachable only through RoomMapConfig",
-};
+// Emptied when the `save_room_map` stub took its four unread Rust mirrors with
+// it. A pair belongs here only if its struct truly never reaches a frontend.
+const NULLABILITY_EXCLUDED_PAIRS = {};
 
 /** Split a Rust struct body into `{ name, ty, attrs }`, attributes attached. */
 function rustFieldsWithAttrs(body) {
@@ -1989,7 +1967,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 36;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 31;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

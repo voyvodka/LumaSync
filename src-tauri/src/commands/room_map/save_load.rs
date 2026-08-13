@@ -1,50 +1,18 @@
-//! Room-map persistence commands: background image copy and Hue channel
-//! position write-back. `save_room_map`/`load_room_map` are still stubs.
+//! Room-map side commands: background image copy and Hue channel position
+//! write-back. The room-map config itself never crosses this boundary — it is
+//! persisted frontend-side through the shellStore.
 
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 use reqwest::blocking::Client as BlockingClient;
-use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::Manager;
 use tauri_plugin_fs::FsExt;
 
 use crate::commands::hue::credential_store::effective_hue_app_key;
 use crate::commands::hue_onboarding::CommandStatus;
-use crate::models::room_map::{HueChannelPlacement, RoomMapConfig};
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct SaveRoomMapResponse {
-    pub status: CommandStatus,
-    pub version: u32,
-}
-
-/// Stub — room-map persistence is not implemented yet (Phase 17); always
-/// returns `STUB_NOT_IMPLEMENTED`.
-#[tauri::command]
-pub fn save_room_map(_config: RoomMapConfig) -> SaveRoomMapResponse {
-    SaveRoomMapResponse {
-        status: CommandStatus {
-            code: "STUB_NOT_IMPLEMENTED".to_string(),
-            message: "Phase 14 stub - implemented in Phase 17".to_string(),
-            details: None,
-        },
-        version: 0,
-    }
-}
-
-/// Stub — room-map persistence is not implemented yet (Phase 17); always
-/// returns `STUB_NOT_IMPLEMENTED`.
-#[tauri::command]
-pub fn load_room_map() -> CommandStatus {
-    CommandStatus {
-        code: "STUB_NOT_IMPLEMENTED".to_string(),
-        message: "Phase 14 stub - implemented in Phase 17".to_string(),
-        details: None,
-    }
-}
+use crate::models::room_map::HueChannelPlacement;
 
 /// Copy a user-picked background image into the app data directory under a
 /// random UUID filename, so the room-map editor can reference a stable
