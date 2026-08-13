@@ -1465,6 +1465,59 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// Ambilight capture reasons — derived Rust → capture.ts parity
+// ---------------------------------------------------------------------------
+const CAPTURE_CONTRACT_FILE = resolve(ROOT, "src/shared/contracts/capture.ts");
+const RUST_CAPTURE_FILES = [
+  resolve(ROOT, "src-tauri/src/commands/ambilight_capture.rs"),
+  resolve(ROOT, "src-tauri/src/commands/lighting_mode.rs"),
+];
+const captureContractSource = readOrEmpty(CAPTURE_CONTRACT_FILE, "capture contract");
+
+console.log("\n[ Ambilight capture reasons — Rust → capture.ts parity ]");
+const emittedCaptureReasons = [
+  ...new Set(
+    RUST_CAPTURE_FILES.flatMap((file) => {
+      const source = readOrEmpty(file, `rust ${file}`);
+      // These ride `status.details`, never a status code, so `undeclaredInBoth`
+      // is structurally blind to them and this loop is the only guard.
+      // Quoted only: `AMBILIGHT_CAPTURE_ATTEMPTS` is a counter, not a reason.
+      const production = source.split(/\n#\[cfg\(test\)\]\s*\nmod /)[0];
+      return [...production.matchAll(/"(AMBILIGHT_CAPTURE_[A-Z0-9_]+)"/g)].map((m) => m[1]);
+    })
+  ),
+].sort();
+
+// Pinned, not `> 0`: hoisting a reason into a `const` would hide it from this
+// harvest while the rest still matched. Bump deliberately when one is added.
+const EXPECTED_CAPTURE_REASON_COUNT = 17;
+check(
+  emittedCaptureReasons.length === EXPECTED_CAPTURE_REASON_COUNT,
+  `harvested exactly ${EXPECTED_CAPTURE_REASON_COUNT} capture reasons from the Rust tree`,
+  `HARVEST COUNT DRIFT: expected ${EXPECTED_CAPTURE_REASON_COUNT} capture reasons, got `
+    + `${emittedCaptureReasons.length} [${emittedCaptureReasons.join(", ")}] — a reason was added, `
+    + `removed, or refactored out of a string literal (which this harvest cannot see)`
+);
+for (const reason of emittedCaptureReasons) {
+  check(
+    captureContractSource.includes(`"${reason}"`),
+    `capture reason "${reason}" declared in capture.ts`,
+    `UNDECLARED capture reason "${reason}" — Rust emits it into status.details but `
+      + `capture.ts > AMBILIGHT_CAPTURE_REASON does not declare it, so `
+      + `classifyCaptureFailure() silently buckets it as "internal"`
+  );
+}
+
+// The non-capture tenant of the same field. Declared in capture.ts so a reader
+// of `details` can name everything that arrives there.
+check(
+  captureContractSource.includes(`"LED_OUTPUT_PORT_UNAVAILABLE"`),
+  `LED_OUTPUT_PORT_UNAVAILABLE declared in capture.ts`,
+  `MISSING LED_OUTPUT_PORT_UNAVAILABLE in capture.ts — lighting_mode.rs puts it in `
+    + `the same status.details field as the capture reasons`
+);
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n====================================`);
