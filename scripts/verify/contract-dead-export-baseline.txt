@@ -36,10 +36,6 @@ hue.ts HUE_DEBUG_COMMAND_CODES
 # to bucket them into, so nothing reaches this map. One line for 13 codes.
 hue.ts HUE_TRANSPORT_REASON
 
-# Documents that save_room_map / load_room_map are unconditional stubs. Goes
-# away with the commands themselves.
-roomMap.ts ROOM_MAP_PERSISTENCE_STATUS
-
 # Mirrors of Rust state with no reader. SUPPORTED_CONTROLLER_IDS is asserted
 # against the Rust allowlist by this very script and read by nothing else.
 device.ts SUPPORTED_CONTROLLER_IDS
