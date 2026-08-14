@@ -12,6 +12,7 @@ import {
   type TestPatternSpeed,
 } from "@/shared/contracts/preview";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
+import { acquireHueForTest, releaseHueAfterTest } from "@/features/hue/state/hueTestLease";
 import { startLedTestPattern, stopLedTestPattern } from "../previewApi";
 
 /**
@@ -51,6 +52,10 @@ export interface UseTestPatternRunnerOptions {
   start?: typeof startLedTestPattern;
   /** Injectable for tests. */
   stop?: typeof stopLedTestPattern;
+  /** Injectable for tests. */
+  acquireHue?: typeof acquireHueForTest;
+  /** Injectable for tests. */
+  releaseHue?: typeof releaseHueAfterTest;
   minIntervalMs?: number;
 }
 
@@ -71,6 +76,8 @@ export function useTestPatternRunner({
   onResult,
   start = startLedTestPattern,
   stop = stopLedTestPattern,
+  acquireHue = acquireHueForTest,
+  releaseHue = releaseHueAfterTest,
   minIntervalMs = TEST_PATTERN_REFRESH_MIN_INTERVAL_MS,
 }: UseTestPatternRunnerOptions): TestPatternRunner {
   const timerRef = useRef<number | null>(null);
@@ -111,6 +118,7 @@ export function useTestPatternRunner({
     inFlightRef.current = (async () => {
       let result: LedTestPatternResult;
       try {
+        await acquireHue(request.targets);
         result = await start({
           pattern: request.pattern,
           brightness: request.brightness,
@@ -142,11 +150,14 @@ export function useTestPatternRunner({
       if (blockedRef.current) {
         pendingRef.current = null;
         clearTimer();
+        // A latched error means no Stop is coming, so nothing else would hand
+        // back a stream this run had opened.
+        await releaseHue();
         return;
       }
       if (pendingRef.current) scheduleRef.current();
     })();
-  }, [clearTimer, start]);
+  }, [acquireHue, clearTimer, releaseHue, start]);
 
   const schedule = useCallback(() => {
     if (inFlightRef.current) return;
@@ -204,8 +215,12 @@ export function useTestPatternRunner({
   const stopRun = useCallback(async () => {
     cancel();
     await settled();
-    await stop();
-  }, [cancel, settled, stop]);
+    try {
+      await stop();
+    } finally {
+      await releaseHue();
+    }
+  }, [cancel, releaseHue, settled, stop]);
 
   return { apply, refresh, cancel, stop: stopRun, settled };
 }

@@ -29,15 +29,21 @@ function request(overrides: Partial<TestPatternRunRequest> = {}): TestPatternRun
 
 function setup(start: ReturnType<typeof vi.fn<StartFn>>, stop = vi.fn(async () => ok())) {
   const onResult = vi.fn();
+  // Stubbed rather than left to the real module: the lease is module state, so
+  // one test's unreleased run would decide the next test's behaviour.
+  const acquireHue = vi.fn(async () => {});
+  const releaseHue = vi.fn(async () => {});
   const view = renderHook(() =>
     useTestPatternRunner({
       onResult,
       start: start as never,
       stop: stop as never,
+      acquireHue: acquireHue as never,
+      releaseHue: releaseHue as never,
       minIntervalMs: MIN_INTERVAL,
     }),
   );
-  return { ...view, onResult, stop };
+  return { ...view, onResult, stop, acquireHue, releaseHue };
 }
 
 /** Flush the microtask queue so an awaited start settles inside `act`. */
@@ -266,5 +272,56 @@ describe("useTestPatternRunner", () => {
     act(() => result.current.apply(request({ pattern: { kind: "spiral" } })));
     await settle();
     expect(start).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Hue lease", () => {
+  it("brings the stream up before the first frame of a hue run", async () => {
+    const order: string[] = [];
+    const start = vi.fn<StartFn>(async () => {
+      order.push("start");
+      return ok();
+    });
+    const { result, acquireHue } = setup(start);
+    acquireHue.mockImplementation(async () => {
+      order.push("acquire");
+    });
+
+    act(() => result.current.apply(request({ targets: ["hue"] })));
+    await settle();
+
+    expect(acquireHue).toHaveBeenCalledWith(["hue"]);
+    expect(order).toEqual(["acquire", "start"]);
+  });
+
+  it("hands the stream back after the stop, not before", async () => {
+    const order: string[] = [];
+    const start = vi.fn<StartFn>(async () => ok());
+    const stop = vi.fn(async () => {
+      order.push("stop");
+      return ok();
+    });
+    const { result, releaseHue } = setup(start, stop);
+    releaseHue.mockImplementation(async () => {
+      order.push("release");
+    });
+
+    act(() => result.current.apply(request({ targets: ["hue"] })));
+    await settle();
+    await act(async () => {
+      await result.current.stop();
+    });
+
+    expect(order).toEqual(["stop", "release"]);
+  });
+
+  it("hands the stream back when a refusal latches the runner, since no stop follows", async () => {
+    const start = vi.fn<StartFn>(async () => err());
+    const { result, releaseHue } = setup(start);
+
+    act(() => result.current.apply(request({ targets: ["hue"] })));
+    await settle();
+
+    expect(releaseHue).toHaveBeenCalledTimes(1);
   });
 });
