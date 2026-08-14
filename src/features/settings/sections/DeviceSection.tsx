@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { LedChipType } from "@/shared/contracts/device";
@@ -77,6 +77,14 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
   // Phase 7: category rail + displays list
   // -------------------------------------------------------------------------
   const [activeCategory, setActiveCategory] = useState<DeviceCategory>("usb");
+
+  // One scroller serves every category — they only toggle `hidden` — so the
+  // offset carries over and a taller category opens past its own heading.
+  const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const main = mainScrollRef.current;
+    if (main) main.scrollTop = 0;
+  }, [activeCategory]);
   const [displays, setDisplays] = useState<DisplayInfo[]>([]);
 
   // The room-map editor authors strips on its own surface; re-hydrating here
@@ -181,7 +189,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
       {/* ── Main content area ────────────────────────────────── */}
       {/* Every category stays mounted and hides via `hidden`, so switching the
           rail never remounts a category or replays its effects. */}
-      <div className="lm-device-main">
+      <div className="lm-device-main" ref={mainScrollRef}>
         <UsbStripsCategory
           isActive={activeCategory === "usb"}
           device={device}

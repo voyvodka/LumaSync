@@ -1,4 +1,7 @@
 import { LED_TEST_STATUS, type LedTestPatternResult, type LedTestStatusCode } from "@/shared/contracts/preview";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
+import { acquireHueForTest, releaseHueAfterTest } from "@/features/hue/state/hueTestLease";
+import { shellStore } from "@/features/persistence/shellStore";
 
 import { startLedTestPattern, stopLedTestPattern } from "../../preview/previewApi";
 import type { LedCalibrationConfig } from "../model/contracts";
@@ -76,6 +79,20 @@ export function isTestPatternFailure(status: LedTestStatusCode | null): boolean 
   );
 }
 
+/** The outputs the user last lit. Hardcoding `["usb"]` here meant a Hue-only
+ * setup could never get anything but a preview out of LED Setup's test. */
+async function resolveTestTargets(): Promise<HueRuntimeTarget[]> {
+  try {
+    const state = await shellStore.load();
+    if (state.lastOutputTargets && state.lastOutputTargets.length > 0) {
+      return [...state.lastOutputTargets];
+    }
+  } catch (error) {
+    console.error("[LumaSync] testPatternFlow could not read the output targets:", error);
+  }
+  return ["usb"];
+}
+
 export function createDefaultTestPatternFlow(initialConfig?: LedCalibrationConfig): TestPatternFlow {
   let currentConfig: LedCalibrationConfig | undefined = initialConfig;
 
@@ -86,14 +103,27 @@ export function createDefaultTestPatternFlow(initialConfig?: LedCalibrationConfi
     // A chase walks the strip in calibrated order, which is the thing LED
     // Setup exists to verify. `ledCalibration` carries the *unsaved* editor
     // layout so the test matches what is on screen, not the last save.
-    startPattern: () =>
-      startLedTestPattern({
+    startPattern: async () => {
+      const targets = await resolveTestTargets();
+      await acquireHueForTest(targets);
+      const result = await startLedTestPattern({
         pattern: { kind: "chase", r: 255, g: 255, b: 255 },
         brightness: TEST_BRIGHTNESS,
         speed: "med",
-        targets: ["usb"],
+        targets,
         ledCalibration: currentConfig,
-      }),
-    stopPattern: () => stopLedTestPattern(),
+      });
+      // A refused start leaves nothing for `dispose` to stop, so the stream we
+      // just opened would stay up with no test behind it.
+      if (!result.active) await releaseHueAfterTest();
+      return result;
+    },
+    stopPattern: async () => {
+      try {
+        return await stopLedTestPattern();
+      } finally {
+        await releaseHueAfterTest();
+      }
+    },
   });
 }
