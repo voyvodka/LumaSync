@@ -82,6 +82,8 @@ const calibration: Catalogue<typeof enCalibration> = {
     errors: {
       testPatternBlocked: "Test paterni engellendi ({{code}}): {{reason}}",
       testPatternToggleFailed: "Test paterni değiştirilemedi: {{reason}}",
+      testPatternRefused: "Test paterni başlatılamadı ({{code}}).",
+      testPatternNoCalibration: "Test çalıştırmadan önce en az bir kenarın LED sayısını gir.",
       displaySwitchBlocked: "Ekran geçişi engellendi ({{code}}): {{reason}}",
       displaySwitchFailed: "Ekran geçişi başarısız oldu: {{reason}}",
     },

@@ -9,8 +9,6 @@
  * string unions that act as contracts.
  */
 
-import type { CommandStatusOf } from "./status";
-
 // ---------------------------------------------------------------------------
 // Calibration primitives
 // ---------------------------------------------------------------------------
@@ -72,29 +70,6 @@ export interface CalibrationTemplate {
   direction: LedDirection;
 }
 
-// ---------------------------------------------------------------------------
-// Calibration test-pattern command status
-// ---------------------------------------------------------------------------
-
-/** Exactly what `calibration.rs` puts on a `start`/`stop_calibration_test_pattern` status. */
-export const CALIBRATION_TEST_PATTERN_STATUS = {
-  PATTERN_STARTED: "CALIBRATION_PATTERN_STARTED",
-  /** No device connected — the editor still animates, nothing reaches a strip. */
-  PREVIEW_ONLY: "CALIBRATION_PREVIEW_ONLY",
-  PATTERN_STOPPED: "CALIBRATION_PATTERN_STOPPED",
-} as const;
-
-export type CalibrationTestPatternStatusCode =
-  (typeof CALIBRATION_TEST_PATTERN_STATUS)[keyof typeof CALIBRATION_TEST_PATTERN_STATUS];
-
-export type CalibrationTestPatternStatus = CommandStatusOf<CalibrationTestPatternStatusCode>;
-
-/** Thrown as `Err(String)` formatted `"CODE: detail"`. A `catch` sees these; a
- * `switch (status.code)` never will. */
-export const CALIBRATION_COMMAND_ERRORS = {
-  PATTERN_INVALID: "CALIBRATION_PATTERN_INVALID",
-  STATE_READ_FAILED: "CALIBRATION_STATE_READ_FAILED",
-} as const;
-
-export type CalibrationCommandErrorCode =
-  (typeof CALIBRATION_COMMAND_ERRORS)[keyof typeof CALIBRATION_COMMAND_ERRORS];
+// The `CALIBRATION_PATTERN_*` status surface was removed once LED Setup moved
+// onto `start_led_test_pattern` (`contracts/preview.ts`). Do not add a second
+// test-pattern path — having one is what let the old no-op survive unnoticed.

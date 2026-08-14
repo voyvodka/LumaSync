@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LedCalibrationConfig } from "../contracts";
-import { buildLedSequence, resolveLedSequenceItem } from "../indexMapping";
+import { buildLedSequence } from "../indexMapping";
 
 const BASE_CONFIG: LedCalibrationConfig = {
   counts: {
@@ -126,32 +126,5 @@ describe("buildLedSequence", () => {
 
       expect(counterClockwise[0]?.index).toBe(clockwise[0]?.index);
     }
-  });
-});
-
-describe("resolveLedSequenceItem", () => {
-  it("treats non-finite marker indexes as first marker", () => {
-    const sequence = buildLedSequence(BASE_CONFIG);
-
-    expect(resolveLedSequenceItem(sequence, Number.NaN)).toEqual(sequence[0]);
-    expect(resolveLedSequenceItem(sequence, Number.POSITIVE_INFINITY)).toEqual(sequence[0]);
-    expect(resolveLedSequenceItem(sequence, Number.NEGATIVE_INFINITY)).toEqual(sequence[0]);
-  });
-
-  it("normalizes negative and overflowing marker indexes", () => {
-    const sequence = buildLedSequence(BASE_CONFIG);
-    const sequenceLength = sequence.length;
-
-    expect(resolveLedSequenceItem(sequence, 0)).toEqual(sequence[0]);
-    expect(resolveLedSequenceItem(sequence, sequenceLength)).toEqual(sequence[0]);
-    expect(resolveLedSequenceItem(sequence, sequenceLength + 3)).toEqual(sequence[3]);
-    expect(resolveLedSequenceItem(sequence, -1)).toEqual(sequence[sequenceLength - 1]);
-    expect(resolveLedSequenceItem(sequence, -(sequenceLength + 2))).toEqual(sequence[sequenceLength - 2]);
-  });
-
-  it("returns null for empty sequence", () => {
-    expect(resolveLedSequenceItem([], 0)).toBeNull();
-    expect(resolveLedSequenceItem([], 12)).toBeNull();
-    expect(resolveLedSequenceItem([], -2)).toBeNull();
   });
 });

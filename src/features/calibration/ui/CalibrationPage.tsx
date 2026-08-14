@@ -31,15 +31,19 @@ import {
   openDisplayOverlay,
   updateDisplayOverlayPreview,
 } from "../calibrationApi";
-import { createDefaultTestPatternFlow, type TestPatternSnapshot } from "../state/testPatternFlow";
+import {
+  createDefaultTestPatternFlow,
+  isTestPatternFailure,
+  type TestPatternSnapshot,
+} from "../state/testPatternFlow";
 import { createDisplayTargetState, type DisplayTargetSnapshot } from "../state/displayTargetState";
 import { LedRoomCanvas } from "./LedRoomCanvas";
-import { getSerialConnectionStatus } from "@/features/device/deviceConnectionApi";
 import {
   DISPLAY_OVERLAY_STATUS,
   type DisplayInfo,
   type OverlayPreviewPayload,
 } from "@/shared/contracts/display";
+import { LED_TEST_STATUS } from "@/shared/contracts/preview";
 import { clamp } from "@/shared/lib/math";
 
 function reclaimFocus() {
@@ -55,16 +59,6 @@ interface CalibrationPageProps {
 
 function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
   return createCalibrationEditorState(initialConfig ?? resetToManual());
-}
-
-function areSnapshotsEqual(left: TestPatternSnapshot, right: TestPatternSnapshot) {
-  return (
-    left.isEnabled === right.isEnabled &&
-    left.mode === right.mode &&
-    left.markerIndex === right.markerIndex &&
-    left.totalLeds === right.totalLeds &&
-    left.isBlockingSave === right.isBlockingSave
-  );
 }
 
 function buildOverlayPreviewPayload(
@@ -113,12 +107,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     buildInitialEditorState(initialConfig),
   );
   const [isSaving, setIsSaving] = useState(false);
-  const flowRef = useRef(
-    createDefaultTestPatternFlow(async () => {
-      const status = await getSerialConnectionStatus();
-      return { connected: status.connected };
-    }, initialConfig),
-  );
+  const flowRef = useRef(createDefaultTestPatternFlow(initialConfig));
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
   const displayTargetRef = useRef(
     createDisplayTargetState({ openDisplayOverlay, closeDisplayOverlay }),
@@ -174,26 +163,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
   // Sync editor config to test pattern flow
   useEffect(() => {
     flowRef.current.setConfig(editorState.current);
-    flowRef.current.setTotalLeds(editorState.current.totalLeds);
-    setTestPattern(flowRef.current.getSnapshot());
   }, [editorState.current]);
-
-  // rAF loop while test pattern is active
-  useEffect(() => {
-    if (!testPattern.isEnabled) return;
-    let frameId: number | null = null;
-    const syncSnapshot = () => {
-      const latest = flowRef.current.getSnapshot();
-      setTestPattern((prev) => (areSnapshotsEqual(prev, latest) ? prev : latest));
-      if (latest.isEnabled) {
-        frameId = window.requestAnimationFrame(syncSnapshot);
-      }
-    };
-    frameId = window.requestAnimationFrame(syncSnapshot);
-    return () => {
-      if (frameId !== null) window.cancelAnimationFrame(frameId);
-    };
-  }, [testPattern.isEnabled]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -243,6 +213,21 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       }
       const next = await flowRef.current.toggle(shouldEnable);
       setTestPattern(next);
+
+      // A refused start leaves nothing running, so the overlay must come back
+      // down with it — otherwise the editor shows a stage dressed for a test
+      // that never began.
+      if (shouldEnable && isTestPatternFailure(next.lastStatus)) {
+        setTestPatternError(
+          next.lastStatus === LED_TEST_STATUS.PATTERN_NO_CALIBRATION
+            ? t("calibration:overlay.errors.testPatternNoCalibration")
+            : t("calibration:overlay.errors.testPatternRefused", { code: next.lastStatus }),
+        );
+        const closed = await displayTargetRef.current.closeActiveDisplay();
+        setDisplayTarget(closed);
+        return;
+      }
+
       setTestPatternError(null);
       if (!shouldEnable) {
         const closed = await displayTargetRef.current.closeActiveDisplay();

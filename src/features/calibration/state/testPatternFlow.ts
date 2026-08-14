@@ -1,214 +1,99 @@
-import {
-  startCalibrationTestPattern,
-  stopCalibrationTestPattern,
-} from "../calibrationApi";
+import { LED_TEST_STATUS, type LedTestPatternResult, type LedTestStatusCode } from "@/shared/contracts/preview";
+
+import { startLedTestPattern, stopLedTestPattern } from "../../preview/previewApi";
 import type { LedCalibrationConfig } from "../model/contracts";
-import { buildLedSequence, resolveLedSequenceItem } from "../model/indexMapping";
 
 export type TestPatternMode = "sending" | "preview-only";
 
 export interface TestPatternSnapshot {
   isEnabled: boolean;
   mode: TestPatternMode;
-  markerIndex: number;
-  totalLeds: number;
-  isBlockingSave: boolean;
-}
-
-interface TestPatternConnectionStatus {
-  connected: boolean;
+  /** Coded outcome of the last start/stop, so the page can explain a refusal
+   * instead of showing an enabled test that never reached a strip. */
+  lastStatus: LedTestStatusCode | null;
 }
 
 interface CreateTestPatternFlowDeps {
-  getConnectionStatus: () => Promise<TestPatternConnectionStatus>;
-  startPhysicalPattern: (markerIndex: number) => Promise<void>;
-  stopPhysicalPattern: () => Promise<void>;
-  initialConfig?: LedCalibrationConfig;
+  startPattern: () => Promise<LedTestPatternResult>;
+  stopPattern: () => Promise<LedTestPatternResult>;
   onConfigChange?: (config: LedCalibrationConfig) => void;
-  now?: () => number;
-  scheduleFrame?: (callback: FrameRequestCallback) => number;
-  cancelFrame?: (frameId: number) => void;
 }
-
-const MARKER_ADVANCE_MS = 120;
 
 export interface TestPatternFlow {
   getSnapshot: () => TestPatternSnapshot;
-  setTotalLeds: (totalLeds: number) => TestPatternSnapshot;
   setConfig: (config: LedCalibrationConfig) => void;
   toggle: (enabled: boolean) => Promise<TestPatternSnapshot>;
   dispose: () => Promise<void>;
 }
 
-function nextMarkerIndex(current: number, totalLeds: number): number {
-  if (totalLeds <= 0) {
-    return 0;
-  }
+const IDLE: TestPatternSnapshot = { isEnabled: false, mode: "preview-only", lastStatus: null };
 
-  return (current + 1) % totalLeds;
-}
+/** Brightness the LED Setup chase runs at. Bright enough to read the ordering
+ * across a room, short of the eye-watering full scale. */
+const TEST_BRIGHTNESS = 0.5;
 
 export function createTestPatternFlow(deps: CreateTestPatternFlowDeps): TestPatternFlow {
-  const now = deps.now ?? (() => Date.now());
-  const scheduleFrame =
-    deps.scheduleFrame ?? ((callback: FrameRequestCallback) => window.requestAnimationFrame(callback));
-  const cancelFrame =
-    deps.cancelFrame ?? ((frameId: number) => window.cancelAnimationFrame(frameId));
-
-  let snapshot: TestPatternSnapshot = {
-    isEnabled: false,
-    mode: "preview-only",
-    markerIndex: 0,
-    totalLeds: 24,
-    isBlockingSave: false,
-  };
-
-  let frameId: number | null = null;
-  let lastMarkerAt = now();
-  const stopAnimation = () => {
-    if (frameId === null) {
-      return;
-    }
-
-    cancelFrame(frameId);
-    frameId = null;
-  };
-
-  const startAnimation = () => {
-    stopAnimation();
-    lastMarkerAt = now();
-
-    const tick: FrameRequestCallback = (timestamp) => {
-      if (!snapshot.isEnabled) {
-        frameId = null;
-        return;
-      }
-
-      if (timestamp - lastMarkerAt >= MARKER_ADVANCE_MS) {
-        snapshot = {
-          ...snapshot,
-          markerIndex: nextMarkerIndex(snapshot.markerIndex, snapshot.totalLeds),
-        };
-        lastMarkerAt = timestamp;
-      }
-
-      frameId = scheduleFrame(tick);
-    };
-
-    frameId = scheduleFrame(tick);
-  };
-
-  const stopPhysical = async () => {
-    await deps.stopPhysicalPattern();
-  };
+  let snapshot: TestPatternSnapshot = IDLE;
 
   return {
     getSnapshot: () => snapshot,
-    setTotalLeds: (totalLeds) => {
-      const normalizedTotal = Number.isFinite(totalLeds) ? Math.max(1, Math.floor(totalLeds)) : 1;
-      snapshot = {
-        ...snapshot,
-        totalLeds: normalizedTotal,
-        markerIndex: snapshot.markerIndex % normalizedTotal,
-      };
-      return snapshot;
-    },
     setConfig: (config) => {
       deps.onConfigChange?.(config);
     },
     toggle: async (enabled) => {
-      if (enabled) {
-        snapshot = {
-          ...snapshot,
-          isEnabled: true,
-          mode: "preview-only",
-          markerIndex: 0,
-          isBlockingSave: false,
-        };
-        startAnimation();
-
-        try {
-          const status = await deps.getConnectionStatus();
-          if (status.connected) {
-            await deps.startPhysicalPattern(snapshot.markerIndex);
-            snapshot = {
-              ...snapshot,
-              mode: "sending",
-            };
-          }
-        } catch (error) {
-          console.warn(
-            "[LumaSync] Test pattern hardware path failed, continuing preview-only:",
-            error,
-          );
-          snapshot = {
-            ...snapshot,
-            mode: "preview-only",
-          };
-        }
-
+      if (!enabled) {
+        const result = await deps.stopPattern();
+        snapshot = { ...IDLE, lastStatus: result.status.code };
         return snapshot;
       }
 
-      stopAnimation();
-      await stopPhysical();
+      const result = await deps.startPattern();
       snapshot = {
-        ...snapshot,
-        isEnabled: false,
-        mode: "preview-only",
-        markerIndex: 0,
-        isBlockingSave: false,
+        // The backend owns this verdict. Reporting "sending" from a cached
+        // connection flag is exactly how the previous no-op stayed hidden.
+        isEnabled: result.active,
+        mode: result.previewOnly ? "preview-only" : "sending",
+        lastStatus: result.status.code,
       };
       return snapshot;
     },
     dispose: async () => {
-      stopAnimation();
       if (snapshot.isEnabled) {
-        await stopPhysical();
+        await deps.stopPattern();
       }
-      snapshot = {
-        ...snapshot,
-        isEnabled: false,
-        mode: "preview-only",
-        markerIndex: 0,
-        isBlockingSave: false,
-      };
+      snapshot = IDLE;
     },
   };
 }
 
-export function createDefaultTestPatternFlow(
-  getConnectionStatus: () => Promise<TestPatternConnectionStatus>,
-  initialConfig?: LedCalibrationConfig,
-): TestPatternFlow {
-  let currentConfig: LedCalibrationConfig | null = initialConfig ?? null;
+/** True when a start refused outright — nothing is running and the user needs
+ * to be told why, as opposed to a preview-only run that is merely limited. */
+export function isTestPatternFailure(status: LedTestStatusCode | null): boolean {
+  return (
+    status === LED_TEST_STATUS.PATTERN_NO_CALIBRATION ||
+    status === LED_TEST_STATUS.PATTERN_INVALID_PARAMS ||
+    status === LED_TEST_STATUS.PATTERN_RUNTIME_ERROR
+  );
+}
 
-  const resolvePhysicalIndex = (markerIndex: number) => {
-    const fallbackIndex = Math.max(0, Math.floor(markerIndex));
-
-    if (!currentConfig) {
-      return fallbackIndex;
-    }
-
-    const sequence = buildLedSequence(currentConfig);
-    return resolveLedSequenceItem(sequence, markerIndex)?.index ?? fallbackIndex;
-  };
+export function createDefaultTestPatternFlow(initialConfig?: LedCalibrationConfig): TestPatternFlow {
+  let currentConfig: LedCalibrationConfig | undefined = initialConfig;
 
   return createTestPatternFlow({
-    getConnectionStatus,
-    initialConfig,
     onConfigChange: (config) => {
       currentConfig = config;
     },
-    startPhysicalPattern: async (markerIndex) => {
-      await startCalibrationTestPattern({
-        ledIndexes: [resolvePhysicalIndex(markerIndex)],
-        frameMs: MARKER_ADVANCE_MS,
-        brightness: 64,
-      });
-    },
-    stopPhysicalPattern: async () => {
-      await stopCalibrationTestPattern();
-    },
+    // A chase walks the strip in calibrated order, which is the thing LED
+    // Setup exists to verify. `ledCalibration` carries the *unsaved* editor
+    // layout so the test matches what is on screen, not the last save.
+    startPattern: () =>
+      startLedTestPattern({
+        pattern: { kind: "chase", r: 255, g: 255, b: 255 },
+        brightness: TEST_BRIGHTNESS,
+        speed: "med",
+        targets: ["usb"],
+        ledCalibration: currentConfig,
+      }),
+    stopPattern: () => stopLedTestPattern(),
   });
 }

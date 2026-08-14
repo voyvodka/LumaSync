@@ -2709,6 +2709,10 @@ pub struct StartLedTestPatternPayload {
     pub speed: Option<TestPatternSpeed>,
     #[serde(default)]
     pub targets: Option<Vec<String>>,
+    /// Layout to size the frame with. LED Setup sends its unsaved editor
+    /// state here; absent falls through to `maybe_hydrate_led_calibration`.
+    #[serde(default)]
+    pub led_calibration: Option<LedCalibrationConfig>,
 }
 
 /// Result of `start_led_test_pattern` / `stop_led_test_pattern` — whether the
@@ -2799,7 +2803,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         }),
         targets: Some(targets),
         display_id: None,
-        led_calibration: None,
+        led_calibration: payload.led_calibration.clone(),
         color_correction: None,
         firmware_profile: None,
         chip_type: None,

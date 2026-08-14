@@ -7,22 +7,6 @@ export interface LedSequenceItem {
   localIndex: number;
 }
 
-export function resolveLedSequenceItem(
-  sequence: LedSequenceItem[],
-  markerIndex: number,
-): LedSequenceItem | null {
-  if (sequence.length === 0) {
-    return null;
-  }
-
-  if (!Number.isFinite(markerIndex)) {
-    return sequence[0] ?? null;
-  }
-
-  const normalizedMarkerIndex = ((markerIndex % sequence.length) + sequence.length) % sequence.length;
-  return sequence[normalizedMarkerIndex] ?? null;
-}
-
 const SEGMENT_ORDER: LedSegmentKey[] = ["top", "right", "bottom", "left"];
 
 type AnchorLocalIndexMode = "start" | "end" | "gapRight" | "gapLeft";

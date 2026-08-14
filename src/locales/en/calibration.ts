@@ -79,6 +79,8 @@ export default {
     errors: {
       testPatternBlocked: "Test pattern blocked ({{code}}): {{reason}}",
       testPatternToggleFailed: "Test pattern toggle failed: {{reason}}",
+      testPatternRefused: "Test pattern did not start ({{code}}).",
+      testPatternNoCalibration: "Set the LED counts for at least one edge before running a test.",
       displaySwitchBlocked: "Display switch blocked ({{code}}): {{reason}}",
       displaySwitchFailed: "Display switch failed: {{reason}}",
     },
