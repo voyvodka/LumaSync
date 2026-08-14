@@ -395,20 +395,9 @@ export const SHELL_STORE_KEY = "shell-state";
 /** Window layout mode — compact for tray-first quick controls, full for settings */
 export type UIMode = "compact" | "full";
 
-/**
- * Auto-update release channel (v1.5 W2-C6).
- *
- * - `"stable"` — production releases tagged `vX.Y.Z` (no suffix). Served
- *   from `latest.json`. Default for fresh installs and upgrades from
- *   v1.4 where the field is absent.
- * - `"beta"` — prereleases tagged `vX.Y.Z-beta.N`. Served from
- *   `latest-beta.json`. Opt-in via the Settings → System pane.
- *
- * Endpoint mapping today is a single canonical `latest.json` inside
- * `tauri.conf.json`; a follow-up Rust-side dynamic
- * `app.updater_builder().endpoints(...)` will route opted-in installs to
- * `latest-beta.json` once the prerelease publishing flow is exercised.
- */
+/** Auto-update channel; absent or unreadable ⇒ `"stable"`. Beta is a
+ * **superset** — stable releases refresh the beta feed too. Routing lives in
+ * `commands/updater.rs`, not `tauri.conf.json`. */
 export type UpdateChannel = "stable" | "beta";
 
 /** Default update channel for fresh installs / unset state. */

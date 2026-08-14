@@ -36,8 +36,15 @@ https://keepachangelog.com/en/1.1.0/
 - Testing a WLED bridge no longer reports success it did not verify. The test asked the device for its details over HTTP — which is real, and still cross-checks the LED count — but then sent one UDP frame and called that a round trip. UDP has no acknowledgement, so a wrong realtime port, a rejected format, or a dropped packet all passed. It now checks the port against the device's own setting, and after sending asks the device whether it entered realtime mode: a confirmed result and a "sent, not confirmed" result are now different answers. The timing figure is labelled send latency, because that is all it ever measured.
 - Starting a mode whose calibrated strip length disagrees with the WLED device's LED count now says so. WLED lights the first N LEDs of a short frame and truncates a long one, so the strip half-responds — which reads as a wiring fault and sends people to their solder joints. Lighting continues; the mismatch is now reported with both numbers.
 
+### Added
+
+- A beta update channel, switchable in Settings → System. With it on, LumaSync also offers prereleases; with it off nothing changes. Beta is a superset — a stable release still reaches you on the beta channel, so a tester is never stranded on an older prerelease. The description says plainly what CI does and does not prove about a prerelease: it builds and tests them, but never launches the packaged installer itself.
+- Each log file now opens with the version, build type and update channel that wrote it. Stable and beta are one installation writing the same file in turn, so nothing in a log said which build produced a line.
+
 ### Changed
 
+- A release can no longer be published from a tag that goes backwards. The tag-versus-tree check added earlier compares only the `X.Y.Z` core, so tagging a prerelease of a version already released passed every step and would have offered users a build older than the one they run. The tag must now also be newer than every existing release tag.
+- A prerelease publishes its version's release notes instead of needing its own changelog section.
 - Linux screen capture now downscales each frame before analysing it, as macOS and Windows already did. A 4K X11 display was handing all 8.3 million of its pixels to the analysis pass twenty times a second and now walks about 230 thousand — that ratio is arithmetic read off the code, not a measurement: nobody has run it on Linux hardware, which stays the least-exercised of the three platforms.
 - The LED preview popup has one always-available close control, and reopens where it was last dragged.
 - Runtime telemetry in Settings adopts the amber Rev 07 design language it had been left out of.

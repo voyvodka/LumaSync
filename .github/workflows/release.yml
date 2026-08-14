@@ -81,6 +81,39 @@ jobs:
             exit 1
           fi
 
+      # The gate above compares CORE versions, so it cannot see a BACKWARDS tag:
+      # `v1.5.4-rc.1` after `v1.5.4` sorts lower under semver and would ship a
+      # feed older than what users run, with every step green.
+      - name: Verify the tag is newer than every existing release tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # `sort -V` is NOT semver-correct: it orders 1.5.4-rc.1 ABOVE 1.5.4.
+          # Substituting `-` for `~`, which sort -V ranks below everything, gives
+          # the semver ordering. Verified against 1.5.4~rc.1 < 1.5.4 < 1.5.5~rc.1.
+          semver_key() { printf '%s' "${1#v}" | tr '-' '~'; }
+
+          TAG="${GITHUB_REF_NAME}"
+          PREVIOUS=$(gh api "repos/${GITHUB_REPOSITORY}/tags" --paginate --jq '.[].name' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' \
+            | grep -vxF "$TAG" \
+            | while read -r t; do printf '%s\t%s\n' "$(semver_key "$t")" "$t"; done \
+            | sort -V -k1,1 | tail -1 | cut -f2)
+
+          if [ -z "$PREVIOUS" ]; then
+            echo "No earlier release tag; nothing to compare against."
+            exit 0
+          fi
+
+          NEWEST=$(printf '%s\n%s\n' "$(semver_key "$TAG")" "$(semver_key "$PREVIOUS")" | sort -V | tail -1)
+          if [ "$NEWEST" != "$(semver_key "$TAG")" ] || [ "$(semver_key "$TAG")" = "$(semver_key "$PREVIOUS")" ]; then
+            echo "::error::tag ${TAG} is not newer than the existing ${PREVIOUS}; refusing to publish a backwards release."
+            exit 1
+          fi
+          echo "${TAG} is newer than ${PREVIOUS}."
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
@@ -210,14 +243,31 @@ jobs:
         shell: bash
         run: |
           VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
-          NOTES=$(awk "/^## \[${VERSION}\]/{p=1; next} /^## \[/{if(p) exit} /^---$/{if(p) exit} p" CHANGELOG.md)
-          # Previously a placeholder string, so a release with no section shipped
-          # to users with no notes and nothing failed. Blanks are stripped first:
-          # a heading with an empty body yields newlines, not an empty string.
-          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
-            echo "::error::CHANGELOG.md has no non-empty '## [${VERSION}]' section; refusing to release."
+          CORE_VERSION="${VERSION%%[-+]*}"
+
+          # Blanks are stripped before the emptiness test: a heading with an
+          # empty body yields newlines, not an empty string.
+          extract() {
+            awk "/^## \[$1\]/{p=1; next} /^## \[/{if(p) exit} /^---\$/{if(p) exit} p" CHANGELOG.md
+          }
+          nonempty() { [ -n "$(printf '%s' "$1" | tr -d '[:space:]')" ]; }
+
+          NOTES=$(extract "${VERSION}")
+          SOURCE="${VERSION}"
+          # A prerelease is the candidate for its core version, so it publishes
+          # that section. ## [Unreleased] would ship notes for unbuilt work.
+          if ! nonempty "$NOTES" && [ "$CORE_VERSION" != "$VERSION" ]; then
+            NOTES=$(extract "${CORE_VERSION}")
+            SOURCE="${CORE_VERSION}"
+          fi
+
+          # Previously a placeholder string, so a release with no section
+          # shipped to users with no notes and nothing failed.
+          if ! nonempty "$NOTES"; then
+            echo "::error::CHANGELOG.md has no non-empty '## [${VERSION}]' section (nor '## [${CORE_VERSION}]'); refusing to release."
             exit 1
           fi
+          echo "Release notes taken from '## [${SOURCE}]'."
           {
             echo "notes<<RELEASE_NOTES_EOF"
             echo "$NOTES"
@@ -331,6 +381,25 @@ jobs:
             fi
           done
           echo "latest.json covers $(jq -r '.platforms | keys | length' latest.json) platform keys."
+
+      # The anchor is a prerelease so it stays out of /releases/latest, and
+      # stable tags refresh it too — see docs/architecture/build-and-release.md.
+      - name: Refresh the beta channel feed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          ANCHOR: beta-channel
+        run: |
+          set -euo pipefail
+          cp latest.json latest-beta.json
+          if ! gh release view "$ANCHOR" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$ANCHOR" --repo "$GITHUB_REPOSITORY" \
+              --prerelease \
+              --title "Beta channel feed" \
+              --notes "Updater feed for the beta channel. Not a build — the only asset is \`latest-beta.json\`, replaced on every release. Marked prerelease so it never becomes /releases/latest."
+          fi
+          gh release upload "$ANCHOR" latest-beta.json --repo "$GITHUB_REPOSITORY" --clobber
+          echo "beta feed now points at $(jq -r '.version' latest-beta.json) (from $TAG)."
 
       - name: Publish the release
         env:

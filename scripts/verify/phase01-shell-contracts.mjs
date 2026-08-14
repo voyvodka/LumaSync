@@ -1478,7 +1478,13 @@ function harvestCodes(files) {
   const found = new Set();
   for (const file of files) {
     let text = stripComments(readFileSync(file, "utf-8"));
-    if (file.endsWith(".rs")) text = stripRustTestModules(text);
+    if (file.endsWith(".rs")) {
+      text = stripRustTestModules(text);
+      // `env!("CARGO_PKG_VERSION")` is a compile-time variable name, not a code
+      // crossing the IPC boundary. Without this it harvests as an undeclared
+      // producer and can only be silenced by polluting the ratchet.
+      text = text.replace(/\b(?:option_)?env!\s*\(\s*"[^"]*"\s*\)/g, "env!()");
+    }
     // `"CODE: detail"` counts too — Err arms carry the code as a prefix (#42).
     for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})(?:"|:\s)/g)) {
       const code = m[1];
@@ -2132,7 +2138,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 36;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 40;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

@@ -15,6 +15,7 @@ import {
   toggleStartup,
 } from "@/features/tray/trayController";
 import { APP_NAME, APP_VERSION } from "@/shared/constants/app";
+import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/shell";
 import type { UpdaterState } from "@/features/updater/useAutoUpdater";
 import { DevUpdaterMenu } from "@/features/updater/DevUpdaterMenu";
 
@@ -29,6 +30,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
   const { t, i18n } = useTranslation();
   const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";
   const [startupEnabled, setStartupEnabled] = useState(false);
+  const [updateChannel, setUpdateChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
   const [startupLoading, setStartupLoading] = useState(true);
 
   useEffect(() => {
@@ -43,6 +45,13 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
         setStartupEnabled(false);
       } finally {
         setStartupLoading(false);
+      }
+
+      try {
+        const persisted = await shellStore.load();
+        setUpdateChannel(persisted.updateChannel ?? DEFAULT_UPDATE_CHANNEL);
+      } catch {
+        setUpdateChannel(DEFAULT_UPDATE_CHANNEL);
       }
 
       try {
@@ -65,6 +74,19 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
       await shellStore.save({ language: lang });
     } catch (err) {
       console.error("[LumaSync] shellStore.save(language) failed:", err);
+    }
+  }
+
+  async function handleChannelToggle() {
+    const next: UpdateChannel = updateChannel === "beta" ? "stable" : "beta";
+    // Optimistic, then reverted on failure: Rust reads this same field off disk
+    // to pick the endpoint, so a toggle the store rejected must not look on.
+    setUpdateChannel(next);
+    try {
+      await shellStore.save({ updateChannel: next });
+    } catch (err) {
+      console.error("[LumaSync] shellStore.save(updateChannel) failed:", err);
+      setUpdateChannel(updateChannel);
     }
   }
 
@@ -162,6 +184,21 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
             >
               {isCheckingForUpdates ? t("updater:checking") : t("updater:checkAction")}
             </button>
+          </div>
+        </div>
+        <div className="lm-settings-row">
+          <div className="lm-settings-row-l">
+            <div className="lm-settings-row-name">{t("updater:betaChannel")}</div>
+            <div className="lm-settings-row-desc">{t("updater:betaChannelDescription")}</div>
+          </div>
+          <div className="lm-settings-row-r">
+            <button
+              type="button"
+              className={`lm-settings-tg ${updateChannel === "beta" ? "is-on" : ""}`}
+              onClick={() => { void handleChannelToggle(); }}
+              aria-pressed={updateChannel === "beta"}
+              aria-label={t("updater:betaChannel")}
+            />
           </div>
         </div>
       </section>
