@@ -56,6 +56,28 @@ release and giving every rc its own heading is bookkeeping with no reader. Falli
 `## [Unreleased]` was rejected: it would ship notes for work that is not in the build. Both empty
 means the job fails — there is no placeholder.
 
+**A prerelease carries its suffix in the tree version, and MSI needs a pinned version because of it.**
+`tauri-action` reads the version from `Cargo.toml`/`package.json`, not from the tag — so a tree
+reading plain `1.5.5` produces artefacts named `LumaSync_1.5.5_*` and a feed saying `1.5.5` even when
+the tag is `v1.5.5-rc.1`. The updater decides with `release.version > current_version`, so that build
+can never be upgraded to `rc.2` or to stable `1.5.5`: both comparisons are `1.5.5 > 1.5.5`. The three
+version locations therefore carry `1.5.5-rc.1` in full.
+
+The MSI bundler refuses that: *"optional pre-release identifier in app version must be numeric-only
+and cannot be greater than 65535 for msi target"*. `bundle.windows.wix.version` is pinned to the core
+`X.Y.Z` instead of being derived, which makes it a **fourth** version location — and the tag gate
+checks it, because a stale pin is a Windows upgrade that silently never triggers.
+
+**Windows cannot upgrade between builds that share an `X.Y.Z`, and no version scheme fixes it.**
+Microsoft is explicit: *"Windows Installer uses only the first three fields of the product version.
+If you include a fourth field in your product version, the installer ignores the fourth field"*, and
+*"at least one of the three fields of ProductVersion must change for an upgrade"*. So `1.5.5-rc.1`,
+`1.5.5-rc.2` and `1.5.5` all present as `1.5.5` to Windows Installer, and the updater's
+`msiexec /i` does not perform an upgrade between them. Using a numeric suffix (`1.5.5-1` →
+`1.5.5.1`) changes nothing, because that lands in the ignored fourth field. **Windows testers must
+reinstall each release candidate by hand.** The real fix is to make NSIS the Windows updater target —
+it overwrites rather than consulting a product version — which is a separate change.
+
 ## Gotchas
 
 - **`cargo build` and `pnpm tauri build --debug` write the same path and produce different binaries.** Both land on `src-tauri/target/debug/lumasync`. The cargo one loads the frontend from the Vite dev server, so launching it without `pnpm dev` running gives a blank window and `Could not connect to localhost:1420` in the Web Inspector — an intact app with no content, indistinguishable from a broken one. Nothing about the path reveals which is there. Use `pnpm tauri dev`, or rebuild with `--debug --no-bundle` to embed the frontend. `scripts/verify/launch-smoke.mjs` asserts the frontend is embedded and fails immediately rather than waiting out its timeout.

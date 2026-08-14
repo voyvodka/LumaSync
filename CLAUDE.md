@@ -291,7 +291,7 @@ describe a release artefact as verified on the strength of a green CI run.
 
 Four things must stay true regardless of who does the work:
 
-- **Three version locations move in lockstep**: `src-tauri/Cargo.toml`, `package.json`, `SECURITY.md`. Then `cargo check` to refresh `Cargo.lock`. `tauri.conf.json` has no version field — it inherits from Cargo.toml.
+- **Four version locations move in lockstep**: `src-tauri/Cargo.toml`, `package.json`, `SECURITY.md`, and `bundle.windows.wix.version` in `tauri.conf.json`. Then `cargo check` to refresh `Cargo.lock`. The first three carry the full version including any prerelease suffix; the wix one carries the bare `X.Y.Z`, because MSI rejects a non-numeric prerelease identifier. The tag gate in `release.yml` checks all four.
 - **No duplicate `## [X.Y.Z]` headings in CHANGELOG.md** — `release.yml` extracts notes with `awk` and stops at the first match.
 - **Work lands on `main` through pull requests.** Branch protection requires four checks: `Build and Check (ubuntu-24.04)`, `Build and Check (macos-latest)`, `Build and Check (windows-latest)`, `Analyze (javascript-typescript)`. Renaming a workflow job renames its status context — a required context no job produces blocks every PR until an admin overrides it.
 - **Tagging publishes in two stages.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the updater feed never sees a platform-incomplete `latest.json`; a `publish` job then asserts all four platform keys before undrafting. A `-` in the tag (e.g. `-rc.1`) marks it prerelease.
