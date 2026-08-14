@@ -6,6 +6,7 @@ import {
   type DisplayOverlayCommandResult,
   type OverlayPreviewPayload,
 } from "@/shared/contracts/display";
+import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 
 interface CreateDisplayTargetStateDeps {
   openDisplayOverlay: (
@@ -65,6 +66,7 @@ function toBlockedSnapshot(
 export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): DisplayTargetState {
   let snapshot: DisplayTargetSnapshot = { ...DEFAULT_SNAPSHOT };
   let inFlightSwitch: Promise<DisplayTargetSnapshot> | null = null;
+  const switchGuard = createLatestOperationGuard();
 
   const getResolvedTargetId = (displayId?: DisplayId | null) => {
     if (displayId && displayId.trim().length > 0) {
@@ -110,8 +112,13 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
       return snapshot;
     },
     switchActiveDisplay: async (displayId, preview) => {
-      if (inFlightSwitch) {
-        return inFlightSwitch;
+      // Returning the in-flight promise here used to drop `displayId` on the
+      // floor, so a second click left the store and the UI on the display the
+      // overlay had not moved to. Queue behind it and let the newest win.
+      const isLatest = switchGuard.begin();
+      while (inFlightSwitch) {
+        await inFlightSwitch.catch(() => undefined);
+        if (!isLatest()) return snapshot;
       }
 
       const fallbackDisplayId =
