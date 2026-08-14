@@ -32,6 +32,30 @@ tests. Only add or adjust tests for changed behaviour.
 renames its status context, and a required context that no job produces blocks every PR until an
 admin overrides it.
 
+**The beta update channel is fed from an anchor release, because GitHub has no "latest prerelease"
+URL.** The stable endpoint in `tauri.conf.json` resolves through
+`/releases/latest/download/latest.json`, and `/releases/latest` returns the newest release that is
+neither a draft nor a prerelease — so a prerelease's `latest.json` is unreachable at any stable
+address. The `publish` job therefore copies it onto a fixed release tagged `beta-channel` as
+`latest-beta.json`. Three properties make that safe, and each is load-bearing:
+
+- **The anchor is itself marked prerelease.** That is the only thing keeping it out of
+  `/releases/latest`; a normal release there would hijack the stable feed for every install.
+- **Stable tags refresh it too.** Beta is a *superset* of stable, not a fork of it. Without this a
+  tester sitting on `1.5.5-rc.2` would never be offered `1.5.6`.
+- **The refresh runs after the four-platform assertion and before the undraft.** A failure leaves
+  the release a draft and the job re-runnable; a published release with a stale beta feed is worse
+  than one that has not published yet.
+
+The `beta-channel` tag does not match `release.yml`'s `v*.*.*` trigger, so creating it cannot
+recurse into another release run.
+
+**A prerelease tag publishes its core version's changelog section.** `v1.5.4-rc.1` looks for
+`## [1.5.4-rc.1]` first and falls back to `## [1.5.4]`, because an rc *is* the candidate for that
+release and giving every rc its own heading is bookkeeping with no reader. Falling back to
+`## [Unreleased]` was rejected: it would ship notes for work that is not in the build. Both empty
+means the job fails — there is no placeholder.
+
 ## Gotchas
 
 - **`cargo build` and `pnpm tauri build --debug` write the same path and produce different binaries.** Both land on `src-tauri/target/debug/lumasync`. The cargo one loads the frontend from the Vite dev server, so launching it without `pnpm dev` running gives a blank window and `Could not connect to localhost:1420` in the Web Inspector — an intact app with no content, indistinguishable from a broken one. Nothing about the path reveals which is there. Use `pnpm tauri dev`, or rebuild with `--debug --no-bundle` to embed the frontend. `scripts/verify/launch-smoke.mjs` asserts the frontend is embedded and fails immediately rather than waiting out its timeout.
