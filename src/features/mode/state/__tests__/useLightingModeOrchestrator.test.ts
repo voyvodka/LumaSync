@@ -217,6 +217,47 @@ describe("useLightingModeOrchestrator", () => {
     expect(result.current.isModeTransitioning).toBe(false);
   });
 
+  describe("OFF-path stop outcomes", () => {
+    async function runOffWithFailingUsbStop() {
+      const view = harness();
+      act(() => {
+        view.result.current.setLightingMode({
+          kind: LIGHTING_MODE_KIND.SOLID,
+          solid: { r: 1, g: 2, b: 3, brightness: 1 },
+        });
+        view.result.current.setSelectedOutputTargets(["usb", "hue"]);
+        view.result.current.setActiveOutputTargets(["usb", "hue"]);
+      });
+
+      stopLightingMock.mockRejectedValue(new Error("port gone"));
+      await act(async () => {
+        await view.result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.OFF });
+      });
+      return view;
+    }
+
+    it("still asks the other target to stop", async () => {
+      await runOffWithFailingUsbStop();
+      expect(stopHueMock).toHaveBeenCalled();
+    });
+
+    it("drops the target that stopped and keeps the one that did not", async () => {
+      const view = await runOffWithFailingUsbStop();
+
+      // Under `Promise.all` the USB rejection aborted before the results were
+      // applied, so both stayed active — including the one already stopped.
+      expect(view.result.current.activeOutputTargets).not.toContain("hue");
+      expect(view.result.current.activeOutputTargets).toContain("usb");
+    });
+
+    it("reaches OFF, rather than leaving the toggle on the mode it just stopped", async () => {
+      const view = await runOffWithFailingUsbStop();
+
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+      expect(view.result.current.isModeTransitioning).toBe(false);
+    });
+  });
+
   describe("capture start failures", () => {
     // D-05 gates a USB target with no calibration before Phase 2 ever runs.
     const savedCalibration = {
