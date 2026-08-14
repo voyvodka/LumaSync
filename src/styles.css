@@ -1906,7 +1906,10 @@
 /* Card grid */
 .lm-device-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* `auto-fit`, never `auto-fill`: auto-fill keeps the empty track, which is
+     the dead column beside a lone bridge. `min(…, 100%)` is load-bearing too —
+     a bare 260px floor overflows any container narrower than one card. */
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: 14px;
   min-height: 0;
 }
@@ -2098,13 +2101,17 @@
 /* Actions row */
 .lm-dcard-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
 }
 .lm-dcard-act {
   all: unset;
   box-sizing: border-box;
-  flex: 1;
+  /* `1 1 auto`, not the shorthand `1` (= `1 1 0%`). A zero basis makes every
+     button "fit" on one line, so wrap never fires and `all: unset`'s restored
+     `min-width: auto` pushes the row out of the card instead. */
+  flex: 1 1 auto;
   padding: 7px 10px;
   border: 1px solid #252b34;
   border-radius: 6px;
