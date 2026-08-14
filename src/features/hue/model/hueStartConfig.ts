@@ -35,6 +35,22 @@ export function toHueStartConfig(state: {
   return { bridgeIp, username, clientKey, areaId };
 }
 
+/** `toHueStartConfig` builds a fresh object every call, so storing it blindly
+ * restarts every effect keyed on the config. Compare before storing. */
+export function isSameHueStartConfig(
+  a: HueStartConfig | null,
+  b: HueStartConfig | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.bridgeIp === b.bridgeIp &&
+    a.username === b.username &&
+    a.clientKey === b.clientKey &&
+    a.areaId === b.areaId
+  );
+}
+
 /** All four codes that mean "the stream is up, or on its way up". */
 export function isHueStartCodeOk(code: string): boolean {
   return (

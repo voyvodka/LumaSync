@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { HUE_CREDENTIAL_BACKENDS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
-import { isHueStartCodeOk, isHueStopCodeOk, toHueStartConfig } from "../hueStartConfig";
+import {
+  isHueStartCodeOk,
+  isHueStopCodeOk,
+  isSameHueStartConfig,
+  toHueStartConfig,
+} from "../hueStartConfig";
 
 describe("toHueStartConfig", () => {
   const complete = {
@@ -89,5 +94,40 @@ describe("isHueStartCodeOk / isHueStopCodeOk", () => {
   it("accepts only a confirmed stop", () => {
     expect(isHueStopCodeOk(HUE_RUNTIME_STATUS.STREAM_STOPPED)).toBe(true);
     expect(isHueStopCodeOk(HUE_RUNTIME_STATUS.STREAM_RUNNING)).toBe(false);
+  });
+});
+
+describe("isSameHueStartConfig", () => {
+  const state = {
+    lastHueBridge: { ip: "192.168.1.10" },
+    hueAppKey: "app-user",
+    hueClientKey: "AABBCCDD",
+    lastHueAreaId: "area-1",
+  };
+
+  // The whole point: two projections of an unchanged shell state are distinct
+  // objects, so `Object.is` reports a change on every mode switch and every
+  // effect keyed on the config restarts with a fresh failure budget.
+  it("treats two projections of the same state as equal despite distinct identity", () => {
+    const a = toHueStartConfig(state);
+    const b = toHueStartConfig(state);
+
+    expect(a).not.toBe(b);
+    expect(isSameHueStartConfig(a, b)).toBe(true);
+  });
+
+  it("separates a real change on any of the four fields", () => {
+    const base = toHueStartConfig(state);
+
+    expect(isSameHueStartConfig(base, toHueStartConfig({ ...state, lastHueAreaId: "area-2" }))).toBe(false);
+    expect(isSameHueStartConfig(base, toHueStartConfig({ ...state, lastHueBridge: { ip: "10.0.0.2" } }))).toBe(false);
+    expect(isSameHueStartConfig(base, toHueStartConfig({ ...state, hueAppKey: "other" }))).toBe(false);
+    expect(isSameHueStartConfig(base, toHueStartConfig({ ...state, hueClientKey: "FFFF" }))).toBe(false);
+  });
+
+  it("handles the unpaired null on either side", () => {
+    expect(isSameHueStartConfig(null, null)).toBe(true);
+    expect(isSameHueStartConfig(toHueStartConfig(state), null)).toBe(false);
+    expect(isSameHueStartConfig(null, toHueStartConfig(state))).toBe(false);
   });
 });

@@ -45,6 +45,7 @@ import {
   type LightingModeConfig,
 } from "./features/mode/model/contracts";
 import type { HueStartConfig } from "./features/hue/model/hueStartConfig";
+import { useStableHueStartConfig } from "./features/hue/state/useStableHueStartConfig";
 import type { LedCalibrationConfig } from "./features/calibration/model/contracts";
 import {
   resizeToMode,
@@ -80,7 +81,7 @@ function App() {
   } = useUIMode();
   const [activeSection, setActiveSection] = useState<SectionId>(SECTION_IDS.LIGHTS);
   const [savedCalibration, setSavedCalibration] = useState<LedCalibrationConfig | undefined>(undefined);
-  const [hueStartConfig, setHueStartConfig] = useState<HueStartConfig | null>(null);
+  const [hueStartConfig, setHueStartConfig] = useStableHueStartConfig();
   // Mirror of `hueStartConfig` so the connection-event subscriber (in a
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
