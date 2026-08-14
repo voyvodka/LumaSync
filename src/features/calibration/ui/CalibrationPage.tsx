@@ -533,8 +533,9 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
                     <button
                       key={display.id}
                       type="button"
+                      disabled={displayTarget.isSwitching}
                       onClick={() => void handleSelectDisplay(display)}
-                      className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors ${
+                      className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         isSelected
                           ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
                           : "border-zinc-700 bg-zinc-900 hover:border-zinc-600"

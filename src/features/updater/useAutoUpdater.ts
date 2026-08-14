@@ -10,6 +10,7 @@ import {
   type UpdateMetadata,
 } from "@/shared/contracts/updater";
 import { checkForUpdate, downloadAndInstallUpdate } from "./updaterApi";
+import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 
 export type UpdaterState =
   | { status: "idle" }
@@ -43,12 +44,21 @@ export function useAutoUpdater() {
   const [state, setState] = useState<UpdaterState>({ status: "idle" });
   const [channel, setChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
   const lastStartRef = useRef<number>(0);
+  const checkGuardRef = useRef(createLatestOperationGuard());
 
   const checkForUpdates = useCallback(async () => {
-    setChannel(await readUpdateChannel());
+    // The startup check and a Retry press can be in flight together and resolve
+    // in either order; without this the older answer lands last and wins.
+    const isLatest = checkGuardRef.current.begin();
+
+    const storedChannel = await readUpdateChannel();
+    if (!isLatest()) return;
+    setChannel(storedChannel);
     setState({ status: "checking" });
+
     try {
       const response = await checkForUpdate();
+      if (!isLatest()) return;
       // Rust's answer wins over the store read above: it is what actually
       // chose the endpoint the result came from.
       setChannel(response.channel);
@@ -61,6 +71,7 @@ export function useAutoUpdater() {
         setState({ status: "error", message: response.status.message });
       }
     } catch (err) {
+      if (!isLatest()) return;
       // The command never rejects; this is the invoke layer itself failing —
       // an unregistered command, or a window torn down mid-check.
       const message = err instanceof Error ? err.message : String(err);

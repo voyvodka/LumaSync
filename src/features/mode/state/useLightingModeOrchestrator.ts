@@ -4,6 +4,7 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { isHueStartCodeOk, isHueStopCodeOk, toHueStartConfig } from "@/features/hue/model/hueStartConfig";
 import { loadShellState, saveShellState } from "@/features/shell/windowLifecycle";
+import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
 import {
   AMBILIGHT_CAPTURE_REASON,
   describeCaptureFailure,
@@ -88,6 +89,7 @@ export function useLightingModeOrchestrator({
   const [lightingMode, setLightingModeState] = useState<LightingModeConfig>({ kind: LIGHTING_MODE_KIND.OFF });
   const [selectedOutputTargets, setSelectedOutputTargets] = useState<HueRuntimeTarget[]>([...DEFAULT_OUTPUT_TARGETS]);
   const [activeOutputTargets, setActiveOutputTargets] = useState<HueRuntimeTarget[]>([]);
+  const outputTargetsGuardRef = useRef(createLatestOperationGuard());
   const [isModeTransitioning, setIsModeTransitioning] = useState(false);
   // A1.2 — surfaces the targets whose stop_lighting / stop_hue_stream invoke
   // failed during a delta-stop, so the chip stays active instead of silently
@@ -132,6 +134,10 @@ export function useLightingModeOrchestrator({
   }, [lightingMode]);
 
   const handleOutputTargetsChange = useCallback(async (targets: HueRuntimeTarget[]) => {
+    // The toggles stay live while this runs, so a user can remove Hue before
+    // the add that started first has finished. Without the guard that add
+    // lands afterwards and puts Hue back into the active set.
+    const isLatest = outputTargetsGuardRef.current.begin();
     const normalizedTargets = normalizeOutputTargets(targets);
     const prevTargets = selectedOutputTargets;
     setSelectedOutputTargets(normalizedTargets);
@@ -180,6 +186,8 @@ export function useLightingModeOrchestrator({
     const failedToStop = stopResults
       .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && !r.value.ok)
       .map((r) => r.value.target);
+    if (!isLatest()) return;
+
     if (successfullyStopped.length > 0) {
       const nextActive = currentActive.filter((t) => !successfullyStopped.includes(t));
       setActiveOutputTargets(nextActive);
@@ -190,6 +198,9 @@ export function useLightingModeOrchestrator({
 
     // Delta-start: for each added target, start the current mode on it
     for (const target of addedTargets) {
+      // Re-checked per target, not once: each iteration awaits, so a newer
+      // change can supersede this run partway through the list.
+      if (!isLatest()) return;
       if (target === "usb") {
         // Note: was previously using invoke("set_lighting_mode", { request: {...} })
         // which is the wrong key name (Tauri expects "payload") and silently failed.
@@ -200,6 +211,7 @@ export function useLightingModeOrchestrator({
             ambilight: lightingMode.ambilight,
             targets: normalizedTargets,
           }, { force: true });
+          if (!isLatest()) return;
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
         } catch {
           // D-06: silently skip failed target, existing targets continue
@@ -215,6 +227,7 @@ export function useLightingModeOrchestrator({
             continue;
           }
           const hueResult = await startHue(runtimeHueConfig);
+          if (!isLatest()) return;
           if (isHueStartCodeOk(hueResult.status.code)) {
             setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
             // Re-apply lighting mode so the ambilight worker picks up the now-live
