@@ -55,6 +55,9 @@ interface CalibrationPageProps {
   initialConfig?: LedCalibrationConfig;
   onNavigateBack: () => void;
   onSaved: (config: LedCalibrationConfig) => void;
+  /** Mirrors the choice into the mode runtime cache, the same way `onSaved` does
+   *  for the layout. Persisting alone leaves the live capture on the old monitor. */
+  onDisplayChange?: (displayId: string) => void;
 }
 
 function buildInitialEditorState(initialConfig?: LedCalibrationConfig): CalibrationEditorState {
@@ -100,7 +103,7 @@ function anchorFromEdgeEndpoint(edge: AnchorEdge, endpoint: AnchorEndpoint): Led
   return `${edge}-${endpoint}` as LedStartAnchor;
 }
 
-export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: CalibrationPageProps) {
+export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisplayChange }: CalibrationPageProps) {
   const { t } = useTranslation();
 
   const [editorState, setEditorState] = useState<CalibrationEditorState>(() =>
@@ -262,6 +265,9 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
     // Persist so the next set_lighting_mode call binds the ambilight
     // worker to the user's chosen capture source (v1.4 Platform GAP 2).
     void shellStore.save({ selectedDisplayId: display.id });
+    // Synchronous, for the same reason `onSaved` is: shellStore only feeds the
+    // next boot, so without this the live payload keeps the old monitor.
+    onDisplayChange?.(display.id);
 
     // Auto-derive default counts only when the user hasn't customized yet
     // (fresh manual default → totalLeds === 0).
@@ -286,7 +292,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved }: Cali
       const reason = error instanceof Error ? error.message : String(error);
       setTestPatternError(t("calibration:overlay.errors.displaySwitchFailed", { reason }));
     }
-  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t]);
+  }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t, onDisplayChange]);
 
   // A3.7 — accept the absolute next value, not a delta. Stepper buttons
   // pass `value + 1` / `value - 1` so the +/- affordance is preserved

@@ -64,8 +64,14 @@ vi.mock("../HueChannelMapPanel", () => ({
   ),
 }));
 
-vi.mock("./control/LedChipTypePicker", () => ({
-  LedChipTypePicker: () => null,
+// Path was `./control/…`, which resolves under `__tests__/` and so matched no
+// module in the graph — the real picker rendered here for as long as it existed.
+vi.mock("../control/LedChipTypePicker", () => ({
+  LedChipTypePicker: ({ onChipTypeChange }: { onChipTypeChange?: (next: string) => void }) => (
+    <button type="button" onClick={() => onChipTypeChange?.("sk6812-rgbw")}>
+      stub:selectChipType
+    </button>
+  ),
 }));
 
 function defaultDeviceConnectionState() {
@@ -486,4 +492,24 @@ describe("DeviceSection — USB and Hue persist banners are independent", () => 
     );
     expect(screen.getByText(USB_BANNER)).toBeInTheDocument();
   }, 15000);
+});
+
+describe("DeviceSection — chip type forwarding", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  // Without this hop the picker only writes shellStore, so the running encoder
+  // keeps the boot-time byte width — 3 bytes per pixel for an RGBW strip.
+  it("hands the chip-type choice to its own caller", async () => {
+    const onChipTypeChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DeviceSection onChipTypeChange={onChipTypeChange} />);
+
+    await user.click(await screen.findByText("stub:selectChipType"));
+
+    expect(onChipTypeChange).toHaveBeenCalledWith("sk6812-rgbw");
+  });
 });
