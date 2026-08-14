@@ -61,11 +61,15 @@ jobs:
           # `current:` is the one place SECURITY.md names an exact release; the
           # other rows of the support table are ranges (`1.5.x`, `< 1.4.0`).
           SEC_VERSION=$(core "$(sed -n 's/.*(current: \([0-9][^)]*\)).*/\1/p' SECURITY.md)")
+          # MSI rejects a non-numeric pre-release identifier, so wix.version is
+          # pinned to the core rather than derived. Checked here or it rots
+          # silently into a Windows upgrade that never triggers.
+          WIX_VERSION=$(core "$(jq -r '.bundle.windows.wix.version // empty' src-tauri/tauri.conf.json)")
 
-          echo "tag=${TAG_VERSION} package.json=${PKG_VERSION} Cargo.toml=${CARGO_VERSION} SECURITY.md=${SEC_VERSION}"
+          echo "tag=${TAG_VERSION} package.json=${PKG_VERSION} Cargo.toml=${CARGO_VERSION} SECURITY.md=${SEC_VERSION} wix=${WIX_VERSION}"
 
           FAILED=0
-          for pair in "package.json:${PKG_VERSION}" "src-tauri/Cargo.toml:${CARGO_VERSION}" "SECURITY.md:${SEC_VERSION}"; do
+          for pair in "package.json:${PKG_VERSION}" "src-tauri/Cargo.toml:${CARGO_VERSION}" "SECURITY.md:${SEC_VERSION}" "tauri.conf.json wix.version:${WIX_VERSION}"; do
             file="${pair%%:*}"
             found="${pair#*:}"
             if [ -z "$found" ]; then
