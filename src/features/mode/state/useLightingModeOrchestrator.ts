@@ -390,21 +390,32 @@ export function useLightingModeOrchestrator({
           });
 
           const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
-          // Optimization: Execute stop commands concurrently for independent targets
-          // (USB and Hue) to minimize shutdown phase and mode transition latency.
-          await Promise.all(
+          // `allSettled` for the same reason as the delta-stop path above: one
+          // rejection under `Promise.all` discards the other target's outcome and
+          // aborts before the results are applied.
+          await Promise.allSettled(
             runtimePlan.stopTargets.map(async (target) => {
               if (target === "usb") {
-                await stopLighting();
-                targetResults.usb = { ok: true };
+                try {
+                  await stopLighting();
+                  targetResults.usb = { ok: true };
+                } catch (error) {
+                  const reason = error instanceof Error ? error.message : String(error);
+                  targetResults.usb = { ok: false, code: "USB_STOP_FAILED", message: reason };
+                }
               }
               if (target === "hue") {
-                const hueResult = await stopHue();
-                targetResults.hue = {
-                  ok: isHueStopCodeOk(hueResult.status.code),
-                  code: hueResult.status.code,
-                  message: hueResult.status.message,
-                };
+                try {
+                  const hueResult = await stopHue();
+                  targetResults.hue = {
+                    ok: isHueStopCodeOk(hueResult.status.code),
+                    code: hueResult.status.code,
+                    message: hueResult.status.message,
+                  };
+                } catch (error) {
+                  const reason = error instanceof Error ? error.message : String(error);
+                  targetResults.hue = { ok: false, code: "HUE_STOP_FAILED", message: reason };
+                }
               }
             })
           );
