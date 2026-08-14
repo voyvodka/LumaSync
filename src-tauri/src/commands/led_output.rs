@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
 use super::device_connection::SerialConnectionState;
+use super::device_connection::BOOTLOADER_SETTLE_DELAY_MS;
 
 const OUTPUT_BAUD_RATE: u32 = 115_200;
 const OUTPUT_TIMEOUT_MS: u64 = 500;
@@ -404,13 +405,17 @@ type PortFactory = dyn Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError>
 struct SerialLedPacketSender {
     sessions: Mutex<HashMap<String, Box<dyn Write + Send>>>,
     port_factory: Arc<PortFactory>,
+    /// Runs once per newly opened handle, before its first byte. Separate from
+    /// `port_factory` so tests can observe *when* it fires without sleeping.
+    after_open: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl SerialLedPacketSender {
-    fn new(port_factory: Arc<PortFactory>) -> Self {
+    fn new(port_factory: Arc<PortFactory>, after_open: Arc<dyn Fn() + Send + Sync>) -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
             port_factory,
+            after_open,
         }
     }
 
@@ -419,21 +424,38 @@ impl SerialLedPacketSender {
     where
         F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
     {
-        Self::new(Arc::new(factory))
+        Self::new(Arc::new(factory), Arc::new(|| {}))
+    }
+
+    #[cfg(test)]
+    fn with_open_hook_for_tests<F, H>(factory: F, after_open: H) -> Self
+    where
+        F: Fn(&str) -> Result<Box<dyn Write + Send>, LedOutputError> + Send + Sync + 'static,
+        H: Fn() + Send + Sync + 'static,
+    {
+        Self::new(Arc::new(factory), Arc::new(after_open))
     }
 }
 
 impl Default for SerialLedPacketSender {
     fn default() -> Self {
-        Self::new(Arc::new(|port_name: &str| {
-            serialport::new(port_name, OUTPUT_BAUD_RATE)
-                .timeout(Duration::from_millis(OUTPUT_TIMEOUT_MS))
-                .open()
-                .map(|port| port as Box<dyn Write + Send>)
-                .map_err(|error| {
-                    LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", Some(error.to_string()))
-                })
-        }))
+        Self::new(
+            Arc::new(|port_name: &str| {
+                serialport::new(port_name, OUTPUT_BAUD_RATE)
+                    .timeout(Duration::from_millis(OUTPUT_TIMEOUT_MS))
+                    .open()
+                    .map(|port| port as Box<dyn Write + Send>)
+                    .map_err(|error| {
+                        LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", Some(error.to_string()))
+                    })
+            }),
+            // Connect opens, settles, verifies and then *drops* its handle, so
+            // this open is a second DTR assert and a second auto-reset. Frame 1
+            // is written into the bootloader without it.
+            Arc::new(|| {
+                std::thread::sleep(Duration::from_millis(BOOTLOADER_SETTLE_DELAY_MS));
+            }),
+        )
     }
 }
 
@@ -445,6 +467,7 @@ impl LedPacketSender for SerialLedPacketSender {
 
         if !sessions.contains_key(port_name) {
             let opened = (self.port_factory)(port_name)?;
+            (self.after_open)();
             sessions.insert(port_name.to_string(), opened);
         }
 
@@ -1367,6 +1390,64 @@ mod tests {
             .send("COM42", &[4, 5, 6])
             .expect("second write reuses session");
         assert_eq!(open_count.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn first_frame_settles_before_the_bootloader_gets_the_bytes() {
+        // Connect opens, settles, verifies and drops its handle, so this open is
+        // a second DTR assert. Without the settle frame 1 lands in the bootloader.
+        let settles = Arc::new(AtomicUsize::new(0));
+        let settles_for_hook = Arc::clone(&settles);
+        let sender = super::SerialLedPacketSender::with_open_hook_for_tests(
+            |_port_name| Ok(Box::new(FakePort::default())),
+            move || {
+                settles_for_hook.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        sender.send("COM42", &[1, 2, 3]).expect("first write");
+        assert_eq!(settles.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn the_settle_is_per_session_not_per_frame() {
+        // The 2 s cost is only acceptable once. Paying it per frame would put the
+        // capture-to-output path 40x over its budget.
+        let settles = Arc::new(AtomicUsize::new(0));
+        let settles_for_hook = Arc::clone(&settles);
+        let sender = super::SerialLedPacketSender::with_open_hook_for_tests(
+            |_port_name| Ok(Box::new(FakePort::default())),
+            move || {
+                settles_for_hook.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        for _ in 0..5 {
+            sender.send("COM42", &[1, 2, 3]).expect("write");
+        }
+        assert_eq!(settles.load(Ordering::SeqCst), 1);
+
+        // A reopen is a fresh DTR assert, so it settles again.
+        sender.disconnect_session("COM42");
+        sender
+            .send("COM42", &[4, 5, 6])
+            .expect("write after reopen");
+        assert_eq!(settles.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn a_failed_open_does_not_settle() {
+        let settles = Arc::new(AtomicUsize::new(0));
+        let settles_for_hook = Arc::clone(&settles);
+        let sender = super::SerialLedPacketSender::with_open_hook_for_tests(
+            |_port_name| Err(LedOutputError::new("LED_OUTPUT_PORT_OPEN_FAILED", None)),
+            move || {
+                settles_for_hook.fetch_add(1, Ordering::SeqCst);
+            },
+        );
+
+        assert!(sender.send("COM42", &[1, 2, 3]).is_err());
+        assert_eq!(settles.load(Ordering::SeqCst), 0);
     }
 
     #[test]
