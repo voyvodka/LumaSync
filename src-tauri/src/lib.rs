@@ -30,6 +30,7 @@ mod commands {
     pub mod runtime_telemetry;
     pub mod screen_capture_permission;
     pub mod test_pattern;
+    pub mod updater;
     pub mod wled_discovery;
     pub mod wled_sink;
 }
@@ -82,6 +83,7 @@ use commands::runtime_telemetry::{get_runtime_telemetry, RuntimeTelemetryState};
 use commands::screen_capture_permission::{
     get_screen_capture_permission, open_screen_capture_settings,
 };
+use commands::updater::{check_for_update, download_and_install_update, PendingUpdate};
 use commands::wled_discovery::{
     connect_wled_sink, discover_wled_devices, get_wled_sink_status, test_wled_bridge,
 };
@@ -518,6 +520,20 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
+            // Stable and beta are one install writing the same file in turn, so
+            // no line says which build wrote it. Per-launch: a mid-session
+            // rotation can still leave a file with no banner.
+            log::info!(
+                "[startup] LumaSync v{} ({}) channel={}",
+                env!("CARGO_PKG_VERSION"),
+                if cfg!(debug_assertions) {
+                    "debug"
+                } else {
+                    "release"
+                },
+                commands::updater::read_update_channel(app.handle()),
+            );
+
             // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();
@@ -555,6 +571,7 @@ pub fn run() {
             app.manage(LedTwinState::default());
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
+            app.manage(PendingUpdate::default());
 
             // Build tray icon.
             //
@@ -764,6 +781,8 @@ pub fn run() {
             open_led_control_popup,
             show_led_control_popup,
             hide_led_control_popup,
+            check_for_update,
+            download_and_install_update,
         ])
         .build(app_context())
         .expect("error while building tauri application");

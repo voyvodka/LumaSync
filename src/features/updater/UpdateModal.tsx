@@ -1,13 +1,13 @@
 import type { TFunction } from "i18next";
 import { useTranslation, Trans } from "react-i18next";
-import type { Update } from "@tauri-apps/plugin-updater";
+import type { UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterState } from "./useAutoUpdater";
 import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
 import { clamp } from "@/shared/lib/math";
 
 interface UpdateModalProps {
   state: UpdaterState;
-  onInstall: (update: Update) => void;
+  onInstall: (update: UpdateMetadata) => void;
   onDismiss: () => void;
   onRetry: () => void;
 }
@@ -142,12 +142,13 @@ function AvailableContent({
   onInstall,
   t,
 }: {
-  update: Update;
+  update: UpdateMetadata;
   onDismiss: () => void;
   onInstall: () => void;
   t: TFn;
 }) {
-  const notes = parseReleaseNotes(update.body);
+  // Rust sends `Option<String>` unskipped, so an absent body arrives as null.
+  const notes = parseReleaseNotes(update.body ?? undefined);
   const currentVersion = update.currentVersion;
   const nextVersion = update.version;
   const sizeLabel = t("updater:sizeUnknown");
