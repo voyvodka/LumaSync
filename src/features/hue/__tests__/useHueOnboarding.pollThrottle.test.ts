@@ -37,7 +37,10 @@ vi.mock("@/features/persistence/shellStore", () => ({
 vi.mock("../hueOnboardingApi", () => ({
   checkHueStreamReadiness: vi.fn(),
   discoverHueBridges: vi.fn(),
-  getHueAreaChannels: vi.fn().mockResolvedValue([]),
+  getHueAreaChannels: vi.fn().mockResolvedValue({
+    status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
+    channels: [],
+  }),
   listHueEntertainmentAreas: vi.fn(),
   migrateHueCredentials: vi.fn().mockResolvedValue({
     status: { code: "HUE_CREDENTIAL_MIGRATION_FAILED", message: "no keychain" },

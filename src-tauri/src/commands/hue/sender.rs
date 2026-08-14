@@ -22,7 +22,8 @@ use log::{error, info, warn};
 use reqwest::blocking::Client as BlockingClient;
 use serde_json::{json, Value};
 
-use super::super::hue_http::{classify_hue_response, classify_hue_response_blocking};
+use super::super::hue_http::{classify_hue_response, classify_hue_response_blocking, HueHttpFault};
+use super::super::hue_onboarding::AreaListError;
 use super::area_cache::invalidate_hue_area_cache;
 use super::dtls::connect_dtls;
 use super::frame::{
@@ -796,12 +797,15 @@ fn async_hue_http_client() -> Result<reqwest::Client, String> {
 // Channel resolution from the bridge
 // ---------------------------------------------------------------------------
 
+/// `AreaListError` rather than a bare `String`: `get_hue_area_channels` has to
+/// collapse a 403 onto `AUTH_INVALID_RE_PAIR_REQUIRED` without matching on the
+/// fault's `Display` text — the same rule the area-list path already follows.
 pub(crate) async fn fetch_area_channels(
     bridge_ip: &str,
     username: &str,
     area_id: &str,
-) -> Result<Vec<HueAreaChannel>, String> {
-    let client = async_hue_http_client()?;
+) -> Result<Vec<HueAreaChannel>, AreaListError> {
+    let client = async_hue_http_client().map_err(AreaListError::Other)?;
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
     // `error_for_status` bypassed the 403 classifier, so an expired key
@@ -811,20 +815,29 @@ pub(crate) async fn fetch_area_channels(
         .header("hue-application-key", username)
         .send()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| AreaListError::Other(error.to_string()))?;
     let response = classify_hue_response(response)
         .await
-        .map_err(|fault| fault.to_string())?;
-    let payload = response.text().await.map_err(|error| error.to_string())?;
+        .map_err(|fault| match fault {
+            HueHttpFault::AuthInvalid => AreaListError::AuthInvalid,
+            other => AreaListError::Other(other.to_string()),
+        })?;
+    let payload = response
+        .text()
+        .await
+        .map_err(|error| AreaListError::Other(error.to_string()))?;
 
-    let parsed: Value = serde_json::from_str(&payload).map_err(|error| error.to_string())?;
+    let parsed: Value =
+        serde_json::from_str(&payload).map_err(|error| AreaListError::Other(error.to_string()))?;
     let raw_channels = parsed
         .get("data")
         .and_then(|value| value.as_array())
         .and_then(|items| items.first())
         .and_then(|item| item.get("channels"))
         .and_then(|value| value.as_array())
-        .ok_or_else(|| "Missing channels in entertainment area payload".to_string())?;
+        .ok_or_else(|| {
+            AreaListError::Other("Missing channels in entertainment area payload".to_string())
+        })?;
 
     fn push_unique(target: &mut Vec<String>, id: &str) {
         if !target.iter().any(|existing| existing == id) {

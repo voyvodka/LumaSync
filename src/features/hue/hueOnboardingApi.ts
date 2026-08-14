@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { HUE_COMMANDS } from "@/shared/contracts/hue";
 import type {
+  HueAreaChannelListResponse,
   HueCredentialMigrationResponse,
   HueOnboardingCommandStatus,
   HuePairBridgeResponse,
@@ -136,22 +137,19 @@ export async function checkHueStreamReadiness(
   });
 }
 
-/** One resolved entertainment channel: its bridge-reported position and auto-detected screen region. */
-export interface HueAreaChannelInfo {
-  index: number;
-  positionX: number;
-  positionY: number;
-  lightCount: number;
-  autoRegion: string;
-}
+export type {
+  HueAreaChannelInfo,
+  HueAreaChannelListResponse,
+  HueAreaChannelsCommandStatus,
+} from "@/shared/contracts/hue";
 
-/** Fetch per-channel metadata for the area — light count and auto-detected screen region — for the room-map editor. */
+/** Fetch per-channel metadata for the area — light count and auto-detected screen region — for the room-map editor. Never throws; check `status.code`. */
 export async function getHueAreaChannels(
   bridgeIp: string,
   username: string,
   areaId: string,
-): Promise<HueAreaChannelInfo[]> {
-  return invoke<HueAreaChannelInfo[]>(HUE_COMMANDS.GET_AREA_CHANNELS, {
+): Promise<HueAreaChannelListResponse> {
+  return invoke<HueAreaChannelListResponse>(HUE_COMMANDS.GET_AREA_CHANNELS, {
     bridgeIp,
     username,
     areaId,

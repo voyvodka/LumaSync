@@ -321,6 +321,47 @@ export const HUE_SOLID_COLOR_STATUS = {
 export type HueSolidColorStatusCode =
   (typeof HUE_SOLID_COLOR_STATUS)[keyof typeof HUE_SOLID_COLOR_STATUS];
 
+/** `get_hue_area_channels` codes. Its own family, not a reuse of
+ * `HUE_AREA_LIST_*` — that one answers "which areas exist", and a shared code
+ * could not be handled or searched for apart. */
+export const HUE_AREA_CHANNELS_STATUS = {
+  OK: "HUE_AREA_CHANNELS_OK",
+  /** An area configured with no channels — a success the room-map editor
+   * renders as an empty strip. Never conflate with a failed fetch. */
+  EMPTY: "HUE_AREA_CHANNELS_EMPTY",
+  FAILED: "HUE_AREA_CHANNELS_FAILED",
+} as const;
+
+export type HueAreaChannelsStatusCode =
+  (typeof HUE_AREA_CHANNELS_STATUS)[keyof typeof HUE_AREA_CHANNELS_STATUS];
+
+/** Exactly what `hue/commands.rs::area_channels_status` puts on the
+ * `get_hue_area_channels` status. Borrows the re-pair code from the runtime
+ * family, same as the onboarding union below. */
+export type HueAreaChannelsWireStatusCode =
+  | HueAreaChannelsStatusCode
+  | typeof HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
+
+export type HueAreaChannelsCommandStatus = CommandStatusOf<HueAreaChannelsWireStatusCode>;
+
+/** One resolved entertainment channel: its bridge-reported position and
+ * auto-detected screen region. */
+export interface HueAreaChannelInfo {
+  index: number;
+  positionX: number;
+  positionY: number;
+  lightCount: number;
+  autoRegion: string;
+}
+
+/** Result of `get_hue_area_channels`. `channels` is non-nullable and empty on
+ * failure: `status.code` is the sole discriminator, and a nullable array would
+ * be a second signal for the same fact that could disagree with it. */
+export interface HueAreaChannelListResponse {
+  status: HueAreaChannelsCommandStatus;
+  channels: HueAreaChannelInfo[];
+}
+
 /** Exactly what `hue_onboarding.rs` puts on a discovery / verify / validate /
  * area-list / readiness `status`. The re-pair code is the one member it borrows
  * from the runtime family. */
