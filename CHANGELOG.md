@@ -7,6 +7,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.5]
+
 ### Fixed
 
 - Device cards use the width they are given, and their buttons stop spilling out of the card. The Devices panel laid every category out in two fixed columns at any window size, so a single paired bridge left a dead half beside it, and a narrower window squeezed both cards until the action buttons pushed past the card edge — measured at 560 px and below, and worse in Turkish, whose labels run several characters longer than the English ones. Cards now reflow to the space available, and a row of buttons wraps rather than overflowing.
