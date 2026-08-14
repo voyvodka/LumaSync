@@ -1,6 +1,7 @@
 /** Boot-time re-bind of `ShellState.lastWledSink`. Probes `/json/info` first: `connect_wled_sink` only binds a local socket, so a blind restore reports success and then streams into the void. */
 import type { ShellState } from "@/shared/contracts/shell";
 import {
+  normalizeWledProtocol,
   WLED_STATUS,
   type WledDeviceInfo,
   type WledUdpSinkConfig,
@@ -76,7 +77,10 @@ export async function restoreWledSink(
 
   const transport: WledTransportOverride = {
     port: saved.port,
-    protocol: saved.protocol,
+    // A store predating the WARLS removal (or a hand-edited one) can hold a
+    // value the union no longer admits. Normalising here beats a schema bump
+    // for a value no writer has ever produced.
+    protocol: normalizeWledProtocol(saved.protocol),
   };
 
   let connectResponse: WledConnectResponse;

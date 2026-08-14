@@ -12,6 +12,7 @@ import {
   type WledCommandStatus,
   type WledDeviceInfo,
   type WledSinkStatus,
+  type WledTestResponse as ContractWledTestResponse,
   type WledUdpSinkConfig,
 } from "@/shared/contracts/device";
 
@@ -33,11 +34,7 @@ export interface WledConnectResponse {
  */
 export type WledTransportOverride = Pick<WledUdpSinkConfig, "port" | "protocol">;
 
-export interface WledTestResponse {
-  status: WledCommandStatus;
-  /** Round-trip latency of the test packet (ms), populated on success. */
-  roundTripMs?: number;
-}
+export type WledTestResponse = ContractWledTestResponse;
 
 /** Probe a single WLED instance's `/json/info` at `ip`. Never throws. */
 export async function discoverWledDevices(

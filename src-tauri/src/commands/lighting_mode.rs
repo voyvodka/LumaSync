@@ -205,6 +205,22 @@ pub struct LightingModeCommandResult {
     pub active: bool,
     pub mode: LightingModeConfig,
     pub status: CommandStatus,
+    pub wled_advisory: Option<WledLiveFrameAdvisory>,
+}
+
+/// Non-fatal notice that the frame length and the bound WLED sink disagree.
+///
+/// Deliberately not a failure: WLED updates the first N LEDs of a short frame
+/// and truncates a long one, so half a lit strip beats none. It exists because
+/// "half my strip is dead" reads as a wiring fault, and the user goes looking
+/// at solder joints long before suspecting a count mismatch.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WledLiveFrameAdvisory {
+    pub code: String,
+    pub message: String,
+    pub frame_led_count: u16,
+    pub sink_led_count: u16,
 }
 
 struct LightingWorkerRuntime {
@@ -420,7 +436,40 @@ fn make_result(mode: LightingModeConfig, status: CommandStatus) -> LightingModeC
         active: mode.kind != LightingModeKind::Off,
         mode,
         status,
+        wled_advisory: None,
     }
+}
+
+/// Frame LEDs the mode will emit. Mirrors the worker's own derivation — the
+/// 1-LED fallback when calibration is absent is the legacy behaviour, not a
+/// mismatch worth reporting, so it is filtered out by the caller.
+fn frame_led_count_for(mode: &LightingModeConfig) -> u16 {
+    mode.led_calibration
+        .as_ref()
+        .map(|cal| cal.total_leds)
+        .unwrap_or(1)
+}
+
+/// Compare the frame the mode will emit against the bound WLED sink.
+fn wled_frame_advisory(
+    mode: &LightingModeConfig,
+    wled_sink: Option<&WledSinkConfig>,
+) -> Option<WledLiveFrameAdvisory> {
+    let sink = wled_sink?;
+    if mode.kind == LightingModeKind::Off {
+        return None;
+    }
+    let frame_led_count = frame_led_count_for(mode);
+    if frame_led_count <= 1 || frame_led_count == sink.led_count {
+        return None;
+    }
+    Some(WledLiveFrameAdvisory {
+        code: "WLED_LIVE_LED_COUNT_MISMATCH".to_string(),
+        message: "The calibrated strip length does not match the LED count reported by the WLED device; part of the strip will not track."
+            .to_string(),
+        frame_led_count,
+        sink_led_count: sink.led_count,
+    })
 }
 
 fn clamp_u8(value: Option<u8>, fallback: u8) -> u8 {
@@ -1800,8 +1849,39 @@ enum UsbOutputPlan {
 // lib-tests that carry other outstanding compilation issues). Bundling
 // these into a struct is tracked as a follow-up refactor rather than part
 // of the clippy cleanup pass.
+/// Wraps the mode change so the WLED length advisory is derived once, from the
+/// mode that actually took effect. Attaching it per success branch would mean
+/// every future branch has to remember to, and the ones that refuse a change
+/// must not carry it at all.
 #[allow(clippy::too_many_arguments)]
 fn apply_mode_change(
+    owner: &mut LightingRuntimeOwner,
+    next_mode: LightingModeConfig,
+    device_connected: bool,
+    connected_port: Option<&str>,
+    wled_sink: Option<WledSinkConfig>,
+    hue_output: Option<HueActiveOutputContext>,
+    telemetry_snapshot: Option<SharedRuntimeTelemetry>,
+    edge_signal_emitter: Option<EdgeSignalEmitter>,
+    trace: Option<&mut Vec<&'static str>>,
+) -> LightingModeCommandResult {
+    let mut result = apply_mode_change_inner(
+        owner,
+        next_mode,
+        device_connected,
+        connected_port,
+        wled_sink,
+        hue_output,
+        telemetry_snapshot,
+        edge_signal_emitter,
+        trace,
+    );
+    result.wled_advisory = wled_frame_advisory(&result.mode, wled_sink.as_ref());
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_mode_change_inner(
     owner: &mut LightingRuntimeOwner,
     next_mode: LightingModeConfig,
     device_connected: bool,

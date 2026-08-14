@@ -940,11 +940,18 @@ check(
   "MISSING: WledTestRequest.device field — A1.6 test fix incomplete"
 );
 
-console.log("\n[ WLED test response — roundTripMs (A1.6) ]");
+console.log("\n[ WLED test response — sendLatencyMs (A1.6) ]");
 check(
-  wledRustSource.includes("pub round_trip_ms: Option<u64>"),
-  "WledTestResponse.round_trip_ms: Option<u64> present in Rust",
-  "MISSING: WledTestResponse.round_trip_ms field — A1.6 test response fix incomplete"
+  wledRustSource.includes("pub send_latency_ms: Option<u64>"),
+  "WledTestResponse.send_latency_ms: Option<u64> present in Rust",
+  "MISSING: WledTestResponse.send_latency_ms field — A1.6 test response fix incomplete"
+);
+// The old name claimed a round trip UDP cannot provide. Pinning its absence
+// stops it coming back with the same misleading meaning.
+check(
+  !wledRustSource.includes("round_trip_ms"),
+  "Old WledTestResponse.round_trip_ms name is gone",
+  "STILL PRESENT: round_trip_ms — UDP has no ACK, so the name overclaims"
 );
 check(
   !wledRustSource.match(/pub struct WledTestResponse[^}]*pub device:/s),
@@ -1358,8 +1365,13 @@ checkWireUnion(
   "WledWireStatusCode",
   [...stripComments(wledRustSource).matchAll(/WledCommandStatus::(?:ok|err)\(\s*"([A-Z][A-Z0-9_]*)"/g)]
     .map((m) => m[1]),
-  constMembers(deviceSource, "WLED_STATUS").filter((c) => c !== "WLED_SINK_NOT_STARTED"),
-  12
+  // Mirrors the `Exclude<...>` in device.ts, which this harvest cannot read:
+  // SINK_NOT_STARTED is an Err(String) prefix and LIVE_LED_COUNT_MISMATCH rides
+  // the mode-apply result, so neither ever lands on a WLED command status.
+  constMembers(deviceSource, "WLED_STATUS").filter(
+    (c) => c !== "WLED_SINK_NOT_STARTED" && c !== "WLED_LIVE_LED_COUNT_MISMATCH"
+  ),
+  14
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
@@ -2120,7 +2132,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 34;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 36;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

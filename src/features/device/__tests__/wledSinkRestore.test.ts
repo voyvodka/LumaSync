@@ -8,8 +8,16 @@ const SAVED: WledUdpSinkConfig = {
   ip: "192.168.1.42",
   port: 21324,
   ledCount: 60,
-  protocol: "warls",
+  protocol: "drgb",
 };
+
+/** A store written before WARLS was removed. The union no longer admits the
+ * value, so it can only reach the restore path unvalidated — which is exactly
+ * what `normalizeWledProtocol` is there to absorb. */
+const LEGACY_WARLS_SAVED = {
+  ...SAVED,
+  protocol: "warls",
+} as unknown as WledUdpSinkConfig;
 
 function shellState(partial: Partial<ShellState> = {}): ShellState {
   return {
@@ -109,7 +117,22 @@ describe("restoreWledSink", () => {
 
     expect(deps.connect).toHaveBeenCalledWith(
       expect.objectContaining({ ip: SAVED.ip }),
-      { port: 21324, protocol: "warls" },
+      { port: 21324, protocol: "drgb" },
+    );
+  });
+
+  it("maps a persisted legacy warls protocol onto drgb", async () => {
+    const deps = buildDeps({
+      loadShellState: vi
+        .fn()
+        .mockResolvedValue(shellState({ lastWledSink: LEGACY_WARLS_SAVED })),
+    });
+
+    await restoreWledSink(deps);
+
+    expect(deps.connect).toHaveBeenCalledWith(
+      expect.objectContaining({ ip: SAVED.ip }),
+      { port: 21324, protocol: "drgb" },
     );
   });
 

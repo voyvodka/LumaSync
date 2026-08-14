@@ -26,12 +26,9 @@ export const DEVICE_COMMANDS = {
    * current sink, no implicit stream start.
    */
   CONNECT_WLED_SINK: "connect_wled_sink",
-  /**
-   * v1.5 W1-B1 — round-trip a single test packet to verify reachability,
-   * negotiated protocol, and reported LED count match the user's config.
-   * Surfaces `WLED_BRIDGE_UNREACHABLE` / `WLED_PROTOCOL_MISMATCH` /
-   * `WLED_LED_COUNT_MISMATCH` instead of generic transport errors.
-   */
+  /** Probe `/json/info`, cross-check LED count + realtime port, send one test
+   * frame, then re-read `info.live` to decide confirmed vs unconfirmed.
+   * "Round trip" is historical — UDP has no ACK. See {@link WledTestResponse}. */
   TEST_WLED_BRIDGE: "test_wled_bridge",
   /** Registry snapshot of the bound WLED sink. `lastWledSink` is intent; this is what Rust holds — they diverge when a boot restore fails or serial evicts WLED. */
   GET_WLED_SINK_STATUS: "get_wled_sink_status",
@@ -384,40 +381,49 @@ export type SinkRef =
 // WLED UDP sink (v1.5 G1)
 // ---------------------------------------------------------------------------
 
+/** `ddp` (default) or realtime UDP with byte 0 = 2. Past DRGB's 490-LED
+ * ceiling the encoder switches byte 0 to 4 (DNRGB) and chunks — transport
+ * detail, deliberately not a third enum member. */
+export const WLED_PROTOCOL = {
+  DDP: "ddp",
+  DRGB: "drgb",
+} as const;
+
+export type WledProtocol = (typeof WLED_PROTOCOL)[keyof typeof WLED_PROTOCOL];
+
+/** Coerce a persisted protocol to a value the union still admits. `"warls"`
+ * predates its removal; it maps to `drgb`, the same realtime UDP transport on
+ * the same port. Anything else falls back to the DDP default. */
+export function normalizeWledProtocol(value: unknown): WledProtocol {
+  if (value === WLED_PROTOCOL.DRGB || value === "warls") return WLED_PROTOCOL.DRGB;
+  return WLED_PROTOCOL.DDP;
+}
+
 /**
  * Persisted configuration for a WLED UDP sink.
  *
- * `port` defaults to 4048 (DDP) when the user has not customised it; the
- * other DDP-compatible WLED ports (21324 for WARLS) live behind the
- * `protocol` discriminant. `ledCount` mirrors the bridge-reported value
- * at connect time and is checked at every reconnect — a mismatch surfaces
- * `WLED_LED_COUNT_MISMATCH` so the user can re-trim their virtual strip
- * before frames go out.
+ * `ledCount` mirrors the bridge-reported value at connect time and is checked
+ * at every reconnect — a mismatch surfaces `WLED_LED_COUNT_MISMATCH` so the
+ * user can re-trim their virtual strip before frames go out.
  */
 export interface WledUdpSinkConfig {
   /** WLED instance IP (IPv4 or IPv6 textual form). */
   ip: string;
-  /** UDP port. Default 4048 for DDP, 21324 for WARLS. */
+  /** UDP port. Default {@link WLED_DEFAULT_DDP_PORT} for `ddp`,
+   * {@link WLED_DEFAULT_REALTIME_PORT} for `drgb`. */
   port: number;
   /** Number of LEDs reported by the WLED instance. */
   ledCount: number;
-  /**
-   * Wire protocol the host should speak.
-   *
-   * - `ddp`: Distributed Display Protocol — preferred, supports >490 LEDs
-   *   in a single frame, header carries an offset for chunked sends.
-   * - `warls`: WLED's native sync protocol — older, limited to one
-   *   datagram per packet, but compatible with every WLED build since
-   *   0.9.0. Fallback when the user pins compatibility.
-   */
-  protocol: "ddp" | "warls";
+  protocol: WledProtocol;
 }
 
 /** Default UDP port for the DDP wire protocol used by WLED. */
 export const WLED_DEFAULT_DDP_PORT = 4048 as const;
 
-/** Default UDP port for the WARLS wire protocol used by WLED. */
-export const WLED_DEFAULT_WARLS_PORT = 21324 as const;
+/** Default UDP port for WLED's realtime UDP family (`drgb` and its DNRGB
+ * promotion). Shared with the notifier, and user-remappable on the device —
+ * `/json/info.udpport` is the authority, not this default. */
+export const WLED_DEFAULT_REALTIME_PORT = 21324 as const;
 
 /**
  * Snapshot of a WLED instance returned by `discover_wled_devices`.
@@ -439,6 +445,34 @@ export interface WledDeviceInfo {
 export interface WledSinkStatus {
   connected: boolean;
   sink: WledUdpSinkConfig | null;
+}
+
+/** Response from `test_wled_bridge`. The numeric fields carry what the status
+ * code alone cannot, so the UI never parses `status.details`. */
+export interface WledTestResponse {
+  status: WledCommandStatus;
+  /** Host-side duration of the `send_to` call. Not a round trip: UDP has no
+   * ACK, and this excludes network flight and WLED's own processing. */
+  sendLatencyMs?: number | null;
+  /** LED count the user configured. Populated on `WLED_LED_COUNT_MISMATCH`. */
+  requestedLedCount?: number | null;
+  /** `/json/info.leds.count`. Populated on `WLED_LED_COUNT_MISMATCH` so the UI
+   * can offer a one-click "trust the bridge" resync. */
+  deviceLedCount?: number | null;
+  /** `/json/info.udpport`. Populated on `WLED_REALTIME_PORT_MISMATCH`. */
+  deviceRealtimePort?: number | null;
+}
+
+/** Non-fatal notice from `set_lighting_mode`: the stream started, but the frame
+ * length does not match the sink, so part of the strip will not track. Rides
+ * the result instead of replacing its success code — half a strip beats none. */
+export interface WledLiveFrameAdvisory {
+  code: typeof WLED_STATUS.LIVE_LED_COUNT_MISMATCH;
+  message: string;
+  /** LEDs per frame, derived from `ledCalibration.totalLeds` (1 when absent). */
+  frameLedCount: number;
+  /** `WledUdpSinkConfig.ledCount` held by the active sink registry. */
+  sinkLedCount: number;
 }
 
 /**
@@ -481,8 +515,18 @@ export const WLED_STATUS = {
   INVALID_LED_COUNT: "WLED_INVALID_LED_COUNT",
   /** `connect_wled_sink` promoted the instance to the active sink. */
   CONNECT_OK: "WLED_CONNECT_OK",
-  /** `test_wled_bridge` round-tripped a packet successfully. */
-  TEST_OK: "WLED_TEST_OK",
+  /** Frame sent and `/json/info.live` read back `true`. The only test outcome
+   * that claims delivery. */
+  TEST_LIVE_CONFIRMED: "WLED_TEST_LIVE_CONFIRMED",
+  /** Reachable over HTTP, count matched, frame written to the socket — but the
+   * `live` read-back did not confirm. Does NOT claim the LEDs changed. */
+  TEST_SENT_UNCONFIRMED: "WLED_TEST_SENT_UNCONFIRMED",
+  /** Configured port is not the device's `/json/info.udpport` (or not 4048 for
+   * `ddp`). Fails closed — the frame would go where nothing listens. */
+  REALTIME_PORT_MISMATCH: "WLED_REALTIME_PORT_MISMATCH",
+  /** Live counterpart of {@link WLED_STATUS.LED_COUNT_MISMATCH}, which refuses
+   * at connect. Off-wire for commands — see {@link WledLiveFrameAdvisory}. */
+  LIVE_LED_COUNT_MISMATCH: "WLED_LIVE_LED_COUNT_MISMATCH",
   /** The test packet could not be written to the socket. */
   TEST_SEND_FAILED: "WLED_TEST_SEND_FAILED",
   /** Connection refused / network-level error probing the configured IP. */
@@ -496,8 +540,12 @@ export const WLED_STATUS = {
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];
 
 /** Exactly what `wled_discovery.rs` puts on a WLED command `status`.
- * `WLED_SINK_NOT_STARTED` is excluded: `wled_sink.rs` returns it as an
- * `Err(String)` prefix, so a `switch (status.code)` can never see it. */
-export type WledWireStatusCode = Exclude<WledStatusCode, typeof WLED_STATUS.SINK_NOT_STARTED>;
+ * `SINK_NOT_STARTED` is an `Err(String)` prefix from `wled_sink.rs` and
+ * `LIVE_LED_COUNT_MISMATCH` rides the mode-apply result, so neither can ever
+ * reach a `switch (status.code)` here. */
+export type WledWireStatusCode = Exclude<
+  WledStatusCode,
+  typeof WLED_STATUS.SINK_NOT_STARTED | typeof WLED_STATUS.LIVE_LED_COUNT_MISMATCH
+>;
 
 export type WledCommandStatus = CommandStatusOf<WledWireStatusCode>;

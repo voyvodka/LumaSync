@@ -4,6 +4,7 @@ import {
   DEVICE_COMMANDS,
   DEVICE_ERROR_CODES,
   type DeviceErrorCode,
+  type WledLiveFrameAdvisory,
 } from "@/shared/contracts/device";
 import {
   HUE_COMMANDS,
@@ -39,6 +40,9 @@ export interface ModeCommandResult {
     message: string;
     details: string | null;
   };
+  /** Non-fatal: the stream started but part of the WLED strip will not track.
+   * Rides alongside a success status rather than replacing it. */
+  wledAdvisory?: WledLiveFrameAdvisory | null;
 }
 
 /** Bridge/credential/area selection needed to start (or restart) the Hue entertainment stream. */

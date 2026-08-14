@@ -237,23 +237,23 @@ describe("connectWledSink", () => {
 // ---------------------------------------------------------------------------
 
 describe("testWledBridge", () => {
-  it("happy path: resolves with WLED_TEST_OK and roundTripMs populated", async () => {
+  it("happy path: resolves with WLED_TEST_LIVE_CONFIRMED and sendLatencyMs populated", async () => {
     const response: WledTestResponse = {
-      status: makeStatus("WLED_TEST_OK", "Test frame (red ramp) sent successfully."),
-      roundTripMs: 3,
+      status: makeStatus("WLED_TEST_LIVE_CONFIRMED", "Test frame sent and the device reported it is displaying a realtime source."),
+      sendLatencyMs: 3,
     };
     invokeMock.mockResolvedValueOnce(response);
 
     const result = await testWledBridge(DEVICE_OK);
 
     expect(result).toEqual(response);
-    expect(result.roundTripMs).toBe(3);
+    expect(result.sendLatencyMs).toBe(3);
   });
 
   it("happy path: invokes test_wled_bridge with { device } wrapping the WledDeviceInfo", async () => {
     invokeMock.mockResolvedValueOnce({
-      status: makeStatus("WLED_TEST_OK"),
-      roundTripMs: 2,
+      status: makeStatus("WLED_TEST_LIVE_CONFIRMED"),
+      sendLatencyMs: 2,
     });
 
     await testWledBridge(DEVICE_OK);
@@ -264,6 +264,45 @@ describe("testWledBridge", () => {
     );
   });
 
+  it("WLED_TEST_SENT_UNCONFIRMED is a success that does not claim delivery", async () => {
+    const response: WledTestResponse = {
+      status: makeStatus(
+        "WLED_TEST_SENT_UNCONFIRMED",
+        "Device reachable and test frame written to the socket, but the device did not confirm it is displaying a realtime source.",
+      ),
+      sendLatencyMs: 1,
+      requestedLedCount: 60,
+      deviceLedCount: 60,
+    };
+    invokeMock.mockResolvedValueOnce(response);
+
+    const result = await testWledBridge(DEVICE_OK);
+
+    // The frame was sent, so latency exists — but the code must stay
+    // distinguishable from the confirmed one, which is the whole point.
+    expect(result.status.code).toBe("WLED_TEST_SENT_UNCONFIRMED");
+    expect(result.status.code).not.toBe("WLED_TEST_LIVE_CONFIRMED");
+    expect(result.sendLatencyMs).toBe(1);
+  });
+
+  it("coded failure: resolves with WLED_REALTIME_PORT_MISMATCH and reports the device port", async () => {
+    const response: WledTestResponse = {
+      status: {
+        code: WLED_STATUS.REALTIME_PORT_MISMATCH,
+        message: "Configured realtime port is not the port this device listens on.",
+        details: "configured=21324, device=19446",
+      },
+      deviceRealtimePort: 19446,
+    };
+    invokeMock.mockResolvedValueOnce(response);
+
+    const result = await testWledBridge(DEVICE_OK);
+
+    expect(result.status.code).toBe(WLED_STATUS.REALTIME_PORT_MISMATCH);
+    expect(result.deviceRealtimePort).toBe(19446);
+    expect(result.sendLatencyMs).toBeUndefined();
+  });
+
   it("coded failure: resolves (does not throw) with WLED_LED_COUNT_MISMATCH", async () => {
     const response: WledTestResponse = {
       status: {
@@ -271,14 +310,14 @@ describe("testWledBridge", () => {
         message: "Requested LED count does not match device-reported LED count.",
         details: "requested=60, device=144",
       },
-      roundTripMs: undefined,
+      sendLatencyMs: undefined,
     };
     invokeMock.mockResolvedValueOnce(response);
 
     const result = await testWledBridge(DEVICE_OK);
 
     expect(result.status.code).toBe(WLED_STATUS.LED_COUNT_MISMATCH);
-    expect(result.roundTripMs).toBeUndefined();
+    expect(result.sendLatencyMs).toBeUndefined();
     // never-throws contract
   });
 
@@ -289,14 +328,14 @@ describe("testWledBridge", () => {
         message: "Failed to bind UDP socket for test.",
         details: "network unreachable",
       },
-      roundTripMs: undefined,
+      sendLatencyMs: undefined,
     };
     invokeMock.mockResolvedValueOnce(response);
 
     const result = await testWledBridge(DEVICE_OK);
 
     expect(result.status.code).toBe(WLED_STATUS.BRIDGE_UNREACHABLE);
-    expect(result.roundTripMs).toBeUndefined();
+    expect(result.sendLatencyMs).toBeUndefined();
   });
 
   it("coded failure: resolves with WLED_PROTOCOL_MISMATCH when device returns unexpected HTTP status", async () => {
@@ -306,7 +345,7 @@ describe("testWledBridge", () => {
         message: "Response from device is not valid WLED JSON.",
         details: "HTTP 404",
       },
-      roundTripMs: undefined,
+      sendLatencyMs: undefined,
     };
     invokeMock.mockResolvedValueOnce(response);
 
@@ -315,20 +354,20 @@ describe("testWledBridge", () => {
     expect(result.status.code).toBe(WLED_STATUS.PROTOCOL_MISMATCH);
   });
 
-  it("WLED_TEST_OK: roundTripMs is absent (undefined) when test frame send fails", async () => {
+  it("WLED_TEST_SEND_FAILED: sendLatencyMs is absent (undefined) when test frame send fails", async () => {
     const response: WledTestResponse = {
       status: {
         code: "WLED_TEST_SEND_FAILED",
         message: "Test frame send failed.",
         details: "udp send error",
       },
-      roundTripMs: undefined,
+      sendLatencyMs: undefined,
     };
     invokeMock.mockResolvedValueOnce(response);
 
     const result = await testWledBridge(DEVICE_OK);
 
     expect(result.status.code).toBe("WLED_TEST_SEND_FAILED");
-    expect(result.roundTripMs).toBeUndefined();
+    expect(result.sendLatencyMs).toBeUndefined();
   });
 });
