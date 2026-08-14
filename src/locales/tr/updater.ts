@@ -43,6 +43,9 @@ const updater: Catalogue<typeof enUpdater> = {
   checkForUpdates: "Yazılım güncellemesi",
   checkForUpdatesDescription: "LumaSync'in en son sürümünü kontrol et.",
   checkAction: "Güncellemeleri kontrol et",
+  betaChannel: "Beta kanalı",
+  betaChannelDescription:
+    "Kararlı sürümlerin yanı sıra ön sürümleri de al. Ön sürümler CI tarafından derlenip test edilir, ancak paketlenmiş kurulum dosyasının kendisi hiçbir zaman çalıştırılarak sınanmaz — pürüz bekleyin.",
   checking: "Kontrol ediliyor...",
 };
 

@@ -40,5 +40,8 @@ export default {
   checkForUpdates: "Software update",
   checkForUpdatesDescription: "Check for the latest version of LumaSync.",
   checkAction: "Check for updates",
+  betaChannel: "Beta channel",
+  betaChannelDescription:
+    "Receive prereleases as well as stable versions. Prereleases are built and tested by CI, but the packaged installer itself is never launch-tested — expect rough edges.",
   checking: "Checking...",
 };
