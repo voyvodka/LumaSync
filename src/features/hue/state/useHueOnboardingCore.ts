@@ -7,6 +7,7 @@ import {
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
 import { shellStore } from "../../persistence/shellStore";
+import { hueCredentialEvents } from "../hueCredentialEvents";
 import {
   applyAreaReadinessSnapshot,
   flattenAreaGroups,
@@ -89,6 +90,7 @@ async function migrateStoredCredentialsToKeychain(storedState: ShellState): Prom
       hueClientKey: undefined,
       credentialStorageBackend: HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
     });
+    hueCredentialEvents.emit({ reason: "credentials-migrated" });
   } catch (error) {
     console.warn("[LumaSync] Hue credential keychain migration failed", error);
   }
@@ -226,10 +228,14 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         const hasStored = prev.selectedAreaId && flattened.some((area) => area.id === prev.selectedAreaId);
         const nextSelectedAreaId = hasStored ? prev.selectedAreaId : flattened[0]?.id ?? null;
 
-        void shellStore.save({
-          lastHueAreaId: nextSelectedAreaId ?? undefined,
-          hueOnboardingStep: HUE_ONBOARDING_STEP.AREA_SELECT,
-        });
+        // Emit only once the write has landed: the subscriber re-reads the
+        // store, so firing early hands it the value this call replaced.
+        void shellStore
+          .save({
+            lastHueAreaId: nextSelectedAreaId ?? undefined,
+            hueOnboardingStep: HUE_ONBOARDING_STEP.AREA_SELECT,
+          })
+          .then(() => hueCredentialEvents.emit({ reason: "area-selected" }));
 
         return {
           ...prev,
@@ -408,6 +414,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
           hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
           hueOnboardingStep: HUE_ONBOARDING_STEP.PAIR,
         });
+        hueCredentialEvents.emit({ reason: "paired" });
         await refreshAreasWith(response.credentials);
       }
     } catch (error) {
@@ -431,10 +438,12 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         selectedAreaId: areaId,
       }));
 
-      void shellStore.save({
-        lastHueAreaId: areaId ?? undefined,
-        hueOnboardingStep: areaId ? HUE_ONBOARDING_STEP.AREA_SELECT : HUE_ONBOARDING_STEP.PAIR,
-      });
+      void shellStore
+        .save({
+          lastHueAreaId: areaId ?? undefined,
+          hueOnboardingStep: areaId ? HUE_ONBOARDING_STEP.AREA_SELECT : HUE_ONBOARDING_STEP.PAIR,
+        })
+        .then(() => hueCredentialEvents.emit({ reason: "area-selected" }));
     },
     [patchState],
   );

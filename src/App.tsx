@@ -46,6 +46,7 @@ import {
 } from "./features/mode/model/contracts";
 import type { HueStartConfig } from "./features/hue/model/hueStartConfig";
 import { useStableHueStartConfig } from "./features/hue/state/useStableHueStartConfig";
+import { useHueStartConfigSync } from "./features/hue/state/useHueStartConfigSync";
 import type { LedCalibrationConfig } from "./features/calibration/model/contracts";
 import {
   resizeToMode,
@@ -187,6 +188,7 @@ function App() {
     });
   armUsbConnectedRef.current = armUsbConnected;
 
+  useHueStartConfigSync(setHueStartConfig);
   useEffect(() => { hueStartConfigRef.current = hueStartConfig; }, [hueStartConfig]);
   useTrayIntegration({
     onLightingModeChange: handleLightingModeChange,

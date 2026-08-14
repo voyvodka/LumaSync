@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import { hueCredentialEvents } from "../../hueCredentialEvents";
 import { __resetHueReadCacheForTests } from "../../hueReadCache";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
 
@@ -175,5 +176,49 @@ describe("useHueOnboardingCore — credential invariants", () => {
       expect(result.current.state.bridgeUnreachable).toBe(false);
       expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.NEEDS_REPAIR);
     });
+  });
+});
+
+describe("useHueOnboardingCore — pairing announces itself", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetHueReadCacheForTests();
+    shellLoadMock.mockResolvedValue({});
+    shellSaveMock.mockResolvedValue(undefined);
+    listAreasMock.mockResolvedValue({
+      status: { code: "HUE_AREA_LIST_OK", message: "ok", details: null },
+      areas: [],
+    });
+  });
+
+  // Nothing else tells App a bridge was paired, so a missed emit leaves the
+  // start-config mirror on null until the user happens to switch mode.
+  it("emits once the credentials are persisted", async () => {
+    pairBridgeMock.mockResolvedValue({
+      status: { code: "HUE_PAIRING_OK", message: "ok", details: null },
+      credentials: { username: "app-user", clientKey: "AABBCCDD" },
+      credentialStorageBackend: "keychain",
+    });
+    const seen: string[] = [];
+    const unsubscribe = hueCredentialEvents.subscribe((event) => seen.push(event.reason));
+
+    await selectBridgeAndPair();
+
+    expect(seen).toContain("paired");
+    unsubscribe();
+  });
+
+  it("stays silent when the bridge refuses to pair", async () => {
+    pairBridgeMock.mockResolvedValue({
+      status: { code: "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED", message: "press it", details: null },
+      credentials: null,
+    });
+    const seen: string[] = [];
+    const unsubscribe = hueCredentialEvents.subscribe((event) => seen.push(event.reason));
+
+    await selectBridgeAndPair();
+
+    expect(seen).not.toContain("paired");
+    unsubscribe();
   });
 });
