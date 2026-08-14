@@ -43,10 +43,16 @@ async function readUpdateChannel(): Promise<UpdateChannel> {
 export function useAutoUpdater() {
   const [state, setState] = useState<UpdaterState>({ status: "idle" });
   const [channel, setChannel] = useState<UpdateChannel>(DEFAULT_UPDATE_CHANNEL);
+  // Hides the status that was dismissed, not the updater. Setting `idle`
+  // instead hid nothing — the progress listener kept writing `downloading`.
+  const [dismissedStatus, setDismissedStatus] = useState<UpdaterState["status"] | null>(null);
   const lastStartRef = useRef<number>(0);
   const checkGuardRef = useRef(createLatestOperationGuard());
 
   const checkForUpdates = useCallback(async () => {
+    // A newer version is new information even though the status is `available`
+    // again, so it must not stay hidden behind the previous "Later".
+    setDismissedStatus(null);
     // The startup check and a Retry press can be in flight together and resolve
     // in either order; without this the older answer lands last and wins.
     const isLatest = checkGuardRef.current.begin();
@@ -81,6 +87,7 @@ export function useAutoUpdater() {
 
   const downloadAndInstall = useCallback(async (update: UpdateMetadata) => {
     let unlisten: UnlistenFn | undefined;
+    setDismissedStatus(null);
     try {
       let total = 0;
       lastStartRef.current = Date.now();
@@ -132,15 +139,21 @@ export function useAutoUpdater() {
   }, []);
 
   const dismiss = useCallback(() => {
-    setState({ status: "idle" });
-  }, []);
+    setDismissedStatus(state.status);
+  }, [state.status]);
 
   // Dev-only escape hatch for testing the 4 modal states without a real updater endpoint.
   // Kept permanently in DEV so the panel remains usable across sessions.
   const devSetState = useCallback((next: UpdaterState) => {
     if (!import.meta.env.DEV) return;
+    setDismissedStatus(null);
     setState(next);
   }, []);
 
-  return { state, channel, checkForUpdates, downloadAndInstall, dismiss, devSetState };
+  // A dismissed `downloading` still reaches `installing`, and that transition
+  // re-opens on purpose: the app is about to be replaced and relaunched, which
+  // is not the interruption the user declined.
+  const isModalOpen = state.status !== dismissedStatus;
+
+  return { state, channel, isModalOpen, checkForUpdates, downloadAndInstall, dismiss, devSetState };
 }

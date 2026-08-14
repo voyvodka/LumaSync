@@ -238,7 +238,7 @@ describe("useAutoUpdater", () => {
     expect(result.current.channel).toBe("beta");
   });
 
-  it("dismiss() resets state back to idle", async () => {
+  it("dismiss() closes the modal without discarding what the updater is doing", async () => {
     vi.mocked(checkForUpdate).mockRejectedValue(new Error("oops"));
 
     const { result } = renderHook(() => useAutoUpdater());
@@ -247,12 +247,16 @@ describe("useAutoUpdater", () => {
       await result.current.checkForUpdates();
     });
     expect(result.current.state.status).toBe("error");
+    expect(result.current.isModalOpen).toBe(true);
 
     act(() => {
       result.current.dismiss();
     });
 
-    expect(result.current.state.status).toBe("idle");
+    expect(result.current.isModalOpen).toBe(false);
+    // The state itself is untouched — collapsing it to `idle` is what let a
+    // later progress event resurrect the modal from scratch.
+    expect(result.current.state.status).toBe("error");
   });
 
   it("stringifies non-Error rejection values into the error message", async () => {
@@ -268,5 +272,77 @@ describe("useAutoUpdater", () => {
     if (result.current.state.status === "error") {
       expect(result.current.state.message).toBe("string rejection");
     }
+  });
+  describe("dismissal survives the events that used to reopen the modal", () => {
+    async function startDownload() {
+      const getHandler = captureProgressHandler();
+      vi.mocked(downloadAndInstallUpdate).mockReturnValue(new Promise(() => {}) as never);
+      const { result } = renderHook(() => useAutoUpdater());
+      await act(async () => {
+        void result.current.downloadAndInstall(UPDATE);
+      });
+      return { result, getHandler };
+    }
+
+    it("keeps the modal shut while the download it dismissed keeps reporting", async () => {
+      const { result, getHandler } = await startDownload();
+      expect(result.current.state.status).toBe("downloading");
+
+      act(() => {
+        result.current.dismiss();
+      });
+      expect(result.current.isModalOpen).toBe(false);
+
+      // The exact event that used to reopen it — the download is still running,
+      // which is what "continue in background" asked for.
+      act(() => {
+        getHandler()?.({ payload: { downloadedBytes: 512, totalBytes: 2048, finished: false } });
+      });
+
+      expect(result.current.isModalOpen).toBe(false);
+      expect(result.current.state.status).toBe("downloading");
+      if (result.current.state.status === "downloading") {
+        expect(result.current.state.downloadedBytes).toBe(512);
+      }
+    });
+
+    it("re-opens when the download finishes, because a relaunch is not what was declined", async () => {
+      const { result, getHandler } = await startDownload();
+      act(() => {
+        result.current.dismiss();
+      });
+
+      act(() => {
+        getHandler()?.({ payload: { downloadedBytes: 2048, totalBytes: 2048, finished: true } });
+      });
+
+      expect(result.current.state.status).toBe("installing");
+      expect(result.current.isModalOpen).toBe(true);
+    });
+
+    it("re-opens for a newer version after the previous one was put off", async () => {
+      vi.mocked(checkForUpdate).mockResolvedValue({
+        status: status(UPDATER_STATUS.UPDATE_AVAILABLE),
+        channel: "stable",
+        update: UPDATE,
+      });
+      const { result } = renderHook(() => useAutoUpdater());
+
+      await act(async () => {
+        await result.current.checkForUpdates();
+      });
+      act(() => {
+        result.current.dismiss();
+      });
+      expect(result.current.isModalOpen).toBe(false);
+
+      // Same status, different answer: suppressing it would hide the new
+      // version behind the previous "Later".
+      await act(async () => {
+        await result.current.checkForUpdates();
+      });
+
+      expect(result.current.isModalOpen).toBe(true);
+    });
   });
 });
