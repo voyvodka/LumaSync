@@ -513,3 +513,38 @@ describe("DeviceSection — chip type forwarding", () => {
     expect(onChipTypeChange).toHaveBeenCalledWith("sk6812-rgbw");
   });
 });
+
+describe("DeviceSection — category scroll position", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  // Categories only toggle `hidden`, so they share `.lm-device-main`'s scroller.
+  it("returns to the top when the category changes", async () => {
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    const main = document.querySelector(".lm-device-main") as HTMLElement;
+    expect(main).toBeTruthy();
+    main.scrollTop = 420;
+
+    await user.click(screen.getByText("device:page.rail.hueBridges").closest("button")!);
+
+    await waitFor(() => expect(main.scrollTop).toBe(0));
+  });
+
+  it("does it again on every switch, not only the first", async () => {
+    const user = userEvent.setup();
+    render(<DeviceSection />);
+
+    const main = document.querySelector(".lm-device-main") as HTMLElement;
+    await user.click(screen.getByText("device:page.rail.hueBridges").closest("button")!);
+
+    main.scrollTop = 300;
+    await user.click(screen.getByText("device:page.rail.wled").closest("button")!);
+
+    await waitFor(() => expect(main.scrollTop).toBe(0));
+  });
+});
