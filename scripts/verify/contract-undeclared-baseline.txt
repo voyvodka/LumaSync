@@ -51,5 +51,6 @@ KEYCHAIN_SET_FAILED
 
 # Internal to their sink/discovery helpers; the caller wraps them.
 CLIENT_INIT
+WLED_FRAME_TOO_LONG
 WLED_SEND_FAILED
 WLED_SOCKET_BIND_FAILED

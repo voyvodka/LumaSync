@@ -13,7 +13,9 @@
 //!   WLED_LED_COUNT_MISMATCH    -- Requested ledCount != device-reported count.
 //!   WLED_BRIDGE_UNREACHABLE    -- connect/test: device not reachable.
 //!   WLED_CONNECT_OK            -- Sink built and registered.
-//!   WLED_TEST_OK               -- Test frame sent without error.
+//!   WLED_TEST_LIVE_CONFIRMED   -- Frame sent AND /json/info.live read back true.
+//!   WLED_TEST_SENT_UNCONFIRMED -- Frame written to the socket, delivery unproven.
+//!   WLED_REALTIME_PORT_MISMATCH-- Configured port is not the device's udpport.
 //!   WLED_TEST_SEND_FAILED      -- Test frame UDP send failed.
 //!   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
 //!                                 unspecified, multicast, or broadcast).
@@ -29,6 +31,16 @@ use super::led_sink::LedSink;
 use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// DDP's own port, fixed by the protocol and independent of the realtime UDP
+/// port the user can remap in WLED's settings.
+const WLED_DDP_PORT: u16 = 4048;
+const WLED_DEFAULT_REALTIME_PORT: u16 = 21324;
+
+/// How long to wait after the test frame before re-reading `/json/info.live`.
+/// WLED latches realtime mode on receipt, so this only has to cover LAN flight
+/// plus the device's own loop, not a full frame interval.
+const WLED_LIVE_READBACK_DELAY: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -94,14 +106,29 @@ pub struct WledTestRequest {
 
 /// Response from `test_wled_bridge`.
 ///
-/// `round_trip_ms` measures the wall-clock time from the UDP send call to
-/// the moment it returns without error. This is a best-effort metric — it
-/// does not include WLED's processing time, only the host-side send latency.
+/// `send_latency_ms` is the host-side duration of the `send_to` call. UDP has
+/// no ACK, so it is not a round trip and excludes network flight and WLED's
+/// own processing — the name says so to stop the UI implying otherwise.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledTestResponse {
     pub status: WledCommandStatus,
-    pub round_trip_ms: Option<u64>,
+    pub send_latency_ms: Option<u64>,
+    pub requested_led_count: Option<u16>,
+    pub device_led_count: Option<u16>,
+    pub device_realtime_port: Option<u16>,
+}
+
+impl WledTestResponse {
+    fn failed(status: WledCommandStatus) -> Self {
+        Self {
+            status,
+            send_latency_ms: None,
+            requested_led_count: None,
+            device_led_count: None,
+            device_realtime_port: None,
+        }
+    }
 }
 
 /// The `WledSinkConfig` currently registered, in the frontend's
@@ -160,6 +187,14 @@ struct WledInfoResponse {
     ver: String,
     #[serde(default)]
     name: String,
+    /// True while WLED is displaying a realtime source. Read back after the
+    /// test frame — the only evidence available that the datagram landed.
+    #[serde(default)]
+    live: bool,
+    /// The device's realtime UDP port. 0 when a build omits the field, which
+    /// is why the port check treats 0 as "unknown" rather than a mismatch.
+    #[serde(default)]
+    udpport: u16,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -168,17 +203,21 @@ struct WledLedsInfo {
     count: u16,
 }
 
+/// `"warls"` still maps, to `Drgb`. No writer ever produced it, but a
+/// hand-edited store can, and DRGB is the same realtime UDP transport on the
+/// same port that a WARLS user was asking for. `normalizeWledProtocol` does the
+/// same on the TS side — both ends absorb it so neither has to trust the other.
 fn parse_protocol(s: Option<&str>) -> WledProtocol {
     match s {
-        Some("warls") => WledProtocol::Warls,
+        Some("drgb") | Some("warls") => WledProtocol::Drgb,
         _ => WledProtocol::Ddp,
     }
 }
 
 fn default_port_for(protocol: WledProtocol) -> u16 {
     match protocol {
-        WledProtocol::Ddp => 4048,
-        WledProtocol::Warls => 21324,
+        WledProtocol::Ddp => WLED_DDP_PORT,
+        WledProtocol::Drgb => WLED_DEFAULT_REALTIME_PORT,
     }
 }
 
@@ -187,7 +226,7 @@ fn default_port_for(protocol: WledProtocol) -> u16 {
 fn protocol_to_str(protocol: WledProtocol) -> &'static str {
     match protocol {
         WledProtocol::Ddp => "ddp",
-        WledProtocol::Warls => "warls",
+        WledProtocol::Drgb => "drgb",
     }
 }
 
@@ -437,12 +476,7 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
 
     let info = match fetch_wled_info(&device.ip) {
         Ok(info) => info,
-        Err(status) => {
-            return WledTestResponse {
-                status,
-                round_trip_ms: None,
-            }
-        }
+        Err(status) => return WledTestResponse::failed(status),
     };
 
     if info.leds.count != device.led_count {
@@ -455,34 +489,48 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
                     device.led_count, info.leds.count
                 )),
             ),
-            round_trip_ms: None,
+            send_latency_ms: None,
+            requested_led_count: Some(device.led_count),
+            device_led_count: Some(info.leds.count),
+            device_realtime_port: None,
         };
     }
 
     let ip = match parse_ipv4(&device.ip) {
         Ok(addr) => addr,
         Err(msg) => {
-            return WledTestResponse {
-                status: WledCommandStatus::err("WLED_INVALID_IP", &msg, None),
-                round_trip_ms: None,
-            }
+            return WledTestResponse::failed(WledCommandStatus::err("WLED_INVALID_IP", &msg, None))
         }
     };
 
     let protocol = parse_protocol(request.protocol.as_deref());
     let port = request.port.unwrap_or_else(|| default_port_for(protocol));
 
+    // Fail closed on a port nothing listens on: the send would succeed at the
+    // socket layer and the old code would have called that a pass. `udpport` 0
+    // means the build did not report one, so it cannot contradict anything.
+    if protocol == WledProtocol::Drgb && info.udpport != 0 && info.udpport != port {
+        return WledTestResponse {
+            status: WledCommandStatus::err(
+                "WLED_REALTIME_PORT_MISMATCH",
+                "Configured realtime port is not the port this device listens on.",
+                Some(format!("configured={}, device={}", port, info.udpport)),
+            ),
+            send_latency_ms: None,
+            requested_led_count: None,
+            device_led_count: None,
+            device_realtime_port: Some(info.udpport),
+        };
+    }
+
     let mut sink = WledUdpSink::new(ip, port, device.led_count, protocol);
 
     if let Err(e) = sink.start() {
-        return WledTestResponse {
-            status: WledCommandStatus::err(
-                "WLED_BRIDGE_UNREACHABLE",
-                "Failed to bind UDP socket for test.",
-                Some(e),
-            ),
-            round_trip_ms: None,
-        };
+        return WledTestResponse::failed(WledCommandStatus::err(
+            "WLED_BRIDGE_UNREACHABLE",
+            "Failed to bind UDP socket for test.",
+            Some(e),
+        ));
     }
 
     // Red ramp: LED i -> [i % 256, 0, 0]
@@ -495,22 +543,40 @@ pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
     let elapsed_ms = t0.elapsed().as_millis() as u64;
     let _ = sink.stop();
 
-    match send_result {
-        Ok(()) => WledTestResponse {
-            status: WledCommandStatus::ok(
-                "WLED_TEST_OK",
-                "Test frame (red ramp) sent successfully.",
-            ),
-            round_trip_ms: Some(elapsed_ms),
-        },
-        Err(e) => WledTestResponse {
-            status: WledCommandStatus::err(
-                "WLED_TEST_SEND_FAILED",
-                "Test frame send failed.",
-                Some(e),
-            ),
-            round_trip_ms: None,
-        },
+    if let Err(e) = send_result {
+        return WledTestResponse::failed(WledCommandStatus::err(
+            "WLED_TEST_SEND_FAILED",
+            "Test frame send failed.",
+            Some(e),
+        ));
+    }
+
+    // The socket accepting the datagram proves nothing about delivery, so ask
+    // the device whether it entered realtime mode. A failed re-probe downgrades
+    // to unconfirmed rather than failing — the frame may well have landed.
+    std::thread::sleep(WLED_LIVE_READBACK_DELAY);
+    let live_confirmed = fetch_wled_info(&device.ip)
+        .map(|after| after.live)
+        .unwrap_or(false);
+
+    let status = if live_confirmed {
+        WledCommandStatus::ok(
+            "WLED_TEST_LIVE_CONFIRMED",
+            "Test frame sent and the device reported it is displaying a realtime source.",
+        )
+    } else {
+        WledCommandStatus::ok(
+            "WLED_TEST_SENT_UNCONFIRMED",
+            "Device reachable and test frame written to the socket, but the device did not confirm it is displaying a realtime source.",
+        )
+    };
+
+    WledTestResponse {
+        status,
+        send_latency_ms: Some(elapsed_ms),
+        requested_led_count: Some(device.led_count),
+        device_led_count: Some(info.leds.count),
+        device_realtime_port: (info.udpport != 0).then_some(info.udpport),
     }
 }
 
@@ -526,8 +592,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_protocol_warls() {
-        assert_eq!(parse_protocol(Some("warls")), WledProtocol::Warls);
+    fn parse_protocol_drgb() {
+        assert_eq!(parse_protocol(Some("drgb")), WledProtocol::Drgb);
+    }
+
+    /// A store written before the v5 migration still reaches Rust on that
+    /// launch, and WARLS users wanted realtime UDP — which is what DRGB is.
+    #[test]
+    fn parse_protocol_maps_legacy_warls_onto_drgb() {
+        assert_eq!(parse_protocol(Some("warls")), WledProtocol::Drgb);
     }
 
     #[test]
@@ -536,8 +609,8 @@ mod tests {
     }
 
     #[test]
-    fn default_port_warls_is_21324() {
-        assert_eq!(default_port_for(WledProtocol::Warls), 21324);
+    fn default_port_drgb_is_the_realtime_port() {
+        assert_eq!(default_port_for(WledProtocol::Drgb), 21324);
     }
 
     // Round-trips because the frontend persists what this emits and replays it
@@ -545,7 +618,7 @@ mod tests {
     #[test]
     fn protocol_to_str_round_trips_through_parse_protocol() {
         use super::protocol_to_str;
-        for protocol in [WledProtocol::Ddp, WledProtocol::Warls] {
+        for protocol in [WledProtocol::Ddp, WledProtocol::Drgb] {
             let encoded = protocol_to_str(protocol);
             assert_eq!(parse_protocol(Some(encoded)), protocol, "{encoded}");
         }
@@ -605,6 +678,8 @@ mod tests {
             mac: "AA:BB:CC:DD:EE:FF".to_string(),
             ver: "0.14.0".to_string(),
             name: "Living Room".to_string(),
+            live: false,
+            udpport: 21324,
         };
         let device = info_to_device("10.0.0.5", info);
         assert_eq!(device.ip, "10.0.0.5");
@@ -622,6 +697,8 @@ mod tests {
             mac: String::new(),
             ver: String::new(),
             name: String::new(),
+            live: false,
+            udpport: 0,
         };
         let device = info_to_device("10.0.0.1", info);
         assert!(device.mac.is_none());
