@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { LED_TEST_STATUS, type LedTestPatternResult } from "@/shared/contracts/preview";
@@ -14,9 +14,23 @@ vi.mock("@/features/preview/previewApi", () => ({
   stopLedTestPattern: vi.fn(),
 }));
 
+let storeState: Record<string, unknown> = {};
+
+vi.mock("@/features/persistence/shellStore", () => ({
+  shellStore: { load: () => Promise.resolve(storeState) },
+}));
+
+vi.mock("@/features/hue/state/hueTestLease", () => ({
+  acquireHueForTest: vi.fn().mockResolvedValue(undefined),
+  releaseHueAfterTest: vi.fn().mockResolvedValue(undefined),
+}));
+
 const previewApi = await import("@/features/preview/previewApi");
 const startLedTestPatternMock = vi.mocked(previewApi.startLedTestPattern);
 const stopLedTestPatternMock = vi.mocked(previewApi.stopLedTestPattern);
+const hueTestLease = await import("@/features/hue/state/hueTestLease");
+const acquireHueForTestMock = vi.mocked(hueTestLease.acquireHueForTest);
+const releaseHueAfterTestMock = vi.mocked(hueTestLease.releaseHueAfterTest);
 
 const BASE_COUNTS = { top: 4, right: 3, bottom: 4, left: 3 } as const;
 
@@ -122,8 +136,14 @@ describe("isTestPatternFailure", () => {
 });
 
 describe("createDefaultTestPatternFlow", () => {
-  it("sends the edited layout, not the last saved one", async () => {
+  beforeEach(() => {
+    storeState = {};
     startLedTestPatternMock.mockClear();
+    acquireHueForTestMock.mockClear();
+    releaseHueAfterTestMock.mockClear();
+  });
+
+  it("sends the edited layout, not the last saved one", async () => {
     startLedTestPatternMock.mockResolvedValue(result());
     stopLedTestPatternMock.mockResolvedValue(result({ active: false }));
 
@@ -137,6 +157,47 @@ describe("createDefaultTestPatternFlow", () => {
     const payload = startLedTestPatternMock.mock.calls[0][0];
     expect(payload.ledCalibration).toEqual(edited);
     expect(payload.pattern.kind).toBe("chase");
-    expect(payload.targets).toEqual(["usb"]);
+  });
+
+  it("tests the outputs the user last lit, not a hardcoded USB strip", async () => {
+    storeState = { lastOutputTargets: ["hue"] };
+    startLedTestPatternMock.mockResolvedValue(result());
+
+    await createDefaultTestPatternFlow(createConfig()).toggle(true);
+
+    expect(startLedTestPatternMock.mock.calls[0][0].targets).toEqual(["hue"]);
+    expect(acquireHueForTestMock).toHaveBeenCalledWith(["hue"]);
+  });
+
+  it("falls back to USB when nothing has been lit yet", async () => {
+    startLedTestPatternMock.mockResolvedValue(result());
+
+    await createDefaultTestPatternFlow(createConfig()).toggle(true);
+
+    expect(startLedTestPatternMock.mock.calls[0][0].targets).toEqual(["usb"]);
+  });
+
+  it("hands the stream back when the start is refused, since no stop will follow", async () => {
+    storeState = { lastOutputTargets: ["hue"] };
+    startLedTestPatternMock.mockResolvedValue(
+      result({ active: false, status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "" } }),
+    );
+
+    await createDefaultTestPatternFlow(createConfig()).toggle(true);
+
+    expect(releaseHueAfterTestMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the stream back when the test is switched off", async () => {
+    storeState = { lastOutputTargets: ["hue"] };
+    startLedTestPatternMock.mockResolvedValue(result());
+    stopLedTestPatternMock.mockResolvedValue(result({ active: false }));
+
+    const flow = createDefaultTestPatternFlow(createConfig());
+    await flow.toggle(true);
+    expect(releaseHueAfterTestMock).not.toHaveBeenCalled();
+
+    await flow.toggle(false);
+    expect(releaseHueAfterTestMock).toHaveBeenCalledTimes(1);
   });
 });

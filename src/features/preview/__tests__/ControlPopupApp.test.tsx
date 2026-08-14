@@ -32,10 +32,15 @@ vi.mock("../previewApi", () => ({
 
 const setLightingMode = vi.fn();
 const stopLighting = vi.fn();
+// Reached through `hueTestLease`, which the runner now calls around every run.
+const startHue = vi.fn();
+const stopHue = vi.fn();
 
 vi.mock("@/features/mode/modeApi", () => ({
   setLightingMode: (...args: unknown[]) => setLightingMode(...args),
   stopLighting: (...args: unknown[]) => stopLighting(...args),
+  startHue: (...args: unknown[]) => startHue(...args),
+  stopHue: (...args: unknown[]) => stopHue(...args),
 }));
 
 const storeSave = vi.fn();
