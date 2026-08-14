@@ -6,7 +6,7 @@ Security updates are provided for the latest stable release.
 
 | Version | Supported |
 | --- | --- |
-| 1.5.x (current: 1.5.5) | Yes |
+| 1.5.x (current: 1.5.5-rc.1) | Yes |
 | 1.4.x | No |
 | < 1.4.0 | No |
 
