@@ -24,6 +24,7 @@ const common: Catalogue<typeof enCommon> = {
       action: "Cihazları aç",
       stoppedBody: "LumaSync Hue köprüsünü kontrol etmeyi bıraktı — bu ağda yanıt vermedi.",
       retry: "Yeniden dene",
+      retrying: "Kontrol ediliyor…",
     },
   },
   mode: {

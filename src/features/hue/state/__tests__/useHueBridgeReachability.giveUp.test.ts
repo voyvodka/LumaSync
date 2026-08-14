@@ -95,6 +95,39 @@ describe("useHueBridgeReachability — give up and retry", () => {
     expect(result.current.reachable).toBe(true);
   });
 
+  it("a retry that fails keeps the give-up flag, so the button stays on screen", async () => {
+    const { result } = renderHook(() => useHueBridgeReachability(config, false));
+    await advance(HUE_BRIDGE_REACHABILITY_POLL_MS * 3);
+    expect(result.current.gaveUp).toBe(true);
+
+    // The bridge is still absent. Clearing `gaveUp` on retry is what made the
+    // button delete itself mid-press and leave the user with no feedback.
+    await act(async () => {
+      result.current.retry();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(validateHueCredentialsMock).toHaveBeenCalledTimes(5);
+    expect(result.current.gaveUp).toBe(true);
+  });
+
+  it("reports a probe in flight so the retry can render pending", async () => {
+    let release: ((value: unknown) => void) | undefined;
+    validateHueCredentialsMock.mockImplementationOnce(
+      () => new Promise((resolve) => { release = resolve; }),
+    );
+
+    const { result } = renderHook(() => useHueBridgeReachability(config, false));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(result.current.probing).toBe(true);
+
+    await act(async () => {
+      release?.(valid);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.probing).toBe(false);
+  });
+
   it("a retry requested from another surface re-arms this loop too", async () => {
     const { result } = renderHook(() => useHueBridgeReachability(config, false));
     await advance(HUE_BRIDGE_REACHABILITY_POLL_MS * 3);

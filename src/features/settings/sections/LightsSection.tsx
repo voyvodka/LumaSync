@@ -78,6 +78,8 @@ interface LightsSectionProps {
   hueReachable?: boolean;
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
   hueProbeGaveUp?: boolean;
+  /** A bridge probe is in flight, so the retry control shows pending. */
+  hueProbeChecking?: boolean;
   onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   calibration?: LedCalibrationConfig;
@@ -134,6 +136,7 @@ export function LightsSection({
   hueConfigured,
   hueReachable = true,
   hueProbeGaveUp = false,
+  hueProbeChecking = false,
   onRetryHueProbe,
   hueStreaming,
   calibration,
@@ -399,10 +402,16 @@ export function LightsSection({
                 : undefined
             }
             secondaryAction={
+              // Still gated on `hueProbeGaveUp` — offering retry during normal
+              // polling is noise. What changed is that `gaveUp` now survives a
+              // manual retry, so the button no longer deletes itself on click.
               hueProbeGaveUp && onRetryHueProbe
                 ? {
-                    label: t("common:output.offline.retry"),
+                    label: hueProbeChecking
+                      ? t("common:output.offline.retrying")
+                      : t("common:output.offline.retry"),
                     onClick: onRetryHueProbe,
+                    pending: hueProbeChecking,
                   }
                 : undefined
             }

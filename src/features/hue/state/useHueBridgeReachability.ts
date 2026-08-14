@@ -13,6 +13,9 @@ export interface HueBridgeReachability {
   reachable: boolean;
   /** The probe stopped after a sustained outage; only `retry` re-arms it. */
   gaveUp: boolean;
+  /** A probe is in flight. Without this the retry control has nothing to
+   * render, so pressing it looks like it did nothing. */
+  probing: boolean;
   retry: () => void;
 }
 
@@ -25,6 +28,7 @@ export function useHueBridgeReachability(
 ): HueBridgeReachability {
   const [hueReachable, setHueReachable] = useState(false);
   const [gaveUp, setGaveUp] = useState(false);
+  const [probing, setProbing] = useState(false);
   const restartToken = useHuePollRestartToken();
 
   useEffect(() => {
@@ -32,6 +36,7 @@ export function useHueBridgeReachability(
       // An unpaired or streaming bridge has nothing to retry, so the banner
       // must not keep offering it one.
       setGaveUp(false);
+      setProbing(false);
       return;
     }
 
@@ -39,8 +44,10 @@ export function useHueBridgeReachability(
     let timeoutId: number | null = null;
     let inFlight = false;
     let stopped = false;
+    // `gaveUp` deliberately survives a manual retry — clearing it here made the
+    // retry button delete itself the instant it was pressed. Only a bridge that
+    // answers clears it, in the success branch below.
     const budget = createPollBudget();
-    setGaveUp(false);
 
     const noteFailure = (reason: string) => {
       const verdict = budget.recordFailure();
@@ -62,6 +69,7 @@ export function useHueBridgeReachability(
       if (inFlight) return;
       if (document.visibilityState === "hidden") return;
       inFlight = true;
+      setProbing(true);
       try {
         const validation = await validateHueCredentials(
           hueStartConfig.bridgeIp,
@@ -74,14 +82,19 @@ export function useHueBridgeReachability(
         // Only a bridge that never answered counts against the budget. A
         // bridge that answers CREDENTIAL_INVALID is on the network and needs
         // a re-pair, which the Devices card already offers.
-        if (code === HUE_STATUS.CREDENTIAL_CHECK_FAILED) noteFailure(code);
-        else budget.recordSuccess();
+        if (code === HUE_STATUS.CREDENTIAL_CHECK_FAILED) {
+          noteFailure(code);
+        } else {
+          budget.recordSuccess();
+          setGaveUp(false);
+        }
       } catch (error) {
         if (!mounted) return;
         setHueReachable(false);
         noteFailure(String(error));
       } finally {
         inFlight = false;
+        if (mounted) setProbing(false);
         if (!stopped) scheduleNext();
       }
     };
@@ -117,7 +130,7 @@ export function useHueBridgeReachability(
   }, [hueStartConfig, hueStreaming, restartToken]);
 
   return useMemo(
-    () => ({ reachable: hueReachable, gaveUp, retry: requestHuePollRestart }),
-    [gaveUp, hueReachable],
+    () => ({ reachable: hueReachable, gaveUp, probing, retry: requestHuePollRestart }),
+    [gaveUp, hueReachable, probing],
   );
 }

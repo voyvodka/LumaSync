@@ -60,6 +60,7 @@ vi.mock("react-i18next", () => ({
         "common:output.offline.stoppedBody":
           "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
         "common:output.offline.retry": "Check again",
+        "common:output.offline.retrying": "Checking…",
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
@@ -237,6 +238,7 @@ describe("LightsSection — output availability gate", () => {
       hueConfigured: boolean;
       hueReachable: boolean;
       hueProbeGaveUp: boolean;
+      hueProbeChecking: boolean;
       onRetryHueProbe: () => void;
       onOpenDevices: () => void;
       onModeChange: (next: LightingModeConfig) => void;
@@ -250,6 +252,7 @@ describe("LightsSection — output availability gate", () => {
         hueConfigured={props.hueConfigured ?? false}
         hueReachable={props.hueReachable ?? false}
         hueProbeGaveUp={props.hueProbeGaveUp ?? false}
+        hueProbeChecking={props.hueProbeChecking ?? false}
         onRetryHueProbe={props.onRetryHueProbe}
         hueStreaming={false}
         modeLockReason={null}
@@ -301,6 +304,22 @@ describe("LightsSection — output availability gate", () => {
 
     await user.click(screen.getByRole("button", { name: "Check again" }));
     expect(onRetryHueProbe).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the retry on screen while the retry it triggered is in flight", () => {
+    renderWithOutputs({
+      hueConfigured: true,
+      hueProbeGaveUp: true,
+      hueProbeChecking: true,
+      onRetryHueProbe: vi.fn(),
+    });
+
+    // The whole complaint: pressing it used to clear `gaveUp` and delete the
+    // only thing on screen that said anything was happening.
+    const retry = screen.getByRole("button", { name: "Checking…" });
+    expect(retry).toBeDisabled();
+    expect(retry).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
   });
 
   it("hides the retry while the probe is still trying", () => {
