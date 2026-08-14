@@ -1,8 +1,8 @@
-# quick-xml <0.41 DoS: all three paths are build-time codegen or toast XML we generate, so none see
-# attacker input; the fix is semver-major for those 0.x parents. Drop when they bump upstream.
+# No advisories are ignored today. The quick-xml RUSTSEC-2026-0194 / -0195 DoS
+# entries were suppressed here until the resolved quick-xml (via plist <- tauri)
+# reached the patched 0.41.0; it has, so the ignore list is deliberately empty.
+# Any future addition needs a written justification here and must be
+# re-checked at every release.
 
 [advisories]
-ignore = [
-  "RUSTSEC-2026-0194",
-  "RUSTSEC-2026-0195",
-]
+ignore = []

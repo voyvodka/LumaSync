@@ -40,6 +40,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # The three version locations move in lockstep by convention only: a
+      # `v1.5.4` tag on a 1.5.5 tree published a mislabelled release, all green.
+      - name: Verify the tag matches the in-tree version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Core X.Y.Z only: `v1.5.4-rc.1` is cut from a tree reading `1.5.4`,
+          # and nothing in-tree records the suffix to check it against.
+          core() { printf '%s' "${1%%[-+]*}"; }
+
+          TAG_VERSION=$(core "${GITHUB_REF_NAME#v}")
+          # Every pattern ends in `.*` so it also absorbs the CR the Windows
+          # runner leaves on each line.
+          PKG_VERSION=$(core "$(sed -n 's/^  "version": "\([^"]*\)".*/\1/p' package.json)")
+          # Anchored at column 0: a dependency's `version = ` sits inside an
+          # inline table and is always indented or preceded by a key.
+          CARGO_VERSION=$(core "$(sed -n 's/^version = "\([^"]*\)".*/\1/p' src-tauri/Cargo.toml)")
+          # `current:` is the one place SECURITY.md names an exact release; the
+          # other rows of the support table are ranges (`1.5.x`, `< 1.4.0`).
+          SEC_VERSION=$(core "$(sed -n 's/.*(current: \([0-9][^)]*\)).*/\1/p' SECURITY.md)")
+
+          echo "tag=${TAG_VERSION} package.json=${PKG_VERSION} Cargo.toml=${CARGO_VERSION} SECURITY.md=${SEC_VERSION}"
+
+          FAILED=0
+          for pair in "package.json:${PKG_VERSION}" "src-tauri/Cargo.toml:${CARGO_VERSION}" "SECURITY.md:${SEC_VERSION}"; do
+            file="${pair%%:*}"
+            found="${pair#*:}"
+            if [ -z "$found" ]; then
+              echo "::error::could not read a version out of ${file}"
+              FAILED=1
+            elif [ "$found" != "$TAG_VERSION" ]; then
+              echo "::error::${file} says ${found} but the tag says ${TAG_VERSION}"
+              FAILED=1
+            fi
+          done
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the in-tree version; refusing to build."
+            exit 1
+          fi
+
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
@@ -170,8 +211,12 @@ jobs:
         run: |
           VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
           NOTES=$(awk "/^## \[${VERSION}\]/{p=1; next} /^## \[/{if(p) exit} /^---$/{if(p) exit} p" CHANGELOG.md)
-          if [ -z "$NOTES" ]; then
-            NOTES="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          # Previously a placeholder string, so a release with no section shipped
+          # to users with no notes and nothing failed. Blanks are stripped first:
+          # a heading with an empty body yields newlines, not an empty string.
+          if [ -z "$(printf '%s' "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md has no non-empty '## [${VERSION}]' section; refusing to release."
+            exit 1
           fi
           {
             echo "notes<<RELEASE_NOTES_EOF"
@@ -179,8 +224,11 @@ jobs:
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      # Pinned to a commit, unlike the other actions here: this is the only step
+      # handed TAURI_SIGNING_PRIVATE_KEY, the trust anchor for every auto-update
+      # the app performs. Move the SHA and the version comment together.
       - name: Build and upload release assets
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
