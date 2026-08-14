@@ -283,11 +283,13 @@ contains. Do not classify the bump from the diff — the answer is always patch 
 says otherwise. A change that is genuinely breaking still ships under a patch number, so it must be
 called out in the release notes in as many words.
 
-**Green CI proves the debug binary starts, not the download.** `scripts/verify/launch-smoke.mjs`
-builds and launches the debug binary on all three platforms and waits for a startup marker, so a
-dead binary fails the build. The bundled `.dmg` / `.msi` / `.deb` / AppImage is still never
-launched anywhere — and bundling is where signing, entitlements, and app layout enter. Do not
-describe a release artefact as verified on the strength of a green CI run.
+**Green CI proves less than it looks like, and least of all on Windows.**
+`scripts/verify/launch-smoke.mjs` launches the debug binary on **macOS and Linux only** — Windows is
+gated out of both workflows ([#181](https://github.com/voyvodka/LumaSync/issues/181)), and it cannot
+pass there anyway while its startup marker travels through the console→log bridge, which is itself
+broken on Windows. `release.yml` does launch the mounted `.dmg` and the AppImage before publishing;
+the `.msi` and `.deb` are never launched anywhere. So Windows has **no launch coverage at all**, in
+either profile. Do not describe a release artefact as verified on the strength of a green CI run.
 
 Four things must stay true regardless of who does the work:
 

@@ -803,11 +803,10 @@ mod platform {
     /// at the Hue 20 Hz cadence, so this matches the macOS + Windows
     /// "latest frame on demand" contract from the worker's point of view.
     ///
-    /// Wave 1 baseline: X11 path is the supported configuration. xcap
-    /// auto-detects Wayland and falls through to PipeWire / xdg-desktop-
-    /// portal under the hood; we do not block that, but we make no
-    /// promises about it either — Wayland hardening lands in v2.0
-    /// (Platform GAP 1b).
+    /// X11 is the supported configuration. xcap auto-detects Wayland and
+    /// falls through to PipeWire / xdg-desktop-portal underneath; we do not
+    /// block that and make no promises about it. No release is named here on
+    /// purpose — see `docs/architecture/capture-and-pipeline.md`.
     struct LinuxFrameSource {
         monitor: Monitor,
         /// Pull mode runs ~20×/s, so Windows' per-frame downscale log would
