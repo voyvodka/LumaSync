@@ -7,6 +7,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+## [1.5.5]
+
 ### Fixed
 
 - Two settings saved at the same moment no longer undo each other. All persisted shell state — window geometry, last section, lighting mode, the bound device, the room map and its grid settings — lives in one file that every writer read, modified and wrote back. Two writers overlapping meant the second read a snapshot taken before the first had landed, so it wrote back the older value and silently reverted whatever the first had just changed. Writes are now serialised, and a write that fails no longer blocks the ones queued behind it.
