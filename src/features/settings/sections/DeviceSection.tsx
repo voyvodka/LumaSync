@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { LedChipType } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type {
@@ -35,9 +36,11 @@ export interface DeviceSectionProps {
    * count live. Inert when omitted.
    */
   onNavigateToRoomMap?: () => void;
+  /** Forwarded to the chip-type picker; see `UsbStripsCategoryProps`. */
+  onChipTypeChange?: (next: LedChipType) => void;
 }
 
-export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) {
+export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceSectionProps = {}) {
   const { t } = useTranslation();
 
   // Mounted once and handed to the children whole: `useHueOnboarding` composes
@@ -188,6 +191,7 @@ export function DeviceSection({ onNavigateToRoomMap }: DeviceSectionProps = {}) 
           flagPersistError={usbPersistError.raise}
           clearPersistError={usbPersistError.clear}
           onNavigateToRoomMap={onNavigateToRoomMap}
+          onChipTypeChange={onChipTypeChange}
         />
 
         <HueBridgesCategory

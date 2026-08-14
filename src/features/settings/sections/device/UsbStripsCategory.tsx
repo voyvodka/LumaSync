@@ -7,6 +7,7 @@ import type { RoomMapConfig, UsbStripPlacement } from "@/shared/contracts/roomMa
 import { shellStore } from "@/features/persistence/shellStore";
 import { buildDeviceStatusCard } from "@/features/device/deviceStatusCard";
 import type { UseDeviceConnectionResult } from "@/features/device/useDeviceConnection";
+import type { LedChipType } from "@/shared/contracts/device";
 import { LedChipTypePicker } from "../control/LedChipTypePicker";
 import { IconRefresh, IconUsb } from "@/shared/ui/icons";
 
@@ -41,6 +42,9 @@ export interface UsbStripsCategoryProps {
   flagPersistError: () => void;
   clearPersistError: () => void;
   onNavigateToRoomMap?: () => void;
+  /** Inert when omitted — and then the picker only writes shellStore, leaving the
+   *  running encoder on the boot-time byte width until the next reconnect. */
+  onChipTypeChange?: (next: LedChipType) => void;
 }
 
 export function UsbStripsCategory({
@@ -52,6 +56,7 @@ export function UsbStripsCategory({
   flagPersistError,
   clearPersistError,
   onNavigateToRoomMap,
+  onChipTypeChange,
 }: UsbStripsCategoryProps) {
   const { t } = useTranslation();
   const {
@@ -452,7 +457,7 @@ export function UsbStripsCategory({
       </div>
 
       {/* Chip type selector — USB sink strip config (v1.5 G3) */}
-      <LedChipTypePicker />
+      <LedChipTypePicker onChipTypeChange={onChipTypeChange} />
 
       {/* Paired strips — Wave 4-E + 4-G surface. Lists every
           persisted UsbStripPlacement with a per-strip portName,

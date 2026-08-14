@@ -5,7 +5,7 @@ import { CalibrationPage } from "../calibration/ui/CalibrationPage";
 import { DeviceSection } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile } from "@/shared/contracts/device";
+import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
@@ -57,6 +57,12 @@ interface SettingsLayoutProps {
    * set_lighting_mode. Mirrors the onHueIntensityPresetChange pattern.
    */
   onFirmwareProfileChange?: (next: FirmwareProfile) => void;
+  /** Forwarded to the chip-type picker in DEVICES; same hot-reload contract as
+   *  `onFirmwareProfileChange`, because chip type is also a wire-format change. */
+  onChipTypeChange?: (next: LedChipType) => void;
+  /** Forwarded to LED Setup's display picker. Without it a mid-session monitor
+   *  switch persists but never reaches the running capture session. */
+  onSelectedDisplayIdChange?: (next: string) => void;
   /**
    * v1.5 W2-B1 — compact-mode "no reachable output" banner deep-link.
    * Forwarded only when `uiMode === "compact"`; full mode renders its
@@ -90,6 +96,8 @@ export const SettingsLayout = memo(function SettingsLayout({
   onHueIntensityPresetChange,
   onColorCorrectionChange,
   onFirmwareProfileChange,
+  onChipTypeChange,
+  onSelectedDisplayIdChange,
   onOpenDevices,
 }: SettingsLayoutProps) {
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
@@ -162,6 +170,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               setPendingZoneCounts(null);
               onCalibrationSaved(cfg);
             }}
+            onDisplayChange={onSelectedDisplayIdChange}
           />
         )}
 
@@ -169,6 +178,7 @@ export const SettingsLayout = memo(function SettingsLayout({
           <div className="h-full overflow-hidden">
             <DeviceSection
               onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
+              onChipTypeChange={onChipTypeChange}
             />
           </div>
         )}
