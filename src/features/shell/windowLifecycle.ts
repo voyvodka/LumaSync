@@ -83,10 +83,24 @@ export async function loadShellState(): Promise<ShellState> {
   return migrated;
 }
 
+/** Tail of the serialised write chain — see {@link saveShellState}. */
+let shellWriteQueue: Promise<void> = Promise.resolve();
+
+/** Persist a partial update, queued behind every other write: this is a
+ * read-modify-write over one blob, so two concurrent callers read the same
+ * snapshot and the later one silently reverts the earlier one's fields. */
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {
-  const store = await getStore();
-  const current = await loadShellState();
-  await store.set(SHELL_STORE_KEY, { ...current, ...state });
+  const write = shellWriteQueue.then(async () => {
+    const store = await getStore();
+    const current = await loadShellState();
+    await store.set(SHELL_STORE_KEY, { ...current, ...state });
+  });
+
+  // The queue continues past a rejection; the caller still sees it via `write`.
+  // Without this a single failed write would wedge every later one forever.
+  shellWriteQueue = write.catch(() => {});
+
+  return write;
 }
 
 // ---------------------------------------------------------------------------

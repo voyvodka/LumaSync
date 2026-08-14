@@ -118,7 +118,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 // Import AFTER mocks are registered.
-import { restoreWindowState, persistWindowState } from "../windowLifecycle";
+import { restoreWindowState, persistWindowState, saveShellState } from "../windowLifecycle";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -527,5 +527,50 @@ describe("Scenario 8 — center-preserve: single setPosition per restore", () =>
     await restoreWindowState();
 
     expect(setPositionMock).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 9 — concurrent writers
+// ---------------------------------------------------------------------------
+
+describe("Scenario 9 — concurrent saveShellState calls do not revert each other", () => {
+  /** `set` must land on a later macrotask, not a microtask — otherwise the
+   * first writer always finishes before the second one reads and the race
+   * this scenario exists to catch quietly stops happening. */
+  function usePersistentStore(initial: ShellState) {
+    let persisted = initial;
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    storeGetMock.mockImplementation(async () => {
+      await tick();
+      return persisted;
+    });
+    storeSetMock.mockImplementation(async (_key, value) => {
+      await tick();
+      persisted = value as ShellState;
+    });
+    return () => persisted;
+  }
+
+  it("keeps both fields when two writers start from the same snapshot", async () => {
+    const read = usePersistentStore(makePersistedState({}));
+
+    await Promise.all([
+      saveShellState({ lastSection: "devices" }),
+      saveShellState({ hasCompletedOnboarding: true }),
+    ]);
+
+    expect(read().lastSection).toBe("devices");
+    expect(read().hasCompletedOnboarding).toBe(true);
+  });
+
+  it("a rejected write does not wedge the writes queued behind it", async () => {
+    const read = usePersistentStore(makePersistedState({}));
+    storeSetMock.mockRejectedValueOnce(new Error("disk full"));
+
+    await expect(saveShellState({ lastSection: "devices" })).rejects.toThrow("disk full");
+    await saveShellState({ hasCompletedOnboarding: true });
+
+    expect(read().hasCompletedOnboarding).toBe(true);
   });
 });
