@@ -2040,6 +2040,7 @@ const NULLABILITY_NAME_ALIASES = {
   CommandStatus: "CommandStatusOf",
   WledCommandStatus: "CommandStatusOf",
   HueCommandStatus: "CommandStatusOf",
+  DisplayInfoPayload: "DisplayInfo",
 };
 
 /**
@@ -2127,10 +2128,48 @@ function lookupTsField(interfaceName, field, seen = new Set()) {
 }
 
 const nullabilityPairs = [];
+const unpairedStructs = [];
 for (const [structName, defs] of rustSerializableStructs) {
   const tsName = NULLABILITY_NAME_ALIASES[structName] ?? structName;
-  if (!contractInterfaces.has(tsName)) continue;
+  // Was a bare `continue`: an unpaired struct was not excluded, it was
+  // INVISIBLE — absent from the pair list, the coverage pin and the exclusion
+  // table alike. That hid 30 of 70 wire structs, including a live mismatch.
+  if (!contractInterfaces.has(tsName)) {
+    unpairedStructs.push(structName);
+    continue;
+  }
   nullabilityPairs.push({ structName, tsName, defs });
+}
+
+console.log("\n[ Serialize structs with no contract interface (ratcheted) ]");
+const UNPAIRED_BASELINE_FILE = resolve(__dirname, "contract-unpaired-struct-baseline.txt");
+const unpairedBaseline = new Set(
+  readOrEmpty(UNPAIRED_BASELINE_FILE, "unpaired-struct baseline")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"))
+);
+for (const structName of unpairedStructs.filter((n) => !unpairedBaseline.has(n)).sort()) {
+  fail(
+    `UNPAIRED WIRE STRUCT "${structName}" — it derives Serialize but no `
+      + `interface in src/shared/contracts/ carries its name, so none of its `
+      + `fields are nullability-checked. Add a NULLABILITY_NAME_ALIASES entry `
+      + `if the mirror exists under another name, move the mirror into a `
+      + `contract, or baseline it with the reason.`
+  );
+}
+check(
+  unpairedStructs.filter((n) => !unpairedBaseline.has(n)).length === 0,
+  `no new unpaired wire structs beyond the ${unpairedBaseline.size} baselined`,
+  "new unpaired wire structs found (listed above)"
+);
+for (const structName of unpairedBaseline) {
+  check(
+    unpairedStructs.includes(structName),
+    `baseline entry "${structName}" is still unpaired`,
+    `STALE BASELINE: "${structName}" now pairs with a contract interface — `
+      + `delete the line from contract-unpaired-struct-baseline.txt (it may only shrink)`
+  );
 }
 
 // Coverage pin. A new Serialize struct that shares a contract interface name
@@ -2138,7 +2177,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 40;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 41;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

@@ -1,0 +1,40 @@
+# Ratchet, not a suppression list — it may only SHRINK.
+#
+# Each name is a `#[derive(Serialize)]` struct that crosses the IPC boundary but
+# has no same-named interface under src/shared/contracts/, so none of its fields
+# are nullability-checked. Most have a TS mirror living in a feature module
+# instead of a contract; the fix for one of those is to move the mirror into a
+# contract, or add a NULLABILITY_NAME_ALIASES entry when the name differs.
+#
+# Before this file existed these structs were not excluded, they were invisible:
+# the pairing loop skipped them with a bare `continue`, so they never reached the
+# coverage pin or the exclusion table.
+AmbilightPayload
+EdgeSignalPayload
+HealthCheckResult
+HealthStepResult
+HueDiscoveryResponse
+HueEntertainmentAreaListResponse
+HueRuntimeCommandResult
+HueSolidColorSnapshot
+HueStreamReadinessResponse
+HueValidateCredentialsResponse
+HueVerifyBridgeIpResponse
+LightingModeChangedPayload
+LightingModeCommandResult
+LightingModeConfig
+OverlayPreviewCountsPayload
+OverlayPreviewSequenceItemPayload
+SerialConnectionStatus
+SerialPortDescriptor
+SerialPortListResponse
+SetHueSolidColorRequest
+SolidColorPayload
+StartHueStreamRequest
+TestPatternConfig
+UpdaterCommandStatus
+UsbPortMetadata
+WledConnectResponse
+WledDiscoveryResponse
+WledSinkSnapshot
+WledSinkStatusResponse

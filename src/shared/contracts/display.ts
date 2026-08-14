@@ -47,7 +47,7 @@ export interface DisplayInfo {
   height: number;
   x: number;
   y: number;
-  scaleFactor?: number;
+  scaleFactor: number;
   isPrimary: boolean;
 }
 
