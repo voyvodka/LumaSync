@@ -46,6 +46,9 @@ export interface OnboardingBannerAction {
    * never need to set this.
    */
   ariaLabel?: string;
+  /** Renders the action inert while its work is in flight, so it stays on
+   * screen instead of disappearing the moment it is pressed. */
+  pending?: boolean;
 }
 
 export interface OnboardingBannerProps {
@@ -133,6 +136,8 @@ export function OnboardingBanner({
               type="button"
               className="lm-onboarding-banner-secondary"
               onClick={secondaryAction.onClick}
+              disabled={secondaryAction.pending}
+              aria-busy={secondaryAction.pending}
               aria-label={secondaryAction.ariaLabel ?? secondaryAction.label}
             >
               {secondaryAction.label}

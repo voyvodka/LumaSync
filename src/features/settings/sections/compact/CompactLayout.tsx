@@ -47,6 +47,7 @@ interface CompactLayoutProps {
   hueReachable: boolean;
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
   hueProbeGaveUp?: boolean;
+  hueProbeChecking?: boolean;
   onRetryHueProbe?: () => void;
   isModeTransitioning: boolean;
   modeLockReason: ModeGuardReason | null;
@@ -83,6 +84,7 @@ export function CompactLayout({
   hueConfigured,
   hueReachable,
   hueProbeGaveUp = false,
+  hueProbeChecking = false,
   onRetryHueProbe,
   isModeTransitioning,
   modeLockReason,
@@ -226,8 +228,12 @@ export function CompactLayout({
                   type="button"
                   className="lm-compact-offline-action is-ghost"
                   onClick={onRetryHueProbe}
+                  disabled={hueProbeChecking}
+                  aria-busy={hueProbeChecking}
                 >
-                  {t("common:output.offline.retry")}
+                  {hueProbeChecking
+                    ? t("common:output.offline.retrying")
+                    : t("common:output.offline.retry")}
                 </button>
               )}
             </div>

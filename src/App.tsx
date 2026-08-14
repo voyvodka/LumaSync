@@ -297,6 +297,7 @@ function App() {
     hueConfigured: hueStartConfig !== null,
     hueReachable: hueReachable || hueStreaming,
     hueProbeGaveUp: hueProbe.gaveUp,
+    hueProbeChecking: hueProbe.probing,
     onRetryHueProbe: hueProbe.retry,
     hueStreaming,
     modeLockReason:

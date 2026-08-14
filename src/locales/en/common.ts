@@ -22,6 +22,7 @@ export default {
       action: "Open devices",
       stoppedBody: "LumaSync stopped checking for your Hue bridge — it did not answer on this network.",
       retry: "Check again",
+      retrying: "Checking…",
     },
   },
   mode: {
