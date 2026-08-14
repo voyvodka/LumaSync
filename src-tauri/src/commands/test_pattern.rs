@@ -36,18 +36,22 @@ use super::led_calibration::{
 const SYNTH_LONG_AXIS: u32 = 640;
 
 /// Fallback LED count when no calibration is available — only affects the
-/// comet's physical length estimate, never the ability to render.
+/// comet's tail length, never the ability to render.
 const FALLBACK_TOTAL_LEDS: u16 = 60;
 
 /// Aspect used when the display could not be resolved. 16:9 is the overwhelming
 /// desktop default and only shifts the perimeter weighting slightly if wrong.
 pub const DEFAULT_DISPLAY_ASPECT: f32 = 16.0 / 9.0;
 
-/// Physical length of the comet's tail. The strip density assumption mirrors
-/// `CalibrationPage`'s `totalLeds / 60` metre readout, so the tail keeps the
-/// same real-world size whatever LED counts the user assigned to each edge.
-const COMET_LENGTH_M: f32 = 0.04;
-const ASSUMED_LEDS_PER_M: f32 = 60.0;
+/// Comet tail: a floor in LEDs, and a perimeter fraction that takes over on
+/// long strips. Its predecessor divided a 4 cm length by `total_leds / 60`
+/// metres, which is algebraically `2.4 / total_leds` — the same 2.4 LEDs at
+/// every strip length, which is a head and two dim neighbours.
+const COMET_TAIL_LEDS: f32 = 5.0;
+const COMET_TAIL_FRACTION: f32 = 0.03;
+
+/// Never more than this much of the ring, or the chase stops reading as one.
+const COMET_TAIL_MAX_FRACTION: f32 = 0.15;
 
 /// Slowest realistic consumer of a synthetic frame — the Hue bridge's 20 Hz
 /// floor and roughly the serial budget for a mid-length strip. The worker
@@ -154,8 +158,8 @@ pub struct TestPatternConfig {
 
 /// Build a boxed [`AmbilightFrameSource`] that renders synthetic test frames.
 ///
-/// `calibration` only estimates strip density for the comet's tail length; all
-/// patterns render regardless of whether a calibration is present.
+/// `calibration` only sizes the comet's tail; all patterns render regardless of
+/// whether a calibration is present.
 pub fn create_synthetic_frame_source(
     config: TestPatternConfig,
     calibration: Option<LedCalibrationConfig>,
@@ -235,15 +239,12 @@ impl SyntheticFrameSource {
 
     /// Tail length as a fraction of the perimeter.
     ///
-    /// The visual term is a fixed PHYSICAL length, so the number of LEDs it
-    /// lights follows each edge's own density — 4 cm covers more LEDs on a
-    /// densely populated edge than a sparse one, which is what keeps the comet
-    /// the same size all the way round. The motion-blur floor is a hard
-    /// requirement, not a preference: a tail shorter than one frame's travel
-    /// leaves unlit gaps no matter how the colour is computed.
+    /// The motion-blur floor is a hard requirement, not a preference: a tail
+    /// shorter than one frame's travel leaves unlit gaps no matter how the
+    /// colour is computed.
     fn tail_fraction(&self) -> f32 {
-        let perimeter_m = (self.total_leds as f32 / ASSUMED_LEDS_PER_M).max(0.05);
-        let visual = (COMET_LENGTH_M / perimeter_m).clamp(0.006, 0.15);
+        let total = (self.total_leds as f32).max(1.0);
+        let visual = (COMET_TAIL_LEDS / total).clamp(COMET_TAIL_FRACTION, COMET_TAIL_MAX_FRACTION);
         let interval = self.last_dt.max(MIN_CONSUMER_INTERVAL_S);
         let coverage = self.speed.loops_per_sec() * interval * 1.15;
         visual.max(coverage)
@@ -879,38 +880,72 @@ mod tests {
         );
     }
 
-    /// A fixed PHYSICAL tail: a denser strip lights more LEDs over the same
-    /// distance, so the comet keeps its real-world size whatever counts the
-    /// user assigned.
-    #[test]
-    fn tail_length_tracks_strip_density_not_led_count_alone() {
-        let tail_for = |total_leds: u16| {
-            let mut cal = lopsided_calibration();
-            cal.total_leds = total_leds;
-            let src = SyntheticFrameSource::new(
-                cfg(
-                    TestPatternKind::Chase { r: 1, g: 1, b: 1 },
-                    TestPatternSpeed::Slow,
-                ),
-                Some(cal),
-                None,
-            );
-            src.tail_fraction()
-        };
+    fn tail_leds_for(total_leds: u16) -> f32 {
+        let mut cal = lopsided_calibration();
+        cal.total_leds = total_leds;
+        let src = SyntheticFrameSource::new(
+            cfg(
+                TestPatternKind::Chase { r: 1, g: 1, b: 1 },
+                TestPatternSpeed::Slow,
+            ),
+            Some(cal),
+            None,
+        );
+        src.tail_fraction() * total_leds as f32
+    }
 
-        let sparse = tail_for(80);
-        let dense = tail_for(320);
+    /// The symptom this replaced: the tail used to be a physical 4 cm over an
+    /// assumed 60 LEDs/m, which is `2.4 / total_leds` — one bright LED and two
+    /// too dim to read, at every strip length between ~16 and ~400.
+    #[test]
+    fn tail_never_collapses_to_a_single_readable_led() {
+        for total in [30u16, 60, 100, 160, 240, 320, 400, 600] {
+            // Under ~34 LEDs the cap binds first, and it should: five LEDs of a
+            // 30-LED ring is a sixth of the room, not a comet.
+            let floor = COMET_TAIL_LEDS.min(COMET_TAIL_MAX_FRACTION * total as f32);
+            let leds = tail_leds_for(total);
+            assert!(
+                leds >= floor - 0.01,
+                "{total} LEDs: tail of {leds} LEDs is below the {floor} floor",
+            );
+        }
+    }
+
+    /// Past the floor's reach the tail grows with the ring, so a long perimeter
+    /// gets a streak rather than the same five dots it had at 60 LEDs.
+    #[test]
+    fn tail_grows_once_the_floor_stops_binding() {
         assert!(
-            dense < sparse,
-            "a denser strip must claim a SMALLER perimeter fraction ({dense} vs {sparse})"
+            tail_leds_for(400) > tail_leds_for(100) + 1.0,
+            "a 400-LED ring must light a longer tail than a 100-LED one: {} vs {}",
+            tail_leds_for(400),
+            tail_leds_for(100),
         );
-        // …but the same physical span, so the LED count it lights is stable.
-        let leds_sparse = sparse * 80.0;
-        let leds_dense = dense * 320.0;
-        assert!(
-            (leds_sparse - leds_dense).abs() < 0.5,
-            "the same physical tail must light a comparable LED span: {leds_sparse} vs {leds_dense}"
-        );
+    }
+
+    /// The growth term is bounded — a comet spanning a sixth of the room stops
+    /// reading as a moving head at all.
+    #[test]
+    fn tail_never_claims_more_than_the_cap() {
+        for total in [4u16, 16, 30, 5000] {
+            let src = {
+                let mut cal = lopsided_calibration();
+                cal.total_leds = total;
+                SyntheticFrameSource::new(
+                    cfg(
+                        TestPatternKind::Chase { r: 1, g: 1, b: 1 },
+                        TestPatternSpeed::Slow,
+                    ),
+                    Some(cal),
+                    None,
+                )
+            };
+            assert!(
+                src.tail_fraction() <= COMET_TAIL_MAX_FRACTION + f32::EPSILON,
+                "{total} LEDs: {} exceeds the {COMET_TAIL_MAX_FRACTION} cap",
+                src.tail_fraction(),
+            );
+        }
     }
 
     // -------------------------------------------------------------------------
