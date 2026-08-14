@@ -89,7 +89,10 @@ describe("useHueOnboarding — A3.1 active-streamer banner auto-clear", () => {
       ],
     });
 
-    getAreaChannelsMock.mockResolvedValue([]);
+    getAreaChannelsMock.mockResolvedValue({
+      status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },
+      channels: [],
+    });
 
     const hookModule = await import("../useHueOnboarding");
     useHueOnboardingHook = hookModule.useHueOnboarding as unknown as () => Record<string, unknown>;

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 
 import { shellStore } from "../../persistence/shellStore";
 import {
@@ -49,26 +49,32 @@ export function useHueAreaChannels(
 
     setIsLoadingChannels(true);
     void getHueAreaChannels(ip, username, areaId)
-      .then((channels) => {
-        if (!cancelled) {
-          setAreaChannels(channels);
+      .then(({ status, channels }) => {
+        if (cancelled) {
+          return;
+        }
+        setAreaChannels(channels);
+        // Only the 403 escalates — a transient bridge failure must not prompt
+        // a re-pair. An empty area is `HUE_AREA_CHANNELS_EMPTY`, not a failure.
+        if (status.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED) {
+          // Spread, not rebuild: keeps the bridge's own message and details.
+          // The literal re-pins `code` into the narrower onboarding union.
+          onAuthInvalidRef.current?.({
+            ...status,
+            code: HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED,
+          });
+        } else if (status.code === HUE_AREA_CHANNELS_STATUS.FAILED) {
+          console.warn(`[LumaSync] Hue area channel fetch failed: ${status.details ?? status.message}`);
         }
       })
       .catch((error: unknown) => {
+        // The command itself never throws; this is the invoke layer rejecting —
+        // an unregistered command or an IPC channel torn down mid-flight.
         if (cancelled) {
           return;
         }
         setAreaChannels([]);
-        // `get_hue_area_channels` hands the classifier's 403 to the Err arm, so
-        // the re-pair code arrives as a rejection message, not a status object.
-        // Only that exact code escalates — a timeout must not prompt a re-pair.
-        if (toErrorDetails(error) === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED) {
-          onAuthInvalidRef.current?.({
-            code: HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED,
-            message: "The bridge rejected the channel request.",
-            details: null,
-          });
-        }
+        console.warn(`[LumaSync] Hue area channel invoke rejected: ${toErrorDetails(error)}`);
       })
       .finally(() => {
         if (!cancelled) {

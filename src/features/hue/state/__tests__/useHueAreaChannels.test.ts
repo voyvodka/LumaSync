@@ -1,7 +1,8 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 
 import { useHueAreaChannels } from "../useHueAreaChannels";
 
@@ -22,18 +23,30 @@ vi.mock("../../hueOnboardingApi", () => ({
 
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };
 const CREDENTIALS = { username: "app-key", clientKey: "psk" };
+const CHANNEL: HueAreaChannelInfo = {
+  index: 0,
+  positionX: 0,
+  positionY: 0,
+  lightCount: 1,
+  autoRegion: "left",
+};
+
+/** The command never throws — every arm resolves with this envelope. */
+function response(code: string, channels: HueAreaChannelInfo[] = [], details: string | null = null) {
+  return { status: { code, message: `stub ${code}`, details }, channels };
+}
 
 describe("useHueAreaChannels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     shellLoadMock.mockResolvedValue({});
     shellSaveMock.mockResolvedValue(undefined);
-    getAreaChannelsMock.mockResolvedValue([
-      { index: 0, positionX: 0, positionY: 0, lightCount: 1, autoRegion: "left" },
-    ]);
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.OK, [CHANNEL]));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -52,8 +65,8 @@ describe("useHueAreaChannels", () => {
     expect(getAreaChannelsMock).not.toHaveBeenCalled();
   });
 
-  it("empties the list when the channel request rejects", async () => {
-    getAreaChannelsMock.mockRejectedValue(new Error("bridge unreachable"));
+  it("empties the list when the fetch reports a coded failure", async () => {
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.FAILED));
 
     const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
 
@@ -61,9 +74,10 @@ describe("useHueAreaChannels", () => {
     expect(result.current.areaChannels).toEqual([]);
   });
 
-  it("reports a 403 rejection as the declared re-pair status", async () => {
-    // Tauri rejects with the raw Err string, not an Error instance.
-    getAreaChannelsMock.mockRejectedValue(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED);
+  it("reports a bridge 403 as the declared re-pair status, keeping the bridge's own message", async () => {
+    getAreaChannelsMock.mockResolvedValue(
+      response(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, [], "HTTP 403 unauthorized-user"),
+    );
     const onAuthInvalid = vi.fn();
 
     const { result } = renderHook(() =>
@@ -73,14 +87,16 @@ describe("useHueAreaChannels", () => {
     await waitFor(() => expect(onAuthInvalid).toHaveBeenCalledTimes(1));
     expect(onAuthInvalid).toHaveBeenCalledWith({
       code: HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED,
-      message: expect.any(String),
-      details: null,
+      message: `stub ${HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED}`,
+      details: "HTTP 403 unauthorized-user",
     });
     expect(result.current.areaChannels).toEqual([]);
   });
 
-  it("leaves an unrecognised rejection as a silent empty list", async () => {
-    getAreaChannelsMock.mockRejectedValue(new Error("bridge unreachable"));
+  it("does not escalate a transient failure code to a re-pair prompt", async () => {
+    getAreaChannelsMock.mockResolvedValue(
+      response(HUE_AREA_CHANNELS_STATUS.FAILED, [], "bridge unreachable"),
+    );
     const onAuthInvalid = vi.fn();
 
     const { result } = renderHook(() =>
@@ -89,7 +105,35 @@ describe("useHueAreaChannels", () => {
 
     await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
     expect(onAuthInvalid).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("bridge unreachable"));
+  });
+
+  it("treats an area with no channels as a success, not a failure", async () => {
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.EMPTY));
+    const onAuthInvalid = vi.fn();
+
+    const { result } = renderHook(() =>
+      useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1", onAuthInvalid),
+    );
+
+    await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
     expect(result.current.areaChannels).toEqual([]);
+    expect(onAuthInvalid).not.toHaveBeenCalled();
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it("empties the list when the invoke layer itself rejects", async () => {
+    getAreaChannelsMock.mockRejectedValue(new Error("ipc channel closed"));
+    const onAuthInvalid = vi.fn();
+
+    const { result } = renderHook(() =>
+      useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1", onAuthInvalid),
+    );
+
+    await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
+    expect(result.current.areaChannels).toEqual([]);
+    expect(onAuthInvalid).not.toHaveBeenCalled();
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("ipc channel closed"));
   });
 
   it("does not refetch when the callback identity changes every render", async () => {

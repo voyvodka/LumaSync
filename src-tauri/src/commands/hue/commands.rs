@@ -16,15 +16,17 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::error;
+use log::{error, warn};
 // Reachable only from the `#[cfg(debug_assertions)]` arm of `simulate_hue_fault`,
 // so an ungated import is an unused-import error under `clippy --release`.
 #[cfg(debug_assertions)]
 use log::info;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::super::hue_onboarding::{
-    check_hue_stream_readiness, check_hue_stream_readiness_with_freshness, CommandStatus,
+    check_hue_stream_readiness, check_hue_stream_readiness_with_freshness, AreaListError,
+    CommandStatus,
 };
 use super::area_cache::HueReadFreshness;
 use super::credential_store::effective_hue_app_key;
@@ -57,9 +59,32 @@ use super::state_store::{
 /// before reporting a partial-stop timeout.
 const HUE_STOP_TIMEOUT_SECS: u64 = 3;
 
+// Every `Result` below is structural, never a throwing surface — coded failures
+// ride the status object. Tauri *requires* it of an `async` command taking a
+// reference: dropping it fails the `AsyncCommandMustReturnResult` bound.
+
 // ---------------------------------------------------------------------------
 // Tauri command: list channel metadata for the selected entertainment area
 // ---------------------------------------------------------------------------
+
+/// Response for `get_hue_area_channels` — status plus the resolved channels.
+/// `channels` is empty on every failure arm; `status.code` is the discriminator.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct HueAreaChannelListResponse {
+    pub status: CommandStatus,
+    pub channels: Vec<HueAreaChannelInfo>,
+}
+
+/// Sole constructor for this command's status, so the contract verifier can
+/// harvest the emitted code set from one call shape.
+fn area_channels_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
+    CommandStatus {
+        code: code.to_string(),
+        message: message.to_string(),
+        details,
+    }
+}
 
 /// Return channel metadata for the selected Hue entertainment area.
 /// Prefers the channels already resolved by the active runtime stream to avoid
@@ -71,16 +96,61 @@ pub async fn get_hue_area_channels(
     username: String,
     area_id: String,
     runtime_state: State<'_, HueRuntimeStateStore>,
-) -> Result<Vec<HueAreaChannelInfo>, String> {
+) -> Result<HueAreaChannelListResponse, String> {
     // Fast path: reuse channels already resolved by the running stream (brief lock, no I/O).
-    if let Some(info) = channels_to_info_via_owner(&runtime_state, &area_id) {
-        return Ok(info);
+    if let Some(channels) = channels_to_info_via_owner(&runtime_state, &area_id) {
+        return Ok(ok_or_empty(channels));
     }
     // Slow path: fetch directly from bridge (no lock held). An empty `username`
     // means "resolve from the OS keychain".
     let username = effective_hue_app_key(&username);
-    let channels = fetch_area_channels(&bridge_ip, &username, &area_id).await?;
-    Ok(super::frame::channels_to_info(&channels))
+    Ok(
+        match fetch_area_channels(&bridge_ip, &username, &area_id).await {
+            Ok(channels) => ok_or_empty(super::frame::channels_to_info(&channels)),
+            Err(AreaListError::AuthInvalid) => {
+                warn!("Hue area channel fetch rejected with 403 type=1 — re-pair required");
+                HueAreaChannelListResponse {
+                    status: area_channels_status(
+                        "AUTH_INVALID_RE_PAIR_REQUIRED",
+                        "Hue bridge rejected our credentials. Re-pair the bridge to continue.",
+                        Some("Bridge returned HTTP 403 with unauthorized-user error.".to_string()),
+                    ),
+                    channels: Vec::new(),
+                }
+            }
+            Err(AreaListError::Other(message)) => {
+                warn!("Failed to load Hue area channels for {area_id}: {message}");
+                HueAreaChannelListResponse {
+                    status: area_channels_status(
+                        "HUE_AREA_CHANNELS_FAILED",
+                        "Could not load Hue entertainment channels for the selected area.",
+                        Some(message),
+                    ),
+                    channels: Vec::new(),
+                }
+            }
+        },
+    )
+}
+
+fn ok_or_empty(channels: Vec<HueAreaChannelInfo>) -> HueAreaChannelListResponse {
+    if channels.is_empty() {
+        return HueAreaChannelListResponse {
+            status: area_channels_status(
+                "HUE_AREA_CHANNELS_EMPTY",
+                "The selected Hue entertainment area has no channels.",
+                Some(
+                    "Add lights to the Entertainment Area in the Hue app, then refresh."
+                        .to_string(),
+                ),
+            ),
+            channels,
+        };
+    }
+    HueAreaChannelListResponse {
+        status: area_channels_status("HUE_AREA_CHANNELS_OK", "Hue area channels loaded.", None),
+        channels,
+    }
 }
 
 /// Start the Hue entertainment stream for the given bridge/area — checks
@@ -812,5 +882,36 @@ pub fn simulate_hue_fault() -> CommandStatus {
         code: "SIMULATE_NOT_AVAILABLE_IN_RELEASE".to_string(),
         message: "Fault simulation is available in debug builds only.".to_string(),
         details: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn channel(index: usize) -> HueAreaChannelInfo {
+        HueAreaChannelInfo {
+            index,
+            position_x: 0.0,
+            position_y: 0.0,
+            light_count: 1,
+            auto_region: "left".to_string(),
+        }
+    }
+
+    #[test]
+    fn empty_area_is_a_success_code_distinct_from_a_failed_fetch() {
+        let empty = ok_or_empty(Vec::new());
+        assert_eq!(empty.status.code, "HUE_AREA_CHANNELS_EMPTY");
+        assert!(empty.channels.is_empty());
+        assert_ne!(empty.status.code, "HUE_AREA_CHANNELS_FAILED");
+    }
+
+    #[test]
+    fn resolved_channels_report_ok_and_survive_the_envelope() {
+        let response = ok_or_empty(vec![channel(0), channel(1)]);
+        assert_eq!(response.status.code, "HUE_AREA_CHANNELS_OK");
+        assert_eq!(response.channels.len(), 2);
+        assert_eq!(response.status.details, None);
     }
 }

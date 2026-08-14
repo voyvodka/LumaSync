@@ -1382,6 +1382,13 @@ checkWireUnion(
   19
 );
 
+checkWireUnion(
+  "HueAreaChannelsWireStatusCode",
+  [...rustHueRuntimeSource.matchAll(/area_channels_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+  [...constMembers(hueSource, "HUE_AREA_CHANNELS_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
+  4
+);
+
 // ---------------------------------------------------------------------------
 // Highest severity: a code both trees use and neither declares. Both sides
 // believe they own it and neither is authoritative — how a word-swap survives.
@@ -2113,7 +2120,7 @@ for (const [structName, defs] of rustSerializableStructs) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 32;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 34;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,
