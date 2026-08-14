@@ -181,6 +181,10 @@ impl Default for HueRetryPolicy {
 /// Persists even when the stream is Idle so that solid-color commands keep
 /// working without requiring an active streaming session.
 pub(crate) struct HuePersistentSender {
+    /// Which area `channels` belongs to. Without it the cache could answer a
+    /// question about another area with these channels — see
+    /// `channels_to_info_via_owner`.
+    pub(crate) area_id: String,
     pub(crate) channels: Vec<HueAreaChannel>,
     /// Shares the same `Arc<SyncSender>` with `HueActiveStreamContext` while
     /// the stream is running. When the stream stops, this is the sole owner
@@ -502,9 +506,11 @@ pub(crate) fn channels_to_info_via_owner(
             return Some(super::frame::channels_to_info(&stream.channels));
         }
     }
-    // Also check persistent sender (covers app-startup solid-only mode).
+    // Also check persistent sender (covers app-startup solid-only mode). The
+    // area check is load-bearing: the frontend persists channel overrides keyed
+    // by the area id it asked for, so a wrong answer here survives restart.
     if let Some(persistent) = owner.persistent_sender.as_ref() {
-        if !persistent.channels.is_empty() {
+        if persistent.area_id == area_id && !persistent.channels.is_empty() {
             return Some(super::frame::channels_to_info(&persistent.channels));
         }
     }
@@ -587,11 +593,32 @@ pub(crate) mod test_helpers {
         };
         (ctx, rx)
     }
+
+    /// A persistent sender carrying one channel, tagged with `area_id`.
+    pub(crate) fn dummy_persistent_sender(area_id: &str) -> super::HuePersistentSender {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        super::HuePersistentSender {
+            area_id: area_id.to_string(),
+            channels: vec![HueAreaChannel {
+                channel_id: 7,
+                light_ids: vec!["light-persistent".to_string()],
+                screen_region: HueScreenRegion::Center,
+                position_x: 0.0,
+                position_y: 0.0,
+            }],
+            sender: HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: 1,
+            },
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::test_helpers::observable_active_stream_context;
+    use super::test_helpers::{
+        dummy_active_stream_context, dummy_persistent_sender, observable_active_stream_context,
+    };
     use super::*;
 
     fn snapshot(r: u8) -> HueSolidColorSnapshot {
@@ -717,5 +744,63 @@ mod tests {
         assert!(!flush_pending_solid_color(&mut owner));
         assert!(owner.pending_solid_color.is_some());
         assert!(rx.try_recv().is_err());
+    }
+    // ---------------------------------------------------------------------
+    // channels_to_info_via_owner — the cache answers an identity question, so
+    // every arm has to prove it matched the area it was asked about.
+    // ---------------------------------------------------------------------
+
+    fn store_with(owner: HueRuntimeOwner) -> HueRuntimeStateStore {
+        HueRuntimeStateStore {
+            runtime: Arc::new(Mutex::new(owner)),
+        }
+    }
+
+    #[test]
+    fn active_stream_answers_only_for_its_own_area() {
+        let store = store_with(HueRuntimeOwner {
+            active_stream: Some(dummy_active_stream_context()),
+            ..Default::default()
+        });
+
+        assert!(channels_to_info_via_owner(&store, "area").is_some());
+        assert!(channels_to_info_via_owner(&store, "another-area").is_none());
+    }
+
+    #[test]
+    fn persistent_sender_answers_only_for_its_own_area() {
+        let store = store_with(HueRuntimeOwner {
+            persistent_sender: Some(dummy_persistent_sender("area-a")),
+            ..Default::default()
+        });
+
+        assert!(channels_to_info_via_owner(&store, "area-a").is_some());
+        assert!(channels_to_info_via_owner(&store, "area-b").is_none());
+    }
+
+    #[test]
+    fn a_second_area_is_never_served_the_streaming_one_channels() {
+        // Bug B8: streaming area-a, the picker asks for area-b. The active-stream
+        // arm declines, and the persistent-sender arm used to answer anyway —
+        // whose channels the frontend then persists under area-b's id.
+        let store = store_with(HueRuntimeOwner {
+            active_stream: Some(dummy_active_stream_context()),
+            persistent_sender: Some(dummy_persistent_sender("area")),
+            ..Default::default()
+        });
+
+        assert!(channels_to_info_via_owner(&store, "area-b").is_none());
+    }
+
+    #[test]
+    fn an_empty_channel_list_is_not_an_answer() {
+        let mut persistent = dummy_persistent_sender("area-a");
+        persistent.channels.clear();
+        let store = store_with(HueRuntimeOwner {
+            persistent_sender: Some(persistent),
+            ..Default::default()
+        });
+
+        assert!(channels_to_info_via_owner(&store, "area-a").is_none());
     }
 }
