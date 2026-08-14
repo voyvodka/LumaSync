@@ -91,6 +91,7 @@ pub(crate) fn store_active_stream_context_with_cipher(
     // Keep a persistent clone that survives stream stop/start cycles.
     if !channels.is_empty() {
         owner.persistent_sender = Some(HuePersistentSender {
+            area_id: request.area_id.clone(),
             channels: channels.clone(),
             sender: color_sender.clone(),
         });
@@ -526,6 +527,7 @@ async fn internal_restart_stream(
         };
         if !channels.is_empty() {
             owner.persistent_sender = Some(HuePersistentSender {
+                area_id: request.area_id.clone(),
                 channels: channels.clone(),
                 sender: color_sender.clone(),
             });
