@@ -99,13 +99,19 @@ impl DeactivateToken {
         Arc::new(Self::default())
     }
 
-    /// Returns `true` exactly once per token lifetime. The winner is
-    /// expected to perform the deactivation PUT; every later caller
-    /// observes `false` and must skip the request.
+    /// Returns `true` for one *in-flight* PUT at a time. The winner performs
+    /// the deactivation; every later caller observes `false` and skips it.
     pub(crate) fn try_acquire(&self) -> bool {
         self.in_flight
             .compare_exchange(false, true, AtomicOrdering::AcqRel, AtomicOrdering::Acquire)
             .is_ok()
+    }
+
+    /// Hand the token back after a PUT that did not land. What the token
+    /// dedupes is *concurrent* PUTs; keeping it burned after a failure means
+    /// no later caller ever retries and the bridge holds `active_streamer`.
+    pub(crate) fn release(&self) {
+        self.in_flight.store(false, AtomicOrdering::Release);
     }
 
     /// Test/diagnostic-only probe: was the token already acquired?
@@ -132,7 +138,26 @@ pub(crate) fn deactivate_with_token(
         log::debug!("deactivate_with_token: skip — token already acquired for area {area_id}");
         return Ok(());
     }
-    deactivate_entertainment_config(client, bridge_ip, username, area_id)
+    let outcome = deactivate_entertainment_config(client, bridge_ip, username, area_id);
+    settle_deactivate(token, area_id, outcome)
+}
+
+/// Split out from `deactivate_with_token` so the release-and-log rule is
+/// testable without a bridge. Four of the six call sites discard this `Result`,
+/// so the log has to live here or a failure leaves no trace at all.
+fn settle_deactivate(
+    token: &DeactivateToken,
+    area_id: &str,
+    outcome: Result<(), String>,
+) -> Result<(), String> {
+    if let Err(err) = &outcome {
+        token.release();
+        warn!(
+            "Deactivate PUT failed for area {area_id} ({err}); token released so a \
+             later caller can retry — the bridge may hold active_streamer until one does"
+        );
+    }
+    outcome
 }
 
 // ---------------------------------------------------------------------------
@@ -1807,6 +1832,35 @@ mod tests {
     // DeactivateToken (v1.5.2 A1.3) — dedupe primitive for entertainment-config
     // deactivation across the sender thread, foreground stop, and reconnect monitor.
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_failed_put_hands_the_token_back_so_a_later_caller_retries() {
+        let token = DeactivateToken::new();
+        assert!(token.try_acquire(), "first caller wins");
+
+        let outcome = settle_deactivate(&token, "area-1", Err("bridge unreachable".to_string()));
+
+        assert!(outcome.is_err(), "the failure still reaches the caller");
+        assert!(
+            !token.was_acquired(),
+            "a burned token after a failed PUT means nothing ever deactivates the area"
+        );
+        assert!(token.try_acquire(), "the next caller can retry");
+    }
+
+    #[test]
+    fn a_successful_put_keeps_the_token_burned() {
+        let token = DeactivateToken::new();
+        assert!(token.try_acquire(), "first caller wins");
+
+        let outcome = settle_deactivate(&token, "area-1", Ok(()));
+
+        assert!(outcome.is_ok());
+        // Releasing here would reopen the concurrent-duplicate-PUT race the
+        // token exists to close (A1.3, phantom active streamer).
+        assert!(token.was_acquired());
+        assert!(!token.try_acquire(), "later callers still no-op");
+    }
 
     #[test]
     fn deactivate_token_grants_first_caller_only_once() {
