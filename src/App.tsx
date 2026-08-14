@@ -71,7 +71,7 @@ const CALIBRATION_AUTO_OPENED_KEY = "lumasync_calibration_opened";
 
 function App() {
   const { t } = useTranslation();
-  const { state: updaterState, checkForUpdates, downloadAndInstall, dismiss, devSetState: devSetUpdaterState } = useAutoUpdater();
+  const { state: updaterState, isModalOpen: isUpdateModalOpen, checkForUpdates, downloadAndInstall, dismiss, devSetState: devSetUpdaterState } = useAutoUpdater();
   const {
     currentMode,
     isContentVisible,
@@ -427,12 +427,14 @@ function App() {
         uiMode={currentMode}
         lightingActive={lightingMode.kind !== LIGHTING_MODE_KIND.OFF}
       />
-      <UpdateModal
-        state={updaterState}
-        onInstall={downloadAndInstall}
-        onDismiss={dismiss}
-        onRetry={() => void checkForUpdates()}
-      />
+      {isUpdateModalOpen && (
+        <UpdateModal
+          state={updaterState}
+          onInstall={downloadAndInstall}
+          onDismiss={dismiss}
+          onRetry={() => void checkForUpdates()}
+        />
+      )}
       <ShellNotices
         usbDisconnected={usbDisconnectNotice}
         usbUnsupported={usbUnsupportedNotice}
