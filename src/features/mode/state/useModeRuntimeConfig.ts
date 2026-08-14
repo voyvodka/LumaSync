@@ -29,12 +29,20 @@ export interface ModeRuntimeConfig {
   setLightingSmoothingPreset: (preset: HueIntensityPreset) => void;
   setColorCorrection: (correction: ColorCorrectionConfig) => void;
   setFirmwareProfile: (profile: FirmwareProfile) => void;
+  setSelectedDisplayId: (displayId: string | undefined) => void;
+  setChipType: (chipType: LedChipType) => void;
   getSelectedDisplayId: () => string | undefined;
 }
 
 /** Ref-backed cache of every knob that must ride on *every* `set_lighting_mode`
  *  payload. Refs, not state: the drag path cannot afford a shellStore
  *  round-trip and a stale closure would re-dispatch a stripped payload (H1). */
+/** Shared by `prime` and `setSelectedDisplayId` so a persisted `""` and a
+ *  runtime `""` both mean "fall back to the OS primary", never a real id. */
+function normalizeDisplayId(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
 export function useModeRuntimeConfig(input: {
   calibration: LedCalibrationConfig | undefined;
 }): ModeRuntimeConfig {
@@ -74,11 +82,16 @@ export function useModeRuntimeConfig(input: {
     firmwareProfileRef.current = profile;
   }, []);
 
+  const setSelectedDisplayId = useCallback((displayId: string | undefined) => {
+    selectedDisplayIdRef.current = normalizeDisplayId(displayId);
+  }, []);
+
+  const setChipType = useCallback((chipType: LedChipType) => {
+    chipTypeRef.current = chipType;
+  }, []);
+
   const prime = useCallback((state: ModeRuntimeConfigPrimeInput) => {
-    selectedDisplayIdRef.current =
-      typeof state.selectedDisplayId === "string" && state.selectedDisplayId.length > 0
-        ? state.selectedDisplayId
-        : undefined;
+    selectedDisplayIdRef.current = normalizeDisplayId(state.selectedDisplayId);
     // Absent ⇒ DEFAULT_HUE_INTENSITY_PRESET so the ambilight worker always
     // receives a deterministic preset. The other three stay undefined and let
     // the backend's #[serde(default)] apply.
@@ -123,6 +136,8 @@ export function useModeRuntimeConfig(input: {
       setLightingSmoothingPreset,
       setColorCorrection,
       setFirmwareProfile,
+      setSelectedDisplayId,
+      setChipType,
       getSelectedDisplayId,
     }),
     [
@@ -133,6 +148,8 @@ export function useModeRuntimeConfig(input: {
       setLightingSmoothingPreset,
       setColorCorrection,
       setFirmwareProfile,
+      setSelectedDisplayId,
+      setChipType,
       getSelectedDisplayId,
     ],
   );
