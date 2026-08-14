@@ -34,7 +34,7 @@ const HANDSHAKE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_millis(2_000);
 /// sent before the bootloader window closes is a guaranteed
 /// `SERIAL_HEALTH_HANDSHAKE_TIMEOUT`. Must run inside `tokio::task::spawn_blocking`,
 /// never on the IPC dispatcher thread. See docs/architecture/device-output.md.
-const BOOTLOADER_SETTLE_DELAY_MS: u64 = 2_000;
+pub(crate) const BOOTLOADER_SETTLE_DELAY_MS: u64 = 2_000;
 
 /// Supported USB serial adapter VID:PID allowlist — read this constant,
 /// never hardcode elsewhere. See docs/architecture/device-output.md for why
