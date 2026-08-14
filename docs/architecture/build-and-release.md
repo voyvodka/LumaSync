@@ -78,6 +78,19 @@ If you include a fourth field in your product version, the installer ignores the
 reinstall each release candidate by hand.** The real fix is to make NSIS the Windows updater target —
 it overwrites rather than consulting a product version — which is a separate change.
 
+**A tag push is not gated by branch protection, so `release.yml` gates it itself.** Protection rules
+apply to pull requests into `main`; nothing stops a tag on any commit, including one that never saw
+review. The release job therefore asserts the tagged commit is contained in `main` and was
+introduced by a *merged* pull request. Provenance is checked rather than re-running the required
+contexts against the merge commit: `ci.yml` sets `cancel-in-progress`, so a superseded commit's run
+shows `cancelled` even when its PR was fully green — requiring `success` there would block
+legitimate releases. A merged PR cannot exist without the four required checks having passed, which
+is the same guarantee arrived at from the other side.
+
+`release.yml` also runs `typecheck:e2e` and `check:i18n`, the two members of `check:all` it was
+missing. `check:i18n` is the orphaned-translation-key ratchet, and a tag push runs no CI, so this is
+the only place it can catch one before publication.
+
 ## Gotchas
 
 - **`cargo build` and `pnpm tauri build --debug` write the same path and produce different binaries.** Both land on `src-tauri/target/debug/lumasync`. The cargo one loads the frontend from the Vite dev server, so launching it without `pnpm dev` running gives a blank window and `Could not connect to localhost:1420` in the Web Inspector — an intact app with no content, indistinguishable from a broken one. Nothing about the path reveals which is there. Use `pnpm tauri dev`, or rebuild with `--debug --no-bundle` to embed the frontend. `scripts/verify/launch-smoke.mjs` asserts the frontend is embedded and fails immediately rather than waiting out its timeout.
