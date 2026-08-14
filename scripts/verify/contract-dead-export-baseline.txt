@@ -27,7 +27,6 @@
 # Declared 2026-08-13 alongside the codes Rust already emits. Nothing catches
 # these yet — they are thrown Err(String) prefixes with no handler on the
 # frontend. Each line disappears when something first renders that failure.
-calibration.ts CALIBRATION_COMMAND_ERRORS
 device.ts SERIAL_COMMAND_ERRORS
 display.ts DISPLAY_COMMAND_ERRORS
 lighting.ts LIGHTING_COMMAND_ERRORS

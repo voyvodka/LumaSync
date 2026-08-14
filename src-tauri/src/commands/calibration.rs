@@ -1,5 +1,6 @@
-//! Display enumeration, the transparent click-through calibration overlay
-//! window, and the LED test-pattern commands used to preview index mapping.
+//! Display enumeration and the transparent click-through calibration overlay
+//! window. Test patterns live in `lighting_mode::start_led_test_pattern` —
+//! this module deliberately has no output path of its own.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -11,28 +12,6 @@ use tauri::{
     window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, Position, Runtime, Size,
     State, WebviewUrl, WebviewWindowBuilder,
 };
-
-use super::device_connection::{CommandStatus, SerialConnectionState};
-
-/// Request payload for `start_calibration_test_pattern`: which LED indexes
-/// to light, the frame interval, and brightness.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StartCalibrationTestPatternPayload {
-    pub led_indexes: Vec<u16>,
-    pub frame_ms: u16,
-    pub brightness: u8,
-}
-
-/// Result of starting or stopping a calibration test pattern, including
-/// whether output actually reached hardware or ran preview-only.
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CalibrationCommandResponse {
-    pub active: bool,
-    pub preview_only: bool,
-    pub status: CommandStatus,
-}
 
 /// Metadata for one enumerated display, used to size and position the
 /// calibration and LED-twin overlay windows.
@@ -646,75 +625,4 @@ mod tests {
         assert_eq!(runtime.active_display_id, None);
         assert_eq!(runtime.active_overlay_label, None);
     }
-}
-
-/// Start a calibration test pattern on the given LED indexes; runs
-/// preview-only when no device is connected.
-#[tauri::command]
-pub fn start_calibration_test_pattern(
-    payload: StartCalibrationTestPatternPayload,
-    connection_state: tauri::State<'_, SerialConnectionState>,
-) -> Result<CalibrationCommandResponse, String> {
-    if payload.led_indexes.is_empty() {
-        return Err("CALIBRATION_PATTERN_INVALID: ledIndexes cannot be empty.".to_string());
-    }
-
-    if payload.frame_ms == 0 {
-        return Err("CALIBRATION_PATTERN_INVALID: frameMs must be greater than zero.".to_string());
-    }
-
-    if payload.brightness == 0 {
-        return Err(
-            "CALIBRATION_PATTERN_INVALID: brightness must be greater than zero.".to_string(),
-        );
-    }
-
-    let connected = connection_state
-        .last_status
-        .lock()
-        .map(|status| status.connected)
-        .map_err(|error| format!("CALIBRATION_STATE_READ_FAILED: {error}"))?;
-
-    if connected {
-        return Ok(CalibrationCommandResponse {
-            active: true,
-            preview_only: false,
-            status: CommandStatus {
-                code: "CALIBRATION_PATTERN_STARTED".to_string(),
-                message: "Calibration test pattern started.".to_string(),
-                details: None,
-            },
-        });
-    }
-
-    Ok(CalibrationCommandResponse {
-        active: false,
-        preview_only: true,
-        status: CommandStatus {
-            code: "CALIBRATION_PREVIEW_ONLY".to_string(),
-            message: "Device is disconnected, running preview-only mode.".to_string(),
-            details: Some("Connect a device to mirror preview on physical LEDs.".to_string()),
-        },
-    })
-}
-
-#[tauri::command]
-pub fn stop_calibration_test_pattern(
-    connection_state: tauri::State<'_, SerialConnectionState>,
-) -> Result<CalibrationCommandResponse, String> {
-    let connected = connection_state
-        .last_status
-        .lock()
-        .map(|status| status.connected)
-        .map_err(|error| format!("CALIBRATION_STATE_READ_FAILED: {error}"))?;
-
-    Ok(CalibrationCommandResponse {
-        active: false,
-        preview_only: !connected,
-        status: CommandStatus {
-            code: "CALIBRATION_PATTERN_STOPPED".to_string(),
-            message: "Calibration test pattern stopped.".to_string(),
-            details: None,
-        },
-    })
 }

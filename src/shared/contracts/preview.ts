@@ -14,6 +14,7 @@
  *   (`EdgeSignalPayload` in `features/mode/model/contracts.ts`); owns the status surface.
  */
 
+import type { LedCalibrationConfig } from "./calibration";
 import type { DisplayId } from "./display";
 import type { HueRuntimeTarget } from "./hue";
 
@@ -97,6 +98,10 @@ export interface StartLedTestPatternPayload {
    * default (USB-first, mirroring `resolveDefaultTargets`).
    */
   targets?: HueRuntimeTarget[];
+  /** Strip layout to size the pattern with; absent ⇒ backend hydrates the
+   * persisted one. LED Setup passes its *unsaved* editor layout so a test
+   * verifies the counts being edited. */
+  ledCalibration?: LedCalibrationConfig;
 }
 
 /**
