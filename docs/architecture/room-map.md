@@ -60,6 +60,23 @@ object type recreates that redundancy — the inspector swaps on the active sele
 
 ## Gotchas
 
+- **A refused Hue zone mutation arrives as a *resolved* promise.** The four `hue_zone` commands only
+  reject on IPC-transport failure; a validation refusal comes back as a non-applied `status.code`
+  with HTTP-200-shaped success. Six mutators in `useRoomMapHueZones.ts` held nothing but
+  `.catch(console.error)`, so every refusal was structurally invisible and the invalid zone the
+  frontend had already written optimistically stayed in `shell-state.json`. `isHueZoneApplied` in
+  the contract is the discriminator; read it, and re-apply the `zones`/`channels` the backend hands
+  back.
+- **That reconciliation only works if the payload carries the *pre*-mutation lists.** `existingZones`
+  is both the input the command validates against and the pre-image it echoes on refusal, and the
+  commands perform the mutation themselves. Sending the already-mutated list made a refusal return
+  the very state it refused — and in `assign_channel_to_hue_zone` it made `already_in_zone` always
+  true, so the per-area channel cap never ran at all.
+- **The scale clamp and the bounds check are two different rules, and the inspector only knew one.**
+  Rust refuses both `scale ∉ [0.05, 1.0]` and `|center| + scale > 1`. `HueZoneInspector` clamped the
+  first, so growing a zone parked against a wall authored a state the backend refuses. The edge
+  maximum is bounded by the centre's remaining headroom; the drag path in `HueChannelOverlay` had
+  always done this, which is why only the inspector could produce it.
 - **WKWebView strips custom MIME types from a cross-element drag payload.** A channel dragged onto a
   zone header arrived with an empty `getData("application/x-lumasync-channel")` under Tauri's macOS
   webview, so the drop silently fell through. The index is written into `text/plain` as well as the

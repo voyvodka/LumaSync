@@ -97,6 +97,15 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       offlineTitle: "Köprü çevrimdışı",
       offlineHint: "Son alan hatırlandı; erişiminiz yoksa yeniden eşleyin.",
     },
+    rejected: {
+      dismiss: "Kapat",
+      generic: "Bu bölge değişikliği uygulanmadı.",
+      notFound: "Bu bölge artık yok; harita yeniden yüklendi.",
+      outOfBounds: "Bölge duvarı aşıyor. Küçültün veya içeri taşıyın.",
+      limitReached: "Bu bölge zaten en fazla 10 kanal tutuyor.",
+      notInArea: "Bu kanal farklı bir eğlence alanına ait.",
+      oversized: "Bölge odadan büyük. Boyutunu küçültün.",
+    },
   },
   zoneProperties: {
     color: "Renk",

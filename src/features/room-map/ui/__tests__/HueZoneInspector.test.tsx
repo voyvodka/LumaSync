@@ -227,3 +227,42 @@ describe("HueZoneInspector — W4-K single-row layout", () => {
     expect(hexInput.value).toBe("#3B82F6");
   });
 });
+
+// Rust refuses `|center| + scale > 1` (`validate_zone_shape`). Bounding the
+// slider by the room alone let a wall-side zone grow past that, and the refusal
+// was invisible because nothing read `status.code`.
+describe("HueZoneInspector — headroom at the wall", () => {
+  const NEAR_WALL: HueZone = { ...BASE_ZONE, centerX: 0.7, centerY: 0, scaleX: 0.2, scaleY: 0.25 };
+
+  it("caps the edge at the centre's remaining headroom, not the room's short side", () => {
+    const onUpdate = vi.fn();
+    render(
+      <HueZoneInspector zone={NEAR_WALL} onUpdate={onUpdate} roomWidthM={5} roomDepthM={4} />,
+    );
+
+    const slider = screen.getByTestId("hue-zone-size-slider") as HTMLInputElement;
+    // Room short side is 4 m, but centerX 0.7 leaves scaleX ≤ 0.3 → 1.5 m.
+    expect(Number(slider.max)).toBeCloseTo(1.5, 5);
+
+    fireEvent.change(slider, { target: { value: "4" } });
+    const patch = onUpdate.mock.calls[0][0];
+    expect(Math.abs(NEAR_WALL.centerX) + patch.scaleX).toBeLessThanOrEqual(1);
+    expect(Math.abs(NEAR_WALL.centerY) + patch.scaleY).toBeLessThanOrEqual(1);
+  });
+
+  it("leaves a centred zone the full room short side", () => {
+    render(
+      <HueZoneInspector zone={BASE_ZONE} onUpdate={vi.fn()} roomWidthM={5} roomDepthM={4} />,
+    );
+    expect(Number((screen.getByTestId("hue-zone-size-slider") as HTMLInputElement).max)).toBeCloseTo(4, 5);
+  });
+
+  it("keeps a legacy escapee editable instead of collapsing its range", () => {
+    const escaped: HueZone = { ...BASE_ZONE, centerX: 1, centerY: 1, scaleX: 0.9, scaleY: 0.9 };
+    render(<HueZoneInspector zone={escaped} onUpdate={vi.fn()} roomWidthM={5} roomDepthM={4} />);
+    const slider = screen.getByTestId("hue-zone-size-slider") as HTMLInputElement;
+    // Headroom is 0 on both axes; the floor keeps min ≤ max so the control works.
+    expect(Number(slider.max)).toBeGreaterThanOrEqual(Number(slider.min));
+    expect(slider.disabled).toBe(false);
+  });
+});
