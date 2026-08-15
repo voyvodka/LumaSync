@@ -86,6 +86,10 @@ struct LedTwinRuntime {
 pub struct LedTwinState {
     inner: Mutex<LedTwinRuntime>,
     preview_active: Arc<AtomicBool>,
+    /// Set only when revealing the popup actually hid a visible main window, so
+    /// a preview opened from the tray — with the shell already hidden — does not
+    /// conjure it on the way out.
+    main_hidden_by_preview: AtomicBool,
 }
 
 impl Default for LedTwinState {
@@ -93,6 +97,7 @@ impl Default for LedTwinState {
         Self {
             inner: Mutex::new(LedTwinRuntime::default()),
             preview_active: Arc::new(AtomicBool::new(false)),
+            main_hidden_by_preview: AtomicBool::new(false),
         }
     }
 }
@@ -102,6 +107,16 @@ impl LedTwinState {
         self.inner
             .lock()
             .map_err(|error| format!("LED_TWIN_STATE_LOCK_FAILED: {error}"))
+    }
+
+    fn remember_main_hidden(&self, hidden: bool) {
+        self.main_hidden_by_preview.store(hidden, Ordering::Relaxed);
+    }
+
+    /// Reads and clears in one step: every restore path calls this, and only the
+    /// first of them may act.
+    fn take_main_hidden(&self) -> bool {
+        self.main_hidden_by_preview.swap(false, Ordering::Relaxed)
     }
 
     /// Clone of the shared enrichment gate, handed to each LIVE ambilight
@@ -529,6 +544,36 @@ pub fn open_led_control_popup<R: Runtime>(
     })
 }
 
+/// Get the shell out of the way while the preview owns the screen. Nothing
+/// happens if it is already hidden, so the tray path stays a no-op.
+pub(crate) fn hide_main_for_preview<R: Runtime>(app: &AppHandle<R>, twin_state: &LedTwinState) {
+    let Some(main) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    if !matches!(main.is_visible(), Ok(true)) {
+        return;
+    }
+    if main.hide().is_ok() {
+        twin_state.remember_main_hidden(true);
+    }
+}
+
+/// Put it back, but only if this preview is what took it away.
+pub(crate) fn restore_main_after_preview<R: Runtime>(
+    app: &AppHandle<R>,
+    twin_state: &LedTwinState,
+) {
+    if !twin_state.take_main_hidden() {
+        return;
+    }
+    let Some(main) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    let _ = main.show();
+    let _ = main.unminimize();
+    let _ = main.set_focus();
+}
+
 /// Show and focus an already-created control popup window.
 #[tauri::command]
 pub fn show_led_control_popup<R: Runtime>(
@@ -540,6 +585,7 @@ pub fn show_led_control_popup<R: Runtime>(
             let _ = window.unminimize();
             let _ = window.show();
             let _ = window.set_focus();
+            hide_main_for_preview(&app, &twin_state);
             twin_state.set_control_visible(true);
             emit_preview_state_changed(&app);
             Ok(ControlPopupResult {
@@ -567,6 +613,7 @@ pub fn hide_led_control_popup<R: Runtime>(
     if let Some(window) = app.get_webview_window(LED_CONTROL_POPUP_LABEL) {
         let _ = window.hide();
     }
+    restore_main_after_preview(&app, &twin_state);
     twin_state.set_control_visible(false);
     emit_preview_state_changed(&app);
     Ok(ControlPopupResult {
@@ -580,6 +627,34 @@ pub fn hide_led_control_popup<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every restore path calls `take_main_hidden`, and the popup's red-X can
+    /// race `hide_led_control_popup`. Only the first may act, or a second call
+    /// would raise a window the user had since put away themselves.
+    #[test]
+    fn the_main_hidden_flag_is_consumed_once() {
+        let state = LedTwinState::default();
+        assert!(
+            !state.take_main_hidden(),
+            "nothing to restore before a preview"
+        );
+
+        state.remember_main_hidden(true);
+        assert!(state.take_main_hidden());
+        assert!(
+            !state.take_main_hidden(),
+            "a second restore path must find the flag already spent"
+        );
+    }
+
+    /// The tray opens the preview with the shell already hidden. Nothing was
+    /// taken away, so closing the preview must not conjure it.
+    #[test]
+    fn a_preview_that_hid_nothing_restores_nothing() {
+        let state = LedTwinState::default();
+        state.remember_main_hidden(false);
+        assert!(!state.take_main_hidden());
+    }
 
     #[test]
     fn twin_label_uses_prefix_and_is_unique() {
