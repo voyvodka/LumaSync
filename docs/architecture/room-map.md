@@ -41,6 +41,19 @@ channel from its zone in a way the user had not asked for *and* shifted every la
 Detaching goes through "Move to → Unassigned" instead. Anything reaching for a channel by array
 position rather than `channelIndex` is repeating that bug.
 
+**Minting a `channelIndex` by array length repeated it from the other end.** "Add Hue channel"
+stamped `hueChannels.length`, which on a gapped map — and maps written by v1.4.0 and earlier are
+gapped — hands the new channel a number that is already taken: `[0, 2]` has length 2, so the new
+entry is a second `2`. Every lookup and update matches on `channelIndex`, so the two become one
+object the user cannot separate, and because nothing ever removes a channel the collision is
+permanent. `nextHueChannelIndex` counts past the highest instead. It does not fill the gap on
+purpose: a gap plausibly belongs to a bridge channel that simply has not been placed yet, and
+claiming its number would look like a mapping nobody made.
+
+That is a collision fix, not an answer to the larger question — there is still no bridge-sync
+path, so a hand-stamped index is not known to correspond to any real channel. Whether the editor
+should be minting these at all is open.
+
 **A zone is a physical square in metres, which means its two cube-space scales diverge in a
 non-square room.** The inspector edits one edge length; `scaleX` and `scaleY` are derived from it
 against the room's width and depth independently, so a 1 m square in a 5×4 m room is not a uniform

@@ -13,6 +13,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Adding a Hue light to the room map no longer produces two entries that behave as one. The new light was numbered by counting how many were already placed, which on a map with a gap in its numbering — every map written before v1.4.0 — hands it a number another light already has. From then on the two are indistinguishable: moving, locking or renaming either one changes both, and since nothing ever removes a light from the map, it could not be undone. New lights are now numbered past the highest in use.
 - On Windows, the overlays now keep marking their internal windows click-through for a few seconds after opening, instead of once at the moment they are created. The browser engine builds those windows on its own schedule and finishes after the overlay exists, so the single pass could run before there was anything to mark — leaving the overlay to swallow every click meant for the screen behind it. This is the suspected cause of the overlay making the app unclickable on Windows; it is a Windows-only code path and is being confirmed on hardware.
 
 ## [1.5.5]
