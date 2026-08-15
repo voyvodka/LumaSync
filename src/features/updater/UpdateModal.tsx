@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 import { useTranslation, Trans } from "react-i18next";
-import type { UpdateMetadata } from "@/shared/contracts/updater";
+import { UPDATER_STATUS, type UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterState } from "./useAutoUpdater";
 import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
 import { clamp } from "@/shared/lib/math";
@@ -129,7 +129,13 @@ export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModa
 
         {/* ── Error ─────────────────────────────────────────────────── */}
         {state.status === "error" && (
-          <ErrorContent message={state.message} onDismiss={onDismiss} onRetry={onRetry} t={t} />
+          <ErrorContent
+            code={state.code}
+            message={state.message}
+            onDismiss={onDismiss}
+            onRetry={onRetry}
+            t={t}
+          />
         )}
       </div>
     </div>
@@ -317,16 +323,22 @@ function InstallingContent({ version, onDismiss, t }: { version: string; onDismi
 }
 
 function ErrorContent({
+  code,
   message,
   onDismiss,
   onRetry,
   t,
 }: {
+  code?: string;
   message: string;
   onDismiss: () => void;
   onRetry: () => void;
   t: TFn;
 }) {
+  // A check that never reached the feed is not a failed installation, and its
+  // raw message is the plugin's — which embeds the endpoint URL.
+  const isCheckFailure =
+    code === UPDATER_STATUS.CHECK_FAILED || code === UPDATER_STATUS.ENDPOINT_INVALID;
   return (
     <>
       <div className="lm-updater-head">
@@ -334,17 +346,21 @@ function ErrorContent({
           <IconError />
         </div>
         <div className="lm-updater-titlewrap">
-          <div className="lm-updater-eyebrow is-error">{t("updater:error.eyebrow")}</div>
+          <div className="lm-updater-eyebrow is-error">
+            {t(isCheckFailure ? "updater:error.checkEyebrow" : "updater:error.eyebrow")}
+          </div>
           <div className="lm-updater-title" id="lm-updater-title">
-            {t("updater:error.title")}
+            {t(isCheckFailure ? "updater:error.checkTitle" : "updater:error.title")}
           </div>
         </div>
       </div>
 
-      <div className="lm-updater-body">{t("updater:error.body")}</div>
+      <div className="lm-updater-body">
+        {t(isCheckFailure ? "updater:error.checkBody" : "updater:error.body")}
+      </div>
 
       <div className="lm-updater-errbox">
-        <b>{t("updater:error.boxTitle")}</b>
+        <b>{t(isCheckFailure ? "updater:error.detailTitle" : "updater:error.boxTitle")}</b>
         {message}
       </div>
 

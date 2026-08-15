@@ -6,6 +6,7 @@ import { DEFAULT_UPDATE_CHANNEL, type UpdateChannel } from "@/shared/contracts/s
 import {
   UPDATER_PROGRESS_EVENT,
   UPDATER_STATUS,
+  type UpdaterStatusCode,
   type UpdateDownloadProgress,
   type UpdateMetadata,
 } from "@/shared/contracts/updater";
@@ -26,7 +27,9 @@ export type UpdaterState =
       etaSeconds: number | null;
     }
   | { status: "installing"; update: UpdateMetadata }
-  | { status: "error"; message: string };
+  /** `code` decides the wording; `message` is the raw backend detail, which for
+   *  a failed check embeds the feed URL and must not be the headline. */
+  | { status: "error"; code?: UpdaterStatusCode; message: string };
 
 /** Rendered as a badge, so it is refreshed from the store before every check.
  * Rust reads the same field to pick the endpoint and echoes it back — a
@@ -74,7 +77,11 @@ export function useAutoUpdater() {
       } else if (response.status.code === UPDATER_STATUS.UP_TO_DATE) {
         setState({ status: "idle" });
       } else {
-        setState({ status: "error", message: response.status.message });
+        setState({
+          status: "error",
+          code: response.status.code,
+          message: response.status.message,
+        });
       }
     } catch (err) {
       if (!isLatest()) return;
@@ -127,7 +134,11 @@ export function useAutoUpdater() {
 
       const response = await downloadAndInstallUpdate();
       if (response.status.code !== UPDATER_STATUS.INSTALL_STARTED) {
-        setState({ status: "error", message: response.status.message });
+        setState({
+          status: "error",
+          code: response.status.code,
+          message: response.status.message,
+        });
       }
       // On success the app is replaced and relaunched, so no state change here.
     } catch (err) {
