@@ -47,6 +47,8 @@ const innerSizeMock = vi.fn(() =>
   Promise.resolve<{ width: number; height: number }>({ width: 320, height: 452 }),
 );
 const setPositionMock = vi.fn((_arg: unknown) => Promise.resolve<void>(undefined));
+const setSizeMock = vi.fn((_arg: unknown) => Promise.resolve<void>(undefined));
+const scaleFactorMock = vi.fn(() => Promise.resolve<number>(1));
 const centerMock = vi.fn(() => Promise.resolve<void>(undefined));
 const setMinSizeMock = vi.fn((_arg: unknown) => Promise.resolve<void>(undefined));
 const showMock = vi.fn(() => Promise.resolve<void>(undefined));
@@ -76,6 +78,8 @@ vi.mock("@tauri-apps/api/window", () => ({
     outerSize: () => outerSizeMock(),
     innerSize: () => innerSizeMock(),
     setPosition: (arg: unknown) => setPositionMock(arg),
+    setSize: (arg: unknown) => setSizeMock(arg),
+    scaleFactor: () => scaleFactorMock(),
     center: () => centerMock(),
     setMinSize: (arg: unknown) => setMinSizeMock(arg),
     show: () => showMock(),
@@ -118,7 +122,12 @@ vi.mock("@tauri-apps/api/event", () => ({
 }));
 
 // Import AFTER mocks are registered.
-import { restoreWindowState, persistWindowState, saveShellState } from "../windowLifecycle";
+import {
+  restoreWindowState,
+  persistWindowState,
+  resizeToMode,
+  saveShellState,
+} from "../windowLifecycle";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -189,6 +198,7 @@ beforeEach(() => {
     outerPositionMock.mockResolvedValue({ x: 800, y: 300 });
   });
   availableMonitorsMock.mockResolvedValue([MONITOR_1080P]);
+  scaleFactorMock.mockResolvedValue(1);
   storeGetMock.mockResolvedValue(null);
   storeSetMock.mockResolvedValue(undefined);
   setPositionMock.mockResolvedValue(undefined);
@@ -643,5 +653,75 @@ describe("Scenario 10 — the write queue under load and failure", () => {
     await saveShellState({ trayHintShown: true });
 
     expect(read()).toMatchObject({ trayHintShown: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 11 — boot restores the persisted UI mode without animating
+// ---------------------------------------------------------------------------
+
+describe("Scenario 11 — boot restores the persisted UI mode", () => {
+  it("un-animated resize lands the final rect in one setSize, not a frame sequence", async () => {
+    setupPersistedState(
+      makePersistedState({
+        uiMode: "full",
+        lastFullSize: { width: 900, height: 620 },
+      }),
+    );
+
+    await resizeToMode("full", { animate: false });
+
+    // `animateWindowRect` cannot take a zero duration — `t` would be NaN and the
+    // loop would never exit — so the boot path must bypass it entirely.
+    expect(setSizeMock).toHaveBeenCalledTimes(1);
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject({ width: 900, height: 620 });
+  });
+
+  it("restores the user's last full size rather than the default", async () => {
+    setupPersistedState(
+      makePersistedState({
+        uiMode: "full",
+        lastFullSize: { width: 1280, height: 800 },
+      }),
+    );
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject({ width: 1280, height: 800 });
+  });
+
+  it("grows around the current centre instead of jumping to monitor centre", async () => {
+    // The "from" rect comes from innerSize, not outerSize: 320×452 at
+    // (800, 300) ⇒ centre (960, 526). Growing to 900×620 about that centre
+    // puts the top-left at (510, 216) — on-screen, so the clamp leaves it.
+    setupPersistedState(
+      makePersistedState({
+        uiMode: "full",
+        lastFullSize: { width: 900, height: 620 },
+      }),
+    );
+
+    await resizeToMode("full", { animate: false });
+
+    const position = setPositionMock.mock.calls[0][0] as { x: number; y: number };
+    expect(position).toMatchObject({ x: 510, y: 216 });
+  });
+
+  it("re-entering full does not overwrite the remembered full size", async () => {
+    // The capture branch is guarded on *leaving* full. Boot calls this while
+    // already in full, so a smaller live window must not become the memory.
+    innerSizeMock.mockResolvedValue({ width: 320, height: 452 });
+    setupPersistedState(
+      makePersistedState({
+        uiMode: "full",
+        lastFullSize: { width: 900, height: 620 },
+      }),
+    );
+
+    await resizeToMode("full", { animate: false });
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 900, height: 620 });
   });
 });
