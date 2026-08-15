@@ -382,10 +382,9 @@ async function ensureCurrentWindowOnScreen(win: ReturnType<typeof getCurrentWind
 /**
  * Restore window position from persisted shell state.
  *
- * SIZE is intentionally NOT restored here: every launch starts in compact
- * mode (see `initWindowLifecycle`), and the Tauri window is already created
- * at compact dimensions via tauri.conf.json. Writing a persisted full-mode
- * size here would produce a visible big→compact flash before React mounts.
+ * SIZE is not restored here — `initWindowLifecycle` does that afterwards, by
+ * calling `resizeToMode` with the persisted mode. This runs at the window's
+ * created (compact) dimensions, which is what the centre math below reads.
  *
  * Position uses a **center-anchored** model: the persisted `windowCenterX/Y`
  * is mode-invariant. We re-derive the top-left from that center and the
@@ -573,7 +572,10 @@ async function animateWindowRect(
  * place rather than jumping to monitor center. Final position is clamped
  * inside the nearest monitor so we never animate off-screen.
  */
-export async function resizeToMode(mode: UIMode): Promise<void> {
+export async function resizeToMode(
+  mode: UIMode,
+  opts?: { animate?: boolean },
+): Promise<void> {
   const win = getCurrentWindow();
   const currentState = await loadShellState();
   const currentMode: UIMode = currentState.uiMode ?? "compact";
@@ -639,12 +641,22 @@ export async function resizeToMode(mode: UIMode): Promise<void> {
   isAnimatingMode = true;
   cancelPendingGeometryPersist();
   try {
-    await animateWindowRect(
-      win,
-      { width: fromWidth, height: fromHeight, x: fromX, y: fromY },
-      { width: targetWidth, height: targetHeight, x: targetX, y: targetY },
-      UI_MODE_RESIZE_DURATION_MS,
-    );
+    if (opts?.animate === false) {
+      // Boot restores the persisted mode while the window is still hidden, so
+      // there is nothing to animate — and `animateWindowRect` cannot be handed
+      // a zero duration, since `t` would be NaN and the loop would never exit.
+      await Promise.all([
+        win.setSize(new LogicalSize(targetWidth, targetHeight)),
+        win.setPosition(new LogicalPosition(targetX, targetY)),
+      ]);
+    } else {
+      await animateWindowRect(
+        win,
+        { width: fromWidth, height: fromHeight, x: fromX, y: fromY },
+        { width: targetWidth, height: targetHeight, x: targetX, y: targetY },
+        UI_MODE_RESIZE_DURATION_MS,
+      );
+    }
   } finally {
     isAnimatingMode = false;
     // Drop any trailing scheduled persist from onResized/onMoved events that
@@ -677,12 +689,16 @@ export async function initWindowLifecycle(opts?: {
 }): Promise<void> {
   if (!lifecycleInitPromise) {
     lifecycleInitPromise = (async () => {
-      // Every launch opens compact and only position is restored here — the
-      // flash-free part of that is in docs/architecture/ui-and-shell.md.
       const win = getCurrentWindow();
       // Compact's floor from frame 0; `resizeToMode` raises it on a toggle to full.
       await applyModeMinSize(win, "compact");
       await restoreWindowState();
+      // Grow to the persisted mode around the restored centre, via the same path
+      // a manual toggle takes. Still hidden, so nothing of this is visible.
+      const { uiMode } = await loadShellState();
+      if ((uiMode ?? "compact") !== "compact") {
+        await resizeToMode(uiMode ?? "compact", { animate: false });
+      }
       await win.show();
       // `show()` alone can reveal the window *behind* the active app on a cold
       // launch (notably macOS), leaving the user to click the dock icon.

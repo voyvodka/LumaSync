@@ -11,6 +11,10 @@ https://keepachangelog.com/en/1.1.0/
 
 - The tray menu has a Close Overlays item. The preview and calibration overlays cover a whole screen, carry no title bar and stay out of the taskbar, so if one ever stops letting clicks through there is nothing left to close it with — and on Windows that has happened. The tray belongs to the desktop and cannot be covered, so this closes every overlay, puts the preview controls away and brings the main window back, without needing the window it is rescuing.
 
+### Changed
+
+- The window opens in whichever mode you left it in. Every launch forced compact and threw away the persisted choice, so anyone who preferred the wide layout re-selected it after every restart. The stated reason was a visible big-to-small flash during startup, which is not something that can happen: the window is created hidden and only shown once its size and position have been applied. Wide mode is now restored — at the size you last left it — before the window appears.
+
 ### Fixed
 
 - Adding a Hue light to the room map no longer produces two entries that behave as one. The new light was numbered by counting how many were already placed, which on a map with a gap in its numbering — every map written before v1.4.0 — hands it a number another light already has. From then on the two are indistinguishable: moving, locking or renaming either one changes both, and since nothing ever removes a light from the map, it could not be undone. New lights are now numbered past the highest in use.

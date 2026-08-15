@@ -61,6 +61,11 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
 
     async function bootstrap() {
       try {
+        // Before the window is sized and shown, or it appears at full size
+        // still rendering the compact layout.
+        const state = await loadShellState();
+        sink.setUIMode(state.uiMode ?? "compact");
+
         // Restore window geometry immediately — before any heavy async work —
         // so the window settles into its saved position without a visible jump.
         await initWindowLifecycle({
@@ -89,9 +94,6 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
           },
         });
 
-        const state = await loadShellState();
-        // Always start in compact — ignore any persisted uiMode.
-        sink.setUIMode("compact");
         // Map old section IDs to new ones for backward compatibility
         const sectionMap: Record<string, SectionId> = {
           // Legacy IDs from persisted state before navigation restructure
