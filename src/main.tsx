@@ -42,9 +42,8 @@ function bridgeConsoleToTauri() {
   const originalWarn = console.warn.bind(console);
   const originalError = console.error.bind(console);
 
-  // A dead bridge used to be invisible — see #181, where the Rust sink stayed
-  // empty on Windows while the webview console was fine. Report once, through
-  // the unwrapped console.error so it cannot recurse.
+  // A dead bridge used to be invisible. Report once through the unwrapped
+  // console.error so a rejected log invoke cannot recurse.
   let bridgeFailed = false;
   const onBridgeFailure = (err: unknown) => {
     if (bridgeFailed) return;

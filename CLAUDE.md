@@ -283,13 +283,13 @@ contains. Do not classify the bump from the diff — the answer is always patch 
 says otherwise. A change that is genuinely breaking still ships under a patch number, so it must be
 called out in the release notes in as many words.
 
-**Green CI proves less than it looks like, and least of all on Windows.**
-`scripts/verify/launch-smoke.mjs` launches the debug binary on **macOS and Linux only** — Windows is
-gated out of both workflows ([#181](https://github.com/voyvodka/LumaSync/issues/181)), and it cannot
-pass there anyway while its startup marker travels through the console→log bridge, which is itself
-broken on Windows. `release.yml` does launch the mounted `.dmg` and the AppImage before publishing;
-the `.msi` and `.deb` are never launched anywhere. So Windows has **no launch coverage at all**, in
-either profile. Do not describe a release artefact as verified on the strength of a green CI run.
+**Green CI proves less than it looks like.** `scripts/verify/launch-smoke.mjs` launches the debug
+binary on all three platforms. Windows uses a smoke-only visible-window config because WebView2 can
+drop an embedded debug webview's first request when it starts hidden
+([#181](https://github.com/voyvodka/LumaSync/issues/181)); production keeps its hidden startup.
+`release.yml` launches the mounted `.dmg`, AppImage, and Windows release binary before publishing.
+The `.msi` and `.deb` installers are still never installed in CI, so do not describe either
+installer as verified on the strength of a green run.
 
 Four things must stay true regardless of who does the work:
 

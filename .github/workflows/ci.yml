@@ -161,6 +161,13 @@ jobs:
         # `--no-bundle` skips packaging, which launch does not exercise.
         run: pnpm tauri build --debug --no-bundle
 
+      - name: Build app for the Windows launch smoke test
+        if: runner.os == 'Windows'
+        # WebView2 can skip WebResourceRequested when an embedded debug webview
+        # starts hidden (#181). The shipped config remains hidden; this override
+        # exposes only the CI window until React takes over.
+        run: pnpm tauri build --debug --no-bundle --config src-tauri/tauri.windows-smoke.conf.json
+
       - name: Launch smoke test (Linux)
         if: runner.os == 'Linux'
         env:
@@ -177,7 +184,11 @@ jobs:
         if: runner.os == 'macOS'
         run: node scripts/verify/launch-smoke.mjs
 
-      # Windows has no launch smoke step — see #181.
+      - name: Launch smoke test (Windows)
+        if: runner.os == 'Windows'
+        env:
+          LUMASYNC_NO_DEVTOOLS: "1"
+        run: node scripts/verify/launch-smoke.mjs --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
 
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'
