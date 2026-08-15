@@ -558,9 +558,13 @@ pub fn run() {
             // Debug builds: auto-open WebView devtools in a detached window so
             // frontend `console.log` is visible without manually toggling it
             // from the WebView context menu each launch.
+            // `LUMASYNC_NO_DEVTOOLS` takes it back out: opening devtools here is
+            // the leading suspect for #181's debug-build navigation failure.
             #[cfg(debug_assertions)]
-            if let Some(main_window) = app.get_webview_window("main") {
-                main_window.open_devtools();
+            if std::env::var_os("LUMASYNC_NO_DEVTOOLS").is_none() {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    main_window.open_devtools();
+                }
             }
 
             app.manage(tray_state);
