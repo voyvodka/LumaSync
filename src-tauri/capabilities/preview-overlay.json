@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "preview-overlay",
+  "description": "v1.6 digital-twin overlay. Click-through and passive: it listens for frame events and reads the shell store once at open. It calls no window API at all, so it is granted none — the ten core:window:allow-* it used to share with the popup were unused here, on the surface that already misbehaves on Windows.",
+  "windows": ["led-twin-overlay-*"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "store:default",
+    "log:default"
+  ]
+}
