@@ -15,12 +15,10 @@ import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import { acquireHueForTest, releaseHueAfterTest } from "@/features/hue/state/hueTestLease";
 import { startLedTestPattern, stopLedTestPattern } from "../previewApi";
 
-/**
- * Floor between two worker restarts driven by a continuous input. 250 ms keeps
- * a colour drag visibly live (~4 Hz) while cutting the raw 20 Hz commit rate
- * of `useSolidColorDraft` by 5x.
- */
-export const TEST_PATTERN_REFRESH_MIN_INTERVAL_MS = 250;
+/** Floor between two starts from a continuous input. Was 250 ms when each one
+ * rebuilt the worker; a colour or speed change now retunes it in place, and
+ * `refresh` is only ever the colour drag — the retunable case. */
+export const TEST_PATTERN_REFRESH_MIN_INTERVAL_MS = 80;
 
 type LedTestErrorCode = Extract<
   LedTestStatusCode,
