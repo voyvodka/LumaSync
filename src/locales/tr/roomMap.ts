@@ -107,6 +107,12 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       oversized: "Bölge odadan büyük. Boyutunu küçültün.",
     },
   },
+  zoomControl: {
+    label: "Yakınlaştırma",
+    in: "Yakınlaştır",
+    out: "Uzaklaştır",
+    fit: "Ekrana sığdır",
+  },
   zoneProperties: {
     color: "Renk",
     borderColor: "Kenar",

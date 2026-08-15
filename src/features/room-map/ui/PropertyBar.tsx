@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
 import { parseObjectId } from "../model/objectId";
+import { resolveHueChannelWorld } from "../model/hueChannelPosition";
 import { IconLock, IconUnlock, IconOpacity } from "@/shared/ui/icons";
 
 interface PropertyBarProps {
@@ -57,7 +58,10 @@ function getFieldValues(config: RoomMapConfig, id: string | null): FieldValues |
   if (parsed?.kind === "hue") {
     const ch = findHueChannel(config.hueChannels, parsed.channelIndex);
     if (!ch) return null;
-    return { x: ch.x.toFixed(2), y: ch.y.toFixed(2), w: "", h: "", r: "", locked: !!ch.locked };
+    // Zone-bound channels render from `zoneRelativePosition`; reading `ch.x/y`
+    // here showed a coordinate the dot was not at.
+    const world = resolveHueChannelWorld(ch, config.zones);
+    return { x: world.x.toFixed(2), y: world.y.toFixed(2), w: "", h: "", r: "", locked: !!ch.locked };
   }
 
   if (parsed?.kind === "image") {

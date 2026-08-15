@@ -104,6 +104,12 @@ export default {
       oversized: "The zone is larger than the room. Reduce its size.",
     },
   },
+  zoomControl: {
+    label: "Zoom",
+    in: "Zoom in",
+    out: "Zoom out",
+    fit: "Fit to view",
+  },
   zoneProperties: {
     color: "Color",
     borderColor: "Border",

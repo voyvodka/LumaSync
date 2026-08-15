@@ -60,6 +60,16 @@ object type recreates that redundancy — the inspector swaps on the active sele
 
 ## Gotchas
 
+- **A Hue channel carries two positions and only one is live.** Once `zoneId` is set,
+  `zoneRelativePosition` is what the canvas paints and the absolute `x`/`y` are leftovers. Three
+  call sites derived that independently: the overlay correctly, keyboard nudge and the property bar
+  not — so nudging a zone-bound channel wrote a field nothing reads, and the readout showed a
+  coordinate the dot was not at. `model/hueChannelPosition.ts` is now the only place that resolves
+  or writes a channel position; go through it rather than touching `ch.x` directly.
+- **The lock has to be checked by every mutator, not just delete.** `deleteById` consulted
+  `isLocked` from the start and `handleRotate` / `handleArrowNudge` never did, so a locked object
+  stayed keyboard-movable — a lock that holds against the mouse and not the keyboard reads as
+  broken rather than partial.
 - **A refused Hue zone mutation arrives as a *resolved* promise.** The four `hue_zone` commands only
   reject on IPC-transport failure; a validation refusal comes back as a non-applied `status.code`
   with HTTP-200-shaped success. Six mutators in `useRoomMapHueZones.ts` held nothing but
