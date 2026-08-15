@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { canDeleteObjectKind } from "../model/objectCapability";
 
 import { IconLockClosed, IconLockOpen } from "@/shared/ui/icons";
 import type { ObjectRowEntry } from "../model/objectList";
@@ -104,7 +105,7 @@ export function ObjectRow({
         detach for a Hue channel goes through the Hue Zones tab's
         "Move to → Unassigned" affordance instead.
       */}
-      {!entry.locked && entry.type !== "hue" && (
+      {!entry.locked && canDeleteObjectKind(entry.type) && (
         <button
           type="button"
           className="lm-room-dock-row-action is-danger"
