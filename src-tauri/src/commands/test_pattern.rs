@@ -10,7 +10,9 @@
 //! would — no capture-pipeline fork.
 //!
 //! Patterns advance on an ACCUMULATED phase (`phase += dt × rate`) rather than
-//! elapsed wall-clock, so changing speed never teleports them. Brightness is
+//! elapsed wall-clock, so changing speed never teleports them. Pattern and speed
+//! are re-read from a shared cell each frame, so a colour drag retunes the
+//! running source instead of rebuilding the worker per commit. Brightness is
 //! intentionally NOT baked into the rendered frame — it flows through the
 //! worker's existing brightness path (LumaSync v1 header byte + the twin's
 //! post-EWMA scalar) so a synthetic run dims identically to live ambilight.
@@ -19,7 +21,7 @@
 //! `SetWindowDisplayAffinity`) is explicitly OUT OF SCOPE here.
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
@@ -148,6 +150,28 @@ pub struct TestPatternConfig {
     pub display_aspect: f32,
 }
 
+/// The two things a running test can change without rebuilding the worker. The
+/// frame size and the LED layout are baked in at construction, so a change to
+/// either still costs a restart.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TestPatternLive {
+    pub kind: TestPatternKind,
+    pub speed: TestPatternSpeed,
+}
+
+/// Shared with the running source and re-read per frame — same role as
+/// `pattern_phase`, which already survives a rebuild the same way.
+pub type TestPatternLiveSlot = Arc<Mutex<TestPatternLive>>;
+
+impl TestPatternLive {
+    pub fn from_config(config: &TestPatternConfig) -> Self {
+        Self {
+            kind: config.kind.clone(),
+            speed: config.speed,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Synthetic frame source
 // ---------------------------------------------------------------------------
@@ -160,8 +184,14 @@ pub fn create_synthetic_frame_source(
     config: TestPatternConfig,
     calibration: Option<LedCalibrationConfig>,
     phase_slot: Option<Arc<AtomicU32>>,
+    live_slot: Option<TestPatternLiveSlot>,
 ) -> Box<dyn AmbilightFrameSource> {
-    Box::new(SyntheticFrameSource::new(config, calibration, phase_slot))
+    Box::new(SyntheticFrameSource::new(
+        config,
+        calibration,
+        phase_slot,
+        live_slot,
+    ))
 }
 
 /// Procedural frame source.
@@ -186,6 +216,9 @@ pub struct SyntheticFrameSource {
     last_dt: f32,
     last_tick: Instant,
     phase_slot: Option<Arc<AtomicU32>>,
+    /// Pattern and speed re-read every frame, so a colour drag retunes the
+    /// running worker instead of tearing it down per commit.
+    live_slot: Option<TestPatternLiveSlot>,
 }
 
 impl SyntheticFrameSource {
@@ -193,6 +226,7 @@ impl SyntheticFrameSource {
         config: TestPatternConfig,
         calibration: Option<LedCalibrationConfig>,
         phase_slot: Option<Arc<AtomicU32>>,
+        live_slot: Option<TestPatternLiveSlot>,
     ) -> Self {
         let total_leds = calibration
             .as_ref()
@@ -230,7 +264,20 @@ impl SyntheticFrameSource {
             last_dt: 0.0,
             last_tick: Instant::now(),
             phase_slot,
+            live_slot,
         }
+    }
+
+    /// Pull the retunable half of the config off the shared cell. A poisoned
+    /// lock is recovered rather than skipped: dropping the read would freeze the
+    /// pattern on whatever it was showing when the panic happened.
+    fn refresh_live(&mut self) {
+        let Some(slot) = self.live_slot.as_ref() else {
+            return;
+        };
+        let live = slot.lock().unwrap_or_else(|err| err.into_inner());
+        self.kind = live.kind.clone();
+        self.speed = live.speed;
     }
 
     /// Tail length as a fraction of the perimeter.
@@ -291,6 +338,7 @@ impl SyntheticFrameSource {
 
 impl AmbilightFrameSource for SyntheticFrameSource {
     fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
+        self.refresh_live();
         let now = Instant::now();
         // Clamped so a stalled worker (or a debugger pause) cannot teleport the
         // comet a full lap on the next tick.
@@ -534,7 +582,7 @@ mod tests {
     }
 
     fn source(kind: TestPatternKind, speed: TestPatternSpeed) -> Box<dyn AmbilightFrameSource> {
-        create_synthetic_frame_source(cfg(kind, speed), Some(lopsided_calibration()), None)
+        create_synthetic_frame_source(cfg(kind, speed), Some(lopsided_calibration()), None, None)
     }
 
     fn seq_item(segment: LedSegment, local_index: u16) -> LedSequenceItem {
@@ -849,6 +897,7 @@ mod tests {
                 cfg(TestPatternKind::Chase { r: 255, g: 0, b: 0 }, speed),
                 Some(lopsided_calibration()),
                 None,
+                None,
             );
             let travel = speed.loops_per_sec() * MIN_CONSUMER_INTERVAL_S;
             assert!(
@@ -869,6 +918,7 @@ mod tests {
                 TestPatternSpeed::Fast,
             ),
             Some(lopsided_calibration()),
+            None,
             None,
         );
         let nominal = src.tail_fraction();
@@ -893,6 +943,7 @@ mod tests {
                     TestPatternSpeed::Slow,
                 ),
                 Some(cal),
+                None,
                 None,
             );
             src.tail_fraction()
@@ -926,6 +977,7 @@ mod tests {
             cfg(TestPatternKind::Rainbow, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             Some(Arc::clone(&slot)),
+            None,
         );
         assert!(
             (src.phase - 0.75).abs() < 1e-6,
@@ -940,6 +992,7 @@ mod tests {
             cfg(TestPatternKind::Rainbow, TestPatternSpeed::Fast),
             Some(lopsided_calibration()),
             Some(Arc::clone(&slot)),
+            None,
         );
         src.capture_frame().expect("frame");
         let published = f32::from_bits(slot.load(Ordering::Relaxed));
@@ -953,6 +1006,59 @@ mod tests {
         );
     }
 
+    /// The whole point of the live cell: a colour or speed change reaches the
+    /// running source without rebuilding it.
+    #[test]
+    fn the_live_cell_is_re_read_on_every_frame() {
+        let slot: TestPatternLiveSlot = Arc::new(Mutex::new(TestPatternLive {
+            kind: TestPatternKind::Solid { r: 255, g: 0, b: 0 },
+            speed: TestPatternSpeed::Slow,
+        }));
+        let mut src = SyntheticFrameSource::new(
+            cfg(
+                TestPatternKind::Solid { r: 255, g: 0, b: 0 },
+                TestPatternSpeed::Slow,
+            ),
+            Some(lopsided_calibration()),
+            None,
+            Some(Arc::clone(&slot)),
+        );
+
+        let red = src.capture_frame().expect("first frame");
+        assert_eq!(red.pixels_rgb[0], [255, 0, 0]);
+
+        *slot.lock().expect("slot") = TestPatternLive {
+            kind: TestPatternKind::Solid { r: 0, g: 0, b: 255 },
+            speed: TestPatternSpeed::Fast,
+        };
+
+        let blue = src.capture_frame().expect("second frame");
+        assert_eq!(
+            blue.pixels_rgb[0],
+            [0, 0, 255],
+            "the source must pick the new colour up without being rebuilt"
+        );
+        assert_eq!(src.speed, TestPatternSpeed::Fast);
+    }
+
+    /// Without a cell the source keeps what it was constructed with — the live
+    /// path builds one, so this is the shape every non-test caller sees.
+    #[test]
+    fn a_source_without_a_live_cell_keeps_its_construction_values() {
+        let mut src = SyntheticFrameSource::new(
+            cfg(
+                TestPatternKind::Solid { r: 9, g: 9, b: 9 },
+                TestPatternSpeed::Slow,
+            ),
+            Some(lopsided_calibration()),
+            None,
+            None,
+        );
+        let frame = src.capture_frame().expect("frame");
+        assert_eq!(frame.pixels_rgb[0], [9, 9, 9]);
+        assert_eq!(src.speed, TestPatternSpeed::Slow);
+    }
+
     #[test]
     fn a_garbage_slot_value_degrades_to_zero() {
         let slot = Arc::new(AtomicU32::new(f32::NAN.to_bits()));
@@ -960,6 +1066,7 @@ mod tests {
             cfg(TestPatternKind::Spiral, TestPatternSpeed::Med),
             Some(lopsided_calibration()),
             Some(slot),
+            None,
         );
         assert_eq!(src.phase, 0.0);
     }

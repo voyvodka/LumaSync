@@ -41,8 +41,8 @@ use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
 };
 use super::test_pattern::{
-    create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternSpeed,
-    DEFAULT_DISPLAY_ASPECT,
+    create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternLive,
+    TestPatternLiveSlot, TestPatternSpeed, DEFAULT_DISPLAY_ASPECT,
 };
 use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 
@@ -81,6 +81,8 @@ pub struct AmbilightCaptureRequest {
     pub test_pattern: Option<TestPatternConfig>,
     /// Animation phase carried across the worker rebuild a pattern tweak forces.
     pub pattern_phase: Option<Arc<AtomicU32>>,
+    /// Pattern + speed the source re-reads per frame, so a colour drag retunes.
+    pub pattern_live: Option<TestPatternLiveSlot>,
 }
 
 type AmbilightFrameSourceFactory = dyn Fn(AmbilightCaptureRequest) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError>
@@ -355,9 +357,12 @@ struct PreviewRuntime {
     /// on without a worker restart.
     preview_gate: Option<Arc<AtomicBool>>,
     /// Animation phase (f32 bits) shared with the running `SyntheticFrameSource`.
-    /// Every pattern tweak rebuilds the worker, so without carrying the phase a
-    /// colour or speed change restarts the animation from zero.
+    /// Carried across the rebuilds that a calibration or geometry change still
+    /// forces, so the animation never restarts from zero.
     pattern_phase: Arc<AtomicU32>,
+    /// Pattern + speed of the running synthetic source. Writing it retunes the
+    /// test in place; `None` means no synthetic worker is up.
+    pattern_live: Option<TestPatternLiveSlot>,
 }
 
 /// Per-worker enrichment context — decides whether and how the ~10 Hz
@@ -407,6 +412,7 @@ impl Default for LightingRuntimeOwner {
                         test,
                         req.led_calibration,
                         req.pattern_phase,
+                        req.pattern_live,
                     ))
                 } else {
                     create_live_frame_source(req.display_id.as_deref())
@@ -1968,6 +1974,21 @@ fn apply_mode_change_inner(
 
     let mut trace = trace;
 
+    // A running test retunes in place too: its pattern and speed sit in a cell the
+    // frame source re-reads each frame, so only the frame geometry forces a rebuild.
+    // Without it every colour commit was a full worker teardown.
+    let preview_retune = match (
+        owner.preview.pending_test_pattern.as_ref(),
+        owner.preview.active_test_pattern.as_ref(),
+    ) {
+        (None, None) => true,
+        (Some(next), Some(current)) => {
+            owner.preview.pattern_live.is_some() && next.display_aspect == current.display_aspect
+        }
+        // Live→test needs a synthetic source built; test→live needs the real one back.
+        _ => false,
+    };
+
     // Fast path: ambilight already running and only settings changed (brightness,
     // black border detection, smoothing alpha) — update live atomics in-place
     // without stopping the worker or recreating SCStream.
@@ -1981,8 +2002,7 @@ fn apply_mode_change_inner(
         && normalized_next.led_calibration == owner.active_mode.led_calibration
         && normalized_next.color_correction == owner.active_mode.color_correction
         && normalized_next.firmware_profile == owner.active_mode.firmware_profile
-        && owner.preview.pending_test_pattern.is_none()
-        && owner.preview.active_test_pattern.is_none()
+        && preview_retune
     {
         if let Some(live) = &owner.ambilight_live {
             let cfg = normalized_next
@@ -2015,6 +2035,13 @@ fn apply_mode_change_inner(
                 cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
             );
             owner.active_mode = normalized_next;
+            if let Some(next) = owner.preview.pending_test_pattern.take() {
+                if let Some(slot) = owner.preview.pattern_live.as_ref() {
+                    let mut cell = slot.lock().unwrap_or_else(|err| err.into_inner());
+                    *cell = TestPatternLive::from_config(&next);
+                }
+                owner.preview.active_test_pattern = Some(next);
+            }
             return make_result(
                 owner.active_mode.clone(),
                 command_status(
@@ -2032,6 +2059,7 @@ fn apply_mode_change_inner(
         LightingModeKind::Off => {
             owner.active_mode = LightingModeConfig::default();
             owner.preview.active_test_pattern = None;
+            owner.preview.pattern_live = None;
             make_result(
                 owner.active_mode.clone(),
                 command_status("LIGHTING_MODE_STOPPED", "Lighting runtime stopped.", None),
@@ -2179,6 +2207,7 @@ fn apply_mode_change_inner(
 
             owner.active_mode = normalized_next;
             owner.preview.active_test_pattern = None;
+            owner.preview.pattern_live = None;
             let status = match hue_skip_reason {
                 Some(reason) => command_status(
                     "SOLID_MODE_HUE_OUTPUT_SKIPPED",
@@ -2226,12 +2255,19 @@ fn apply_mode_change_inner(
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
 
+            // Fresh per worker: the old cell belongs to the source being torn
+            // down, and handing it on would let a stale write reach it.
+            let pattern_live = test_pattern
+                .as_ref()
+                .map(|cfg| Arc::new(Mutex::new(TestPatternLive::from_config(cfg))));
+
             let frame_source = {
                 let req = AmbilightCaptureRequest {
                     display_id: normalized_next.display_id.clone(),
                     led_calibration: normalized_next.led_calibration.clone(),
                     test_pattern: test_pattern.clone(),
                     pattern_phase: Some(Arc::clone(&owner.preview.pattern_phase)),
+                    pattern_live: pattern_live.clone(),
                 };
                 match (owner.frame_source_factory)(req) {
                     Ok(source) => {
@@ -2309,6 +2345,7 @@ fn apply_mode_change_inner(
                     owner.ambilight_live = Some(live_settings);
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
+                    owner.preview.pattern_live = pattern_live;
                     if let Some(p) = connected_port {
                         owner.active_port = Some(p.to_string());
                     }
@@ -3417,6 +3454,7 @@ mod tests {
                         led_calibration: None,
                         test_pattern: None,
                         pattern_phase: None,
+                        pattern_live: None,
                     })
                     .expect("frame source should be available"),
                     shared_runtime_telemetry(),
@@ -3960,7 +3998,8 @@ mod lighting_mode_tests {
 
     use super::{
         apply_mode_change, normalize_mode_config, AmbilightPayload, LightingModeConfig,
-        LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
+        LightingModeKind, LightingRuntimeOwner, SolidColorPayload, TestPatternConfig,
+        TestPatternKind, TestPatternSpeed,
     };
     use crate::commands::hue::frame::{
         HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
@@ -4553,6 +4592,185 @@ mod lighting_mode_tests {
             Some("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND")
         );
         assert_eq!(snapshot.last_capture_error_at_secs, Some(0));
+    }
+
+    fn test_config(
+        kind: TestPatternKind,
+        speed: TestPatternSpeed,
+        aspect: f32,
+    ) -> TestPatternConfig {
+        TestPatternConfig {
+            kind,
+            brightness: 0.5,
+            speed,
+            display_aspect: aspect,
+        }
+    }
+
+    fn red_chase() -> TestPatternKind {
+        TestPatternKind::Chase { r: 255, g: 0, b: 0 }
+    }
+
+    /// R15: a colour or speed change during a running test used to tear the
+    /// worker down and build a new one, which is why the frontend had to throttle
+    /// a continuous drag to 4 Hz.
+    #[test]
+    fn a_running_test_retunes_in_place_instead_of_rebuilding() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_with_fake_sender();
+
+        owner.preview.pending_test_pattern =
+            Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+        let started = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 0.5,
+                ..Default::default()
+            }),
+            true,
+            Some("COM-R15"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+        let slot = owner
+            .preview
+            .pattern_live
+            .clone()
+            .expect("a synthetic worker must publish its live cell");
+
+        owner.preview.pending_test_pattern = Some(test_config(
+            TestPatternKind::Spiral,
+            TestPatternSpeed::Fast,
+            1.78,
+        ));
+        let retuned = apply_mode_change(
+            &mut owner,
+            ambilight_with_payload(AmbilightPayload {
+                brightness: 0.5,
+                ..Default::default()
+            }),
+            true,
+            Some("COM-R15"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(
+            retuned.status.code, "AMBILIGHT_MODE_UPDATED",
+            "a pattern tweak on a running test must not rebuild the worker",
+        );
+
+        let cell = slot.lock().expect("live cell");
+        assert_eq!(cell.kind, TestPatternKind::Spiral);
+        assert_eq!(cell.speed, TestPatternSpeed::Fast);
+        drop(cell);
+        assert_eq!(
+            owner.preview.active_test_pattern.as_ref().map(|c| &c.kind),
+            Some(&TestPatternKind::Spiral),
+            "the retune must also move the reported active pattern",
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
+    }
+
+    /// The frame size is baked into the source, so a display swap is the one
+    /// test-to-test change the cell cannot carry.
+    #[test]
+    fn a_display_aspect_change_still_rebuilds_the_source() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_with_fake_sender();
+
+        owner.preview.pending_test_pattern =
+            Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+        let payload = ambilight_with_payload(AmbilightPayload {
+            brightness: 0.5,
+            ..Default::default()
+        });
+        let started = apply_mode_change(
+            &mut owner,
+            payload.clone(),
+            true,
+            Some("COM-R15B"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+
+        owner.preview.pending_test_pattern =
+            Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.6));
+        let after = apply_mode_change(
+            &mut owner,
+            payload,
+            true,
+            Some("COM-R15B"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(after.status.code, "AMBILIGHT_MODE_STARTED");
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
+    }
+
+    /// Live→test needs a synthetic source built, so it can never be a retune
+    /// however similar the rest of the config looks.
+    #[test]
+    fn starting_a_test_over_live_ambilight_rebuilds() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_with_fake_sender();
+
+        let payload = ambilight_with_payload(AmbilightPayload {
+            brightness: 0.5,
+            ..Default::default()
+        });
+        let live = apply_mode_change(
+            &mut owner,
+            payload.clone(),
+            true,
+            Some("COM-R15C"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(live.status.code, "AMBILIGHT_MODE_STARTED");
+        assert!(owner.preview.pattern_live.is_none());
+
+        owner.preview.pending_test_pattern =
+            Some(test_config(red_chase(), TestPatternSpeed::Slow, 1.78));
+        let to_test = apply_mode_change(
+            &mut owner,
+            payload,
+            true,
+            Some("COM-R15C"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(to_test.status.code, "AMBILIGHT_MODE_STARTED");
+        assert!(owner.preview.pattern_live.is_some());
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 
     #[test]
