@@ -679,7 +679,10 @@ mod tests {
             Err("OVERLAY_WINDOW_CLOSE_FAILED: wedged".to_string())
         });
 
-        assert!(result.is_err(), "the destroy failure must still be reported");
+        assert!(
+            result.is_err(),
+            "the destroy failure must still be reported"
+        );
         assert_eq!(runtime.active_display_id, None);
         assert_eq!(runtime.active_overlay_label, None);
     }
