@@ -22,6 +22,10 @@ export default {
     title: "Installation could not complete",
     body: "You can keep using the current version. Check the error below or try again.",
     boxTitle: "Update error",
+    checkEyebrow: "Update check failed",
+    checkTitle: "Could not reach the update server",
+    checkBody: "Nothing has changed — you are still on the version you were running. This usually means no connection, or something on the network blocking the request.",
+    detailTitle: "Technical detail",
   },
   actions: {
     later: "Later",

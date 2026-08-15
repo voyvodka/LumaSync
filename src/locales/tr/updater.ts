@@ -23,8 +23,12 @@ const updater: Catalogue<typeof enUpdater> = {
   error: {
     eyebrow: "Güncelleme başarısız",
     title: "Kurulum tamamlanamadı",
-    body: "LumaSync mevcut sürümünü kullanmaya devam edebilirsin. Aşağıdaki hatayı kontrol et veya tekrar dene.",
+    body: "Mevcut sürümü kullanmaya devam edebilirsiniz. Aşağıdaki hatayı inceleyin veya tekrar deneyin.",
     boxTitle: "Güncelleme hatası",
+    checkEyebrow: "Güncelleme kontrolü başarısız",
+    checkTitle: "Güncelleme sunucusuna ulaşılamadı",
+    checkBody: "Hiçbir şey değişmedi — çalıştırdığınız sürümdesiniz. Bu genelde bağlantı olmadığı ya da ağda bir şeyin isteği engellediği anlamına gelir.",
+    detailTitle: "Teknik ayrıntı",
   },
   actions: {
     later: "Sonra",
