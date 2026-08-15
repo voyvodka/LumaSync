@@ -231,10 +231,8 @@ export function WledDevicePicker({
           role="status"
           aria-live="polite"
           className={[
-            "mt-2 rounded border px-3 py-2 text-[11px]",
-            discoveryStatus.code === WLED_STATUS.DISCOVERY_OK
-              ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-200"
-              : "border-rose-500/40 bg-rose-900/20 text-rose-200",
+            "lm-status-banner mt-2 rounded px-3 py-2 text-[11px]",
+            discoveryStatus.code === WLED_STATUS.DISCOVERY_OK ? "is-ok" : "is-err",
           ].join(" ")}
         >
           {translateWledStatusCode(discoveryStatus.code, t) ?? discoveryStatus.message}
@@ -313,10 +311,8 @@ export function WledDevicePicker({
                   role="status"
                   aria-live="polite"
                   className={[
-                    "rounded border px-2 py-1 text-[10px] mt-1",
-                    resultStatus.code === "WLED_DISCOVERY_OK"
-                      ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-200"
-                      : "border-amber-500/40 bg-amber-900/20 text-amber-200",
+                    "lm-status-banner rounded px-2 py-1 text-[10px] mt-1",
+                    resultStatus.code === "WLED_DISCOVERY_OK" ? "is-ok" : "is-warn",
                   ].join(" ")}
                 >
                   {translateWledStatusCode(resultStatus.code, t) ?? resultStatus.message}
@@ -367,11 +363,7 @@ function WledRestoreBanner({
   if (outcome.kind === "idle" || outcome.kind === "no-saved-device") return null;
 
   const tone =
-    outcome.kind === "failed"
-      ? "border-rose-500/40 bg-rose-900/20 text-rose-200"
-      : outcome.kind === "restored"
-        ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-200"
-        : "border-amber-500/40 bg-amber-900/20 text-amber-200";
+    outcome.kind === "failed" ? "is-err" : outcome.kind === "restored" ? "is-ok" : "is-warn";
 
   // Keep every `t()` call out of a template literal — the i18n orphan
   // verifier consumes a backtick literal whole and never sees a key inside it.
@@ -391,7 +383,7 @@ function WledRestoreBanner({
     <div
       role="status"
       aria-live="polite"
-      className={["mb-2 rounded border px-3 py-2 text-[11px]", tone].join(" ")}
+      className={["lm-status-banner mb-2 rounded px-3 py-2 text-[11px]", tone].join(" ")}
     >
       {headline}
       {reason ? " " + reason : null}
