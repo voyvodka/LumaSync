@@ -9,6 +9,10 @@ Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mo
 
 **Capture is per-platform and native.** ScreenCaptureKit on macOS, Windows Graphics Capture on
 Windows, X11 on Linux. Wayland is not supported and needs `xdg-desktop-portal` before it can be.
+**No release is named for it in committed source**, deliberately: the code comment and this file
+used to promise different versions, so neither promises one now. `xcap` already falls through to
+PipeWire on a Wayland session, which is why it sometimes appears to work — that path is untested and
+unsupported, not a soft launch.
 
 **Frames are downscaled before analysis on all three platforms.** `MAX_CAPTURE_DIM` in
 `ambilight_capture.rs` caps the working dimension at 640. Full-resolution analysis buys nothing for
