@@ -1484,6 +1484,9 @@ function harvestCodes(files) {
       // crossing the IPC boundary. Without this it harvests as an undeclared
       // producer and can only be silenced by polluting the ratchet.
       text = text.replace(/\b(?:option_)?env!\s*\(\s*"[^"]*"\s*\)/g, "env!()");
+      // Same for a runtime lookup: `std::env::var_os("LUMASYNC_NO_DEVTOOLS")`
+      // names an environment variable, which never crosses the IPC boundary.
+      text = text.replace(/\benv::(?:var|var_os|remove_var|set_var)\s*\(\s*"[^"]*"/g, "env::var(");
     }
     // `"CODE: detail"` counts too — Err arms carry the code as a prefix (#42).
     for (const m of text.matchAll(/"([A-Z][A-Z0-9_]{4,})(?:"|:\s)/g)) {
