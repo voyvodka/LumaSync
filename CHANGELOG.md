@@ -11,6 +11,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Status messages in Devices and the WLED picker use the same colours as the rest of the app. Four of them had been written against a raw palette that bypassed the theme, so a success or a failure looked subtly different depending on which panel it appeared in — and none of them had a high-contrast fallback, which left them unreadable in forced-colours mode.
 - LED Setup no longer explains a problem in the app's own error codes. A layout it refused to accept was reported as, literally, "NO_LEDS_CONFIGURED: counts" — the same in Turkish, since it was never a sentence to begin with. All six refusals now say what is wrong in the language you are using, and the strip that carries them is announced rather than silently appearing.
 - The LED Setup header stops breaking mid-phrase in a narrow window. The LED count, length and power sat in a group that absorbed the entire squeeze while the buttons beside it kept their width, so the text was the only thing that gave — worse in Turkish, whose labels run longer. The header now wraps as a whole, and the length-and-power figure stays on one line.
 - Opening the LED preview now gets the main window out of the way, and closing the preview brings it back. The preview covers the screen it is testing, so the window it was launched from was sitting behind it for no reason. Opening the preview from the tray, with the window already away, leaves it that way — closing the preview only restores a window the preview itself hid.

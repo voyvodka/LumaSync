@@ -844,17 +844,6 @@
   backdrop-filter: blur(4px);
   pointer-events: none;
 }
-.lm-compact-hero-input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-}
-.lm-compact-hero-input:disabled {
-  cursor: not-allowed;
-}
 
 /* v1.5 W2 fix #41 — Adalight brightness-locked notice. Mono mini-text
    slotted under the slider when the firmware profile owns brightness;
@@ -4355,6 +4344,41 @@ body {
   flex: 1;
 }
 /* Inline status panel — error / success for save and persist */
+/* Shared status-banner tone. Carries colour only — each site keeps its own
+   padding and type scale, so converging the palette does not silently restyle
+   four surfaces. Mirrors `.lm-chmap-feedback`'s tones without its mono 10px
+   sizing, which is specific to the channel-map panel. */
+.lm-status-banner {
+  border: 1px solid transparent;
+}
+.lm-status-banner.is-ok {
+  color: var(--lm-green, #4ade80);
+  background: rgba(74, 222, 128, 0.06);
+  border-color: rgba(74, 222, 128, 0.25);
+}
+.lm-status-banner.is-warn {
+  color: var(--lm-amber, #ffb020);
+  background: rgba(255, 176, 32, 0.07);
+  border-color: rgba(255, 176, 32, 0.3);
+}
+.lm-status-banner.is-err {
+  color: var(--lm-red, #ef5b5b);
+  background: rgba(239, 91, 91, 0.07);
+  border-color: rgba(239, 91, 91, 0.3);
+}
+.lm-status-banner.is-info {
+  color: var(--lm-ink-dim);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--lm-line-2);
+}
+@media (forced-colors: active) {
+  .lm-status-banner {
+    color: CanvasText;
+    border-color: CanvasText;
+    background: Canvas;
+  }
+}
+
 .lm-chmap-feedback {
   display: flex;
   align-items: flex-start;
@@ -5726,44 +5750,6 @@ body {
   color: var(--lm-ink-faint);
   text-transform: uppercase;
 }
-/*
- * v1.5 W4-F4 — header action slot used for "Duplicate as logical zone".
- * Square 24×24 button with the same chip-style border as the rest of
- * the inspector header so it does not pull attention away from the
- * zone name. Hover lifts to amber accent to telegraph it as
- * actionable. Tap target hits the 24 px floor — close to but below
- * the 32 px global tap-target rule because the dock header band is
- * height-constrained; the broader inspector body keeps the 32 px
- * minimum on its primary controls.
- */
-.lm-zone-inspector-h-action {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--lm-ink-dim);
-  border: 1px solid var(--lm-border, rgba(255, 255, 255, 0.08));
-  cursor: pointer;
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
-}
-.lm-zone-inspector-h-action:hover {
-  color: var(--lm-amber);
-  border-color: var(--lm-amber);
-}
-.lm-zone-inspector-h-action:focus-visible {
-  outline: var(--lm-focus-ring, 2px solid currentColor);
-  outline-offset: 1px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .lm-zone-inspector-h-action {
-    transition: none;
-  }
-}
 .lm-zone-inspector-slider-row {
   display: flex;
   align-items: center;
@@ -6325,17 +6311,6 @@ body {
   border-color: rgba(255, 176, 32, 0.55);
   box-shadow: var(--lm-focus-ring-soft);
 }
-.lm-paired-strip-form-port {
-  font-family: var(--lm-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  color: var(--lm-ink-faint);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* W4-J #1 — empty-state copy inside the inline strip form. Used when
    the user opens the form but there are no eligible ports (none
    detected, or every detected port is already paired). Sits in place
@@ -6459,7 +6434,6 @@ body {
   .lm-paired-strip-form,
   .lm-paired-strip-form-input,
   .lm-paired-strip-form-select,
-  .lm-paired-strip-form-port,
   .lm-paired-strip-action.is-primary,
   .lm-device-discover {
     border-color: CanvasText;
@@ -6979,8 +6953,6 @@ body {
   .lm-pattern-speed button,
   .lm-control-close,
   .lm-control-chip,
-  .lm-control-start,
-  .lm-control-stop,
   .lm-control-info,
   .lm-signal-note {
     border-color: CanvasText;
