@@ -53,6 +53,17 @@ const calibration: Catalogue<typeof enCalibration> = {
     anchorGapRight: "Boş-Sağ",
     anchorGapLeft: "Boş-Sol",
     totalStrip: "Toplam şerit",
+    ledsUnit: "LED",
+    ledUnit: "LED",
+    lengthAndPower: "≈ {{meters}} m · {{watts}} W",
+    validation: {
+      COUNTS_REQUIRED: "Bu oda için LED sayıları ayarlanmamış.",
+      SEGMENT_NEGATIVE: "{{field}} tam sayı bir LED adedi olmalı, negatif olamaz.",
+      TOTAL_MISMATCH: "Toplam, dört kenarın sayısıyla uyuşmuyor.",
+      BOTTOM_MISSING_NEGATIVE: "Ayak boşluğu negatif olamaz.",
+      BOTTOM_MISSING_EXCEEDS_BOTTOM: "Ayak boşluğu alt kenardan daha geniş.",
+      NO_LEDS_CONFIGURED: "Bütün kenarlar sıfır, yakılacak bir şey yok.",
+    },
     aria: {
       countIncrease: "{{label}} sayısını artır",
       countDecrease: "{{label}} sayısını azalt",
