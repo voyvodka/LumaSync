@@ -414,12 +414,12 @@ export function UsbStripsCategory({
       <div
         role="status"
         aria-live="polite"
-        className={`rounded-lg border p-3 ${
+        className={`lm-status-banner rounded-lg p-3 ${
           statusVariant === "success"
-            ? "border-emerald-500/40 bg-emerald-900/20"
+            ? "is-ok"
             : statusVariant === "error"
-              ? "border-rose-500/40 bg-rose-900/20"
-              : "border-zinc-800 bg-zinc-800/30"
+              ? "is-err"
+              : "is-info"
         }`}
       >
         <p className="text-[11px] font-semibold text-zinc-100">{statusTitle}</p>
