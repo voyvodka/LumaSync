@@ -574,3 +574,74 @@ describe("Scenario 9 — concurrent saveShellState calls do not revert each othe
     expect(read().hasCompletedOnboarding).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario 10 — the write queue survives a failure and holds its order
+// ---------------------------------------------------------------------------
+
+describe("Scenario 10 — the write queue under load and failure", () => {
+  /** Same macrotask-delayed store as Scenario 9 — without the delay the first
+   * writer always finishes before the second reads and nothing interleaves. */
+  function usePersistentStore() {
+    let persisted: Record<string, unknown> | null = null;
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+    storeGetMock.mockImplementation(async () => {
+      await tick();
+      return persisted;
+    });
+    storeSetMock.mockImplementation(async (_key, value) => {
+      await tick();
+      persisted = value as Record<string, unknown>;
+    });
+    return () => persisted;
+  }
+
+  it("keeps every field across a burst of overlapping writes", async () => {
+    const read = usePersistentStore();
+
+    await Promise.all([
+      saveShellState({ language: "en" }),
+      saveShellState({ trayHintShown: true }),
+      saveShellState({ startupEnabled: true }),
+      saveShellState({ notificationsEnabled: false }),
+      saveShellState({ lastSuccessfulPort: "/dev/ttyUSB0" }),
+    ]);
+
+    expect(read()).toMatchObject({
+      language: "en",
+      trayHintShown: true,
+      startupEnabled: true,
+      notificationsEnabled: false,
+      lastSuccessfulPort: "/dev/ttyUSB0",
+    });
+  });
+
+  it("applies writes in the order they were issued", async () => {
+    const read = usePersistentStore();
+
+    await Promise.all([
+      saveShellState({ language: "en" }),
+      saveShellState({ language: "tr" }),
+    ]);
+
+    expect(read()?.language).toBe("tr");
+  });
+
+  it("surfaces a failed write to its own caller", async () => {
+    usePersistentStore();
+    storeSetMock.mockRejectedValueOnce(new Error("disk full"));
+
+    await expect(saveShellState({ language: "tr" })).rejects.toThrow("disk full");
+  });
+
+  it("does not wedge the queue after a failure", async () => {
+    const read = usePersistentStore();
+    storeSetMock.mockRejectedValueOnce(new Error("disk full"));
+
+    await expect(saveShellState({ language: "tr" })).rejects.toThrow();
+    // Without the `.catch(() => {})` on the queue tail this never resolves.
+    await saveShellState({ trayHintShown: true });
+
+    expect(read()).toMatchObject({ trayHintShown: true });
+  });
+});

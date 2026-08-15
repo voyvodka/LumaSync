@@ -87,6 +87,14 @@ shows `cancelled` even when its PR was fully green — requiring `success` there
 legitimate releases. A merged PR cannot exist without the four required checks having passed, which
 is the same guarantee arrived at from the other side.
 
+**The version gate also runs on every PR, not only on a tag.** `scripts/verify/version-parity.mjs`
+is in `check:all` and applies the same rules as the tag gate — plus two the workflow cannot check
+from a tag alone: that `Cargo.lock`'s `lumasync` entry was refreshed by `cargo check`, and that
+`CHANGELOG.md` has exactly one heading for the version. Its `sed`/`jq` equivalents are deliberately
+copied rather than reimplemented; a check that reads the files differently can pass where the gate
+fails, which is worse than no check. Learning at tag time that a version drifted is the most
+expensive moment to learn it: the work is already merged.
+
 `release.yml` also runs `typecheck:e2e` and `check:i18n`, the two members of `check:all` it was
 missing. `check:i18n` is the orphaned-translation-key ratchet, and a tag push runs no CI, so this is
 the only place it can catch one before publication.
