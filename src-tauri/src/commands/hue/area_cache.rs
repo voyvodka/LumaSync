@@ -256,13 +256,13 @@ mod tests {
         reset();
         let calls = Arc::new(AtomicUsize::new(0));
 
-        let read = || {
+        let read = |ttl| {
             let calls = Arc::clone(&calls);
             read_area_snapshot_with_ttl(
                 "192.168.1.51",
                 "expiry-user",
                 HueReadFreshness::Cached,
-                Duration::from_millis(20),
+                ttl,
                 move || async move {
                     calls.fetch_add(1, AtomicOrdering::SeqCst);
                     Ok(vec![area("a", false)])
@@ -270,13 +270,11 @@ mod tests {
             )
         };
 
-        let _ = read().await;
-        let _ = read().await;
+        let _ = read(Duration::MAX).await;
+        let _ = read(Duration::MAX).await;
         assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
 
-        tokio::time::sleep(Duration::from_millis(40)).await;
-
-        let _ = read().await;
+        let _ = read(Duration::ZERO).await;
         assert_eq!(calls.load(AtomicOrdering::SeqCst), 2);
     }
 
