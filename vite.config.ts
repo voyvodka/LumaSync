@@ -26,6 +26,13 @@ export default defineConfig(async () => ({
     __APP_VERSION__: JSON.stringify(version),
   },
 
+  build: {
+    // Vite's 500 kB default warns about download cost, which a bundle read off
+    // local disk never pays. Kept just above the current size so it still
+    // ratchets — see docs/architecture/build-and-release.md.
+    chunkSizeWarningLimit: 900,
+  },
+
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {

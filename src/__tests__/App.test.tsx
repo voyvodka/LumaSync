@@ -24,7 +24,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 // TitleBar's win/linux branch calls `getCurrentWindow()` from
-// @tauri-apps/api/window during mount to track maximize state. jsdom has
+// @tauri-apps/api/window during mount to track maximize state. happy-dom has
 // no Tauri internals so the call would throw — stub the bits TitleBar
 // actually touches with no-op promises.
 vi.mock("@tauri-apps/api/window", () => ({
@@ -103,7 +103,7 @@ vi.mock("../features/mode/modeApi", () => ({
 // via invokeMock. With a flat `mockResolvedValue({ connected: true })` the
 // DTO lands as `{ connected: true }`, `mapFullTelemetrySnapshot` throws on
 // `dto.usb` (undefined), and the repeated throw/catch in the polling loop
-// floods the jsdom event queue — causing ambilight `waitFor` assertions to
+// floods the happy-dom event queue — causing ambilight `waitFor` assertions to
 // hit their 3 s timeout in the full suite even though each test passes in
 // isolation. Stubbing the entire StatusBar component is the cleanest
 // isolation boundary; it already contains no state being tested here.

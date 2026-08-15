@@ -41,9 +41,9 @@ use super::sender::{
     DeactivateToken, HueLightMetadata, ShutdownSignal,
 };
 use super::state_store::{
-    acquire_hue_runtime, flush_pending_solid_color, make_result, status_with,
-    HueActiveStreamContext, HuePersistentSender, HueRuntimeActionHint, HueRuntimeOwner,
-    HueRuntimeState, HueRuntimeTriggerSource, StartHueStreamRequest,
+    acquire_hue_runtime, flush_pending_solid_color, status_with, HueActiveStreamContext,
+    HuePersistentSender, HueRuntimeActionHint, HueRuntimeOwner, HueRuntimeState,
+    HueRuntimeTriggerSource, StartHueStreamRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -567,15 +567,6 @@ async fn internal_restart_stream(
     spawn_reconnect_monitor(shutdown_signal, Arc::clone(runtime), request.clone());
 
     RestartOutcome::Restarted
-}
-
-// `make_result` is re-imported to silence "unused" warnings if some retry
-// path of this module is later shortened — kept available because both
-// `register_transient_fault` and `register_auth_invalid` already produce
-// `HueRuntimeCommandResult` values that callers in this module discard.
-#[allow(dead_code)]
-fn _silence_make_result(owner: &HueRuntimeOwner) {
-    let _ = make_result(owner);
 }
 
 #[cfg(test)]

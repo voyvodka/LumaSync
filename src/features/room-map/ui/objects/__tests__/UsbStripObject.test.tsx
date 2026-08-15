@@ -3,13 +3,13 @@
  *
  * ROOM-05: USB strip renders two-point line with drag handles at each endpoint.
  *
- * jsdom does not fire real pointer events at SVG coordinates, so drag-move
+ * happy-dom does not fire real pointer events at SVG coordinates, so drag-move
  * deltas cannot be measured. The test covers the rendered DOM structure:
  * the SVG line element is present and the two circular handle divs are
  * positioned at the start and end pixel coordinates.
  */
 import { render } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { UsbStripObject } from "../UsbStripObject";
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
@@ -17,14 +17,6 @@ import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
-
-// jsdom does not implement setPointerCapture
-beforeEach(() => {
-  if (!(HTMLElement.prototype as { setPointerCapture?: unknown }).setPointerCapture) {
-    HTMLElement.prototype.setPointerCapture = vi.fn();
-    HTMLElement.prototype.releasePointerCapture = vi.fn();
-  }
-});
 
 const PLACEMENT: UsbStripPlacement = {
   stripId: "strip-1",

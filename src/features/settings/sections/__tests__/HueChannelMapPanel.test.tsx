@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
@@ -20,13 +20,6 @@ vi.mock("react-i18next", () => ({
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
-
-// Mock setPointerCapture — not available in jsdom
-beforeEach(() => {
-  if (!HTMLElement.prototype.setPointerCapture) {
-    HTMLElement.prototype.setPointerCapture = vi.fn();
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -90,7 +83,7 @@ describe("CHAN-02: drag to update position", () => {
   it("clientToHueCoords is inverse of posToPercent (y-flip correctness)", () => {
     // This is a structural test — the component must contain both functions as
     // a contractual guarantee. Full behavioral verification requires real pointer
-    // events which jsdom cannot fully simulate (setPointerCapture is a no-op).
+    // events which happy-dom cannot fully simulate (setPointerCapture is a no-op).
     // A y=+1 channel should appear at the top of the canvas (CSS top: 0%).
     // A y=-1 channel should appear at the bottom (CSS top: 100%).
     // This placeholder is upgraded to a coordinate assertion in Plan 02 when
@@ -123,7 +116,7 @@ describe("CHAN-03: z-axis height slider", () => {
     // Select channel 1 by clicking its dot
     const dot1 = screen.getAllByRole("button", { name: "1" })[0];
     await user.click(dot1);
-    // fireEvent.change is more reliable for range inputs in jsdom
+    // fireEvent.change is more reliable for range inputs in happy-dom
     const slider = screen.getByRole("slider");
     fireEvent.change(slider, { target: { value: "0.5" } });
     expect(onPositionChange).toHaveBeenCalled();
@@ -146,7 +139,7 @@ describe("CHAN-04: multi-select and group drag", () => {
     const dot2 = screen.getAllByRole("button", { name: "2" })[0];
     // First click selects channel 1
     fireEvent.click(dot1);
-    // Shift+click second dot using fireEvent for reliable shiftKey simulation in jsdom
+    // Shift+click second dot using fireEvent for reliable shiftKey simulation in happy-dom
     fireEvent.click(dot2, { shiftKey: true });
     // Multi-select count badge should appear (multiSelectCount i18n key)
     const badge = screen.queryByText(/multiSelectCount/);
@@ -190,7 +183,7 @@ describe("CHAN-05: save to bridge write-back", () => {
   it("cancelling confirm dialog does not invoke write-back", async () => {
     const { invoke: mockInvoke } = await import("@tauri-apps/api/core");
     vi.mocked(mockInvoke).mockClear();
-    // jsdom does not define window.confirm; assign a mock function directly
+    // happy-dom does not define window.confirm; assign a mock function directly
     window.confirm = vi.fn().mockReturnValueOnce(false);
 
     const user = userEvent.setup();
@@ -210,7 +203,7 @@ describe("CHAN-05: save to bridge write-back", () => {
       code: "CHAN_WB_SCHEMA_REJECTED",
       message: "Bridge rejected the format",
     });
-    // jsdom does not define window.confirm; assign a mock function directly
+    // happy-dom does not define window.confirm; assign a mock function directly
     window.confirm = vi.fn().mockReturnValueOnce(true);
 
     const user = userEvent.setup();

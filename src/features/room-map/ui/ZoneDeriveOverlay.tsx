@@ -192,7 +192,8 @@ export function ZoneDeriveOverlay({
         <button
           className="bg-amber-500 text-zinc-950 hover:bg-amber-400 px-3 py-1 rounded-md text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
           onClick={onConfirm}
-          // eslint-disable-next-line jsx-a11y/no-autofocus
+          // Deliberate: the overlay is a modal confirm step, so focus belongs on
+          // its primary action the moment it opens.
           autoFocus
         >
           {t("roomMap:zones.confirmDeriveButton")}

@@ -31,7 +31,7 @@ describe("useUIMode — transition orchestration", () => {
       switchPromise = result.current.switchUIMode("full");
     });
 
-    // Phase 1 is a fade-out gated on a transitionend event that jsdom never
+    // Phase 1 is a fade-out gated on a transitionend event that happy-dom never
     // fires — the hook falls back to the safety timeout (~280ms).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);
