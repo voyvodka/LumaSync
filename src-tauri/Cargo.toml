@@ -67,13 +67,9 @@ keyring = { version = "4", features = ["apple-native-keyring-store"] }
 # Used by `_hue._tcp.local.` (Hue) today; the shared `network::mdns` registry
 # also serves the future WLED `_wled._tcp.local.` browser (D5 — single
 # responder per process to avoid macOS SO_REUSEPORT contention).
-# Pin policy (evaluated 2026-05-04, G6): caret "0.19" is intentional.
-# 0.13→0.19 had major API churn (ScopedIpV4/ResolvedService surface rewrites);
-# registry was adapted at migration time. The 0.19.x patch line has been quiet
-# (0.19.1 was a clean bugfix — source-IP subnet selection + TXT length guard,
-# no consumer API change). Exact pin (=0.19.1) would block Dependabot from
-# picking up security patches automatically, which is the worse trade-off.
-# Dependabot will open a PR for any 0.19.x patch; review before merging.
+# Caret, never exact: an exact pin blocks Dependabot carrying a security patch.
+# This crate has moved its consumer surface across minors before (0.13→0.19 took
+# ScopedIpV4/ResolvedService), so review a minor against `network::mdns`.
 mdns-sd = "0.20"
 uuid = { version = "1", features = ["v4"] }
 # Gated behind the `e2e` feature — see [features] below.
