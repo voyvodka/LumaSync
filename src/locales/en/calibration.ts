@@ -50,6 +50,17 @@ export default {
     anchorGapRight: "Gap R",
     anchorGapLeft: "Gap L",
     totalStrip: "Total strip",
+    ledsUnit: "LEDs",
+    ledUnit: "LED",
+    lengthAndPower: "≈ {{meters}} m · {{watts}} W",
+    validation: {
+      COUNTS_REQUIRED: "No LED counts have been set for this room.",
+      SEGMENT_NEGATIVE: "{{field}} must be a whole number of LEDs, not a negative one.",
+      TOTAL_MISMATCH: "The total does not match the four edge counts.",
+      BOTTOM_MISSING_NEGATIVE: "The stand gap cannot be negative.",
+      BOTTOM_MISSING_EXCEEDS_BOTTOM: "The stand gap is wider than the bottom edge.",
+      NO_LEDS_CONFIGURED: "Every edge is set to zero, so there is nothing to light.",
+    },
     aria: {
       countIncrease: "Increase {{label}}",
       countDecrease: "Decrease {{label}}",
