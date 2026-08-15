@@ -6,6 +6,7 @@ const tray: Catalogue<typeof enTray> = {
   lightsOff: "Işıkları Kapat",
   resumeLastMode: "Son Modda Aç",
   solidColor: "Sabit Renk",
+  closeOverlays: "Kaplamaları Kapat",
   quit: "LumaSync'ten Çık",
   hint: {
     title: "LumaSync menü çubuğunda çalışıyor",

@@ -113,6 +113,7 @@ struct TrayState<R: Runtime> {
     resume_last_mode: MenuItem<R>,
     solid_color: MenuItem<R>,
     show_led_preview: MenuItem<R>,
+    close_overlays: MenuItem<R>,
     quit: MenuItem<R>,
 }
 
@@ -124,6 +125,7 @@ struct TrayLabels {
     resume_last_mode: String,
     solid_color: String,
     show_led_preview: String,
+    close_overlays: String,
     quit: String,
 }
 
@@ -136,6 +138,47 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: tray rescue — tear every overlay down and put the shell back
+// ---------------------------------------------------------------------------
+
+/// The overlays are `closable(false)`, `skip_taskbar(true)` and undecorated, so
+/// an overlay that captures input instead of passing it through takes the whole
+/// desktop with it: nothing underneath is clickable, and there is no title bar
+/// and no taskbar button to close it with. The tray belongs to the shell and
+/// cannot be covered, which makes it the one surface still reachable.
+///
+/// Deliberately backend-only. Every other tray item emits to the webview and
+/// lets the frontend act, but a wedge is the worst moment to depend on a round
+/// trip through it — so this closes the windows directly and shows the main
+/// window unconditionally, rather than through `restore_main_after_preview`,
+/// which only acts when the preview is what hid it.
+fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(twin_state) = app.try_state::<commands::led_preview::LedTwinState>() {
+        if let Err(error) = commands::led_preview::close_led_twin_overlay(
+            app.clone(),
+            twin_state,
+            commands::led_preview::CloseLedTwinOverlayPayload { display_id: None },
+        ) {
+            log::warn!("[tray] closing the twin overlays failed: {error}");
+        }
+    }
+
+    if let Some(overlay_state) = app.try_state::<commands::calibration::OverlayState>() {
+        if let Err(error) = commands::calibration::close_any_display_overlay(app, &overlay_state) {
+            log::warn!("[tray] closing the calibration overlay failed: {error}");
+        }
+    }
+
+    if let Some(twin_state) = app.try_state::<commands::led_preview::LedTwinState>() {
+        if let Err(error) = commands::led_preview::hide_led_control_popup(app.clone(), twin_state) {
+            log::warn!("[tray] hiding the control popup failed: {error}");
+        }
+    }
+
+    show_and_focus_settings(app);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +355,10 @@ fn update_tray_labels(
         .set_text(&labels.show_led_preview)
         .map_err(|e| e.to_string())?;
     tray_state
+        .close_overlays
+        .set_text(&labels.close_overlays)
+        .map_err(|e| e.to_string())?;
+    tray_state
         .quit
         .set_text(&labels.quit)
         .map_err(|e| e.to_string())?;
@@ -343,6 +390,13 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
         true,
         None::<&str>,
     )?;
+    let close_overlays = MenuItem::with_id(
+        app,
+        "tray-close-overlays",
+        "Close Overlays",
+        true,
+        None::<&str>,
+    )?;
     let separator3 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit LumaSync", true, None::<&str>)?;
 
@@ -357,6 +411,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
             &resume_last,
             &solid_color,
             &show_led_preview,
+            &close_overlays,
             &separator3,
             &quit,
         ],
@@ -368,6 +423,7 @@ fn build_tray_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(Menu<R>, Tr
         resume_last_mode: resume_last,
         solid_color,
         show_led_preview,
+        close_overlays,
         quit,
     };
 
@@ -662,6 +718,7 @@ pub fn run() {
                             (),
                         );
                     }
+                    "tray-close-overlays" => close_all_overlays(app),
                     "quit" => kick_off_shutdown_and_die(app),
                     _ => {}
                 })

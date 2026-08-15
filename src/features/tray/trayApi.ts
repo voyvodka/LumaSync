@@ -10,6 +10,7 @@ export interface TrayLabels {
   solidColor: string;
   /** Optional so the Rust handler keeps its existing default while the label rolls out additively. */
   showLedPreview?: string;
+  closeOverlays: string;
   quit: string;
 }
 

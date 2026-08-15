@@ -3,6 +3,7 @@ export default {
   lightsOff: "Lights Off",
   resumeLastMode: "Resume Last Mode",
   solidColor: "Solid Color",
+  closeOverlays: "Close Overlays",
   quit: "Quit LumaSync",
   hint: {
     title: "LumaSync is running in the tray",
