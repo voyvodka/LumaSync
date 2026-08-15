@@ -1407,12 +1407,16 @@ checkWireUnion(
 // ---------------------------------------------------------------------------
 console.log("\n[ Status codes present in BOTH trees, declared in NEITHER ]");
 
+function normalizeSourcePath(file) {
+  return file.replaceAll("\\", "/");
+}
+
 function walkSourceFiles(dir, match, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name === "__tests__") continue;
     const full = resolve(dir, entry.name);
     if (entry.isDirectory()) walkSourceFiles(full, match, out);
-    else if (match.test(entry.name)) out.push(full);
+    else if (match.test(entry.name)) out.push(normalizeSourcePath(full));
   }
   return out;
 }
@@ -1425,8 +1429,8 @@ function rustTestOnlyPaths(root) {
   const paths = new Set();
   for (const file of walkSourceFiles(root, /\.rs$/)) {
     for (const m of readFileSync(file, "utf-8").matchAll(/^#\[cfg\(test\)\]\s*\nmod\s+(\w+)\s*;/gm)) {
-      paths.add(resolve(dirname(file), `${m[1]}.rs`));
-      paths.add(resolve(dirname(file), m[1]));
+      paths.add(normalizeSourcePath(resolve(dirname(file), `${m[1]}.rs`)));
+      paths.add(normalizeSourcePath(resolve(dirname(file), m[1])));
     }
   }
   return paths;
