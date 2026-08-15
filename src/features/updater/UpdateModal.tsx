@@ -4,6 +4,7 @@ import type { UpdateMetadata } from "@/shared/contracts/updater";
 import type { UpdaterState } from "./useAutoUpdater";
 import { IconDownload, IconInstall, IconError } from "@/shared/ui/icons";
 import { clamp } from "@/shared/lib/math";
+import { useDialogFocus } from "@/shared/ui/useDialogFocus";
 
 interface UpdateModalProps {
   state: UpdaterState;
@@ -71,6 +72,11 @@ function parseReleaseNotes(body: string | undefined): Note[] {
 
 export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModalProps) {
   const { t } = useTranslation();
+  // Escape is offered only where the content offers a dismiss: during install
+  // the app is about to be replaced, so there is nothing to back out of.
+  const { containerRef, handleKeyDown } = useDialogFocus(state.status !== "idle", {
+    onClose: state.status === "installing" ? undefined : onDismiss,
+  });
 
   if (
     state.status !== "available" &&
@@ -83,6 +89,9 @@ export function UpdateModal({ state, onInstall, onDismiss, onRetry }: UpdateModa
 
   return (
     <div
+      ref={containerRef}
+      onKeyDown={handleKeyDown}
+      tabIndex={-1}
       className="lm-updater-backdrop"
       role="dialog"
       aria-modal="true"
