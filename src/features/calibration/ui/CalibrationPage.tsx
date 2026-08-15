@@ -45,6 +45,7 @@ import {
 } from "@/shared/contracts/display";
 import { LED_TEST_STATUS } from "@/shared/contracts/preview";
 import { clamp } from "@/shared/lib/math";
+import { useDialogFocus } from "@/shared/ui/useDialogFocus";
 
 function reclaimFocus() {
   void getCurrentWindow().setFocus();
@@ -110,6 +111,13 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
     buildInitialEditorState(initialConfig),
   );
   const [isSaving, setIsSaving] = useState(false);
+
+  // Escape means "keep editing" — the safe answer for a dialog whose other
+  // option throws work away.
+  const { containerRef: discardDialogRef, handleKeyDown: handleDiscardKeyDown } = useDialogFocus(
+    editorState.confirmDiscard,
+    { onClose: () => setEditorState((prev) => keepEditing(prev)) },
+  );
   const flowRef = useRef(createDefaultTestPatternFlow(initialConfig));
   const [testPattern, setTestPattern] = useState<TestPatternSnapshot>(flowRef.current.getSnapshot());
   const displayTargetRef = useRef(
@@ -636,9 +644,17 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
 
       {/* Discard confirmation */}
       {editorState.confirmDiscard && (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4">
+        <div
+          ref={discardDialogRef}
+          onKeyDown={handleDiscardKeyDown}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lm-discard-title"
+          className="lm-modal-scrim"
+        >
           <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-xl">
-            <h3 className="text-base font-semibold text-zinc-100">
+            <h3 id="lm-discard-title" className="text-base font-semibold text-zinc-100">
               {t("calibration:overlay.unsavedTitle")}
             </h3>
             <p className="mt-2 text-sm text-zinc-300">
