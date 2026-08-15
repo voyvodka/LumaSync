@@ -94,6 +94,15 @@ export default {
       offlineTitle: "Bridge offline",
       offlineHint: "Last area is remembered; re-pair if you no longer have access.",
     },
+    rejected: {
+      dismiss: "Dismiss",
+      generic: "That zone change was not applied.",
+      notFound: "That zone no longer exists; the map has been reloaded.",
+      outOfBounds: "The zone would reach past a wall. Shrink it or move it inward.",
+      limitReached: "This zone already holds the maximum of 10 channels.",
+      notInArea: "That channel belongs to a different entertainment area.",
+      oversized: "The zone is larger than the room. Reduce its size.",
+    },
   },
   zoneProperties: {
     color: "Color",

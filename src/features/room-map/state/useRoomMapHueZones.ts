@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { shellStore } from "@/features/persistence/shellStore";
-import type { HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
-import { findHueChannel } from "@/shared/contracts/roomMap";
+import type {
+  HueZone,
+  HueZoneCommandResult,
+  HueZoneStatusCode,
+  RoomMapConfig,
+} from "@/shared/contracts/roomMap";
+import { findHueChannel, isHueZoneApplied } from "@/shared/contracts/roomMap";
 import {
   assignChannelToHueZone,
   createHueZone,
@@ -24,6 +29,9 @@ export interface UseRoomMapHueZonesReturn {
   /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
   hueAreaId: string | null;
   hueBridgeConfigured: boolean;
+  /** Code of the last refused mutation, until dismissed. `null` while nothing is refused. */
+  hueZoneRejection: HueZoneStatusCode | null;
+  dismissHueZoneRejection: () => void;
   handleAddHueZone: () => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
@@ -33,9 +41,9 @@ export interface UseRoomMapHueZonesReturn {
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
 }
 
-// Hue Zone CRUD. Every handler is local-first and optimistic: a failed invoke
-// is logged but the local edit stands, because reverting flickers the canvas.
-// See docs/architecture/room-map.md.
+// Hue Zone CRUD. Every handler is local-first and optimistic: the local edit
+// lands first, then the backend either confirms it or hands back the pre-image
+// it refused, which is re-applied. See docs/architecture/room-map.md.
 export function useRoomMapHueZones({
   config,
   updateConfig,
@@ -68,6 +76,40 @@ export function useRoomMapHueZones({
 
   const hueZones = config.zones;
 
+  const [hueZoneRejection, setHueZoneRejection] = useState<HueZoneStatusCode | null>(null);
+  const dismissHueZoneRejection = useCallback(() => setHueZoneRejection(null), []);
+
+  // Settle one mutation against the backend's verdict. `withChannels` is only
+  // set for the two commands that own `hueChannels`; the other two return an
+  // empty `channels` list that would wipe every placement if written back.
+  const settle = useCallback(
+    (
+      label: string,
+      promise: Promise<HueZoneCommandResult>,
+      withChannels: boolean,
+      onRefused?: () => void,
+    ) => {
+      void promise
+        .then((result) => {
+          if (isHueZoneApplied(result.status.code)) return;
+          console.warn(
+            `[LumaSync] ${label} refused: ${result.status.code} — ${result.status.message}`,
+          );
+          setHueZoneRejection(result.status.code);
+          void updateConfig(
+            withChannels
+              ? { zones: result.zones, hueChannels: result.channels }
+              : { zones: result.zones },
+          );
+          onRefused?.();
+        })
+        .catch((e) => {
+          console.error(`[LumaSync] ${label} failed`, e);
+        });
+    },
+    [updateConfig],
+  );
+
   const handleAddHueZone = useCallback(() => {
     if (!hueAreaId) return;
     const id = `hue-zone-${crypto.randomUUID()}`;
@@ -91,11 +133,10 @@ export function useRoomMapHueZones({
     setActiveHueZoneId(id);
     setObjectPanelOpen(true);
 
-    // Mirror to backend; never throw — silent-catch ban → log only.
-    void createHueZone({ zone: newZone, existingZones: hueZones }).catch((e) => {
-      console.error("[LumaSync] create_hue_zone failed", e);
+    settle("create_hue_zone", createHueZone({ zone: newZone, existingZones: hueZones }), false, () => {
+      setActiveHueZoneId((current) => (current === id ? null : current));
     });
-  }, [hueAreaId, hueZones, config.zones, updateConfig, t, setObjectPanelOpen]);
+  }, [hueAreaId, hueZones, config.zones, updateConfig, t, setObjectPanelOpen, settle]);
 
   const handleDeleteHueZone = useCallback(
     (zoneId: string) => {
@@ -109,11 +150,13 @@ export function useRoomMapHueZones({
       void updateConfig({ zones: nextZones, hueChannels: nextChannels });
       if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
 
-      void deleteHueZone({ zoneId, existingZones: hueZones, channels: config.hueChannels }).catch((e) => {
-        console.error("[LumaSync] delete_hue_zone failed", e);
-      });
+      settle(
+        "delete_hue_zone",
+        deleteHueZone({ zoneId, existingZones: hueZones, channels: config.hueChannels }),
+        true,
+      );
     },
-    [hueZones, config.zones, config.hueChannels, activeHueZoneId, updateConfig],
+    [hueZones, config.zones, config.hueChannels, activeHueZoneId, updateConfig, settle],
   );
 
   const handleRenameHueZone = useCallback(
@@ -128,12 +171,14 @@ export function useRoomMapHueZones({
       });
       void updateConfig({ zones: next });
       if (renamed) {
-        void updateHueZone({ zone: renamed, existingZones: next }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (rename) failed", e);
-        });
+        settle(
+          "update_hue_zone (rename)",
+          updateHueZone({ zone: renamed, existingZones: config.zones }),
+          false,
+        );
       }
     },
-    [config.zones, updateConfig],
+    [config.zones, updateConfig, settle],
   );
 
   // Selection is exclusive between concrete objects and Hue zones, so the
@@ -189,18 +234,23 @@ export function useRoomMapHueZones({
       });
       void updateConfig({ hueChannels: nextChannels, zones: nextZones });
 
-      void assignChannelToHueZone({
-        channelIndex,
-        zoneId: targetZoneId,
-        zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
-        entertainmentAreaId,
-        existingZones: nextZones,
-        channels: nextChannels,
-      }).catch((e) => {
-        console.error("[LumaSync] assign_channel_to_hue_zone failed", e);
-      });
+      // Pre-mutation lists: the backend performs the same attach itself, and
+      // sending `nextZones` made `already_in_zone` always true, which skipped
+      // the per-area channel cap entirely.
+      settle(
+        "assign_channel_to_hue_zone",
+        assignChannelToHueZone({
+          channelIndex,
+          zoneId: targetZoneId,
+          zoneRelativePosition: targetZoneId ? { x: 0, y: 0, z: 0 } : null,
+          entertainmentAreaId,
+          existingZones: config.zones,
+          channels: config.hueChannels,
+        }),
+        true,
+      );
     },
-    [config.hueChannels, config.zones, hueZones, hueAreaId, updateConfig],
+    [config.hueChannels, config.zones, hueZones, hueAreaId, updateConfig, settle],
   );
 
   const activeHueZone: HueZone | null = activeHueZoneId
@@ -219,12 +269,14 @@ export function useRoomMapHueZones({
       });
       void updateConfig({ zones: next });
       if (updated) {
-        void updateHueZone({ zone: updated, existingZones: next }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (center) failed", e);
-        });
+        settle(
+          "update_hue_zone (center)",
+          updateHueZone({ zone: updated, existingZones: config.zones }),
+          false,
+        );
       }
     },
-    [config.zones, updateConfig],
+    [config.zones, updateConfig, settle],
   );
 
   // The patch passes through verbatim — do NOT mirror one axis onto the other.
@@ -242,12 +294,14 @@ export function useRoomMapHueZones({
       });
       void updateConfig({ zones: next });
       if (updated) {
-        void updateHueZone({ zone: updated, existingZones: next }).catch((e) => {
-          console.error("[LumaSync] update_hue_zone (props) failed", e);
-        });
+        settle(
+          "update_hue_zone (props)",
+          updateHueZone({ zone: updated, existingZones: config.zones }),
+          false,
+        );
       }
     },
-    [config.zones, updateConfig],
+    [config.zones, updateConfig, settle],
   );
 
   return {
@@ -256,6 +310,8 @@ export function useRoomMapHueZones({
     activeHueZone,
     hueAreaId,
     hueBridgeConfigured,
+    hueZoneRejection,
+    dismissHueZoneRejection,
     handleAddHueZone,
     handleDeleteHueZone,
     handleRenameHueZone,

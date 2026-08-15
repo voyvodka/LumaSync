@@ -457,11 +457,27 @@ export const HUE_ZONE_STATUS_CODES = {
 export type HueZoneStatusCode =
   (typeof HUE_ZONE_STATUS_CODES)[keyof typeof HUE_ZONE_STATUS_CODES];
 
+// The four commands signal a refusal by *resolving* with a non-applied code —
+// they reject only on IPC-transport failure, so a caller holding just a
+// `.catch()` cannot see a validation refusal at all.
+const HUE_ZONE_SUCCESS_CODES = new Set<string>([
+  HUE_ZONE_STATUS_CODES.HUE_ZONE_CREATED,
+  HUE_ZONE_STATUS_CODES.HUE_ZONE_UPDATED,
+  HUE_ZONE_STATUS_CODES.HUE_ZONE_DELETED,
+]);
+
+/** True when a Hue zone command applied the mutation it was asked to apply. */
+export function isHueZoneApplied(code: HueZoneStatusCode): boolean {
+  return HUE_ZONE_SUCCESS_CODES.has(code);
+}
+
 // ---------------------------------------------------------------------------
 // Hue Zone command payloads (mirrors `commands/room_map/hue_zone.rs`)
 // ---------------------------------------------------------------------------
 
-/** Response for the four Hue zone authoring commands; `zones`/`channels` are echoed back for the next shellStore write. */
+/** Response for the four Hue zone authoring commands. `zones`/`channels` are the applied
+ *  mutation on success and the pre-image on a refusal — only while callers send
+ *  *pre*-mutation lists. See docs/architecture/room-map.md. */
 export interface HueZoneCommandResult {
   status: {
     code: HueZoneStatusCode;
