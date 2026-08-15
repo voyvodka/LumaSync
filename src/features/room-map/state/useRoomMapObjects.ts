@@ -7,7 +7,7 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { findHueChannel } from "@/shared/contracts/roomMap";
+import { findHueChannel, nextHueChannelIndex } from "@/shared/contracts/roomMap";
 import { moveHueChannelToWorld, nudgeHueChannel } from "../model/hueChannelPosition";
 import {
   furnitureObjectId,
@@ -91,7 +91,7 @@ export function useRoomMapObjects({
 
   const handleAddHue = useCallback(() => {
     const newChannel: HueChannelPlacement = {
-      channelIndex: config.hueChannels.length,
+      channelIndex: nextHueChannelIndex(config.hueChannels),
       x: 0,
       y: 0,
       z: 0,

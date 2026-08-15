@@ -75,6 +75,13 @@ export function findHueChannel(
   return channels.find((c) => c.channelIndex === channelIndex);
 }
 
+/** Mint a `channelIndex` for a hand-placed channel. `channels.length` collides on a
+ * gapped map (`[0, 2]` → a second `2`), and nothing ever removes a channel to undo it.
+ * Counts past the highest rather than filling the gap — see docs/architecture/room-map.md. */
+export function nextHueChannelIndex(channels: readonly HueChannelPlacement[]): number {
+  return channels.reduce((highest, channel) => Math.max(highest, channel.channelIndex + 1), 0);
+}
+
 // ---------------------------------------------------------------------------
 // USB Strip Placement
 // ---------------------------------------------------------------------------
