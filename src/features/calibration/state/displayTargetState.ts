@@ -3,6 +3,7 @@ import {
   OVERLAY_NO_DISPLAY,
   type DisplayId,
   type DisplayInfo,
+  type DisplayTargetBlockedCode,
   type DisplayOverlayCommandResult,
   type OverlayPreviewPayload,
 } from "@/shared/contracts/display";
@@ -21,7 +22,7 @@ export interface DisplayTargetSnapshot {
   selectedDisplayId: DisplayId | null;
   activeDisplayId: DisplayId | null;
   blocked: boolean;
-  blockedCode: string | null;
+  blockedCode: DisplayTargetBlockedCode | null;
   blockedReason: string | null;
   isSwitching: boolean;
 }

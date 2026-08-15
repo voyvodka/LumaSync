@@ -37,6 +37,7 @@ function createState() {
       height: 1080,
       x: 0,
       y: 0,
+      scaleFactor: 1,
       isPrimary: true,
     },
     {
@@ -46,6 +47,7 @@ function createState() {
       height: 1440,
       x: 1920,
       y: 0,
+      scaleFactor: 1,
       isPrimary: false,
     },
   ]);
@@ -67,8 +69,8 @@ describe("displayTargetState", () => {
     });
 
     state.setDisplays([
-      { id: "display-2", label: "Display 2", width: 2560, height: 1440, x: 1920, y: 0, isPrimary: false },
-      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, isPrimary: true },
+      { id: "display-2", label: "Display 2", width: 2560, height: 1440, x: 1920, y: 0, scaleFactor: 1, isPrimary: false },
+      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, scaleFactor: 1, isPrimary: true },
     ]);
 
     expect(state.getSnapshot().selectedDisplayId).toBe("display-1");
@@ -156,7 +158,7 @@ describe("displayTargetState", () => {
     });
 
     state.setDisplays([
-      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, isPrimary: true },
+      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, scaleFactor: 1, isPrimary: true },
     ]);
 
     const first = state.switchActiveDisplay("display-1");
@@ -174,9 +176,9 @@ describe("switchActiveDisplay — rapid clicks", () => {
   function createThreeDisplayState() {
     const harness = createState();
     harness.state.setDisplays([
-      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, isPrimary: true },
-      { id: "display-2", label: "Display 2", width: 2560, height: 1440, x: 1920, y: 0, isPrimary: false },
-      { id: "display-3", label: "Display 3", width: 1280, height: 720, x: 4480, y: 0, isPrimary: false },
+      { id: "display-1", label: "Display 1", width: 1920, height: 1080, x: 0, y: 0, scaleFactor: 1, isPrimary: true },
+      { id: "display-2", label: "Display 2", width: 2560, height: 1440, x: 1920, y: 0, scaleFactor: 1, isPrimary: false },
+      { id: "display-3", label: "Display 3", width: 1280, height: 720, x: 4480, y: 0, scaleFactor: 1, isPrimary: false },
     ]);
     return harness;
   }

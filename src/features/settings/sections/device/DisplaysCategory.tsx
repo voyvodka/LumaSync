@@ -46,7 +46,7 @@ export function DisplaysCategory({ isActive, displays }: DisplaysCategoryProps) 
                 </div>
                 <div className="lm-dcard-cell">
                   <div className="lm-dcard-cell-k">{t("device:page.displays.cellScale")}</div>
-                  <div className="lm-dcard-cell-v">{(display.scaleFactor ?? 1).toFixed(1)}x</div>
+                  <div className="lm-dcard-cell-v">{display.scaleFactor.toFixed(1)}x</div>
                 </div>
               </div>
             </div>
