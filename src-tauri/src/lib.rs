@@ -714,6 +714,13 @@ pub fn run() {
                     let _ = window.hide();
                     if let Some(state) = window.try_state::<commands::led_preview::LedTwinState>() {
                         state.mark_control_hidden();
+                        // The red-X bypasses `hide_led_control_popup`, and this
+                        // is the path that would otherwise leave the shell
+                        // hidden with no window to bring it back.
+                        commands::led_preview::restore_main_after_preview(
+                            window.app_handle(),
+                            &state,
+                        );
                     }
                     commands::led_preview::emit_preview_state_changed(window.app_handle());
                 }

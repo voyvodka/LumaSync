@@ -34,7 +34,7 @@ import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
 import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
-import type { RoomDimensions } from "@/shared/contracts/roomMap";
+import type { HueZoneStatusCode, RoomDimensions } from "@/shared/contracts/roomMap";
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
@@ -57,6 +57,18 @@ interface RoomMapEditorProps {
    */
   hueReachable?: boolean;
 }
+
+// Literal keys, not `\`…${code}\``, so the orphan ratchet can see each one.
+const HUE_ZONE_REJECTION_KEYS = {
+  HUE_ZONE_CREATED: "roomMap:hueZones.rejected.generic",
+  HUE_ZONE_UPDATED: "roomMap:hueZones.rejected.generic",
+  HUE_ZONE_DELETED: "roomMap:hueZones.rejected.generic",
+  HUE_ZONE_NOT_FOUND: "roomMap:hueZones.rejected.notFound",
+  HUE_ZONE_CHANNEL_OUT_OF_BOUNDS: "roomMap:hueZones.rejected.outOfBounds",
+  HUE_ZONE_LIMIT_REACHED: "roomMap:hueZones.rejected.limitReached",
+  HUE_ZONE_CHANNEL_NOT_IN_AREA: "roomMap:hueZones.rejected.notInArea",
+  HUE_ZONE_OVERSIZED: "roomMap:hueZones.rejected.oversized",
+} as const satisfies Record<HueZoneStatusCode, string>;
 
 export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
   const { t } = useTranslation();
@@ -83,6 +95,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     activeHueZone,
     hueAreaId,
     hueBridgeConfigured,
+    hueZoneRejection,
+    dismissHueZoneRejection,
     handleAddHueZone,
     handleDeleteHueZone,
     handleRenameHueZone,
@@ -714,6 +728,20 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       {imageError && (
         <div role="alert" className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
           {t("roomMap:imageImportError")}
+        </div>
+      )}
+
+      {hueZoneRejection && (
+        <div role="alert" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
+          <span>{t(HUE_ZONE_REJECTION_KEYS[hueZoneRejection])}</span>
+          <button
+            type="button"
+            onClick={dismissHueZoneRejection}
+            aria-label={t("roomMap:hueZones.rejected.dismiss")}
+            className="min-h-[32px] px-2 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--lm-accent)]"
+          >
+            {t("roomMap:hueZones.rejected.dismiss")}
+          </button>
         </div>
       )}
     </div>

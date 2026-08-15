@@ -138,23 +138,33 @@ export function HueZoneInspector({
   const safeDepthM = Math.max(0, roomDepthM);
   // The largest square that fits the room footprint. Falls back to `0` before
   // dimensions load, which disables the input — the derivation divides by it.
-  const maxEdgeM = Math.min(safeWidthM, safeDepthM);
+  const roomMaxEdgeM = Math.min(safeWidthM, safeDepthM);
   // `SCALE_MIN` against the smaller room axis, mirroring Rust: 0.20 m in a
   // 5×4 m room — a single-bulb zone that still has cube resolution left.
-  const minEdgeM = SCALE_MIN * maxEdgeM;
+  const minEdgeM = SCALE_MIN * roomMaxEdgeM;
+  // Rust refuses `|center| + scale > 1`, so a zone parked near a wall has less
+  // headroom than the room does. Floored at `minEdgeM` to keep legacy escapees usable.
+  const maxEdgeM = Math.max(
+    minEdgeM,
+    Math.min(
+      roomMaxEdgeM,
+      (1 - Math.abs(zone.centerX)) * safeWidthM,
+      (1 - Math.abs(zone.centerY)) * safeDepthM,
+    ),
+  );
   const currentEdgeM = resolvePhysicalEdgeM(zone, safeWidthM, safeDepthM);
 
   // One metre value drives both axes, and in a non-square room they diverge on
   // purpose so the zone stays a physical square. See docs/architecture/room-map.md.
   const setEdgeM = useCallback(
     (rawMetres: number) => {
-      if (maxEdgeM <= 0) return;
+      if (roomMaxEdgeM <= 0) return;
       const clampedM = clamp(rawMetres, minEdgeM, maxEdgeM);
       const sx = clampScale(clampedM / safeWidthM);
       const sy = clampScale(clampedM / safeDepthM);
       onUpdate({ scaleX: sx, scaleY: sy });
     },
-    [maxEdgeM, minEdgeM, safeWidthM, safeDepthM, onUpdate],
+    [roomMaxEdgeM, maxEdgeM, minEdgeM, safeWidthM, safeDepthM, onUpdate],
   );
 
   const [edgeDraft, setEdgeDraft] = useState<string>(currentEdgeM.toFixed(2));
