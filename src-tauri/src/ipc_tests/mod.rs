@@ -8,6 +8,7 @@
 mod device_commands;
 mod hue_commands;
 mod lighting_commands;
+mod overlay_commands;
 mod preview_commands;
 mod room_map_commands;
 mod telemetry_commands;
@@ -18,6 +19,7 @@ use tauri::test::{get_ipc_response, mock_builder, MockRuntime};
 use tauri::webview::InvokeRequest;
 use tauri::{App, Manager, WebviewWindow, WebviewWindowBuilder};
 
+use crate::commands::calibration::OverlayState;
 use crate::commands::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use crate::commands::hue::state_store::HueRuntimeStateStore;
 use crate::commands::led_preview::LedTwinState;
@@ -45,6 +47,7 @@ where
     app.manage(ActiveSinkRegistry::default());
     app.manage(LightingRuntimeState::default());
     app.manage(LedTwinState::default());
+    app.manage(OverlayState::default());
     app.manage(HueRuntimeStateStore::default());
     app.manage(RuntimeTelemetryState::default());
     app
