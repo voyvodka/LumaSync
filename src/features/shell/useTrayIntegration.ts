@@ -33,6 +33,7 @@ function pushTrayLabels() {
     resumeLastMode: i18next.t("tray:resumeLastMode"),
     solidColor: i18next.t("tray:solidColor"),
     showLedPreview: i18next.t("preview:tray.show"),
+    closeOverlays: i18next.t("tray:closeOverlays"),
     quit: i18next.t("tray:quit"),
   });
 }

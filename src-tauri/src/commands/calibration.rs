@@ -194,7 +194,10 @@ pub fn build_transparent_overlay<R: Runtime>(
     // WS_EX_TRANSPARENT from the parent. Propagate the flag to all child
     // windows so the overlay is truly click-through.
     #[cfg(target_os = "windows")]
-    propagate_transparent_to_children(&window);
+    {
+        propagate_transparent_to_children(&window);
+        schedule_clickthrough_resweeps(&window);
+    }
 
     Ok(window)
 }
@@ -223,6 +226,51 @@ fn open_overlay_window<R: Runtime>(
     );
 
     Ok(())
+}
+
+/// Re-sweep schedule, in milliseconds after the initial synchronous sweep.
+///
+/// WebView2 does not have all of its child HWNDs in place when `build()` returns —
+/// the render-widget child is created when content loads, which is later still. So
+/// the one sweep on the line after `build()` can find nothing to mark, the child
+/// that captures the mouse stays opaque to input, and the overlay swallows every
+/// click on the desktop underneath it, leaving an app that `closable(false)` and
+/// `skip_taskbar(true)` also make impossible to close. Sweeping again is the fix,
+/// not a retry-until-it-works hedge: the ex-style bits are idempotent, so a sweep
+/// that finds an already-marked window changes nothing. The tail is long enough to
+/// outlast a cold WebView2 start on a slow machine.
+#[cfg(target_os = "windows")]
+const CLICKTHROUGH_RESWEEP_DELAYS_MS: [u64; 5] = [50, 150, 400, 1000, 2500];
+
+/// Mark the children WebView2 had not created yet when the overlay was built.
+/// See `CLICKTHROUGH_RESWEEP_DELAYS_MS` for why one sweep is not enough.
+#[cfg(target_os = "windows")]
+fn schedule_clickthrough_resweeps<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    let app = window.app_handle().clone();
+    let label = window.label().to_string();
+
+    std::thread::spawn(move || {
+        for delay_ms in CLICKTHROUGH_RESWEEP_DELAYS_MS {
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+
+            // The overlay closes on its own schedule; a sweep still pending then
+            // has nothing left to mark.
+            if app.get_webview_window(&label).is_none() {
+                return;
+            }
+
+            let sweep_app = app.clone();
+            let sweep_label = label.clone();
+            let dispatched = app.run_on_main_thread(move || {
+                if let Some(window) = sweep_app.get_webview_window(&sweep_label) {
+                    propagate_transparent_to_children(&window);
+                }
+            });
+            if dispatched.is_err() {
+                return;
+            }
+        }
+    });
 }
 
 /// Walk every child HWND of the overlay window and apply WS_EX_TRANSPARENT | WS_EX_LAYERED
@@ -487,6 +535,43 @@ pub fn close_display_overlay<R: Runtime>(
     Ok(overlay_result("OVERLAY_CLOSED", "Display overlay closed."))
 }
 
+/// Close whichever calibration overlay is open, on whatever display.
+///
+/// `close_display_overlay` takes a display id because its callers know one.
+/// The tray rescue does not, and must not have to ask the frontend for it —
+/// see `close_all_overlays` in `lib.rs` for why that path stays in the backend.
+pub(crate) fn close_any_display_overlay<R: Runtime>(
+    app: &AppHandle<R>,
+    overlay_state: &OverlayState,
+) -> Result<(), String> {
+    let mut runtime = overlay_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
+
+    apply_overlay_close_all_transition(&mut runtime, |label| close_overlay_window(app, label))
+}
+
+/// Clear the bookkeeping whether or not the destroy worked, then report the
+/// destroy's outcome. A label left pointing at a window that could not be
+/// closed makes the *next* open refuse as well, which turns one stuck overlay
+/// into a permanently unusable surface — and the rescue exists precisely for
+/// the case where things are already going wrong.
+fn apply_overlay_close_all_transition(
+    runtime: &mut OverlayRuntimeState,
+    close: impl FnOnce(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    let close_result = match runtime.active_overlay_label.as_deref() {
+        Some(label) => close(label),
+        None => Ok(()),
+    };
+
+    runtime.active_display_id = None;
+    runtime.active_overlay_label = None;
+
+    close_result
+}
+
 /// Push an updated preview payload into the currently open calibration
 /// overlay without reopening the window.
 #[tauri::command]
@@ -547,7 +632,10 @@ mod tests {
 
     use tauri::WebviewUrl;
 
-    use super::{apply_overlay_open_transition, build_overlay_webview_url, OverlayRuntimeState};
+    use super::{
+        apply_overlay_close_all_transition, apply_overlay_open_transition,
+        build_overlay_webview_url, OverlayRuntimeState,
+    };
 
     #[test]
     fn overlay_webview_url_uses_app_surface() {
@@ -574,6 +662,41 @@ mod tests {
         assert_eq!(result.code, "OVERLAY_OPENED");
         assert_eq!(runtime.active_display_id.as_deref(), Some("display-1"));
         assert_eq!(runtime.active_overlay_label.as_deref(), Some("window-1"));
+    }
+
+    /// The tray rescue is reached when an overlay is already misbehaving, so a
+    /// destroy that fails must not leave the label behind — the next open reads
+    /// it as "one is still up" and the surface never recovers.
+    #[test]
+    fn close_all_clears_the_bookkeeping_even_when_the_destroy_fails() {
+        let mut runtime = OverlayRuntimeState {
+            active_display_id: Some("display-1".to_string()),
+            active_overlay_label: Some("window-1".to_string()),
+        };
+
+        let result = apply_overlay_close_all_transition(&mut runtime, |label| {
+            assert_eq!(label, "window-1");
+            Err("OVERLAY_WINDOW_CLOSE_FAILED: wedged".to_string())
+        });
+
+        assert!(
+            result.is_err(),
+            "the destroy failure must still be reported"
+        );
+        assert_eq!(runtime.active_display_id, None);
+        assert_eq!(runtime.active_overlay_label, None);
+    }
+
+    #[test]
+    fn close_all_with_no_overlay_open_does_not_reach_the_destroy() {
+        let mut runtime = OverlayRuntimeState::default();
+
+        let result = apply_overlay_close_all_transition(&mut runtime, |_| {
+            panic!("nothing is open, so nothing should be destroyed")
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(runtime.active_overlay_label, None);
     }
 
     #[test]
