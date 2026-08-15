@@ -84,7 +84,7 @@ check(
 // `Cargo.lock` is refreshed by `cargo check`; a stale entry means the lockfile
 // was not regenerated after the bump, and the release build would disagree.
 const lockVersion = read("src-tauri/Cargo.lock")
-  .match(/\[\[package\]\]\nname = "lumasync"\nversion = "([^"]+)"/)?.[1];
+  .match(/\[\[package\]\]\r?\nname = "lumasync"\r?\nversion = "([^"]+)"/)?.[1];
 check(
   "Cargo.lock is refreshed for lumasync",
   lockVersion === cargoVersion,

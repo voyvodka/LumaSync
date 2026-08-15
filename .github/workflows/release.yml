@@ -398,7 +398,18 @@ jobs:
             --log-file "$HOME/.local/share/com.lumasync.app/logs/lumasync.log" \
             --hard-kill
 
-      # Windows has no launch smoke step — see #181.
+      - name: Launch smoke test on the Windows release binary
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $binary = "src-tauri/target/release/lumasync.exe"
+          if (-not (Test-Path -LiteralPath $binary)) {
+            throw "Windows release binary not found at $binary"
+          }
+          node scripts/verify/launch-smoke.mjs `
+            --binary $binary `
+            --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync.log" `
+            --hard-kill
 
   publish:
     name: Publish release
