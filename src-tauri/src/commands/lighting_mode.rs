@@ -2910,7 +2910,7 @@ pub fn start_led_test_pattern<R: Runtime>(
 
     emit_preview_state_changed(&app);
 
-    let outcome = if result.status.code == "AMBILIGHT_MODE_STARTED" {
+    let outcome = if is_ambilight_start_ok(&result.status.code) {
         let code = if preview_only {
             LED_TEST_PATTERN_PREVIEW_ONLY
         } else {
@@ -2933,6 +2933,13 @@ pub fn start_led_test_pattern<R: Runtime>(
         }
     };
     Ok(outcome)
+}
+
+/// A test pattern reaches the lights through either arm of `apply_mode_change`:
+/// a fresh worker, or the in-place retune a running test takes. Accepting only
+/// the former reported every change after the first as a failed start.
+fn is_ambilight_start_ok(code: &str) -> bool {
+    code == "AMBILIGHT_MODE_STARTED" || code == "AMBILIGHT_MODE_UPDATED"
 }
 
 /// Stop the running LED test pattern and restore the mode that was active
@@ -4610,6 +4617,29 @@ mod lighting_mode_tests {
 
     fn red_chase() -> TestPatternKind {
         TestPatternKind::Chase { r: 255, g: 0, b: 0 }
+    }
+
+    /// The retune landed in #264 but `start_led_test_pattern` still only
+    /// accepted `AMBILIGHT_MODE_STARTED`, so every change after the first
+    /// reported "test pattern could not start" over a test that was running.
+    #[test]
+    fn a_retuned_test_is_a_success_not_a_failure() {
+        assert!(
+            super::is_ambilight_start_ok("AMBILIGHT_MODE_STARTED"),
+            "a fresh start is a success"
+        );
+        assert!(
+            super::is_ambilight_start_ok("AMBILIGHT_MODE_UPDATED"),
+            "an in-place retune reaches the lights just as a restart does"
+        );
+        assert!(
+            !super::is_ambilight_start_ok("AMBILIGHT_MODE_START_FAILED"),
+            "a real failure must still read as one"
+        );
+        assert!(
+            !super::is_ambilight_start_ok("DEVICE_NOT_CONNECTED"),
+            "a gated start must still read as a failure"
+        );
     }
 
     /// R15: a colour or speed change during a running test used to tear the

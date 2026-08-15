@@ -8,6 +8,7 @@ import type {
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
+import { moveHueChannelToWorld, nudgeHueChannel } from "../model/hueChannelPosition";
 import {
   furnitureObjectId,
   parseObjectId,
@@ -138,6 +139,7 @@ export function useRoomMapObjects({
   }, [selectedId, deleteById]);
 
   const handleRotate = useCallback(() => {
+    if (selectedId && isLocked(selectedId)) return;
     const parsed = selectedId ? parseObjectId(selectedId) : null;
     if (parsed?.kind !== "furniture") return;
     const updated = config.furniture.map((f) => {
@@ -146,7 +148,7 @@ export function useRoomMapObjects({
       return { ...f, rotation: (current + 15) % 360 };
     });
     void updateConfig({ furniture: updated });
-  }, [selectedId, config.furniture, updateConfig]);
+  }, [selectedId, config.furniture, updateConfig, isLocked]);
 
   const handleDuplicate = useCallback(
     (id: string) => {
@@ -171,7 +173,7 @@ export function useRoomMapObjects({
 
   const handleArrowNudge = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      if (!selectedId) return;
+      if (!selectedId || isLocked(selectedId)) return;
       const arrowKeys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"];
       if (!arrowKeys.includes(e.key)) return;
       e.preventDefault();
@@ -217,13 +219,13 @@ export function useRoomMapObjects({
         void updateConfig({
           hueChannels: config.hueChannels.map((ch) =>
             ch.channelIndex === parsed.channelIndex
-              ? { ...ch, x: Math.max(-1, Math.min(1, ch.x + hdx)), y: Math.max(-1, Math.min(1, ch.y + hdy)) }
+              ? nudgeHueChannel(ch, config.zones, hdx, hdy)
               : ch,
           ),
         });
       }
     },
-    [selectedId, config, updateConfig],
+    [selectedId, config, updateConfig, isLocked],
   );
 
   const handleUpdatePosition = useCallback(
@@ -243,7 +245,13 @@ export function useRoomMapObjects({
           }),
         });
       } else if (parsed?.kind === "hue") {
-        void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === parsed.channelIndex ? { ...ch, x, y } : ch)) });
+        void updateConfig({
+          hueChannels: config.hueChannels.map((ch) =>
+            ch.channelIndex === parsed.channelIndex
+              ? moveHueChannelToWorld(ch, config.zones, x, y)
+              : ch,
+          ),
+        });
       } else if (parsed?.kind === "image") {
         void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, offsetX: x, offsetY: y } : l)) });
       }
