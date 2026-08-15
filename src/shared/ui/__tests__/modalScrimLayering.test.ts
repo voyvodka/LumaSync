@@ -1,5 +1,5 @@
 // A scrim over the title bar leaves the window undraggable and unclosable —
-// that bar is the drag region. Source-level: jsdom applies no stylesheet.
+// that bar is the drag region. Source-level: happy-dom applies no stylesheet.
 
 /// <reference types="node" />
 import { readFileSync } from "node:fs";

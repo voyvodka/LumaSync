@@ -260,3 +260,87 @@ describe("HsvColorPicker hex input", () => {
     expect(input.getAttribute("aria-invalid")).toBe("false");
   });
 });
+
+// Until the test environment installed its own `localStorage`, every one of
+// these paths threw into `loadRecent`/`saveRecent`'s catch and the strip was
+// silently inert under Node >= 24.
+describe("HsvColorPicker recent colors", () => {
+  const RECENT_KEY = "lm-recent-colors";
+
+  function renderPicker(onChange = vi.fn()) {
+    const utils = render(<HsvColorPicker value="#ffffff" onChange={onChange} />);
+    const input = utils.container.querySelector("input[type='text']") as HTMLInputElement;
+    return { ...utils, input, onChange };
+  }
+
+  function commit(input: HTMLInputElement, hex: string): void {
+    fireEvent.change(input, { target: { value: hex } });
+    fireEvent.blur(input);
+  }
+
+  function storedRecent(): unknown {
+    return JSON.parse(window.localStorage.getItem(RECENT_KEY) ?? "null");
+  }
+
+  function swatchTitles(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll("button[role='listitem']")).map(
+      (b) => b.getAttribute("title") ?? "",
+    );
+  }
+
+  it("persists a committed hex and restores it on a fresh mount", () => {
+    const first = renderPicker();
+    commit(first.input, "1a2b3c");
+    expect(storedRecent()).toEqual(["#1a2b3c"]);
+    first.unmount();
+
+    const second = renderPicker();
+    expect(swatchTitles(second.container)).toEqual(["#1A2B3C"]);
+  });
+
+  it("moves a re-picked color to the front instead of duplicating it", () => {
+    const { input, container } = renderPicker();
+    commit(input, "111111");
+    commit(input, "222222");
+    commit(input, "111111");
+
+    expect(storedRecent()).toEqual(["#111111", "#222222"]);
+    expect(swatchTitles(container)).toEqual(["#111111", "#222222"]);
+  });
+
+  it("caps the strip at eight entries, dropping the oldest", () => {
+    const { input, container } = renderPicker();
+    for (let i = 1; i <= 9; i += 1) {
+      commit(input, `${i}${i}${i}${i}${i}${i}`);
+    }
+
+    const stored = storedRecent() as string[];
+    expect(stored).toHaveLength(8);
+    expect(stored[0]).toBe("#999999");
+    expect(stored).not.toContain("#111111");
+    expect(swatchTitles(container)).toHaveLength(8);
+  });
+
+  it("ignores a stored payload that is not an array", () => {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify({ nope: true }));
+    const { container } = renderPicker();
+    expect(swatchTitles(container)).toEqual([]);
+  });
+
+  it("drops stored entries that are not six-digit hex", () => {
+    window.localStorage.setItem(
+      RECENT_KEY,
+      JSON.stringify(["#1a2b3c", "red", "#abc", 42, "#AABBCC"]),
+    );
+    const { container } = renderPicker();
+    expect(swatchTitles(container)).toEqual(["#1A2B3C", "#AABBCC"]);
+  });
+
+  it("survives a corrupt payload that is not JSON at all", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    window.localStorage.setItem(RECENT_KEY, "{not json");
+    const { container } = renderPicker();
+    expect(swatchTitles(container)).toEqual([]);
+    expect(logged).toHaveBeenCalled();
+  });
+});

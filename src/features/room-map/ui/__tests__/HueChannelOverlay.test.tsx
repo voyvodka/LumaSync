@@ -14,12 +14,7 @@ import { render, fireEvent, cleanup } from "@testing-library/react";
 import { HueChannelOverlay } from "../HueChannelOverlay";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 
-// jsdom does not implement setPointerCapture; stub it so React stays happy.
 beforeEach(() => {
-  if (!(HTMLElement.prototype as { setPointerCapture?: unknown }).setPointerCapture) {
-    HTMLElement.prototype.setPointerCapture = vi.fn();
-    HTMLElement.prototype.releasePointerCapture = vi.fn();
-  }
   cleanup();
 });
 
@@ -134,7 +129,7 @@ describe("HueChannelOverlay — W4-J #3 simultaneous zone visibility", () => {
     expect(passiveBounds).toHaveLength(0);
 
     // The passive layer paints at `z-index: 17` (behind the active
-    // chrome) and the active bounds paint at `z-index: 18`. jsdom
+    // chrome) and the active bounds paint at `z-index: 18`. happy-dom
     // silently drops `color-mix()` declarations from the inline
     // `border` shorthand, so we count layers via `z-index` instead of
     // dashed-border presence — the structural signal is enough to

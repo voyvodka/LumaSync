@@ -4,24 +4,16 @@
  * ROOM-02: furniture renders with label and shows resize handles when selected
  * and unlocked.
  *
- * Drag resize is pointer-event driven with coordinate math — jsdom does not
+ * Drag resize is pointer-event driven with coordinate math — happy-dom does not
  * compute getBoundingClientRect, so delta assertions require a real browser.
  * The tests here pin structural rendering: label visibility, handle presence,
  * and locked-state suppression of handles.
  */
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 import { FurnitureObject } from "../FurnitureObject";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
-
-// jsdom does not implement setPointerCapture / releasePointerCapture
-beforeEach(() => {
-  if (!(HTMLElement.prototype as { setPointerCapture?: unknown }).setPointerCapture) {
-    HTMLElement.prototype.setPointerCapture = vi.fn();
-    HTMLElement.prototype.releasePointerCapture = vi.fn();
-  }
-});
 
 const BASE_PLACEMENT: FurniturePlacement = {
   id: "sofa-1",

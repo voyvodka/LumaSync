@@ -285,15 +285,10 @@ describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)
 // ---------------------------------------------------------------------------
 
 describe("RoomMapEditor (pending)", () => {
-  // requires jsdom layout (offsetWidth/offsetHeight always 0 in jsdom);
-  // pxPerMeter is a fixed constant (80) in production, not derived from DOM
-  // measurements — ratio assertion needs a real browser environment; revisit
-  // when Playwright component tests are added.
+  // Both need real layout — happy-dom reports offsetWidth and
+  // getBoundingClientRect as 0 — so they belong in the WDIO e2e suite.
   it.todo("ROOM-01: renders canvas with room dimensions proportional to config");
 
-  // requires coordinate-level assertion of Hue channel DOM positions relative
-  // to the TV anchor; needs real getBoundingClientRect values which jsdom does
-  // not compute — revisit when Playwright component tests are added.
   it.todo("ROOM-06: TV anchor acts as center reference — Hue channels positioned relative to TV");
 
   // ROOM-08 removed in v1.5.x — backgroundImagePath field was migrated to the
