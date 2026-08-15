@@ -30,6 +30,8 @@ import { OriginMarker } from "./OriginMarker";
 import { ContextMenu, type ContextMenuAction } from "./ContextMenu";
 import { LeftToolbar } from "./LeftToolbar";
 import { MouseCoordinateDisplay } from "./MouseCoordinateDisplay";
+import { ZoomControl } from "./ZoomControl";
+import { canDeleteObjectKind } from "../model/objectCapability";
 import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
@@ -57,6 +59,8 @@ interface RoomMapEditorProps {
    */
   hueReachable?: boolean;
 }
+
+const IS_MAC = navigator.platform.includes("Mac");
 
 // Literal keys, not `\`…${code}\``, so the orphan ratchet can see each one.
 const HUE_ZONE_REJECTION_KEYS = {
@@ -311,7 +315,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const getContextMenuActions = useCallback((): ContextMenuAction[] => {
     if (!contextMenu) return [];
     const id = contextMenu.targetId;
-    const isMac = navigator.platform.includes("Mac");
     const actions: ContextMenuAction[] = [];
 
     const parsed = parseObjectId(id);
@@ -319,7 +322,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     if (canDuplicate) {
       actions.push({
         label: t("roomMap:contextMenu.duplicate"),
-        shortcut: isMac ? "\u2318D" : "Ctrl+D",
+        shortcut: IS_MAC ? "\u2318D" : "Ctrl+D",
         onClick: () => handleDuplicate(id),
       });
     }
@@ -354,12 +357,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       });
     }
 
-    actions.push({
-      label: t("roomMap:contextMenu.delete"),
-      shortcut: isMac ? "\u232B" : "Del",
-      danger: true,
-      onClick: () => deleteById(id),
-    });
+    if (canDeleteObjectKind(parsed?.kind)) {
+      actions.push({
+        label: t("roomMap:contextMenu.delete"),
+        shortcut: IS_MAC ? "\u232B" : "Del",
+        danger: true,
+        onClick: () => deleteById(id),
+      });
+    }
 
     return actions;
   }, [contextMenu, t, handleDuplicate, handleRotate, deleteById, config.furniture, config.imageLayers, handleRenameFurniture]);
@@ -584,6 +589,16 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             />
 
           </RoomMapCanvas>
+
+          <ZoomControl
+            zoom={zoom}
+            canvasSize={canvasSize}
+            panOffset={panOffset}
+            onZoomChange={setZoom}
+            onPanChange={setPanOffset}
+            onFitToView={() => fitToView(16)}
+            isMac={IS_MAC}
+          />
 
           {/* Mouse coordinate display — fixed to bottom-right of canvas container */}
           <MouseCoordinateDisplay

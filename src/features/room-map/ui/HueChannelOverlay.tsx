@@ -4,6 +4,7 @@ import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
+import { resolveHueChannelWorld } from "../model/hueChannelPosition";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
@@ -334,6 +335,13 @@ export function HueChannelOverlay({
         (z) => !activeHueZone || z.id !== activeHueZone.id,
       );
 
+  // `allHueZones` is canonical, but an embed may pass only the active zone —
+  // keep resolving through it so a bound channel does not fall back to `ch.x/y`.
+  const resolvableZones =
+    activeHueZone && !(allHueZones ?? []).some((z) => z.id === activeHueZone.id)
+      ? [...(allHueZones ?? []), activeHueZone]
+      : allHueZones ?? [];
+
   return (
     <>
       {/* W4-J #3 — passive zone bounds (read-only). Sits behind the
@@ -516,26 +524,7 @@ export function HueChannelOverlay({
       {channels.map((ch) => {
         // Render from zone-relative coords for any bound channel: the absolute
         // `ch.x/y` is stale leftover and passive zones would visibly drift.
-        let worldX = ch.x;
-        let worldY = ch.y;
-        let boundZone = ch.zoneId
-          ? allHueZones?.find((z) => z.id === ch.zoneId) ?? null
-          : null;
-        if (!boundZone && ch.zoneId && activeHueZone?.id === ch.zoneId) {
-          boundZone = activeHueZone;
-        }
-        if (boundZone && ch.zoneRelativePosition) {
-          worldX = clamp(
-            boundZone.centerX + boundZone.scaleX * ch.zoneRelativePosition.x,
-            -1,
-            1,
-          );
-          worldY = clamp(
-            boundZone.centerY + boundZone.scaleY * ch.zoneRelativePosition.y,
-            -1,
-            1,
-          );
-        }
+        const { x: worldX, y: worldY } = resolveHueChannelWorld(ch, resolvableZones);
         // NaN has real sources here (failed mid-drag invoke, `pxPerMeter` 0 at
         // mount) and React would stamp it into `style.left`. See room-map.md.
         const rawLeftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;

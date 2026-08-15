@@ -13,6 +13,7 @@ import { buildLedSequence } from "../model/indexMapping";
 import { deriveDefaultCounts, resetToManual } from "../model/templates";
 import {
   validateCalibrationConfig,
+  type CalibrationValidationCode,
   type CalibrationValidationError,
 } from "../model/validation";
 import {
@@ -103,6 +104,20 @@ function anchorFromEdgeEndpoint(edge: AnchorEdge, endpoint: AnchorEndpoint): Led
   if (endpoint === "gap-left") return "bottom-gap-left";
   return `${edge}-${endpoint}` as LedStartAnchor;
 }
+
+/** Literal keys, never a template: the orphan ratchet scans source text, so an
+ *  interpolated key reads as referenced nowhere. Typing it by the code union
+ *  also turns a new validation code into a compile error, not a blank line. */
+const VALIDATION_MESSAGE_KEYS = {
+  COUNTS_REQUIRED: "calibration:page.validation.COUNTS_REQUIRED",
+  SEGMENT_NEGATIVE: "calibration:page.validation.SEGMENT_NEGATIVE",
+  TOTAL_MISMATCH: "calibration:page.validation.TOTAL_MISMATCH",
+  BOTTOM_MISSING_NEGATIVE: "calibration:page.validation.BOTTOM_MISSING_NEGATIVE",
+  BOTTOM_MISSING_EXCEEDS_BOTTOM: "calibration:page.validation.BOTTOM_MISSING_EXCEEDS_BOTTOM",
+  NO_LEDS_CONFIGURED: "calibration:page.validation.NO_LEDS_CONFIGURED",
+  // `satisfies`, not an annotation: `t()` needs the literal types, and this
+  // still fails to compile if a code is added to the union without a string.
+} as const satisfies Record<CalibrationValidationCode, string>;
 
 export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisplayChange }: CalibrationPageProps) {
   const { t } = useTranslation();
@@ -422,7 +437,11 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
     <div className="flex h-full min-h-0 flex-col">
       {/* Error strip */}
       {(testPatternError || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
-        <div className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-950/60 px-3.5 py-2.5">
+        <div
+          role="alert"
+          aria-live="polite"
+          className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-950/60 px-3.5 py-2.5"
+        >
           {displayTarget.blocked && (
             <ErrorLine text={t("calibration:overlay.blockedReason", {
               code: displayTarget.blockedCode ?? DISPLAY_OVERLAY_STATUS.OPEN_FAILED,
@@ -431,7 +450,10 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
           )}
           {testPatternError && <ErrorLine text={testPatternError} />}
           {validationErrors?.map((error) => (
-            <ErrorLine key={`${error.code}:${error.field}`} text={`${error.code}: ${error.field}`} />
+            <ErrorLine
+              key={`${error.code}:${error.field}`}
+              text={t(VALIDATION_MESSAGE_KEYS[error.code], { field: error.field })}
+            />
           ))}
         </div>
       )}
@@ -441,8 +463,8 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         {/* Stage */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Stage header */}
-          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-zinc-800 px-6 py-2.5">
-            <div className="flex min-w-0 items-baseline gap-2.5">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-zinc-800 px-6 py-2.5">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
               <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.16em] text-amber-400">
                 {t("calibration:page.totalStrip")}
               </span>
@@ -450,11 +472,11 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
                 {totalLeds}
               </span>
               <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.1em] text-zinc-500">
-                LEDs
+                {t("calibration:page.ledsUnit")}
               </span>
-              <span className="[font-family:var(--lm-mono)] text-[10px] text-zinc-600">·</span>
-              <span className="[font-family:var(--lm-mono)] text-[10px] text-zinc-500">
-                ≈ {meterLength} m · {powerWatts} W
+              <span aria-hidden className="[font-family:var(--lm-mono)] text-[10px] text-zinc-600">·</span>
+              <span className="whitespace-nowrap [font-family:var(--lm-mono)] text-[10px] text-zinc-500">
+                {t("calibration:page.lengthAndPower", { meters: meterLength, watts: powerWatts })}
               </span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
@@ -701,11 +723,12 @@ function DockSection({ title, children }: { title: string; children: React.React
 }
 
 function EdgeSummary({ label, value }: { label: string; value: number }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-baseline gap-1.5 px-4 py-2">
       <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-zinc-500">{label}</span>
       <span className="[font-family:var(--lm-mono)] text-sm font-medium text-zinc-100">{value}</span>
-      <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.1em] text-zinc-600">LED</span>
+      <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.1em] text-zinc-600">{t("calibration:page.ledUnit")}</span>
     </div>
   );
 }
