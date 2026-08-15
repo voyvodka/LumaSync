@@ -1992,8 +1992,8 @@ fn apply_mode_change_inner(
     // Fast path: ambilight already running and only settings changed (brightness,
     // black border detection, smoothing alpha) — update live atomics in-place
     // without stopping the worker or recreating SCStream.
-    // NOTE: led_calibration, color_correction, or firmware_profile changes force a worker
-    // restart because they affect the LED encoder pipeline, not just runtime atomics.
+    // NOTE: led_calibration, color_correction, firmware_profile and chip_type all force a worker
+    // restart — each is read only when the encoder is built, so retuning atomics ignores them.
     if normalized_next.kind == LightingModeKind::Ambilight
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
@@ -2002,6 +2002,7 @@ fn apply_mode_change_inner(
         && normalized_next.led_calibration == owner.active_mode.led_calibration
         && normalized_next.color_correction == owner.active_mode.color_correction
         && normalized_next.firmware_profile == owner.active_mode.firmware_profile
+        && normalized_next.chip_type == owner.active_mode.chip_type
         && preview_retune
     {
         if let Some(live) = &owner.ambilight_live {
@@ -3997,9 +3998,9 @@ mod lighting_mode_tests {
     use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 
     use super::{
-        apply_mode_change, normalize_mode_config, AmbilightPayload, LightingModeConfig,
-        LightingModeKind, LightingRuntimeOwner, SolidColorPayload, TestPatternConfig,
-        TestPatternKind, TestPatternSpeed,
+        apply_mode_change, normalize_mode_config, AmbilightPayload, LedChipType,
+        LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
+        TestPatternConfig, TestPatternKind, TestPatternSpeed,
     };
     use crate::commands::hue::frame::{
         HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
@@ -4767,6 +4768,78 @@ mod lighting_mode_tests {
         );
         assert_eq!(to_test.status.code, "AMBILIGHT_MODE_STARTED");
         assert!(owner.preview.pattern_live.is_some());
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
+    }
+
+    /// The chip type decides the wire format — SK6812 RGBW emits four bytes per
+    /// pixel where WS2812B emits three — and it is read only when the encoder is
+    /// built. Left out of the fast-path guard, a chip change took the in-place
+    /// retune and the strip kept being driven with the previous format.
+    #[test]
+    fn fast_path_guard_restarts_the_worker_on_a_chip_type_change() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_with_fake_sender();
+
+        let mut start = ambilight_with_payload(AmbilightPayload {
+            brightness: 0.8,
+            ..Default::default()
+        });
+        start.chip_type = Some(LedChipType::Ws2812bGrb);
+        let brought_up = apply_mode_change(
+            &mut owner,
+            start.clone(),
+            true,
+            Some("COM-CHIP"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(brought_up.status.code, "AMBILIGHT_MODE_STARTED");
+
+        let mut swapped = start.clone();
+        swapped.chip_type = Some(LedChipType::Sk6812Rgbw);
+        let after = apply_mode_change(
+            &mut owner,
+            swapped,
+            true,
+            Some("COM-CHIP"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(
+            after.status.code, "AMBILIGHT_MODE_STARTED",
+            "a chip-type change must rebuild the encoder, not retune atomics",
+        );
+
+        // …while an unchanged chip still takes the cheap path.
+        let retune = apply_mode_change(
+            &mut owner,
+            {
+                let mut same = start.clone();
+                same.chip_type = Some(LedChipType::Sk6812Rgbw);
+                same.ambilight = Some(AmbilightPayload {
+                    brightness: 0.3,
+                    ..Default::default()
+                });
+                same
+            },
+            true,
+            Some("COM-CHIP"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(retune.status.code, "AMBILIGHT_MODE_UPDATED");
 
         let mut cleanup_trace = None;
         super::stop_previous(&mut owner, &mut cleanup_trace);
