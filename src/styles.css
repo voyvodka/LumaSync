@@ -20,6 +20,9 @@
      palette is dark-only; light variants are intentionally absent
      because the app is dark-mode-primary.
      ───────────────────────────────────────────────────────────────── */
+  /* Mirrors `TITLE_BAR_HEIGHT_PX` — a modal scrim must start below the bar or
+     it swallows the drag region and the window controls. */
+  --lm-titlebar-h: 36px;
   --lm-bg:        #07080a;
   --lm-panel:     #0e1014;
   --lm-panel-2:   #14171d;
@@ -1004,9 +1007,19 @@
 }
 
 /* ── Updater modal (Phase 4) ────────────────────────────────────────── */
+.lm-modal-scrim {
+  position: fixed;
+  inset: var(--lm-titlebar-h) 0 0 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
 .lm-updater-backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--lm-titlebar-h) 0 0 0;
   z-index: 50;
   display: grid;
   place-items: center;
