@@ -533,6 +533,11 @@ export const WLED_STATUS = {
   CLIENT_BUILD_FAILED: "WLED_CLIENT_BUILD_FAILED",
   /** A send was attempted before `connect_wled_sink` established the sink. */
   SINK_NOT_STARTED: "WLED_SINK_NOT_STARTED",
+  /** The `spawn_blocking` worker behind the probe died. A local fault: the
+   * device was never reached, so it says nothing about the bridge. */
+  DISCOVERY_WORKER_FAILED: "WLED_DISCOVERY_WORKER_FAILED",
+  /** Same, for the test worker. */
+  TEST_WORKER_FAILED: "WLED_TEST_WORKER_FAILED",
 } as const;
 
 export type WledStatusCode = (typeof WLED_STATUS)[keyof typeof WLED_STATUS];
