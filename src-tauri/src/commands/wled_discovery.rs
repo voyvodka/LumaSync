@@ -356,8 +356,23 @@ fn info_to_device(ip: &str, info: WledInfoResponse) -> WledDeviceInfo {
 }
 
 /// Probe a WLED device's `/json/info` endpoint and report its identity.
+// `async fn` + `spawn_blocking` because a sync command runs on the main thread:
+// an unreachable device froze the UI for the whole `WLED_HTTP_TIMEOUT`.
 #[tauri::command]
-pub fn discover_wled_devices(request: WledDiscoveryRequest) -> WledDiscoveryResponse {
+pub async fn discover_wled_devices(request: WledDiscoveryRequest) -> WledDiscoveryResponse {
+    tokio::task::spawn_blocking(move || discover_wled_devices_blocking(request))
+        .await
+        .unwrap_or_else(|join_error| WledDiscoveryResponse {
+            status: WledCommandStatus::err(
+                "WLED_DISCOVERY_WORKER_FAILED",
+                "WLED discovery worker terminated unexpectedly.",
+                Some(join_error.to_string()),
+            ),
+            devices: Vec::new(),
+        })
+}
+
+fn discover_wled_devices_blocking(request: WledDiscoveryRequest) -> WledDiscoveryResponse {
     match fetch_wled_info(&request.ip) {
         Ok(info) => {
             let device = info_to_device(&request.ip, info);
@@ -470,8 +485,22 @@ pub fn get_wled_sink_status(
 
 /// Send a one-off red-ramp test frame to a WLED device without registering
 /// it as the active sink.
+// Same main-thread reasoning as `discover_wled_devices`, and worse here: two HTTP
+// round-trips with a `WLED_LIVE_READBACK_DELAY` sleep between them.
 #[tauri::command]
-pub fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
+pub async fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
+    tokio::task::spawn_blocking(move || test_wled_bridge_blocking(request))
+        .await
+        .unwrap_or_else(|join_error| {
+            WledTestResponse::failed(WledCommandStatus::err(
+                "WLED_TEST_WORKER_FAILED",
+                "WLED test worker terminated unexpectedly.",
+                Some(join_error.to_string()),
+            ))
+        })
+}
+
+fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
     let device = &request.device;
 
     let info = match fetch_wled_info(&device.ip) {
