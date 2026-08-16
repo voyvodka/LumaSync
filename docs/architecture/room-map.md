@@ -54,6 +54,18 @@ That is a collision fix, not an answer to the larger question — there is still
 path, so a hand-stamped index is not known to correspond to any real channel. Whether the editor
 should be minting these at all is open.
 
+**How far a wrong index can actually reach.** Less far than it looks, and worth knowing before
+treating one as an emergency. The live frame path never reads the room map: `flatten_light_slots`
+in `commands/hue/sender.rs` builds its light slots from `channels.iter().enumerate()` over the
+*bridge's* channel array, so a bad room-map index cannot change which light gets which colour. The
+bridge write-back does not carry a minted index either — `HueChannelMapPanel` rebuilds the payload
+from the live `channels` array, keying on `ch.index`, so an index matching no bridge channel is
+never PUT. The one place it does bite is `resolvePlacement`, which looks the persisted placement up
+*by the bridge channel's* index: a hand-placed marker whose index collides with a real channel
+supplies that channel's position, and that position does reach the bridge on "Save to bridge". So
+the failure mode is a wrong **position** for a real channel, not a wrong light and not a wrong
+colour. That changes when room-aware ambilight lands and the live path starts reading placements.
+
 **A zone is a physical square in metres, which means its two cube-space scales diverge in a
 non-square room.** The inspector edits one edge length; `scaleX` and `scaleY` are derived from it
 against the room's width and depth independently, so a 1 m square in a 5×4 m room is not a uniform
