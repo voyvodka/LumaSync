@@ -1371,7 +1371,9 @@ checkWireUnion(
   constMembers(deviceSource, "WLED_STATUS").filter(
     (c) => c !== "WLED_SINK_NOT_STARTED" && c !== "WLED_LIVE_LED_COUNT_MISMATCH"
   ),
-  14
+  // 14 → 16: the two `spawn_blocking` worker-death codes, added when discovery
+  // and test moved off the main thread.
+  16
 );
 
 const rustHueRuntimeSource = walkRustSourceFiles(resolve(ROOT, "src-tauri/src/commands/hue"))
