@@ -335,8 +335,25 @@ export function LightsSection({
   const { snapshot: liveTelemetry } = useFullTelemetryPoll(isAmbilight, TELEMETRY_POLL_INTERVAL_MS);
   const liveUsb = liveTelemetry?.usb ?? null;
 
-  const latencyLabel = liveUsb ? `${Math.round(liveUsb.frameLatencyMs)}ms` : "—";
-  const fpsLabel = liveUsb ? `${Math.round(liveUsb.sendFps)} fps` : "—";
+  // `usb` is non-nullable in the snapshot, so a Hue-only session still gets a
+  // struct — of zeros. Reading it unconditionally painted "0ms / 0 fps" under a
+  // "Signal" heading while Hue streamed fine, which reads as a dead pipeline.
+  const showUsbSignal = usbSelected;
+  const liveHue = liveTelemetry?.hue ?? null;
+
+  const latencyLabel =
+    showUsbSignal && liveUsb ? `${Math.round(liveUsb.frameLatencyMs)}ms` : "—";
+  // Hue measures no latency, only a packet rate — so Σ carries a different unit
+  // here, and the heading names the sink rather than letting the two be confused.
+  const fpsLabel = showUsbSignal
+    ? liveUsb
+      ? `${Math.round(liveUsb.sendFps)} fps`
+      : "—"
+    : liveHue
+      ? `${Math.round(liveHue.packetRate)} pkt/s`
+      : "—";
+  const signalTitle =
+    !showUsbSignal && hueSelected ? t("lights:signal.titleHue") : t("lights:signal.title");
 
   // Gate on the flag, never on `linkMaxFps < 30` — the 0 sentinel means "no
   // serial link this session", so a raw comparison would paint every Hue-only
@@ -529,7 +546,7 @@ export function LightsSection({
           </div>
           <div className="lm-signal">
             <div className="lm-signal-head">
-              <span className="l">{t("lights:signal.title")}</span>
+              <span className="l">{signalTitle}</span>
               <span className="meta-pill">
                 <span>
                   {t("lights:signal.delta")} <b>{latencyLabel}</b>
