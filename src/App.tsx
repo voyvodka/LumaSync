@@ -391,9 +391,13 @@ function App() {
          * window. Easing matches `easeOutCubic` in `animateWindowRect`
          * so the three phases read as one continuous motion.
          */}
+        {/* A flex column, not a block: the layout sizes itself to 100% of this
+            box, so an in-flow banner above it pushed exactly its own height off
+            the bottom, past the layout's own scroll container. See
+            docs/architecture/ui-and-shell.md. */}
         <div
           ref={contentRef}
-          className={`absolute inset-0 ${
+          className={`absolute inset-0 flex flex-col ${
             isContentVisible ? "" : "pointer-events-none"
           }`}
           style={{
@@ -421,7 +425,9 @@ function App() {
             onOpenCalibration={() => void handleSectionChange(SECTION_IDS.LED_SETUP)}
             onComplete={handleOnboardingComplete}
           />
-          <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
+          <div className="min-h-0 flex-1">
+            <SettingsLayout uiMode={currentMode} {...sharedSettingsLayoutProps} />
+          </div>
         </div>
       </div>
       <StatusBar

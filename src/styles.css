@@ -3593,6 +3593,36 @@
   align-items: center;
   gap: 12px;
   color: var(--lm-ink);
+  /* The content slot is a flex column; without this the banner would give up
+     its own height rather than let the layout below it scroll. */
+  flex-shrink: 0;
+}
+
+/* Below ~480 px the single row has too little width left for the copy, and the
+   banner grew to 206 px at the compact window's 320 — half the window, against
+   the < 80 px this surface is meant to cost. Wrapping the actions onto their own
+   line gives the text the full row back. Compact is the only mode that reaches
+   this width; full mode floors at 800. */
+@media (max-width: 480px) {
+  .lm-onboarding-banner {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .lm-onboarding-banner-step {
+    order: 1;
+  }
+  .lm-onboarding-banner-text {
+    order: 2;
+  }
+  .lm-onboarding-banner-dismiss {
+    order: 3;
+  }
+  .lm-onboarding-banner-actions {
+    order: 4;
+    flex-basis: 100%;
+    justify-content: flex-end;
+  }
 }
 .lm-onboarding-banner-step {
   flex-shrink: 0;
