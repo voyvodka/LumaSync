@@ -1353,4 +1353,28 @@ describe("App mode orchestration", () => {
       }
     });
   });
+
+  // No layout engine here, so only the structure is assertable, not the heights
+  // it decides — as a block column the banner clipped 162 px at 320×480.
+  it("gives the onboarding banner its own row instead of letting it push the layout out", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("active-mode")).toBeInTheDocument();
+    });
+
+    const banner = document.querySelector(".lm-onboarding-banner");
+    expect(banner).not.toBeNull();
+
+    const slot = banner!.parentElement!;
+    expect(slot.className).toContain("flex");
+    expect(slot.className).toContain("flex-col");
+
+    // The layout sits in a sibling box that may shrink; `min-h-0` is what lets
+    // it, since a flex item's auto minimum would otherwise pin it to content.
+    const layoutBox = screen.getByTestId("active-mode").closest("div")!.parentElement!;
+    expect(layoutBox.parentElement).toBe(slot);
+    expect(layoutBox.className).toContain("flex-1");
+    expect(layoutBox.className).toContain("min-h-0");
+  });
 });
