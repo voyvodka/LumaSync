@@ -440,7 +440,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         <div
           role="alert"
           aria-live="polite"
-          className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-rose-500/25 bg-rose-950/60 px-3.5 py-2.5"
+          className="shrink-0 mx-4 mt-3 flex flex-col gap-1 rounded-lg border border-[var(--lm-red)]/25 bg-[var(--lm-red)]/10 px-3.5 py-2.5"
         >
           {displayTarget.blocked && (
             <ErrorLine text={t("calibration:overlay.blockedReason", {
@@ -463,19 +463,19 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         {/* Stage */}
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Stage header */}
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-zinc-800 px-6 py-2.5">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-b border-[var(--lm-line)] px-6 py-2.5">
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-              <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.16em] text-amber-400">
+              <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.16em] text-[var(--lm-amber)]">
                 {t("calibration:page.totalStrip")}
               </span>
-              <span className="[font-family:var(--lm-mono)] text-lg font-semibold leading-none text-zinc-100">
+              <span className="[font-family:var(--lm-mono)] text-lg font-semibold leading-none text-[var(--lm-ink)]">
                 {totalLeds}
               </span>
-              <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.1em] text-zinc-500">
+              <span className="[font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.1em] text-[var(--lm-ink-dim)]">
                 {t("calibration:page.ledsUnit")}
               </span>
-              <span aria-hidden className="[font-family:var(--lm-mono)] text-[10px] text-zinc-600">·</span>
-              <span className="whitespace-nowrap [font-family:var(--lm-mono)] text-[10px] text-zinc-500">
+              <span aria-hidden className="[font-family:var(--lm-mono)] text-[10px] text-[var(--lm-ink-faint)]">·</span>
+              <span className="whitespace-nowrap [font-family:var(--lm-mono)] text-[10px] text-[var(--lm-ink-dim)]">
                 {t("calibration:page.lengthAndPower", { meters: meterLength, watts: powerWatts })}
               </span>
             </div>
@@ -484,7 +484,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
                 type="button"
                 onClick={() => void handleOpenPreview()}
                 title={t("preview:entry.ledSetupHint")}
-                className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--lm-amber)]/40 bg-[var(--lm-amber)]/10 px-2.5 py-1.5 text-xs font-medium text-[var(--lm-amber)] transition-colors hover:bg-[var(--lm-amber)]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lm-amber)]/60"
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <rect x="3" y="5" width="18" height="12" rx="1.5" />
@@ -497,7 +497,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
               <button
                 type="button"
                 onClick={handleReset}
-                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--lm-line-2)] bg-[var(--lm-panel)] px-2.5 py-1.5 text-xs font-medium text-[var(--lm-ink)] transition-colors hover:bg-[var(--lm-panel-2)]"
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <path d="M3 12l3-3 4 4 8-8 3 3" />
@@ -511,8 +511,8 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
                 onClick={() => void handlePreviewToggle()}
                 className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   testPattern.isEnabled
-                    ? "bg-amber-500 text-zinc-950 hover:bg-amber-400"
-                    : "bg-zinc-100 text-zinc-900 hover:bg-zinc-200"
+                    ? "bg-[var(--lm-amber)] text-[var(--lm-bg)] hover:bg-[var(--lm-amber)]"
+                    : "border border-[var(--lm-line-2)] bg-[var(--lm-panel)] text-[var(--lm-ink)] hover:bg-[var(--lm-panel-2)]"
                 }`}
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -531,11 +531,11 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
             {testPattern.isEnabled && (
               <div className={`absolute top-3 left-3 flex items-center gap-1.5 rounded-md px-2 py-1 [font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.12em] ${
                 testPattern.mode === "preview-only"
-                  ? "bg-amber-500/15 text-amber-300"
-                  : "bg-emerald-500/15 text-emerald-300"
+                  ? "bg-[var(--lm-amber)]/15 text-[var(--lm-amber)]"
+                  : "bg-[var(--lm-green)]/15 text-[var(--lm-green)]"
               }`}>
                 <span className={`h-1.5 w-1.5 rounded-full ${
-                  testPattern.mode === "preview-only" ? "bg-amber-400" : "animate-pulse bg-emerald-400"
+                  testPattern.mode === "preview-only" ? "bg-[var(--lm-amber)]" : "animate-pulse bg-[var(--lm-green)]"
                 }`} />
                 {testPattern.mode === "preview-only"
                   ? t("calibration:overlay.previewOnly")
@@ -545,7 +545,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
           </div>
 
           {/* Edge summary */}
-          <div className="grid shrink-0 grid-cols-4 border-t border-zinc-800">
+          <div className="grid shrink-0 grid-cols-4 border-t border-[var(--lm-line)]">
             <EdgeSummary label={t("calibration:page.edgeTop")} value={counts.top} />
             <EdgeSummary label={t("calibration:page.edgeRight")} value={counts.right} />
             <EdgeSummary label={t("calibration:page.edgeBottom")} value={counts.bottom} />
@@ -554,12 +554,12 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
         </div>
 
         {/* Dock */}
-        <div className="flex w-[268px] shrink-0 flex-col border-l border-zinc-800 bg-black/30">
+        <div className="flex w-[268px] shrink-0 flex-col border-l border-[var(--lm-line)] bg-black/30">
           <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
           <DockSection title={t("calibration:page.dockCaptureSource")}>
             <div className="flex flex-col gap-1.5">
               {displayTarget.displays.length === 0 ? (
-                <div className="rounded-md border border-dashed border-zinc-700 px-3 py-2 text-xs text-zinc-500">
+                <div className="rounded-md border border-dashed border-[var(--lm-line-2)] px-3 py-2 text-xs text-[var(--lm-ink-dim)]">
                   {t("calibration:overlay.noDisplays")}
                 </div>
               ) : (
@@ -573,18 +573,18 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
                       onClick={() => void handleSelectDisplay(display)}
                       className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         isSelected
-                          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                          : "border-zinc-700 bg-zinc-900 hover:border-zinc-600"
+                          ? "border-[var(--lm-amber)]/40 bg-[var(--lm-amber)]/10 text-[var(--lm-amber)]"
+                          : "border-[var(--lm-line-2)] bg-[var(--lm-panel)] hover:border-[var(--lm-line-2)]"
                       }`}
                     >
-                      <div className={`h-4 w-6 shrink-0 rounded-sm border ${isSelected ? "border-amber-500" : "border-zinc-500"}`}>
-                        {isSelected && <div className="h-full w-full rounded-sm bg-amber-500/20" />}
+                      <div className={`h-4 w-6 shrink-0 rounded-sm border ${isSelected ? "border-[var(--lm-amber)]" : "border-[var(--lm-line-2)]"}`}>
+                        {isSelected && <div className="h-full w-full rounded-sm bg-[var(--lm-amber)]/20" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="truncate [font-family:var(--lm-mono)] text-[10px] uppercase tracking-[0.1em] font-medium">
                           {display.label}
                         </div>
-                        <div className="truncate [font-family:var(--lm-mono)] text-[9px] text-zinc-500">
+                        <div className="truncate [font-family:var(--lm-mono)] text-[9px] text-[var(--lm-ink-dim)]">
                           {display.width} × {display.height}
                         </div>
                       </div>
@@ -643,11 +643,11 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
           </div>
 
           {/* Sticky Save/Cancel footer */}
-          <div className="flex shrink-0 items-center gap-2 border-t border-zinc-800 bg-black/30 px-4 py-3">
+          <div className="flex shrink-0 items-center gap-2 border-t border-[var(--lm-line)] bg-black/30 px-4 py-3">
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-colors hover:bg-zinc-800"
+              className="flex-1 rounded-md border border-[var(--lm-line-2)] px-3 py-1.5 text-xs font-medium text-[var(--lm-ink)] transition-colors hover:bg-[var(--lm-panel-2)]"
             >
               {t("calibration:overlay.cancel")}
             </button>
@@ -656,7 +656,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
               disabled={isSaving}
               aria-busy={isSaving}
               onClick={() => void handleSave()}
-              className="flex-1 rounded-md bg-amber-500 px-3 py-1.5 text-xs font-semibold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+              className="flex-1 rounded-md bg-[var(--lm-amber)] px-3 py-1.5 text-xs font-semibold text-[var(--lm-bg)] transition-colors hover:bg-[var(--lm-amber)] disabled:opacity-50"
             >
               {isSaving ? t("calibration:overlay.saving") : t("calibration:overlay.save")}
             </button>
@@ -675,18 +675,18 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
           aria-labelledby="lm-discard-title"
           className="lm-modal-scrim"
         >
-          <div className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-xl">
-            <h3 id="lm-discard-title" className="text-base font-semibold text-zinc-100">
+          <div className="w-full max-w-md rounded-xl border border-[var(--lm-line-2)] bg-[var(--lm-panel)] p-5 shadow-xl">
+            <h3 id="lm-discard-title" className="text-base font-semibold text-[var(--lm-ink)]">
               {t("calibration:overlay.unsavedTitle")}
             </h3>
-            <p className="mt-2 text-sm text-zinc-300">
+            <p className="mt-2 text-sm text-[var(--lm-ink)]">
               {t("calibration:overlay.unsavedDescription")}
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setEditorState((prev) => keepEditing(prev))}
-                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm font-medium text-zinc-200"
+                className="rounded-md border border-[var(--lm-line-2)] px-3 py-1.5 text-sm font-medium text-[var(--lm-ink)]"
               >
                 {t("calibration:overlay.keepEditing")}
               </button>
@@ -698,7 +698,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
                   setTestPattern(flowRef.current.getSnapshot());
                   onNavigateBack();
                 }}
-                className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white"
+                className="rounded-md bg-[var(--lm-red)] px-3 py-1.5 text-sm font-semibold text-white"
               >
                 {t("calibration:overlay.discard")}
               </button>
@@ -713,8 +713,8 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
 function DockSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 flex items-center gap-2 [font-family:var(--lm-mono)] text-[9.5px] uppercase tracking-[0.18em] text-zinc-500">
-        <span className="h-px w-2.5 bg-zinc-600" />
+      <div className="mb-1.5 flex items-center gap-2 [font-family:var(--lm-mono)] text-[9.5px] uppercase tracking-[0.18em] text-[var(--lm-ink-dim)]">
+        <span className="h-px w-2.5 bg-[var(--lm-line-2)]" />
         {title}
       </div>
       {children}
@@ -726,9 +726,9 @@ function EdgeSummary({ label, value }: { label: string; value: number }) {
   const { t } = useTranslation();
   return (
     <div className="flex items-baseline gap-1.5 px-4 py-2">
-      <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-zinc-500">{label}</span>
-      <span className="[font-family:var(--lm-mono)] text-sm font-medium text-zinc-100">{value}</span>
-      <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.1em] text-zinc-600">{t("calibration:page.ledUnit")}</span>
+      <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-[var(--lm-ink-dim)]">{label}</span>
+      <span className="[font-family:var(--lm-mono)] text-sm font-medium text-[var(--lm-ink)]">{value}</span>
+      <span className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.1em] text-[var(--lm-ink-faint)]">{t("calibration:page.ledUnit")}</span>
     </div>
   );
 }
@@ -770,8 +770,8 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
   }, [draft, value, onChange]);
 
   return (
-    <div className="rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5">
-      <div className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-zinc-500">{label}</div>
+    <div className="rounded-md border border-[var(--lm-line-2)] bg-[var(--lm-panel)] px-2 py-1.5">
+      <div className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-[var(--lm-ink-dim)]">{label}</div>
       <div className="mt-1 flex items-center gap-1.5">
         <input
           ref={inputRef}
@@ -791,14 +791,14 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
             }
           }}
           aria-label={t("calibration:page.aria.countInput", { label })}
-          className="min-w-0 flex-1 bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100 outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
+          className="min-w-0 flex-1 bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-[var(--lm-ink)] outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
         />
         <div className="flex flex-col gap-0.5">
           <button
             type="button"
             onClick={() => onChange(value + 1)}
             aria-label={t("calibration:page.aria.countIncrease", { label })}
-            className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400"
+            className="flex h-4 w-5 items-center justify-center rounded border border-[var(--lm-line-2)] text-[10px] leading-none text-[var(--lm-ink-dim)] transition-colors hover:border-[var(--lm-amber)] hover:text-[var(--lm-amber)]"
           >
             +
           </button>
@@ -806,7 +806,7 @@ function CountStepper({ label, value, onChange }: { label: string; value: number
             type="button"
             onClick={() => onChange(value - 1)}
             aria-label={t("calibration:page.aria.countDecrease", { label })}
-            className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400"
+            className="flex h-4 w-5 items-center justify-center rounded border border-[var(--lm-line-2)] text-[10px] leading-none text-[var(--lm-ink-dim)] transition-colors hover:border-[var(--lm-amber)] hover:text-[var(--lm-amber)]"
           >
             −
           </button>
@@ -825,8 +825,8 @@ function EdgeTab({ edge, label, active, disabled, onClick }: { edge: AnchorEdge;
       aria-pressed={active}
       className={`rounded-md border px-1.5 py-1.5 [font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.1em] transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
         active
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-          : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600"
+          ? "border-[var(--lm-amber)]/40 bg-[var(--lm-amber)]/10 text-[var(--lm-amber)]"
+          : "border-[var(--lm-line-2)] bg-[var(--lm-panel)] text-[var(--lm-ink-dim)] hover:border-[var(--lm-line-2)]"
       }`}
     >
       {label}
@@ -842,8 +842,8 @@ function EndpointButton({ endpoint, label, active, onClick }: { endpoint: Anchor
       aria-pressed={active}
       className={`flex-1 rounded-md border px-2 py-1.5 [font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.1em] transition-colors ${
         active
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-          : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600"
+          ? "border-[var(--lm-amber)]/40 bg-[var(--lm-amber)]/10 text-[var(--lm-amber)]"
+          : "border-[var(--lm-line-2)] bg-[var(--lm-panel)] text-[var(--lm-ink-dim)] hover:border-[var(--lm-line-2)]"
       }`}
     >
       {label}
@@ -859,8 +859,8 @@ function DirectionButton({ direction, label, active, onClick }: { direction: Led
       aria-pressed={active}
       className={`rounded-md border px-2 py-1.5 [font-family:var(--lm-mono)] text-[10px] tracking-[0.1em] transition-colors ${
         active
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
-          : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600"
+          ? "border-[var(--lm-amber)]/40 bg-[var(--lm-amber)]/10 text-[var(--lm-amber)]"
+          : "border-[var(--lm-line-2)] bg-[var(--lm-panel)] text-[var(--lm-ink-dim)] hover:border-[var(--lm-line-2)]"
       }`}
     >
       {label}
@@ -897,9 +897,9 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
   }, [draft, value, max, onChange]);
 
   return (
-    <div className="flex items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5">
+    <div className="flex items-center gap-2 rounded-md border border-[var(--lm-line-2)] bg-[var(--lm-panel)] px-2.5 py-1.5">
       <div className="min-w-0 flex-1">
-        <div className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-zinc-500">
+        <div className="[font-family:var(--lm-mono)] text-[9px] uppercase tracking-[0.14em] text-[var(--lm-ink-dim)]">
           LED
         </div>
         <input
@@ -920,17 +920,17 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
             }
           }}
           aria-label={t("calibration:page.aria.gapInput")}
-          className="w-full bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-zinc-100 outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
+          className="w-full bg-transparent border-0 p-0 [font-family:var(--lm-mono)] text-base font-medium text-[var(--lm-ink)] outline-none focus:underline focus:decoration-amber-400 focus:underline-offset-4"
         />
       </div>
-      <div className="[font-family:var(--lm-mono)] text-[9px] text-zinc-600">/ {max}</div>
+      <div className="[font-family:var(--lm-mono)] text-[9px] text-[var(--lm-ink-faint)]">/ {max}</div>
       <div className="flex flex-col gap-0.5">
         <button
           type="button"
           disabled={value >= max}
           onClick={() => onChange(value + 1)}
           aria-label={t("calibration:page.aria.gapIncrease")}
-          className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-35"
+          className="flex h-4 w-5 items-center justify-center rounded border border-[var(--lm-line-2)] text-[10px] leading-none text-[var(--lm-ink-dim)] transition-colors hover:border-[var(--lm-amber)] hover:text-[var(--lm-amber)] disabled:cursor-not-allowed disabled:opacity-35"
         >
           +
         </button>
@@ -939,7 +939,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
           disabled={value <= 0}
           onClick={() => onChange(value - 1)}
           aria-label={t("calibration:page.aria.gapDecrease")}
-          className="flex h-4 w-5 items-center justify-center rounded border border-zinc-600 text-[10px] leading-none text-zinc-400 transition-colors hover:border-amber-500 hover:text-amber-400 disabled:cursor-not-allowed disabled:opacity-35"
+          className="flex h-4 w-5 items-center justify-center rounded border border-[var(--lm-line-2)] text-[10px] leading-none text-[var(--lm-ink-dim)] transition-colors hover:border-[var(--lm-amber)] hover:text-[var(--lm-amber)] disabled:cursor-not-allowed disabled:opacity-35"
         >
           −
         </button>
@@ -950,7 +950,7 @@ function StandGapStepper({ value, max, onChange }: { value: number; max: number;
 
 function ErrorLine({ text }: { text: string }) {
   return (
-    <p className="flex items-start gap-2 text-xs text-rose-300">
+    <p className="flex items-start gap-2 text-xs text-[var(--lm-red)]">
       <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 16 16" fill="none">
         <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4" />
         <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />

@@ -13,6 +13,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- LED Setup is drawn in the app's own colours. It was still using the stock palette it was built against, so its greys read lighter, its amber duller, and its preview toggle was a near-white slab in an otherwise dark window. Nothing moves or changes behaviour; the page now matches every other surface.
 - The window opens in whichever mode you left it in. Every launch forced compact and threw away the persisted choice, so anyone who preferred the wide layout re-selected it after every restart. The stated reason was a visible big-to-small flash during startup, which is not something that can happen: the window is created hidden and only shown once its size and position have been applied. Wide mode is now restored — at the size you last left it — before the window appears.
 
 ### Fixed
