@@ -1346,3 +1346,218 @@ fn command_status(code: &str, message: &str, details: Option<String>) -> Command
         details,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        parse_area_list_payload, parse_credentials_validation_payload, parse_discovery_payload,
+        parse_pairing_payload,
+    };
+
+    // ── discovery ────────────────────────────────────────────────────────
+
+    /// An empty list is a legitimate answer from the cloud discovery endpoint,
+    /// not a failure: the manual-IP path is still open, and the code says so.
+    #[test]
+    fn an_empty_discovery_list_is_not_reported_as_a_failure() {
+        let response = parse_discovery_payload("[]");
+
+        assert_eq!(response.status.code, "HUE_DISCOVERY_EMPTY");
+        assert!(response.bridges.is_empty());
+    }
+
+    #[test]
+    fn a_discovered_bridge_carries_its_ip_into_the_display_name() {
+        let response = parse_discovery_payload(
+            r#"[{"id":"001788fffe123456","internalipaddress":"192.168.1.50"}]"#,
+        );
+
+        assert_eq!(response.status.code, "HUE_DISCOVERY_OK");
+        assert_eq!(response.bridges.len(), 1);
+        assert_eq!(response.bridges[0].ip, "192.168.1.50");
+        assert_eq!(response.bridges[0].id, "001788fffe123456");
+        assert!(response.bridges[0].name.contains("192.168.1.50"));
+    }
+
+    #[test]
+    fn unparseable_discovery_json_fails_with_the_reason_attached() {
+        let response = parse_discovery_payload("<html>gateway timeout</html>");
+
+        assert_eq!(response.status.code, "HUE_DISCOVERY_FAILED");
+        assert!(response.status.details.is_some());
+    }
+
+    // ── pairing ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn pairing_succeeds_only_when_both_secrets_are_present() {
+        let response = parse_pairing_payload(
+            r#"[{"success":{"username":"app-key","clientkey":"PSK-HEX"}}]"#,
+        );
+
+        assert_eq!(response.status.code, "HUE_PAIRING_OK");
+        let credentials = response.credentials.expect("credentials on success");
+        assert_eq!(credentials.username, "app-key");
+        assert_eq!(credentials.client_key, "PSK-HEX");
+    }
+
+    /// Without `clientkey` there is no DTLS pre-shared key, so streaming could
+    /// never start. Reporting this as success would strand the user at the next
+    /// step with no explanation.
+    #[test]
+    fn a_success_missing_the_client_key_is_a_failure_not_a_partial_success() {
+        let response = parse_pairing_payload(r#"[{"success":{"username":"app-key"}}]"#);
+
+        assert_eq!(response.status.code, "HUE_PAIRING_FAILED");
+        assert!(response.credentials.is_none());
+    }
+
+    /// Error 101 is the overwhelmingly common first-run case and the only one
+    /// with an action the user can take, so it must not collapse into the
+    /// catch-all.
+    #[test]
+    fn the_unpressed_link_button_gets_its_own_code() {
+        let response = parse_pairing_payload(
+            r#"[{"error":{"type":101,"description":"link button not pressed"}}]"#,
+        );
+
+        assert_eq!(response.status.code, "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED");
+        assert!(response.credentials.is_none());
+    }
+
+    #[test]
+    fn each_recoverable_pairing_error_keeps_its_own_code() {
+        for (payload, expected) in [
+            (
+                r#"[{"error":{"type":7,"description":"invalid value for devicetype"}}]"#,
+                "HUE_PAIRING_DEVICETYPE_INVALID",
+            ),
+            (
+                r#"[{"error":{"type":429,"description":"too many requests"}}]"#,
+                "HUE_PAIRING_RATE_LIMITED",
+            ),
+            (
+                r#"[{"error":{"type":503,"description":"bridge busy"}}]"#,
+                "HUE_PAIRING_BRIDGE_BUSY",
+            ),
+        ] {
+            assert_eq!(parse_pairing_payload(payload).status.code, expected);
+        }
+    }
+
+    /// Type 7 is a generic "invalid value" — only the devicetype flavour has a
+    /// dedicated code, and the rest must fall back rather than be mislabelled.
+    #[test]
+    fn a_type_7_that_is_not_about_devicetype_falls_back_to_the_catch_all() {
+        let response =
+            parse_pairing_payload(r#"[{"error":{"type":7,"description":"invalid value for x"}}]"#);
+
+        assert_eq!(response.status.code, "HUE_PAIRING_FAILED");
+    }
+
+    #[test]
+    fn an_unknown_pairing_error_type_collapses_to_the_catch_all() {
+        let response =
+            parse_pairing_payload(r#"[{"error":{"type":9999,"description":"who knows"}}]"#);
+
+        assert_eq!(response.status.code, "HUE_PAIRING_FAILED");
+    }
+
+    // ── credential validation ────────────────────────────────────────────
+
+    #[test]
+    fn a_config_payload_with_a_bridge_id_proves_the_credentials_work() {
+        let response =
+            parse_credentials_validation_payload(r#"{"bridgeid":"001788FFFE123456","name":"Hue"}"#);
+
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_VALID");
+        assert!(response.valid);
+    }
+
+    /// Error type 1 is "unauthorized user" — the signal that a re-pair is
+    /// genuinely required, and the only error that should ever say so.
+    #[test]
+    fn an_unauthorized_error_asks_for_a_re_pair() {
+        let response = parse_credentials_validation_payload(
+            r#"[{"error":{"type":1,"description":"unauthorized user"}}]"#,
+        );
+
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_INVALID");
+        assert!(!response.valid);
+    }
+
+    /// A different error must NOT read as invalid credentials: that would send
+    /// the user through a re-pair they do not need.
+    #[test]
+    fn another_error_type_is_inconclusive_rather_than_invalid() {
+        let response = parse_credentials_validation_payload(
+            r#"[{"error":{"type":3,"description":"resource not available"}}]"#,
+        );
+
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_CHECK_FAILED");
+        assert!(!response.valid);
+    }
+
+    // ── area list ────────────────────────────────────────────────────────
+
+    /// The names deliberately mix cases so that a plain byte-order sort gives a
+    /// *different* answer — ASCII puts every capital ahead of every lowercase,
+    /// so `["alpha","Beta","Gamma","delta"]` would come back as
+    /// `Beta, Gamma, alpha, delta`. Same-case data would pass either way and
+    /// prove nothing.
+    #[test]
+    fn areas_come_back_sorted_case_insensitively_by_name() {
+        let payload = r#"{"data":[
+            {"id":"d","metadata":{"name":"delta"},"channels":[]},
+            {"id":"b","metadata":{"name":"Beta"},"channels":[]},
+            {"id":"g","metadata":{"name":"Gamma"},"channels":[]},
+            {"id":"a","metadata":{"name":"alpha"},"channels":[]}
+        ]}"#;
+
+        let areas = parse_area_list_payload(payload).expect("valid payload");
+
+        let names: Vec<&str> = areas.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["alpha", "Beta", "delta", "Gamma"]);
+    }
+
+    /// `active_streamer` is what surfaces HUE_STREAM_NOT_READY_ACTIVE_STREAMER
+    /// later, so a present-but-null value must read as "free", not "in use".
+    #[test]
+    fn a_null_active_streamer_means_the_area_is_free() {
+        let payload = r#"{"data":[
+            {"id":"a","metadata":{"name":"Free"},"channels":[],"active_streamer":null},
+            {"id":"b","metadata":{"name":"Taken"},"channels":[],"active_streamer":{"rid":"x"}}
+        ]}"#;
+
+        let areas = parse_area_list_payload(payload).expect("valid payload");
+
+        assert!(!areas[0].active_streamer, "explicit null is not a streamer");
+        assert!(areas[1].active_streamer);
+    }
+
+    #[test]
+    fn a_channel_count_is_read_from_the_channel_array_length() {
+        let payload = r#"{"data":[
+            {"id":"a","metadata":{"name":"Room"},"channels":[{"channel_id":0},{"channel_id":1}]}
+        ]}"#;
+
+        let areas = parse_area_list_payload(payload).expect("valid payload");
+
+        assert_eq!(areas[0].channel_count, 2);
+    }
+
+    #[test]
+    fn an_area_with_no_metadata_name_still_parses_with_a_placeholder() {
+        let payload = r#"{"data":[{"id":"a","channels":[]}]}"#;
+
+        let areas = parse_area_list_payload(payload).expect("valid payload");
+
+        assert_eq!(areas[0].name, "Unnamed Area");
+    }
+
+    #[test]
+    fn a_payload_with_no_data_array_is_an_error_not_an_empty_list() {
+        assert!(parse_area_list_payload(r#"{"errors":[]}"#).is_err());
+        assert!(parse_area_list_payload("not json").is_err());
+    }
+}
