@@ -24,6 +24,8 @@ export default {
   },
   signal: {
     title: "Capture → Strip",
+    /** Hue-only session: the bridge reports a packet rate and no latency at all. */
+    titleHue: "Capture → Hue",
     delta: "Δ",
     fps: "Σ",
     edgesAria: "Live edge preview",

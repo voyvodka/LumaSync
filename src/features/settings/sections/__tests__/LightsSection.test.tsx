@@ -541,3 +541,95 @@ describe("LightsSection — serial link budget note", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
+
+describe("LightsSection — the signal pill names its sink", () => {
+  /** `usb` is non-nullable in the wire shape, so a Hue-only session still
+   *  carries a struct. Zeros here are "not measuring", not "measured zero". */
+  function hueOnlySnapshot(packetRate: number) {
+    return {
+      usb: {
+        captureFps: 0,
+        sendFps: 0,
+        queueHealth: "healthy" as const,
+        frameLatencyMs: 0,
+        linkConstrained: false,
+        linkMaxFps: 0,
+      },
+      hue: {
+        state: "streaming",
+        uptimeSecs: 42,
+        packetRate,
+        lastErrorCode: null,
+        lastErrorAtSecs: null,
+        totalReconnects: 0,
+        successfulReconnects: 0,
+        failedReconnects: 0,
+        dtlsActive: true,
+        dtlsCipher: "TLS_PSK_WITH_AES_128_GCM_SHA256",
+        dtlsConnectedAtSecs: 1,
+      },
+    };
+  }
+
+  function renderAmbilight(targets: ("usb" | "hue")[]) {
+    return render(
+      <LightsSection
+        mode={{ kind: "ambilight", ambilight: { brightness: 1 } }}
+        outputTargets={targets}
+        usbConnected={targets.includes("usb")}
+        hueConfigured={targets.includes("hue")}
+        hueReachable={targets.includes("hue")}
+        hueStreaming={targets.includes("hue")}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    telemetryMock.mockReset();
+    shellStateRef.current = {};
+  });
+
+  it("never reports the USB zeros as a measurement in a Hue-only session", async () => {
+    telemetryMock.mockResolvedValue(hueOnlySnapshot(25.4));
+    renderAmbilight(["hue"]);
+
+    await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
+    // The bug: "0ms" and "0 fps" under a Signal heading while Hue streams fine.
+    await waitFor(() => {
+      expect(screen.queryByText("0ms")).not.toBeInTheDocument();
+      expect(screen.queryByText("0 fps")).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the Hue packet rate and no latency, under a Hue-named heading", async () => {
+    telemetryMock.mockResolvedValue(hueOnlySnapshot(25.4));
+    renderAmbilight(["hue"]);
+
+    expect(await screen.findByText("25 pkt/s")).toBeInTheDocument();
+    expect(await screen.findByText("—")).toBeInTheDocument();
+    expect(await screen.findByText("lights:signal.titleHue")).toBeInTheDocument();
+  });
+
+  it("keeps the USB numbers and heading when USB is a target", async () => {
+    telemetryMock.mockResolvedValue({
+      ...hueOnlySnapshot(25.4),
+      usb: {
+        captureFps: 60,
+        sendFps: 58,
+        queueHealth: "healthy" as const,
+        frameLatencyMs: 12,
+        linkConstrained: false,
+        linkMaxFps: 60,
+      },
+    });
+    renderAmbilight(["usb", "hue"]);
+
+    expect(await screen.findByText("12ms")).toBeInTheDocument();
+    expect(await screen.findByText("58 fps")).toBeInTheDocument();
+    expect(screen.queryByText("25 pkt/s")).not.toBeInTheDocument();
+  });
+});

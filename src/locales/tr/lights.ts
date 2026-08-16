@@ -27,6 +27,7 @@ const lights: Catalogue<typeof enLights> = {
   },
   signal: {
     title: "Yakalama → Şerit",
+    titleHue: "Yakalama → Hue",
     delta: "Δ",
     fps: "Σ",
     edgesAria: "Canlı kenar önizlemesi",
