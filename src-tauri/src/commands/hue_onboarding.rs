@@ -1391,9 +1391,8 @@ mod tests {
 
     #[test]
     fn pairing_succeeds_only_when_both_secrets_are_present() {
-        let response = parse_pairing_payload(
-            r#"[{"success":{"username":"app-key","clientkey":"PSK-HEX"}}]"#,
-        );
+        let response =
+            parse_pairing_payload(r#"[{"success":{"username":"app-key","clientkey":"PSK-HEX"}}]"#);
 
         assert_eq!(response.status.code, "HUE_PAIRING_OK");
         let credentials = response.credentials.expect("credentials on success");
