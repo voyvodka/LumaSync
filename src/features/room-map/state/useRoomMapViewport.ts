@@ -97,7 +97,9 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
   };
 }
 
-function computeFit(
+/** Exported for tests: measuring the canvas needs a layout engine, computing the
+ *  fit from a measurement does not, and this is where the proportion is decided. */
+export function computeFit(
   canvasW: number,
   canvasH: number,
   widthMeters: number,

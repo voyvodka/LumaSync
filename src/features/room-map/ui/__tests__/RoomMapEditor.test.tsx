@@ -280,18 +280,6 @@ describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)
   });
 });
 
-// ---------------------------------------------------------------------------
-// Preserved stub tests (Wave 0, pending implementation)
-// ---------------------------------------------------------------------------
-
-describe("RoomMapEditor (pending)", () => {
-  // Both need real layout — happy-dom reports offsetWidth and
-  // getBoundingClientRect as 0 — so they belong in the WDIO e2e suite.
-  it.todo("ROOM-01: renders canvas with room dimensions proportional to config");
-
-  it.todo("ROOM-06: TV anchor acts as center reference — Hue channels positioned relative to TV");
-
-  // ROOM-08 removed in v1.5.x — backgroundImagePath field was migrated to the
-  // imageLayers system (useRoomMapPersist.ts migration at load time); the old
-  // field is no longer rendered on the canvas and the assertion no longer applies.
-});
+// Wave 0 stubs resolved where the decisions are actually made: ROOM-01 by
+// `computeFit` (useRoomMapViewport.test.ts), ROOM-06 by `deriveZones`
+// (deriveZones.test.ts). ROOM-08 dropped with `backgroundImagePath` in v1.5.x.
