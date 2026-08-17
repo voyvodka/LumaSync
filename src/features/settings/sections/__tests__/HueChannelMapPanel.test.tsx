@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
-import { HueChannelMapPanel } from "../HueChannelMapPanel";
+import {
+  HueChannelMapPanel,
+  clampGroupDelta,
+  clientToHueCoords,
+  posToPercent,
+} from "../HueChannelMapPanel";
 
 // Mock i18n — return key as value (with interpolation support)
 vi.mock("react-i18next", () => ({
@@ -80,15 +85,32 @@ describe("CHAN-02: drag to update position", () => {
     expect(screen.getByText("hue:channelMap.modAssignZone")).toBeTruthy();
   });
 
-  it("clientToHueCoords is inverse of posToPercent (y-flip correctness)", () => {
-    // This is a structural test — the component must contain both functions as
-    // a contractual guarantee. Full behavioral verification requires real pointer
-    // events which happy-dom cannot fully simulate (setPointerCapture is a no-op).
-    // A y=+1 channel should appear at the top of the canvas (CSS top: 0%).
-    // A y=-1 channel should appear at the bottom (CSS top: 100%).
-    // This placeholder is upgraded to a coordinate assertion in Plan 02 when
-    // ChannelDetailStrip exposes x/y readout for direct DOM assertion.
-    expect(true).toBe(true); // placeholder — see above rationale
+  // Was `expect(true).toBe(true)` with a note that behaviour needed pointer
+  // events. Both halves are pure — the y-flip is the part worth pinning, since
+  // Hue +y is the far wall while CSS `top` grows downward.
+  const RECT = { left: 100, top: 50, width: 400, height: 200 } as DOMRect;
+
+  it("puts the far wall at the top of the canvas and the near wall at the bottom", () => {
+    expect(posToPercent(0, 1).top).toBe("0%");
+    expect(posToPercent(0, -1).top).toBe("100%");
+    expect(posToPercent(-1, 0).left).toBe("0%");
+    expect(posToPercent(1, 0).left).toBe("100%");
+  });
+
+  it("round-trips a pointer position back to the coordinate it came from", () => {
+    for (const [x, y] of [[0, 0], [1, 1], [-1, -1], [0.25, -0.75]]) {
+      const { left, top } = posToPercent(x, y);
+      const clientX = RECT.left + (parseFloat(left) / 100) * RECT.width;
+      const clientY = RECT.top + (parseFloat(top) / 100) * RECT.height;
+      const back = clientToHueCoords(clientX, clientY, RECT);
+      expect(back.x).toBeCloseTo(x, 6);
+      expect(back.y).toBeCloseTo(y, 6);
+    }
+  });
+
+  it("clamps a pointer dragged outside the canvas", () => {
+    expect(clientToHueCoords(RECT.left - 500, RECT.top - 500, RECT)).toEqual({ x: -1, y: 1 });
+    expect(clientToHueCoords(RECT.left + 900, RECT.top + 900, RECT)).toEqual({ x: 1, y: -1 });
   });
 });
 
@@ -146,12 +168,35 @@ describe("CHAN-04: multi-select and group drag", () => {
     expect(badge).toBeTruthy();
   });
 
-  it("clampGroupDelta prevents any channel from exceeding boundary", () => {
-    // Pure function behavior is tested indirectly through group drag.
-    // Structural guarantee: clampGroupDelta is defined in HueChannelMapPanel.tsx
-    // and used by handlePointerMove and handleKeyDown for group boundary clamping.
-    // Direct unit test requires export — behavioral coverage confirmed via manual test.
-    expect(true).toBe(true);
+  // Was `expect(true).toBe(true)` on the grounds that a direct test "requires
+  // export". It does, so the function is exported now: a mutation sweep showed
+  // the upper-bound branch was reachable with nothing asserting on it.
+  describe("clampGroupDelta", () => {
+    const sel = new Set([0, 1]);
+    const group = (...xs: number[]) =>
+      xs.map((x, i) => ({ channelIndex: i, x, y: 0, z: 0 }));
+
+    it("shortens the delta to whichever member hits the far wall first", () => {
+      // 0.9 has 0.1 of headroom, 0.2 has 0.8 — the group may only move 0.1.
+      expect(clampGroupDelta(group(0.9, 0.2), sel, 0.5, 0).dx).toBeCloseTo(0.1, 6);
+    });
+
+    it("clamps against the near wall the same way", () => {
+      expect(clampGroupDelta(group(-0.9, -0.2), sel, -0.5, 0).dx).toBeCloseTo(-0.1, 6);
+    });
+
+    it("clamps each axis on its own", () => {
+      const rows = [{ channelIndex: 0, x: 0.95, y: -0.95, z: 0 }];
+      const { dx, dy } = clampGroupDelta(rows, new Set([0]), 0.5, -0.5);
+      expect(dx).toBeCloseTo(0.05, 6);
+      expect(dy).toBeCloseTo(-0.05, 6);
+    });
+
+    it("leaves a delta that fits alone, and ignores unselected members", () => {
+      expect(clampGroupDelta(group(0.1, 0.2), sel, 0.3, 0).dx).toBe(0.3);
+      // Channel 1 would overflow but is not selected, so it must not constrain.
+      expect(clampGroupDelta(group(0.1, 0.99), new Set([0]), 0.5, 0).dx).toBe(0.5);
+    });
   });
 });
 

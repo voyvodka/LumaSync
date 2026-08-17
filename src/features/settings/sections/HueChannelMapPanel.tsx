@@ -56,7 +56,7 @@ const NO_ZONES: readonly HueZone[] = [];
  *  Hue x: -1=left, +1=right → left%
  *  Hue y: -1=bottom, +1=top → we flip so top of box = top of screen
  */
-function posToPercent(x: number, y: number): { left: string; top: string } {
+export function posToPercent(x: number, y: number): { left: string; top: string } {
   const left = `${((x + 1) / 2) * 100}%`;
   const top = `${((1 - y) / 2) * 100}%`; // flip Y axis
   return { left, top };
@@ -64,7 +64,7 @@ function posToPercent(x: number, y: number): { left: string; top: string } {
 
 /** Inverse of posToPercent: convert client pixel position to Hue [-1,1] coords.
  *  Critical: y-flip must be exact inverse — hueY = 1 - relY * 2 */
-function clientToHueCoords(clientX: number, clientY: number, canvasRect: DOMRect): { x: number; y: number } {
+export function clientToHueCoords(clientX: number, clientY: number, canvasRect: DOMRect): { x: number; y: number } {
   const relX = (clientX - canvasRect.left) / canvasRect.width;
   const relY = (clientY - canvasRect.top) / canvasRect.height;
   const hueX = relX * 2 - 1;
@@ -96,7 +96,7 @@ function resolvePlacement(
  * exceeds [-1.0, 1.0] on either axis. Relative positions within the group are preserved.
  * (RESEARCH Pattern 3, D-03b)
  */
-function clampGroupDelta(
+export function clampGroupDelta(
   allPlacements: HueChannelPlacement[],
   selectedIndices: Set<number>,
   dx: number,
