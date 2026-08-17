@@ -70,7 +70,7 @@ keyring = { version = "4", features = ["apple-native-keyring-store"] }
 # Caret, never exact: an exact pin blocks Dependabot carrying a security patch.
 # This crate has moved its consumer surface across minors before (0.13→0.19 took
 # ScopedIpV4/ResolvedService), so review a minor against `network::mdns`.
-mdns-sd = "0.20"
+mdns-sd = "0.21"
 uuid = { version = "1", features = ["v4"] }
 # Gated behind the `e2e` feature — see [features] below.
 tauri-plugin-wdio-webdriver = { version = "1", optional = true }
