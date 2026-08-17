@@ -118,6 +118,19 @@ pub async fn get_hue_area_channels(
                     channels: Vec::new(),
                 }
             }
+            // Empty `channels` here is not "there are none" — the caller is
+            // required to keep the list it already had. See `HUE_AREA_CHANNELS_STATUS`.
+            Err(AreaListError::Unreachable(message)) => {
+                warn!("Hue bridge unreachable while loading channels for {area_id}: {message}");
+                HueAreaChannelListResponse {
+                    status: area_channels_status(
+                        "HUE_AREA_CHANNELS_UNREACHABLE",
+                        "Could not reach the Hue bridge. Showing the last known channels.",
+                        Some(message),
+                    ),
+                    channels: Vec::new(),
+                }
+            }
             Err(AreaListError::Other(message)) => {
                 warn!("Failed to load Hue area channels for {area_id}: {message}");
                 HueAreaChannelListResponse {
@@ -892,6 +905,8 @@ mod tests {
     fn channel(index: usize) -> HueAreaChannelInfo {
         HueAreaChannelInfo {
             index,
+            channel_id: index as u8,
+            light_ids: vec![format!("light-{index}")],
             position_x: 0.0,
             position_y: 0.0,
             light_count: 1,

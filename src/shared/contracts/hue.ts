@@ -329,6 +329,12 @@ export const HUE_AREA_CHANNELS_STATUS = {
   /** An area configured with no channels — a success the room-map editor
    * renders as an empty strip. Never conflate with a failed fetch. */
   EMPTY: "HUE_AREA_CHANNELS_EMPTY",
+  /** No answer at all — DNS, connect, TLS, timeout. Callers MUST keep the
+   * last-known list and render the area inactive. Clearing here is what makes
+   * a Wi-Fi blip look like a deleted area. */
+  UNREACHABLE: "HUE_AREA_CHANNELS_UNREACHABLE",
+  /** The bridge answered with something we could not parse. A real fault,
+   * unlike `UNREACHABLE`, and it should read like one. */
   FAILED: "HUE_AREA_CHANNELS_FAILED",
 } as const;
 
@@ -347,7 +353,14 @@ export type HueAreaChannelsCommandStatus = CommandStatusOf<HueAreaChannelsWireSt
 /** One resolved entertainment channel: its bridge-reported position and
  * auto-detected screen region. */
 export interface HueAreaChannelInfo {
+  /** Our ordinal, and the key locally persisted overrides are stored under.
+   * Equals `channelId` only on a contiguous area — never send it to the
+   * bridge, and never render it as the channel's identity. */
   index: number;
+  /** The bridge's own identity. 0-based, so `#0` is a legitimate label. */
+  channelId: number;
+  /** CLIP v2 resource ids. For counting and matching — never shown to a user. */
+  lightIds: string[];
   positionX: number;
   positionY: number;
   lightCount: number;

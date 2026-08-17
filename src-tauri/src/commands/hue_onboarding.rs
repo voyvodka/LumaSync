@@ -672,7 +672,9 @@ pub async fn list_hue_entertainment_areas(
                 areas: Vec::new(),
             }
         }
-        Err(AreaListError::Other(message)) => {
+        // The area *list* keeps collapsing the two: retaining a last-known list
+        // there is a separate consumer surface, not part of this change.
+        Err(AreaListError::Other(message) | AreaListError::Unreachable(message)) => {
             warn!("Failed to list Hue entertainment areas: {message}");
             HueEntertainmentAreaListResponse {
                 status: command_status(
@@ -818,7 +820,7 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
                 },
             }
         }
-        Err(AreaListError::Other(message)) => {
+        Err(AreaListError::Other(message) | AreaListError::Unreachable(message)) => {
             warn!("Hue stream readiness check failed: {message}");
             HueStreamReadinessResponse {
                 status: command_status(
@@ -1138,7 +1140,7 @@ async fn fetch_entertainment_payload(
         .header("hue-application-key", username)
         .send()
         .await
-        .map_err(|e| AreaListError::Other(e.to_string()))?;
+        .map_err(|e| AreaListError::Unreachable(e.to_string()))?;
 
     let response = classify_hue_response(raw)
         .await
@@ -1163,6 +1165,11 @@ async fn fetch_entertainment_payload(
 #[derive(Clone, Debug)]
 pub(crate) enum AreaListError {
     AuthInvalid,
+    /// No answer at all — DNS, connect, TLS, timeout. Kept apart from `Other`
+    /// because "the bridge said something we could not parse" and "the bridge
+    /// said nothing" need opposite handling: one is a fault, the other is a
+    /// reason to keep showing what we already knew.
+    Unreachable(String),
     Other(String),
 }
 

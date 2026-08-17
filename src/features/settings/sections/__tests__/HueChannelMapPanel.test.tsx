@@ -33,6 +33,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 function makeChannels(count: number): HueAreaChannelInfo[] {
   return Array.from({ length: count }, (_, i) => ({
     index: i,
+    channelId: i,
+    lightIds: [`light-${i}`],
     positionX: count > 1 ? (i / (count - 1)) * 2 - 1 : 0, // spread across [-1, 1]
     positionY: 0,
     lightCount: 2,

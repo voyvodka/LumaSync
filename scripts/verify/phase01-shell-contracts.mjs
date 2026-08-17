@@ -1400,7 +1400,7 @@ checkWireUnion(
   "HueAreaChannelsWireStatusCode",
   [...rustHueRuntimeSource.matchAll(/area_channels_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
   [...constMembers(hueSource, "HUE_AREA_CHANNELS_STATUS"), "AUTH_INVALID_RE_PAIR_REQUIRED"],
-  4
+  5
 );
 
 // ---------------------------------------------------------------------------

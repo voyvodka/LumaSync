@@ -53,6 +53,15 @@ export function useHueAreaChannels(
         if (cancelled) {
           return;
         }
+        // INVARIANT: an unreachable bridge must leave the list alone. The empty
+        // array on that code means "no answer", not "no channels", and clearing
+        // here is what makes a Wi-Fi blip look like a deleted area.
+        if (status.code === HUE_AREA_CHANNELS_STATUS.UNREACHABLE) {
+          console.warn(
+            `[LumaSync] Hue bridge unreachable, keeping last known channels: ${status.details ?? status.message}`,
+          );
+          return;
+        }
         setAreaChannels(channels);
         // Only the 403 escalates — a transient bridge failure must not prompt
         // a re-pair. An empty area is `HUE_AREA_CHANNELS_EMPTY`, not a failure.

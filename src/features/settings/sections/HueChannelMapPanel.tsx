@@ -84,11 +84,28 @@ function resolvePlacement(
   zones: readonly HueZone[],
 ): HueChannelPlacement {
   const saved = findHueChannel(placements, ch.index);
-  if (!saved) return { channelIndex: ch.index, x: ch.positionX, y: ch.positionY, z: 0 };
+  // Stamped on both branches: this is the only place a placement meets the live
+  // channel it belongs to, so it is the only place the bridge's own id can be
+  // learned. Without it the write-back has nothing to address and refuses.
+  if (!saved) {
+    return {
+      channelIndex: ch.index,
+      channelId: ch.channelId,
+      x: ch.positionX,
+      y: ch.positionY,
+      z: 0,
+    };
+  }
   // The canvas edits world coordinates, so a bound channel's absolute pair is
   // refreshed from its zone before it is shown.
   const world = resolveHueChannelWorld(saved, zones);
-  return { ...saved, x: world.x, y: world.y, z: resolveHueChannelWorldZ(saved, zones) };
+  return {
+    ...saved,
+    channelId: ch.channelId,
+    x: world.x,
+    y: world.y,
+    z: resolveHueChannelWorldZ(saved, zones),
+  };
 }
 
 /**
