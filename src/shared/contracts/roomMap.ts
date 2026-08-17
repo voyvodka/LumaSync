@@ -56,7 +56,8 @@ export interface HueChannelPlacement {
   z: number;
   /** Optional user-assigned label */
   label?: string | null;
-  locked?: boolean;
+  /** Nullable because the Rust mirror puts `None` on the wire as `null`. */
+  locked?: boolean | null;
   /**
    * v1.5 W1-A1 — when present, this channel is logically grouped under the
    * referenced `HueZone`. Absent ⇒ legacy absolute placement.

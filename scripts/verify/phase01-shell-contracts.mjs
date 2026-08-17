@@ -274,11 +274,11 @@ if (orderMatch) {
 // ---------------------------------------------------------------------------
 // Schema version bump — gates the newest migration step; earlier steps chain.
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (v1.6 stranded-zone recovery) ]");
+console.log("\n[ Shell state schema version (Hue channel area attribution) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*4\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 4 (stranded Hue zone recovery gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 4 — the 3 → 4 recovery shim has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*5\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 5 (Hue channel area attribution gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 5 — the 4 → 5 attribution shim has no trigger"
 );
 
 // ---------------------------------------------------------------------------

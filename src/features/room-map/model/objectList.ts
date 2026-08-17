@@ -60,7 +60,7 @@ export function buildObjectList(
       id: hueChannelObjectId(ch.channelIndex),
       type: "hue",
       label: ch.label ?? t("roomMap:objectPanel.hueLabel", { index: String(ch.channelIndex + 1) }),
-      locked: ch.locked,
+      locked: ch.locked ?? undefined,
       zoneId: ch.zoneId,
     });
   }
