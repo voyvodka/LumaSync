@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   findHueChannel,
+  mergeHueChannels,
   nextHueChannelIndex,
   type HueChannelPlacement,
 } from "@/shared/contracts/roomMap";
@@ -35,5 +36,36 @@ describe("findHueChannel", () => {
 
     expect(findHueChannel(channels, 2)).toBe(channels[1]);
     expect(findHueChannel(channels, 1)).toBeUndefined();
+  });
+});
+
+describe("mergeHueChannels", () => {
+  it("keeps placements the editor never saw", () => {
+    // The Hue panel only ever emits the channels one bridge is reporting, so
+    // assigning its output straight onto the config deleted the rest.
+    const stored = [channel(0), channel(1), channel(2)];
+    const edited = [{ ...channel(1), x: 0.7 }];
+
+    const merged = mergeHueChannels(stored, edited);
+
+    expect(merged.map((c) => c.channelIndex).sort()).toEqual([0, 1, 2]);
+    expect(findHueChannel(merged, 1)!.x).toBe(0.7);
+  });
+
+  it("replaces rather than duplicates an edited channel", () => {
+    const merged = mergeHueChannels([channel(0)], [{ ...channel(0), x: -0.4 }]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].x).toBe(-0.4);
+  });
+
+  it("keeps everything when the bridge reports nothing", () => {
+    const stored = [channel(0), channel(3)];
+    expect(mergeHueChannels(stored, [])).toEqual(stored);
+  });
+
+  it("accepts a channel the stored list does not have yet", () => {
+    const merged = mergeHueChannels([channel(0)], [channel(5)]);
+    expect(merged.map((c) => c.channelIndex)).toEqual([0, 5]);
   });
 });

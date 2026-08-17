@@ -82,6 +82,17 @@ export function nextHueChannelIndex(channels: readonly HueChannelPlacement[]): n
   return channels.reduce((highest, channel) => Math.max(highest, channel.channelIndex + 1), 0);
 }
 
+/** Fold an edited subset back into the stored list. An editor only sees the
+ *  channels one bridge is reporting, so assigning its output wholesale deletes
+ *  every placement outside that view — see docs/architecture/room-map.md. */
+export function mergeHueChannels(
+  stored: readonly HueChannelPlacement[],
+  edited: readonly HueChannelPlacement[],
+): HueChannelPlacement[] {
+  const editedIndices = new Set(edited.map((channel) => channel.channelIndex));
+  return [...stored.filter((channel) => !editedIndices.has(channel.channelIndex)), ...edited];
+}
+
 // ---------------------------------------------------------------------------
 // USB Strip Placement
 // ---------------------------------------------------------------------------

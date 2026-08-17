@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 
 import type { LedChipType } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
-import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, mergeHueChannels } from "@/shared/contracts/roomMap";
 import type {
   HueChannelPlacement,
+  HueZone,
   RoomMapConfig,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
@@ -56,6 +57,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
   // -------------------------------------------------------------------------
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
+  const [hueZones, setHueZones] = useState<HueZone[]>([]);
   const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);
   // One flag per save path. A USB write failure must not light the banner
   // inside the Hue channel-map panel, nor re-arm its dismissal timer.
@@ -68,6 +70,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
     shellStore.load().then((state) => {
       if (cancelled) return;
       setChannelPlacements(state.roomMap?.hueChannels ?? []);
+      setHueZones(state.roomMap?.zones ?? []);
       setPairedStrips(state.roomMap?.usbStrips ?? []);
     });
     return () => { cancelled = true; };
@@ -121,7 +124,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
       const currentRoomMap = current.roomMap;
       const updatedRoomMap: RoomMapConfig = {
         ...(currentRoomMap ?? DEFAULT_ROOM_MAP),
-        hueChannels: updated,
+        hueChannels: mergeHueChannels(currentRoomMap?.hueChannels ?? [], updated),
       };
       await shellStore.save({
         roomMap: updatedRoomMap,
@@ -208,6 +211,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
           channelPlacements={channelPlacements}
           onPositionChange={handlePositionChange}
           persistError={hueChannelPersistError.active}
+          zones={hueZones}
         />
 
         <WledCategory isActive={activeCategory === "wled"} />

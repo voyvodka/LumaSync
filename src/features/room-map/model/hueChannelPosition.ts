@@ -60,6 +60,38 @@ export function moveHueChannelToWorld(
   };
 }
 
+/** Height the runtime reads. Rust resolves `center_z + scale_z * relative.z`
+ *  for a bound channel, so the absolute `z` is a leftover there too. */
+export function resolveHueChannelWorldZ(
+  channel: HueChannelPlacement,
+  zones: readonly HueZone[],
+): number {
+  const zone = findBoundZone(channel, zones);
+  if (!zone || !channel.zoneRelativePosition) return channel.z;
+  return clampUnit(zone.centerZ + zone.scaleZ * channel.zoneRelativePosition.z);
+}
+
+/** Set the height, writing whichever field is live. */
+export function setHueChannelWorldZ(
+  channel: HueChannelPlacement,
+  zones: readonly HueZone[],
+  worldZ: number,
+): HueChannelPlacement {
+  const z = clampUnit(worldZ);
+  const zone = findBoundZone(channel, zones);
+  if (!zone || !channel.zoneRelativePosition || zone.scaleZ === 0) {
+    return { ...channel, z };
+  }
+  return {
+    ...channel,
+    z,
+    zoneRelativePosition: {
+      ...channel.zoneRelativePosition,
+      z: clampUnit((z - zone.centerZ) / zone.scaleZ),
+    },
+  };
+}
+
 /** Nudge by a world-space delta, applied to whichever position is live. */
 export function nudgeHueChannel(
   channel: HueChannelPlacement,

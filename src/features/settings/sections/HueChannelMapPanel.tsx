@@ -7,9 +7,16 @@ import {
   CHANNEL_WRITEBACK_STATUS,
   findHueChannel,
   type HueChannelPlacement,
+  type HueZone,
 } from "@/shared/contracts/roomMap";
 import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
+import {
+  moveHueChannelToWorld,
+  resolveHueChannelWorld,
+  resolveHueChannelWorldZ,
+  setHueChannelWorldZ,
+} from "@/features/room-map/model/hueChannelPosition";
 
 const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
 type Region = (typeof REGIONS)[number];
@@ -37,7 +44,13 @@ interface Props {
   areaId?: string;
   /** When true, the save-to-bridge button is disabled with tooltip. */
   isStreaming?: boolean;
+  /** Room-map Hue zones. A channel bound to one stores its position relative to
+   *  the zone, so editing here has to project through it rather than write the
+   *  absolute pair the runtime ignores. */
+  zones?: readonly HueZone[];
 }
+
+const NO_ZONES: readonly HueZone[] = [];
 
 /** Convert Hue position (x: -1..+1, y: -1..+1) to CSS % inside the grid box.
  *  Hue x: -1=left, +1=right → left%
@@ -62,12 +75,20 @@ function clientToHueCoords(clientX: number, clientY: number, canvasRect: DOMRect
   };
 }
 
-/** Merge bridge-reported position with persisted placement. Fallback to bridge data + z=0. */
-function resolvePlacement(ch: HueAreaChannelInfo, placements: HueChannelPlacement[]): { x: number; y: number; z: number } {
+/** The saved record for a bridge channel, or a fresh one seeded from the bridge.
+ *  Returning the whole record is the point — handing back a `{x,y,z}` triple is
+ *  what let the caller rebuild a four-field literal and drop `zoneId`. */
+function resolvePlacement(
+  ch: HueAreaChannelInfo,
+  placements: HueChannelPlacement[],
+  zones: readonly HueZone[],
+): HueChannelPlacement {
   const saved = findHueChannel(placements, ch.index);
-  return saved
-    ? { x: saved.x, y: saved.y, z: saved.z }
-    : { x: ch.positionX, y: ch.positionY, z: 0 };
+  if (!saved) return { channelIndex: ch.index, x: ch.positionX, y: ch.positionY, z: 0 };
+  // The canvas edits world coordinates, so a bound channel's absolute pair is
+  // refreshed from its zone before it is shown.
+  const world = resolveHueChannelWorld(saved, zones);
+  return { ...saved, x: world.x, y: world.y, z: resolveHueChannelWorldZ(saved, zones) };
 }
 
 /**
@@ -261,12 +282,16 @@ export function HueChannelMapPanel({
   username,
   areaId,
   isStreaming = false,
+  zones = NO_ZONES,
 }: Props) {
   const { t } = useTranslation();
 
   // Stable ref for placements so useEffect doesn't cycle on new array references
   const placementsRef = useRef<HueChannelPlacement[]>(placements ?? []);
   placementsRef.current = placements ?? [];
+
+  const zonesRef = useRef<readonly HueZone[]>(zones);
+  zonesRef.current = zones;
 
   // Mode toggle — default "assign-zone" for backward compat (D-01a)
   const [mode, setMode] = useState<EditorMode>("assign-zone");
@@ -300,19 +325,13 @@ export function HueChannelMapPanel({
 
   // Local channel placements — initialized from bridge data + persisted overrides
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>(() =>
-    channels.map((ch) => {
-      const p = resolvePlacement(ch, placementsRef.current);
-      return { channelIndex: ch.index, x: p.x, y: p.y, z: p.z };
-    }),
+    channels.map((ch) => resolvePlacement(ch, placementsRef.current, zonesRef.current)),
   );
 
   // Re-initialize when channels change (area switch). placementsRef read via ref to avoid cycle.
   useEffect(() => {
     setChannelPlacements(
-      channels.map((ch) => {
-        const p = resolvePlacement(ch, placementsRef.current);
-        return { channelIndex: ch.index, x: p.x, y: p.y, z: p.z };
-      }),
+      channels.map((ch) => resolvePlacement(ch, placementsRef.current, zonesRef.current)),
     );
   }, [channels]);
 
@@ -393,7 +412,7 @@ export function HueChannelMapPanel({
 
   const handleZChange = useCallback((z: number) => {
     const next = channelPlacementsRef.current.map((p) =>
-      selectedChannels.has(p.channelIndex) ? { ...p, z } : p
+      selectedChannels.has(p.channelIndex) ? setHueChannelWorldZ(p, zonesRef.current, z) : p
     );
     setChannelPlacements(next);
     onPositionChange?.(next);
@@ -466,7 +485,7 @@ export function HueChannelMapPanel({
       prev.map((p) => {
         const start = ds.groupStartPositions.get(p.channelIndex);
         if (!start) return p;
-        return { ...p, x: start.x + dx, y: start.y + dy };
+        return moveHueChannelToWorld(p, zonesRef.current, start.x + dx, start.y + dy);
       })
     );
   }, []);
@@ -509,7 +528,7 @@ export function HueChannelMapPanel({
 
       const next = channelPlacementsRef.current.map((p) =>
         selectedChannels.has(p.channelIndex)
-          ? { ...p, x: Math.max(-1, Math.min(1, p.x + dx)), y: Math.max(-1, Math.min(1, p.y + dy)) }
+          ? moveHueChannelToWorld(p, zonesRef.current, p.x + dx, p.y + dy)
           : p
       );
       setChannelPlacements(next);
