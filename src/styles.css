@@ -5016,9 +5016,15 @@ body {
 .lm-room-dock-slider {
   flex: 1;
   appearance: none;
+  /* A 4 px track inside a 32 px hit box. Painted through the content box so the
+     track still reads as a hairline while the pointer target clears the floor
+     every other control here clears — the thumb alone was 12 px. */
+  box-sizing: content-box;
   height: 4px;
+  padding-block: 14px;
   border-radius: 2px;
   background: var(--lm-line-2);
+  background-clip: content-box;
   cursor: pointer;
 }
 .lm-room-dock-slider::-webkit-slider-thumb {
@@ -5041,6 +5047,21 @@ body {
 .lm-room-dock-slider:focus-visible {
   outline: none;
   box-shadow: var(--lm-focus-ring-soft);
+}
+/* A slider whose track and thumb are both token colours disappears here. */
+@media (forced-colors: active) {
+  .lm-room-dock-slider {
+    background: CanvasText;
+    background-clip: content-box;
+  }
+  .lm-room-dock-slider::-webkit-slider-thumb {
+    background: Highlight;
+    border-color: Canvas;
+  }
+  .lm-room-dock-slider::-moz-range-thumb {
+    background: Highlight;
+    border-color: Canvas;
+  }
 }
 
 /* Zone bounds — the edge a drag is currently pinned against. The centre marker

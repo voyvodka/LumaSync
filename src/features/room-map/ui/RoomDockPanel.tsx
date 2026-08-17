@@ -22,6 +22,7 @@ import {
   UsbStripInspector,
   type UsbStripConnectionStatus,
 } from "./objects/UsbStripInspector";
+import { resolveHueChannelWorldZ } from "../model/hueChannelPosition";
 import { resolveInspectorTarget } from "../model/resolveInspectorTarget";
 import {
   furnitureObjectId,
@@ -107,6 +108,9 @@ interface RoomDockPanelProps {
    * chip vocabulary as the USB strip inspector. `unknown` ⇒ no chip rendered.
    */
   hueChannelStatus?: UsbStripConnectionStatus;
+
+  /** Height edit for one Hue channel, in world `[-1, 1]`. */
+  onHueChannelHeightChange?: (channelIndex: number, worldZ: number) => void;
 }
 
 /* ── main panel ─────────────────────────────────────────────────── */
@@ -142,6 +146,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     usbConnectionStatus = "unknown",
     onUsbManage,
     hueChannelStatus = "unknown",
+    onHueChannelHeightChange,
   } = props;
   const { t } = useTranslation();
 
@@ -234,6 +239,9 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
             channel={ch}
             zoneName={inspectorTarget.zoneName}
             bridgeStatus={hueChannelStatus}
+            worldZ={resolveHueChannelWorldZ(ch, config.zones)}
+            roomHeightMeters={config.dimensions.heightMeters}
+            onHeightChange={(worldZ) => onHueChannelHeightChange?.(ch.channelIndex, worldZ)}
             onRename={(label) =>
               onRenameHueChannel?.(ch.channelIndex, label)
             }

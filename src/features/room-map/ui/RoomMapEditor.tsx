@@ -11,6 +11,7 @@ import { UsbStripObject } from "./objects/UsbStripObject";
 import { HueChannelOverlay } from "./HueChannelOverlay";
 import { RoomDockPanel } from "./RoomDockPanel";
 import { deriveZones, type ZoneDeriveResult } from "../model/deriveZones";
+import { setHueChannelWorldZ } from "../model/hueChannelPosition";
 import {
   furnitureObjectId,
   hueChannelObjectId,
@@ -682,6 +683,16 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
               void updateConfig({
                 imageLayers: config.imageLayers.map((l) =>
                   l.id === id ? { ...l, ...patch } : l,
+                ),
+              });
+            }}
+            onHueChannelHeightChange={(channelIndex, worldZ) => {
+              const target = visibleHueChannels.find((ch: HueChannelPlacement) => ch.channelIndex === channelIndex);
+              if (!target) return;
+              void updateConfig({
+                hueChannels: replaceHueChannel(
+                  config.hueChannels,
+                  setHueChannelWorldZ(target, config.zones, worldZ),
                 ),
               });
             }}
