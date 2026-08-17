@@ -112,18 +112,23 @@ describe("useRoomMapViewport", () => {
     expect(viewport.panOffset).toEqual({ x: 10, y: 10 });
   });
 
-  it("fits with the dimensions the editor started with, not a later value", () => {
+  it("fits the room that finished loading, not the placeholder it opened with", () => {
+    // `useRoomMapPersist` seeds DEFAULT_ROOM_MAP (5×4) and swaps in the stored
+    // room a commit later, so a dimension change arriving while `loading` IS the
+    // room the user opened. Framing the first-render value instead meant every
+    // map was fitted as a 5×4 and a larger one overflowed the canvas.
+    const LOADED: RoomDimensions = { widthMeters: 10, depthMeters: 8, heightMeters: 2.5 };
     const { rerender } = render(<Harness loading dimensions={ROOM_5X4} />);
-    // A dimension change arriving before the container mounts must not become
-    // the basis of the fit — the room the user opened is the one framed.
-    rerender(<Harness loading dimensions={{ widthMeters: 10, depthMeters: 8, heightMeters: 2.5 }} />);
-    rerender(<Harness loading={false} dimensions={{ widthMeters: 10, depthMeters: 8, heightMeters: 2.5 }} />);
+    rerender(<Harness loading dimensions={LOADED} />);
+    rerender(<Harness loading={false} dimensions={LOADED} />);
 
     act(() => {
       for (const ro of StubResizeObserver.instances) ro.emit(800, 600);
     });
 
-    expect(viewport.zoom).toBeCloseTo(FITTED_ZOOM, 5);
+    // 10×8 m ⇒ 800×640 px at zoom 1; usable box 752×552 ⇒ height wins at 0.8625.
+    expect(viewport.zoom).toBeCloseTo(0.8625, 5);
+    expect(viewport.zoom).not.toBeCloseTo(FITTED_ZOOM, 3);
   });
 
   it("disconnects the observer on unmount", () => {

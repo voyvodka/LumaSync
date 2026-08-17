@@ -55,10 +55,11 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
 
   const initialFitDone = useRef(false);
 
-  // Snapshotted at first render on purpose: the one-shot fit must frame the
-  // dimensions the editor started with. Reading the live value would re-fit the
-  // view out from under a user who is editing the room size.
-  const initialDimensionsRef = useRef(dimensions);
+  // Live, read once at the fit. Snapshotting at first render framed the 5×4
+  // placeholder every time — the persisted config lands a commit later, and
+  // `initialFitDone` is what stops a re-fit, not a stale ref.
+  const liveDimensionsRef = useRef(dimensions);
+  liveDimensionsRef.current = dimensions;
 
   // Keyed on the element, not on mount: the editor renders a loading placeholder
   // first, so the container appears a commit or two late and a mount-only effect
@@ -73,7 +74,7 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
 
         if (!initialFitDone.current) {
           initialFitDone.current = true;
-          const { widthMeters: wm, depthMeters: dm } = initialDimensionsRef.current;
+          const { widthMeters: wm, depthMeters: dm } = liveDimensionsRef.current;
           const fit = computeFit(width, height, wm, dm, 24);
           setZoom(fit.zoom);
           setPanOffset(fit.panOffset);

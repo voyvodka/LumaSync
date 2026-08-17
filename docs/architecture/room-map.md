@@ -76,6 +76,8 @@ colour. That changes when room-aware ambilight lands and the live path starts re
 
 **An editor's output is a subset, so it is merged into `hueChannels`, never assigned over it.** The panel only ever sees the channels one bridge is currently reporting. Assigning that array onto the config deleted every placement outside the view — another area's, and all of them while the bridge was unreachable. `mergeHueChannels` keeps the untouched records, which is the same rule as "the editor never deletes a Hue channel" applied to the save path rather than to a delete button.
 
+**The one-shot fit has to read the dimensions live, not the ones present at first render.** `useRoomMapPersist` seeds `DEFAULT_ROOM_MAP` and swaps in the stored room a commit later, and the canvas container only mounts once loading ends — so a ref captured at first render always held the 5×4 placeholder, and *every* map was framed as if it were 5×4. A larger room then opened zoomed too far in, overflowing the canvas instead of sitting centred in it. The guard against re-fitting under a user who is editing the room size is `initialFitDone`, not a stale ref; the two were conflated, and a test had pinned the stale read as intentional with the reasoning that "a dimension change arriving before the container mounts must not become the basis of the fit" — but that change *is* the room finishing loading.
+
 **A zone is a physical square in metres, which means its two cube-space scales diverge in a
 non-square room.** The inspector edits one edge length; `scaleX` and `scaleY` are derived from it
 against the room's width and depth independently, so a 1 m square in a 5×4 m room is not a uniform
