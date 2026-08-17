@@ -505,12 +505,32 @@ export async function restoreWindowState(): Promise<void> {
  *
  * Call this before hiding or on a debounced resize/move handler.
  */
-export async function persistWindowState(): Promise<void> {
+export async function persistWindowState(
+  opts?: { captureSize?: boolean },
+): Promise<void> {
   const win = getCurrentWindow();
   const { width, height } = await win.outerSize();
   const { x, y } = await win.outerPosition();
   const center = rectCenter({ x, y, width, height });
-  await saveShellState({ windowCenterX: center.x, windowCenterY: center.y });
+
+  const update: Partial<ShellState> = {
+    windowCenterX: center.x,
+    windowCenterY: center.y,
+  };
+
+  // Only a user-driven resize records the size. `resizeToMode` opts out: it
+  // owns `lastFullSize` itself, and at boot the window is still at its compact
+  // size when this runs — capturing there wrote 320×452 over the remembered
+  // full size. Logical *inner* px, matching what `resizeToMode` captures; the
+  // outer rect would grow the window by the title bar every round trip.
+  if (opts?.captureSize !== false) {
+    const { uiMode } = await loadShellState();
+    if ((uiMode ?? "compact") === "full") {
+      update.lastFullSize = await getCurrentLogicalSize();
+    }
+  }
+
+  await saveShellState(update);
 }
 
 // ---------------------------------------------------------------------------
@@ -740,7 +760,7 @@ export async function resizeToMode(
   await applyModeMinSize(win, mode, workArea);
 
   await saveShellState(partialUpdate);
-  await persistWindowState();
+  await persistWindowState({ captureSize: false });
 }
 
 // ---------------------------------------------------------------------------

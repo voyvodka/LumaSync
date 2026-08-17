@@ -821,3 +821,60 @@ describe("Scenario 12 — the target size is clamped to the work area", () => {
       .toEqual({ width: 900, height: 620 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario 13 — a hand-resized window survives a reload
+// ---------------------------------------------------------------------------
+
+describe("Scenario 13 — dragging the window edge is remembered", () => {
+  it("records the new full size, so a reload does not snap back to the last toggle", async () => {
+    setupPersistedState(
+      makePersistedState({ uiMode: "full", lastFullSize: { width: 900, height: 620 } }),
+    );
+    // The user drags the window out to 1200×800; inner is what the restore path
+    // reads back, so that is what has to be stored.
+    innerSizeMock.mockResolvedValue({ width: 1200, height: 800 });
+    outerSizeMock.mockResolvedValue({ width: 1200, height: 828 });
+
+    await persistWindowState();
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 1200, height: 800 });
+  });
+
+  it("stores logical inner px, so the size does not creep by the title bar", async () => {
+    // outer is 28 px taller than inner. Persisting the outer rect would restore
+    // 828, whose next save reads 856, and the window grows on every cycle.
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+    innerSizeMock.mockResolvedValue({ width: 1200, height: 800 });
+    outerSizeMock.mockResolvedValue({ width: 1200, height: 828 });
+
+    await persistWindowState();
+
+    expect(captureLastSavedState().lastFullSize).not.toMatchObject({ height: 828 });
+  });
+
+  it("leaves the remembered full size alone while in compact", async () => {
+    setupPersistedState(
+      makePersistedState({ uiMode: "compact", lastFullSize: { width: 900, height: 620 } }),
+    );
+    innerSizeMock.mockResolvedValue({ width: 320, height: 452 });
+
+    await persistWindowState();
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 900, height: 620 });
+  });
+
+  it("does not let the boot resize overwrite the size it is restoring", async () => {
+    // `resizeToMode` opts out of the capture: at boot the window is still
+    // compact-sized when it runs, so capturing would store 320×452 as the full
+    // size — the exact regression Scenario 11 guards from the other direction.
+    setupPersistedState(
+      makePersistedState({ uiMode: "full", lastFullSize: { width: 900, height: 620 } }),
+    );
+    innerSizeMock.mockResolvedValue({ width: 320, height: 452 });
+
+    await resizeToMode("full", { animate: false });
+
+    expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 900, height: 620 });
+  });
+});
