@@ -64,6 +64,7 @@ const onResizedMock = vi.fn((_cb: unknown) =>
 type MonitorInfo = {
   position: { x: number; y: number };
   size: { width: number; height: number };
+  workArea?: { position: { x: number; y: number }; size: { width: number; height: number } };
 };
 
 const availableMonitorsMock = vi.fn(() =>
@@ -127,6 +128,7 @@ import {
   persistWindowState,
   resizeToMode,
   saveShellState,
+  fitSizeToWorkArea,
 } from "../windowLifecycle";
 
 // ---------------------------------------------------------------------------
@@ -723,5 +725,99 @@ describe("Scenario 11 — boot restores the persisted UI mode", () => {
     await resizeToMode("full", { animate: false });
 
     expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 900, height: 620 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 12 — a target size larger than the screen
+// ---------------------------------------------------------------------------
+
+describe("Scenario 12 — the target size is clamped to the work area", () => {
+  /** A monitor whose usable height is shorter than its resolution. */
+  function monitorWithWorkArea(
+    size: { width: number; height: number },
+    work: { width: number; height: number },
+  ): MonitorInfo {
+    return {
+      position: { x: 0, y: 0 },
+      size,
+      workArea: { position: { x: 0, y: 0 }, size: work },
+    };
+  }
+
+  it("shrinks the full default to fit a screen it is taller than", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorWithWorkArea({ width: 1024, height: 600 }, { width: 1024, height: 560 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject({ width: 900, height: 560 });
+  });
+
+  it("reads the work area, not the resolution — a tall taskbar still clamps", async () => {
+    // 620 fits inside 768 and does not fit inside 600, so a pass that only
+    // looked at `size` would leave the window overlapping the taskbar.
+    availableMonitorsMock.mockResolvedValue([
+      monitorWithWorkArea({ width: 1366, height: 768 }, { width: 1366, height: 600 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject({ width: 900, height: 600 });
+  });
+
+  it("clamps a full size remembered from a larger display", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorWithWorkArea({ width: 1280, height: 800 }, { width: 1280, height: 760 }),
+    ]);
+    setupPersistedState(
+      makePersistedState({ uiMode: "compact", lastFullSize: { width: 1900, height: 1000 } }),
+    );
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject({ width: 1280, height: 760 });
+  });
+
+  it("lowers the min-size too, or the OS would refuse every resize that fits", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorWithWorkArea({ width: 720, height: 600 }, { width: 700, height: 500 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    // The last call is the target mode's floor; earlier ones are the compact
+    // floor the animator drops to.
+    const calls = setMinSizeMock.mock.calls;
+    expect(calls[calls.length - 1][0]).toMatchObject({ width: 700, height: 500 });
+  });
+
+  it("leaves a size that already fits alone", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorWithWorkArea({ width: 1920, height: 1080 }, { width: 1920, height: 1040 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    const size = setSizeMock.mock.calls[0][0] as { width: number; height: number };
+    expect(size).toMatchObject({ width: 900, height: 620 });
+  });
+
+  it("never grows a size to fill the screen", () => {
+    expect(fitSizeToWorkArea({ width: 900, height: 620 }, { width: 3840, height: 2100 }))
+      .toEqual({ width: 900, height: 620 });
+  });
+
+  it("passes the size through when no work area is known", () => {
+    expect(fitSizeToWorkArea({ width: 900, height: 620 }, null))
+      .toEqual({ width: 900, height: 620 });
   });
 });

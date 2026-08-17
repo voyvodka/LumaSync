@@ -217,12 +217,31 @@ interface MonitorRect {
 // The OS enforces its own constraints (menu bar, dock) natively.
 const WINDOW_EDGE_MARGIN = 0;
 
-function buildMonitorRect(monitor: { position: { x: number; y: number }; size: { width: number; height: number } }): MonitorRect {
+interface MonitorInfo {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  workArea?: { position: { x: number; y: number }; size: { width: number; height: number } };
+}
+
+function buildMonitorRect(monitor: MonitorInfo): MonitorRect {
   return {
     x: monitor.position.x,
     y: monitor.position.y,
     width: monitor.size.width,
     height: monitor.size.height,
+  };
+}
+
+/** Full bounds when the platform reports no work area — the size clamp is a
+ *  safety net, and a missing dock inset must not turn it into a no-op. */
+function buildWorkAreaRect(monitor: MonitorInfo): MonitorRect {
+  const area = monitor.workArea;
+  if (!area) return buildMonitorRect(monitor);
+  return {
+    x: area.position.x,
+    y: area.position.y,
+    width: area.size.width,
+    height: area.size.height,
   };
 }
 
@@ -289,6 +308,39 @@ function pickNearestMonitor(rect: WindowRect, monitors: MonitorRect[]): MonitorR
       ? monitor
       : best;
   }, null as MonitorRect | null);
+}
+
+/** Shrink-only, and exported for tests: a window taller than the screen puts its
+ *  own resize grip out of reach. Growing to fill a large display is a taste call
+ *  the persisted full size already answers. */
+export function fitSizeToWorkArea(
+  size: { width: number; height: number },
+  workArea: { width: number; height: number } | null,
+): { width: number; height: number } {
+  if (!workArea) return { ...size };
+  return {
+    width: Math.min(size.width, workArea.width),
+    height: Math.min(size.height, workArea.height),
+  };
+}
+
+/** Logical work area of the monitor nearest `rect`, or null when none is known. */
+async function logicalWorkAreaNear(
+  rect: WindowRect,
+  scaleFactor: number,
+): Promise<{ width: number; height: number } | null> {
+  const monitors: MonitorInfo[] = await availableMonitors();
+  if (monitors.length === 0) return null;
+
+  const bounds = monitors.map(buildMonitorRect);
+  const nearest = pickNearestMonitor(rect, bounds);
+  if (!nearest) return null;
+
+  const work = buildWorkAreaRect(monitors[bounds.indexOf(nearest)]);
+  return {
+    width: Math.floor(work.width / scaleFactor),
+    height: Math.floor(work.height / scaleFactor),
+  };
 }
 
 async function ensureWindowRectOnScreen(rect: WindowRect): Promise<WindowRect | null> {
@@ -476,8 +528,11 @@ const UI_MODE_RESIZE_DURATION_MS = 220;
 async function applyModeMinSize(
   win: ReturnType<typeof getCurrentWindow>,
   mode: UIMode,
+  workArea?: { width: number; height: number } | null,
 ): Promise<void> {
-  const min = UI_MODE_MIN_SIZES[mode];
+  // A floor larger than the screen is worse than no floor: the OS refuses every
+  // resize below it, so the window cannot be made to fit at all.
+  const min = fitSizeToWorkArea(UI_MODE_MIN_SIZES[mode], workArea ?? null);
   await win.setMinSize(new LogicalSize(min.width, min.height));
 }
 
@@ -608,6 +663,22 @@ export async function resizeToMode(
     targetHeight = defaults.height;
   }
 
+  // Neither the 900×620 full default nor a size remembered from a larger
+  // display is checked against the screen it is about to land on.
+  const workArea = await logicalWorkAreaNear(
+    {
+      x: Math.round(fromX * scaleFactor),
+      y: Math.round(fromY * scaleFactor),
+      width: Math.round(fromWidth * scaleFactor),
+      height: Math.round(fromHeight * scaleFactor),
+    },
+    scaleFactor,
+  );
+  ({ width: targetWidth, height: targetHeight } = fitSizeToWorkArea(
+    { width: targetWidth, height: targetHeight },
+    workArea,
+  ));
+
   // Anchor target around the current window center so the window grows/shrinks
   // in place instead of teleporting to monitor center.
   const centerX = fromX + fromWidth / 2;
@@ -666,7 +737,7 @@ export async function resizeToMode(
   }
 
   // Re-apply the target mode's min-size so OS resize handles enforce the floor.
-  await applyModeMinSize(win, mode);
+  await applyModeMinSize(win, mode, workArea);
 
   await saveShellState(partialUpdate);
   await persistWindowState();
