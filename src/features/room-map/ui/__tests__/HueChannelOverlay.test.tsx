@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, cleanup } from "@testing-library/react";
 
-import { HueChannelOverlay } from "../HueChannelOverlay";
+import { HueChannelOverlay, pinnedZoneEdges } from "../HueChannelOverlay";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 
 beforeEach(() => {
@@ -217,5 +217,43 @@ describe("HueChannelOverlay — bug #50 + #52(b) zone center drag", () => {
 
     const tagged = container.querySelectorAll(`[data-zone-channel-id="${ZONE.id}"]`);
     expect(tagged).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Pinned-edge cue — why a large zone's centre marker stops short of the wall
+// ---------------------------------------------------------------------------
+
+describe("pinnedZoneEdges", () => {
+  it("names the wall the box is flush against, not where the marker sits", () => {
+    // A 0.6-scale zone pinned at the top: the centre stops at 0.4, which is
+    // 0.6 away from the wall its edge is touching. That gap is the whole reason
+    // the drag looks stuck.
+    expect(pinnedZoneEdges({ centerX: 0, centerY: 0.4 }, { halfScaleX: 0.6, halfScaleY: 0.6 }))
+      .toBe("top");
+  });
+
+  it("lights both edges in a corner", () => {
+    expect(pinnedZoneEdges({ centerX: -0.7, centerY: -0.7 }, { halfScaleX: 0.3, halfScaleY: 0.3 }))
+      .toBe("bottom left");
+  });
+
+  it("says nothing while the zone still has room to move", () => {
+    expect(pinnedZoneEdges({ centerX: 0, centerY: 0 }, { halfScaleX: 0.3, halfScaleY: 0.3 }))
+      .toBe("");
+  });
+
+  it("reports nothing for a degenerate zone that already overflows the cube", () => {
+    // Centre chosen so the arithmetic *would* match without the half-scale
+    // guard: at 1.4, `-1 + halfScale` is 0.4 on both axes, so a guardless
+    // version answers "bottom left" and lights a box that is already outside
+    // the room. A centred probe passes either way and proves nothing.
+    expect(pinnedZoneEdges({ centerX: 0.4, centerY: 0.4 }, { halfScaleX: 1.4, halfScaleY: 1.4 }))
+      .toBe("");
+  });
+
+  it("pins a full-width zone that can only sit centred", () => {
+    expect(pinnedZoneEdges({ centerX: 0, centerY: 0 }, { halfScaleX: 1, halfScaleY: 1 }))
+      .toBe("top bottom left right");
   });
 });

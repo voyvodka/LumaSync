@@ -5043,6 +5043,39 @@ body {
   box-shadow: var(--lm-focus-ring-soft);
 }
 
+/* Zone bounds — the edge a drag is currently pinned against. The centre marker
+   stops `scale` short of the wall, so on a large zone it parks far from the edge
+   holding it and the drag reads as broken. Composed from four slots so a corner
+   lights both of its edges. `box-shadow` rather than `border-*`: the box sets
+   `border` inline, and an inset shadow needs no specificity fight to beat it. */
+[data-zone-bounds-id] {
+  --lm-zone-pin-top: inset 0 0 0 0 transparent;
+  --lm-zone-pin-bottom: inset 0 0 0 0 transparent;
+  --lm-zone-pin-left: inset 0 0 0 0 transparent;
+  --lm-zone-pin-right: inset 0 0 0 0 transparent;
+  box-shadow: var(--lm-zone-pin-top), var(--lm-zone-pin-bottom),
+    var(--lm-zone-pin-left), var(--lm-zone-pin-right);
+}
+[data-zone-pinned~="top"] {
+  --lm-zone-pin-top: inset 0 2px 0 0 var(--lm-amber);
+}
+[data-zone-pinned~="bottom"] {
+  --lm-zone-pin-bottom: inset 0 -2px 0 0 var(--lm-amber);
+}
+[data-zone-pinned~="left"] {
+  --lm-zone-pin-left: inset 2px 0 0 0 var(--lm-amber);
+}
+[data-zone-pinned~="right"] {
+  --lm-zone-pin-right: inset -2px 0 0 0 var(--lm-amber);
+}
+@media (forced-colors: active) {
+  /* Shadows are dropped in forced colours, so the cue has to be a real border. */
+  [data-zone-pinned] {
+    border-color: Highlight;
+    border-style: solid;
+  }
+}
+
 /* Zone label chip — pinned to canvas top-left when a Hue zone is active */
 .lm-room-zone-chip {
   position: absolute;
