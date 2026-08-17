@@ -19,6 +19,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Where you place a Hue light in the room map is now what the app samples from. Until now the lights followed the positions stored on the bridge, so arranging them here changed nothing until you pushed those positions to the bridge and the app read them back — and the coarse buttons on the Devices page never reached the lights at all, on any path. Your placement is sent when the stream starts, so it takes effect the next time lighting comes on. Writing positions to the bridge stays a separate, deliberate action, since that layout is shared with the Hue app and anything else that streams.
 - The room map now shows the Hue lights your bridge actually reports, and its Add Hue Channel button is gone. That button created a marker with a made-up number that matched no light on the bridge, and it existed only because the room map had no other way to learn about them — until a light had been moved on the Devices page it was invisible there. The lights are now picked up from the bridge itself the first time the page opens, so they are in the room map before you touch anything. Markers you placed by hand are left where they are.
 
 ### Fixed

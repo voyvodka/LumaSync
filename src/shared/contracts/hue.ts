@@ -352,6 +352,16 @@ export type HueAreaChannelsCommandStatus = CommandStatusOf<HueAreaChannelsWireSt
 
 /** One resolved entertainment channel: its bridge-reported position and
  * auto-detected screen region. */
+/** One channel's locally authored position, carried on the start request.
+ * Addressed by the bridge's `channelId` — a positional array is the ordinal
+ * trap this replaced. The screen region is never carried: Rust re-derives it
+ * from the position so there is one writable source. */
+export interface HueChannelPlacementOverride {
+  channelId: number;
+  positionX: number;
+  positionY: number;
+}
+
 export interface HueAreaChannelInfo {
   /** Our ordinal, and the key locally persisted overrides are stored under.
    * Equals `channelId` only on a contiguous area — never send it to the

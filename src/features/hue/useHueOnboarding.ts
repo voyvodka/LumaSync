@@ -28,7 +28,6 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     bridge: core.selectedBridge,
     credentials: state.credentials,
     areaId: state.selectedAreaId,
-    channelRegionOverrides: channels.channelRegionOverrides,
     onError: core.publishStatus,
   });
 

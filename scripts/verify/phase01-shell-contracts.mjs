@@ -2186,7 +2186,7 @@ for (const structName of unpairedBaseline) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 41;
+const EXPECTED_NULLABILITY_PAIR_COUNT = 42;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

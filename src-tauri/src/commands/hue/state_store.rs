@@ -112,10 +112,20 @@ pub struct StartHueStreamRequest {
     pub client_key: String,
     pub area_id: String,
     pub trigger_source: Option<HueRuntimeTriggerSource>,
-    /// Optional per-channel region overrides indexed by channel index.
-    /// Each entry is a region string: "left", "right", "top", "bottom", or "center".
-    /// `None` entries use the auto-detected region.
-    pub channel_region_overrides: Option<Vec<Option<String>>>,
+    /// The user's own placements for this area. Sparse and addressed by the
+    /// bridge's `channel_id` — a positional array would reintroduce the ordinal
+    /// this replaced. Absent ⇒ every channel keeps the bridge's position.
+    pub channel_placements: Option<Vec<HueChannelPlacementOverride>>,
+}
+
+/// One channel's locally authored position. The screen region is never carried:
+/// it is re-derived from the position so there is one writable source.
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct HueChannelPlacementOverride {
+    pub channel_id: u8,
+    pub position_x: f32,
+    pub position_y: f32,
 }
 
 /// Requested solid color + optional brightness to push to every light in

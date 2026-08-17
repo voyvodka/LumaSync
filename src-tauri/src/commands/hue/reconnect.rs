@@ -36,7 +36,7 @@ use super::frame::HueAreaChannel;
 use super::frame::HueColorSender;
 use super::retry::register_transient_fault;
 use super::sender::{
-    apply_channel_region_overrides, build_hue_sender_with_counter, deactivate_with_token,
+    apply_channel_placements, build_hue_sender_with_counter, deactivate_with_token,
     fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, wait_for_shutdown,
     DeactivateToken, HueLightMetadata, ShutdownSignal,
 };
@@ -468,8 +468,8 @@ async fn internal_restart_stream(
     let mut channels = fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
         .await
         .unwrap_or_default();
-    if let Some(overrides) = &request.channel_region_overrides {
-        apply_channel_region_overrides(&mut channels, overrides);
+    if let Some(placements) = &request.channel_placements {
+        apply_channel_placements(&mut channels, placements);
     }
 
     // 4b. Pre-fetch per-light archetype + gamut metadata (W1-C3a). Graceful:
@@ -587,7 +587,7 @@ mod tests {
             client_key: String::new(),
             area_id: "living-room".to_string(),
             trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
-            channel_region_overrides: None,
+            channel_placements: None,
         };
 
         let _ = start_with_evidence(
