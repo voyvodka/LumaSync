@@ -40,6 +40,12 @@ pub struct HueChannelPlacement {
     /// Parent entertainment area — `channel_index` is unique only within one.
     #[serde(default)]
     pub entertainment_area_id: Option<String>,
+    /// The bridge's own channel identity. `channel_index` above is our ordinal
+    /// and is NOT interchangeable with it. Absent means never resolved, and the
+    /// write-back must refuse rather than fall back to the ordinal — sending
+    /// the ordinal as a `channel_id` is the defect this field exists to end.
+    #[serde(default)]
+    pub channel_id: Option<u8>,
     /// v1.5 W1-A3 — when present, channel is logically grouped under
     /// `HueZone.id`. `zone_relative_position` is then the authoritative
     /// source of truth and `x/y/z` above are derived at runtime.

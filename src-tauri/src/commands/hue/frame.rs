@@ -86,7 +86,13 @@ pub struct HueAreaChannel {
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct HueAreaChannelInfo {
+    /// Our ordinal, and the key every locally persisted override is stored
+    /// under. Coincides with `channel_id` only on a contiguous area — never
+    /// substitute one for the other, and never send this to the bridge.
     pub index: usize,
+    /// The bridge's identity, and the byte written into the HueStream frame.
+    pub channel_id: u8,
+    pub light_ids: Vec<String>,
     pub position_x: f32,
     pub position_y: f32,
     pub light_count: usize,
@@ -576,6 +582,8 @@ pub(crate) fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChanne
         .enumerate()
         .map(|(index, ch)| HueAreaChannelInfo {
             index,
+            channel_id: ch.channel_id,
+            light_ids: ch.light_ids.clone(),
             position_x: ch.position_x,
             position_y: ch.position_y,
             light_count: ch.light_ids.len(),
@@ -587,6 +595,36 @@ pub(crate) fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChanne
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn channels_to_info_keeps_the_bridge_id_apart_from_the_ordinal() {
+        // Gapped on purpose. A contiguous area makes the two coincide, so a
+        // fixture built from one passes whether or not the id is carried at
+        // all — which is how the ordinal reached the bridge unnoticed.
+        let channels: Vec<HueAreaChannel> = [0u8, 2, 5]
+            .iter()
+            .map(|id| HueAreaChannel {
+                channel_id: *id,
+                light_ids: vec![format!("light-{id}")],
+                screen_region: HueScreenRegion::Left,
+                position_x: 0.0,
+                position_y: 0.0,
+            })
+            .collect();
+
+        let info = channels_to_info(&channels);
+
+        assert_eq!(
+            info.iter().map(|c| c.index).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+        assert_eq!(
+            info.iter().map(|c| c.channel_id).collect::<Vec<_>>(),
+            vec![0, 2, 5]
+        );
+        assert_eq!(info[2].light_ids, vec!["light-5".to_string()]);
+        assert_eq!(info[2].light_count, 1);
+    }
 
     #[test]
     fn build_huestream_frame_produces_correct_header_and_channels() {

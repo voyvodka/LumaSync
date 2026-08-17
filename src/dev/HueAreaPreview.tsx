@@ -12,20 +12,20 @@ import type { HueAreaChannelInfo } from "../features/hue/hueOnboardingApi";
 /** 10 channels spread around the TV — varied positions for thorough spatial testing. */
 const MOCK_CHANNELS: HueAreaChannelInfo[] = [
   // Left wall
-  { index: 0, positionX: -0.9,  positionY:  0.3,  lightCount: 3, autoRegion: "left" },
-  { index: 1, positionX: -0.85, positionY: -0.3,  lightCount: 2, autoRegion: "left" },
+  { index: 0, channelId: 0, lightIds: [], positionX: -0.9,  positionY:  0.3,  lightCount: 3, autoRegion: "left" },
+  { index: 1, channelId: 1, lightIds: [], positionX: -0.85, positionY: -0.3,  lightCount: 2, autoRegion: "left" },
   // Right wall
-  { index: 2, positionX:  0.9,  positionY:  0.35, lightCount: 3, autoRegion: "right" },
-  { index: 3, positionX:  0.85, positionY: -0.25, lightCount: 2, autoRegion: "right" },
+  { index: 2, channelId: 2, lightIds: [], positionX:  0.9,  positionY:  0.35, lightCount: 3, autoRegion: "right" },
+  { index: 3, channelId: 3, lightIds: [], positionX:  0.85, positionY: -0.25, lightCount: 2, autoRegion: "right" },
   // Top / ceiling
-  { index: 4, positionX: -0.3,  positionY:  0.85, lightCount: 2, autoRegion: "top" },
-  { index: 5, positionX:  0.3,  positionY:  0.9,  lightCount: 2, autoRegion: "top" },
+  { index: 4, channelId: 4, lightIds: [], positionX: -0.3,  positionY:  0.85, lightCount: 2, autoRegion: "top" },
+  { index: 5, channelId: 5, lightIds: [], positionX:  0.3,  positionY:  0.9,  lightCount: 2, autoRegion: "top" },
   // Bottom / floor
-  { index: 6, positionX: -0.25, positionY: -0.85, lightCount: 1, autoRegion: "bottom" },
-  { index: 7, positionX:  0.25, positionY: -0.9,  lightCount: 1, autoRegion: "bottom" },
+  { index: 6, channelId: 6, lightIds: [], positionX: -0.25, positionY: -0.85, lightCount: 1, autoRegion: "bottom" },
+  { index: 7, channelId: 7, lightIds: [], positionX:  0.25, positionY: -0.9,  lightCount: 1, autoRegion: "bottom" },
   // Center / behind TV
-  { index: 8, positionX:  0.0,  positionY:  0.0,  lightCount: 1, autoRegion: "center" },
-  { index: 9, positionX:  0.15, positionY:  0.15, lightCount: 1, autoRegion: "center" },
+  { index: 8, channelId: 8, lightIds: [], positionX:  0.0,  positionY:  0.0,  lightCount: 1, autoRegion: "center" },
+  { index: 9, channelId: 9, lightIds: [], positionX:  0.15, positionY:  0.15, lightCount: 1, autoRegion: "center" },
 ];
 
 /** Mock channel positions for mini-preview (subset per area) */

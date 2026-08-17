@@ -48,6 +48,10 @@ export interface HueChannelPlacement {
    *  `zoneId`: the Rust mirror echoes an absent value back as `null`. Empty ⇒
    *  unscoped, which the 4 → 5 migration leaves only when no area was known. */
   entertainmentAreaId?: string | null;
+  /** The bridge's identity; `channelIndex` is our ordinal and coincides with it
+   * only on a contiguous area. Absent ⇒ unresolved, and the write-back refuses
+   * rather than substituting the ordinal. Nullable: Rust echoes `None` as `null`. */
+  channelId?: number | null;
   /** Horizontal position: -1=left wall, +1=right wall */
   x: number;
   /** Vertical position (depth/front-back): -1=back wall, +1=front (TV wall) */
@@ -588,6 +592,10 @@ export const CHANNEL_WRITEBACK_STATUS = {
   NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
   /** Area id failed the path-traversal guard before any request was built. */
   AREA_INVALID: "HUE_AREA_INVALID",
+  /** At least one placement had no `channelId`, so it was skipped rather than
+   * addressed by its ordinal. Resolved channels in the same request are still
+   * written — one unresolvable marker must not block syncing the rest. */
+  UNRESOLVED_CHANNEL: "CHAN_WB_UNRESOLVED_CHANNEL",
 } as const;
 
 export type ChannelWritebackStatusCode =

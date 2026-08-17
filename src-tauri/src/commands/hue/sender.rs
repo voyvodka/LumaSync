@@ -840,7 +840,7 @@ pub(crate) async fn fetch_area_channels(
         .header("hue-application-key", username)
         .send()
         .await
-        .map_err(|error| AreaListError::Other(error.to_string()))?;
+        .map_err(|error| AreaListError::Unreachable(error.to_string()))?;
     let response = classify_hue_response(response)
         .await
         .map_err(|fault| match fault {

@@ -25,6 +25,8 @@ const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };
 const CREDENTIALS = { username: "app-key", clientKey: "psk" };
 const CHANNEL: HueAreaChannelInfo = {
   index: 0,
+  channelId: 0,
+  lightIds: ["light-0"],
   positionX: 0,
   positionY: 0,
   lightCount: 1,
@@ -72,6 +74,25 @@ describe("useHueAreaChannels", () => {
 
     await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
     expect(result.current.areaChannels).toEqual([]);
+  });
+
+  it("keeps the last known channels when the bridge stops answering", async () => {
+    // The whole point of splitting UNREACHABLE out of FAILED: an empty array on
+    // that code means "no answer", not "no channels". Clearing here is what made
+    // a Wi-Fi blip look like a deleted area.
+    const { result, rerender } = renderHook(
+      ({ areaId }: { areaId: string }) => useHueAreaChannels(BRIDGE, CREDENTIALS, areaId),
+      { initialProps: { areaId: "area-1" } },
+    );
+    await waitFor(() => expect(result.current.areaChannels).toEqual([CHANNEL]));
+
+    getAreaChannelsMock.mockResolvedValue(
+      response(HUE_AREA_CHANNELS_STATUS.UNREACHABLE, [], "connection refused"),
+    );
+    rerender({ areaId: "area-2" });
+
+    await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
+    expect(result.current.areaChannels).toEqual([CHANNEL]);
   });
 
   it("reports a bridge 403 as the declared re-pair status, keeping the bridge's own message", async () => {
