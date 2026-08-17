@@ -878,3 +878,53 @@ describe("Scenario 13 — dragging the window edge is remembered", () => {
     expect(captureLastSavedState().lastFullSize).toMatchObject({ width: 900, height: 620 });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Scenario 14 — gaps a mutation sweep found: the monitor pick and the anim floor
+// ---------------------------------------------------------------------------
+
+describe("Scenario 14 — clamping against the right monitor", () => {
+  const LEFT: MonitorInfo = { position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 } };
+  const RIGHT: MonitorInfo = { position: { x: 1920, y: 0 }, size: { width: 1920, height: 1080 } };
+
+  it("clamps an off-screen window into the monitor it is nearest, not the first one", async () => {
+    // Making pickNearestMonitor return the head of the list survived the whole
+    // suite: every other case has a single monitor, where first == nearest.
+    availableMonitorsMock.mockResolvedValue([LEFT, RIGHT]);
+    // Centre far to the right and below both screens, so a clamp is required.
+    setupPersistedState(makePersistedState({ windowCenterX: 3800, windowCenterY: 2000 }));
+    outerSizeMock.mockResolvedValue({ width: 320, height: 480 });
+
+    await restoreWindowState();
+
+    // Clamped into the right-hand monitor: x lands inside [1920, 3840), which a
+    // fallback to the first monitor could not produce.
+    expect(captureSetPositionArgs().x).toBeGreaterThanOrEqual(1920);
+  });
+
+  it("still uses the only monitor when there is one", async () => {
+    availableMonitorsMock.mockResolvedValue([LEFT]);
+    setupPersistedState(makePersistedState({ windowCenterX: 3800, windowCenterY: 2000 }));
+    outerSizeMock.mockResolvedValue({ width: 320, height: 480 });
+
+    await restoreWindowState();
+
+    expect(captureSetPositionArgs().x).toBeLessThan(1920);
+  });
+});
+
+describe("Scenario 15 — the animator drops the floor to compact", () => {
+  it("lowers the min size to the compact floor before animating, whatever the target", async () => {
+    // Intermediate frames pass through sizes smaller than the full floor, and
+    // the OS rejects a setSize below the current minimum. Using the target
+    // mode's floor here survived the suite because every other case animates
+    // with `animate: false`.
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full");
+
+    const floors = setMinSizeMock.mock.calls.map((c) => c[0] as { width: number; height: number });
+    expect(floors[0]).toMatchObject({ width: 300, height: 420 });
+    expect(floors[floors.length - 1]).toMatchObject({ width: 800, height: 560 });
+  });
+});

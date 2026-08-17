@@ -1,6 +1,10 @@
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { browser } from "@wdio/globals";
 
-import type { UIMode } from "../../src/shared/contracts/shell";
+import { SHELL_STORE_KEY, type UIMode } from "../../src/shared/contracts/shell";
 import { LIGHTING_MODE_KIND } from "../../src/features/mode/model/contracts";
 
 // `browser.execute` only, never `$()`: the embedded provider answers execute
@@ -105,4 +109,29 @@ async function settleTransition(): Promise<void> {
       timeoutMsg: "UI mode transition never settled at full opacity",
     },
   );
+}
+
+/** Where `plugin-store` puts `shell-state.json` for `com.lumasync.app`. */
+function shellStatePath(): string {
+  const home = homedir();
+  if (process.platform === "darwin") {
+    return join(home, "Library", "Application Support", "com.lumasync.app", `${SHELL_STORE_KEY}.json`);
+  }
+  if (process.platform === "win32") {
+    return join(process.env.APPDATA ?? join(home, "AppData", "Roaming"), "com.lumasync.app", `${SHELL_STORE_KEY}.json`);
+  }
+  return join(home, ".local", "share", "com.lumasync.app", `${SHELL_STORE_KEY}.json`);
+}
+
+/** The stored UI mode, or `null` on a machine that has never run the app — which
+ *  is every CI runner, and the reason a spec must not hard-code either answer.
+ *  Read from disk rather than the webview: the store is not on `window`. */
+export function persistedUiMode(): UIMode | null {
+  try {
+    const raw = JSON.parse(readFileSync(shellStatePath(), "utf-8")) as Record<string, unknown>;
+    const state = (raw[SHELL_STORE_KEY] ?? raw) as { uiMode?: UIMode };
+    return state.uiMode ?? null;
+  } catch {
+    return null;
+  }
 }
