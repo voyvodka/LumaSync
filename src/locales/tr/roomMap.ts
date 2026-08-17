@@ -7,7 +7,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     addTv: "TV Ekle",
     addFurniture: "Mobilya Ekle",
     addUsb: "LED Şerit Ekle",
-    addHue: "Hue Kanal Ekle",
     addImage: "Resim Ekle",
     settingsAriaLabel: "Harita Ayarları",
     tvAlreadyPlaced: "TV zaten eklendi",

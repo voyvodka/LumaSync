@@ -352,6 +352,21 @@ export function HueChannelMapPanel({
     );
   }, [channels]);
 
+  // The room map is bridge-blind — it draws persisted placements only, so a real
+  // channel stayed invisible there until dragged here. The parent's write
+  // refreshes `placements`, so the second pass finds nothing missing.
+  useEffect(() => {
+    if (!onPositionChange || channels.length === 0) return;
+    const resolved = channels.map((ch) =>
+      resolvePlacement(ch, placementsRef.current, zonesRef.current),
+    );
+    const missing = resolved.some((p) => {
+      const stored = findHueChannel(placementsRef.current, p.channelIndex);
+      return !stored || stored.channelId !== p.channelId;
+    });
+    if (missing) onPositionChange(resolved);
+  }, [channels, onPositionChange]);
+
   const regionLabel = (region: Region): string => {
     const key = `hue:channelMap.regions.${region}` as const;
     const translated = t(key);

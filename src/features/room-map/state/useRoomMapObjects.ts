@@ -2,12 +2,11 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   FurniturePlacement,
-  HueChannelPlacement,
   RoomMapConfig,
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { findHueChannel, nextHueChannelIndex } from "@/shared/contracts/roomMap";
+import { findHueChannel } from "@/shared/contracts/roomMap";
 import { moveHueChannelToWorld, nudgeHueChannel } from "../model/hueChannelPosition";
 import {
   furnitureObjectId,
@@ -26,7 +25,6 @@ export interface UseRoomMapObjectsReturn {
   handleAddTv: () => void;
   handleAddFurniture: (type: FurniturePlacement["type"]) => void;
   handleAddUsb: () => void;
-  handleAddHue: () => void;
   isLocked: (id: string) => boolean;
   deleteById: (id: string) => void;
   handleDelete: () => void;
@@ -88,16 +86,6 @@ export function useRoomMapObjects({
     };
     void updateConfig({ usbStrips: [...config.usbStrips, newStrip] });
   }, [widthMeters, config.usbStrips, updateConfig]);
-
-  const handleAddHue = useCallback(() => {
-    const newChannel: HueChannelPlacement = {
-      channelIndex: nextHueChannelIndex(config.hueChannels),
-      x: 0,
-      y: 0,
-      z: 0,
-    };
-    void updateConfig({ hueChannels: [...config.hueChannels, newChannel] });
-  }, [config.hueChannels, updateConfig]);
 
   const isLocked = useCallback(
     (id: string): boolean => {
@@ -294,7 +282,6 @@ export function useRoomMapObjects({
     handleAddTv,
     handleAddFurniture,
     handleAddUsb,
-    handleAddHue,
     isLocked,
     deleteById,
     handleDelete,

@@ -50,6 +50,62 @@ const defaultProps = {
 };
 
 // ---------------------------------------------------------------------------
+// Seeding: the room map is bridge-blind and draws persisted placements only
+// ---------------------------------------------------------------------------
+
+describe("seeding persisted placements from the bridge list", () => {
+  it("persists a channel the store has never seen", () => {
+    const onPositionChange = vi.fn();
+    render(
+      <HueChannelMapPanel {...defaultProps} placements={[]} onPositionChange={onPositionChange} />,
+    );
+    expect(onPositionChange).toHaveBeenCalledTimes(1);
+    expect(onPositionChange.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ channelIndex: 0, channelId: 0 }),
+      expect.objectContaining({ channelIndex: 1, channelId: 1 }),
+      expect.objectContaining({ channelIndex: 2, channelId: 2 }),
+    ]);
+  });
+
+  it("writes nothing when every channel is already stored with its bridge id", () => {
+    const onPositionChange = vi.fn();
+    const placements: HueChannelPlacement[] = [0, 1, 2].map((i) => ({
+      channelIndex: i,
+      channelId: i,
+      x: 0,
+      y: 0,
+      z: 0,
+    }));
+    render(
+      <HueChannelMapPanel
+        {...defaultProps}
+        placements={placements}
+        onPositionChange={onPositionChange}
+      />,
+    );
+    expect(onPositionChange).not.toHaveBeenCalled();
+  });
+
+  it("re-seeds a placement stored before bridge ids existed", () => {
+    const onPositionChange = vi.fn();
+    const placements: HueChannelPlacement[] = [0, 1, 2].map((i) => ({
+      channelIndex: i,
+      x: 0,
+      y: 0,
+      z: 0,
+    }));
+    render(
+      <HueChannelMapPanel
+        {...defaultProps}
+        placements={placements}
+        onPositionChange={onPositionChange}
+      />,
+    );
+    expect(onPositionChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // CHAN-01: channels rendered at positions
 // ---------------------------------------------------------------------------
 

@@ -16,6 +16,10 @@ https://keepachangelog.com/en/1.1.0/
 - LED Setup is drawn in the app's own colours. It was still using the stock palette it was built against, so its greys read lighter, its amber duller, and its preview toggle was a near-white slab in an otherwise dark window. Nothing moves or changes behaviour; the page now matches every other surface.
 - The window opens in whichever mode you left it in. Every launch forced compact and threw away the persisted choice, so anyone who preferred the wide layout re-selected it after every restart. The stated reason was a visible big-to-small flash during startup, which is not something that can happen: the window is created hidden and only shown once its size and position have been applied. Wide mode is now restored — at the size you last left it — before the window appears.
 
+### Changed
+
+- The room map now shows the Hue lights your bridge actually reports, and its Add Hue Channel button is gone. That button created a marker with a made-up number that matched no light on the bridge, and it existed only because the room map had no other way to learn about them — until a light had been moved on the Devices page it was invisible there. The lights are now picked up from the bridge itself the first time the page opens, so they are in the room map before you touch anything. Markers you placed by hand are left where they are.
+
 ### Fixed
 
 - Saving Hue light positions to the bridge no longer moves the wrong light. Each position was addressed by the light's place in the list rather than by the number the bridge itself gave it, and those two only agree while the numbering has no gaps — which it stops having as soon as a light is removed from an entertainment area. Positions are now sent under the bridge's own number. A light the app has not yet matched to the bridge is skipped and reported instead of being written under a guess, and the lights beside it still save.

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
-import { IconTv, IconFurniture, IconLed, IconHue, IconImage } from "@/shared/ui/icons";
+import { IconTv, IconFurniture, IconLed, IconImage } from "@/shared/ui/icons";
 
 const FURNITURE_TYPES: FurniturePlacement["type"][] = ["sofa", "table", "chair", "other"];
 
@@ -10,7 +10,6 @@ interface LeftToolbarProps {
   onAddTv: () => void;
   onAddFurniture: (type: FurniturePlacement["type"]) => void;
   onAddUsb: () => void;
-  onAddHue: () => void;
   onAddImage: () => void;
 }
 
@@ -57,7 +56,6 @@ export function LeftToolbar({
   onAddTv,
   onAddFurniture,
   onAddUsb,
-  onAddHue,
   onAddImage,
 }: LeftToolbarProps) {
   const { t } = useTranslation();
@@ -121,12 +119,6 @@ export function LeftToolbar({
         icon={<IconLed />}
         label={t("roomMap:toolbar.addUsb")}
         onClick={onAddUsb}
-      />
-
-      <ToolChip
-        icon={<IconHue />}
-        label={t("roomMap:toolbar.addHue")}
-        onClick={onAddHue}
       />
 
       <ToolChip
