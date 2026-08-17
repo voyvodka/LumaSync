@@ -220,3 +220,84 @@ describe("CHAN-05: save to bridge write-back", () => {
     expect(retryBtns.length).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Zone-bound channels — the panel used to strip the binding on every save
+// ---------------------------------------------------------------------------
+
+describe("zone-bound channels survive an edit here", () => {
+  const ZONE = {
+    id: "zone-1",
+    name: "TV wall",
+    entertainmentAreaId: "area-1",
+    centerX: 0,
+    centerY: 0,
+    centerZ: 0,
+    scaleX: 0.5,
+    scaleY: 0.5,
+    scaleZ: 0.5,
+    channelIndices: [0],
+  };
+
+  const boundPlacement: HueChannelPlacement = {
+    channelIndex: 0,
+    x: 0.5,
+    y: 0,
+    z: 0,
+    label: "Sofa lamp",
+    locked: true,
+    zoneId: "zone-1",
+    zoneRelativePosition: { x: 1, y: 0, z: 0 },
+  };
+
+  type PositionSpy = ReturnType<typeof vi.fn<(updated: HueChannelPlacement[]) => void>>;
+
+  function lastEmitted(spy: PositionSpy): HueChannelPlacement[] {
+    const calls = spy.mock.calls;
+    return calls[calls.length - 1][0];
+  }
+
+  async function editZ(onPositionChange: PositionSpy, value: string) {
+    const user = userEvent.setup();
+    render(
+      <HueChannelMapPanel
+        {...defaultProps}
+        placements={[boundPlacement]}
+        zones={[ZONE]}
+        onPositionChange={onPositionChange}
+      />,
+    );
+    await user.click(screen.getAllByRole("button", { name: "1" })[0]);
+    fireEvent.change(screen.getByRole("slider"), { target: { value } });
+  }
+
+  it("keeps the zone binding, label and lock instead of rebuilding a bare record", async () => {
+    const onPositionChange: PositionSpy = vi.fn();
+    await editZ(onPositionChange, "0.5");
+
+    const channel = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
+    expect(channel.zoneId).toBe("zone-1");
+    expect(channel.label).toBe("Sofa lamp");
+    expect(channel.locked).toBe(true);
+  });
+
+  it("writes the zone-relative height, which is the one the runtime reads", async () => {
+    const onPositionChange: PositionSpy = vi.fn();
+    await editZ(onPositionChange, "0.5");
+
+    const channel = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
+    // world 0.5 through centerZ 0 + scaleZ 0.5 ⇒ relative 1.0. Writing only the
+    // absolute `z` would leave the resolved height at its old value.
+    expect(channel.zoneRelativePosition?.z).toBeCloseTo(1, 5);
+    expect(channel.z).toBeCloseTo(0.5, 5);
+  });
+
+  it("paints the bound channel where its zone puts it, not at its stale absolute pair", () => {
+    const stale: HueChannelPlacement = { ...boundPlacement, x: -0.9, y: -0.9 };
+    render(<HueChannelMapPanel {...defaultProps} placements={[stale]} zones={[ZONE]} />);
+
+    // centerX 0 + scaleX 0.5 * relative 1 ⇒ 0.5, which is 75% across the canvas.
+    const dot = screen.getAllByRole("button", { name: "1" })[0];
+    expect(dot.style.left).toBe("75%");
+  });
+});

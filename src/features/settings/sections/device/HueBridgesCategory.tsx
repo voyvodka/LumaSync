@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
-import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { deriveHueBridgeCardState } from "@/features/hue/model/hueBridgeCardState";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
@@ -24,6 +24,9 @@ export interface HueBridgesCategoryProps {
   channelPlacements: HueChannelPlacement[];
   onPositionChange: (updated: HueChannelPlacement[]) => Promise<void>;
   persistError: boolean;
+  /** Room-map zones, so the channel map can project through a bound channel's
+   *  zone instead of writing the absolute pair the runtime ignores. */
+  zones: readonly HueZone[];
 }
 
 export function HueBridgesCategory({
@@ -32,6 +35,7 @@ export function HueBridgesCategory({
   channelPlacements,
   onPositionChange,
   persistError,
+  zones,
 }: HueBridgesCategoryProps) {
   const { t } = useTranslation();
   const {
@@ -741,6 +745,7 @@ export function HueBridgesCategory({
                 username={credentials?.username}
                 areaId={selectedArea?.id}
                 isStreaming={runtimeStatus?.state === "Running"}
+                zones={zones}
               />
             ) : null}
           </>

@@ -66,6 +66,10 @@ supplies that channel's position, and that position does reach the bridge on "Sa
 the failure mode is a wrong **position** for a real channel, not a wrong light and not a wrong
 colour. That changes when room-aware ambilight lands and the live path starts reading placements.
 
+**The Devices channel map edits the same `hueChannels` the room map does, so it has to respect the zone binding rather than flatten it.** It rebuilds its working list from the *bridge's* channel array, which is what keeps a hand-minted index from ever being PUT — but the rebuild used to emit a bare `{channelIndex, x, y, z}` literal, dropping `label`, `locked`, `zoneId` and `zoneRelativePosition` for every channel on every save. A channel the room map had bound to a zone came back detached, and since the bare record also carries no area attribution, a second entertainment area's placements overwrote the first's. Seeding now preserves the stored record and resolves the displayed coordinates through the zone, and the three write paths (drag, arrow keys, the height slider) go through `model/hueChannelPosition.ts` so a bound channel's `zoneRelativePosition` moves with it — writing only the absolute pair would leave the runtime resolving the old position. Height needed its own helper there: Rust resolves `center_z + scale_z * relative.z` too, and this panel is the only surface that edits `z` at all.
+
+**An editor's output is a subset, so it is merged into `hueChannels`, never assigned over it.** The panel only ever sees the channels one bridge is currently reporting. Assigning that array onto the config deleted every placement outside the view — another area's, and all of them while the bridge was unreachable. `mergeHueChannels` keeps the untouched records, which is the same rule as "the editor never deletes a Hue channel" applied to the save path rather than to a delete button.
+
 **A zone is a physical square in metres, which means its two cube-space scales diverge in a
 non-square room.** The inspector edits one edge length; `scaleX` and `scaleY` are derived from it
 against the room's width and depth independently, so a 1 m square in a 5×4 m room is not a uniform
