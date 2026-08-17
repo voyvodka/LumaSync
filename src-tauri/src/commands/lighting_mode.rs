@@ -15,6 +15,9 @@ use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
     BlackBorderInsets, CapturedFrame, StaticFrameSource,
 };
+use super::ambilight_scene::{
+    hue_default_screen_affinity, LightSetState, LightTopology, SceneAnalyzer,
+};
 use super::calibration::list_displays;
 use super::device_connection::{ActiveSinkRegistry, CommandStatus, SerialConnectionState};
 use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
@@ -1597,6 +1600,46 @@ fn start_ambilight_worker(
         // count, led_count) without flooding stdout at 60 Hz.
         let mut usb_send_count = 0u32;
         let mut hue_channel_smoother = HueChannelSmoother::new();
+        // Scene-adaptive stage (docs/architecture/capture-and-pipeline.md). Off
+        // for synthetic test frames, which must reach the strip exactly as
+        // painted, and under LUMASYNC_AMBILIGHT_LEGACY=1 for A/B bisecting.
+        let scene_enabled = preview.as_ref().is_none_or(|ctx| ctx.source != "test")
+            && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
+        let mut scene = SceneAnalyzer::new();
+        let strip_topology = LightTopology::Chain {
+            closed: led_calibration.as_ref().is_some_and(|cal| {
+                cal.counts.top > 0
+                    && cal.counts.right > 0
+                    && cal.counts.bottom > 0
+                    && cal.counts.left > 0
+                    && cal.bottom_missing == 0
+            }),
+        };
+        let mut strip_scene_state = LightSetState::default();
+        let (hue_topology, hue_affinity) = hue_output.as_ref().map_or_else(
+            || (LightTopology::Points(Vec::new()), Vec::new()),
+            |ctx| {
+                (
+                    LightTopology::Points(
+                        ctx.channels
+                            .iter()
+                            .map(|ch| (ch.position_x, ch.position_y))
+                            .collect(),
+                    ),
+                    ctx.channels
+                        .iter()
+                        .map(|ch| hue_default_screen_affinity(ch.position_y))
+                        .collect::<Vec<f32>>(),
+                )
+            },
+        );
+        let mut hue_scene_state = LightSetState::default();
+        let mut hue_scene_scratch: Vec<[u8; 3]> = Vec::new();
+        let mut scene_frame_count: u32 = 0;
+        info!(
+            "[ambilight-worker] scene-adaptive stage {}",
+            if scene_enabled { "on" } else { "off" }
+        );
         // Border cache is refreshed each iteration from live_settings.
         let mut border_cache = BlackBorderCache::new(live_settings.read_black_border_detection());
 
@@ -1643,9 +1686,28 @@ fn start_ambilight_worker(
                 border_cache.set_enabled(live_settings.read_black_border_detection());
                 let brightness = live_settings.read_brightness();
                 let saturation = live_settings.read_saturation();
-                quality_state.set_smoothing_alpha(live_settings.read_smoothing_alpha());
                 // Update black border detection cache from the raw (uncropped) frame.
                 border_cache.update_if_due(&raw_frame);
+                // The preset is a ceiling; the scene stage decides how much of it
+                // this frame gets to use, and every sink reads the same answer.
+                let alpha_ceiling = live_settings.read_smoothing_alpha();
+                let frame_alpha = if scene_enabled {
+                    scene.observe_frame(&raw_frame, border_cache.insets(), alpha_ceiling);
+                    scene.process(&mut sampled, &strip_topology, &[], &mut strip_scene_state);
+                    scene_frame_count += 1;
+                    if scene_frame_count <= 2 || scene_frame_count.is_multiple_of(600) {
+                        info!(
+                            "[ambilight-worker] scene #{scene_frame_count} — alpha={:.3}/{alpha_ceiling:.3} change={:.3} ambience={:?}",
+                            scene.alpha(),
+                            scene.change_envelope(),
+                            scene.ambience_srgb()
+                        );
+                    }
+                    scene.alpha()
+                } else {
+                    alpha_ceiling
+                };
+                quality_state.set_smoothing_alpha(frame_alpha);
                 let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
                 telemetry_window.record_capture();
                 // Apply saturation before smoothing/sending so the quality gate sees
@@ -1712,27 +1774,36 @@ fn start_ambilight_worker(
 
                 if let Some(context) = hue_output.as_ref() {
                     if !context.channels.is_empty() {
-                        let raw_colors: Vec<(u8, u8, u8)> = context
-                            .channels
+                        hue_scene_scratch.clear();
+                        hue_scene_scratch.extend(context.channels.iter().map(|ch| {
+                            let (r, g, b) = sample_screen_position_avg(
+                                &raw_frame,
+                                ch.position_x,
+                                ch.position_y,
+                                border_cache.insets(),
+                            );
+                            [r, g, b]
+                        }));
+                        if scene_enabled {
+                            scene.process(
+                                &mut hue_scene_scratch,
+                                &hue_topology,
+                                &hue_affinity,
+                                &mut hue_scene_state,
+                            );
+                        }
+                        let raw_colors: Vec<(u8, u8, u8)> = hue_scene_scratch
                             .iter()
-                            .map(|ch| {
-                                let rgb = sample_screen_position_avg(
-                                    &raw_frame,
-                                    ch.position_x,
-                                    ch.position_y,
-                                    border_cache.insets(),
-                                );
+                            .map(|&[r, g, b]| {
                                 apply_color_correction_rgb_with_luts(
-                                    rgb,
+                                    (r, g, b),
                                     &color_correction,
                                     &frame_luts,
                                 )
                             })
                             .collect();
 
-                        let hue_smoothing_alpha = live_settings.read_smoothing_alpha();
-                        let smoothed =
-                            hue_channel_smoother.smooth(&raw_colors, hue_smoothing_alpha);
+                        let smoothed = hue_channel_smoother.smooth(&raw_colors, frame_alpha);
 
                         hue_send_count += 1;
                         if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {

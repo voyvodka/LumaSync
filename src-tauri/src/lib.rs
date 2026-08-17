@@ -10,6 +10,7 @@ use tauri::{
 
 mod commands {
     pub mod ambilight_capture;
+    pub mod ambilight_scene;
     pub mod calibration;
     pub mod device_connection;
     pub mod device_handshake;

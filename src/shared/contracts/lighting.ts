@@ -20,10 +20,15 @@
 
 /**
  * User-facing smoothing presets applied to every ambilight sink. Each
- * preset maps to a single EWMA (exponentially-weighted moving average)
- * coefficient `alpha` used as:
+ * preset maps to a **ceiling** on the EWMA (exponentially-weighted moving
+ * average) coefficient `alpha` used as:
  *
  *   smoothed = alpha * newSample + (1 - alpha) * prevSmoothed
+ *
+ * The scene-adaptive stage in the Rust worker decides, per frame, how much
+ * of that ceiling the content gets to use — a static scene sits well below
+ * it, a hard change reaches it — and never exceeds it. The user's pick is a
+ * lever on how much movement is allowed, not a fixed rate.
  *
  * Lower alpha ⇒ heavier smoothing ⇒ calmer lights. Higher alpha ⇒
  * snappier response ⇒ more intense.
@@ -37,7 +42,7 @@
  */
 export type LightingSmoothingPreset = "subtle" | "moderate" | "intense";
 
-/** EWMA alpha coefficient for each {@link LightingSmoothingPreset}. */
+/** EWMA alpha ceiling for each {@link LightingSmoothingPreset}. */
 export const LIGHTING_SMOOTHING_PRESET_COEFFICIENTS: Readonly<
   Record<LightingSmoothingPreset, number>
 > = {
