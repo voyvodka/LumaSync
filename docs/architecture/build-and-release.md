@@ -118,3 +118,20 @@ the only place it can catch one before publication.
 ## Resolved
 
 - **v1.5.2 shipped a macOS build that could not launch** ([#115](https://github.com/voyvodka/LumaSync/issues/115)). Linking with a deployment target below 12.0 made dyld abort at launch on users' machines. An app that cannot start cannot run its own updater, so the fault was unrecoverable by the mechanism that exists to recover from faults, and affected users had to reinstall by hand. The deployment-target pin, `scripts/verify/macos-swift-runtime.sh`, and the entire launch smoke test all exist because of this one incident.
+
+## The e2e suite runs against the real app, and its state
+
+`pnpm e2e` builds a debug binary and drives it through the `embedded` WebDriver provider, so a run
+opens a real window and switches modes and tabs on screen. It also reads and writes the same
+`shell-state.json` the installed app uses — there is no isolated profile.
+
+Two consequences, both of which have already bitten:
+
+- **A spec must not assume a starting state.** `shell.e2e.ts` asserted the app "boots into compact
+  mode", which stopped being true when boot began restoring the persisted mode. CI never noticed,
+  because a fresh runner has no state file and therefore defaults to compact; on a machine that had
+  last been left in full mode the first three specs failed. Worse, the suite *repaired itself*: the
+  section-routing spec ends by switching back to compact, so a second run passed and the failure
+  looked like a flake. Assert against the persisted value, or switch to the mode the spec needs.
+- **A run is visible and it mutates real data.** Anyone watching the machine sees the app open,
+  cycle through menus and close. Say so before running it, and put back anything a spec seeded.

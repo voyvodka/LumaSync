@@ -2,6 +2,11 @@
 // Windows+Linux only (tauri-apps/tauri#7068). Run via `pnpm e2e`, which
 // rebuilds: `cargo test` emits a dev-cfg binary to this same path that loads
 // the Vite dev URL instead of embedded assets, so the window comes up blank.
+//
+// This drives the *installed* app: it opens a real window, switches modes and
+// tabs on screen, and reads and writes the real `shell-state.json`. On a machine
+// the maintainer also uses, a run is visible and it does leave state behind — so
+// specs must not assume a starting state. See docs/architecture/build-and-release.md.
 
 import type { TauriCapabilities } from "@wdio/tauri-service";
 
