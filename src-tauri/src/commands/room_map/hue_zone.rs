@@ -570,6 +570,10 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
             y: wy,
             z: wz,
             label: None,
+            locked: None,
+            // A zone belongs to exactly one area, so the synthesised placement
+            // inherits it rather than being left unscoped.
+            entertainment_area_id: Some(zone_ref.entertainment_area_id.clone()),
             zone_id: Some(target_zone_id.clone()),
             zone_relative_position: Some(resolved_relative),
         });
@@ -712,6 +716,8 @@ mod tests {
             y: 0.8,
             z: 0.0,
             label: None,
+            locked: None,
+            entertainment_area_id: Some("area-1".to_string()),
             zone_id: Some("z1".to_string()),
             zone_relative_position: Some(ZoneRelativePosition {
                 x: 1.0,
@@ -798,6 +804,8 @@ mod tests {
             y: 0.0,
             z: 0.0,
             label: None,
+            locked: None,
+            entertainment_area_id: Some("area-1".to_string()),
             zone_id: Some("z1".to_string()),
             zone_relative_position: Some(ZoneRelativePosition {
                 x: 0.0,

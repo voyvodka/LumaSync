@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LedChipType } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
-import { DEFAULT_ROOM_MAP, mergeHueChannels } from "@/shared/contracts/roomMap";
+import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
 import type {
   HueChannelPlacement,
   HueZone,
@@ -69,7 +69,8 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
     let cancelled = false;
     shellStore.load().then((state) => {
       if (cancelled) return;
-      setChannelPlacements(state.roomMap?.hueChannels ?? []);
+      const stored = state.roomMap?.hueChannels ?? [];
+      setChannelPlacements(selectedAreaId ? hueChannelsForArea(stored, selectedAreaId) : stored);
       setHueZones(state.roomMap?.zones ?? []);
       setPairedStrips(state.roomMap?.usbStrips ?? []);
     });
@@ -118,13 +119,19 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
   }, []);
 
   const handlePositionChange = useCallback(async (updated: HueChannelPlacement[]) => {
-    setChannelPlacements(updated);
+    // Stamped here rather than in the panel: the panel is handed one area's
+    // channels and has no reason to know which, but the merge cannot tell two
+    // areas' channel 0 apart without it.
+    const scoped = selectedAreaId
+      ? updated.map((p) => ({ ...p, entertainmentAreaId: selectedAreaId }))
+      : updated;
+    setChannelPlacements(scoped);
     try {
       const current = await shellStore.load();
       const currentRoomMap = current.roomMap;
       const updatedRoomMap: RoomMapConfig = {
         ...(currentRoomMap ?? DEFAULT_ROOM_MAP),
-        hueChannels: mergeHueChannels(currentRoomMap?.hueChannels ?? [], updated),
+        hueChannels: mergeHueChannels(currentRoomMap?.hueChannels ?? [], scoped),
       };
       await shellStore.save({
         roomMap: updatedRoomMap,
@@ -135,7 +142,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
       console.error("[LumaSync] handlePositionChange failed", e);
       hueChannelPersistError.raise();
     }
-  }, [hueChannelPersistError]);
+  }, [hueChannelPersistError, selectedAreaId]);
 
   return (
     <div className="lm-device-page">

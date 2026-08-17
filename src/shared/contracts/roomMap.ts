@@ -43,6 +43,11 @@ export interface ZoneRelativePosition {
 export interface HueChannelPlacement {
   /** Channel index within the entertainment area (0-based) */
   channelIndex: number;
+  /** Parent entertainment area — `channelIndex` is unique only *within* one, so
+   *  without this two areas' channel 0 are a single record. Nullable like
+   *  `zoneId`: the Rust mirror echoes an absent value back as `null`. Empty ⇒
+   *  unscoped, which the 4 → 5 migration leaves only when no area was known. */
+  entertainmentAreaId?: string | null;
   /** Horizontal position: -1=left wall, +1=right wall */
   x: number;
   /** Vertical position (depth/front-back): -1=back wall, +1=front (TV wall) */
@@ -75,6 +80,36 @@ export function findHueChannel(
   return channels.find((c) => c.channelIndex === channelIndex);
 }
 
+/** Swap one placement in place. Matching on `channelIndex` alone would hit the
+ *  same-numbered channel in every other area; order is preserved because the
+ *  object list is rendered from it and a drag must not reshuffle it. */
+export function replaceHueChannel(
+  channels: readonly HueChannelPlacement[],
+  updated: HueChannelPlacement,
+): HueChannelPlacement[] {
+  return channels.map((channel) =>
+    channel.channelIndex === updated.channelIndex && areaKey(channel) === areaKey(updated)
+      ? updated
+      : channel,
+  );
+}
+
+/** `null` and `undefined` both mean unscoped — Rust echoes `None` as `null`. */
+function areaKey(channel: HueChannelPlacement): string {
+  return channel.entertainmentAreaId ?? "";
+}
+
+/** The placements belonging to one entertainment area. An unscoped record — one
+ *  the 4 → 5 migration had no `lastHueAreaId` to backfill from — is adopted by
+ *  the area currently being viewed rather than stranded where nothing can edit
+ *  it. See docs/architecture/room-map.md. */
+export function hueChannelsForArea(
+  channels: readonly HueChannelPlacement[],
+  entertainmentAreaId: string,
+): HueChannelPlacement[] {
+  return channels.filter((c) => !c.entertainmentAreaId || c.entertainmentAreaId === entertainmentAreaId);
+}
+
 /** Mint a `channelIndex` for a hand-placed channel. `channels.length` collides on a
  * gapped map (`[0, 2]` → a second `2`), and nothing ever removes a channel to undo it.
  * Counts past the highest rather than filling the gap — see docs/architecture/room-map.md. */
@@ -89,8 +124,17 @@ export function mergeHueChannels(
   stored: readonly HueChannelPlacement[],
   edited: readonly HueChannelPlacement[],
 ): HueChannelPlacement[] {
-  const editedIndices = new Set(edited.map((channel) => channel.channelIndex));
-  return [...stored.filter((channel) => !editedIndices.has(channel.channelIndex)), ...edited];
+  // Area *and* index — index alone is the collision this field exists to stop.
+  // Unscoped also loses: `hueChannelsForArea` lent it out and it returns
+  // stamped, so a strict match would keep the pre-adoption copy beside it.
+  const displaces = (stored: HueChannelPlacement, edit: HueChannelPlacement) =>
+    stored.channelIndex === edit.channelIndex &&
+    (areaKey(stored) === areaKey(edit) || !stored.entertainmentAreaId);
+
+  return [
+    ...stored.filter((channel) => !edited.some((edit) => displaces(channel, edit))),
+    ...edited,
+  ];
 }
 
 // ---------------------------------------------------------------------------
