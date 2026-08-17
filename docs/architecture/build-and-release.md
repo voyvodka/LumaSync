@@ -110,6 +110,47 @@ the only place it can catch one before publication.
 - **`chunkSizeWarningLimit` is raised to 900 kB, and that is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it, so the default fired on every build on macOS and Ubuntu and said nothing actionable. The limit sits just above the current bundle so real growth still trips it. Code-splitting the room-map editor would cut startup parse time — that is a genuine win, but a separate change, not a way to silence this.
 - **The test environment installs its own `localStorage`** in `src/test/setup.ts`. Node ≥ 24 defines an experimental `localStorage` global that reads back as `undefined` without `--localstorage-file`, and it shadows the one happy-dom provides. CI runs Node 22 and never saw it; on a newer local Node every `HsvColorPicker` recent-colors read and write threw into its own `catch`, so the feature was inert in tests and nothing failed. Anything reached through `window` deserves the same suspicion when local and CI Node versions differ.
 
+## Keychain prompts in dev
+
+macOS asks for the login-keychain password on almost every `pnpm tauri dev` start —
+*"lumasync wants to use your confidential information stored in com.lumasync.app"* — and
+**"Always Allow" does not stop it**. Nothing in the credential code is at fault, and the
+number of reads is already down to one per account per process (`CachedStore`).
+
+The cause is the signature. Rust's linker ad-hoc signs every relink, and an ad-hoc
+signature's designated requirement is the binary's own cdhash:
+
+```
+Signature=adhoc
+designated => cdhash H"70177a2d4f4f84335b433dbf0fd33c5a39e33005"
+```
+
+"Always Allow" writes *that requirement* into the item's ACL, so the grant belongs to one
+build. The next relink is a different program as far as macOS is concerned. Four days of
+development left 24 dead grants on `hue-app-key`, each one reporting `status -2147415734`
+against a binary that no longer exists.
+
+`scripts/dev/sign-dev-binary.sh` runs as Cargo's `runner` for `aarch64-apple-darwin` — which
+is where `tauri dev` lands, since it launches through `cargo run` — and re-signs the binary
+with a fixed self-signed certificate before exec'ing it. The requirement stops naming a hash:
+
+```
+designated => identifier "com.lumasync.app.dev" and certificate leaf = H"69efdf42…"
+```
+
+Both halves are pinned deliberately. The certificate is created once by
+`pnpm dev:signing-identity`; `--identifier` is passed explicitly because Cargo's default
+(`lumasync-<metadata hash>`) moves whenever crate metadata does, which would put the drift
+straight back. The runner is a pass-through when the identity is absent, so a fresh clone,
+Linux, Windows, and CI are unaffected, and it skips anything not named `lumasync` because
+`runner` wraps `cargo test`'s binaries too.
+
+**This does nothing for released builds.** `tauri.conf.json` sets no `signingIdentity` and no
+workflow carries `APPLE_*` credentials, so shipped macOS builds are ad-hoc signed as well and
+their designated requirement changes with every version. A user who has paired a bridge is
+therefore asked again after each update — twice, since `hue-app-key` and `hue-client-key` are
+separate items with separate ACLs. Only Developer ID signing fixes that one.
+
 ## Accepted risks
 
 - **Windows embedded-debug launch needs a visible smoke window.** Reproducing [#181](https://github.com/voyvodka/LumaSync/issues/181) on bare-metal Windows isolated a WebView2 race: `tauri dev`, release `--no-bundle`, and the release MSI load, but a debug embedded webview starting hidden falls through to `chrome-error://chromewebdata/`. Disabling the automatic DevTools window does not change it; starting the same binary visible makes the custom-protocol document and frontend IPC load. Production remains hidden to avoid a startup flash. CI merges `tauri.windows-smoke.conf.json`, which changes only the smoke window to visible and disables DevTools. The apparently separate missing frontend logs were a logger-filter bug: plugin-log's `webview:<location>` target does not inherit fern's `level_for("webview", Info)`, because fern only walks `::` module separators. Debug logging now uses a global `Info` floor, allowing the startup marker to reach the file sink.
