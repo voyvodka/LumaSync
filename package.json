@@ -25,7 +25,6 @@
     "check:all": "pnpm lint && pnpm typecheck:e2e && pnpm check:rust && pnpm verify:shell-contracts && pnpm check:i18n && pnpm verify:version-parity",
     "preview": "vite preview",
     "tauri": "tauri",
-    "dev:signing-identity": "sh scripts/dev/create-signing-identity.sh",
     "check:i18n": "node scripts/verify/i18n-keys.mjs",
     "verify:shell-contracts": "node scripts/verify/phase01-shell-contracts.mjs",
     "verify:version-parity": "node scripts/verify/version-parity.mjs",

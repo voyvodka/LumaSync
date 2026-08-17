@@ -23,9 +23,3 @@
 # CI/release so the floor holds in every build context.
 [env]
 MACOSX_DEPLOYMENT_TARGET = { value = "12.3", force = true }
-
-# `cargo run` (which is how `tauri dev` launches) goes through a re-signing wrapper
-# on Apple Silicon. Relative to this file's parent, so it resolves from src-tauri/.
-# Pass-through unless the local identity exists — see the script header.
-[target.aarch64-apple-darwin]
-runner = "../scripts/dev/sign-dev-binary.sh"

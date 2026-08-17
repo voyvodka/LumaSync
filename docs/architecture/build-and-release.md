@@ -130,26 +130,35 @@ build. The next relink is a different program as far as macOS is concerned. Four
 development left 24 dead grants on `hue-app-key`, each one reporting `status -2147415734`
 against a binary that no longer exists.
 
-`scripts/dev/sign-dev-binary.sh` runs as Cargo's `runner` for `aarch64-apple-darwin` — which
-is where `tauri dev` lands, since it launches through `cargo run` — and re-signs the binary
-with a fixed self-signed certificate before exec'ing it. The requirement stops naming a hash:
+That ACL is not the gate, though, and fixing it does not stop the prompt. **Two attempts were
+measured against a running app and both failed** — recorded here so the next person does not
+spend the afternoon again:
 
-```
-designated => identifier "com.lumasync.app.dev" and certificate leaf = H"69efdf42…"
-```
+- **Re-signing every dev build with a fixed self-signed certificate.** This works as far as it
+  goes: the requirement becomes `identifier "…" and certificate leaf = H"…"`, it survives a
+  relink byte-identically, and the ACL ends up with one live entry instead of a growing pile of
+  dead ones. The prompt still appeared on every build.
+- **Clearing the item's partition list** (`security set-generic-password-partition-list -S ""`).
+  This made it worse — two prompts became three. macOS re-populates the list on first access and
+  asks for the password in order to do so.
 
-Both halves are pinned deliberately. The certificate is created once by
-`pnpm dev:signing-identity`; `--identifier` is passed explicitly because Cargo's default
-(`lumasync-<metadata hash>`) moves whenever crate metadata does, which would put the drift
-straight back. The runner is a pass-through when the identity is absent, so a fresh clone,
-Linux, Windows, and CI are unaffected, and it skips anything not named `lumasync` because
-`runner` wraps `cargo test`'s binaries too.
+The binding gate is the **partition list**, and its entries name a code-signing partition:
+`apple:`, `apple-tool:`, `teamid:<TEAMID>`, or `cdhash:<hash>`. Code that carries no team
+identifier gets `cdhash:`, which is new on every relink, and there is no wildcard partition to
+fall back to. A self-signed certificate does not supply a team identifier either — setting `OU`
+on one and signing with it still reports `TeamIdentifier=not set`.
 
-**This does nothing for released builds.** `tauri.conf.json` sets no `signingIdentity` and no
-workflow carries `APPLE_*` credentials, so shipped macOS builds are ad-hoc signed as well and
-their designated requirement changes with every version. A user who has paired a bridge is
-therefore asked again after each update — twice, since `hue-app-key` and `hue-client-key` are
-separate items with separate ACLs. Only Developer ID signing fixes that one.
+So an ad-hoc or self-signed dev binary will be asked once per build per item, and the two Hue
+secrets are two items: `hue-app-key` on the first CLIP v2 call at startup, `hue-client-key` when
+a lighting mode opens the DTLS stream. **Only a Developer ID certificate removes it**, because
+only that makes the partition `teamid:` and therefore stable.
+
+**Released builds have the same defect, and there it reaches users.** `tauri.conf.json` sets no
+`signingIdentity` and no workflow carries `APPLE_*` credentials, so shipped macOS builds are
+ad-hoc signed as well and their identity changes with every version. A user who has paired a
+bridge is asked again after each update — twice, for the same two items. That is the strongest
+argument for Developer ID signing, and it is a user-facing one rather than a developer
+convenience.
 
 ## Accepted risks
 
