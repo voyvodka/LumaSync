@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 
-import { shellStore } from "../../persistence/shellStore";
 import {
   getHueAreaChannels,
   type HueOnboardingCommandStatus,
@@ -15,8 +14,10 @@ import { toErrorDetails } from "../model/onboardingStatusCodes";
 export interface UseHueAreaChannelsResult {
   areaChannels: HueAreaChannelInfo[];
   isLoadingChannels: boolean;
-  channelRegionOverrides: Record<number, string>;
-  setChannelRegion: (channelIndex: number, region: string | null) => void;
+  /** The last fetch's code, `null` before the first answer. Kept because an
+   * empty area, an unreachable bridge and a parse failure all leave an empty
+   * list, and the surface has to tell them apart. */
+  channelsStatus: string | null;
 }
 
 export function useHueAreaChannels(
@@ -28,7 +29,7 @@ export function useHueAreaChannels(
 ): UseHueAreaChannelsResult {
   const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
-  const [channelRegionOverrides, setChannelRegionOverrides] = useState<Record<number, string>>({});
+  const [channelsStatus, setChannelsStatus] = useState<string | null>(null);
 
   // Held in a ref so an inline callback at the call site cannot widen the fetch
   // effect's dep array into a refetch-per-render loop.
@@ -39,6 +40,7 @@ export function useHueAreaChannels(
   useEffect(() => {
     if (!selectedBridge || !credentials || !selectedAreaId) {
       setAreaChannels([]);
+      setChannelsStatus(null);
       return;
     }
 
@@ -56,6 +58,7 @@ export function useHueAreaChannels(
         // INVARIANT: an unreachable bridge must leave the list alone. The empty
         // array on that code means "no answer", not "no channels", and clearing
         // here is what makes a Wi-Fi blip look like a deleted area.
+        setChannelsStatus(status.code);
         if (status.code === HUE_AREA_CHANNELS_STATUS.UNREACHABLE) {
           console.warn(
             `[LumaSync] Hue bridge unreachable, keeping last known channels: ${status.details ?? status.message}`,
@@ -83,6 +86,7 @@ export function useHueAreaChannels(
           return;
         }
         setAreaChannels([]);
+        setChannelsStatus(HUE_AREA_CHANNELS_STATUS.FAILED);
         console.warn(`[LumaSync] Hue area channel invoke rejected: ${toErrorDetails(error)}`);
       })
       .finally(() => {
@@ -96,48 +100,5 @@ export function useHueAreaChannels(
     };
   }, [selectedBridge, credentials, selectedAreaId]);
 
-  // Load channel overrides for the selected area from the store.
-  useEffect(() => {
-    if (!selectedAreaId) {
-      setChannelRegionOverrides({});
-      return;
-    }
-
-    const areaId = selectedAreaId;
-    void shellStore.load().then((stored) => {
-      const overrides = stored.hueChannelRegionOverrides?.[areaId] ?? {};
-      setChannelRegionOverrides(overrides);
-    });
-  }, [selectedAreaId]);
-
-  const setChannelRegion = useCallback(
-    (channelIndex: number, region: string | null) => {
-      if (!selectedAreaId) return;
-
-      const areaId = selectedAreaId;
-      setChannelRegionOverrides((prev) => {
-        const next = { ...prev };
-        if (region === null) {
-          delete next[channelIndex];
-        } else {
-          next[channelIndex] = region;
-        }
-
-        void shellStore.load().then((stored) => {
-          const allOverrides = { ...(stored.hueChannelRegionOverrides ?? {}) };
-          if (Object.keys(next).length === 0) {
-            delete allOverrides[areaId];
-          } else {
-            allOverrides[areaId] = next;
-          }
-          void shellStore.save({ hueChannelRegionOverrides: allOverrides });
-        });
-
-        return next;
-      });
-    },
-    [selectedAreaId],
-  );
-
-  return { areaChannels, isLoadingChannels, channelRegionOverrides, setChannelRegion };
+  return { areaChannels, isLoadingChannels, channelsStatus };
 }

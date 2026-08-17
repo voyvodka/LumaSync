@@ -22,6 +22,7 @@
  */
 
 import {
+  DEFAULT_ROOM_MAP,
   migrateLegacyHueZone,
   type HueZone,
   type LegacyHueZone,
@@ -30,6 +31,11 @@ import {
   SHELL_STATE_SCHEMA_VERSION,
   type ShellState,
 } from "@/shared/contracts/shell";
+import {
+  HUE_REGION_PRESET_POSITIONS,
+  type HueRegionPreset,
+} from "@/features/hue/model/regionPresets";
+import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosition";
 
 // ---------------------------------------------------------------------------
 // Legacy ShellState shape — used by the v2 → v3 migration step to read the
@@ -45,6 +51,12 @@ import {
  * Declared inline here (not exported) so `ShellState` itself stays clean —
  * no consumer outside the migration module should ever read these fields.
  */
+/** Retired at schemaVersion 6. Declared here so the fold can read it without
+ *  putting it back on `ShellState`. */
+type LegacyChannelRegions = {
+  hueChannelRegionOverrides?: Record<string, Record<number, string>>;
+};
+
 type LegacyWindowGeometry = {
   windowX?: number | null;
   windowY?: number | null;
@@ -98,7 +110,62 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV4ToV5(next);
   }
 
+  // 5 → 6: fold the retired region overrides into channel positions
+  if ((next.schemaVersion ?? 1) < 6) {
+    next = migrateV5ToV6(next);
+  }
+
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// 5 → 6 — retire `hueChannelRegionOverrides` into channel positions
+// ---------------------------------------------------------------------------
+
+/** The override wrote a region string the frame loop never read. Folding it into
+ *  the position it always meant keeps a choice the UI showed as active for
+ *  releases — so those lights move on the first launch after this. */
+function migrateV5ToV6(state: ShellState): ShellState {
+  const legacy = (state as ShellState & LegacyChannelRegions).hueChannelRegionOverrides;
+  const next = { ...state, schemaVersion: 6 } as ShellState & LegacyChannelRegions;
+  delete next.hueChannelRegionOverrides;
+  if (!legacy || Object.keys(legacy).length === 0) return next;
+
+  const room = next.roomMap ?? DEFAULT_ROOM_MAP;
+  const zones = room.zones ?? [];
+  const channels = [...(room.hueChannels ?? [])];
+  let folded = 0;
+
+  for (const [areaId, perChannel] of Object.entries(legacy)) {
+    for (const [rawIndex, region] of Object.entries(perChannel ?? {})) {
+      const channelIndex = Number(rawIndex);
+      const target = HUE_REGION_PRESET_POSITIONS[region as HueRegionPreset] as
+        | { x: number; y: number }
+        | undefined;
+      if (!Number.isInteger(channelIndex) || !target) continue;
+      const at = channels.findIndex(
+        (c) => c.channelIndex === channelIndex && (c.entertainmentAreaId ?? null) === areaId,
+      );
+      if (at === -1) {
+        channels.push({
+          channelIndex,
+          entertainmentAreaId: areaId,
+          x: target.x,
+          y: target.y,
+          z: 0,
+        });
+      } else {
+        // Through the helper, because a zone-bound channel's live field is its
+        // zone-relative pair and writing the absolute one would be ignored.
+        channels[at] = moveHueChannelToWorld(channels[at]!, zones, target.x, target.y);
+      }
+      folded += 1;
+    }
+  }
+
+  if (folded === 0) return next;
+  console.warn(`[LumaSync] Migrated ${folded} Hue region override(s) into channel positions.`);
+  return { ...next, roomMap: { ...room, hueChannels: channels } };
 }
 
 // ---------------------------------------------------------------------------

@@ -139,14 +139,6 @@ hue:bridge.networkHint
 hue:bridge.noBridges
 hue:bridge.online
 hue:bridge.placeholder
-hue:channelMap.chipLabel
-hue:channelMap.detailStripPosition
-hue:channelMap.noChannelsBody
-hue:channelMap.noChannelsHeading
-hue:channelMap.regionShort.center
-hue:channelMap.screenLabel
-hue:channelMap.selectZoneHint
-hue:channelMap.selectedChannel
 hue:credential.line
 hue:credential.unreachable
 hue:credential.valid

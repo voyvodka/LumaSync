@@ -124,8 +124,9 @@ export const SECTION_ORDER: SectionId[] = [
  * `3` and the legacy spread-merge handles upgrading on-disk v3 states.
  */
 /** `3 → 4` re-folds Hue zones stranded in `roomMap.hueZones` — see docs/architecture/hue.md.
- *  `4 → 5` stamps each `hueChannels` record with its entertainment area. */
-export const SHELL_STATE_SCHEMA_VERSION = 5 as const;
+ *  `4 → 5` stamps each `hueChannels` record with its entertainment area.
+ *  `5 → 6` folds the retired region overrides into channel positions. */
+export const SHELL_STATE_SCHEMA_VERSION = 6 as const;
 
 /** Shape of shell state persisted to disk via plugin-store */
 export interface ShellState {
@@ -208,11 +209,6 @@ export interface ShellState {
    * Last completed onboarding step for resume flow continuity.
    */
   hueOnboardingStep?: HueOnboardingStep;
-  /**
-   * User-defined screen region overrides per entertainment area.
-   * Keyed by area ID → channel index → region string ("left" | "right" | "top" | "bottom" | "center").
-   */
-  hueChannelRegionOverrides?: Record<string, Record<number, string>>;
   /**
    * Cached credential health line shown in Hue settings.
    */
