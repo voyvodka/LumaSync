@@ -658,6 +658,7 @@ export function LightsSection({
                     className="tr-toggle"
                     disabled={slidersDisabled}
                     aria-pressed={blackBorderOn}
+                    aria-label={t("lights:signal.profile.blackBorder")}
                     onClick={toggleBlackBorder}
                   >
                     <div className="tr-track" style={{ width: "100%" }}>
