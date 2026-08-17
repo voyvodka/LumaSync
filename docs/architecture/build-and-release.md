@@ -110,6 +110,56 @@ the only place it can catch one before publication.
 - **`chunkSizeWarningLimit` is raised to 900 kB, and that is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it, so the default fired on every build on macOS and Ubuntu and said nothing actionable. The limit sits just above the current bundle so real growth still trips it. Code-splitting the room-map editor would cut startup parse time — that is a genuine win, but a separate change, not a way to silence this.
 - **The test environment installs its own `localStorage`** in `src/test/setup.ts`. Node ≥ 24 defines an experimental `localStorage` global that reads back as `undefined` without `--localstorage-file`, and it shadows the one happy-dom provides. CI runs Node 22 and never saw it; on a newer local Node every `HsvColorPicker` recent-colors read and write threw into its own `catch`, so the feature was inert in tests and nothing failed. Anything reached through `window` deserves the same suspicion when local and CI Node versions differ.
 
+## Keychain prompts in dev
+
+macOS asks for the login-keychain password on almost every `pnpm tauri dev` start —
+*"lumasync wants to use your confidential information stored in com.lumasync.app"* — and
+**"Always Allow" does not stop it**. Nothing in the credential code is at fault, and the
+number of reads is already down to one per account per process (`CachedStore`).
+
+The cause is the signature. Rust's linker ad-hoc signs every relink, and an ad-hoc
+signature's designated requirement is the binary's own cdhash:
+
+```
+Signature=adhoc
+designated => cdhash H"70177a2d4f4f84335b433dbf0fd33c5a39e33005"
+```
+
+"Always Allow" writes *that requirement* into the item's ACL, so the grant belongs to one
+build. The next relink is a different program as far as macOS is concerned. Four days of
+development left 24 dead grants on `hue-app-key`, each one reporting `status -2147415734`
+against a binary that no longer exists.
+
+That ACL is not the gate, though, and fixing it does not stop the prompt. **Two attempts were
+measured against a running app and both failed** — recorded here so the next person does not
+spend the afternoon again:
+
+- **Re-signing every dev build with a fixed self-signed certificate.** This works as far as it
+  goes: the requirement becomes `identifier "…" and certificate leaf = H"…"`, it survives a
+  relink byte-identically, and the ACL ends up with one live entry instead of a growing pile of
+  dead ones. The prompt still appeared on every build.
+- **Clearing the item's partition list** (`security set-generic-password-partition-list -S ""`).
+  This made it worse — two prompts became three. macOS re-populates the list on first access and
+  asks for the password in order to do so.
+
+The binding gate is the **partition list**, and its entries name a code-signing partition:
+`apple:`, `apple-tool:`, `teamid:<TEAMID>`, or `cdhash:<hash>`. Code that carries no team
+identifier gets `cdhash:`, which is new on every relink, and there is no wildcard partition to
+fall back to. A self-signed certificate does not supply a team identifier either — setting `OU`
+on one and signing with it still reports `TeamIdentifier=not set`.
+
+So an ad-hoc or self-signed dev binary will be asked once per build per item, and the two Hue
+secrets are two items: `hue-app-key` on the first CLIP v2 call at startup, `hue-client-key` when
+a lighting mode opens the DTLS stream. **Only a Developer ID certificate removes it**, because
+only that makes the partition `teamid:` and therefore stable.
+
+**Released builds have the same defect, and there it reaches users.** `tauri.conf.json` sets no
+`signingIdentity` and no workflow carries `APPLE_*` credentials, so shipped macOS builds are
+ad-hoc signed as well and their identity changes with every version. A user who has paired a
+bridge is asked again after each update — twice, for the same two items. That is the strongest
+argument for Developer ID signing, and it is a user-facing one rather than a developer
+convenience.
+
 ## Accepted risks
 
 - **Windows embedded-debug launch needs a visible smoke window.** Reproducing [#181](https://github.com/voyvodka/LumaSync/issues/181) on bare-metal Windows isolated a WebView2 race: `tauri dev`, release `--no-bundle`, and the release MSI load, but a debug embedded webview starting hidden falls through to `chrome-error://chromewebdata/`. Disabling the automatic DevTools window does not change it; starting the same binary visible makes the custom-protocol document and frontend IPC load. Production remains hidden to avoid a startup flash. CI merges `tauri.windows-smoke.conf.json`, which changes only the smoke window to visible and disables DevTools. The apparently separate missing frontend logs were a logger-filter bug: plugin-log's `webview:<location>` target does not inherit fern's `level_for("webview", Info)`, because fern only walks `::` module separators. Debug logging now uses a global `Info` floor, allowing the startup marker to reach the file sink.
