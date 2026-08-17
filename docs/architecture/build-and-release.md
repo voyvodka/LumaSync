@@ -127,11 +127,14 @@ opens a real window and switches modes and tabs on screen. It also reads and wri
 
 Two consequences, both of which have already bitten:
 
+- **Nothing runs the suite automatically.** `ci.yml` never invokes `wdio`; `release.yml` runs
+  `typecheck:e2e` only, which compiles the specs without executing them. So the suite is exercised
+  on a maintainer machine or not at all — which is how it came to encode an assumption that had been
+  false for several releases.
 - **A spec must not assume a starting state.** `shell.e2e.ts` asserted the app "boots into compact
-  mode", which stopped being true when boot began restoring the persisted mode. CI never noticed,
-  because a fresh runner has no state file and therefore defaults to compact; on a machine that had
-  last been left in full mode the first three specs failed. Worse, the suite *repaired itself*: the
-  section-routing spec ends by switching back to compact, so a second run passed and the failure
-  looked like a flake. Assert against the persisted value, or switch to the mode the spec needs.
+  mode", which stopped being true when boot began restoring the persisted mode; on a machine last
+  left in full, the first three specs failed. Worse, the suite *repaired itself*: the section-routing
+  spec ends by switching back to compact, so a second run passed and the failure looked like a flake.
+  Assert against the persisted value, or switch to the mode the spec needs.
 - **A run is visible and it mutates real data.** Anyone watching the machine sees the app open,
   cycle through menus and close. Say so before running it, and put back anything a spec seeded.
