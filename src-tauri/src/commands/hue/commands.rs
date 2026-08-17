@@ -38,7 +38,7 @@ use super::retry::{
 #[cfg(debug_assertions)]
 use super::sender::signal_shutdown_complete;
 use super::sender::{
-    apply_channel_region_overrides, build_hue_sender, deactivate_with_token, fetch_area_channels,
+    apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
     fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, no_op_sender,
     settled_shutdown_signal, wait_for_shutdown, DeactivateToken,
 };
@@ -229,8 +229,8 @@ pub async fn start_hue_stream(
     } else {
         Vec::new()
     };
-    if let Some(overrides) = &request.channel_region_overrides {
-        apply_channel_region_overrides(&mut channels, overrides);
+    if let Some(placements) = &request.channel_placements {
+        apply_channel_placements(&mut channels, placements);
     }
 
     // 4a. Lock briefly for race-condition guard only.
@@ -526,8 +526,8 @@ pub async fn restart_hue_stream(
     } else {
         Vec::new()
     };
-    if let Some(overrides) = &request.channel_region_overrides {
-        apply_channel_region_overrides(&mut channels, overrides);
+    if let Some(placements) = &request.channel_placements {
+        apply_channel_placements(&mut channels, placements);
     }
 
     // 5a. Lock briefly for race-condition guard only.

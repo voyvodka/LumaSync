@@ -30,6 +30,7 @@ use super::frame::{
     build_huestream_frame, channel_position_to_screen_region, HueAreaChannel, HueColorSender,
     HueColorUpdate,
 };
+use super::state_store::HueChannelPlacementOverride;
 
 // ---------------------------------------------------------------------------
 // HTTP client tunables
@@ -1023,17 +1024,28 @@ pub(crate) async fn fetch_area_channels(
     Ok(result)
 }
 
-/// Apply user-supplied region overrides to a channel list fetched from the bridge.
-pub(crate) fn apply_channel_region_overrides(
+/// Overlay the user's own placements onto a channel list fetched from the bridge.
+///
+/// Matched on `channel_id`, never on position in the list: an ordinal shifts the
+/// moment a light leaves the area. A `channel_id` with no match is skipped and
+/// the start still succeeds — it means the light is gone, not that we failed.
+pub(crate) fn apply_channel_placements(
     channels: &mut [HueAreaChannel],
-    overrides: &[Option<String>],
+    placements: &[HueChannelPlacementOverride],
 ) {
-    for (i, channel) in channels.iter_mut().enumerate() {
-        if let Some(Some(region_str)) = overrides.get(i) {
-            if let Some(region) = super::frame::parse_screen_region(region_str) {
-                channel.screen_region = region;
-            }
-        }
+    for placement in placements {
+        let Some(channel) = channels
+            .iter_mut()
+            .find(|c| c.channel_id == placement.channel_id)
+        else {
+            continue;
+        };
+        channel.position_x = placement.position_x.clamp(-1.0, 1.0);
+        channel.position_y = placement.position_y.clamp(-1.0, 1.0);
+        // Always re-derived, never carried on the wire — that is what keeps the
+        // region a label rather than a second writable source.
+        channel.screen_region =
+            super::frame::channel_position_to_screen_region(channel.position_x, channel.position_y);
     }
 }
 
@@ -1445,6 +1457,82 @@ mod tests {
     use super::*;
 
     use std::thread;
+
+    fn bridge_channel(channel_id: u8) -> HueAreaChannel {
+        HueAreaChannel {
+            channel_id,
+            light_ids: vec![format!("light-{channel_id}")],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }
+    }
+
+    #[test]
+    fn placements_are_matched_by_bridge_id_not_by_list_position() {
+        // Gapped: bridge ids 0, 2, 5 at list positions 0, 1, 2. Placing id 5
+        // must move the third entry, not the one sitting at index 5 — which
+        // does not exist — and must leave the others alone.
+        let mut channels = vec![bridge_channel(0), bridge_channel(2), bridge_channel(5)];
+        let placements = vec![HueChannelPlacementOverride {
+            channel_id: 5,
+            position_x: -0.9,
+            position_y: 0.0,
+        }];
+
+        apply_channel_placements(&mut channels, &placements);
+
+        assert_eq!(channels[2].position_x, -0.9);
+        assert_eq!(channels[0].position_x, 0.0);
+        assert_eq!(channels[1].position_x, 0.0);
+    }
+
+    #[test]
+    fn the_region_is_re_derived_from_the_placed_position() {
+        // The region is never carried on the wire; carrying it is what gave the
+        // old override path a second writable source for one runtime fact.
+        let mut channels = vec![bridge_channel(0)];
+        apply_channel_placements(
+            &mut channels,
+            &[HueChannelPlacementOverride {
+                channel_id: 0,
+                position_x: -0.9,
+                position_y: 0.0,
+            }],
+        );
+        assert_eq!(channels[0].screen_region, HueScreenRegion::Left);
+    }
+
+    #[test]
+    fn an_unknown_channel_id_is_skipped_rather_than_failing_the_start() {
+        // The light left the entertainment area since the placement was saved.
+        let mut channels = vec![bridge_channel(0)];
+        apply_channel_placements(
+            &mut channels,
+            &[HueChannelPlacementOverride {
+                channel_id: 9,
+                position_x: 1.0,
+                position_y: 1.0,
+            }],
+        );
+        assert_eq!(channels[0].position_x, 0.0);
+        assert_eq!(channels[0].position_y, 0.0);
+    }
+
+    #[test]
+    fn a_position_outside_the_cube_is_clamped() {
+        let mut channels = vec![bridge_channel(0)];
+        apply_channel_placements(
+            &mut channels,
+            &[HueChannelPlacementOverride {
+                channel_id: 0,
+                position_x: 4.0,
+                position_y: -7.5,
+            }],
+        );
+        assert_eq!(channels[0].position_x, 1.0);
+        assert_eq!(channels[0].position_y, -1.0);
+    }
 
     #[test]
     fn shutdown_signal_fires_when_sender_thread_exits() {

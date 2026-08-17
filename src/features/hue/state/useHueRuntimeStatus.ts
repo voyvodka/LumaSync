@@ -4,7 +4,9 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   type HueRuntimeTarget,
 } from "@/shared/contracts/hue";
+import { shellStore } from "@/features/persistence/shellStore";
 import { restartHue, startHue } from "../../mode/modeApi";
+import { toChannelPlacements } from "../model/hueStartConfig";
 import { readHueStreamStatus } from "../hueReadCache";
 import type { HueBridgeSummary, HuePairingCredentials } from "../hueOnboardingApi";
 import {
@@ -20,7 +22,6 @@ export interface UseHueRuntimeStatusInput {
   bridge: HueBridgeSummary | null;
   credentials: HuePairingCredentials | null;
   areaId: string | null;
-  channelRegionOverrides: Record<number, string>;
   onError: (status: HueOnboardingStatus) => void;
 }
 
@@ -36,7 +37,6 @@ export function useHueRuntimeStatus({
   bridge,
   credentials,
   areaId,
-  channelRegionOverrides,
   onError,
 }: UseHueRuntimeStatusInput): UseHueRuntimeStatusResult {
   const [runtimeStatus, setRuntimeStatus] = useState<HueRuntimeStatusView | null>(null);
@@ -147,7 +147,7 @@ export function useHueRuntimeStatus({
         clientKey: credentials.clientKey,
         areaId,
         triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-        channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
+        channelPlacements: toChannelPlacements((await shellStore.load()).roomMap, areaId),
       });
     } catch (error) {
       onError({
@@ -159,7 +159,7 @@ export function useHueRuntimeStatus({
       await pollRuntimeStatus({ force: true });
       setIsRuntimeMutating(false);
     }
-  }, [areaId, bridge, channelRegionOverrides, credentials, isRuntimeMutating, onError, pollRuntimeStatus]);
+  }, [areaId, bridge, credentials, isRuntimeMutating, onError, pollRuntimeStatus]);
 
   const retryRuntimeTarget = useCallback(
     async (target: HueRuntimeTarget) => {
@@ -176,7 +176,7 @@ export function useHueRuntimeStatus({
             clientKey: credentials.clientKey,
             areaId,
             triggerSource: HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-            channelRegionOverrides: Object.keys(channelRegionOverrides).length > 0 ? channelRegionOverrides : undefined,
+            channelPlacements: toChannelPlacements((await shellStore.load()).roomMap, areaId),
           });
         }
       } catch (error) {
@@ -190,7 +190,7 @@ export function useHueRuntimeStatus({
         setIsRuntimeMutating(false);
       }
     },
-    [areaId, bridge, channelRegionOverrides, credentials, isRuntimeMutating, onError, pollRuntimeStatus],
+    [areaId, bridge, credentials, isRuntimeMutating, onError, pollRuntimeStatus],
   );
 
   return { runtimeStatus, runtimeTargets, isRuntimeMutating, startRuntime, retryRuntimeTarget };

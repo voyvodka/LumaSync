@@ -55,17 +55,6 @@ impl HueScreenRegion {
     }
 }
 
-pub(crate) fn parse_screen_region(s: &str) -> Option<HueScreenRegion> {
-    match s {
-        "top" => Some(HueScreenRegion::Top),
-        "bottom" => Some(HueScreenRegion::Bottom),
-        "left" => Some(HueScreenRegion::Left),
-        "right" => Some(HueScreenRegion::Right),
-        "center" => Some(HueScreenRegion::Center),
-        _ => None,
-    }
-}
-
 /// A single resolved Hue entertainment channel: the lights it controls and
 /// the screen region those lights should mirror.
 #[derive(Clone, Debug)]

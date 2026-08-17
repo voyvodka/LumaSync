@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { HUE_CREDENTIAL_BACKENDS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import {
   isHueStartCodeOk,
   isHueStopCodeOk,
   isSameHueStartConfig,
+  toChannelPlacements,
   toHueStartConfig,
 } from "../hueStartConfig";
 
@@ -23,6 +25,25 @@ describe("toHueStartConfig", () => {
       clientKey: "AABBCCDD",
       areaId: "area-1",
     });
+  });
+
+  it("carries the area's placements, because this projection is the only wiring that counts", () => {
+    // The field this replaces was wired only on the Devices surface, so it never
+    // rode the path a user actually starts a mode from and nobody noticed for
+    // the whole life of the field. Wire it anywhere else and the feature is dead
+    // while still testing green from Devices.
+    const withRoom = {
+      ...complete,
+      roomMap: {
+        hueChannels: [
+          { channelIndex: 0, channelId: 3, x: 0.4, y: -0.2, z: 0, entertainmentAreaId: "area-1" },
+        ],
+        zones: [],
+      } as unknown as RoomMapConfig,
+    };
+    expect(toHueStartConfig(withRoom)?.channelPlacements).toEqual([
+      { channelId: 3, positionX: 0.4, positionY: -0.2 },
+    ]);
   });
 
   it("trims whitespace on every field", () => {
@@ -129,5 +150,57 @@ describe("isSameHueStartConfig", () => {
     expect(isSameHueStartConfig(null, null)).toBe(true);
     expect(isSameHueStartConfig(toHueStartConfig(state), null)).toBe(false);
     expect(isSameHueStartConfig(null, toHueStartConfig(state))).toBe(false);
+  });
+});
+
+describe("toChannelPlacements", () => {
+  const zones = [
+    { id: "z1", name: "Z", entertainmentAreaId: "area-1", channelIndices: [1],
+      centerX: 0.5, centerY: 0, centerZ: 0, scaleX: 0.25, scaleY: 0.25, scaleZ: 0.25 },
+  ] as unknown as RoomMapConfig["zones"];
+
+  it("addresses the bridge id and drops a placement that has none", () => {
+    // A record with no `channelId` has never been matched to the bridge. The
+    // ordinal is not a substitute — sending it is the defect #305 removed.
+    const roomMap = {
+      hueChannels: [
+        { channelIndex: 0, channelId: 4, x: -0.5, y: 0.25, z: 0, entertainmentAreaId: "area-1" },
+        { channelIndex: 1, x: 0.5, y: 0, z: 0, entertainmentAreaId: "area-1" },
+      ],
+      zones: [],
+    } as unknown as RoomMapConfig;
+
+    expect(toChannelPlacements(roomMap, "area-1")).toEqual([
+      { channelId: 4, positionX: -0.5, positionY: 0.25 },
+    ]);
+  });
+
+  it("resolves a zone-bound channel through its zone", () => {
+    // The absolute pair on a bound record is derived, not authoritative; sending
+    // it would stream the position the editor ignores.
+    const roomMap = {
+      hueChannels: [
+        {
+          channelIndex: 1,
+          channelId: 7,
+          x: 0, y: 0, z: 0,
+          entertainmentAreaId: "area-1",
+          zoneId: "z1",
+          zoneRelativePosition: { x: 1, y: 0, z: 0 },
+        },
+      ],
+      zones,
+    } as unknown as RoomMapConfig;
+
+    // centre 0.5 + scale 0.25 * relative 1 = 0.75
+    expect(toChannelPlacements(roomMap, "area-1")).toEqual([
+      { channelId: 7, positionX: 0.75, positionY: 0 },
+    ]);
+  });
+
+  it("is undefined rather than empty when the area has nothing placed", () => {
+    expect(toChannelPlacements({ hueChannels: [], zones: [] } as unknown as RoomMapConfig, "area-1"))
+      .toBeUndefined();
+    expect(toChannelPlacements(undefined, "area-1")).toBeUndefined();
   });
 });

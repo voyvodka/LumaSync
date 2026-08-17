@@ -9,6 +9,7 @@ import {
 import {
   HUE_COMMANDS,
   HUE_RUNTIME_TRIGGER_SOURCE,
+  type HueChannelPlacementOverride,
   type HueRuntimeStatus,
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
@@ -52,8 +53,8 @@ export interface StartHuePayload {
   clientKey: string;
   areaId: string;
   triggerSource?: HueRuntimeTriggerSource;
-  /** Per-channel region overrides indexed by channel index. */
-  channelRegionOverrides?: Record<number, string>;
+  /** The user's own placements for the area, addressed by the bridge's channel id. */
+  channelPlacements?: HueChannelPlacementOverride[];
 }
 
 export interface HueSolidColorPayload {
@@ -138,24 +139,12 @@ export async function getLightingModeStatus(invoker: ModeInvoker = defaultInvoke
   }
 }
 
-function overridesToList(overrides: Record<number, string>): (string | null)[] | undefined {
-  const keys = Object.keys(overrides).map(Number);
-  if (keys.length === 0) {
-    return undefined;
-  }
-  const channelCount = Math.max(...keys) + 1;
-  return Array.from({ length: channelCount }, (_, i) => overrides[i] ?? null);
-}
-
 /** Start the Hue entertainment stream for the given bridge/area. Throws a `ModeApiError` on failure. */
 export async function startHue(
   payload: StartHuePayload,
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<HueRuntimeCommandResult> {
   try {
-    const overrideList = payload.channelRegionOverrides
-      ? overridesToList(payload.channelRegionOverrides)
-      : undefined;
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.START_STREAM, {
       request: {
         bridgeIp: payload.bridgeIp,
@@ -163,7 +152,7 @@ export async function startHue(
         clientKey: payload.clientKey,
         areaId: payload.areaId,
         triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
-        channelRegionOverrides: overrideList,
+        channelPlacements: payload.channelPlacements,
       },
     });
   } catch (error) {
@@ -197,9 +186,6 @@ export async function restartHue(
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<HueRuntimeCommandResult> {
   try {
-    const overrideList = payload.channelRegionOverrides
-      ? overridesToList(payload.channelRegionOverrides)
-      : undefined;
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.RESTART_STREAM, {
       request: {
         bridgeIp: payload.bridgeIp,
@@ -207,7 +193,7 @@ export async function restartHue(
         clientKey: payload.clientKey,
         areaId: payload.areaId,
         triggerSource: payload.triggerSource ?? HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE,
-        channelRegionOverrides: overrideList,
+        channelPlacements: payload.channelPlacements,
       },
     });
   } catch (error) {
