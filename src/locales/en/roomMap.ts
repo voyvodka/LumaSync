@@ -4,7 +4,6 @@ export default {
     addTv: "Add TV",
     addFurniture: "Add Furniture",
     addUsb: "Add LED Strip",
-    addHue: "Add Hue Channel",
     addImage: "Add Image",
     settingsAriaLabel: "Map Settings",
     tvAlreadyPlaced: "TV already placed",

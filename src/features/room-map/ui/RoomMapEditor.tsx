@@ -133,7 +133,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     handleAddTv,
     handleAddFurniture,
     handleAddUsb,
-    handleAddHue,
     deleteById,
     handleDelete,
     handleRotate,
@@ -426,7 +425,6 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             onAddTv={handleAddTv}
             onAddFurniture={handleAddFurniture}
             onAddUsb={handleAddUsb}
-            onAddHue={handleAddHue}
             onAddImage={() => void handleAddImage()}
           />
 
