@@ -9,6 +9,7 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Added
 
+- A Hue light's height can be set from the room map, in metres. It was only editable on the Devices page, as a slider reading -1 to 1 with no unit — a number that means nothing on its own and was read out to a screen reader exactly as stored. The room map now shows the height in metres against the ceiling height you configured, and says whether it sits at floor, eye or ceiling level. The sliders in that panel are also easier to hit: the grab handle was smaller than every other control in the app, and it disappeared entirely in high-contrast mode.
 - The tray menu has a Close Overlays item. The preview and calibration overlays cover a whole screen, carry no title bar and stay out of the taskbar, so if one ever stops letting clicks through there is nothing left to close it with — and on Windows that has happened. The tray belongs to the desktop and cannot be covered, so this closes every overlay, puts the preview controls away and brings the main window back, without needing the window it is rescuing.
 
 ### Changed
