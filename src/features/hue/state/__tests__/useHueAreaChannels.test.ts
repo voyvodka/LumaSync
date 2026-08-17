@@ -1,4 +1,4 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
@@ -6,16 +6,7 @@ import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 
 import { useHueAreaChannels } from "../useHueAreaChannels";
 
-const shellLoadMock = vi.fn();
-const shellSaveMock = vi.fn();
 const getAreaChannelsMock = vi.fn();
-
-vi.mock("@/features/persistence/shellStore", () => ({
-  shellStore: {
-    load: () => shellLoadMock(),
-    save: (...args: unknown[]) => shellSaveMock(...args),
-  },
-}));
 
 vi.mock("../../hueOnboardingApi", () => ({
   getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
@@ -41,8 +32,6 @@ function response(code: string, channels: HueAreaChannelInfo[] = [], details: st
 describe("useHueAreaChannels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    shellLoadMock.mockResolvedValue({});
-    shellSaveMock.mockResolvedValue(undefined);
     getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.OK, [CHANNEL]));
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
@@ -169,56 +158,44 @@ describe("useHueAreaChannels", () => {
     expect(getAreaChannelsMock).toHaveBeenCalledTimes(1);
   });
 
-  it("hydrates overrides for the selected area from the store", async () => {
-    shellLoadMock.mockResolvedValue({ hueChannelRegionOverrides: { "area-1": { 0: "top" } } });
+  it("surfaces the code so the surface can tell empty from unreachable", async () => {
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.EMPTY));
 
     const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
 
-    await waitFor(() => expect(result.current.channelRegionOverrides).toEqual({ 0: "top" }));
+    await waitFor(() =>
+      expect(result.current.channelsStatus).toBe(HUE_AREA_CHANNELS_STATUS.EMPTY),
+    );
+    expect(result.current.areaChannels).toEqual([]);
   });
 
-  it("persists an added override under its area key", async () => {
+  it("records the unreachable code alongside the kept list", async () => {
     const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
-    await waitFor(() => expect(getAreaChannelsMock).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.areaChannels).toHaveLength(1));
 
-    act(() => {
-      result.current.setChannelRegion(0, "top");
-    });
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.UNREACHABLE));
+    const { result: second } = renderHook(() =>
+      useHueAreaChannels(BRIDGE, CREDENTIALS, "area-2"),
+    );
 
-    expect(result.current.channelRegionOverrides).toEqual({ 0: "top" });
     await waitFor(() =>
-      expect(shellSaveMock).toHaveBeenCalledWith({ hueChannelRegionOverrides: { "area-1": { 0: "top" } } }),
+      expect(second.current.channelsStatus).toBe(HUE_AREA_CHANNELS_STATUS.UNREACHABLE),
     );
   });
 
-  it("drops the area key entirely once its last override is removed", async () => {
-    shellLoadMock.mockResolvedValue({
-      hueChannelRegionOverrides: { "area-1": { 0: "top" }, "area-2": { 1: "left" } },
-    });
+  it("reports a rejected invoke as a failure rather than an empty area", async () => {
+    getAreaChannelsMock.mockRejectedValue(new Error("ipc channel closed"));
 
     const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
-    await waitFor(() => expect(result.current.channelRegionOverrides).toEqual({ 0: "top" }));
 
-    act(() => {
-      result.current.setChannelRegion(0, null);
-    });
-
-    expect(result.current.channelRegionOverrides).toEqual({});
     await waitFor(() =>
-      expect(shellSaveMock).toHaveBeenCalledWith({
-        hueChannelRegionOverrides: { "area-2": { 1: "left" } },
-      }),
+      expect(result.current.channelsStatus).toBe(HUE_AREA_CHANNELS_STATUS.FAILED),
     );
   });
 
-  it("ignores an override write while no area is selected", () => {
+  it("clears the code when no area is selected, so a stale one cannot leak", async () => {
     const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, null));
 
-    act(() => {
-      result.current.setChannelRegion(0, "top");
-    });
-
-    expect(result.current.channelRegionOverrides).toEqual({});
-    expect(shellSaveMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.channelsStatus).toBeNull());
   });
 });

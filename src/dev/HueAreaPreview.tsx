@@ -8,6 +8,8 @@ import { useTranslation } from "react-i18next";
 
 import { HueChannelMapPanel, MiniSpatialPreview } from "../features/settings/sections/HueChannelMapPanel";
 import type { HueAreaChannelInfo } from "../features/hue/hueOnboardingApi";
+import { HUE_AREA_CHANNELS_STATUS } from "../shared/contracts/hue";
+import type { HueChannelPlacement } from "../shared/contracts/roomMap";
 
 /** 10 channels spread around the TV — varied positions for thorough spatial testing. */
 const MOCK_CHANNELS: HueAreaChannelInfo[] = [
@@ -76,7 +78,7 @@ const MOCK_AREA_GROUPS: MockAreaGroup[] = [
 export function HueAreaPreview() {
   const { t } = useTranslation();
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
-  const [overrides, setOverrides] = useState<Record<number, string>>({});
+  const [placements, setPlacements] = useState<HueChannelPlacement[]>([]);
 
   const selectedArea: MockArea | undefined = MOCK_AREA_GROUPS
     .flatMap((g) => g.areas)
@@ -180,24 +182,16 @@ export function HueAreaPreview() {
           <HueChannelMapPanel
             channels={MOCK_CHANNELS}
             isLoading={false}
-            overrides={overrides}
-            onSetRegion={(index, region) => {
-              setOverrides((prev) => {
-                if (region === null) {
-                  const next = { ...prev };
-                  delete next[index];
-                  return next;
-                }
-                return { ...prev, [index]: region };
-              });
-            }}
+            channelsStatus={HUE_AREA_CHANNELS_STATUS.OK}
+            placements={placements}
+            onPositionChange={setPlacements}
           />
         ) : null}
 
         {selectedArea && (
           <p className="text-[11px] text-zinc-600">
             Secili: <strong className="text-zinc-300">{selectedArea.name}</strong>
-            {" · "}overrides: {JSON.stringify(overrides)}
+            {" · "}placements: {JSON.stringify(placements)}
           </p>
         )}
       </div>

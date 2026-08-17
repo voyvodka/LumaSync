@@ -1,15 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
-import {
-  HueChannelMapPanel,
-  clampGroupDelta,
-  clientToHueCoords,
-  posToPercent,
-} from "../HueChannelMapPanel";
+import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
+import { HueChannelMapPanel, posToPercent } from "../HueChannelMapPanel";
 
 // Mock i18n — return key as value (with interpolation support)
 vi.mock("react-i18next", () => ({
@@ -30,12 +26,16 @@ vi.mock("@tauri-apps/api/core", () => ({
 // Test helpers
 // ---------------------------------------------------------------------------
 
-function makeChannels(count: number): HueAreaChannelInfo[] {
-  return Array.from({ length: count }, (_, i) => ({
+/** Bridge ids deliberately gapped: a contiguous fixture passes whether or not
+ *  the row addresses the channel by its own id. */
+const BRIDGE_IDS = [0, 2, 5];
+
+function makeChannels(): HueAreaChannelInfo[] {
+  return BRIDGE_IDS.map((channelId, i) => ({
     index: i,
-    channelId: i,
-    lightIds: [`light-${i}`],
-    positionX: count > 1 ? (i / (count - 1)) * 2 - 1 : 0, // spread across [-1, 1]
+    channelId,
+    lightIds: [`light-${channelId}`],
+    positionX: i - 1, // -1, 0, +1 ⇒ left, center, right presets
     positionY: 0,
     lightCount: 2,
     autoRegion: "center",
@@ -43,11 +43,37 @@ function makeChannels(count: number): HueAreaChannelInfo[] {
 }
 
 const defaultProps = {
-  channels: makeChannels(3),
+  channels: makeChannels(),
   isLoading: false,
-  overrides: {} as Record<number, string>,
-  onSetRegion: vi.fn(),
+  channelsStatus: HUE_AREA_CHANNELS_STATUS.OK as string,
 };
+
+type PositionSpy = ReturnType<typeof vi.fn<(updated: HueChannelPlacement[]) => void>>;
+
+function lastEmitted(spy: PositionSpy): HueChannelPlacement[] {
+  const calls = spy.mock.calls;
+  return calls[calls.length - 1]![0];
+}
+
+/** Every channel already stored with its bridge id, so the seeding effect stays
+ *  quiet and a spy sees only what the click produced. */
+function storedAtBridgePositions(): HueChannelPlacement[] {
+  return makeChannels().map((ch) => ({
+    channelIndex: ch.index,
+    channelId: ch.channelId,
+    x: ch.positionX,
+    y: ch.positionY,
+    z: 0,
+  }));
+}
+
+function pill(row: HTMLElement, preset: string): HTMLElement {
+  return within(row).getByRole("radio", { name: `hue:channelMap.regions.${preset}` });
+}
+
+function rows(): HTMLElement[] {
+  return screen.getAllByRole("group");
+}
 
 // ---------------------------------------------------------------------------
 // Seeding: the room map is bridge-blind and draws persisted placements only
@@ -62,24 +88,17 @@ describe("seeding persisted placements from the bridge list", () => {
     expect(onPositionChange).toHaveBeenCalledTimes(1);
     expect(onPositionChange.mock.calls[0]![0]).toEqual([
       expect.objectContaining({ channelIndex: 0, channelId: 0 }),
-      expect.objectContaining({ channelIndex: 1, channelId: 1 }),
-      expect.objectContaining({ channelIndex: 2, channelId: 2 }),
+      expect.objectContaining({ channelIndex: 1, channelId: 2 }),
+      expect.objectContaining({ channelIndex: 2, channelId: 5 }),
     ]);
   });
 
   it("writes nothing when every channel is already stored with its bridge id", () => {
     const onPositionChange = vi.fn();
-    const placements: HueChannelPlacement[] = [0, 1, 2].map((i) => ({
-      channelIndex: i,
-      channelId: i,
-      x: 0,
-      y: 0,
-      z: 0,
-    }));
     render(
       <HueChannelMapPanel
         {...defaultProps}
-        placements={placements}
+        placements={storedAtBridgePositions()}
         onPositionChange={onPositionChange}
       />,
     );
@@ -88,12 +107,7 @@ describe("seeding persisted placements from the bridge list", () => {
 
   it("re-seeds a placement stored before bridge ids existed", () => {
     const onPositionChange = vi.fn();
-    const placements: HueChannelPlacement[] = [0, 1, 2].map((i) => ({
-      channelIndex: i,
-      x: 0,
-      y: 0,
-      z: 0,
-    }));
+    const placements = storedAtBridgePositions().map(({ channelId: _drop, ...rest }) => rest);
     render(
       <HueChannelMapPanel
         {...defaultProps}
@@ -106,155 +120,179 @@ describe("seeding persisted placements from the bridge list", () => {
 });
 
 // ---------------------------------------------------------------------------
-// CHAN-01: channels rendered at positions
+// Channel identity — the bridge's id, raw
 // ---------------------------------------------------------------------------
 
-describe("CHAN-01: channels rendered at positions", () => {
-  it("renders channel dots for each channel", () => {
-    render(<HueChannelMapPanel {...defaultProps} />);
-    // Each channel should have a dot button in the position grid
-    // We look for all buttons; at minimum 3 channel dots plus region chip buttons exist
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("uses persisted placements over bridge positions when provided", () => {
-    const placements: HueChannelPlacement[] = [
-      { channelIndex: 0, x: 0.5, y: 0.5, z: 0 },
-      { channelIndex: 1, x: -0.5, y: -0.5, z: 0 },
-      { channelIndex: 2, x: 0, y: 0, z: 0 },
-    ];
-    render(<HueChannelMapPanel {...defaultProps} placements={placements} />);
-    // Component should render without errors when placements provided
-    const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThanOrEqual(3);
+describe("channel identity", () => {
+  it("labels each row with the bridge id rather than a 1-based ordinal", () => {
+    render(<HueChannelMapPanel {...defaultProps} placements={storedAtBridgePositions()} />);
+    expect(screen.getByText("#0")).toBeTruthy();
+    expect(screen.getByText("#2")).toBeTruthy();
+    expect(screen.getByText("#5")).toBeTruthy();
+    // `#1` / `#3` are what an ordinal, or an ordinal + 1, would have produced.
+    expect(screen.queryByText("#1")).toBeNull();
+    expect(screen.queryByText("#3")).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// CHAN-02: drag to update position
+// Presets write positions — the whole point of the surface
 // ---------------------------------------------------------------------------
 
-describe("CHAN-02: drag to update position", () => {
-  it("shows mode toggle with Position and Assign Zone options", () => {
-    render(<HueChannelMapPanel {...defaultProps} />);
-    // ModePillToggle renders both mode buttons in the panel header
-    expect(screen.getByText("hue:channelMap.modPosition")).toBeTruthy();
-    expect(screen.getByText("hue:channelMap.modAssignZone")).toBeTruthy();
+describe("presets", () => {
+  it("writes the preset's position, not a region label", async () => {
+    const onPositionChange: PositionSpy = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <HueChannelMapPanel
+        {...defaultProps}
+        placements={storedAtBridgePositions()}
+        onPositionChange={onPositionChange}
+      />,
+    );
+
+    await user.click(pill(rows()[0]!, "top"));
+
+    const moved = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
+    expect(moved.x).toBeCloseTo(0, 6);
+    expect(moved.y).toBeCloseTo(1, 6);
   });
 
-  // Was `expect(true).toBe(true)` with a note that behaviour needed pointer
-  // events. Both halves are pure — the y-flip is the part worth pinning, since
-  // Hue +y is the far wall while CSS `top` grows downward.
-  const RECT = { left: 100, top: 50, width: 400, height: 200 } as DOMRect;
+  it("moves only the channel whose pill was clicked", async () => {
+    const onPositionChange: PositionSpy = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <HueChannelMapPanel
+        {...defaultProps}
+        placements={storedAtBridgePositions()}
+        onPositionChange={onPositionChange}
+      />,
+    );
 
-  it("puts the far wall at the top of the canvas and the near wall at the bottom", () => {
+    await user.click(pill(rows()[1]!, "left"));
+
+    const emitted = lastEmitted(onPositionChange);
+    expect(emitted.find((p) => p.channelIndex === 1)!.x).toBeCloseTo(-1, 6);
+    expect(emitted.find((p) => p.channelIndex === 0)!.x).toBeCloseTo(-1, 6);
+    expect(emitted.find((p) => p.channelIndex === 2)!.x).toBeCloseTo(1, 6);
+  });
+
+  it("marks the preset the bridge itself put the channel on as derived, not chosen", () => {
+    render(<HueChannelMapPanel {...defaultProps} placements={storedAtBridgePositions()} />);
+    const left = pill(rows()[0]!, "left");
+    expect(left.getAttribute("aria-checked")).toBe("true");
+    expect(left.className).toContain("is-derived");
+  });
+
+  it("drops the derived mark once the user picks a preset", async () => {
+    const user = userEvent.setup();
+    render(<HueChannelMapPanel {...defaultProps} placements={storedAtBridgePositions()} />);
+
+    await user.click(pill(rows()[0]!, "top"));
+
+    const near = pill(rows()[0]!, "top");
+    expect(near.getAttribute("aria-checked")).toBe("true");
+    expect(near.className).not.toContain("is-derived");
+  });
+
+  it("says Custom, and checks nothing, for a position on no preset", () => {
+    const placements = storedAtBridgePositions();
+    placements[0] = { ...placements[0]!, x: 0.42, y: 0.13 };
+    render(<HueChannelMapPanel {...defaultProps} placements={placements} />);
+
+    const row = rows()[0]!;
+    expect(screen.getByText("hue:channelMap.custom")).toBeTruthy();
+    for (const preset of ["left", "right", "top", "bottom", "center"]) {
+      expect(pill(row, preset).getAttribute("aria-checked")).toBe("false");
+    }
+  });
+
+  it("returns the channel to the bridge's own position on reset", async () => {
+    const onPositionChange: PositionSpy = vi.fn();
+    const user = userEvent.setup();
+    const placements = storedAtBridgePositions();
+    placements[2] = { ...placements[2]!, x: -0.5, y: 0.5 };
+    render(
+      <HueChannelMapPanel
+        {...defaultProps}
+        placements={placements}
+        onPositionChange={onPositionChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /channelMap\.resetToBridge/ }));
+
+    const reset = lastEmitted(onPositionChange).find((p) => p.channelIndex === 2)!;
+    expect(reset.x).toBeCloseTo(1, 6);
+    expect(reset.y).toBeCloseTo(0, 6);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Canvas coordinate helper — still used by MiniSpatialPreview
+// ---------------------------------------------------------------------------
+
+describe("posToPercent", () => {
+  it("puts the far wall at the top of the box and the near wall at the bottom", () => {
     expect(posToPercent(0, 1).top).toBe("0%");
     expect(posToPercent(0, -1).top).toBe("100%");
     expect(posToPercent(-1, 0).left).toBe("0%");
     expect(posToPercent(1, 0).left).toBe("100%");
   });
+});
 
-  it("round-trips a pointer position back to the coordinate it came from", () => {
-    for (const [x, y] of [[0, 0], [1, 1], [-1, -1], [0.25, -0.75]]) {
-      const { left, top } = posToPercent(x, y);
-      const clientX = RECT.left + (parseFloat(left) / 100) * RECT.width;
-      const clientY = RECT.top + (parseFloat(top) / 100) * RECT.height;
-      const back = clientToHueCoords(clientX, clientY, RECT);
-      expect(back.x).toBeCloseTo(x, 6);
-      expect(back.y).toBeCloseTo(y, 6);
-    }
-  });
+// ---------------------------------------------------------------------------
+// Empty-list states — three different facts, three different messages
+// ---------------------------------------------------------------------------
 
-  it("clamps a pointer dragged outside the canvas", () => {
-    expect(clientToHueCoords(RECT.left - 500, RECT.top - 500, RECT)).toEqual({ x: -1, y: 1 });
-    expect(clientToHueCoords(RECT.left + 900, RECT.top + 900, RECT)).toEqual({ x: 1, y: -1 });
+describe("empty channel list", () => {
+  const cases = [
+    [HUE_AREA_CHANNELS_STATUS.EMPTY, "empty"],
+    [HUE_AREA_CHANNELS_STATUS.UNREACHABLE, "unreachable"],
+    [HUE_AREA_CHANNELS_STATUS.FAILED, "failed"],
+  ] as const;
+
+  for (const [code, state] of cases) {
+    it(`reads as "${state}" on ${code}`, () => {
+      render(<HueChannelMapPanel {...defaultProps} channels={[]} channelsStatus={code} />);
+      expect(screen.getByText(`hue:channelMap.state.${state}Heading`)).toBeTruthy();
+      for (const other of cases.map(([, s]) => s).filter((s) => s !== state)) {
+        expect(screen.queryByText(`hue:channelMap.state.${other}Heading`)).toBeNull();
+      }
+    });
+  }
+
+  it("renders nothing at all before the first answer", () => {
+    const { container } = render(
+      <HueChannelMapPanel {...defaultProps} channels={[]} channelsStatus={null} />,
+    );
+    expect(container.firstChild).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// CHAN-03: z-axis height slider
+// Stale list — last-known rows stay, the bridge write does not
 // ---------------------------------------------------------------------------
 
-describe("CHAN-03: z-axis height slider", () => {
-  it("shows detail strip with z-slider when a channel is selected", async () => {
-    const user = userEvent.setup();
-    render(<HueChannelMapPanel {...defaultProps} />);
-    // Channel dots are buttons labelled "1", "2", "3" (ch.index + 1)
-    // Click channel dot "1" to select it
-    const dot1 = screen.getAllByRole("button", { name: "1" })[0];
-    await user.click(dot1);
-    // Detail strip should appear with slider
-    const slider = screen.queryByRole("slider");
-    expect(slider).toBeTruthy();
+describe("unreachable bridge with last-known channels", () => {
+  const staleProps = {
+    ...defaultProps,
+    channelsStatus: HUE_AREA_CHANNELS_STATUS.UNREACHABLE as string,
+    placements: storedAtBridgePositions(),
+    bridgeIp: "192.168.1.10",
+    username: "test-user-key",
+    areaId: "area-uuid-123",
+  };
+
+  it("keeps the rows and says they are stale", () => {
+    render(<HueChannelMapPanel {...staleProps} />);
+    expect(rows()).toHaveLength(3);
+    expect(screen.getByText("hue:channelMap.state.staleBody")).toBeTruthy();
   });
 
-  it("calls onPositionChange when z value changes", async () => {
-    const onPositionChange = vi.fn();
-    const user = userEvent.setup();
-    render(<HueChannelMapPanel {...defaultProps} onPositionChange={onPositionChange} />);
-    // Select channel 1 by clicking its dot
-    const dot1 = screen.getAllByRole("button", { name: "1" })[0];
-    await user.click(dot1);
-    // fireEvent.change is more reliable for range inputs in happy-dom
-    const slider = screen.getByRole("slider");
-    fireEvent.change(slider, { target: { value: "0.5" } });
-    expect(onPositionChange).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// CHAN-04: multi-select and group drag
-// ---------------------------------------------------------------------------
-
-describe("CHAN-04: multi-select and group drag", () => {
-  it("supports Shift+click to add to selection in Position mode", async () => {
-    const user = userEvent.setup();
-    render(<HueChannelMapPanel {...defaultProps} />);
-    // Switch to Position mode first
-    const positionBtn = screen.getByText("hue:channelMap.modPosition");
-    await user.click(positionBtn);
-    // Click first channel dot to select it (dot buttons are labelled "1", "2", "3")
-    const dot1 = screen.getAllByRole("button", { name: "1" })[0];
-    const dot2 = screen.getAllByRole("button", { name: "2" })[0];
-    // First click selects channel 1
-    fireEvent.click(dot1);
-    // Shift+click second dot using fireEvent for reliable shiftKey simulation in happy-dom
-    fireEvent.click(dot2, { shiftKey: true });
-    // Multi-select count badge should appear (multiSelectCount i18n key)
-    const badge = screen.queryByText(/multiSelectCount/);
-    expect(badge).toBeTruthy();
-  });
-
-  // Was `expect(true).toBe(true)` on the grounds that a direct test "requires
-  // export". It does, so the function is exported now: a mutation sweep showed
-  // the upper-bound branch was reachable with nothing asserting on it.
-  describe("clampGroupDelta", () => {
-    const sel = new Set([0, 1]);
-    const group = (...xs: number[]) =>
-      xs.map((x, i) => ({ channelIndex: i, x, y: 0, z: 0 }));
-
-    it("shortens the delta to whichever member hits the far wall first", () => {
-      // 0.9 has 0.1 of headroom, 0.2 has 0.8 — the group may only move 0.1.
-      expect(clampGroupDelta(group(0.9, 0.2), sel, 0.5, 0).dx).toBeCloseTo(0.1, 6);
-    });
-
-    it("clamps against the near wall the same way", () => {
-      expect(clampGroupDelta(group(-0.9, -0.2), sel, -0.5, 0).dx).toBeCloseTo(-0.1, 6);
-    });
-
-    it("clamps each axis on its own", () => {
-      const rows = [{ channelIndex: 0, x: 0.95, y: -0.95, z: 0 }];
-      const { dx, dy } = clampGroupDelta(rows, new Set([0]), 0.5, -0.5);
-      expect(dx).toBeCloseTo(0.05, 6);
-      expect(dy).toBeCloseTo(-0.05, 6);
-    });
-
-    it("leaves a delta that fits alone, and ignores unselected members", () => {
-      expect(clampGroupDelta(group(0.1, 0.2), sel, 0.3, 0).dx).toBe(0.3);
-      // Channel 1 would overflow but is not selected, so it must not constrain.
-      expect(clampGroupDelta(group(0.1, 0.99), new Set([0]), 0.5, 0).dx).toBe(0.5);
-    });
+  it("refuses the bridge write while the bridge is not answering", () => {
+    render(<HueChannelMapPanel {...staleProps} />);
+    expect(screen.getByRole("button", { name: /saveToBridge$/ })).toHaveProperty("disabled", true);
   });
 });
 
@@ -265,6 +303,7 @@ describe("CHAN-04: multi-select and group drag", () => {
 describe("CHAN-05: save to bridge write-back", () => {
   const writebackProps = {
     ...defaultProps,
+    placements: storedAtBridgePositions(),
     bridgeIp: "192.168.1.10",
     username: "test-user-key",
     areaId: "area-uuid-123",
@@ -273,13 +312,13 @@ describe("CHAN-05: save to bridge write-back", () => {
 
   it("save button is disabled when isStreaming is true", () => {
     render(<HueChannelMapPanel {...writebackProps} isStreaming={true} />);
-    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
+    const saveBtn = screen.getByRole("button", { name: /saveToBridge$/ });
     expect(saveBtn).toHaveProperty("disabled", true);
   });
 
   it("save button is enabled when isStreaming is false and credentials present", () => {
     render(<HueChannelMapPanel {...writebackProps} isStreaming={false} />);
-    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
+    const saveBtn = screen.getByRole("button", { name: /saveToBridge$/ });
     expect(saveBtn).toHaveProperty("disabled", false);
   });
 
@@ -291,13 +330,9 @@ describe("CHAN-05: save to bridge write-back", () => {
 
     const user = userEvent.setup();
     render(<HueChannelMapPanel {...writebackProps} />);
-    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
-    await user.click(saveBtn);
+    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
 
-    expect(mockInvoke).not.toHaveBeenCalledWith(
-      "update_hue_channel_positions",
-      expect.anything(),
-    );
+    expect(mockInvoke).not.toHaveBeenCalledWith("update_hue_channel_positions", expect.anything());
   });
 
   it("failed write-back shows inline error with retry", async () => {
@@ -306,19 +341,14 @@ describe("CHAN-05: save to bridge write-back", () => {
       code: "CHAN_WB_SCHEMA_REJECTED",
       message: "Bridge rejected the format",
     });
-    // happy-dom does not define window.confirm; assign a mock function directly
     window.confirm = vi.fn().mockReturnValueOnce(true);
 
     const user = userEvent.setup();
     render(<HueChannelMapPanel {...writebackProps} />);
-    const saveBtn = screen.getByRole("button", { name: /saveToBridge/ });
-    await user.click(saveBtn);
+    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
 
-    // Error message should appear — i18n mock returns "key {opts}" format
-    // Use findAllByText since the error + retry share the same container text
     const errorEls = await screen.findAllByText(/channelMap\.saveToBridgeError/);
     expect(errorEls.length).toBeGreaterThan(0);
-    // Retry button should appear
     const retryBtns = screen.getAllByRole("button", { name: /saveToBridgeErrorRetry/ });
     expect(retryBtns.length).toBeGreaterThan(0);
   });
@@ -336,14 +366,15 @@ describe("zone-bound channels survive an edit here", () => {
     centerX: 0,
     centerY: 0,
     centerZ: 0,
-    scaleX: 0.5,
-    scaleY: 0.5,
+    scaleX: 1,
+    scaleY: 1,
     scaleZ: 0.5,
     channelIndices: [0],
   };
 
   const boundPlacement: HueChannelPlacement = {
     channelIndex: 0,
+    channelId: 0,
     x: 0.5,
     y: 0,
     z: 0,
@@ -353,30 +384,25 @@ describe("zone-bound channels survive an edit here", () => {
     zoneRelativePosition: { x: 1, y: 0, z: 0 },
   };
 
-  type PositionSpy = ReturnType<typeof vi.fn<(updated: HueChannelPlacement[]) => void>>;
-
-  function lastEmitted(spy: PositionSpy): HueChannelPlacement[] {
-    const calls = spy.mock.calls;
-    return calls[calls.length - 1][0];
-  }
-
-  async function editZ(onPositionChange: PositionSpy, value: string) {
-    const user = userEvent.setup();
+  function renderBound(onPositionChange?: PositionSpy) {
+    const placements = storedAtBridgePositions();
+    placements[0] = boundPlacement;
     render(
       <HueChannelMapPanel
         {...defaultProps}
-        placements={[boundPlacement]}
+        placements={placements}
         zones={[ZONE]}
         onPositionChange={onPositionChange}
       />,
     );
-    await user.click(screen.getAllByRole("button", { name: "1" })[0]);
-    fireEvent.change(screen.getByRole("slider"), { target: { value } });
   }
 
   it("keeps the zone binding, label and lock instead of rebuilding a bare record", async () => {
     const onPositionChange: PositionSpy = vi.fn();
-    await editZ(onPositionChange, "0.5");
+    const user = userEvent.setup();
+    renderBound(onPositionChange);
+
+    await user.click(pill(rows()[0]!, "left"));
 
     const channel = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
     expect(channel.zoneId).toBe("zone-1");
@@ -384,23 +410,27 @@ describe("zone-bound channels survive an edit here", () => {
     expect(channel.locked).toBe(true);
   });
 
-  it("writes the zone-relative height, which is the one the runtime reads", async () => {
+  it("writes the zone-relative pair, which is the one the runtime reads", async () => {
     const onPositionChange: PositionSpy = vi.fn();
-    await editZ(onPositionChange, "0.5");
+    const user = userEvent.setup();
+    renderBound(onPositionChange);
+
+    await user.click(pill(rows()[0]!, "left"));
 
     const channel = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
-    // world 0.5 through centerZ 0 + scaleZ 0.5 ⇒ relative 1.0. Writing only the
-    // absolute `z` would leave the resolved height at its old value.
-    expect(channel.zoneRelativePosition?.z).toBeCloseTo(1, 5);
-    expect(channel.z).toBeCloseTo(0.5, 5);
+    // centerX 0 + scaleX 1 ⇒ relative -1 for world -1. Writing only the absolute
+    // pair would leave the resolved position where it was.
+    expect(channel.zoneRelativePosition?.x).toBeCloseTo(-1, 5);
+    expect(channel.x).toBeCloseTo(-1, 5);
   });
 
-  it("paints the bound channel where its zone puts it, not at its stale absolute pair", () => {
-    const stale: HueChannelPlacement = { ...boundPlacement, x: -0.9, y: -0.9 };
-    render(<HueChannelMapPanel {...defaultProps} placements={[stale]} zones={[ZONE]} />);
+  it("reads the row's preset from where the zone puts the channel, not its stale absolute pair", () => {
+    const placements = storedAtBridgePositions();
+    placements[0] = { ...boundPlacement, x: -0.9, y: -0.9 };
+    render(<HueChannelMapPanel {...defaultProps} placements={placements} zones={[ZONE]} />);
 
-    // centerX 0 + scaleX 0.5 * relative 1 ⇒ 0.5, which is 75% across the canvas.
-    const dot = screen.getAllByRole("button", { name: "1" })[0];
-    expect(dot.style.left).toBe("75%");
+    // centerX 0 + scaleX 1 * relative 1 ⇒ world +1, which is the `right` preset.
+    expect(pill(rows()[0]!, "right").getAttribute("aria-checked")).toBe("true");
+    expect(pill(rows()[0]!, "left").getAttribute("aria-checked")).toBe("false");
   });
 });

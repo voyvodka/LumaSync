@@ -63,8 +63,7 @@ export function HueBridgesCategory({
     isRuntimeMutating,
     areaChannels,
     isLoadingChannels,
-    channelRegionOverrides,
-    setChannelRegion,
+    channelsStatus,
     discover,
     selectBridge,
     setManualIp,
@@ -736,8 +735,7 @@ export function HueBridgesCategory({
               <HueChannelMapPanel
                 channels={areaChannels}
                 isLoading={isLoadingChannels}
-                overrides={channelRegionOverrides}
-                onSetRegion={setChannelRegion}
+                channelsStatus={channelsStatus}
                 placements={channelPlacements}
                 onPositionChange={onPositionChange}
                 persistError={persistError}

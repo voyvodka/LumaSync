@@ -64,9 +64,8 @@ export interface UseHueOnboardingResult {
   /** Channels for the currently selected area (empty while loading or no area selected). */
   areaChannels: HueAreaChannelInfo[];
   isLoadingChannels: boolean;
-  /** User overrides: channel index → region string. */
-  channelRegionOverrides: Record<number, string>;
-  setChannelRegion: (channelIndex: number, region: string | null) => void;
+  /** Last channel-fetch code, `null` before the first answer. */
+  channelsStatus: string | null;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;

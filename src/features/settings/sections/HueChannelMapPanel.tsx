@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
@@ -9,31 +8,32 @@ import {
   type HueChannelPlacement,
   type HueZone,
 } from "@/shared/contracts/roomMap";
-import { HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
 import {
   moveHueChannelToWorld,
   resolveHueChannelWorld,
   resolveHueChannelWorldZ,
-  setHueChannelWorldZ,
 } from "@/features/room-map/model/hueChannelPosition";
-
-const REGIONS = ["left", "right", "top", "bottom", "center"] as const;
-type Region = (typeof REGIONS)[number];
-
-/** Editor mode — controls whether drag or zone assignment is active */
-type EditorMode = "position" | "assign-zone";
+import {
+  HUE_REGION_PRESETS,
+  HUE_REGION_PRESET_POSITIONS,
+  isBridgePosition,
+  matchRegionPreset,
+  type HueRegionPreset,
+} from "@/features/hue/model/regionPresets";
 
 interface Props {
   channels: HueAreaChannelInfo[];
   isLoading: boolean;
-  overrides: Record<number, string>;
-  onSetRegion: (channelIndex: number, region: string | null) => void;
+  /** Last fetch's status code, `null` before the first answer. An empty area and
+   * a bridge that never replied both arrive as an empty list. */
+  channelsStatus?: string | null;
   /** Persisted channel placements from shellStore. Falls back to bridge positionX/Y when absent. */
   placements?: HueChannelPlacement[];
-  /** Called when any channel position changes (after pointer-up or arrow key). */
+  /** Called when any channel position changes. */
   onPositionChange?: (updated: HueChannelPlacement[]) => void;
-  /** When true, renders inline amber error message below the detail strip. */
+  /** When true, renders an inline amber error message under the rows. */
   persistError?: boolean;
   /** Bridge IP for write-back (CHAN-05). */
   bridgeIp?: string;
@@ -52,6 +52,8 @@ interface Props {
 
 const NO_ZONES: readonly HueZone[] = [];
 
+const SAVED_FLASH_MS = 2000;
+
 /** Convert Hue position (x: -1..+1, y: -1..+1) to CSS % inside the grid box.
  *  Hue x: -1=left, +1=right → left%
  *  Hue y: -1=bottom, +1=top → we flip so top of box = top of screen
@@ -60,19 +62,6 @@ export function posToPercent(x: number, y: number): { left: string; top: string 
   const left = `${((x + 1) / 2) * 100}%`;
   const top = `${((1 - y) / 2) * 100}%`; // flip Y axis
   return { left, top };
-}
-
-/** Inverse of posToPercent: convert client pixel position to Hue [-1,1] coords.
- *  Critical: y-flip must be exact inverse — hueY = 1 - relY * 2 */
-export function clientToHueCoords(clientX: number, clientY: number, canvasRect: DOMRect): { x: number; y: number } {
-  const relX = (clientX - canvasRect.left) / canvasRect.width;
-  const relY = (clientY - canvasRect.top) / canvasRect.height;
-  const hueX = relX * 2 - 1;
-  const hueY = 1 - relY * 2;
-  return {
-    x: Math.max(-1, Math.min(1, hueX)),
-    y: Math.max(-1, Math.min(1, hueY)),
-  };
 }
 
 /** The saved record for a bridge channel, or a fresh one seeded from the bridge.
@@ -96,7 +85,7 @@ function resolvePlacement(
       z: 0,
     };
   }
-  // The canvas edits world coordinates, so a bound channel's absolute pair is
+  // Presets edit world coordinates, so a bound channel's absolute pair is
   // refreshed from its zone before it is shown.
   const world = resolveHueChannelWorld(saved, zones);
   return {
@@ -108,41 +97,9 @@ function resolvePlacement(
   };
 }
 
-/**
- * Pre-compute the maximum allowed delta so that NO channel in the selected group
- * exceeds [-1.0, 1.0] on either axis. Relative positions within the group are preserved.
- * (RESEARCH Pattern 3, D-03b)
- */
-export function clampGroupDelta(
-  allPlacements: HueChannelPlacement[],
-  selectedIndices: Set<number>,
-  dx: number,
-  dy: number,
-): { dx: number; dy: number } {
-  let clampedDx = dx;
-  let clampedDy = dy;
-  for (const p of allPlacements) {
-    if (!selectedIndices.has(p.channelIndex)) continue;
-    const newX = p.x + dx;
-    const newY = p.y + dy;
-    if (newX > 1) clampedDx = Math.min(clampedDx, 1 - p.x);
-    if (newX < -1) clampedDx = Math.max(clampedDx, -1 - p.x);
-    if (newY > 1) clampedDy = Math.min(clampedDy, 1 - p.y);
-    if (newY < -1) clampedDy = Math.max(clampedDy, -1 - p.y);
-  }
-  return { dx: clampedDx, dy: clampedDy };
-}
-
-/**
- * Region → token-backed CSS color mapping.
- *
- * Aligned with `--lm-zone-1..4` + `--lm-ink-faint`. Region semantics keep
- * spatial intuition (blue=left, purple=right, emerald=top, amber=bottom,
- * grey=center) but the values now live as CSS variables so the mini
- * preview, the canvas dots and the per-channel rows all draw from the
- * same source of truth.
- */
-const REGION_COLOR_VAR: Record<Region, string> = {
+/** Region → token-backed CSS color. Shared with `MiniSpatialPreview` so the
+ *  room list dots read as members of the same family. */
+const REGION_COLOR_VAR: Record<string, string> = {
   left: "var(--lm-zone-1)",
   right: "var(--lm-zone-3)",
   top: "var(--lm-zone-2)",
@@ -150,148 +107,37 @@ const REGION_COLOR_VAR: Record<Region, string> = {
   center: "var(--lm-ink-faint)",
 };
 
-const SAVED_FLASH_MS = 2000;
+const NEUTRAL_DOT = "var(--lm-ink-faint)";
 
-// ---------------------------------------------------------------------------
-// ModePillToggle sub-component — uses `lm-settings-seg` so it matches the
-// segmented controls used elsewhere in the settings surface.
-// ---------------------------------------------------------------------------
+/** Spelled out rather than interpolated: a template-built key is invisible to
+ *  the orphan ratchet, which then green-lights deleting a live string. */
+const PRESET_LABEL_KEY = {
+  left: "hue:channelMap.regions.left",
+  right: "hue:channelMap.regions.right",
+  top: "hue:channelMap.regions.top",
+  bottom: "hue:channelMap.regions.bottom",
+  center: "hue:channelMap.regions.center",
+} as const satisfies Record<HueRegionPreset, string>;
 
-function ModePillToggle({
-  mode,
-  onModeChange,
-  t,
-}: {
-  mode: EditorMode;
-  onModeChange: (m: EditorMode) => void;
-  t: TFunction;
-}) {
-  return (
-    <div className="lm-settings-seg" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === "position"}
-        onClick={() => { onModeChange("position"); }}
-        className={mode === "position" ? "is-on" : ""}
-      >
-        {t("hue:channelMap.modPosition")}
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === "assign-zone"}
-        onClick={() => { onModeChange("assign-zone"); }}
-        className={mode === "assign-zone" ? "is-on" : ""}
-      >
-        {t("hue:channelMap.modAssignZone")}
-      </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DragCoordinateTooltip — pinned to the dragged channel.
-// ---------------------------------------------------------------------------
-
-function DragCoordinateTooltip({
-  x,
-  y,
-  t,
-}: {
-  x: number;
-  y: number;
-  t: TFunction;
-}) {
-  return (
-    <div
-      className="lm-chmap-tooltip"
-      aria-label={t("hue:channelMap.tooltipAriaLabel", { x: x.toFixed(2), y: y.toFixed(2) })}
-    >
-      x: {x.toFixed(2)}, y: {y.toFixed(2)}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ChannelDetailStrip — z-axis slider + read-only x/y for the active channel.
-// ---------------------------------------------------------------------------
-
-function ChannelDetailStrip({
-  selectedChannels,
-  channelPlacements,
-  channels,
-  onZChange,
-  t,
-}: {
-  selectedChannels: Set<number>;
-  channelPlacements: HueChannelPlacement[];
-  channels: HueAreaChannelInfo[];
-  onZChange: (z: number) => void;
-  t: TFunction;
-}) {
-  if (selectedChannels.size === 0) return null;
-
-  // Show last selected channel's values
-  const selectedArr = [...selectedChannels];
-  const lastSelected = selectedArr[selectedArr.length - 1]!;
-  const placement = findHueChannel(channelPlacements, lastSelected);
-  const chInfo = channels.find((c) => c.index === lastSelected);
-  const channelIndexLabel = String((chInfo?.index ?? lastSelected) + 1);
-  const z = placement?.z ?? 0;
-
-  return (
-    <div className="lm-chmap-detail" role="region" aria-label={t("hue:channelMap.detailStripChannel", { index: channelIndexLabel })}>
-      <span className="lm-chmap-detail-name">
-        {t("hue:channelMap.detailStripChannel", { index: channelIndexLabel })}
-      </span>
-      <span className="lm-chmap-detail-pos">
-        {t("hue:channelMap.detailStripCoords", {
-          x: (placement?.x ?? 0).toFixed(2),
-          y: (placement?.y ?? 0).toFixed(2),
-        })}
-      </span>
-
-      <label className="lm-chmap-detail-z">
-        <span className="lm-chmap-detail-z-label">
-          {t("hue:channelMap.detailStripHeight")}
-        </span>
-        <input
-          type="range"
-          min={-1}
-          max={1}
-          step={0.01}
-          value={z}
-          onChange={(e) => { onZChange(parseFloat(e.target.value)); }}
-          aria-label={t("hue:channelMap.detailStripHeight")}
-          aria-valuemin={-1}
-          aria-valuemax={1}
-          aria-valuenow={z}
-        />
-        <span className="lm-chmap-detail-z-val">{z.toFixed(2)}</span>
-      </label>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// HueChannelMapPanel main component
-// ---------------------------------------------------------------------------
-
-/** Intermediate drag state tracked via ref — avoids re-renders on each pointer move */
-interface DragState {
-  active: boolean;
-  channelIndex: number | null;
-  startHueX: number;
-  startHueY: number;
-  groupStartPositions: Map<number, { x: number; y: number }>;
-}
+const EMPTY_STATE_KEYS = {
+  empty: {
+    heading: "hue:channelMap.state.emptyHeading",
+    body: "hue:channelMap.state.emptyBody",
+  },
+  unreachable: {
+    heading: "hue:channelMap.state.unreachableHeading",
+    body: "hue:channelMap.state.unreachableBody",
+  },
+  failed: {
+    heading: "hue:channelMap.state.failedHeading",
+    body: "hue:channelMap.state.failedBody",
+  },
+} as const;
 
 export function HueChannelMapPanel({
   channels,
   isLoading,
-  overrides,
-  onSetRegion,
+  channelsStatus,
   placements,
   onPositionChange,
   persistError,
@@ -303,44 +149,20 @@ export function HueChannelMapPanel({
 }: Props) {
   const { t } = useTranslation();
 
-  // Stable ref for placements so useEffect doesn't cycle on new array references
+  // Stable refs so the effects below do not cycle on new array identities.
   const placementsRef = useRef<HueChannelPlacement[]>(placements ?? []);
   placementsRef.current = placements ?? [];
 
   const zonesRef = useRef<readonly HueZone[]>(zones);
   zonesRef.current = zones;
 
-  // Mode toggle — default "assign-zone" for backward compat (D-01a)
-  const [mode, setMode] = useState<EditorMode>("assign-zone");
-
-  // Multi-select (Plan 02: Shift+click multi-select, D-03a)
-  const [selectedChannels, setSelectedChannels] = useState<Set<number>>(new Set());
-
-  // Backward-compat alias for zone assignment
-  const selectedDot = selectedChannels.size === 1 ? [...selectedChannels][0]! : null;
-  const hasSelection = selectedChannels.size > 0;
-
-  // Drag state — includes groupStartPositions for group drag (D-03b)
-  const dragStateRef = useRef<DragState>({
-    active: false,
-    channelIndex: null,
-    startHueX: 0,
-    startHueY: 0,
-    groupStartPositions: new Map(),
-  });
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
-
-  // Saved flash state (zone assignment)
   const [savedChannelIndex, setSavedChannelIndex] = useState<number | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // CHAN-05: write-back state
   const [isSaving, setIsSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; code?: string; message?: string } | null>(null);
   const saveResultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Local channel placements — initialized from bridge data + persisted overrides
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>(() =>
     channels.map((ch) => resolvePlacement(ch, placementsRef.current, zonesRef.current)),
   );
@@ -353,7 +175,7 @@ export function HueChannelMapPanel({
   }, [channels]);
 
   // The room map is bridge-blind — it draws persisted placements only, so a real
-  // channel stayed invisible there until dragged here. The parent's write
+  // channel stayed invisible there until placed here. The parent's write
   // refreshes `placements`, so the second pass finds nothing missing.
   useEffect(() => {
     if (!onPositionChange || channels.length === 0) return;
@@ -367,30 +189,38 @@ export function HueChannelMapPanel({
     if (missing) onPositionChange(resolved);
   }, [channels, onPositionChange]);
 
-  const regionLabel = (region: Region): string => {
-    const key = `hue:channelMap.regions.${region}` as const;
-    const translated = t(key);
-    return translated === key ? region : translated;
-  };
-
-  const handleSetRegion = useCallback(
-    (channelIndex: number, region: string | null) => {
-      onSetRegion(channelIndex, region);
-      setSavedChannelIndex(channelIndex);
-      if (savedTimerRef.current !== null) {
-        clearTimeout(savedTimerRef.current);
-      }
-      savedTimerRef.current = setTimeout(() => {
-        setSavedChannelIndex(null);
-        savedTimerRef.current = null;
-      }, SAVED_FLASH_MS);
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current !== null) clearTimeout(savedTimerRef.current);
+      if (saveResultTimerRef.current !== null) clearTimeout(saveResultTimerRef.current);
     },
-    [onSetRegion],
+    [],
   );
 
-  // -------------------------------------------------------------------------
-  // CHAN-05: Save to bridge handler
-  // -------------------------------------------------------------------------
+  const flashSaved = useCallback((channelIndex: number) => {
+    setSavedChannelIndex(channelIndex);
+    if (savedTimerRef.current !== null) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => {
+      setSavedChannelIndex(null);
+      savedTimerRef.current = null;
+    }, SAVED_FLASH_MS);
+  }, []);
+
+  /** A preset writes a position, not a label. Everything downstream — the row's
+   *  own state, the room map, the frame loop — reads only the position. */
+  const applyPosition = useCallback(
+    (channelIndex: number, x: number, y: number) => {
+      const next = channelPlacements.map((p) =>
+        p.channelIndex === channelIndex
+          ? moveHueChannelToWorld(p, zonesRef.current, x, y)
+          : p,
+      );
+      setChannelPlacements(next);
+      onPositionChange?.(next);
+      flashSaved(channelIndex);
+    },
+    [channelPlacements, onPositionChange, flashSaved],
+  );
 
   const handleSaveToBridge = useCallback(async () => {
     if (!bridgeIp || username === undefined || !areaId) return;
@@ -432,318 +262,76 @@ export function HueChannelMapPanel({
     }
   }, [bridgeIp, username, areaId, channelPlacements, t]);
 
-  // -------------------------------------------------------------------------
-  // Z-axis change handler (D-02a, D-02b)
-  // -------------------------------------------------------------------------
-
-  // Latest channelPlacements snapshot for handlers that fire after a drag
-  // ends — drag handlers update state via functional updaters, so this ref
-  // captures the post-update value without forcing handler rebinds.
-  const channelPlacementsRef = useRef(channelPlacements);
-  channelPlacementsRef.current = channelPlacements;
-
-  const handleZChange = useCallback((z: number) => {
-    const next = channelPlacementsRef.current.map((p) =>
-      selectedChannels.has(p.channelIndex) ? setHueChannelWorldZ(p, zonesRef.current, z) : p
-    );
-    setChannelPlacements(next);
-    onPositionChange?.(next);
-  }, [selectedChannels, onPositionChange]);
-
-  // -------------------------------------------------------------------------
-  // Pointer event handlers (drag with group support, D-03b)
-  // -------------------------------------------------------------------------
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent, channelIndex: number) => {
-      if (mode !== "position") return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-
-      // If clicking a non-selected channel, select it alone first
-      const isAlreadySelected = selectedChannels.has(channelIndex);
-      const effectiveSelected = isAlreadySelected ? selectedChannels : new Set([channelIndex]);
-
-      if (!isAlreadySelected) {
-        setSelectedChannels(new Set([channelIndex]));
-      }
-
-      const groupStart = new Map<number, { x: number; y: number }>();
-      for (const idx of effectiveSelected) {
-        const p = findHueChannel(channelPlacements, idx);
-        if (p) groupStart.set(idx, { x: p.x, y: p.y });
-      }
-
-      const placement = findHueChannel(channelPlacements, channelIndex);
-      if (!placement) return;
-
-      dragStateRef.current = {
-        active: true,
-        channelIndex,
-        startHueX: placement.x,
-        startHueY: placement.y,
-        groupStartPositions: groupStart,
-      };
-      setDragPosition({ x: placement.x, y: placement.y });
-    },
-    [mode, channelPlacements, selectedChannels],
-  );
-
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const ds = dragStateRef.current;
-    if (!ds.active || !canvasRef.current || ds.channelIndex === null) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const coords = clientToHueCoords(e.clientX, e.clientY, rect);
-
-    // Raw delta from drag start position
-    const rawDx = coords.x - ds.startHueX;
-    const rawDy = coords.y - ds.startHueY;
-
-    // Build "virtual" placements at group start positions for clamping
-    const startPlacements: HueChannelPlacement[] = [];
-    for (const [idx, pos] of ds.groupStartPositions) {
-      startPlacements.push({ channelIndex: idx, x: pos.x, y: pos.y, z: 0 });
-    }
-
-    const { dx, dy } = clampGroupDelta(startPlacements, new Set(ds.groupStartPositions.keys()), rawDx, rawDy);
-
-    // Update tooltip position for the dragged channel
-    const dragStart = ds.groupStartPositions.get(ds.channelIndex);
-    if (dragStart) {
-      setDragPosition({ x: dragStart.x + dx, y: dragStart.y + dy });
-    }
-
-    // Apply clamped delta to ALL selected channels from their start positions
-    setChannelPlacements((prev) =>
-      prev.map((p) => {
-        const start = ds.groupStartPositions.get(p.channelIndex);
-        if (!start) return p;
-        return moveHueChannelToWorld(p, zonesRef.current, start.x + dx, start.y + dy);
-      })
-    );
-  }, []);
-
-  const handlePointerUp = useCallback(() => {
-    if (!dragStateRef.current.active) return;
-    dragStateRef.current = {
-      active: false,
-      channelIndex: null,
-      startHueX: 0,
-      startHueY: 0,
-      groupStartPositions: new Map(),
-    };
-    setDragPosition(null);
-    // Read latest placements via ref so React 19 strict updaters stay pure
-    // (no prop callbacks fired from inside setState updaters).
-    onPositionChange?.(channelPlacementsRef.current);
-  }, [onPositionChange]);
-
-  // -------------------------------------------------------------------------
-  // Keyboard arrow key support (group movement with clampGroupDelta)
-  // -------------------------------------------------------------------------
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent, channelIndex: number) => {
-      if (mode !== "position" || !selectedChannels.has(channelIndex)) return;
-      const delta = 0.05;
-      let rawDx = 0;
-      let rawDy = 0;
-      if (e.key === "ArrowLeft") rawDx = -delta;
-      else if (e.key === "ArrowRight") rawDx = delta;
-      else if (e.key === "ArrowUp") rawDy = delta; // up = positive y in Hue coords
-      else if (e.key === "ArrowDown") rawDy = -delta;
-      else return;
-      e.preventDefault();
-
-      // Use clampGroupDelta for group boundary check
-      const selectedPlacements = channelPlacements.filter((p) => selectedChannels.has(p.channelIndex));
-      const { dx, dy } = clampGroupDelta(selectedPlacements, selectedChannels, rawDx, rawDy);
-
-      const next = channelPlacementsRef.current.map((p) =>
-        selectedChannels.has(p.channelIndex)
-          ? moveHueChannelToWorld(p, zonesRef.current, p.x + dx, p.y + dy)
-          : p
-      );
-      setChannelPlacements(next);
-      onPositionChange?.(next);
-    },
-    [mode, selectedChannels, channelPlacements, onPositionChange],
-  );
-
-  // -------------------------------------------------------------------------
-  // Selection toggle helper — shared between canvas dots and per-row dots.
-  // -------------------------------------------------------------------------
-
-  const toggleSelection = useCallback(
-    (channelIndex: number, shiftKey: boolean) => {
-      setSelectedChannels((prev) => {
-        if (mode === "position" && shiftKey) {
-          const next = new Set(prev);
-          if (next.has(channelIndex)) {
-            next.delete(channelIndex);
-          } else {
-            next.add(channelIndex);
-          }
-          return next;
-        }
-        if (prev.has(channelIndex) && prev.size === 1) return new Set();
-        return new Set([channelIndex]);
-      });
-    },
-    [mode],
-  );
-
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // Render
-  // -------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
-  if (isLoading) {
-    return (
-      <section className="lm-settings-group lm-chmap" role="region" aria-label={t("hue:channelMap.title")}>
-        <div className="lm-settings-group-h">
-          <span className="t">{t("hue:channelMap.title")}</span>
-        </div>
-        <div className="lm-chmap-body">
-          <p className="lm-chmap-hint">{t("hue:channelMap.loading")}</p>
-        </div>
-      </section>
-    );
-  }
-
-  if (channels.length === 0) {
-    return null;
-  }
-
-  // Hint text varies by mode and selection
-  const hintText =
-    mode === "assign-zone"
-      ? t("hue:channelMap.hint")
-      : hasSelection
-        ? t("hue:channelMap.hintPositionModeSelected")
-        : t("hue:channelMap.hintPositionMode");
-
-  const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
-
-  return (
+  const frame = (body: React.ReactNode) => (
     <section
       className="lm-settings-group lm-chmap"
       role="region"
       aria-label={t("hue:channelMap.title")}
     >
-      {/* Header — title + mode toggle */}
       <div className="lm-settings-group-h">
         <span className="t">{t("hue:channelMap.title")}</span>
-        <ModePillToggle mode={mode} onModeChange={setMode} t={t} />
+      </div>
+      {body}
+    </section>
+  );
+
+  if (isLoading) {
+    return frame(
+      <div className="lm-chmap-body">
+        <p className="lm-chmap-hint">{t("hue:channelMap.loading")}</p>
+      </div>,
+    );
+  }
+
+  if (channels.length === 0) {
+    // Three different facts arrive as the same empty list, and one "no channels"
+    // line for all of them is what made a dropped bridge look like an empty area.
+    if (channelsStatus === undefined || channelsStatus === null) return null;
+    const state =
+      channelsStatus === HUE_AREA_CHANNELS_STATUS.EMPTY
+        ? "empty"
+        : channelsStatus === HUE_AREA_CHANNELS_STATUS.UNREACHABLE
+          ? "unreachable"
+          : "failed";
+    const keys = EMPTY_STATE_KEYS[state];
+    return frame(
+      <div className="lm-chmap-body">
+        <div className={`lm-chmap-state is-${state}`} role="status">
+          <span className="lm-chmap-state-h">{t(keys.heading)}</span>
+          <span className="lm-chmap-state-b">{t(keys.body)}</span>
+        </div>
+      </div>,
+    );
+  }
+
+  const isStale = channelsStatus === HUE_AREA_CHANNELS_STATUS.UNREACHABLE;
+  const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
+
+  return (
+    <section
+      className={`lm-settings-group lm-chmap${isStale ? " is-stale" : ""}`}
+      role="region"
+      aria-label={t("hue:channelMap.title")}
+    >
+      <div className="lm-settings-group-h">
+        <span className="t">{t("hue:channelMap.title")}</span>
       </div>
 
       <div className="lm-chmap-body">
-        {/* Hint row + multi-select pill */}
-        <div className="lm-chmap-hint">
-          <span className="lm-chmap-hint-text">{hintText}</span>
-          {mode === "position" && selectedChannels.size > 1 && (
-            <span className="lm-chmap-multi" aria-live="polite">
-              {t("hue:channelMap.multiSelectCount", { count: String(selectedChannels.size) })}
-            </span>
-          )}
-        </div>
+        <p className="lm-chmap-hint">
+          <span className="lm-chmap-hint-text">{t("hue:channelMap.hint")}</span>
+        </p>
 
-        {/* Position canvas */}
-        <div
-          ref={canvasRef}
-          className="lm-chmap-canvas"
-          role="application"
-          aria-label={t("hue:channelMap.canvasAriaLabel")}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-        >
-          <div className="lm-chmap-canvas-axis is-v" aria-hidden />
-          <div className="lm-chmap-canvas-axis is-h" aria-hidden />
+        {isStale && (
+          <div className="lm-chmap-state is-unreachable" role="status">
+            <span className="lm-chmap-state-b">{t("hue:channelMap.state.staleBody")}</span>
+          </div>
+        )}
 
-          {/* Region edge labels — short codes via i18n */}
-          <span className="lm-chmap-canvas-edge is-l" aria-hidden>
-            {t("hue:channelMap.regionShort.left")}
-          </span>
-          <span className="lm-chmap-canvas-edge is-r" aria-hidden>
-            {t("hue:channelMap.regionShort.right")}
-          </span>
-          <span className="lm-chmap-canvas-edge is-t" aria-hidden>
-            {t("hue:channelMap.regionShort.top")}
-          </span>
-          <span className="lm-chmap-canvas-edge is-b" aria-hidden>
-            {t("hue:channelMap.regionShort.bottom")}
-          </span>
-
-          {/* Channel dots */}
-          {channels.map((ch) => {
-            const placement = findHueChannel(channelPlacements, ch.index);
-            const px = placement?.x ?? ch.positionX;
-            const py = placement?.y ?? ch.positionY;
-            const { left, top } = posToPercent(px, py);
-            const effectiveRegion = (overrides[ch.index] ?? ch.autoRegion) as Region;
-            const dotColor = REGION_COLOR_VAR[effectiveRegion] ?? "var(--lm-ink-faint)";
-            const isOverridden = Boolean(overrides[ch.index]);
-            const isSelected = selectedChannels.has(ch.index);
-            const isSingleSelected = isSelected && selectedChannels.size === 1;
-            const isMultiSelected = isSelected && selectedChannels.size > 1;
-            const isDragging =
-              dragStateRef.current.active && dragStateRef.current.channelIndex === ch.index;
-
-            const classes = [
-              "lm-chmap-dot",
-              mode === "position" ? "is-position" : "",
-              isSingleSelected ? "is-selected" : "",
-              isMultiSelected ? "is-multi" : "",
-              isOverridden ? "is-overridden" : "",
-              isDragging ? "is-dragging" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-
-            return (
-              <button
-                key={ch.index}
-                type="button"
-                className={classes}
-                style={{
-                  left,
-                  top,
-                  ["--lm-chmap-dot-color" as string]: dotColor,
-                }}
-                aria-pressed={isSelected}
-                onClick={(e) => {
-                  toggleSelection(ch.index, e.shiftKey);
-                }}
-                onPointerDown={(e) => {
-                  handlePointerDown(e, ch.index);
-                }}
-                onKeyDown={(e) => {
-                  handleKeyDown(e, ch.index);
-                }}
-              >
-                {isSingleSelected && <span className="lm-chmap-dot-pulse" aria-hidden />}
-                <span>{ch.index + 1}</span>
-                {isDragging && dragPosition && (
-                  <DragCoordinateTooltip x={dragPosition.x} y={dragPosition.y} t={t} />
-                )}
-              </button>
-            );
-          })}
-
-          {/* Assign-zone scrim */}
-          {hasSelection && mode === "assign-zone" && selectedDot !== null && (
-            <div className="lm-chmap-canvas-scrim" aria-hidden />
-          )}
-        </div>
-
-        {/* Z-axis detail strip */}
-        <ChannelDetailStrip
-          selectedChannels={selectedChannels}
-          channelPlacements={channelPlacements}
-          channels={channels}
-          onZChange={handleZChange}
-          t={t}
-        />
-
-        {/* Persist error feedback (shellStore write failed) */}
         {persistError && (
           <div className="lm-chmap-feedback is-warn" role="alert">
             <span>{t("hue:channelMap.saveError")}</span>
@@ -751,37 +339,32 @@ export function HueChannelMapPanel({
         )}
       </div>
 
-      {/* Per-channel region assignment rows */}
       <div className="lm-chmap-rows">
         {channels.map((ch) => {
-          const effectiveRegion = (overrides[ch.index] ?? ch.autoRegion) as Region;
-          const dotColor = REGION_COLOR_VAR[effectiveRegion] ?? "var(--lm-ink-faint)";
-          const isOverridden = Boolean(overrides[ch.index]);
+          const placement =
+            findHueChannel(channelPlacements, ch.index) ??
+            resolvePlacement(ch, placementsRef.current, zonesRef.current);
+          const matched = matchRegionPreset(placement.x, placement.y);
+          const fromBridge = isBridgePosition(placement.x, placement.y, ch.positionX, ch.positionY);
+          const dotColor = matched ? (REGION_COLOR_VAR[matched] ?? NEUTRAL_DOT) : NEUTRAL_DOT;
           const isSaved = savedChannelIndex === ch.index;
-          const isSelected = selectedChannels.has(ch.index);
-          const channelLabel = String(ch.index + 1);
+          // The bridge's own id, rendered raw: `#0` is a legitimate channel.
+          const idLabel = `#${ch.channelId}`;
 
           return (
             <div
               key={ch.index}
               className="lm-chmap-row"
               role="group"
-              aria-label={t("hue:channelMap.regionRowAriaLabel", { index: channelLabel })}
+              aria-label={t("hue:channelMap.regionRowAriaLabel", { index: idLabel })}
             >
               <div className="lm-chmap-row-id">
-                <button
-                  type="button"
-                  className={`lm-chmap-row-dot${isSelected ? " is-selected" : ""}`}
+                <span
+                  className="lm-chmap-row-dot"
                   style={{ ["--lm-chmap-dot-color" as string]: dotColor }}
-                  aria-pressed={isSelected}
-                  aria-label={t("hue:channelMap.rowDotAriaLabel", { index: channelLabel })}
-                  onClick={(e) => {
-                    toggleSelection(ch.index, e.shiftKey);
-                  }}
+                  aria-hidden
                 />
-                <span className="lm-chmap-row-num" aria-hidden>
-                  {channelLabel}
-                </span>
+                <span className="lm-chmap-row-num">{idLabel}</span>
                 <span className="lm-chmap-row-lights">
                   {ch.lightCount === 1
                     ? t("hue:channelMap.oneLight")
@@ -789,45 +372,51 @@ export function HueChannelMapPanel({
                 </span>
               </div>
 
-              <div className="lm-chmap-pills" role="radiogroup" aria-label={t("hue:channelMap.zonePicker")}>
-                {REGIONS.map((region) => {
-                  const isActive = effectiveRegion === region;
+              <div
+                className="lm-chmap-pills"
+                role="radiogroup"
+                aria-label={t("hue:channelMap.zonePicker")}
+              >
+                {HUE_REGION_PRESETS.map((preset: HueRegionPreset) => {
+                  const isActive = matched === preset;
                   return (
                     <button
-                      key={region}
+                      key={preset}
                       type="button"
                       role="radio"
                       aria-checked={isActive}
-                      className={`lm-chmap-pill${isActive ? " is-active" : ""}`}
+                      className={`lm-chmap-pill${isActive ? " is-active" : ""}${
+                        isActive && fromBridge ? " is-derived" : ""
+                      }`}
                       onClick={() => {
-                        if (isActive && isOverridden) {
-                          handleSetRegion(ch.index, null);
-                        } else if (!isActive || !isOverridden) {
-                          handleSetRegion(ch.index, region === ch.autoRegion ? null : region);
-                        }
+                        const target = HUE_REGION_PRESET_POSITIONS[preset];
+                        applyPosition(ch.index, target.x, target.y);
                       }}
                     >
-                      {regionLabel(region)}
+                      {t(PRESET_LABEL_KEY[preset])}
                     </button>
                   );
                 })}
               </div>
 
               <div className="lm-chmap-row-trail">
+                {matched === null && (
+                  <span className="lm-chmap-row-custom">{t("hue:channelMap.custom")}</span>
+                )}
                 {isSaved ? (
                   <span className="lm-chmap-row-saved" aria-live="polite">
                     {t("hue:channelMap.saved")}
                   </span>
-                ) : isOverridden ? (
+                ) : !fromBridge ? (
                   <button
                     type="button"
                     className="lm-chmap-row-reset"
+                    title={t("hue:channelMap.resetToBridgeTitle")}
                     onClick={() => {
-                      handleSetRegion(ch.index, null);
+                      applyPosition(ch.index, ch.positionX, ch.positionY);
                     }}
-                    title={t("hue:channelMap.resetToAuto")}
                   >
-                    {t("hue:channelMap.auto")}
+                    {t("hue:channelMap.resetToBridge")}
                   </button>
                 ) : null}
               </div>
@@ -836,7 +425,6 @@ export function HueChannelMapPanel({
         })}
       </div>
 
-      {/* Save-to-bridge footer */}
       {hasSaveAction && (
         <div className="lm-chmap-footer">
           <div className="lm-chmap-footer-row">
@@ -845,8 +433,14 @@ export function HueChannelMapPanel({
             <button
               type="button"
               className="lm-device-btn is-primary"
-              disabled={isStreaming || isSaving}
-              title={isStreaming ? t("hue:channelMap.saveToBridgeTooltip") : undefined}
+              disabled={isStreaming || isSaving || isStale}
+              title={
+                isStale
+                  ? t(EMPTY_STATE_KEYS.unreachable.heading)
+                  : isStreaming
+                    ? t("hue:channelMap.saveToBridgeTooltip")
+                    : undefined
+              }
               onClick={() => {
                 void handleSaveToBridge();
               }}
@@ -854,16 +448,14 @@ export function HueChannelMapPanel({
               {isSaving ? t("hue:channelMap.saving") : t("hue:channelMap.saveToBridge")}
             </button>
           </div>
-          {saveResult !== null && (
-            saveResult.ok ? (
+          {saveResult !== null &&
+            (saveResult.ok ? (
               <div className="lm-chmap-feedback is-ok" role="status" aria-live="polite">
                 <span>{t("hue:channelMap.savedToBridge")}</span>
               </div>
             ) : (
               <div className="lm-chmap-feedback is-err" role="alert">
-                <span>
-                  {t("hue:channelMap.saveToBridgeError", { code: saveResult.code ?? "" })}
-                </span>
+                <span>{t("hue:channelMap.saveToBridgeError", { code: saveResult.code ?? "" })}</span>
                 <button
                   type="button"
                   className="lm-chmap-feedback-retry"
@@ -874,8 +466,7 @@ export function HueChannelMapPanel({
                   {t("hue:channelMap.saveToBridgeErrorRetry")}
                 </button>
               </div>
-            )
-          )}
+            ))}
         </div>
       )}
     </section>
@@ -883,8 +474,8 @@ export function HueChannelMapPanel({
 }
 
 // ---------------------------------------------------------------------------
-// MiniSpatialPreview — kept token-aligned with the main canvas so the room
-// list dots read as members of the same family.
+// MiniSpatialPreview — kept token-aligned with the row dots so the room list
+// reads as part of the same family.
 // ---------------------------------------------------------------------------
 
 /** Minimal channel shape required for MiniSpatialPreview dot rendering. */
@@ -905,18 +496,13 @@ export function MiniSpatialPreview({
   const placeholderCount = channelCount ?? 0;
 
   return (
-    <div
-      className="lm-chmap-canvas"
-      style={{ height: 48, borderRadius: 6 }}
-      aria-hidden="true"
-    >
+    <div className="lm-chmap-canvas" style={{ height: 48, borderRadius: 6 }} aria-hidden="true">
       <div className="lm-chmap-canvas-axis is-v" />
       <div className="lm-chmap-canvas-axis is-h" />
       {channels
         ? channels.map((ch, i) => {
             const { left, top } = posToPercent(ch.positionX, ch.positionY);
-            const region = (ch.autoRegion as Region) ?? "center";
-            const dotColor = REGION_COLOR_VAR[region] ?? "var(--lm-ink-faint)";
+            const dotColor = REGION_COLOR_VAR[ch.autoRegion ?? "center"] ?? NEUTRAL_DOT;
             return (
               <span
                 key={ch.index ?? i}

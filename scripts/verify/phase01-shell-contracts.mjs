@@ -274,11 +274,16 @@ if (orderMatch) {
 // ---------------------------------------------------------------------------
 // Schema version bump — gates the newest migration step; earlier steps chain.
 // ---------------------------------------------------------------------------
-console.log("\n[ Shell state schema version (Hue channel area attribution) ]");
+console.log("\n[ Shell state schema version (region overrides retired) ]");
 check(
-  /SHELL_STATE_SCHEMA_VERSION\s*=\s*5\b/.test(source),
-  "SHELL_STATE_SCHEMA_VERSION === 5 (Hue channel area attribution gate)",
-  "SHELL_STATE_SCHEMA_VERSION not bumped to 5 — the 4 → 5 attribution shim has no trigger"
+  /SHELL_STATE_SCHEMA_VERSION\s*=\s*6\b/.test(source),
+  "SHELL_STATE_SCHEMA_VERSION === 6 (region-override fold gate)",
+  "SHELL_STATE_SCHEMA_VERSION not bumped to 6 — the 5 → 6 fold shim has no trigger"
+);
+check(
+  !/hueChannelRegionOverrides/.test(source),
+  "hueChannelRegionOverrides gone from ShellState",
+  "hueChannelRegionOverrides is back on ShellState — the field is retired, positions carry the intent"
 );
 
 // ---------------------------------------------------------------------------
