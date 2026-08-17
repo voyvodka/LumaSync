@@ -68,7 +68,7 @@ interface HueChannelOverlayProps {
 /**
  * Convert Hue coordinate [-1, 1] to room metres [0, roomSize].
  * Hue x: -1=left edge, +1=right edge
- * Hue y: +1=front wall (bottom of canvas), -1=back wall (top of canvas)
+ * Hue y: +1=front/TV wall (canvas TOP), -1=back wall behind the viewer (canvas BOTTOM)
  */
 function hueToMetres(hueVal: number, roomSizeM: number): number {
   return ((hueVal + 1) / 2) * roomSizeM;
@@ -343,7 +343,7 @@ export function HueChannelOverlay({
     const maxY = clamp(zone.centerY + Math.abs(zone.scaleY), -1, 1);
     const leftPx = hueToMetres(minX, roomWidthM) * pxPerMeter;
     const rightPx = hueToMetres(maxX, roomWidthM) * pxPerMeter;
-    // Y flip: Hue +y is front wall (canvas bottom)
+    // Y flip: CSS y grows downward, and Hue +y (the TV wall) is drawn at the canvas top.
     const topPx = hueToMetres(-maxY, roomDepthM) * pxPerMeter;
     const bottomPx = hueToMetres(-minY, roomDepthM) * pxPerMeter;
     const centerLeftPx = hueToMetres(zone.centerX, roomWidthM) * pxPerMeter;
@@ -563,7 +563,7 @@ export function HueChannelOverlay({
         const rawLeftPx = hueToMetres(worldX, roomWidthM) * pxPerMeter;
         const rawTopPx = hueToMetres(-worldY, roomDepthM) * pxPerMeter;
         const leftPx = Number.isFinite(rawLeftPx) ? rawLeftPx : 0;
-        // Invert Y: Hue +y = front wall (bottom of canvas)
+        // Invert Y: CSS y grows downward; Hue +y (the TV wall) is the canvas top.
         const topPx = Number.isFinite(rawTopPx) ? rawTopPx : 0;
 
         const isSelected = selectedId === hueChannelObjectId(ch.channelIndex);
