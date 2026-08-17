@@ -136,6 +136,31 @@ const EMPTY_DRAG: DragState = {
   element: null,
 };
 
+/** Which walls the zone box is flush against. Exported for tests: the drag path
+ *  is imperative DOM, the decision is arithmetic. A degenerate zone (half-scale
+ *  past 1) already overflows the cube, so it reports nothing rather than all four. */
+export function pinnedZoneEdges(
+  center: { centerX: number; centerY: number },
+  scale: { halfScaleX: number; halfScaleY: number },
+): string {
+  const { halfScaleX, halfScaleY } = scale;
+  // Tolerant, not `===`: the drag path compares a value against the very bound
+  // `clamp` returned so it would match exactly, but a centre that has been
+  // round-tripped through the backend carries float noise, and `-1 + 0.6` is
+  // not `-0.4`. Exact equality would silently stop lighting the edge.
+  const atWall = (value: number, bound: number) => Math.abs(value - bound) <= 1e-6;
+  const edges: string[] = [];
+  if (halfScaleY <= 1) {
+    if (atWall(center.centerY, 1 - halfScaleY)) edges.push("top");
+    if (atWall(center.centerY, -1 + halfScaleY)) edges.push("bottom");
+  }
+  if (halfScaleX <= 1) {
+    if (atWall(center.centerX, -1 + halfScaleX)) edges.push("left");
+    if (atWall(center.centerX, 1 - halfScaleX)) edges.push("right");
+  }
+  return edges.join(" ");
+}
+
 /**
  * Renders Hue channel dots on the room map canvas.
  *
@@ -494,6 +519,13 @@ export function HueChannelOverlay({
                 if (boundsEl && boundsStart) {
                   boundsEl.style.left = `${boundsStart.left + deltaLeftPx}px`;
                   boundsEl.style.top = `${boundsStart.top + deltaTopPx}px`;
+                  // The centre stops `scale` short of the wall, so on a large
+                  // zone the marker parks far from the edge it is actually
+                  // pinned against and the drag reads as broken. Name the edge.
+                  boundsEl.dataset.zonePinned = pinnedZoneEdges(
+                    { centerX: newCx, centerY: newCy },
+                    { halfScaleX, halfScaleY },
+                  );
                 }
                 // `zoneRelativePosition` is unchanged — only the world position
                 // it projects to moves with the zone.
@@ -503,6 +535,7 @@ export function HueChannelOverlay({
                 }
               };
               const upHandler = (uv: PointerEvent) => {
+                if (boundsEl) delete boundsEl.dataset.zonePinned;
                 target.releasePointerCapture(uv.pointerId);
                 target.removeEventListener("pointermove", moveHandler);
                 target.removeEventListener("pointerup", upHandler);
