@@ -1636,6 +1636,7 @@ fn start_ambilight_worker(
         let mut hue_scene_state = LightSetState::default();
         let mut hue_scene_scratch: Vec<[u8; 3]> = Vec::new();
         let mut scene_frame_count: u32 = 0;
+        const SCENE_LOG_EVERY: u32 = 600;
         info!(
             "[ambilight-worker] scene-adaptive stage {}",
             if scene_enabled { "on" } else { "off" }
@@ -1695,10 +1696,13 @@ fn start_ambilight_worker(
                     scene.observe_frame(&raw_frame, border_cache.insets(), alpha_ceiling);
                     scene.process(&mut sampled, &strip_topology, &[], &mut strip_scene_state);
                     scene_frame_count += 1;
-                    if scene_frame_count <= 2 || scene_frame_count.is_multiple_of(600) {
+                    if scene_frame_count <= 2 || scene_frame_count.is_multiple_of(SCENE_LOG_EVERY) {
+                        let (ss, sm, sp, sl) = strip_scene_state.debug_tuple();
+                        let (hs, hm, hp, hl) = hue_scene_state.debug_tuple();
                         info!(
-                            "[ambilight-worker] scene #{scene_frame_count} — alpha={:.3}/{alpha_ceiling:.3} change={:.3} ambience={:?}",
+                            "[ambilight-worker] scene #{scene_frame_count} — alpha={:.3}/{alpha_ceiling:.3} change={:.3} env={:.3} ambience={:?} strip[sigma={ss:.2} med={sm:.2} spread={sp:.2} lean={sl:.2}] hue[sigma={hs:.2} med={hm:.2} spread={hp:.2} lean={hl:.2}]",
                             scene.alpha(),
+                            scene.last_change(),
                             scene.change_envelope(),
                             scene.ambience_srgb()
                         );

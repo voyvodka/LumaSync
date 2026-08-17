@@ -47,8 +47,8 @@ const ALPHA_FLOOR_RATIO: f32 = 0.3;
 /// Change-envelope release per frame (attack is instant).
 const CHANGE_RELEASE: f32 = 0.85;
 /// smoothstep bounds on the change envelope that map floor → ceiling.
-const CHANGE_LO: f32 = 0.03;
-const CHANGE_HI: f32 = 0.30;
+const CHANGE_LO: f32 = 0.008;
+const CHANGE_HI: f32 = 0.15;
 
 /// Ambience memory follows the frame mean at `alpha · AMBIENCE_RATE`.
 const AMBIENCE_RATE: f32 = 0.25;
@@ -135,6 +135,22 @@ pub enum LightTopology {
 #[derive(Clone, Debug, Default)]
 pub struct LightSetState {
     range_sigma: Option<f32>,
+    last_median: f32,
+    last_spread: f32,
+    last_lean: f32,
+}
+
+impl LightSetState {
+    /// (σ_r, median adjacent Δ, mean Δ to ambience, ambience lean) of the last
+    /// `process` call — observability for tuning, read by the worker log.
+    pub fn debug_tuple(&self) -> (f32, f32, f32, f32) {
+        (
+            self.range_sigma.unwrap_or(0.0),
+            self.last_median,
+            self.last_spread,
+            self.last_lean,
+        )
+    }
 }
 
 /// Where a light sits relative to the screen: `1.0` on the screen edge, → `0`
@@ -155,6 +171,7 @@ pub struct SceneAnalyzer {
     hist_prev: Option<[u32; HIST_BINS]>,
     hist_cur: [u32; HIST_BINS],
     change_env: f32,
+    last_change: f32,
     frame_mean: [f32; 3],
     ambience: Option<[f32; 3]>,
     /// α resolved for the current frame by `observe_frame`.
@@ -180,6 +197,7 @@ impl SceneAnalyzer {
             hist_prev: None,
             hist_cur: [0; HIST_BINS],
             change_env: 0.0,
+            last_change: 0.0,
             frame_mean: [0.0; 3],
             ambience: None,
             alpha: 0.0,
@@ -258,6 +276,7 @@ impl SceneAnalyzer {
 
         // Instant attack, slow release: a cut is followed at once, a lull is
         // trusted only after it has lasted.
+        self.last_change = change;
         self.change_env = if change > self.change_env {
             change
         } else {
@@ -288,6 +307,11 @@ impl SceneAnalyzer {
     /// Movement envelope in [0, 1] — exposed for telemetry and tests.
     pub fn change_envelope(&self) -> f32 {
         self.change_env
+    }
+
+    /// Raw histogram change of the last frame, before the envelope.
+    pub fn last_change(&self) -> f32 {
+        self.last_change
     }
 
     /// Ambience colour as sRGB, if a frame has been observed.
@@ -366,6 +390,7 @@ impl SceneAnalyzer {
             Some(prev) => prev + RANGE_ENVELOPE_RATE * (target_sigma - prev),
         };
         state.range_sigma = Some(sigma_r);
+        state.last_median = median;
         let inv_2sr2 = 1.0 / (2.0 * sigma_r * sigma_r);
 
         // Bilateral pass: wide kernel on RGB (chroma), narrow kernel on Y.
@@ -449,6 +474,8 @@ impl SceneAnalyzer {
             / n as f32;
         let contrast = (spread / CONTRAST_REF).clamp(0.0, 1.0);
         let lean = AMBIENCE_LEAN_MIN + (AMBIENCE_LEAN_MAX - AMBIENCE_LEAN_MIN) * (1.0 - contrast);
+        state.last_spread = spread;
+        state.last_lean = lean;
 
         for (i, color) in colors.iter_mut().enumerate() {
             let wide = self.wide[i];
@@ -672,6 +699,17 @@ mod tests {
             "{}",
             a.alpha()
         );
+    }
+
+    // Measured on film content (Big Buck Bunny, 25 fps capture): ordinary motion
+    // gives change ≈ 0.007–0.012, a hard cut ≈ 0.3. The window must let ordinary
+    // motion lift alpha partway and a cut saturate it.
+    #[test]
+    fn ordinary_motion_lifts_alpha_partway_and_a_cut_saturates() {
+        assert!(smoothstep(CHANGE_LO, CHANGE_HI, 0.012) > 0.0);
+        assert!(smoothstep(CHANGE_LO, CHANGE_HI, 0.012) < 0.2);
+        assert!(smoothstep(CHANGE_LO, CHANGE_HI, 0.005) == 0.0);
+        assert!(smoothstep(CHANGE_LO, CHANGE_HI, 0.3) == 1.0);
     }
 
     #[test]
