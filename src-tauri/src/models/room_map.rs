@@ -32,6 +32,14 @@ pub struct HueChannelPlacement {
     pub z: f64,
     #[serde(default)]
     pub label: Option<String>,
+    /// Mirrored so the zone commands stop dropping it: they echo the channel
+    /// list back and the frontend re-applies it wholesale, so a field missing
+    /// here is a field erased by assigning a channel to a zone.
+    #[serde(default)]
+    pub locked: Option<bool>,
+    /// Parent entertainment area — `channel_index` is unique only within one.
+    #[serde(default)]
+    pub entertainment_area_id: Option<String>,
     /// v1.5 W1-A3 — when present, channel is logically grouped under
     /// `HueZone.id`. `zone_relative_position` is then the authoritative
     /// source of truth and `x/y/z` above are derived at runtime.

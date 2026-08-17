@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useRoomMapPersist } from "../state/useRoomMapPersist";
 import { RoomMapCanvas } from "./RoomMapCanvas";
@@ -36,7 +36,8 @@ import { PropertyBar } from "./PropertyBar";
 import { RenameDialog } from "./RenameDialog";
 import { TemplateSelector } from "./TemplateSelector";
 import { ZoneDeriveOverlay } from "./ZoneDeriveOverlay";
-import type { HueZoneStatusCode, RoomDimensions } from "@/shared/contracts/roomMap";
+import type { HueChannelPlacement, HueZoneStatusCode, RoomDimensions } from "@/shared/contracts/roomMap";
+import { hueChannelsForArea, replaceHueChannel } from "@/shared/contracts/roomMap";
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
@@ -178,6 +179,13 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   const gridStepM = widthMeters < 4 ? 0.5 : 1.0;
   const gridStepPx = gridStepM * pxPerMeter;
 
+  // The editor's object ids carry an index and no area, so it shows one area at
+  // a time; placing several independently is P3 work and needs a wider id.
+  const visibleHueChannels = useMemo(
+    () => (hueAreaId ? hueChannelsForArea(config.hueChannels, hueAreaId) : config.hueChannels),
+    [config.hueChannels, hueAreaId],
+  );
+
   // Derived
   const hasTv = !!config.tvAnchor;
   const hasUsb = config.usbStrips.length > 0;
@@ -186,7 +194,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     !config.tvAnchor &&
     config.furniture.length === 0 &&
     config.usbStrips.length === 0 &&
-    config.hueChannels.length === 0;
+    visibleHueChannels.length === 0;
 
   // Zone derivation handlers
   const handleDeriveZones = useCallback(() => {
@@ -291,8 +299,11 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       if (config.usbStrips.length > 0) {
         patch.usbStrips = config.usbStrips.map((s) => ({ ...s, startX: s.startX + dxM, startY: s.startY + dyM, endX: s.endX + dxM, endY: s.endY + dyM }));
       }
-      if (config.hueChannels.length > 0) {
-        patch.hueChannels = config.hueChannels.map((ch) => ({ ...ch, x: ch.x + dxM, y: ch.y + dyM }));
+      if (visibleHueChannels.length > 0) {
+        const moving = new Set(visibleHueChannels);
+        patch.hueChannels = config.hueChannels.map((ch) =>
+          moving.has(ch) ? { ...ch, x: ch.x + dxM, y: ch.y + dyM } : ch,
+        );
       }
       if (config.imageLayers.length > 0) {
         patch.imageLayers = config.imageLayers.map((l) => ({ ...l, offsetX: l.offsetX + dxPx, offsetY: l.offsetY + dyPx }));
@@ -543,12 +554,12 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 the visibility toggle is on, so passive zones paint
                 without needing an active selection. */}
             {(
-              config.hueChannels.length > 0
+              visibleHueChannels.length > 0
               || activeHueZone !== null
               || (showHueZones && hueZones.length > 0)
             ) && (
               <HueChannelOverlay
-                channels={config.hueChannels}
+                channels={visibleHueChannels}
                 pxPerMeter={pxPerMeter}
                 roomWidthM={widthMeters}
                 roomDepthM={depthMeters}
@@ -556,10 +567,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
                 selectedId={selectedId}
                 onSelect={(idx) => setSelectedId(hueChannelObjectId(idx))}
                 onChange={(updated) => {
-                  const next = config.hueChannels.map((ch) =>
-                    ch.channelIndex === updated.channelIndex ? updated : ch,
-                  );
-                  void updateConfig({ hueChannels: next });
+                  void updateConfig({
+                    hueChannels: replaceHueChannel(config.hueChannels, updated),
+                  });
                 }}
                 panMode={spaceHeld}
                 activeHueZone={activeHueZone}
@@ -628,7 +638,12 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
               } else if (parsed?.kind === "usb") {
                 void updateConfig({ usbStrips: config.usbStrips.map((s) => (s.stripId === parsed.stripId ? { ...s, locked: !s.locked } : s)) });
               } else if (parsed?.kind === "hue") {
-                void updateConfig({ hueChannels: config.hueChannels.map((ch) => (ch.channelIndex === parsed.channelIndex ? { ...ch, locked: !ch.locked } : ch)) });
+                const target = visibleHueChannels.find((ch: HueChannelPlacement) => ch.channelIndex === parsed.channelIndex);
+                if (target) {
+                  void updateConfig({
+                    hueChannels: replaceHueChannel(config.hueChannels, { ...target, locked: !target.locked }),
+                  });
+                }
               } else if (parsed?.kind === "image") {
                 void updateConfig({ imageLayers: config.imageLayers.map((l) => (l.id === parsed.layerId ? { ...l, locked: !l.locked } : l)) });
               }
@@ -673,10 +688,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
               });
             }}
             onRenameHueChannel={(channelIndex, label) => {
+              const target = visibleHueChannels.find((ch: HueChannelPlacement) => ch.channelIndex === channelIndex);
+              if (!target) return;
               void updateConfig({
-                hueChannels: config.hueChannels.map((ch) =>
-                  ch.channelIndex === channelIndex ? { ...ch, label } : ch,
-                ),
+                hueChannels: replaceHueChannel(config.hueChannels, { ...target, label }),
               });
             }}
             onRenameImageLayer={handleRenameImage}

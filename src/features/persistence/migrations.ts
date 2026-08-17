@@ -93,7 +93,43 @@ export function migrateShellState(state: ShellState): ShellState {
     next = migrateV3ToV4(next);
   }
 
+  // 4 → 5: stamp each Hue channel placement with its entertainment area
+  if ((next.schemaVersion ?? 1) < 5) {
+    next = migrateV4ToV5(next);
+  }
+
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// 4 → 5 — attribute `roomMap.hueChannels` to an entertainment area
+// ---------------------------------------------------------------------------
+
+/** `lastHueAreaId` is a sound backfill: one bridge is paired at a time, and until
+ *  now a second area's placements overwrote the first's rather than joining them.
+ *  No `lastHueAreaId` ⇒ left unscoped rather than bound to an invented area. */
+function migrateV4ToV5(state: ShellState): ShellState {
+  const room = state.roomMap;
+  if (!room) {
+    return { ...state, schemaVersion: 5 };
+  }
+
+  const areaId = state.lastHueAreaId;
+  const channels = room.hueChannels ?? [];
+  if (!areaId || channels.length === 0) {
+    return { ...state, schemaVersion: 5 };
+  }
+
+  return {
+    ...state,
+    schemaVersion: 5,
+    roomMap: {
+      ...room,
+      hueChannels: channels.map((channel) =>
+        channel.entertainmentAreaId ? channel : { ...channel, entertainmentAreaId: areaId },
+      ),
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
