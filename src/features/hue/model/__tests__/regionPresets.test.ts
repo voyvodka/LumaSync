@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  HUE_REGION_PRESETS,
-  HUE_REGION_PRESET_POSITIONS,
-  isBridgePosition,
-  matchRegionPreset,
-} from "../regionPresets";
+import { HUE_REGION_PRESET_POSITIONS, type HueRegionPreset } from "../regionPresets";
+
+const PRESETS: HueRegionPreset[] = ["left", "right", "top", "bottom", "center"];
 
 /** Mirror of `channel_position_to_screen_region` in
  *  `src-tauri/src/commands/hue/frame.rs`. Rust labels the row's dot colour from
@@ -24,7 +21,7 @@ function classifyLikeRust(x: number, y: number): string {
 
 describe("preset positions", () => {
   it("each preset lands in the band Rust would name it", () => {
-    for (const preset of HUE_REGION_PRESETS) {
+    for (const preset of PRESETS) {
       const { x, y } = HUE_REGION_PRESET_POSITIONS[preset];
       expect(classifyLikeRust(x, y)).toBe(preset);
     }
@@ -34,33 +31,5 @@ describe("preset positions", () => {
     // `+y` is depth, `+1` being the TV wall — the reason these read Near / Far.
     expect(HUE_REGION_PRESET_POSITIONS.top.y).toBe(1);
     expect(HUE_REGION_PRESET_POSITIONS.bottom.y).toBe(-1);
-  });
-});
-
-describe("matchRegionPreset", () => {
-  it("recognises each preset's own position", () => {
-    for (const preset of HUE_REGION_PRESETS) {
-      const { x, y } = HUE_REGION_PRESET_POSITIONS[preset];
-      expect(matchRegionPreset(x, y)).toBe(preset);
-    }
-  });
-
-  it("returns null for a position on no preset — the state a region label could not express", () => {
-    expect(matchRegionPreset(0.42, 0.13)).toBeNull();
-    expect(matchRegionPreset(-0.7, 0.7)).toBeNull();
-    // Right band by Rust's rule, but not the `right` preset's position.
-    expect(matchRegionPreset(0.5, 0)).toBeNull();
-  });
-
-  it("absorbs the float noise a zone round-trip adds, and nothing wider", () => {
-    expect(matchRegionPreset(-1 + 0.004, 0.004)).toBe("left");
-    expect(matchRegionPreset(-1 + 0.05, 0)).toBeNull();
-  });
-});
-
-describe("isBridgePosition", () => {
-  it("is true only while nothing local has moved the channel", () => {
-    expect(isBridgePosition(0.42, -0.13, 0.42, -0.13)).toBe(true);
-    expect(isBridgePosition(0.42, -0.13, 0.42, 0.13)).toBe(false);
   });
 });

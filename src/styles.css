@@ -4013,10 +4013,7 @@ body {
 /* Dimmed with ink tokens rather than opacity, so forced-colors and the
    contrast floor still hold. */
 .lm-chmap.is-stale .lm-chmap-row-num,
-.lm-chmap.is-stale .lm-chmap-pill.is-active {
-  color: var(--lm-ink-dim, #8a94a3);
-}
-.lm-chmap.is-stale .lm-chmap-row-lights {
+.lm-chmap.is-stale .lm-chmap.is-stale .lm-chmap-row-lights {
   color: var(--lm-ink-faint, #4d5564);
 }
 .lm-chmap-row {
@@ -4040,12 +4037,40 @@ body {
   min-width: 96px;
   max-width: 140px;
 }
+.lm-chmap-row-zone {
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  color: var(--lm-ink-dim, #8a94a3);
+  letter-spacing: 0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lm-chmap-row-zone.is-none {
+  color: var(--lm-ink-faint, #4d5564);
+}
+/* Inline link out to the surface that owns placement. */
+.lm-chmap-hint-cta {
+  all: unset;
+  cursor: pointer;
+  margin-left: 6px;
+  color: var(--lm-amber, #ffb020);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+.lm-chmap-hint-cta:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+  border-radius: 3px;
+}
 .lm-chmap-row-dot {
   width: 14px;
+  background: var(--lm-ink-faint, #4d5564);
   height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--lm-chmap-dot-color, var(--lm-ink-faint, #4d5564));
 }
 .lm-chmap-row-num {
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
@@ -4069,54 +4094,10 @@ body {
 }
 
 /* Region pill row — same family as `.lm-settings-seg button` */
-.lm-chmap-pills {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  flex: 1;
-  min-width: 0;
-}
-.lm-chmap-pill {
-  all: unset;
-  box-sizing: border-box;
-  cursor: pointer;
-  padding: 5px 10px;
-  min-height: 32px;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lm-ink-dim, #8a94a3);
-  background: var(--lm-panel-2, #14171d);
-  border: 1px solid var(--lm-line-2, #252b34);
-  border-radius: 6px;
-  font-weight: 500;
-  text-align: center;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
-}
-.lm-chmap-pill:hover:not(:disabled) {
-  color: var(--lm-ink, #eaeef4);
-  border-color: #3a4250;
-}
-.lm-chmap-pill.is-active {
-  color: var(--lm-amber, #ffb020);
-  background: rgba(255, 176, 32, 0.12);
-  border-color: rgba(255, 176, 32, 0.4);
-}
 /* Outlined, not filled: this preset is where the bridge put the channel, not
    something the user chose. */
-.lm-chmap-pill.is-active.is-derived {
-  background: transparent;
-  color: var(--lm-ink-dim, #8a94a3);
-  border-color: rgba(255, 176, 32, 0.35);
-  border-style: dashed;
-}
-.lm-chmap-pill:focus-visible {
-  outline: none;
-  box-shadow: var(--lm-focus-ring-soft);
-}
 
-/* Trailing slot for the "Custom" chip and the "Reset" / "Saved" indicator */
+/* Trailing slot — the channel's zone, or that it has none */
 .lm-chmap-row-trail {
   margin-left: auto;
   flex-shrink: 0;
@@ -4127,55 +4108,6 @@ body {
   gap: 6px;
 }
 /* The state the region label could never express: a position on no preset. */
-.lm-chmap-row-custom {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lm-ink-dim, #8a94a3);
-  border: 1px solid var(--lm-line-2, #252b34);
-  border-radius: 999px;
-  padding: 2px 8px;
-  white-space: nowrap;
-}
-.lm-chmap-row-saved {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lm-green, #4ade80);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.lm-chmap-row-saved::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--lm-green, #4ade80);
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
-}
-.lm-chmap-row-reset {
-  all: unset;
-  cursor: pointer;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--lm-ink-faint, #4d5564);
-  padding: 4px 8px;
-  border-radius: 5px;
-  transition: color 120ms ease, background 120ms ease;
-}
-.lm-chmap-row-reset:hover {
-  color: var(--lm-amber, #ffb020);
-  background: rgba(255, 176, 32, 0.08);
-}
-.lm-chmap-row-reset:focus-visible {
-  outline: none;
-  box-shadow: var(--lm-focus-ring-soft);
-}
 
 /* Footer — Save to bridge action + status feedback */
 .lm-chmap-footer {
@@ -4357,24 +4289,7 @@ body {
     background: CanvasText;
     forced-color-adjust: none;
   }
-  .lm-chmap-pill {
-    color: CanvasText;
-    border-color: CanvasText;
-    background: Canvas;
-    forced-color-adjust: none;
-  }
-  .lm-chmap-pill.is-active {
-    color: Highlight;
-    border-color: Highlight;
-  }
-  /* Dashed is the only carrier of derived-vs-chosen once colour is gone. */
-  .lm-chmap-pill.is-active.is-derived {
-    color: CanvasText;
-    border-color: Highlight;
-    border-style: dashed;
-  }
-  .lm-chmap-pill:focus-visible,
-  .lm-chmap-row-reset:focus-visible {
+  .lm-chmap-hint-cta:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 1px;
     box-shadow: none;
@@ -4395,8 +4310,7 @@ body {
   .lm-chmap-state-b {
     color: CanvasText;
   }
-  .lm-chmap-beta,
-  .lm-chmap-row-custom {
+  .lm-chmap-beta {
     color: Highlight;
     border-color: Highlight;
     background: Canvas;

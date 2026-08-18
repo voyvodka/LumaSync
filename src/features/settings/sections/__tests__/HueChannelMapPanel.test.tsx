@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -67,10 +67,6 @@ function storedAtBridgePositions(): HueChannelPlacement[] {
   }));
 }
 
-function pill(row: HTMLElement, preset: string): HTMLElement {
-  return within(row).getByRole("radio", { name: `hue:channelMap.regions.${preset}` });
-}
-
 function rows(): HTMLElement[] {
   return screen.getAllByRole("group");
 }
@@ -132,99 +128,6 @@ describe("channel identity", () => {
     // `#1` / `#3` are what an ordinal, or an ordinal + 1, would have produced.
     expect(screen.queryByText("#1")).toBeNull();
     expect(screen.queryByText("#3")).toBeNull();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Presets write positions — the whole point of the surface
-// ---------------------------------------------------------------------------
-
-describe("presets", () => {
-  it("writes the preset's position, not a region label", async () => {
-    const onPositionChange: PositionSpy = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <HueChannelMapPanel
-        {...defaultProps}
-        placements={storedAtBridgePositions()}
-        onPositionChange={onPositionChange}
-      />,
-    );
-
-    await user.click(pill(rows()[0]!, "top"));
-
-    const moved = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
-    expect(moved.x).toBeCloseTo(0, 6);
-    expect(moved.y).toBeCloseTo(1, 6);
-  });
-
-  it("moves only the channel whose pill was clicked", async () => {
-    const onPositionChange: PositionSpy = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <HueChannelMapPanel
-        {...defaultProps}
-        placements={storedAtBridgePositions()}
-        onPositionChange={onPositionChange}
-      />,
-    );
-
-    await user.click(pill(rows()[1]!, "left"));
-
-    const emitted = lastEmitted(onPositionChange);
-    expect(emitted.find((p) => p.channelIndex === 1)!.x).toBeCloseTo(-1, 6);
-    expect(emitted.find((p) => p.channelIndex === 0)!.x).toBeCloseTo(-1, 6);
-    expect(emitted.find((p) => p.channelIndex === 2)!.x).toBeCloseTo(1, 6);
-  });
-
-  it("marks the preset the bridge itself put the channel on as derived, not chosen", () => {
-    render(<HueChannelMapPanel {...defaultProps} placements={storedAtBridgePositions()} />);
-    const left = pill(rows()[0]!, "left");
-    expect(left.getAttribute("aria-checked")).toBe("true");
-    expect(left.className).toContain("is-derived");
-  });
-
-  it("drops the derived mark once the user picks a preset", async () => {
-    const user = userEvent.setup();
-    render(<HueChannelMapPanel {...defaultProps} placements={storedAtBridgePositions()} />);
-
-    await user.click(pill(rows()[0]!, "top"));
-
-    const near = pill(rows()[0]!, "top");
-    expect(near.getAttribute("aria-checked")).toBe("true");
-    expect(near.className).not.toContain("is-derived");
-  });
-
-  it("says Custom, and checks nothing, for a position on no preset", () => {
-    const placements = storedAtBridgePositions();
-    placements[0] = { ...placements[0]!, x: 0.42, y: 0.13 };
-    render(<HueChannelMapPanel {...defaultProps} placements={placements} />);
-
-    const row = rows()[0]!;
-    expect(screen.getByText("hue:channelMap.custom")).toBeTruthy();
-    for (const preset of ["left", "right", "top", "bottom", "center"]) {
-      expect(pill(row, preset).getAttribute("aria-checked")).toBe("false");
-    }
-  });
-
-  it("returns the channel to the bridge's own position on reset", async () => {
-    const onPositionChange: PositionSpy = vi.fn();
-    const user = userEvent.setup();
-    const placements = storedAtBridgePositions();
-    placements[2] = { ...placements[2]!, x: -0.5, y: 0.5 };
-    render(
-      <HueChannelMapPanel
-        {...defaultProps}
-        placements={placements}
-        onPositionChange={onPositionChange}
-      />,
-    );
-
-    await user.click(screen.getByRole("button", { name: /channelMap\.resetToBridge/ }));
-
-    const reset = lastEmitted(onPositionChange).find((p) => p.channelIndex === 2)!;
-    expect(reset.x).toBeCloseTo(1, 6);
-    expect(reset.y).toBeCloseTo(0, 6);
   });
 });
 
@@ -393,16 +296,25 @@ describe("zone-bound channels survive an edit here", () => {
         placements={placements}
         zones={[ZONE]}
         onPositionChange={onPositionChange}
+        bridgeIp="192.168.1.10"
+        username="test-user-key"
+        areaId="area-uuid-123"
       />,
     );
   }
 
+  /** Pull is the only write this panel makes now, so it is where the
+   *  zone-preservation guarantees have to hold. */
+  async function pull(onPositionChange: PositionSpy) {
+    const user = userEvent.setup();
+    window.confirm = vi.fn().mockReturnValue(true);
+    renderBound(onPositionChange);
+    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+  }
+
   it("keeps the zone binding, label and lock instead of rebuilding a bare record", async () => {
     const onPositionChange: PositionSpy = vi.fn();
-    const user = userEvent.setup();
-    renderBound(onPositionChange);
-
-    await user.click(pill(rows()[0]!, "left"));
+    await pull(onPositionChange);
 
     const channel = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
     expect(channel.zoneId).toBe("zone-1");
@@ -412,26 +324,28 @@ describe("zone-bound channels survive an edit here", () => {
 
   it("writes the zone-relative pair, which is the one the runtime reads", async () => {
     const onPositionChange: PositionSpy = vi.fn();
-    const user = userEvent.setup();
-    renderBound(onPositionChange);
-
-    await user.click(pill(rows()[0]!, "left"));
+    await pull(onPositionChange);
 
     const channel = lastEmitted(onPositionChange).find((p) => p.channelIndex === 0)!;
-    // centerX 0 + scaleX 1 ⇒ relative -1 for world -1. Writing only the absolute
-    // pair would leave the resolved position where it was.
+    // Channel 0's bridge position is -1; centerX 0 + scaleX 1 ⇒ relative -1.
+    // Writing only the absolute pair would leave the resolved position where it was.
     expect(channel.zoneRelativePosition?.x).toBeCloseTo(-1, 5);
     expect(channel.x).toBeCloseTo(-1, 5);
   });
 
-  it("reads the row's preset from where the zone puts the channel, not its stale absolute pair", () => {
+  it("names the zone a channel belongs to, and says so when it belongs to none", () => {
+    // Two zones, and the bound channel is the FIRST row while its zone is the
+    // SECOND entry — so resolving by list position picks the wrong name.
+    const other = { ...ZONE, id: "zone-0", name: "Behind sofa", channelIndices: [] };
     const placements = storedAtBridgePositions();
-    placements[0] = { ...boundPlacement, x: -0.9, y: -0.9 };
-    render(<HueChannelMapPanel {...defaultProps} placements={placements} zones={[ZONE]} />);
+    placements[0] = boundPlacement;
+    render(
+      <HueChannelMapPanel {...defaultProps} placements={placements} zones={[other, ZONE]} />,
+    );
 
-    // centerX 0 + scaleX 1 * relative 1 ⇒ world +1, which is the `right` preset.
-    expect(pill(rows()[0]!, "right").getAttribute("aria-checked")).toBe("true");
-    expect(pill(rows()[0]!, "left").getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("TV wall")).toBeTruthy();
+    expect(screen.queryByText("Behind sofa")).toBeNull();
+    expect(screen.getAllByText("hue:channelMap.noZone")).toHaveLength(2);
   });
 });
 
@@ -466,11 +380,16 @@ describe("bridge sync state", () => {
     expect(screen.getByText("hue:channelMap.sync.inSync")).toBeTruthy();
   });
 
-  it("reports an unpushed edit without calling it a fault", async () => {
-    const user = userEvent.setup();
-    render(<HueChannelMapPanel {...syncProps} syncedPositions={matchingSnapshot()} />);
-
-    await user.click(pill(rows()[0]!, "top"));
+  it("reports an unpushed edit without calling it a fault", () => {
+    const moved = storedAtBridgePositions();
+    moved[0] = { ...moved[0]!, x: 0.6 };
+    render(
+      <HueChannelMapPanel
+        {...syncProps}
+        placements={moved}
+        syncedPositions={matchingSnapshot()}
+      />,
+    );
 
     expect(screen.getByText("hue:channelMap.sync.localAhead")).toBeTruthy();
   });

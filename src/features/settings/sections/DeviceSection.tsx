@@ -246,6 +246,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
           onPositionChange={handlePositionChange}
           syncedPositions={syncedPositions}
           onSyncedPositionsChange={handleSyncedPositionsChange}
+          onNavigateToRoomMap={onNavigateToRoomMap}
           persistError={hueChannelPersistError.active}
           zones={hueZones}
         />

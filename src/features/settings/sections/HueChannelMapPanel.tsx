@@ -24,13 +24,6 @@ import {
   deriveHueSyncState,
   toSyncSnapshot,
 } from "@/features/hue/model/hueSyncState";
-import {
-  HUE_REGION_PRESETS,
-  HUE_REGION_PRESET_POSITIONS,
-  isBridgePosition,
-  matchRegionPreset,
-  type HueRegionPreset,
-} from "@/features/hue/model/regionPresets";
 
 interface Props {
   channels: HueAreaChannelInfo[];
@@ -60,6 +53,8 @@ interface Props {
   /** Re-read the bridge's list before adopting it — a list fetched while a
    *  stream was running carries our own placements, not the bridge's. */
   onRefreshChannels?: () => void;
+  /** Placement is authored on the room map; this is the way there. */
+  onNavigateToRoomMap?: () => void;
   /** Room-map Hue zones. A channel bound to one stores its position relative to
    *  the zone, so editing here has to project through it rather than write the
    *  absolute pair the runtime ignores. */
@@ -67,8 +62,6 @@ interface Props {
 }
 
 const NO_ZONES: readonly HueZone[] = [];
-
-const SAVED_FLASH_MS = 2000;
 
 /** Convert Hue position (x: -1..+1, y: -1..+1) to CSS % inside the grid box.
  *  Hue x: -1=left, +1=right → left%
@@ -80,8 +73,7 @@ export function posToPercent(x: number, y: number): { left: string; top: string 
   return { left, top };
 }
 
-/** Region → token-backed CSS color. Shared with `MiniSpatialPreview` so the
- *  room list dots read as members of the same family. */
+/** Region → token-backed CSS color, for `MiniSpatialPreview`'s dots. */
 const REGION_COLOR_VAR: Record<string, string> = {
   left: "var(--lm-zone-1)",
   right: "var(--lm-zone-3)",
@@ -91,16 +83,6 @@ const REGION_COLOR_VAR: Record<string, string> = {
 };
 
 const NEUTRAL_DOT = "var(--lm-ink-faint)";
-
-/** Spelled out rather than interpolated: a template-built key is invisible to
- *  the orphan ratchet, which then green-lights deleting a live string. */
-const PRESET_LABEL_KEY = {
-  left: "hue:channelMap.regions.left",
-  right: "hue:channelMap.regions.right",
-  top: "hue:channelMap.regions.top",
-  bottom: "hue:channelMap.regions.bottom",
-  center: "hue:channelMap.regions.center",
-} as const satisfies Record<HueRegionPreset, string>;
 
 const EMPTY_STATE_KEYS = {
   empty: {
@@ -131,6 +113,7 @@ export function HueChannelMapPanel({
   syncedPositions,
   onSyncedPositionsChange,
   onRefreshChannels,
+  onNavigateToRoomMap,
   zones = NO_ZONES,
 }: Props) {
   const { t } = useTranslation();
@@ -141,9 +124,6 @@ export function HueChannelMapPanel({
 
   const zonesRef = useRef<readonly HueZone[]>(zones);
   zonesRef.current = zones;
-
-  const [savedChannelIndex, setSavedChannelIndex] = useState<number | null>(null);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ ok: boolean; code?: string; message?: string } | null>(null);
@@ -175,35 +155,9 @@ export function HueChannelMapPanel({
 
   useEffect(
     () => () => {
-      if (savedTimerRef.current !== null) clearTimeout(savedTimerRef.current);
       if (saveResultTimerRef.current !== null) clearTimeout(saveResultTimerRef.current);
     },
     [],
-  );
-
-  const flashSaved = useCallback((channelIndex: number) => {
-    setSavedChannelIndex(channelIndex);
-    if (savedTimerRef.current !== null) clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => {
-      setSavedChannelIndex(null);
-      savedTimerRef.current = null;
-    }, SAVED_FLASH_MS);
-  }, []);
-
-  /** A preset writes a position, not a label. Everything downstream — the row's
-   *  own state, the room map, the frame loop — reads only the position. */
-  const applyPosition = useCallback(
-    (channelIndex: number, x: number, y: number) => {
-      const next = channelPlacements.map((p) =>
-        p.channelIndex === channelIndex
-          ? moveHueChannelToWorld(p, zonesRef.current, x, y)
-          : p,
-      );
-      setChannelPlacements(next);
-      onPositionChange?.(next);
-      flashSaved(channelIndex);
-    },
-    [channelPlacements, onPositionChange, flashSaved],
   );
 
   const handleSaveToBridge = useCallback(async () => {
@@ -330,6 +284,11 @@ export function HueChannelMapPanel({
       <div className="lm-chmap-body">
         <p className="lm-chmap-hint">
           <span className="lm-chmap-hint-text">{t("hue:channelMap.hint")}</span>
+          {onNavigateToRoomMap && (
+            <button type="button" className="lm-chmap-hint-cta" onClick={onNavigateToRoomMap}>
+              {t("hue:channelMap.openRoomMap")}
+            </button>
+          )}
         </p>
 
         {isStale && (
@@ -350,10 +309,7 @@ export function HueChannelMapPanel({
           const placement =
             findHueChannel(channelPlacements, ch.index) ??
             resolveChannelPlacement(ch, placementsRef.current, zonesRef.current);
-          const matched = matchRegionPreset(placement.x, placement.y);
-          const fromBridge = isBridgePosition(placement.x, placement.y, ch.positionX, ch.positionY);
-          const dotColor = matched ? (REGION_COLOR_VAR[matched] ?? NEUTRAL_DOT) : NEUTRAL_DOT;
-          const isSaved = savedChannelIndex === ch.index;
+          const zone = zones.find((z) => z.id === placement.zoneId);
           // The bridge's own id, rendered raw: `#0` is a legitimate channel.
           const idLabel = `#${ch.channelId}`;
 
@@ -362,14 +318,10 @@ export function HueChannelMapPanel({
               key={ch.index}
               className="lm-chmap-row"
               role="group"
-              aria-label={t("hue:channelMap.regionRowAriaLabel", { index: idLabel })}
+              aria-label={t("hue:channelMap.channelRowAriaLabel", { index: idLabel })}
             >
               <div className="lm-chmap-row-id">
-                <span
-                  className="lm-chmap-row-dot"
-                  style={{ ["--lm-chmap-dot-color" as string]: dotColor }}
-                  aria-hidden
-                />
+                <span className="lm-chmap-row-dot" aria-hidden />
                 <span className="lm-chmap-row-num">{idLabel}</span>
                 <span className="lm-chmap-row-lights">
                   {ch.lightCount === 1
@@ -378,53 +330,14 @@ export function HueChannelMapPanel({
                 </span>
               </div>
 
-              <div
-                className="lm-chmap-pills"
-                role="radiogroup"
-                aria-label={t("hue:channelMap.zonePicker")}
-              >
-                {HUE_REGION_PRESETS.map((preset: HueRegionPreset) => {
-                  const isActive = matched === preset;
-                  return (
-                    <button
-                      key={preset}
-                      type="button"
-                      role="radio"
-                      aria-checked={isActive}
-                      className={`lm-chmap-pill${isActive ? " is-active" : ""}${
-                        isActive && fromBridge ? " is-derived" : ""
-                      }`}
-                      onClick={() => {
-                        const target = HUE_REGION_PRESET_POSITIONS[preset];
-                        applyPosition(ch.index, target.x, target.y);
-                      }}
-                    >
-                      {t(PRESET_LABEL_KEY[preset])}
-                    </button>
-                  );
-                })}
-              </div>
-
               <div className="lm-chmap-row-trail">
-                {matched === null && (
-                  <span className="lm-chmap-row-custom">{t("hue:channelMap.custom")}</span>
-                )}
-                {isSaved ? (
-                  <span className="lm-chmap-row-saved" aria-live="polite">
-                    {t("hue:channelMap.saved")}
+                {zone ? (
+                  <span className="lm-chmap-row-zone">{zone.name}</span>
+                ) : (
+                  <span className="lm-chmap-row-zone is-none">
+                    {t("hue:channelMap.noZone")}
                   </span>
-                ) : !fromBridge ? (
-                  <button
-                    type="button"
-                    className="lm-chmap-row-reset"
-                    title={t("hue:channelMap.resetToBridgeTitle")}
-                    onClick={() => {
-                      applyPosition(ch.index, ch.positionX, ch.positionY);
-                    }}
-                  >
-                    {t("hue:channelMap.resetToBridge")}
-                  </button>
-                ) : null}
+                )}
               </div>
             </div>
           );

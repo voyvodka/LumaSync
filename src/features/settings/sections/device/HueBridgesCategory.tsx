@@ -26,6 +26,7 @@ export interface HueBridgesCategoryProps {
   onPositionChange: (updated: HueChannelPlacement[]) => Promise<void>;
   /** What was last written to the bridge for the selected area. */
   syncedPositions?: HueChannelPlacementOverride[];
+  onNavigateToRoomMap?: () => void;
   onSyncedPositionsChange?: (snapshot: HueChannelPlacementOverride[]) => Promise<void>;
   persistError: boolean;
   /** Room-map zones, so the channel map can project through a bound channel's
@@ -40,6 +41,7 @@ export function HueBridgesCategory({
   onPositionChange,
   syncedPositions,
   onSyncedPositionsChange,
+  onNavigateToRoomMap,
   persistError,
   zones,
 }: HueBridgesCategoryProps) {
@@ -746,6 +748,7 @@ export function HueBridgesCategory({
                 syncedPositions={syncedPositions}
                 onSyncedPositionsChange={(snapshot) => { void onSyncedPositionsChange?.(snapshot); }}
                 onRefreshChannels={refreshChannels}
+                onNavigateToRoomMap={onNavigateToRoomMap}
                 placements={channelPlacements}
                 onPositionChange={onPositionChange}
                 persistError={persistError}
