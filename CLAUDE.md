@@ -138,7 +138,7 @@ Each module uses some of `ui/` (React components), `state/` (state machines and 
 
 Two things the directory listing will not tell you:
 
-- **`hue` holds no UI.** The module is state, model, and the `invoke()` bridge; the Hue screens live in `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx`, and the contract in `src/shared/contracts/hue.ts`.
+- **`hue` holds no UI.** The module is state, model, and the `invoke()` bridge; the contract is in `src/shared/contracts/hue.ts`. The Hue screens are split by what they own: `settings/sections/DeviceSection.tsx` and `HueChannelMapPanel.tsx` list the bridge's channels and own the bridge sync, while **placement is authored only in the room map** — see `docs/architecture/hue.md`.
 - **`onboarding` does not include the room map.** That editor is an advanced surface most users skip; first run must work without it.
 
 ### Rust command modules (`src-tauri/src/commands/`)
