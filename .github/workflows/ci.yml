@@ -109,7 +109,8 @@ jobs:
             libdbus-1-dev \
             libgbm-dev \
             xvfb \
-            dbus-x11
+            dbus-x11 \
+            gnome-keyring
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -175,20 +176,58 @@ jobs:
           # renderer both abort without one, taking the webview down with them.
           WEBKIT_DISABLE_COMPOSITING_MODE: "1"
           WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          LUMASYNC_SMOKE_CREDENTIALS: "1"
+          LUMASYNC_DEV_USE_KEYCHAIN: "1"
+          LUMASYNC_SMOKE_CAPTURE: "1"
         # dbus-run-session gives libayatana-appindicator a session bus to register
-        # the tray against instead of leaving it to GDBus autolaunch.
-        run: xvfb-run -a dbus-run-session -- node scripts/verify/launch-smoke.mjs
+        # the tray against instead of leaving it to GDBus autolaunch — and now
+        # also the bus gnome-keyring-daemon claims org.freedesktop.secrets on,
+        # which is what keyring 4's zbus-secret-service backend talks to. It is
+        # therefore the OUTER wrapper: xvfb-run only sets DISPLAY, so nesting it
+        # inside costs nothing, but starting the daemon outside the bus the app
+        # ends up on would leave the app with no Secret Service at all.
+        # `printf "\n"` unlocks the freshly created login keyring with an empty
+        # password; the daemon forks and stays on the bus for the smoke run.
+        # The credential expectation is soft, not hard: a headless Secret
+        # Service is the thing under test here, and until a run has shown it
+        # working, an unavailable keyring must read as evidence rather than as
+        # a red build. The capture expectation gates.
+        run: >
+          dbus-run-session -- bash -c 'printf "\n" | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1;
+          xvfb-run -a node scripts/verify/launch-smoke.mjs
+          --expect "[smoke-capture] frame="
+          --expect-soft "[smoke-cred] backend=keychain roundtrip=ok"'
 
       - name: Launch smoke test (macOS)
         # The runner provides a real desktop session, so the app launches as-is.
         if: runner.os == 'macOS'
-        run: node scripts/verify/launch-smoke.mjs
+        env:
+          LUMASYNC_SMOKE_CAPTURE: "1"
+        # Soft: TCC screen-recording consent cannot be granted headlessly, and
+        # `[smoke-capture] SKIP code=AMBILIGHT_CAPTURE_PERMISSION_DENIED` is a
+        # true statement about the runner, not a defect. The expectation is on
+        # the bare prefix so either outcome satisfies it and both get printed.
+        # No credential run here at all: a Keychain ACL prompt has nobody to
+        # answer it — see build-and-release.md, "Keychain prompts in dev".
+        run: node scripts/verify/launch-smoke.mjs --expect-soft "[smoke-capture]"
 
       - name: Launch smoke test (Windows)
         if: runner.os == 'Windows'
         env:
           LUMASYNC_NO_DEVTOOLS: "1"
-        run: node scripts/verify/launch-smoke.mjs --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
+          # This runner is the only Windows desktop the app ever reaches, so it
+          # is where Credential Manager and Windows Graphics Capture get proved.
+          # LUMASYNC_DEV_USE_KEYCHAIN keeps the debug build off its DevFileStore
+          # so the round-trip hits CredMan for real — the backend= field in the
+          # expectation is what makes that assertable rather than assumed.
+          LUMASYNC_SMOKE_CREDENTIALS: "1"
+          LUMASYNC_DEV_USE_KEYCHAIN: "1"
+          LUMASYNC_SMOKE_CAPTURE: "1"
+        run: >
+          node scripts/verify/launch-smoke.mjs
+          --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
+          --expect "[smoke-cred] backend=keychain roundtrip=ok"
+          --expect "[smoke-capture] frame="
 
       # The Windows overlay gate (R29). This runner is the only Windows desktop
       # the overlay paths ever reach; the probe asserts the calibration overlay

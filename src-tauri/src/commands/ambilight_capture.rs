@@ -911,6 +911,12 @@ impl BlackBorderInsets {
 const BORDER_SCAN_STEP: usize = 8;
 const BORDER_MAX_INSET: f32 = 0.40;
 
+/// Brightness above which a pixel counts as content rather than letterbox.
+/// Lives here, next to the detector, because the live worker and the debug
+/// capture probe have to read the same number for their answers to be
+/// comparable — a probe measuring a different threshold measures nothing.
+pub const BLACK_BORDER_THRESHOLD: u8 = 15;
+
 fn row_has_content(pixels: &[[u8; 3]], w: usize, row: usize, threshold: u8) -> bool {
     for col in (0..w).step_by(BORDER_SCAN_STEP) {
         if let Some(pixel) = pixels.get(row * w + col) {

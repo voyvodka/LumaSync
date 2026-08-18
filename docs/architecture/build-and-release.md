@@ -165,6 +165,140 @@ The driver duplicates launch-smoke's launch/marker/kill sequence rather than sha
 it. Launch-smoke gates every release on three platforms; moving it to serve a probe
 buys nothing and risks that.
 
+### The tray rescue leg
+
+The pixel diff says whether the overlay drew itself correctly. It says nothing about
+whether it can be *taken down* — and that is the other half of R29, because the
+overlays are `closable(false)`, `skip_taskbar(true)` and undecorated, so the tray's
+**Close Overlays** item is the only surface left when one misbehaves.
+
+After the probe, the driver touches a second file, `<trigger>.close`. The same
+debug-only watcher calls `close_all_overlays` — the exact function the tray item
+calls, on the main thread it calls it from — waits 1.5 s for the queued `close()` and
+`show()` to land, and logs:
+
+```
+[smoke-overlay] rescued overlays=0 main_visible=true
+```
+
+`overlays` counts **visible** windows other than `main`. Visible, not merely present:
+the tray item *hides* the LED control popup rather than closing it, and a hidden
+window covers nothing. Under `--gate` the run fails unless that count is 0 and
+`main_visible=true`; a timeout waiting for the line means `close_all_overlays` never
+returned, which is a wedged main thread rather than a slow one.
+
+## The CI platform bench
+
+Three more hooks reuse the same idea — a `#[cfg(debug_assertions)]` function, armed
+only by an environment variable, reporting one parseable log line — to answer
+questions that need a machine nobody on the project owns: a Credential Manager, a
+Secret Service, a Windows compositor. They live in `src-tauri/src/smoke_bench.rs` and
+ride inside the ordinary launch smoke, which grew `--expect` for exactly this.
+
+Every hook is armed by `<VAR>=1`. Anything else, including an empty string, leaves it
+off and logs a warning — CI `env:` blocks make an empty value easy to produce by
+accident, and an accidental capture probe costs a screen-recording prompt.
+
+| Hook | Variable | Proves |
+|---|---|---|
+| Credential round-trip | `LUMASYNC_SMOKE_CREDENTIALS=1` | The OS keychain stores, returns and deletes a secret — Windows Credential Manager and Linux Secret Service, the two backends the maintainer's machine cannot reach |
+| Capture probe | `LUMASYNC_SMOKE_CAPTURE=1` | One real frame comes back from the live capture path at the size the downscale policy promises |
+| Overlay rescue | `LUMASYNC_SMOKE_OVERLAY_TRIGGER=<path>` | The tray teardown path still empties the screen (above) |
+
+### Reading the credential line
+
+```
+[smoke-cred] backend=keychain roundtrip=ok set=12 get=3 delete=8
+[smoke-cred] FAIL step=verify backend=keychain detail=read-back differs: wrote 30 bytes, read 0 bytes
+```
+
+Timings are milliseconds. The account is `__lumasync_smoke_roundtrip__`, deliberately
+unlike any real one (`hue-app-key`, `hue-client-key`), and it is deleted on every path
+out of the hook including the failing ones — a leaked entry outlives the process and
+on Windows shows up in the user's Credential Manager.
+
+**`backend=` is the whole point of the line.** A debug build seeds `DevFileStore` in
+`setup` so `pnpm tauri dev` stays out of the OS keychain, so the hook on its own would
+happily round-trip a JSON file and report success. The CI step therefore also sets
+`LUMASYNC_DEV_USE_KEYCHAIN=1`, and the expectation is on the full
+`backend=keychain roundtrip=ok` rather than on `roundtrip=ok` — that pairing is what
+makes the result a statement about the OS keychain instead of about a temp file.
+
+`step=` names which of set / get / verify / delete / verify-gone failed.
+`verify-gone` failing — the entry surviving its own delete — is the one worth reading
+twice: it means the backend is not writing through, and every credential the app
+thinks it revoked is still there.
+
+### Reading the capture line
+
+```
+[smoke-capture] frame=640x360 pixels=230400 avg=31,28,44 borders=0.0000,0.0000,0.0000,0.0000 ms=412
+[smoke-capture] SKIP code=AMBILIGHT_CAPTURE_PERMISSION_DENIED
+[smoke-capture] FAIL code=AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND
+```
+
+`frame=` is the size *after* the platform's downscale, which is the number GAP 3 and
+backlog #234 are about: macOS asks SCStream to scale on the GPU, Windows does the same
+arithmetic on the CPU, Linux does it per pull. A line reporting the panel's native
+resolution is the gap, quantified, rather than asserted.
+
+The first local run put a number on something the prose had rounded off. All three
+paths divide by an **integer** factor (`MAX_CAPTURE_DIM / longest side`, floored, min
+1), so "capped at 640 px" is really "capped at 640 px only when the ratio happens to
+land on one". A 1800-px-wide display divides by 2 and captures at **900×584** — 1.98×
+the pixels of a true 640-px cap, on every frame. The cap is a ceiling of 1279 px in
+the worst case, not 640. Worth knowing before anyone reads a Windows frame size as
+proof of parity.
+
+`borders=` is `top,right,bottom,left` as fractions, from the same
+`detect_black_borders` the live worker runs, at the same threshold —
+`BLACK_BORDER_THRESHOLD` lives beside the detector in `ambilight_capture.rs` precisely
+so the probe and the worker cannot drift apart and produce incomparable answers. `avg=`
+is the mean RGB over every sampled pixel; on a headless runner it is usually the
+desktop background, and a flat `0,0,0` with no borders detected means the compositor
+handed back an empty surface.
+
+The probe runs on its own thread and drops the frame source there. That is not
+tidiness: the macOS branch holds an `SCStream`, and dropping one on the main thread
+deadlocks against its own dispatch queue — the same rule `LightingWorkerRuntime::stop`
+follows.
+
+It also polls for the first frame rather than calling `capture_frame()` once. macOS
+SCStream and Windows WGC both push into a shared slot from their own callback, so a
+single call straight after construction reliably loses the race and answers
+`AMBILIGHT_CAPTURE_FRAME_UNAVAILABLE` — the live worker just polls past it, and the
+first version of this probe reported it as a failure of the platform when it was a
+failure of its own timing. Five seconds, 100 ms apart; anything other than "not yet"
+is terminal, because a denied permission does not become granted by asking again.
+
+**Screen-recording consent denied is a SKIP, not a FAIL.** It is a true statement about
+the machine, and a runner that cannot grant TCC must not turn the build red for saying
+so.
+
+### `launch-smoke.mjs --expect`
+
+The bench needs the app to stay alive past the startup marker, which is the one thing
+launch-smoke was built not to do. Three repeatable flags, all inert unless passed:
+
+- `--expect <substring>` — hold the app open until it appears in stdout + log, then fail if it never does
+- `--expect-soft <substring>` — the same wait, but a warning instead of a failure
+- `--expect-fail <substring>` — fail the moment it appears; defaults to `] FAIL`, which every bench hook emits, once any of the three is in use
+
+Bounded by `LAUNCH_SMOKE_EXPECT_TIMEOUT_MS` (30 s default). Every `[smoke-*]` line is
+printed on the way out whether the run passed or failed — a green run with no evidence
+in the log is how a silently-disabled hook survives.
+
+**With none of the three passed, not one line of this executes.** The whole block is
+behind a single `if`, and the release-gate path through the script is what it was
+before the flags existed. That matters more than the feature does: this script is what
+stands between a broken binary and a published release on all three platforms.
+
+### What each runner is asked for
+
+- **Windows** — both hooks, both gating. This runner is the only Windows desktop the app ever reaches, so Credential Manager and Windows Graphics Capture get proved here or nowhere.
+- **Linux** — capture gates; the credential line is `--expect-soft`. The Secret Service is started by hand for the run: `dbus-run-session` wraps everything (so `gnome-keyring-daemon` and the app share one session bus — the daemon claims `org.freedesktop.secrets` on it, which is what keyring 4's `zbus-secret-service` backend talks to), `printf "\n"` unlocks the freshly created login keyring with an empty password, and `xvfb-run` nests inside because it only sets `DISPLAY`. Headless Secret Service is the thing being established here; until a run has shown it working it reads as evidence, not as a red build. Promote it to `--expect` once it has.
+- **macOS** — capture only, and soft: `--expect-soft "[smoke-capture]"` on the bare prefix, so a frame and a permission SKIP both satisfy it and both get printed. No credential run at all — a Keychain ACL prompt has nobody to answer it, which is the same wall described under "Keychain prompts in dev" below.
+
 ## Keychain prompts in dev
 
 macOS asks for the login-keychain password on almost every `pnpm tauri dev` start —

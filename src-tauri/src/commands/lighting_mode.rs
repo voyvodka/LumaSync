@@ -13,7 +13,7 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
 
 use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
-    BlackBorderInsets, CapturedFrame, StaticFrameSource,
+    BlackBorderInsets, CapturedFrame, StaticFrameSource, BLACK_BORDER_THRESHOLD,
 };
 use super::ambilight_scene::{
     hue_default_screen_affinity, LightSetState, LightTopology, SceneAnalyzer,
@@ -847,7 +847,6 @@ struct BlackBorderCache {
 
 impl BlackBorderCache {
     const UPDATE_INTERVAL: Duration = Duration::from_millis(2500);
-    const THRESHOLD: u8 = 15;
 
     fn new(enabled: bool) -> Self {
         // Subtract the interval so the very first frame triggers a detection pass.
@@ -876,7 +875,7 @@ impl BlackBorderCache {
             return;
         }
         if self.last_updated.elapsed() >= Self::UPDATE_INTERVAL {
-            self.insets = detect_black_borders(frame, Self::THRESHOLD);
+            self.insets = detect_black_borders(frame, BLACK_BORDER_THRESHOLD);
             self.last_updated = Instant::now();
         }
     }

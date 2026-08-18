@@ -34,6 +34,12 @@ const BASELINE_SETTLE_MS = 1_500;
 const MODES = new Set(["default", "transparent", "transparent+layered", "off"]);
 const OPENED_RE =
   /\[smoke-overlay\] opened label=(\S+) display=(.*?) outer=(-?\d+),(-?\d+) (\d+)x(\d+) scale=([0-9.]+)/;
+// The tray "Close Overlays" rescue, measured after the probe has taken its
+// evidence — an overlay that cannot be torn down is the half of R29 the pixel
+// diff says nothing about. `--gate` covers this too: it fails unless the
+// teardown left nothing visible and put the main window back.
+const RESCUED_RE = /\[smoke-overlay\] rescued overlays=(\d+) main_visible=(true|false)/;
+const RESCUE_TIMEOUT_MS = 30_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -186,7 +192,11 @@ async function main() {
   const logStart = sizeQuietly(opts.logFile);
 
   const triggerFile = path.join(opts.out, "overlay-trigger");
+  // Named by the app as `<trigger>.close`, not configured separately: one path
+  // cannot get out of step with itself.
+  const closeTriggerFile = `${triggerFile}.close`;
   removeQuietly(triggerFile);
+  removeQuietly(closeTriggerFile);
 
   const childEnv = {
     ...process.env,
@@ -376,6 +386,34 @@ async function main() {
     );
     console.log(`[overlay-smoke] artefacts in ${opts.out}`);
 
+    console.log(`[overlay-smoke] tripping the close trigger: ${closeTriggerFile}`);
+    writeFileSync(closeTriggerFile, "close\n", "utf8");
+
+    const rescueAt = Date.now();
+    let rescued = RESCUED_RE.exec(everything());
+    while (rescued === null && closed === null && Date.now() - rescueAt <= RESCUE_TIMEOUT_MS) {
+      await sleep(POLL_INTERVAL_MS);
+      rescued = RESCUED_RE.exec(everything());
+    }
+    if (rescued === null) {
+      // Not a failure on its own — the non-gate modes exist to gather evidence
+      // about a deliberately broken overlay, and a missing line is evidence.
+      // `--gate` turns it into one below.
+      console.warn(
+        `[overlay-smoke] no '[smoke-overlay] rescued' line within ${RESCUE_TIMEOUT_MS} ms — ` +
+          (closed === null
+            ? "close_all_overlays never returned, which is a wedged main thread"
+            : `the app exited (code=${closed.code}, signal=${closed.signal}) first`),
+      );
+    } else {
+      console.log(
+        `[overlay-smoke] rescue in ${Date.now() - rescueAt} ms: overlays=${rescued[1]} ` +
+          `main_visible=${rescued[2]}`,
+      );
+    }
+
+    dumpEvidence();
+
     if (opts.gate) {
       // Thresholds from the first CI runs (2026-08-18): a healthy overlay changed
       // ~5% of the edge band and ~0.2% of the interior; the <=1.5.5 sweep turned
@@ -386,6 +424,13 @@ async function main() {
       if (!(Number(innerPct) <= 10))
         problems.push(`interior changed ${innerPct}% (> 10%): the overlay is not transparent`);
       if (!clickthrough) problems.push("a hit-test point resolved to the overlay: not click-through");
+      // The tray rescue is the last way out of a wedged overlay; a survivor, a
+      // hidden main window, or no answer at all means there is none.
+      if (rescued === null) problems.push("the tray rescue never reported back");
+      else {
+        if (rescued[1] !== "0") problems.push(`${rescued[1]} overlay(s) survived the tray rescue`);
+        if (rescued[2] !== "true") problems.push("the main window is not visible after the rescue");
+      }
       if (problems.length > 0) {
         forceKill();
         fail(`overlay gate failed: ${problems.join("; ")}`);
