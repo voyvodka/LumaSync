@@ -253,7 +253,8 @@ pnpm tauri dev > /tmp/lumasync-debug-stdout.log 2>&1 &
   and forwards them into `tauri-plugin-log`, so frontend output lands in the same
   sink as Rust's `log::info!`/`log::warn!`. On macOS that file is
   `~/Library/Logs/com.lumasync.app/lumasync-dev.log` (dev) /
-  `LumaSync.log` (release). Read the file first; terminal stdout only helps for
+  `lumasync.log` (release; an older `LumaSync.log` is the same file on a
+  case-insensitive filesystem). Read the file first; terminal stdout only helps for
   crashes before the sink initialises.
 - Frontend lines carry the `[LumaSync]` prefix by convention.
 - Two sinks are configured (Stdout + LogDir), so a line seen in both places is

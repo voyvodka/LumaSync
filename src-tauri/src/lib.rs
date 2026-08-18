@@ -539,14 +539,15 @@ pub fn run() {
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .max_file_size(LOG_MAX_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                ))
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::LogDir {
+                // `targets`, not `target`: the builder starts with a default
+                // Stdout + LogDir pair and `target` appends to it — see
+                // docs/architecture/build-and-release.md, "Log lines twice".
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
                         file_name: Some("lumasync-dev".to_string()),
-                    },
-                ))
+                    }),
+                ])
                 .build(),
         );
     }
@@ -563,14 +564,12 @@ pub fn run() {
                 .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                 .max_file_size(LOG_MAX_FILE_SIZE)
                 .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                ))
-                .target(tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::LogDir {
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
                         file_name: Some("lumasync".to_string()),
-                    },
-                ))
+                    }),
+                ])
                 .build(),
         );
     }
