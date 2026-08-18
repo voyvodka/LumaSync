@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Windows-only R29 evidence run. Reports, does not gate. Flags: --mode
-// <default|transparent|transparent+layered|off>, --out <dir>, --binary <path>,
-// --log-file <path>, --i-know. See docs/architecture/build-and-release.md.
+// Windows-only R29 probe. Flags: --mode <default|transparent|transparent+layered|off>,
+// --out <dir>, --binary <path>, --log-file <path>, --i-know, --gate (fail unless the
+// overlay painted its edge band and both hit-test points fell through it).
+// See docs/architecture/build-and-release.md.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -52,6 +53,7 @@ function parseArgs(argv) {
     binary: DEFAULT_BINARY,
     logFile: DEFAULT_LOG_FILE,
     iKnow: false,
+    gate: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i + 1];
@@ -77,6 +79,9 @@ function parseArgs(argv) {
         if (value === undefined) fail("--log-file needs a path");
         opts.logFile = path.resolve(value);
         i += 1;
+        break;
+      case "--gate":
+        opts.gate = true;
         break;
       case "--i-know":
         opts.iKnow = true;
@@ -361,13 +366,31 @@ async function main() {
 
     const verdict = probe.verdict ?? {};
     const bandPct = verdict.bandChangedPct ?? "n/a";
-    const clickthrough = verdict.pointHitsOverlay?.centre === false;
+    const innerPct = verdict.innerChangedPct ?? "n/a";
+    const clickthrough =
+      verdict.pointHitsOverlay?.centre === false && verdict.pointHitsOverlay?.topBand === false;
     const layeredChildren = verdict.childrenWithLayered ?? "n/a";
     console.log(
-      `[overlay-smoke] mode=${opts.mode} painted=${bandPct}% clickthrough=${clickthrough} ` +
-        `layeredChildren=${layeredChildren}`,
+      `[overlay-smoke] mode=${opts.mode} painted=${bandPct}% inner=${innerPct}% ` +
+        `clickthrough=${clickthrough} layeredChildren=${layeredChildren}`,
     );
     console.log(`[overlay-smoke] artefacts in ${opts.out}`);
+
+    if (opts.gate) {
+      // Thresholds from the first CI runs (2026-08-18): a healthy overlay changed
+      // ~5% of the edge band and ~0.2% of the interior; the <=1.5.5 sweep turned
+      // the whole display solid black (69% / 33%). Anything between is a defect
+      // of a kind we have not seen, and it should fail rather than pass quietly.
+      const problems = [];
+      if (!(Number(bandPct) >= 1)) problems.push(`edge band changed ${bandPct}% (< 1%): nothing painted`);
+      if (!(Number(innerPct) <= 10))
+        problems.push(`interior changed ${innerPct}% (> 10%): the overlay is not transparent`);
+      if (!clickthrough) problems.push("a hit-test point resolved to the overlay: not click-through");
+      if (problems.length > 0) {
+        forceKill();
+        fail(`overlay gate failed: ${problems.join("; ")}`);
+      }
+    }
   } finally {
     forceKill();
     // A survivor would make the next mode's launch hit the single-instance

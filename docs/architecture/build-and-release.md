@@ -113,11 +113,28 @@ the only place it can catch one before publication.
 ## The Windows overlay probe
 
 The `windows-latest` CI job is the only Windows desktop the calibration overlay
-ever reaches, so it doubles as the test bench for R29 (overlay opens blank / wedges
-the app). Two steps run after the Windows launch smoke, both `continue-on-error`:
-`scripts/verify/overlay-smoke.mjs --mode default` and `--mode transparent+layered`.
-They are **evidence, not a gate** — nothing fails on a bad verdict — and they become
-a gate once the behaviour they record is confirmed.
+ever reaches, so it is the test bench for R29 (overlay opens blank / wedges the
+app). One step runs after the Windows launch smoke and **gates the job**:
+`scripts/verify/overlay-smoke.mjs --mode default --gate`, which fails unless the
+overlay painted its edge band (≥ 1 % changed), stayed transparent (≤ 10 % of the
+interior changed) and both hit-test points fell through it.
+
+**What the first runs established (2026-08-18, PR #316).** With the sweep in its
+default `transparent` mode the overlay drew its capsules over the desktop — edge band
+5.1 % changed, interior 0.2 %, `WindowFromPoint` at the centre resolved to the main
+window's webview underneath and at the top edge to the desktop's `SysListView32`.
+With `--mode transparent+layered`, the ≤ 1.5.5 sweep, **the whole display went solid
+black** — 69 % of the band and 33.5 % of the interior changed, `after.png` is black
+edge to edge — while hit-testing still fell through. That is the R29 report
+("nothing on screen, nothing to click"), reproduced and released by one flag. The
+sweep also showed the WebView2 tree the overlay contains: `WRY_WEBVIEW` and
+`Chrome_WidgetWin_0` in our process, `Chrome_WidgetWin_1` and
+`Chrome_RenderWidgetHostHWND` in the browser process, `Intermediate D3D Window` in
+the GPU process already carrying `WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP` of its
+own; `SetWindowLongPtrW` landed cross-process on all of them. It also showed the
+last-error slot reading 6 after a set that had landed on an in-process window, which
+is why the sweep judges success by re-reading the style rather than by the return
+value.
 
 A run launches the same debug binary the launch smoke uses with
 `LUMASYNC_SMOKE_OVERLAY_TRIGGER` pointing at a file. A debug-only watcher
@@ -136,8 +153,9 @@ Reading the `overlay-smoke-windows` artefact: `probe.json` carries the whole dum
 plus a `verdict` block, `sweep-log.txt` holds every `[overlay-sweep]` and
 `[smoke-overlay]` line including the per-child ex-style transitions, and
 `baseline.png` / `after.png` are the two frames the diff compared. In the verdict,
-**`bandChangedPct` near zero means the overlay painted nothing** — that is the R29
-signature, and the `transparent+layered` run is the one expected to show it.
+**`bandChangedPct` near zero means the overlay painted nothing, and a large
+`innerChangedPct` means it is opaque** — the second is what the ≤ 1.5.5 sweep does.
+`--mode transparent+layered` re-takes that evidence on demand; it is not run in CI.
 `pointHitsOverlay: false` is the *healthy* reading: a click-through overlay is meant
 to be skipped by hit-testing, so the point lands on whatever is underneath.
 `childrenWithLayered > 0` in the default run would mean the #314 fix is not holding.

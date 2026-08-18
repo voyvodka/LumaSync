@@ -190,19 +190,14 @@ jobs:
           LUMASYNC_NO_DEVTOOLS: "1"
         run: node scripts/verify/launch-smoke.mjs --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
 
-      # R29 evidence only, not a gate: this runner is the only Windows desktop
-      # the overlay paths ever reach. It gates once the behaviour is confirmed.
-      - name: Overlay probe — default sweep (Windows, evidence only)
+      # The Windows overlay gate (R29). This runner is the only Windows desktop
+      # the overlay paths ever reach; the probe asserts the calibration overlay
+      # paints its edge band, stays transparent, and passes clicks through.
+      # `--mode 'transparent+layered'` reproduces the <= 1.5.5 solid-black
+      # overlay if the evidence ever needs re-taking.
+      - name: Overlay probe (Windows)
         if: runner.os == 'Windows'
-        continue-on-error: true
-        run: node scripts/verify/overlay-smoke.mjs --mode default --out overlay-smoke/default
-
-      - name: Overlay probe — transparent+layered sweep (Windows, evidence only)
-        if: runner.os == 'Windows'
-        continue-on-error: true
-        # Reproduces the <= 1.5.5 sweep. If the #314 diagnosis holds, this run
-        # is the blank one and the default run above is not.
-        run: node scripts/verify/overlay-smoke.mjs --mode 'transparent+layered' --out overlay-smoke/layered
+        run: node scripts/verify/overlay-smoke.mjs --mode default --out overlay-smoke/default --gate
 
       - name: Upload overlay probe artefacts
         if: always() && runner.os == 'Windows'
