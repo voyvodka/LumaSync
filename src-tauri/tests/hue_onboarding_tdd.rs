@@ -74,7 +74,7 @@ mod hue {
                 "STUB"
             }
             #[allow(dead_code)]
-            pub fn backend(&self) -> Backend {
+            pub fn backend(&self, _store: &StubStore) -> Backend {
                 Backend
             }
         }

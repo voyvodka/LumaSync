@@ -49,6 +49,16 @@ KEYCHAIN_ENTRY_FAILED
 KEYCHAIN_GET_FAILED
 KEYCHAIN_SET_FAILED
 
+# Same shape as the KEYCHAIN_* group, for the debug-only `DevFileStore` that
+# replaces the keychain in a dev build. Never compiled into a release binary.
+DEV_FILE_CHMOD_FAILED
+DEV_FILE_MKDIR_FAILED
+DEV_FILE_PARSE_FAILED
+DEV_FILE_READ_FAILED
+DEV_FILE_RENAME_FAILED
+DEV_FILE_SERIALIZE_FAILED
+DEV_FILE_WRITE_FAILED
+
 # Internal to their sink/discovery helpers; the caller wraps them.
 CLIENT_INIT
 WLED_FRAME_TOO_LONG

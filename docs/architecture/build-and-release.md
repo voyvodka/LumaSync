@@ -153,6 +153,14 @@ secrets are two items: `hue-app-key` on the first CLIP v2 call at startup, `hue-
 a lighting mode opens the DTLS stream. **Only a Developer ID certificate removes it**, because
 only that makes the partition `teamid:` and therefore stable.
 
+**So debug builds stopped asking the keychain anything.** `lib.rs` seeds the credential store with
+a `DevFileStore` — plaintext JSON, `0600`, in the app data dir — before any Hue command can run, so
+a dev session never reaches Keychain Services, and the CI launch smoke's debug binary touches
+neither a keychain nor D-Bus. The cost is that a debug build cannot see credentials a release build
+stored: a dev session pairs the bridge once and keeps it in its own file. `LUMASYNC_DEV_USE_KEYCHAIN=1`
+skips the seeding for anyone who needs the real path back. The consequences for the wire label are
+in [`hue.md`](hue.md).
+
 **Released builds have the same defect, and there it reaches users.** `tauri.conf.json` sets no
 `signingIdentity` and no workflow carries `APPLE_*` credentials, so shipped macOS builds are
 ad-hoc signed as well and their identity changes with every version. A user who has paired a

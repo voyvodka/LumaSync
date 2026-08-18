@@ -495,10 +495,16 @@ export type HueTransportReason =
  *   Used by users who paired before v1.5 and as a downgrade-safe fallback
  *   when the OS keychain is unavailable. Migration to `keychain` happens
  *   silently on next successful keychain probe.
+ * - `dev-file` — a plaintext JSON file in the app data dir, written only by a
+ *   debug build so `tauri dev` never triggers the macOS keychain prompt. It
+ *   reads exactly like `plaintext-legacy` on this side: it does not license
+ *   clearing the plaintext copy, because no release build can read that file.
+ *   Never persisted to `shellStore`; it only ever arrives on a response.
  */
 export const HUE_CREDENTIAL_BACKENDS = {
   KEYCHAIN: "keychain",
   PLAINTEXT_LEGACY: "plaintext-legacy",
+  DEV_FILE: "dev-file",
 } as const;
 
 export type HueCredentialBackend =
