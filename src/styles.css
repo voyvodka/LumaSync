@@ -4034,7 +4034,11 @@ body {
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  width: 96px;
+  /* A floor, not a fixed width: the id grew from one digit to `#<channelId>`
+     and the count is translated, so a hard 96 px pushed the text out of the
+     column instead of letting it shrink. */
+  min-width: 96px;
+  max-width: 140px;
 }
 .lm-chmap-row-dot {
   width: 14px;
@@ -4058,6 +4062,10 @@ body {
   font-size: 9.5px;
   color: var(--lm-ink-dim, #8a94a3);
   letter-spacing: 0.02em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Region pill row — same family as `.lm-settings-seg button` */
@@ -4997,6 +5005,10 @@ body {
 .lm-room-dock-area-state {
   display: flex;
   align-items: center;
+  /* The dock is 280 px wide and the action's label is translated, so it cannot
+     be assumed to fit beside the text. Wrapping drops it to its own line
+     instead of crushing the text column to one word per line. */
+  flex-wrap: wrap;
   gap: 8px;
   margin: 6px 8px 0;
   padding: 8px 10px;
@@ -5016,7 +5028,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  flex: 1;
+  /* A real basis, not `flex: 1`: with a zero basis the text yields all of its
+     width to a non-shrinking button before the row ever wraps. */
+  flex: 1 1 150px;
   min-width: 0;
 }
 .lm-room-dock-area-state-title {
@@ -5025,6 +5039,9 @@ body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--lm-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .lm-room-dock-area-state-sub {
   font-size: 10.5px;
@@ -5038,6 +5055,8 @@ body {
   all: unset;
   cursor: pointer;
   flex-shrink: 0;
+  margin-left: auto;
+  white-space: nowrap;
   padding: 4px 10px;
   min-height: 26px;
   display: inline-flex;
@@ -5714,6 +5733,12 @@ body {
   text-transform: uppercase;
   color: var(--lm-ink-faint);
   flex-shrink: 0;
+}
+.lm-zone-inspector-pair-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .lm-zone-inspector-pair-label--hex {
   margin-left: 4px;

@@ -259,10 +259,11 @@ export function HueZoneInspector({
         />
       </div>
 
-      {/* EDGE  [n.nn] M   |   HEX  [#XXXXXX]
-          Single row; both groups are flex children so the row stays
-          one line down to ~280 px before either group wraps. */}
+      {/* EDGE [n.nn] m | HEX [#XXXXXX]. Each label and its control share a
+          group so the wrap falls between the two, never between a label and
+          the input it names — a flat row wrapped exactly there at 280 px. */}
       <div className="lm-zone-inspector-pair">
+        <div className="lm-zone-inspector-pair-group">
         <label
           className="lm-zone-inspector-pair-label"
           htmlFor={`zone-size-m-${zone.id}`}
@@ -298,7 +299,9 @@ export function HueZoneInspector({
         <span className="lm-zone-inspector-pair-unit" aria-hidden>
           m
         </span>
+        </div>
 
+        <div className="lm-zone-inspector-pair-group">
         <label
           className="lm-zone-inspector-pair-label lm-zone-inspector-pair-label--hex"
           htmlFor={`zone-hex-${zone.id}`}
@@ -327,6 +330,7 @@ export function HueZoneInspector({
             }
           }}
         />
+        </div>
       </div>
 
       {/* Color preset swatches — single row, 6 buttons. Tap target is
