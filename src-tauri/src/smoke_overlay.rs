@@ -13,6 +13,11 @@ use crate::commands::calibration::{list_displays, open_display_overlay, OverlayS
 const POLL_INTERVAL: Duration = Duration::from_millis(250);
 const MAX_WAIT: Duration = Duration::from_secs(180);
 const RECT_SETTLE: Duration = Duration::from_millis(1_500);
+/// The teardown queues `close()` and `show()` onto the event loop, so a count
+/// taken straight after the call reads the state before either landed.
+const RESCUE_SETTLE: Duration = Duration::from_millis(1_500);
+/// Suffix of the second trigger file, beside the first: `<trigger>.close`.
+const CLOSE_TRIGGER_SUFFIX: &str = ".close";
 
 /// Watch `LUMASYNC_SMOKE_OVERLAY_TRIGGER` for the probe's go-signal and open the
 /// calibration overlay when it lands. No-op when the variable is unset, which is
@@ -33,6 +38,15 @@ pub fn spawn_trigger_watcher<R: Runtime>(app: &AppHandle<R>) {
         log::warn!(
             "[smoke-overlay] trigger {} already exists at startup — the probe must delete it first",
             trigger.display()
+        );
+    }
+    // Same hazard one step later: a stale close trigger tears the overlay down
+    // before the probe has photographed it.
+    let close_trigger = close_trigger_for(&trigger);
+    if close_trigger.exists() {
+        log::warn!(
+            "[smoke-overlay] close trigger {} already exists at startup — the probe must delete it first",
+            close_trigger.display()
         );
     }
 
@@ -58,7 +72,9 @@ pub fn spawn_trigger_watcher<R: Runtime>(app: &AppHandle<R>) {
             log::info!("[smoke-overlay] trigger seen at {}", trigger.display());
 
             let main_thread_app = app.clone();
-            if let Err(error) = app.run_on_main_thread(move || open_and_report(&main_thread_app)) {
+            if let Err(error) =
+                app.run_on_main_thread(move || open_and_report(&main_thread_app, close_trigger))
+            {
                 log::error!("[smoke-overlay] open failed: RUN_ON_MAIN_THREAD_FAILED: {error}");
             }
         });
@@ -71,7 +87,7 @@ pub fn spawn_trigger_watcher<R: Runtime>(app: &AppHandle<R>) {
 /// Runs on the main thread. Opens the overlay on the primary display through the
 /// same command path the frontend uses, then logs the resulting physical rect so
 /// the external probe knows where to look.
-fn open_and_report<R: Runtime>(app: &AppHandle<R>) {
+fn open_and_report<R: Runtime>(app: &AppHandle<R>, close_trigger: PathBuf) {
     let displays = match list_displays(app.clone()) {
         Ok(displays) => displays,
         Err(error) => {
@@ -134,7 +150,15 @@ fn open_and_report<R: Runtime>(app: &AppHandle<R>) {
     }
 
     log::info!("[smoke-overlay] opening label={label} display={display_id}");
-    schedule_rect_report(app.clone(), label, display_id, scale_factor);
+    schedule_rect_report(app.clone(), label, display_id, scale_factor, close_trigger);
+}
+
+/// `<trigger>.close`, as a sibling of the open trigger rather than a second
+/// path to configure: one variable cannot get out of step with itself.
+fn close_trigger_for(trigger: &std::path::Path) -> PathBuf {
+    let mut name = trigger.as_os_str().to_os_string();
+    name.push(CLOSE_TRIGGER_SUFFIX);
+    PathBuf::from(name)
 }
 
 /// `set_position`/`set_size` are queued onto the event loop rather than applied
@@ -145,18 +169,74 @@ fn schedule_rect_report<R: Runtime>(
     label: String,
     display_id: String,
     scale_factor: f64,
+    close_trigger: PathBuf,
 ) {
     let spawned = std::thread::Builder::new()
         .name("smoke-overlay-rect".into())
         .spawn(move || {
             std::thread::sleep(RECT_SETTLE);
-            let _ = app
-                .clone()
+            let rect_app = app.clone();
+            let _ = rect_app
                 .run_on_main_thread(move || report_rect(&app, &label, &display_id, scale_factor));
+            watch_for_rescue(rect_app, close_trigger);
         });
     if let Err(error) = spawned {
         log::error!("[smoke-overlay] open failed: RECT_THREAD_SPAWN_FAILED: {error}");
     }
+}
+
+/// R29's other half. The overlay opening is only half the report: the tray's
+/// "Close Overlays" item is the one surface left when an overlay swallows the
+/// desktop, and nothing outside a Windows desktop can prove it still works.
+/// Runs on the rect thread, which has done its job by the time this is called.
+fn watch_for_rescue<R: Runtime>(app: AppHandle<R>, close_trigger: PathBuf) {
+    let deadline = Instant::now() + MAX_WAIT;
+    while !close_trigger.exists() {
+        if Instant::now() >= deadline {
+            log::warn!(
+                "[smoke-overlay] close trigger {} never appeared within {} s — no rescue measured",
+                close_trigger.display(),
+                MAX_WAIT.as_secs()
+            );
+            return;
+        }
+        std::thread::sleep(POLL_INTERVAL);
+    }
+
+    log::info!(
+        "[smoke-overlay] close trigger seen at {}",
+        close_trigger.display()
+    );
+
+    // The exact function the tray item calls, on the thread it calls it from.
+    let rescue_app = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || crate::close_all_overlays(&rescue_app)) {
+        log::error!("[smoke-overlay] rescue failed: RUN_ON_MAIN_THREAD_FAILED: {error}");
+        return;
+    }
+
+    std::thread::sleep(RESCUE_SETTLE);
+    let report_app = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || report_rescue(&report_app)) {
+        log::error!("[smoke-overlay] rescue failed: RUN_ON_MAIN_THREAD_FAILED: {error}");
+    }
+}
+
+/// Counts *visible* non-main windows, not every non-main window: the tray item
+/// hides the LED control popup rather than closing it, and a hidden window
+/// covers nothing. What R29 is about is what is left on the screen.
+fn report_rescue<R: Runtime>(app: &AppHandle<R>) {
+    let still_open = app
+        .webview_windows()
+        .iter()
+        .filter(|(label, window)| label.as_str() != "main" && window.is_visible().unwrap_or(false))
+        .count();
+    let main_visible = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false);
+
+    log::info!("[smoke-overlay] rescued overlays={still_open} main_visible={main_visible}");
 }
 
 fn report_rect<R: Runtime>(app: &AppHandle<R>, label: &str, display_id: &str, scale_factor: f64) {

@@ -39,7 +39,9 @@ mod commands {
 #[cfg(target_os = "macos")]
 mod macos_window;
 
-// Evidence-gathering hook for the Windows overlay probe; never in a release bin.
+// Evidence-gathering hooks for the CI platform bench; never in a release bin.
+#[cfg(debug_assertions)]
+mod smoke_bench;
 #[cfg(debug_assertions)]
 mod smoke_overlay;
 
@@ -160,7 +162,7 @@ fn show_and_focus_settings<R: Runtime>(app: &AppHandle<R>) {
 /// trip through it — so this closes the windows directly and shows the main
 /// window unconditionally, rather than through `restore_main_after_preview`,
 /// which only acts when the preview is what hid it.
-fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
+pub(crate) fn close_all_overlays<R: Runtime>(app: &AppHandle<R>) {
     if let Some(twin_state) = app.try_state::<commands::led_preview::LedTwinState>() {
         if let Err(error) = commands::led_preview::close_led_twin_overlay(
             app.clone(),
@@ -649,6 +651,12 @@ pub fn run() {
             // hook resolves `OverlayState` when it fires.
             #[cfg(debug_assertions)]
             smoke_overlay::spawn_trigger_watcher(app.handle());
+
+            // Both no-op unless their env var is `1` — see smoke_bench.rs.
+            #[cfg(debug_assertions)]
+            smoke_bench::spawn_credential_roundtrip();
+            #[cfg(debug_assertions)]
+            smoke_bench::spawn_capture_probe();
 
             // Build tray icon.
             //

@@ -2,6 +2,13 @@
 // Start a built app, assert STARTUP_READY_MARKER, quit. Flags: --binary <path>,
 // --log-file <path> (scanned from its size at launch; never deleted), --hard-kill. The default binary needs `pnpm tauri build
 // --debug --no-bundle`; plain `cargo build` writes a dev-URL binary there.
+//
+// Bench flags, all repeatable and all inert unless passed: --expect <substring>
+// (hold the app open until it appears in stdout+log, then fail if it never
+// does), --expect-soft <substring> (same wait, warns instead of failing), and
+// --expect-fail <substring> (fail the moment it appears; defaults to `] FAIL`
+// once any of the three is in use). See docs/architecture/build-and-release.md,
+// "The CI platform bench".
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -27,6 +34,14 @@ const READY_TIMEOUT_MS =
 // The Rust shutdown watchdog hard-exits at 4s, so a healthy quit is well inside.
 const SHUTDOWN_TIMEOUT_MS = 20_000;
 const POLL_INTERVAL_MS = 250;
+// Only ever consumed when --expect / --expect-soft / --expect-fail is passed.
+// The bench hooks settle for ~3 s and a cold Secret Service call on a loaded
+// runner is seconds more, so this is generous rather than tight.
+const EXPECT_TIMEOUT_MS =
+  Number.parseInt(process.env.LAUNCH_SMOKE_EXPECT_TIMEOUT_MS ?? "", 10) || 30_000;
+// Every bench hook reports its own failure with this substring, so one default
+// covers all of them without the caller having to enumerate the codes.
+const DEFAULT_EXPECT_FAIL = "] FAIL";
 
 const SHUTDOWN_DONE = "[shutdown] cleanup complete, exiting";
 const SHUTDOWN_WATCHDOG = "[shutdown] watchdog fired";
@@ -47,7 +62,14 @@ function fail(message, detail) {
 }
 
 function parseArgs(argv) {
-  const opts = { binary: DEFAULT_BINARY, logFile: null, hardKill: IS_WINDOWS };
+  const opts = {
+    binary: DEFAULT_BINARY,
+    logFile: null,
+    hardKill: IS_WINDOWS,
+    expect: [],
+    expectSoft: [],
+    expectFail: [],
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i + 1];
     switch (argv[i]) {
@@ -64,6 +86,16 @@ function parseArgs(argv) {
       case "--hard-kill":
         opts.hardKill = true;
         break;
+      case "--expect":
+      case "--expect-soft":
+      case "--expect-fail": {
+        if (value === undefined || value.length === 0) fail(`${argv[i]} needs a substring`);
+        const bucket =
+          argv[i] === "--expect" ? "expect" : argv[i] === "--expect-soft" ? "expectSoft" : "expectFail";
+        opts[bucket].push(value);
+        i += 1;
+        break;
+      }
       default:
         fail(`unknown argument: ${argv[i]}`);
     }
@@ -126,6 +158,18 @@ function removeQuietly(target) {
   } catch (error) {
     console.warn(`[launch-smoke] could not remove ${target}: ${error}`);
   }
+}
+
+/** The bench hooks are the whole point of a run that passes --expect, so their
+ * lines are printed whether it passed or failed — a green run with no evidence
+ * in the log is how a silently-disabled hook survives. */
+function printBenchLines(output) {
+  const lines = output.split(/\r?\n/).filter((line) => /\[smoke[a-z-]*\]/.test(line));
+  console.log("--- bench lines ---");
+  for (const line of lines.length > 0 ? lines : ["(the app logged no [smoke-*] line at all)"]) {
+    console.log(line);
+  }
+  console.log("--- end bench lines ---");
 }
 
 async function main() {
@@ -224,6 +268,52 @@ async function main() {
     }
     const via = stdio.includes(marker) ? "stdout" : "log file";
     console.log(`[launch-smoke] startup reached in ${Date.now() - startedAt} ms (via ${via})`);
+
+    // Everything from here to the closing brace is skipped outright when no
+    // expectation flag was passed, so the release-gate path is exactly what it
+    // was before this block existed.
+    if (opts.expect.length + opts.expectSoft.length + opts.expectFail.length > 0) {
+      const expectFail = opts.expectFail.length > 0 ? opts.expectFail : [DEFAULT_EXPECT_FAIL];
+      const wanted = [...opts.expect, ...opts.expectSoft];
+      console.log(`[launch-smoke] holding for ${wanted.length} expectation(s), max ${EXPECT_TIMEOUT_MS} ms`);
+
+      const expectedAt = Date.now();
+      for (;;) {
+        const output = everything();
+        const tripped = expectFail.filter((needle) => output.includes(needle));
+        if (tripped.length > 0) {
+          printBenchLines(output);
+          forceKill();
+          fail(`a bench hook reported failure: ${tripped.join(", ")}`);
+        }
+
+        const missingHard = opts.expect.filter((needle) => !output.includes(needle));
+        const missingSoft = opts.expectSoft.filter((needle) => !output.includes(needle));
+        if (missingHard.length === 0 && missingSoft.length === 0) {
+          console.log(`[launch-smoke] every expectation met in ${Date.now() - expectedAt} ms`);
+          printBenchLines(output);
+          break;
+        }
+
+        // An app that exits mid-wait can never satisfy what is still missing.
+        const gone = closed !== null;
+        if (gone || Date.now() - expectedAt > EXPECT_TIMEOUT_MS) {
+          printBenchLines(output);
+          if (missingHard.length > 0) {
+            const why = gone
+              ? `the app exited (code=${closed.code}, signal=${closed.signal}) first`
+              : `nothing appeared within ${EXPECT_TIMEOUT_MS} ms`;
+            forceKill();
+            fail(`expectation never appeared: ${missingHard.join(", ")} — ${why}`, output);
+          }
+          for (const needle of missingSoft) {
+            console.warn(`[launch-smoke] soft expectation never appeared: ${needle}`);
+          }
+          break;
+        }
+        await sleep(POLL_INTERVAL_MS);
+      }
+    }
 
     // SIGINT reaches the debug-only ctrl_c hook and runs the tray-Quit path, so
     // its cleanup lines are assertable. Release builds compile that hook out and
