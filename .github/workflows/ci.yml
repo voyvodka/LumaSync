@@ -188,15 +188,14 @@ jobs:
         # ends up on would leave the app with no Secret Service at all.
         # `printf "\n"` unlocks the freshly created login keyring with an empty
         # password; the daemon forks and stays on the bus for the smoke run.
-        # The credential expectation is soft, not hard: a headless Secret
-        # Service is the thing under test here, and until a run has shown it
-        # working, an unavailable keyring must read as evidence rather than as
-        # a red build. The capture expectation gates.
+        # Both expectations gate. The headless Secret Service round-trip was
+        # first shown working on 2026-08-18 (set 714 ms cold, get 2 ms), so an
+        # unavailable keyring is a regression, not missing evidence.
         run: >
           dbus-run-session -- bash -c 'printf "\n" | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1;
           xvfb-run -a node scripts/verify/launch-smoke.mjs
           --expect "[smoke-capture] frame="
-          --expect-soft "[smoke-cred] backend=keychain roundtrip=ok"'
+          --expect "[smoke-cred] backend=keychain roundtrip=ok"'
 
       - name: Launch smoke test (macOS)
         # The runner provides a real desktop session, so the app launches as-is.
