@@ -39,6 +39,10 @@ mod commands {
 #[cfg(target_os = "macos")]
 mod macos_window;
 
+// Evidence-gathering hook for the Windows overlay probe; never in a release bin.
+#[cfg(debug_assertions)]
+mod smoke_overlay;
+
 mod models {
     pub mod room_map;
 }
@@ -641,6 +645,11 @@ pub fn run() {
             app.manage(HueRuntimeStateStore::default());
             app.manage(RuntimeTelemetryState::default());
             app.manage(PendingUpdate::default());
+
+            // After the `manage` calls, not next to `LUMASYNC_NO_DEVTOOLS`: the
+            // hook resolves `OverlayState` when it fires.
+            #[cfg(debug_assertions)]
+            smoke_overlay::spawn_trigger_watcher(app.handle());
 
             // Build tray icon.
             //

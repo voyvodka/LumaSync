@@ -190,6 +190,25 @@ jobs:
           LUMASYNC_NO_DEVTOOLS: "1"
         run: node scripts/verify/launch-smoke.mjs --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
 
+      # The Windows overlay gate (R29). This runner is the only Windows desktop
+      # the overlay paths ever reach; the probe asserts the calibration overlay
+      # paints its edge band, stays transparent, and passes clicks through.
+      # `--mode 'transparent+layered'` reproduces the <= 1.5.5 solid-black
+      # overlay if the evidence ever needs re-taking.
+      - name: Overlay probe (Windows)
+        if: runner.os == 'Windows'
+        run: node scripts/verify/overlay-smoke.mjs --mode default --out overlay-smoke/default --gate
+
+      - name: Upload overlay probe artefacts
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: overlay-smoke-windows
+          path: overlay-smoke/**
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'
         working-directory: src-tauri

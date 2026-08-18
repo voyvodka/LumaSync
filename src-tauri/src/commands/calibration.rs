@@ -437,12 +437,14 @@ unsafe extern "system" fn mark_child_clickthrough(
     }
 
     // SetWindowLongPtrW returns 0 both for "previous value was 0" and for
-    // failure, so the error has to be read out of the thread's last-error slot —
-    // a cross-process/UIPI refusal on WebView2's windows must not look like success.
+    // failure, and the CI probe showed the last-error slot reading 6 after a
+    // set that demonstrably landed on an in-process window — so the verdict is
+    // the re-read style, not the return value; the error code is only detail.
     unsafe { SetLastError(0) };
-    let previous_ex = unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_wanted) };
+    let _previous_ex = unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_wanted) };
     let set_error = unsafe { GetLastError() };
-    if previous_ex == 0 && set_error != 0 {
+    let ex_after_set = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    if (ex_after_set & tally.added_bits) != tally.added_bits {
         tally.failed += 1;
         log::debug!(
             "[overlay-sweep] {}: hwnd={:#x} class='{}' pid={} ex={:#x} -> {:#x} SET FAILED err={}",

@@ -110,6 +110,60 @@ the only place it can catch one before publication.
 - **`chunkSizeWarningLimit` is raised to 900 kB, and that is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it, so the default fired on every build on macOS and Ubuntu and said nothing actionable. The limit sits just above the current bundle so real growth still trips it. Code-splitting the room-map editor would cut startup parse time — that is a genuine win, but a separate change, not a way to silence this.
 - **The test environment installs its own `localStorage`** in `src/test/setup.ts`. Node ≥ 24 defines an experimental `localStorage` global that reads back as `undefined` without `--localstorage-file`, and it shadows the one happy-dom provides. CI runs Node 22 and never saw it; on a newer local Node every `HsvColorPicker` recent-colors read and write threw into its own `catch`, so the feature was inert in tests and nothing failed. Anything reached through `window` deserves the same suspicion when local and CI Node versions differ.
 
+## The Windows overlay probe
+
+The `windows-latest` CI job is the only Windows desktop the calibration overlay
+ever reaches, so it is the test bench for R29 (overlay opens blank / wedges the
+app). One step runs after the Windows launch smoke and **gates the job**:
+`scripts/verify/overlay-smoke.mjs --mode default --gate`, which fails unless the
+overlay painted its edge band (≥ 1 % changed), stayed transparent (≤ 10 % of the
+interior changed) and both hit-test points fell through it.
+
+**What the first runs established (2026-08-18, PR #316).** With the sweep in its
+default `transparent` mode the overlay drew its capsules over the desktop — edge band
+5.1 % changed, interior 0.2 %, `WindowFromPoint` at the centre resolved to the main
+window's webview underneath and at the top edge to the desktop's `SysListView32`.
+With `--mode transparent+layered`, the ≤ 1.5.5 sweep, **the whole display went solid
+black** — 69 % of the band and 33.5 % of the interior changed, `after.png` is black
+edge to edge — while hit-testing still fell through. That is the R29 report
+("nothing on screen, nothing to click"), reproduced and released by one flag. The
+sweep also showed the WebView2 tree the overlay contains: `WRY_WEBVIEW` and
+`Chrome_WidgetWin_0` in our process, `Chrome_WidgetWin_1` and
+`Chrome_RenderWidgetHostHWND` in the browser process, `Intermediate D3D Window` in
+the GPU process already carrying `WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP` of its
+own; `SetWindowLongPtrW` landed cross-process on all of them. It also showed the
+last-error slot reading 6 after a set that had landed on an in-process window, which
+is why the sweep judges success by re-reading the style rather than by the return
+value.
+
+A run launches the same debug binary the launch smoke uses with
+`LUMASYNC_SMOKE_OVERLAY_TRIGGER` pointing at a file. A debug-only watcher
+(`src-tauri/src/smoke_overlay.rs`) polls for that file and, when it appears, opens
+the calibration overlay on the primary display through the ordinary
+`open_display_overlay` path, then logs `[smoke-overlay] opened … outer=x,y WxH` so
+the rect is known from outside the process. `scripts/verify/win-overlay-probe.ps1`
+then reads the result from the outside: every top-level window of the PID and every
+descendant with class, owning PID and `GWL_EXSTYLE` in hex;
+`WindowFromPoint` at the overlay centre and 3% inside the top edge; and a
+pixel diff of the overlay rect against a baseline screenshot taken before the
+overlay opened, split into an outer 8% band (where the LED capsules are drawn) and
+the inner region.
+
+Reading the `overlay-smoke-windows` artefact: `probe.json` carries the whole dump
+plus a `verdict` block, `sweep-log.txt` holds every `[overlay-sweep]` and
+`[smoke-overlay]` line including the per-child ex-style transitions, and
+`baseline.png` / `after.png` are the two frames the diff compared. In the verdict,
+**`bandChangedPct` near zero means the overlay painted nothing, and a large
+`innerChangedPct` means it is opaque** — the second is what the ≤ 1.5.5 sweep does.
+`--mode transparent+layered` re-takes that evidence on demand; it is not run in CI.
+`pointHitsOverlay: false` is the *healthy* reading: a click-through overlay is meant
+to be skipped by hit-testing, so the point lands on whatever is underneath.
+`childrenWithLayered > 0` in the default run would mean the #314 fix is not holding.
+
+The driver duplicates launch-smoke's launch/marker/kill sequence rather than sharing
+it. Launch-smoke gates every release on three platforms; moving it to serve a probe
+buys nothing and risks that.
+
 ## Keychain prompts in dev
 
 macOS asks for the login-keychain password on almost every `pnpm tauri dev` start —
