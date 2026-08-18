@@ -190,6 +190,30 @@ jobs:
           LUMASYNC_NO_DEVTOOLS: "1"
         run: node scripts/verify/launch-smoke.mjs --log-file "$env:LOCALAPPDATA\com.lumasync.app\logs\lumasync-dev.log"
 
+      # R29 evidence only, not a gate: this runner is the only Windows desktop
+      # the overlay paths ever reach. It gates once the behaviour is confirmed.
+      - name: Overlay probe — default sweep (Windows, evidence only)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        run: node scripts/verify/overlay-smoke.mjs --mode default --out overlay-smoke/default
+
+      - name: Overlay probe — transparent+layered sweep (Windows, evidence only)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        # Reproduces the <= 1.5.5 sweep. If the #314 diagnosis holds, this run
+        # is the blank one and the default run above is not.
+        run: node scripts/verify/overlay-smoke.mjs --mode 'transparent+layered' --out overlay-smoke/layered
+
+      - name: Upload overlay probe artefacts
+        if: always() && runner.os == 'Windows'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: overlay-smoke-windows
+          path: overlay-smoke/**
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Rust audit (Linux only)
         if: runner.os == 'Linux'
         working-directory: src-tauri
