@@ -5,6 +5,7 @@ import { findHueChannel } from "@/shared/contracts/roomMap";
 import { clamp } from "@/shared/lib/math";
 import { hueChannelObjectId } from "../model/objectId";
 import { resolveHueChannelWorld } from "../model/hueChannelPosition";
+import { hueChannelDotText, hueChannelName } from "../model/hueChannelLabel";
 
 interface HueChannelOverlayProps {
   channels: HueChannelPlacement[];
@@ -592,9 +593,7 @@ export function HueChannelOverlay({
 
         const isGhost =
           liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
-        const baseLabel =
-          ch.label ??
-          t("roomMap:hueChannel.defaultLabel", { index: String(ch.channelIndex + 1) });
+        const baseLabel = hueChannelName(ch, t);
         const dotLabel = isGhost
           ? t("roomMap:hueChannel.ghostLabel", { name: baseLabel })
           : baseLabel;
@@ -662,7 +661,7 @@ export function HueChannelOverlay({
                 }
               }}
             >
-              {ch.channelIndex + 1}
+              {hueChannelDotText(ch.channelId)}
             </div>
           </div>
         );

@@ -7,6 +7,7 @@ import { IconDragHandle, IconMoveTo } from "@/shared/ui/icons";
 import { MovePopover } from "./MovePopover";
 import { getZoneColor } from "../model/zoneColor";
 import { deriveHueAreaState } from "../model/hueAreaState";
+import { hueChannelName } from "../model/hueChannelLabel";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
 
 interface HueZonesTabProps {
@@ -378,17 +379,14 @@ export function HueZonesTab(props: HueZonesTabProps) {
                           aria-hidden
                         />
                         <span className="lm-room-dock-row-label">
-                          {ch.label ??
-                            t("roomMap:hueChannel.defaultLabel", {
-                              index: String(ch.channelIndex + 1),
-                            })}
+                          {hueChannelName(ch, t)}
                         </span>
                         {dragSupported && (
                           <button
                             type="button"
                             className="lm-room-dock-row-action lm-room-dock-row-action--move"
                             aria-label={t("roomMap:hueZones.moveChannelAriaLabel", {
-                              channel: String(ch.channelIndex + 1),
+                              channel: hueChannelName(ch, t),
                             })}
                             onClick={(e) => {
                               e.stopPropagation();
@@ -468,17 +466,14 @@ export function HueZonesTab(props: HueZonesTabProps) {
                         aria-hidden
                       />
                       <span className="lm-room-dock-row-label">
-                        {ch.label ??
-                          t("roomMap:hueChannel.defaultLabel", {
-                            index: String(ch.channelIndex + 1),
-                          })}
+                        {hueChannelName(ch, t)}
                       </span>
                       {dragSupported && hueZones.length > 0 && (
                         <button
                           type="button"
                           className="lm-room-dock-row-action lm-room-dock-row-action--move"
                           aria-label={t("roomMap:hueZones.moveChannelAriaLabel", {
-                            channel: String(ch.channelIndex + 1),
+                            channel: hueChannelName(ch, t),
                           })}
                           onClick={(e) => {
                             e.stopPropagation();

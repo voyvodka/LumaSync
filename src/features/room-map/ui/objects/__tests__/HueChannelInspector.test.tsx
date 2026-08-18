@@ -76,3 +76,69 @@ describe("HueChannelInspector height control", () => {
     expect((screen.getByRole("slider") as HTMLInputElement).disabled).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Identity — the bridge's own id, never our ordinal
+// ---------------------------------------------------------------------------
+
+describe("channel identity", () => {
+  /** Ordinal 2, bridge id 5 — they disagree, which is the whole point. */
+  const gapped: HueChannelPlacement = { channelIndex: 2, channelId: 5, x: 0, y: 0, z: 0 };
+
+  function renderChannel(ch: HueChannelPlacement, extra: Record<string, unknown> = {}) {
+    render(
+      <HueChannelInspector
+        channel={ch}
+        zoneName={null}
+        worldZ={0}
+        roomHeightMeters={2.5}
+        onHeightChange={vi.fn()}
+        onRename={vi.fn()}
+        onToggleLock={vi.fn()}
+        {...extra}
+      />,
+    );
+  }
+
+  it("shows the bridge id, not the ordinal and not the ordinal plus one", () => {
+    renderChannel(gapped);
+    expect(screen.getByText("#5")).toBeTruthy();
+    expect(screen.queryByText("3")).toBeNull();
+    expect(screen.queryByText("#3")).toBeNull();
+  });
+
+  it("names channel #0 rather than dropping a falsy id", () => {
+    renderChannel({ channelIndex: 0, channelId: 0, x: 0, y: 0, z: 0 });
+    expect(screen.getByText("#0")).toBeTruthy();
+  });
+
+  it("says the placement is unmatched when it carries no bridge id", () => {
+    renderChannel({ channelIndex: 2, x: 0, y: 0, z: 0 });
+    expect(screen.getByText("roomMap:inspector.hueChannelUnresolved")).toBeTruthy();
+  });
+
+  it("reports how many bulbs the channel drives", () => {
+    renderChannel(gapped, { lightCount: 3 });
+    expect(screen.getByText(/hueLights/)).toBeTruthy();
+  });
+
+  it("uses the singular for one bulb", () => {
+    renderChannel(gapped, { lightCount: 1 });
+    expect(screen.getByText("roomMap:inspector.hueOneLight")).toBeTruthy();
+  });
+
+  it("omits the count rather than showing zero when the bridge has not said", () => {
+    renderChannel(gapped, { lightCount: null });
+    expect(screen.queryByText("roomMap:inspector.hueLightCountLabel")).toBeNull();
+  });
+
+  it("explains a channel the bridge no longer reports", () => {
+    renderChannel(gapped, { isGhost: true });
+    expect(screen.getByText("roomMap:inspector.hueChannelGhostNote")).toBeTruthy();
+  });
+
+  it("says nothing about ghosts for a channel the bridge still reports", () => {
+    renderChannel(gapped);
+    expect(screen.queryByText("roomMap:inspector.hueChannelGhostNote")).toBeNull();
+  });
+});

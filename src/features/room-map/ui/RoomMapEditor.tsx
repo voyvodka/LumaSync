@@ -113,7 +113,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     handleHueZoneUpdate,
   } = useRoomMapHueZones({ config, updateConfig, setSelectedId, setObjectPanelOpen });
 
-  const { channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } = useRoomMapHueChannels({
+  const { areaChannels, channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } =
+    useRoomMapHueChannels({
     config,
     adoptConfig,
     hueAreaId,
@@ -671,6 +672,8 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             isRefreshingChannels={isLoadingChannels}
             channelsStatus={channelsStatus}
             hueChannels={visibleHueChannels}
+            areaChannels={areaChannels}
+            liveChannelIds={liveChannelIds}
             hueAreaId={hueAreaId}
             onAssignChannelToZone={handleAssignChannelToZone}
             onNavigateToDevices={onNavigateToDevices}
