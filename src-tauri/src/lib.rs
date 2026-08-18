@@ -587,6 +587,18 @@ pub fn run() {
                 commands::updater::read_update_channel(app.handle()),
             );
 
+            // A dev binary is ad-hoc signed, so macOS asks for the login
+            // keychain password once per secret per relink and no amount of
+            // re-signing stops it — docs/architecture/build-and-release.md.
+            // Debug builds keep their Hue credentials in a file instead.
+            #[cfg(debug_assertions)]
+            match app.path().app_data_dir() {
+                Ok(dir) => commands::hue::credential_store::init_store_for_debug(dir),
+                Err(error) => log::warn!(
+                    "[hue-cred] no app data dir — debug build falls back to the OS keychain: {error}"
+                ),
+            }
+
             // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();

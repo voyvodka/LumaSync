@@ -54,6 +54,23 @@ raced a write is discarded via a generation counter, because a stale key survivi
 worse than the reads the cache removes. The accepted cost: a credential edited outside the app is
 not seen until restart.
 
+**A debug build does not use the OS keychain at all.** `lib.rs` seeds the shared store with a
+`DevFileStore` — a plaintext JSON file, `dev-credentials.json`, `0600` in the app data dir —
+before any Hue command can run. The reason is the macOS keychain prompt on every `pnpm tauri dev`
+relink, which nothing on the keychain side fixes; see `build-and-release.md`. Three consequences,
+and they are the whole cost: a debug build cannot see credentials a release build stored, so a dev
+session pairs the bridge once and keeps it in the file; the file is plaintext, which is the right
+trade for a developer convenience on a developer's machine and would only look safer encrypted
+under a key stored beside it; and the CI launch smoke's debug binary now touches no keychain and no
+D-Bus at all. `LUMASYNC_DEV_USE_KEYCHAIN=1` skips the seeding when the real keychain path is what
+needs exercising.
+
+`MigrationOutcome::backend` therefore reports the store's own label rather than a constant
+`Keychain`, and the new `dev-file` value is additive on the TS `HueCredentialBackend` union. It
+reads exactly like `plaintext-legacy` on the frontend: only the literal `"keychain"` licenses
+deleting the plaintext copy, and licensing that on a file no release build can read would strand
+the pairing.
+
 **An empty `username` on the wire means "resolve from the OS keychain".** Same idiom as
 `clientKey`, applied to the second secret so there is one rule rather than two. Every CLIP surface
 runs the request value through `effective_hue_app_key` first; a non-empty value is used as-is and

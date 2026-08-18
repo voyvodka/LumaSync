@@ -408,12 +408,13 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                     &creds.username,
                     &creds.client_key,
                 );
+                let backend = outcome.backend(store.as_ref());
                 info!(
                     "[hue-cred] pairing migration {}: backend={}",
                     outcome.status_code(),
-                    outcome.backend().as_str()
+                    backend.as_str()
                 );
-                result.credential_storage_backend = Some(outcome.backend().as_str().to_string());
+                result.credential_storage_backend = Some(backend.as_str().to_string());
             }
             result
         }
@@ -499,7 +500,7 @@ pub fn migrate_hue_credentials(
         &username,
         &client_key,
     );
-    let backend = outcome.backend();
+    let backend = outcome.backend(store.as_ref());
     info!(
         "[hue-cred] boot migration {}: backend={}",
         outcome.status_code(),

@@ -133,6 +133,16 @@ describe("useHueOnboarding credential persistence", () => {
     expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
   });
 
+  it("keeps both plaintext secrets when a debug build stored them in its dev file", async () => {
+    // A dev-only file no release build can read is not permission to delete
+    // the copy that release build would need.
+    const saved = await pairWith(HUE_CREDENTIAL_BACKENDS.DEV_FILE);
+
+    expect(saved.hueClientKey).toBe("psk-deadbeef");
+    expect(saved.hueAppKey).toBe("app-key-abc");
+    expect(saved.credentialStorageBackend).toBe(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY);
+  });
+
   it("restores a keychain-backed pairing on boot without a stored client key", async () => {
     shellLoadMock.mockResolvedValue({
       lastHueBridge: BRIDGE,

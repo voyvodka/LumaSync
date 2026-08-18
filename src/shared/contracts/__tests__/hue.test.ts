@@ -13,6 +13,7 @@ describe("Hue credential backend wire contract", () => {
   it("pins the literal values Rust emits", () => {
     expect(HUE_CREDENTIAL_BACKENDS.KEYCHAIN).toBe("keychain");
     expect(HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY).toBe("plaintext-legacy");
+    expect(HUE_CREDENTIAL_BACKENDS.DEV_FILE).toBe("dev-file");
   });
 
   it("exposes the migration command id", () => {
@@ -34,6 +35,7 @@ describe("Hue credential backend wire contract", () => {
     const backends: HueCredentialBackend[] = [
       HUE_CREDENTIAL_BACKENDS.KEYCHAIN,
       HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
+      HUE_CREDENTIAL_BACKENDS.DEV_FILE,
     ];
 
     for (const backend of backends) {

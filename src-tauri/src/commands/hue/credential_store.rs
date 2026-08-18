@@ -44,6 +44,8 @@
 
 use log::{debug, info, warn};
 use std::collections::HashMap;
+#[cfg(any(debug_assertions, test))]
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 /// Service identifier (bundle id) used as the keychain "service" field.
@@ -84,6 +86,12 @@ pub enum CredentialBackend {
     /// fallback path so they never need to match on this variant directly.
     #[allow(dead_code)]
     Noop,
+    /// Plaintext JSON file in the app data dir, seeded by debug builds only.
+    /// Reaches the frontend so a dev session never clears its plaintext copy
+    /// on the strength of a file a release build cannot read — see
+    /// `DevFileStore`.
+    #[allow(dead_code)]
+    DevFile,
 }
 
 impl CredentialBackend {
@@ -93,6 +101,7 @@ impl CredentialBackend {
             CredentialBackend::Keychain => "keychain",
             CredentialBackend::PlaintextLegacy => "plaintext-legacy",
             CredentialBackend::Noop => "noop",
+            CredentialBackend::DevFile => "dev-file",
         }
     }
 }
@@ -217,6 +226,146 @@ impl SecretStore for NoopStore {
 }
 
 // ---------------------------------------------------------------------------
+// DevFileStore — debug builds only, keeps `tauri dev` out of the OS keychain
+// ---------------------------------------------------------------------------
+
+/// File name of the debug-only credential store inside the app data dir.
+#[cfg(any(debug_assertions, test))]
+pub const DEV_CREDENTIAL_FILE: &str = "dev-credentials.json";
+
+/// Plaintext JSON secret store used by debug builds in place of the keychain.
+///
+/// A dev binary is ad-hoc signed, so its keychain partition entry is a
+/// `cdhash:` that changes on every relink and macOS asks for the login
+/// password once per secret per build. Re-signing and partition-list edits
+/// were both measured and neither works — see
+/// `docs/architecture/build-and-release.md`. Debug builds therefore skip the
+/// keychain altogether rather than keep negotiating with it.
+///
+/// Plaintext is deliberate: this is a developer convenience on a developer's
+/// machine, and encrypting it under a key stored beside it would only look
+/// safer. The file is created `0600` on Unix, lives in the app data dir, and
+/// no release build ever compiles this type.
+#[cfg(any(debug_assertions, test))]
+pub struct DevFileStore {
+    path: PathBuf,
+    /// Serialises the read-modify-write cycle. Migration writes both accounts
+    /// back to back, and an interleaved cycle would drop the first one.
+    write_lock: Mutex<()>,
+}
+
+#[cfg(any(debug_assertions, test))]
+impl DevFileStore {
+    /// Handle over `path`. No I/O until a method is called; a missing file
+    /// reads as an empty store.
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            write_lock: Mutex::new(()),
+        }
+    }
+
+    fn read_all(&self) -> Result<HashMap<String, String>, String> {
+        match std::fs::read_to_string(&self.path) {
+            Ok(raw) if raw.trim().is_empty() => Ok(HashMap::new()),
+            Ok(raw) => {
+                serde_json::from_str(&raw).map_err(|err| format!("DEV_FILE_PARSE_FAILED: {err}"))
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(HashMap::new()),
+            Err(err) => Err(format!("DEV_FILE_READ_FAILED: {err}")),
+        }
+    }
+
+    /// Write via temp file + rename so a crash mid-write cannot leave a
+    /// half-written file that reads as "no credentials" and forces a re-pair.
+    fn write_all(&self, entries: &HashMap<String, String>) -> Result<(), String> {
+        use std::io::Write;
+
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| format!("DEV_FILE_MKDIR_FAILED: {err}"))?;
+        }
+
+        let body = serde_json::to_string_pretty(entries)
+            .map_err(|err| format!("DEV_FILE_SERIALIZE_FAILED: {err}"))?;
+        let temp_path = self
+            .path
+            .with_extension(format!("{}.tmp", std::process::id()));
+
+        let write = (|| -> std::io::Result<()> {
+            let mut options = std::fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            let mut file = options.open(&temp_path)?;
+            file.write_all(body.as_bytes())?;
+            file.sync_all()
+        })();
+        if let Err(err) = write {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(format!("DEV_FILE_WRITE_FAILED: {err}"));
+        }
+
+        if let Err(err) = std::fs::rename(&temp_path, &self.path) {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(format!("DEV_FILE_RENAME_FAILED: {err}"));
+        }
+
+        // `OpenOptions::mode` only applies when it creates the file, so a
+        // reused temp path could carry the wrong mode into the rename.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&self.path, std::fs::Permissions::from_mode(0o600))
+                .map_err(|err| format!("DEV_FILE_CHMOD_FAILED: {err}"))?;
+        }
+
+        Ok(())
+    }
+
+    fn lock(&self) -> MutexGuard<'_, ()> {
+        self.write_lock
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+#[cfg(any(debug_assertions, test))]
+impl SecretStore for DevFileStore {
+    fn set(&self, account: &str, value: &str) -> Result<(), String> {
+        let _guard = self.lock();
+        let mut entries = self.read_all()?;
+        entries.insert(account.to_string(), value.to_string());
+        self.write_all(&entries)?;
+        debug!("[hue-cred] dev-file SET ok ({account})");
+        Ok(())
+    }
+
+    fn get(&self, account: &str) -> Result<Option<String>, String> {
+        let entries = self.read_all()?;
+        Ok(entries.get(account).cloned())
+    }
+
+    fn delete(&self, account: &str) -> Result<(), String> {
+        let _guard = self.lock();
+        let mut entries = self.read_all()?;
+        if entries.remove(account).is_none() {
+            return Ok(());
+        }
+        self.write_all(&entries)?;
+        debug!("[hue-cred] dev-file DELETE ok ({account})");
+        Ok(())
+    }
+
+    fn backend(&self) -> CredentialBackend {
+        CredentialBackend::DevFile
+    }
+}
+
+// ---------------------------------------------------------------------------
 // CachedStore — process-lifetime read cache in front of a backing store
 // ---------------------------------------------------------------------------
 
@@ -334,6 +483,34 @@ pub fn default_store() -> Arc<CachedStore> {
     Arc::clone(SHARED_STORE.get_or_init(|| Arc::new(CachedStore::new(platform_store()))))
 }
 
+/// Seed the process-wide store with a `DevFileStore` so a debug build never
+/// touches the OS keychain. Called from `lib.rs` `setup`, before any Hue
+/// command can run.
+///
+/// `LUMASYNC_DEV_USE_KEYCHAIN=1` skips the seeding, so a debug build can still
+/// exercise the real keychain path when that is what is being tested. Once the
+/// shared store exists it is never replaced — swapping the backend under a
+/// live cache is how a stale credential outlives a re-pair.
+#[cfg(debug_assertions)]
+pub fn init_store_for_debug(app_data_dir: PathBuf) {
+    if std::env::var_os("LUMASYNC_DEV_USE_KEYCHAIN").is_some() {
+        info!("[hue-cred] LUMASYNC_DEV_USE_KEYCHAIN set — debug build keeps the OS keychain");
+        return;
+    }
+
+    let path = app_data_dir.join(DEV_CREDENTIAL_FILE);
+    let store = Arc::new(CachedStore::new(Box::new(DevFileStore::new(path.clone()))));
+    if SHARED_STORE.set(store).is_err() {
+        warn!("[hue-cred] shared store already built — keeping it, dev file store not installed");
+        return;
+    }
+
+    info!(
+        "[hue-cred] debug build: Hue credentials live in {} — not the OS keychain",
+        path.display()
+    );
+}
+
 /// Construct the platform-appropriate backing `SecretStore`.
 ///
 /// Probes `KeychainStore` by attempting to allocate a throwaway entry. If
@@ -385,9 +562,14 @@ impl MigrationOutcome {
 
     /// Which backend now holds the credentials after this outcome — informs
     /// whether the caller may clear its plaintext copy.
-    pub fn backend(&self) -> CredentialBackend {
+    ///
+    /// The label is the store's own, not a constant: a debug build writes to
+    /// `DevFileStore`, and reporting that as `keychain` would license the
+    /// frontend to delete a plaintext copy that only a dev-only file replaces.
+    /// `NoopStore` cannot reach the success arms — its `set` always fails.
+    pub fn backend(&self, store: &dyn SecretStore) -> CredentialBackend {
         match self {
-            MigrationOutcome::Migrated | MigrationOutcome::Skipped => CredentialBackend::Keychain,
+            MigrationOutcome::Migrated | MigrationOutcome::Skipped => store.backend(),
             MigrationOutcome::Failed => CredentialBackend::PlaintextLegacy,
         }
     }
@@ -663,6 +845,7 @@ pub(crate) mod tests {
             "plaintext-legacy"
         );
         assert_eq!(CredentialBackend::Noop.as_str(), "noop");
+        assert_eq!(CredentialBackend::DevFile.as_str(), "dev-file");
     }
 
     #[test]
@@ -732,6 +915,157 @@ pub(crate) mod tests {
         ));
     }
 
+    // ---------------------- DevFileStore (debug-only backend) ----------------------
+
+    /// Unique directory under the system temp dir, removed on drop. The crate
+    /// carries no `tempfile` dev-dependency and this is the only test that
+    /// needs one.
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "lumasync-cred-{}-{}",
+                std::process::id(),
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+        fn store(&self) -> DevFileStore {
+            DevFileStore::new(self.0.join(DEV_CREDENTIAL_FILE))
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn dev_file_store_round_trips_and_labels_itself() {
+        let dir = TempDir::new();
+        let store = dir.store();
+
+        assert_eq!(store.backend(), CredentialBackend::DevFile);
+        assert_eq!(store.backend().as_str(), "dev-file");
+        // A missing file is an empty store, not an error.
+        assert_eq!(store.get(KEY_HUE_APP_KEY).unwrap(), None);
+
+        store.set(KEY_HUE_APP_KEY, "user-123").unwrap();
+        store.set(KEY_HUE_CLIENT_KEY, "deadbeef").unwrap();
+        assert_eq!(
+            store.get(KEY_HUE_APP_KEY).unwrap().as_deref(),
+            Some("user-123")
+        );
+        assert_eq!(
+            store.get(KEY_HUE_CLIENT_KEY).unwrap().as_deref(),
+            Some("deadbeef")
+        );
+
+        store.set(KEY_HUE_APP_KEY, "user-456").unwrap();
+        assert_eq!(
+            store.get(KEY_HUE_APP_KEY).unwrap().as_deref(),
+            Some("user-456")
+        );
+        // The second account survives the first being rewritten.
+        assert_eq!(
+            store.get(KEY_HUE_CLIENT_KEY).unwrap().as_deref(),
+            Some("deadbeef")
+        );
+
+        store.delete(KEY_HUE_APP_KEY).unwrap();
+        assert_eq!(store.get(KEY_HUE_APP_KEY).unwrap(), None);
+        assert_eq!(
+            store.get(KEY_HUE_CLIENT_KEY).unwrap().as_deref(),
+            Some("deadbeef")
+        );
+    }
+
+    #[test]
+    fn dev_file_store_delete_of_a_missing_account_is_ok() {
+        let dir = TempDir::new();
+        let store = dir.store();
+        // Missing file, then missing key inside an existing file.
+        store.delete(KEY_HUE_APP_KEY).unwrap();
+        store.set(KEY_HUE_CLIENT_KEY, "deadbeef").unwrap();
+        store.delete(KEY_HUE_APP_KEY).unwrap();
+        store.delete(KEY_HUE_APP_KEY).unwrap();
+        assert_eq!(
+            store.get(KEY_HUE_CLIENT_KEY).unwrap().as_deref(),
+            Some("deadbeef")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dev_file_store_writes_owner_only_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = TempDir::new();
+        let store = dir.store();
+        store.set(KEY_HUE_APP_KEY, "user-123").unwrap();
+
+        let path = dir.0.join(DEV_CREDENTIAL_FILE);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600, "dev credential file must be 0600");
+
+        // A rewrite must not widen it either.
+        store.set(KEY_HUE_APP_KEY, "user-456").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn dev_file_store_leaves_no_temp_file_behind() {
+        let dir = TempDir::new();
+        let store = dir.store();
+        store.set(KEY_HUE_APP_KEY, "user-123").unwrap();
+        store.set(KEY_HUE_CLIENT_KEY, "deadbeef").unwrap();
+        store.delete(KEY_HUE_APP_KEY).unwrap();
+
+        let names: Vec<String> = std::fs::read_dir(&dir.0)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec![DEV_CREDENTIAL_FILE.to_string()], "{names:?}");
+    }
+
+    #[test]
+    fn dev_file_store_serves_the_migration_and_resolver_path() {
+        let dir = TempDir::new();
+        let store = dir.store();
+
+        let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
+        assert_eq!(outcome, MigrationOutcome::Migrated);
+        // Never `keychain`: the frontend clears its plaintext copy on that
+        // literal alone, and a release build cannot read this file.
+        assert_eq!(outcome.backend(&store), CredentialBackend::DevFile);
+
+        let resolved = resolve_hue_credentials(&store, "", "").unwrap();
+        assert_eq!(resolved.username, "user-123");
+        assert_eq!(resolved.client_key, "deadbeef");
+
+        // Re-running the same pair is a no-op write.
+        assert_eq!(
+            migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef"),
+            MigrationOutcome::Skipped
+        );
+    }
+
+    #[test]
+    fn dev_file_store_reports_a_corrupt_file_rather_than_reading_it_empty() {
+        let dir = TempDir::new();
+        let store = dir.store();
+        std::fs::write(dir.0.join(DEV_CREDENTIAL_FILE), "{ not json").unwrap();
+
+        // An unreadable file must not look like "no credentials stored" —
+        // the resolver degrades to the plaintext fallback on an `Err`, but
+        // would treat `Ok(None)` as proof the keychain is empty.
+        assert!(store.get(KEY_HUE_APP_KEY).is_err());
+    }
+
     // ---------------------- W2-A2 migration scenarios ----------------------
 
     #[test]
@@ -740,7 +1074,7 @@ pub(crate) mod tests {
         let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Migrated);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_OK");
-        assert_eq!(outcome.backend(), CredentialBackend::Keychain);
+        assert_eq!(outcome.backend(&store), CredentialBackend::Keychain);
         assert_eq!(
             store.get(KEY_HUE_APP_KEY).unwrap().as_deref(),
             Some("user-123")
@@ -758,7 +1092,7 @@ pub(crate) mod tests {
         let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Skipped);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_SKIPPED");
-        assert_eq!(outcome.backend(), CredentialBackend::Keychain);
+        assert_eq!(outcome.backend(&store), CredentialBackend::Keychain);
     }
 
     #[test]
@@ -799,7 +1133,7 @@ pub(crate) mod tests {
         let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_FAILED");
-        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
         // First set was the app-key, which failed before any write happened.
         assert_eq!(store.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
@@ -842,7 +1176,7 @@ pub(crate) mod tests {
         assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
         // The frontend keys its delete decision on this value.
-        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
     }
 
     #[test]
@@ -873,7 +1207,7 @@ pub(crate) mod tests {
         };
         let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
-        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
         // No half-written entry survives a failed verification.
         assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
         assert_eq!(store.inner.get(KEY_HUE_CLIENT_KEY).unwrap(), None);
@@ -1154,7 +1488,7 @@ pub(crate) mod tests {
         let store = CachedStore::new(Box::new(LyingBacking));
         let outcome = migrate_hue_credentials_to_keychain(&store, "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
-        assert_eq!(outcome.backend(), CredentialBackend::PlaintextLegacy);
+        assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
     }
 
     #[test]
