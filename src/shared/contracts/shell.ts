@@ -10,6 +10,7 @@ import type { LedTestPattern } from "./preview";
 import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import type {
   HueBridgeSummary,
+  HueChannelPlacementOverride,
   HueCredentialBackend,
   HueCredentialStatus,
   HueIntensityPreset,
@@ -209,6 +210,16 @@ export interface ShellState {
    * Last completed onboarding step for resume flow continuity.
    */
   hueOnboardingStep?: HueOnboardingStep;
+  /**
+   * What was last written to the bridge, per entertainment area. Compared
+   * against the local placements to say whether the bridge's copy is behind.
+   *
+   * A snapshot rather than a live read: while a stream is running,
+   * `get_hue_area_channels` serves the running stream's channel list, which has
+   * already had our own placements applied — so reading the bridge would answer
+   * with our own numbers and always report "in sync". See docs/architecture/hue.md.
+   */
+  hueBridgeSyncedPositions?: Record<string, HueChannelPlacementOverride[]>;
   /**
    * Cached credential health line shown in Hue settings.
    */

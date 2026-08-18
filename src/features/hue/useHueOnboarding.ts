@@ -68,6 +68,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     areaChannels: channels.areaChannels,
     isLoadingChannels: channels.isLoadingChannels,
     channelsStatus: channels.channelsStatus,
+    refreshChannels: channels.refreshChannels,
     discover: core.discover,
     selectBridge: core.selectBridge,
     setManualIp: core.setManualIp,

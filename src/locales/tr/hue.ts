@@ -91,6 +91,13 @@ const hue: Catalogue<typeof enHue> = {
     saveToBridgeError: "{{code}}: Pozisyonlar yazılamadı.",
     saveToBridgeErrorRetry: "Tekrar dene",
     saveConfirm: "Köprü üzerindeki kanal pozisyonları güncellenecek. Köprü: {{ip}}. Devam edilsin mi?",
+    pullFromBridge: "Köprüdekini al",
+    pullConfirm: "Bu, senin düzenini köprüde saklı olanla değiştirir. Devam edilsin mi?",
+    sync: {
+      inSync: "Köprüde de bu düzen var.",
+      localAhead: "Işıkların zaten buna uyuyor. Köprüde hâlâ eski düzen duruyor — Hue uygulamasının da uyması gerekiyorsa gönder.",
+      neverPushed: "Buradan köprüye hiçbir şey gönderilmedi.",
+    },
     beta: "Beta",
     state: {
       emptyHeading: "Kanal yok",

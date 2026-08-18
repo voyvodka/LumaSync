@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import type { LedChipType } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
+import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
 import type {
   HueChannelPlacement,
@@ -57,6 +58,7 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
   // -------------------------------------------------------------------------
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>([]);
+  const [syncedPositions, setSyncedPositions] = useState<HueChannelPlacementOverride[] | undefined>();
   const [hueZones, setHueZones] = useState<HueZone[]>([]);
   const [pairedStrips, setPairedStrips] = useState<UsbStripPlacement[]>([]);
   // One flag per save path. A USB write failure must not light the banner
@@ -71,6 +73,9 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
       if (cancelled) return;
       const stored = state.roomMap?.hueChannels ?? [];
       setChannelPlacements(selectedAreaId ? hueChannelsForArea(stored, selectedAreaId) : stored);
+      setSyncedPositions(
+        selectedAreaId ? state.hueBridgeSyncedPositions?.[selectedAreaId] : undefined,
+      );
       setHueZones(state.roomMap?.zones ?? []);
       setPairedStrips(state.roomMap?.usbStrips ?? []);
     });
@@ -143,6 +148,28 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
       hueChannelPersistError.raise();
     }
   }, [hueChannelPersistError, selectedAreaId]);
+
+  /** Recorded per area: two areas' arrangements are pushed independently, and a
+   *  single snapshot would report one of them wrong. */
+  const handleSyncedPositionsChange = useCallback(
+    async (snapshot: HueChannelPlacementOverride[]) => {
+      if (!selectedAreaId) return;
+      const areaId = selectedAreaId;
+      setSyncedPositions(snapshot);
+      try {
+        const current = await shellStore.load();
+        await shellStore.save({
+          hueBridgeSyncedPositions: {
+            ...(current.hueBridgeSyncedPositions ?? {}),
+            [areaId]: snapshot,
+          },
+        });
+      } catch (e) {
+        console.error("[LumaSync] handleSyncedPositionsChange failed", e);
+      }
+    },
+    [selectedAreaId],
+  );
 
   return (
     <div className="lm-device-page">
@@ -217,6 +244,8 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
           hue={hue}
           channelPlacements={channelPlacements}
           onPositionChange={handlePositionChange}
+          syncedPositions={syncedPositions}
+          onSyncedPositionsChange={handleSyncedPositionsChange}
           persistError={hueChannelPersistError.active}
           zones={hueZones}
         />

@@ -66,6 +66,7 @@ export interface UseHueOnboardingResult {
   isLoadingChannels: boolean;
   /** Last channel-fetch code, `null` before the first answer. */
   channelsStatus: string | null;
+  refreshChannels: () => void;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;

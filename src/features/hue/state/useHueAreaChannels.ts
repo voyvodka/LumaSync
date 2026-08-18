@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 
@@ -18,6 +18,9 @@ export interface UseHueAreaChannelsResult {
    * empty area, an unreachable bridge and a parse failure all leave an empty
    * list, and the surface has to tell them apart. */
   channelsStatus: string | null;
+  /** Re-read the bridge's list. The pull path needs it: a list fetched while a
+   *  stream was running carries our own placements, not the bridge's. */
+  refreshChannels: () => void;
 }
 
 export function useHueAreaChannels(
@@ -30,6 +33,10 @@ export function useHueAreaChannels(
   const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [channelsStatus, setChannelsStatus] = useState<string | null>(null);
+  const [refreshToken, setRefreshToken] = useState(0);
+  const refreshChannels = useCallback(() => {
+    setRefreshToken((n) => n + 1);
+  }, []);
 
   // Held in a ref so an inline callback at the call site cannot widen the fetch
   // effect's dep array into a refetch-per-render loop.
@@ -98,7 +105,7 @@ export function useHueAreaChannels(
     return () => {
       cancelled = true;
     };
-  }, [selectedBridge, credentials, selectedAreaId]);
+  }, [selectedBridge, credentials, selectedAreaId, refreshToken]);
 
-  return { areaChannels, isLoadingChannels, channelsStatus };
+  return { areaChannels, isLoadingChannels, channelsStatus, refreshChannels };
 }
