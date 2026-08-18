@@ -74,15 +74,14 @@ const hue: Catalogue<typeof enHue> = {
     conflictHint: "Başka bir uygulama bu alana aktif olarak akış yapıyor. Başlamadan önce diğer akışı durdurun.",
   },
   channelMap: {
-    title: "Kanal yerleşimi",
-    hint: "Kaba bir yerleşim seç ya da kanalı oda haritasında serbestçe konumlandır.",
+    title: "Hue kanalları",
+    hint: "Bu alanda köprünün bildirdiği ışıklar. Konumlarını oda haritasından ver.",
+    channelRowAriaLabel: "Kanal {{index}}",
+    noZone: "Bölge yok",
+    openRoomMap: "Oda haritasını aç",
     loading: "Kanallar yükleniyor…",
     oneLight: "1 ışık",
     lights: "{{count}} ışık",
-    custom: "Özel",
-    saved: "✓ Kaydedildi",
-    resetToBridge: "Sıfırla",
-    resetToBridgeTitle: "Köprünün bildirdiği konuma dön",
     saveError: "Yerleşim kaydedilemedi — depolama hatası. Tekrar dene.",
     saveToBridge: "Pozisyonları köprüye kaydet",
     saveToBridgeTooltip: "Önce yayını durdur",
@@ -108,17 +107,6 @@ const hue: Catalogue<typeof enHue> = {
       failedHeading: "Kanallar okunamadı",
       failedBody: "Köprü beklenmeyen bir yanıt verdi. Alanı doğrulayıp tekrar dene.",
     },
-    // `top` / `bottom` are the wire values and never change; the labels read
-    // Yakın / Uzak because that axis is depth, +1 being the TV wall.
-    regions: {
-      left: "Sol",
-      right: "Sağ",
-      top: "Yakın",
-      bottom: "Uzak",
-      center: "Orta",
-    },
-    zonePicker: "Yerleşim",
-    regionRowAriaLabel: "{{index}} kanalının yerleşimi",
   },
   targetFailed: "{{target}} hedefi baslatılamadı, mevcut çıkış devam ediyor.",
   readiness: {

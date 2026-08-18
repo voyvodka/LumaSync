@@ -71,15 +71,14 @@ export default {
     conflictHint: "Another app is actively streaming to this area. Stop the other stream before starting.",
   },
   channelMap: {
-    title: "Channel placement",
-    hint: "Pick a coarse placement, or position the channel freely on the room map.",
+    title: "Hue channels",
+    hint: "The bridge's lights for this area. Position them on the room map.",
+    channelRowAriaLabel: "Channel {{index}}",
+    noZone: "No zone",
+    openRoomMap: "Open room map",
     loading: "Loading channels…",
     oneLight: "1 light",
     lights: "{{count}} lights",
-    custom: "Custom",
-    saved: "✓ Saved",
-    resetToBridge: "Reset",
-    resetToBridgeTitle: "Return to the position the bridge reports",
     saveError: "Placement not saved — store error. Try it again.",
     saveToBridge: "Save positions to bridge",
     saveToBridgeTooltip: "Stop the stream first",
@@ -105,17 +104,6 @@ export default {
       failedHeading: "Channels could not be read",
       failedBody: "The bridge answered with something unexpected. Validate the area and try again.",
     },
-    // `top` / `bottom` are the wire values and never change; the labels read
-    // Near / Far because that axis is depth, +1 being the TV wall.
-    regions: {
-      left: "Left",
-      right: "Right",
-      top: "Near",
-      bottom: "Far",
-      center: "Center",
-    },
-    zonePicker: "Placement",
-    regionRowAriaLabel: "Placement for channel {{index}}",
   },
   targetFailed: "Could not add {{target}} to active output.",
   readiness: {
