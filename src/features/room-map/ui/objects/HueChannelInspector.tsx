@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
+
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 import { Header } from "./InspectorPrimitives";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
@@ -30,6 +32,8 @@ export function HueChannelInspector({
   worldZ,
   roomHeightMeters,
   onHeightChange,
+  lightCount,
+  isGhost = false,
   onRename,
   onToggleLock,
 }: {
@@ -46,19 +50,24 @@ export function HueChannelInspector({
    * `unknown` (default) ⇒ no chip rendered.
    */
   bridgeStatus?: UsbStripConnectionStatus;
+  /** How many bulbs this channel drives, from the bridge. `null` when the
+   *  channel is not in the area the bridge reports — see `isGhost`. */
+  lightCount?: number | null;
+  /** True when the bridge no longer reports this channel. Distinct from an
+   *  unresolved placement, which was never matched to one at all. */
+  isGhost?: boolean;
   onRename: (label: string) => void;
   onToggleLock: () => void;
 }) {
   const { t } = useTranslation();
   const locked = !!channel.locked;
   const [labelDraft, setLabelDraft] = useState(
-    channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
+    hueChannelName(channel, t),
   );
   const [labelDirty, setLabelDirty] = useState(false);
 
   if (!labelDirty) {
-    const external =
-      channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) });
+    const external = hueChannelName(channel, t);
     if (external !== labelDraft) setLabelDraft(external);
   }
 
@@ -66,9 +75,7 @@ export function HueChannelInspector({
     setLabelDirty(false);
     const trimmed = labelDraft.trim();
     if (!trimmed) {
-      setLabelDraft(
-        channel.label ?? t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
-      );
+      setLabelDraft(hueChannelName(channel, t));
       return;
     }
     if (trimmed !== channel.label) onRename(trimmed);
@@ -78,10 +85,7 @@ export function HueChannelInspector({
     <>
       <Header
         typeLabel={t("roomMap:inspector.typeHue")}
-        name={
-          channel.label ??
-          t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) })
-        }
+        name={hueChannelName(channel, t)}
         dotColor={TYPE_DOT_COLOR.hue}
       />
       <div className="lm-room-dock-field">
@@ -105,10 +109,7 @@ export function HueChannelInspector({
               e.preventDefault();
               commitLabel();
             } else if (e.key === "Escape") {
-              setLabelDraft(
-                channel.label ??
-                  t("roomMap:hueChannel.defaultLabel", { index: String(channel.channelIndex + 1) }),
-              );
+              setLabelDraft(hueChannelName(channel, t));
               setLabelDirty(false);
             }
           }}
@@ -137,8 +138,27 @@ export function HueChannelInspector({
         <span className="lm-room-dock-field-label">
           {t("roomMap:inspector.hueChannelIndexLabel")}
         </span>
-        <span className="lm-room-dock-field-value">{channel.channelIndex + 1}</span>
+        <span className="lm-room-dock-field-value">
+          {hueChannelIdLabel(channel.channelId) ?? t("roomMap:inspector.hueChannelUnresolved")}
+        </span>
       </div>
+      {lightCount != null && (
+        <div className="lm-room-dock-field">
+          <span className="lm-room-dock-field-label">
+            {t("roomMap:inspector.hueLightCountLabel")}
+          </span>
+          <span className="lm-room-dock-field-value">
+            {lightCount === 1
+              ? t("roomMap:inspector.hueOneLight")
+              : t("roomMap:inspector.hueLights", { count: lightCount })}
+          </span>
+        </div>
+      )}
+      {isGhost && (
+        <p className="lm-room-dock-note" role="status">
+          {t("roomMap:inspector.hueChannelGhostNote")}
+        </p>
+      )}
       <div className="lm-room-dock-field lm-zone-inspector-slider-row">
         <label className="lm-room-dock-field-label" htmlFor={`hue-height-${channel.channelIndex}`}>
           {t("roomMap:inspector.hueHeightLabel")}

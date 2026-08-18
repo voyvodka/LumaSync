@@ -81,6 +81,10 @@ interface RoomDockPanelProps {
   /** The active area's channels. The canvas shows one area at a time and object
    *  ids carry no area, so a list of all of them selects the wrong channel. */
   hueChannels?: HueChannelPlacement[];
+  /** The bridge's own view of the area, for light counts. */
+  areaChannels?: readonly { channelId: number; lightCount: number }[];
+  /** Bridge ids the area reports; `null` ⇒ no clean read, so nothing is a ghost. */
+  liveChannelIds?: ReadonlySet<number> | null;
 
   // Every inspector callback is optional on purpose: a read-only embed still
   // renders the inspector, with the affected control disabled.
@@ -147,6 +151,8 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     isRefreshingChannels,
     channelsStatus,
     hueChannels,
+    areaChannels,
+    liveChannelIds,
     onUpdateFurniture,
     onUpdateTvAnchor,
     onUpdateUsbStrip,
@@ -248,6 +254,14 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           <HueChannelInspector
             key={`hueChannel:${ch.channelIndex}`}
             channel={ch}
+            lightCount={
+              ch.channelId == null
+                ? null
+                : areaChannels?.find((c) => c.channelId === ch.channelId)?.lightCount ?? null
+            }
+            isGhost={
+              liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId)
+            }
             zoneName={inspectorTarget.zoneName}
             bridgeStatus={hueChannelStatus}
             worldZ={resolveHueChannelWorldZ(ch, config.zones)}

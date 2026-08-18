@@ -53,7 +53,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     offline: "OFFLINE",
   },
   hueChannel: {
-    defaultLabel: "Kanal {{index}}",
+    defaultLabel: "Kanal {{id}}",
+    unresolvedLabel: "Eşleşmemiş kanal",
     ghostLabel: "{{name}} — artık bu alanda değil",
   },
   zones: {
@@ -175,6 +176,11 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     hueBridgeLabel: "Köprü",
     hueBridgeConnected: "Çevrim içi",
     hueBridgeDisconnected: "Çevrim dışı",
+    hueChannelUnresolved: "Eşleşmedi",
+    hueChannelGhostNote: "Köprü bu ışığı artık bu alanda bildirmiyor. Taşıyabilmen veya kaldırabilmen için burada tutuluyor.",
+    hueLightCountLabel: "Işıklar",
+    hueOneLight: "1 ışık",
+    hueLights: "{{count}} ışık",
     hueChannelIndexLabel: "Kanal",
     hueZoneLabel: "Bölge",
     hueHeightLabel: "Yükseklik",

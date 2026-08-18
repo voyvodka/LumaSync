@@ -4860,6 +4860,16 @@ body {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* Inline explanation under a field — used when a value needs a sentence rather
+   than a tooltip nobody opens. */
+.lm-room-dock-note {
+  margin: 2px 0 6px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim, #8a94a3);
+}
+
 .lm-room-dock-slider {
   flex: 1;
   appearance: none;

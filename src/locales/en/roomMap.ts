@@ -50,7 +50,8 @@ export default {
     offline: "OFFLINE",
   },
   hueChannel: {
-    defaultLabel: "Channel {{index}}",
+    defaultLabel: "Channel {{id}}",
+    unresolvedLabel: "Unmatched channel",
     ghostLabel: "{{name}} — no longer in this area",
   },
   zones: {
@@ -172,6 +173,11 @@ export default {
     hueBridgeLabel: "Bridge",
     hueBridgeConnected: "Online",
     hueBridgeDisconnected: "Offline",
+    hueChannelUnresolved: "Not matched",
+    hueChannelGhostNote: "The bridge no longer reports this light in this area. It is kept here so you can move or remove it.",
+    hueLightCountLabel: "Lights",
+    hueOneLight: "1 light",
+    hueLights: "{{count}} lights",
     hueChannelIndexLabel: "Channel",
     hueZoneLabel: "Zone",
     hueHeightLabel: "Height",

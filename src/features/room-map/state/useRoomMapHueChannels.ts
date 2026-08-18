@@ -20,6 +20,9 @@ export interface UseRoomMapHueChannelsArgs {
 }
 
 export interface UseRoomMapHueChannelsReturn {
+  /** The area's channels as the bridge reports them — light counts and all.
+   *  Empty until a clean read lands. */
+  areaChannels: HueAreaChannelInfo[];
   /** Last fetch's code, `null` before the first answer. */
   channelsStatus: string | null;
   isLoadingChannels: boolean;
@@ -131,6 +134,7 @@ export function useRoomMapHueChannels({
   }, [current, hueAreaId, ready]);
 
   return {
+    areaChannels: current?.channels ?? [],
     channelsStatus,
     isLoadingChannels,
     liveChannelIds: current?.ids ?? null,
