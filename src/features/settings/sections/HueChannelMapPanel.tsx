@@ -8,13 +8,22 @@ import {
   type HueChannelPlacement,
   type HueZone,
 } from "@/shared/contracts/roomMap";
-import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
+import {
+  HUE_AREA_CHANNELS_STATUS,
+  HUE_RUNTIME_STATUS,
+  type HueChannelPlacementOverride,
+} from "@/shared/contracts/hue";
 import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
 import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosition";
 import {
   resolveChannelPlacement,
   seedChannelPlacements,
 } from "@/features/room-map/model/hueChannelSeeding";
+import {
+  HUE_SYNC_STATE,
+  deriveHueSyncState,
+  toSyncSnapshot,
+} from "@/features/hue/model/hueSyncState";
 import {
   HUE_REGION_PRESETS,
   HUE_REGION_PRESET_POSITIONS,
@@ -44,6 +53,13 @@ interface Props {
   areaId?: string;
   /** When true, the save-to-bridge button is disabled with tooltip. */
   isStreaming?: boolean;
+  /** What was last written to the bridge for this area. Absent ⇒ never pushed. */
+  syncedPositions?: HueChannelPlacementOverride[];
+  /** Record a new snapshot after a push or a pull settles the two sides. */
+  onSyncedPositionsChange?: (snapshot: HueChannelPlacementOverride[]) => void;
+  /** Re-read the bridge's list before adopting it — a list fetched while a
+   *  stream was running carries our own placements, not the bridge's. */
+  onRefreshChannels?: () => void;
   /** Room-map Hue zones. A channel bound to one stores its position relative to
    *  the zone, so editing here has to project through it rather than write the
    *  absolute pair the runtime ignores. */
@@ -112,6 +128,9 @@ export function HueChannelMapPanel({
   username,
   areaId,
   isStreaming = false,
+  syncedPositions,
+  onSyncedPositionsChange,
+  onRefreshChannels,
   zones = NO_ZONES,
 }: Props) {
   const { t } = useTranslation();
@@ -207,6 +226,7 @@ export function HueChannelMapPanel({
         areaId,
       });
       if (response.code === HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED) {
+        onSyncedPositionsChange?.(toSyncSnapshot(channelPlacements));
         setSaveResult({ ok: true });
         saveResultTimerRef.current = setTimeout(() => {
           setSaveResult(null);
@@ -225,7 +245,24 @@ export function HueChannelMapPanel({
     } finally {
       setIsSaving(false);
     }
-  }, [bridgeIp, username, areaId, channelPlacements, t]);
+  }, [bridgeIp, username, areaId, channelPlacements, onSyncedPositionsChange, t]);
+
+  /** Take the bridge's arrangement. Destructive — it replaces local placement —
+   *  so unlike the push it asks first. Gated on the runtime being off for the
+   *  same reason the push is: while a stream runs, the channel list we would
+   *  adopt is the one carrying our own placements. */
+  const handlePullFromBridge = useCallback(() => {
+    if (!window.confirm(t("hue:channelMap.pullConfirm"))) return;
+    onRefreshChannels?.();
+    const adopted = channels.map((ch) => {
+      const existing = findHueChannel(channelPlacements, ch.index);
+      const base = existing ?? { channelIndex: ch.index, channelId: ch.channelId, x: 0, y: 0, z: 0 };
+      return moveHueChannelToWorld(base, zonesRef.current, ch.positionX, ch.positionY);
+    });
+    setChannelPlacements(adopted);
+    onPositionChange?.(adopted);
+    onSyncedPositionsChange?.(toSyncSnapshot(adopted));
+  }, [channels, channelPlacements, onPositionChange, onSyncedPositionsChange, onRefreshChannels, t]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -274,6 +311,10 @@ export function HueChannelMapPanel({
   }
 
   const isStale = channelsStatus === HUE_AREA_CHANNELS_STATUS.UNREACHABLE;
+  const syncState = deriveHueSyncState(channelPlacements, syncedPositions);
+  // Gated on the runtime, not just on streaming: a solid-colour session also
+  // holds a channel list with our placements applied.
+  const bridgeBusy = isStreaming || isStale;
   const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
 
   return (
@@ -392,13 +433,32 @@ export function HueChannelMapPanel({
 
       {hasSaveAction && (
         <div className="lm-chmap-footer">
+          <div className="lm-chmap-sync" role="status">
+            <span className={`lm-chmap-sync-dot is-${syncState}`} aria-hidden />
+            <span className="lm-chmap-sync-tx">
+              {syncState === HUE_SYNC_STATE.IN_SYNC
+                ? t("hue:channelMap.sync.inSync")
+                : syncState === HUE_SYNC_STATE.LOCAL_AHEAD
+                  ? t("hue:channelMap.sync.localAhead")
+                  : t("hue:channelMap.sync.neverPushed")}
+            </span>
+          </div>
           <div className="lm-chmap-footer-row">
             <span className="lm-chmap-beta">{t("hue:channelMap.beta")}</span>
             <div className="lm-chmap-footer-spacer" />
             <button
               type="button"
+              className="lm-device-btn"
+              disabled={bridgeBusy || isSaving || channels.length === 0}
+              title={bridgeBusy ? t("hue:channelMap.saveToBridgeTooltip") : undefined}
+              onClick={handlePullFromBridge}
+            >
+              {t("hue:channelMap.pullFromBridge")}
+            </button>
+            <button
+              type="button"
               className="lm-device-btn is-primary"
-              disabled={isStreaming || isSaving || isStale}
+              disabled={bridgeBusy || isSaving}
               title={
                 isStale
                   ? t(EMPTY_STATE_KEYS.unreachable.heading)

@@ -4186,6 +4186,45 @@ body {
   border-top: 1px solid var(--lm-line, #1a1e25);
   background: rgba(255, 255, 255, 0.01);
 }
+/* Bridge-sync line. "Local ahead" is deliberately not an error colour: the
+   runtime samples the local placement, so the lights already follow it. */
+.lm-chmap-sync {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 0 8px;
+  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--lm-ink-dim, #8a94a3);
+}
+.lm-chmap-sync-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+  background: var(--lm-ink-faint, #4d5564);
+}
+.lm-chmap-sync-dot.is-in-sync {
+  background: var(--lm-green, #4ade80);
+}
+.lm-chmap-sync-dot.is-local-ahead {
+  background: var(--lm-amber, #ffb020);
+}
+.lm-chmap-sync-tx {
+  min-width: 0;
+}
+@media (forced-colors: active) {
+  .lm-chmap-sync-dot {
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+  .lm-chmap-sync-dot.is-local-ahead {
+    background: Highlight;
+  }
+}
+
 .lm-chmap-footer-row {
   display: flex;
   align-items: center;

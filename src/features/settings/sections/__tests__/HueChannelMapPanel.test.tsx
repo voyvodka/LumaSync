@@ -434,3 +434,122 @@ describe("zone-bound channels survive an edit here", () => {
     expect(pill(rows()[0]!, "left").getAttribute("aria-checked")).toBe("false");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Bridge sync — what the bridge holds versus what we hold
+// ---------------------------------------------------------------------------
+
+describe("bridge sync state", () => {
+  const syncProps = {
+    ...defaultProps,
+    placements: storedAtBridgePositions(),
+    bridgeIp: "192.168.1.10",
+    username: "test-user-key",
+    areaId: "area-uuid-123",
+    isStreaming: false,
+  };
+
+  const matchingSnapshot = () =>
+    storedAtBridgePositions().map((p) => ({
+      channelId: p.channelId!,
+      positionX: p.x,
+      positionY: p.y,
+    }));
+
+  it("says nothing has been pushed when there is no snapshot", () => {
+    render(<HueChannelMapPanel {...syncProps} />);
+    expect(screen.getByText("hue:channelMap.sync.neverPushed")).toBeTruthy();
+  });
+
+  it("says the bridge has this arrangement when the snapshot matches", () => {
+    render(<HueChannelMapPanel {...syncProps} syncedPositions={matchingSnapshot()} />);
+    expect(screen.getByText("hue:channelMap.sync.inSync")).toBeTruthy();
+  });
+
+  it("reports an unpushed edit without calling it a fault", async () => {
+    const user = userEvent.setup();
+    render(<HueChannelMapPanel {...syncProps} syncedPositions={matchingSnapshot()} />);
+
+    await user.click(pill(rows()[0]!, "top"));
+
+    expect(screen.getByText("hue:channelMap.sync.localAhead")).toBeTruthy();
+  });
+
+  it("records what was pushed, so the state survives a restart", async () => {
+    const { invoke: mockInvoke } = await import("@tauri-apps/api/core");
+    vi.mocked(mockInvoke).mockResolvedValueOnce({ code: "HUE_CHANNEL_POSITIONS_UPDATED" });
+    window.confirm = vi.fn().mockReturnValue(true);
+    const onSyncedPositionsChange = vi.fn();
+
+    const user = userEvent.setup();
+    render(
+      <HueChannelMapPanel {...syncProps} onSyncedPositionsChange={onSyncedPositionsChange} />,
+    );
+    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+
+    await vi.waitFor(() => expect(onSyncedPositionsChange).toHaveBeenCalled());
+    expect(onSyncedPositionsChange.mock.calls[0]![0]).toEqual([
+      { channelId: 0, positionX: -1, positionY: 0 },
+      { channelId: 2, positionX: 0, positionY: 0 },
+      { channelId: 5, positionX: 1, positionY: 0 },
+    ]);
+  });
+
+  it("asks before taking the bridge's arrangement, because it replaces yours", async () => {
+    window.confirm = vi.fn().mockReturnValue(false);
+    const onPositionChange = vi.fn();
+
+    const user = userEvent.setup();
+    render(<HueChannelMapPanel {...syncProps} onPositionChange={onPositionChange} />);
+    onPositionChange.mockClear();
+    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(onPositionChange).not.toHaveBeenCalled();
+  });
+
+  it("adopts the bridge's positions and records them as sent", async () => {
+    window.confirm = vi.fn().mockReturnValue(true);
+    const onPositionChange = vi.fn();
+    const onSyncedPositionsChange = vi.fn();
+    const moved = storedAtBridgePositions();
+    moved[0] = { ...moved[0]!, x: 0.6, y: 0.6 };
+
+    const user = userEvent.setup();
+    render(
+      <HueChannelMapPanel
+        {...syncProps}
+        placements={moved}
+        onPositionChange={onPositionChange}
+        onSyncedPositionsChange={onSyncedPositionsChange}
+      />,
+    );
+    onPositionChange.mockClear();
+    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+
+    const adopted = onPositionChange.mock.calls[0]![0];
+    // Channel 0's bridge position is (-1, 0); the local edit is discarded.
+    expect(adopted.find((p: { channelIndex: number }) => p.channelIndex === 0).x).toBeCloseTo(-1, 6);
+    expect(onSyncedPositionsChange).toHaveBeenCalled();
+  });
+
+  it("re-reads the bridge first, because a list fetched mid-stream is ours", async () => {
+    window.confirm = vi.fn().mockReturnValue(true);
+    const onRefreshChannels = vi.fn();
+
+    const user = userEvent.setup();
+    render(<HueChannelMapPanel {...syncProps} onRefreshChannels={onRefreshChannels} />);
+    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+
+    expect(onRefreshChannels).toHaveBeenCalled();
+  });
+
+  it("refuses to take the bridge's arrangement while the runtime holds the channels", () => {
+    render(<HueChannelMapPanel {...syncProps} isStreaming={true} />);
+    expect(screen.getByRole("button", { name: /pullFromBridge/ })).toHaveProperty(
+      "disabled",
+      true,
+    );
+  });
+});
+

@@ -88,6 +88,13 @@ export default {
     saveToBridgeError: "{{code}}: Failed to write positions.",
     saveToBridgeErrorRetry: "Try again",
     saveConfirm: "Channel positions on bridge will be updated. Bridge: {{ip}}. Continue?",
+    pullFromBridge: "Take bridge's",
+    pullConfirm: "This replaces your arrangement with the one stored on the bridge. Continue?",
+    sync: {
+      inSync: "The bridge has this arrangement.",
+      localAhead: "Your lights already follow this. The bridge still has an older arrangement — send it if the Hue app should match.",
+      neverPushed: "Nothing has been sent to the bridge from here.",
+    },
     beta: "Beta",
     state: {
       emptyHeading: "No channels",
