@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   External HWND + pixel probe for the Windows calibration overlay (R29 evidence).
 
@@ -9,7 +9,7 @@
   diffs the overlay rect against a baseline screenshot taken before the overlay
   opened.
 
-  Reports; it does not judge. A "bad" verdict still exits 0 — the caller decides.
+  Reports; it does not judge. A "bad" verdict still exits 0 - the caller decides.
   See docs/architecture/build-and-release.md.
 
 .NOTES
@@ -392,7 +392,7 @@ if (-not ("LsProbe" -as [type])) {
 }
 
 # GitHub runners sit at 100% scale, but an unaware process would still report
-# virtualised coordinates on any machine that does not — and the rect handed in
+# virtualised coordinates on any machine that does not - and the rect handed in
 # is physical.
 [void][LsProbe]::SetProcessDPIAware()
 
@@ -433,7 +433,7 @@ if ($BaselineOnly) {
     Write-Host ("[win-overlay-probe] baseline {0}x{1} nonBlack={2}% -> {3}" -f `
         $screen[0], $screen[1], $baselineInfo.nonBlackPct, $baselinePath)
     if ($baselineInfo.nonBlackPct -le 0.01) {
-        Write-Host "warning: the baseline is (near) solid black — this session may have no visible desktop"
+        Write-Host "warning: the baseline is (near) solid black - this session may have no visible desktop"
     }
     $baselineInfo | ConvertTo-Json -Depth 4
     exit 0
@@ -460,7 +460,7 @@ foreach ($handle in $topLevelHandles) {
 }
 
 # Title first (build_transparent_overlay sets it), then exact rect, then the
-# largest visible window — in that order, because the title is the only one of
+# largest visible window - in that order, because the title is the only one of
 # the three that cannot be coincidentally matched by the main shell window.
 $overlayHandle = [IntPtr]::Zero
 for ($i = 0; $i -lt $topLevelHandles.Count; $i++) {
