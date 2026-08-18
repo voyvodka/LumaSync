@@ -8,6 +8,8 @@ const MAX_HISTORY = 50;
 export interface UseRoomMapPersistReturn {
   config: RoomMapConfig;
   updateConfig: (partial: Partial<RoomMapConfig>) => Promise<void>;
+  /** Like `updateConfig` but outside undo history — for writes the user did not make. */
+  adoptConfig: (partial: Partial<RoomMapConfig>) => Promise<void>;
   replaceConfig: (full: RoomMapConfig) => Promise<void>;
   resetConfig: () => Promise<void>;
   undo: () => Promise<void>;
@@ -109,6 +111,18 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
     [config, persist, pushHistory],
   );
 
+  /** A write the user did not make — reconciling against the bridge, say. It
+   *  skips history on purpose: an undo entry the user cannot account for is
+   *  worse than none, and Cmd+Z would silently undo the reconciliation. */
+  const adoptConfig = useCallback(
+    async (partial: Partial<RoomMapConfig>) => {
+      const next = { ...config, ...partial };
+      setConfig(next);
+      await persist(next);
+    },
+    [config, persist],
+  );
+
   const replaceConfig = useCallback(
     async (full: RoomMapConfig) => {
       pushHistory(config);
@@ -144,5 +158,5 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
     await persist(next);
   }, [config, persist, syncUndoFlags]);
 
-  return { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error };
+  return { config, updateConfig, adoptConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error };
 }

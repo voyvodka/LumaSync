@@ -22,6 +22,7 @@ import {
 } from "../model/objectId";
 import { useSnapGuides } from "../state/useSnapGuides";
 import { useRoomMapGridSettings } from "../state/useRoomMapGridSettings";
+import { useRoomMapHueChannels } from "../state/useRoomMapHueChannels";
 import { useRoomMapHueZones } from "../state/useRoomMapHueZones";
 import { useRoomMapImageLayers } from "../state/useRoomMapImageLayers";
 import { useRoomMapObjects } from "../state/useRoomMapObjects";
@@ -78,7 +79,7 @@ const HUE_ZONE_REJECTION_KEYS = {
 
 export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
   const { t } = useTranslation();
-  const { config, updateConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
+  const { config, updateConfig, adoptConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [derivePreview, setDerivePreview] = useState<ZoneDeriveResult | null>(null);
@@ -111,6 +112,14 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     handleHueZoneCenterChange,
     handleHueZoneUpdate,
   } = useRoomMapHueZones({ config, updateConfig, setSelectedId, setObjectPanelOpen });
+
+  const { channelsStatus, isLoadingChannels, liveChannelIds, refreshChannels } = useRoomMapHueChannels({
+    config,
+    adoptConfig,
+    hueAreaId,
+    hueBridgeConfigured,
+    ready: !loading,
+  });
 
   const { guides: snapGuides, onDragMove: snapDragMove, onDragEnd: snapDragEnd } = useSnapGuides(config);
 
@@ -559,6 +568,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             ) && (
               <HueChannelOverlay
                 channels={visibleHueChannels}
+                liveChannelIds={liveChannelIds}
                 pxPerMeter={pxPerMeter}
                 roomWidthM={widthMeters}
                 roomDepthM={depthMeters}
@@ -657,6 +667,9 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             addHueZoneDisabled={!hueAreaId}
             addHueZoneDisabledTooltip={t("roomMap:hueZones.addDisabledTooltip")}
             hueBridgeConfigured={hueBridgeConfigured}
+            onRefreshChannels={refreshChannels}
+            isRefreshingChannels={isLoadingChannels}
+            channelsStatus={channelsStatus}
             hueAreaId={hueAreaId}
             onAssignChannelToZone={handleAssignChannelToZone}
             onNavigateToDevices={onNavigateToDevices}

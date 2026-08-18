@@ -7,6 +7,7 @@ import { IconDragHandle, IconMoveTo } from "@/shared/ui/icons";
 import { MovePopover } from "./MovePopover";
 import { getZoneColor } from "../model/zoneColor";
 import { deriveHueAreaState } from "../model/hueAreaState";
+import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
 
 interface HueZonesTabProps {
   hueZones: HueZone[];
@@ -23,6 +24,11 @@ interface HueZonesTabProps {
   hueAreaId: string | null;
   onAssignChannelToZone?: (channelIndex: number, targetZoneId: string | null) => void;
   onNavigateToDevices?: () => void;
+  /** Re-read the bridge's channel list. Absent ⇒ the surface has no bridge client. */
+  onRefreshChannels?: () => void;
+  isRefreshingChannels?: boolean;
+  /** Last channel-fetch code. A failed read must not look like an empty area. */
+  channelsStatus?: string | null;
 }
 
 export function HueZonesTab(props: HueZonesTabProps) {
@@ -41,6 +47,9 @@ export function HueZonesTab(props: HueZonesTabProps) {
     hueAreaId,
     onAssignChannelToZone,
     onNavigateToDevices,
+    onRefreshChannels,
+    isRefreshingChannels = false,
+    channelsStatus,
   } = props;
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -48,6 +57,10 @@ export function HueZonesTab(props: HueZonesTabProps) {
 
   // ── Wave 4-B (B1) — area-state header ─────────────────────────────
   const areaState = deriveHueAreaState(hueBridgeConfigured, hueAreaId);
+  // Anything that is not a clean read: the placements on screen are the last
+  // known ones, which must not be presented as the bridge's current truth.
+  const channelsUnread =
+    channelsStatus != null && channelsStatus !== HUE_AREA_CHANNELS_STATUS.OK;
 
   // ── Wave 4-B (B2/B3) — drag-and-drop + move popover state ─────────
   const [dragChannelIndex, setDragChannelIndex] = useState<number | null>(null);
@@ -173,9 +186,24 @@ export function HueZonesTab(props: HueZonesTabProps) {
                 : t("roomMap:hueZones.areaState.notConfiguredHint")
               : areaState.kind === "no-area"
                 ? t("roomMap:hueZones.areaState.noAreaHint")
-                : t("roomMap:hueZones.areaState.readyHint")}
+                : channelsUnread
+                  ? t("roomMap:hueZones.areaState.unreadHint")
+                  : t("roomMap:hueZones.areaState.readyHint")}
           </span>
         </div>
+        {areaState.kind === "ready" && onRefreshChannels && (
+          <button
+            type="button"
+            className="lm-room-dock-area-state-cta"
+            onClick={onRefreshChannels}
+            disabled={isRefreshingChannels}
+            title={t("roomMap:hueZones.areaState.refreshTitle")}
+          >
+            {isRefreshingChannels
+              ? t("roomMap:hueZones.areaState.refreshing")
+              : t("roomMap:hueZones.areaState.refresh")}
+          </button>
+        )}
         {areaState.kind !== "ready" && onNavigateToDevices && (
           <button
             type="button"
