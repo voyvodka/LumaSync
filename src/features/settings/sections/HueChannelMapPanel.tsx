@@ -10,11 +10,11 @@ import {
 } from "@/shared/contracts/roomMap";
 import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
 import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
+import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosition";
 import {
-  moveHueChannelToWorld,
-  resolveHueChannelWorld,
-  resolveHueChannelWorldZ,
-} from "@/features/room-map/model/hueChannelPosition";
+  resolveChannelPlacement,
+  seedChannelPlacements,
+} from "@/features/room-map/model/hueChannelSeeding";
 import {
   HUE_REGION_PRESETS,
   HUE_REGION_PRESET_POSITIONS,
@@ -62,39 +62,6 @@ export function posToPercent(x: number, y: number): { left: string; top: string 
   const left = `${((x + 1) / 2) * 100}%`;
   const top = `${((1 - y) / 2) * 100}%`; // flip Y axis
   return { left, top };
-}
-
-/** The saved record for a bridge channel, or a fresh one seeded from the bridge.
- *  Returning the whole record is the point — handing back a `{x,y,z}` triple is
- *  what let the caller rebuild a four-field literal and drop `zoneId`. */
-function resolvePlacement(
-  ch: HueAreaChannelInfo,
-  placements: HueChannelPlacement[],
-  zones: readonly HueZone[],
-): HueChannelPlacement {
-  const saved = findHueChannel(placements, ch.index);
-  // Stamped on both branches: this is the only place a placement meets the live
-  // channel it belongs to, so it is the only place the bridge's own id can be
-  // learned. Without it the write-back has nothing to address and refuses.
-  if (!saved) {
-    return {
-      channelIndex: ch.index,
-      channelId: ch.channelId,
-      x: ch.positionX,
-      y: ch.positionY,
-      z: 0,
-    };
-  }
-  // Presets edit world coordinates, so a bound channel's absolute pair is
-  // refreshed from its zone before it is shown.
-  const world = resolveHueChannelWorld(saved, zones);
-  return {
-    ...saved,
-    channelId: ch.channelId,
-    x: world.x,
-    y: world.y,
-    z: resolveHueChannelWorldZ(saved, zones),
-  };
 }
 
 /** Region → token-backed CSS color. Shared with `MiniSpatialPreview` so the
@@ -164,29 +131,27 @@ export function HueChannelMapPanel({
   const saveResultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>(() =>
-    channels.map((ch) => resolvePlacement(ch, placementsRef.current, zonesRef.current)),
+    channels.map((ch) => resolveChannelPlacement(ch, placementsRef.current, zonesRef.current)),
   );
 
   // Re-initialize when channels change (area switch). placementsRef read via ref to avoid cycle.
   useEffect(() => {
     setChannelPlacements(
-      channels.map((ch) => resolvePlacement(ch, placementsRef.current, zonesRef.current)),
+      channels.map((ch) => resolveChannelPlacement(ch, placementsRef.current, zonesRef.current)),
     );
   }, [channels]);
 
-  // The room map is bridge-blind — it draws persisted placements only, so a real
-  // channel stayed invisible there until placed here. The parent's write
-  // refreshes `placements`, so the second pass finds nothing missing.
+  // The room map seeds itself now, but this stays: whichever surface the user
+  // opens first has to be the one that reconciles. The parent's write refreshes
+  // `placements`, so the second pass finds nothing missing.
   useEffect(() => {
     if (!onPositionChange || channels.length === 0) return;
-    const resolved = channels.map((ch) =>
-      resolvePlacement(ch, placementsRef.current, zonesRef.current),
+    const { resolved, needsWrite } = seedChannelPlacements(
+      channels,
+      placementsRef.current,
+      zonesRef.current,
     );
-    const missing = resolved.some((p) => {
-      const stored = findHueChannel(placementsRef.current, p.channelIndex);
-      return !stored || stored.channelId !== p.channelId;
-    });
-    if (missing) onPositionChange(resolved);
+    if (needsWrite) onPositionChange(resolved);
   }, [channels, onPositionChange]);
 
   useEffect(
@@ -343,7 +308,7 @@ export function HueChannelMapPanel({
         {channels.map((ch) => {
           const placement =
             findHueChannel(channelPlacements, ch.index) ??
-            resolvePlacement(ch, placementsRef.current, zonesRef.current);
+            resolveChannelPlacement(ch, placementsRef.current, zonesRef.current);
           const matched = matchRegionPreset(placement.x, placement.y);
           const fromBridge = isBridgePosition(placement.x, placement.y, ch.positionX, ch.positionY);
           const dotColor = matched ? (REGION_COLOR_VAR[matched] ?? NEUTRAL_DOT) : NEUTRAL_DOT;

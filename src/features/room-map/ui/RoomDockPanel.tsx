@@ -74,6 +74,9 @@ interface RoomDockPanelProps {
    * does nothing on click).
    */
   onNavigateToDevices?: () => void;
+  onRefreshChannels?: () => void;
+  isRefreshingChannels?: boolean;
+  channelsStatus?: string | null;
 
   // Every inspector callback is optional on purpose: a read-only embed still
   // renders the inspector, with the affected control disabled.
@@ -136,6 +139,9 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     hueAreaId = null,
     onAssignChannelToZone,
     onNavigateToDevices,
+    onRefreshChannels,
+    isRefreshingChannels,
+    channelsStatus,
     onUpdateFurniture,
     onUpdateTvAnchor,
     onUpdateUsbStrip,
@@ -320,6 +326,9 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               hueAreaId={hueAreaId}
               onAssignChannelToZone={onAssignChannelToZone}
               onNavigateToDevices={onNavigateToDevices}
+              onRefreshChannels={onRefreshChannels}
+              isRefreshingChannels={isRefreshingChannels}
+              channelsStatus={channelsStatus}
             />
           ) : null}
         </div>

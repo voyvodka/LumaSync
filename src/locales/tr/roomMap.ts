@@ -54,6 +54,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   },
   hueChannel: {
     defaultLabel: "Kanal {{index}}",
+    ghostLabel: "{{name}} — artık bu alanda değil",
   },
   zones: {
     deriveButton: "Zone Türet",
@@ -93,6 +94,10 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       noAreaCta: "Alan seç",
       readyTitle: "Alan hazır · {{N}} bölge",
       readyHint: "Bir kanalı bölgeye sürükleyin veya Taşı eylemini kullanın.",
+      unreadHint: "Son bilinen ışıklar gösteriliyor — köprü o günden beri yanıt vermedi.",
+      refresh: "Işıkları yeniden oku",
+      refreshing: "Okunuyor…",
+      refreshTitle: "Köprüye bu alanda şu an hangi ışıklar var diye sor",
       offlineTitle: "Köprü çevrimdışı",
       offlineHint: "Son alan hatırlandı; erişiminiz yoksa yeniden eşleyin.",
     },

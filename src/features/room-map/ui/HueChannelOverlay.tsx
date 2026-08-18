@@ -27,6 +27,10 @@ interface HueChannelOverlayProps {
   onChannelZoneToggle?: (channelIndex: number) => void;
   /** When true, space is held — don't start drag */
   panMode?: boolean;
+  /** Bridge ids the area currently reports. A placement whose `channelId` is
+   *  absent is drawn as a ghost. An EMPTY set means the list is unknown, not
+   *  that every channel is gone — never mark anything from it. */
+  liveChannelIds?: ReadonlySet<number>;
   /**
    * v1.5 W1-A6 — when set, the overlay enters "Hue zone scope" mode:
    * - Channels bound to this zone render at zone-relative coordinates
@@ -169,6 +173,7 @@ export function pinnedZoneEdges(
  */
 export function HueChannelOverlay({
   channels,
+  liveChannelIds,
   pxPerMeter,
   roomWidthM,
   roomDepthM,
@@ -585,9 +590,17 @@ export function HueChannelOverlay({
               ? { boxShadow: `0 0 0 2px ${activeHueZone.borderColor}` }
               : {};
 
-        const dotLabel =
+        const isGhost =
+          liveChannelIds !== undefined &&
+          liveChannelIds.size > 0 &&
+          ch.channelId != null &&
+          !liveChannelIds.has(ch.channelId);
+        const baseLabel =
           ch.label ??
           t("roomMap:hueChannel.defaultLabel", { index: String(ch.channelIndex + 1) });
+        const dotLabel = isGhost
+          ? t("roomMap:hueChannel.ghostLabel", { name: baseLabel })
+          : baseLabel;
 
         return (
           <div
@@ -614,7 +627,11 @@ export function HueChannelOverlay({
               className={[
                 "flex items-center justify-center rounded-full border-2 text-[8px] font-bold select-none",
                 isSelected ? "w-4 h-4" : "w-3 h-3",
-                isSelected ? "bg-white border-white text-zinc-900" : "bg-white/80 border-zinc-400 text-zinc-900",
+                isGhost
+                  ? "lm-room-hue-dot--ghost"
+                  : isSelected
+                    ? "bg-white border-white text-zinc-900"
+                    : "bg-white/80 border-zinc-400 text-zinc-900",
                 zoneAssignMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
                 isUnassignedInZoneMode ? "opacity-50" : "",
                 dimmedByHueZone ? "opacity-30 cursor-not-allowed pointer-events-none" : "",

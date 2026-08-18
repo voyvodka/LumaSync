@@ -4357,6 +4357,23 @@ body {
   }
 }
 
+/* A placement whose channel the bridge no longer reports. Dashed rather than
+   faded — a ghost has to stay legible enough to find and remove. */
+.lm-room-hue-dot--ghost {
+  border-style: dashed;
+  background: var(--lm-panel-2, #14171d);
+  border-color: var(--lm-ink-faint, #4d5564);
+  color: var(--lm-ink-dim, #8a94a3);
+}
+@media (forced-colors: active) {
+  .lm-room-hue-dot--ghost {
+    background: Canvas;
+    border-color: CanvasText;
+    color: CanvasText;
+    forced-color-adjust: none;
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    Room map editor — right dock + zone bounds + zone label chip
    v1.5 surface rework (replaces zinc/Tailwind ad-hoc panel chrome)

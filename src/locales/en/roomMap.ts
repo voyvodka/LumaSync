@@ -51,6 +51,7 @@ export default {
   },
   hueChannel: {
     defaultLabel: "Channel {{index}}",
+    ghostLabel: "{{name}} — no longer in this area",
   },
   zones: {
     deriveButton: "Derive Zones",
@@ -90,6 +91,10 @@ export default {
       noAreaCta: "Choose area",
       readyTitle: "Area ready · {{N}} zones",
       readyHint: "Drag a channel onto a zone, or use the Move action.",
+      unreadHint: "Showing the last known lights — the bridge has not answered since.",
+      refresh: "Re-read lights",
+      refreshing: "Reading…",
+      refreshTitle: "Ask the bridge which lights this area has now",
       offlineTitle: "Bridge offline",
       offlineHint: "Last area is remembered; re-pair if you no longer have access.",
     },
