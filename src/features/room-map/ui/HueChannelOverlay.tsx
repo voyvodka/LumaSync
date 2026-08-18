@@ -27,10 +27,10 @@ interface HueChannelOverlayProps {
   onChannelZoneToggle?: (channelIndex: number) => void;
   /** When true, space is held — don't start drag */
   panMode?: boolean;
-  /** Bridge ids the area currently reports. A placement whose `channelId` is
-   *  absent is drawn as a ghost. An EMPTY set means the list is unknown, not
-   *  that every channel is gone — never mark anything from it. */
-  liveChannelIds?: ReadonlySet<number>;
+  /** Bridge ids the area reports, or `null`/absent when no clean read has
+   *  landed. A placement outside a non-null set is drawn as a ghost; `null`
+   *  marks nothing, because "cannot tell" is not "everything is gone". */
+  liveChannelIds?: ReadonlySet<number> | null;
   /**
    * v1.5 W1-A6 — when set, the overlay enters "Hue zone scope" mode:
    * - Channels bound to this zone render at zone-relative coordinates
@@ -591,10 +591,7 @@ export function HueChannelOverlay({
               : {};
 
         const isGhost =
-          liveChannelIds !== undefined &&
-          liveChannelIds.size > 0 &&
-          ch.channelId != null &&
-          !liveChannelIds.has(ch.channelId);
+          liveChannelIds != null && ch.channelId != null && !liveChannelIds.has(ch.channelId);
         const baseLabel =
           ch.label ??
           t("roomMap:hueChannel.defaultLabel", { index: String(ch.channelIndex + 1) });

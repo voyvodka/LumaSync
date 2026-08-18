@@ -57,10 +57,11 @@ export function HueZonesTab(props: HueZonesTabProps) {
 
   // ── Wave 4-B (B1) — area-state header ─────────────────────────────
   const areaState = deriveHueAreaState(hueBridgeConfigured, hueAreaId);
-  // Anything that is not a clean read: the placements on screen are the last
-  // known ones, which must not be presented as the bridge's current truth.
+  // EMPTY is a clean answer — the area really has no lights — so only the
+  // genuinely unread codes may claim the screen is showing stale data.
+  const channelsEmpty = channelsStatus === HUE_AREA_CHANNELS_STATUS.EMPTY;
   const channelsUnread =
-    channelsStatus != null && channelsStatus !== HUE_AREA_CHANNELS_STATUS.OK;
+    channelsStatus != null && channelsStatus !== HUE_AREA_CHANNELS_STATUS.OK && !channelsEmpty;
 
   // ── Wave 4-B (B2/B3) — drag-and-drop + move popover state ─────────
   const [dragChannelIndex, setDragChannelIndex] = useState<number | null>(null);
@@ -188,7 +189,9 @@ export function HueZonesTab(props: HueZonesTabProps) {
                 ? t("roomMap:hueZones.areaState.noAreaHint")
                 : channelsUnread
                   ? t("roomMap:hueZones.areaState.unreadHint")
-                  : t("roomMap:hueZones.areaState.readyHint")}
+                  : channelsEmpty
+                    ? t("roomMap:hueZones.areaState.emptyHint")
+                    : t("roomMap:hueZones.areaState.readyHint")}
           </span>
         </div>
         {areaState.kind === "ready" && onRefreshChannels && (

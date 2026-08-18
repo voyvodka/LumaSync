@@ -94,6 +94,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       noAreaCta: "Alan seç",
       readyTitle: "Alan hazır · {{N}} bölge",
       readyHint: "Bir kanalı bölgeye sürükleyin veya Taşı eylemini kullanın.",
+      emptyHint: "Bu alanda ışık yok. Hue uygulamasından ekleyebilirsin.",
       unreadHint: "Son bilinen ışıklar gösteriliyor — köprü o günden beri yanıt vermedi.",
       refresh: "Işıkları yeniden oku",
       refreshing: "Okunuyor…",

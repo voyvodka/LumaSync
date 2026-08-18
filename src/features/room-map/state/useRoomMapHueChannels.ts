@@ -23,14 +23,20 @@ export interface UseRoomMapHueChannelsReturn {
   /** Last fetch's code, `null` before the first answer. */
   channelsStatus: string | null;
   isLoadingChannels: boolean;
-  /** Bridge ids the area reports. A placement whose `channelId` is missing here
-   *  is a ghost. Empty while the list is unknown — treat it as "cannot tell",
-   *  never as "everything is a ghost". */
-  liveChannelIds: ReadonlySet<number>;
+  /** Bridge ids the area reports, or `null` when no clean read has landed. A
+   *  placement outside a non-null set is a ghost; `null` marks nothing. An
+   *  EMPTY set is a definite answer — the area really has no lights. */
+  liveChannelIds: ReadonlySet<number> | null;
   refreshChannels: () => void;
 }
 
-const NO_IDS: ReadonlySet<number> = new Set<number>();
+/** Scoped to the area it came from: without that, switching areas would seed the
+ *  previous area's channels under the new area's id. */
+interface ChannelSnapshot {
+  areaId: string;
+  channels: HueAreaChannelInfo[];
+  ids: Set<number>;
+}
 
 /** Not `useHueOnboarding`: a second copy of that state machine doubles its poll
  *  loop, which is why the editor stayed bridge-blind. Fetches on open and on
@@ -42,7 +48,7 @@ export function useRoomMapHueChannels({
   hueBridgeConfigured,
   ready,
 }: UseRoomMapHueChannelsArgs): UseRoomMapHueChannelsReturn {
-  const [areaChannels, setAreaChannels] = useState<HueAreaChannelInfo[]>([]);
+  const [snapshot, setSnapshot] = useState<ChannelSnapshot | null>(null);
   const [channelsStatus, setChannelsStatus] = useState<string | null>(null);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -53,10 +59,10 @@ export function useRoomMapHueChannels({
 
   useEffect(() => {
     if (!hueBridgeConfigured || !hueAreaId) {
-      setAreaChannels([]);
       setChannelsStatus(null);
       return;
     }
+    const areaId = hueAreaId;
 
     let cancelled = false;
     setIsLoadingChannels(true);
@@ -68,17 +74,22 @@ export function useRoomMapHueChannels({
         if (!ip) return null;
         // An empty app key is the keychain signal, and the command resolves it
         // there — passing `""` is correct, not a missing credential.
-        return getHueAreaChannels(ip, state.hueAppKey ?? "", hueAreaId);
+        return getHueAreaChannels(ip, state.hueAppKey ?? "", areaId);
       })
       .then((response) => {
         if (cancelled || !response) return;
         const { status, channels } = response;
         setChannelsStatus(status.code);
-        // INVARIANT: an unreachable bridge must leave the list alone. The empty
-        // array on that code means "no answer", not "no channels", and clearing
-        // here is what turns a Wi-Fi blip into a map full of ghosts.
-        if (status.code === HUE_AREA_CHANNELS_STATUS.UNREACHABLE) return;
-        setAreaChannels(channels);
+        // INVARIANT: only a clean read says anything about which lights the area
+        // has. Unreachable, unparseable and 403 all arrive as an empty array
+        // meaning "no answer", and adopting one is what turns a Wi-Fi blip into
+        // a map full of ghosts. EMPTY is the one legitimate empty answer.
+        if (
+          status.code === HUE_AREA_CHANNELS_STATUS.OK ||
+          status.code === HUE_AREA_CHANNELS_STATUS.EMPTY
+        ) {
+          setSnapshot({ areaId, channels, ids: liveChannelIdSet(channels) });
+        }
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -94,6 +105,9 @@ export function useRoomMapHueChannels({
     };
   }, [hueBridgeConfigured, hueAreaId, refreshToken]);
 
+  // A snapshot taken for another area is not an answer about this one.
+  const current = snapshot !== null && snapshot.areaId === hueAreaId ? snapshot : null;
+
   // Seeding runs off refs so a placement edit cannot retrigger it — the effect
   // writes placements, and depending on them would make it feed itself.
   const configRef = useRef(config);
@@ -102,10 +116,10 @@ export function useRoomMapHueChannels({
   adoptRef.current = adoptConfig;
 
   useEffect(() => {
-    if (!ready || !hueAreaId || areaChannels.length === 0) return;
+    if (!ready || !hueAreaId || current === null || current.channels.length === 0) return;
     const stored = configRef.current.hueChannels;
     const { resolved, needsWrite } = seedChannelPlacements(
-      areaChannels,
+      current.channels,
       hueChannelsForArea(stored, hueAreaId),
       configRef.current.zones,
     );
@@ -114,12 +128,12 @@ export function useRoomMapHueChannels({
     // so writing the resolved list wholesale deletes every other area's.
     const scoped = resolved.map((p) => ({ ...p, entertainmentAreaId: hueAreaId }));
     void adoptRef.current({ hueChannels: mergeHueChannels(stored, scoped) });
-  }, [areaChannels, hueAreaId, ready]);
+  }, [current, hueAreaId, ready]);
 
   return {
     channelsStatus,
     isLoadingChannels,
-    liveChannelIds: areaChannels.length > 0 ? liveChannelIdSet(areaChannels) : NO_IDS,
+    liveChannelIds: current?.ids ?? null,
     refreshChannels,
   };
 }

@@ -91,6 +91,7 @@ export default {
       noAreaCta: "Choose area",
       readyTitle: "Area ready · {{N}} zones",
       readyHint: "Drag a channel onto a zone, or use the Move action.",
+      emptyHint: "This area has no lights. Add some to it in the Hue app.",
       unreadHint: "Showing the last known lights — the bridge has not answered since.",
       refresh: "Re-read lights",
       refreshing: "Reading…",
