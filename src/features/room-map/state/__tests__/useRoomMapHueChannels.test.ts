@@ -118,7 +118,7 @@ describe("useRoomMapHueChannels", () => {
 
   it("keeps the last known list when the bridge stops answering", async () => {
     const { result } = renderHook(() => useRoomMapHueChannels(args()));
-    await waitFor(() => expect(result.current.liveChannelIds.size).toBe(3));
+    await waitFor(() => expect(result.current.liveChannelIds?.size).toBe(3));
 
     getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.UNREACHABLE));
     act(() => {
@@ -130,20 +130,69 @@ describe("useRoomMapHueChannels", () => {
 
     // Still three. Emptying here would mark every placement on the map a ghost
     // on a Wi-Fi blip — the same invariant the Devices list carries.
-    expect(result.current.liveChannelIds.size).toBe(3);
+    expect(result.current.liveChannelIds?.size).toBe(3);
   });
 
   it("exposes the bridge ids, so a placement outside them can be told apart", async () => {
     const { result } = renderHook(() => useRoomMapHueChannels(args()));
 
-    await waitFor(() => expect(result.current.liveChannelIds.size).toBe(3));
-    expect([...result.current.liveChannelIds].sort((a, b) => a - b)).toEqual([0, 2, 5]);
+    await waitFor(() => expect(result.current.liveChannelIds?.size).toBe(3));
+    expect([...result.current.liveChannelIds!].sort((a, b) => a - b)).toEqual([0, 2, 5]);
   });
 
-  it("leaves the id set empty before the first answer, so nothing reads as a ghost", () => {
+  it("says nothing rather than nothing-is-live before the first answer", () => {
     getAreaChannelsMock.mockReturnValue(new Promise(() => {}));
     const { result } = renderHook(() => useRoomMapHueChannels(args()));
-    expect(result.current.liveChannelIds.size).toBe(0);
+    expect(result.current.liveChannelIds).toBeNull();
+  });
+
+  it("says nothing after a failed read either — a fault is not an empty area", async () => {
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.FAILED));
+    const { result } = renderHook(() => useRoomMapHueChannels(args()));
+
+    await waitFor(() =>
+      expect(result.current.channelsStatus).toBe(HUE_AREA_CHANNELS_STATUS.FAILED),
+    );
+    expect(result.current.liveChannelIds).toBeNull();
+  });
+
+  it("keeps the last clean read when a later one fails", async () => {
+    const { result } = renderHook(() => useRoomMapHueChannels(args()));
+    await waitFor(() => expect(result.current.liveChannelIds?.size).toBe(3));
+
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.FAILED));
+    act(() => {
+      result.current.refreshChannels();
+    });
+    await waitFor(() =>
+      expect(result.current.channelsStatus).toBe(HUE_AREA_CHANNELS_STATUS.FAILED),
+    );
+
+    expect(result.current.liveChannelIds?.size).toBe(3);
+  });
+
+  it("reports an empty area as a definite answer, so its stale markers are ghosts", async () => {
+    getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.EMPTY));
+    const { result } = renderHook(() => useRoomMapHueChannels(args()));
+
+    await waitFor(() => expect(result.current.liveChannelIds).not.toBeNull());
+    expect(result.current.liveChannelIds?.size).toBe(0);
+  });
+
+  it("ignores a snapshot taken for another area", async () => {
+    const a = args();
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useRoomMapHueChannels>[0]) => useRoomMapHueChannels(props),
+      { initialProps: a },
+    );
+    await waitFor(() => expect(result.current.liveChannelIds?.size).toBe(3));
+
+    getAreaChannelsMock.mockReturnValue(new Promise(() => {}));
+    rerender({ ...a, hueAreaId: "area-2" });
+
+    // The previous area's answer says nothing about this one, so it must not be
+    // read as the live list — nor seeded under the new area's id.
+    expect(result.current.liveChannelIds).toBeNull();
   });
 
   it("does not touch the bridge when none is configured", async () => {

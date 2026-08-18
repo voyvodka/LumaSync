@@ -670,6 +670,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             onRefreshChannels={refreshChannels}
             isRefreshingChannels={isLoadingChannels}
             channelsStatus={channelsStatus}
+            hueChannels={visibleHueChannels}
             hueAreaId={hueAreaId}
             onAssignChannelToZone={handleAssignChannelToZone}
             onNavigateToDevices={onNavigateToDevices}

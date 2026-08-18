@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import type {
   FurniturePlacement,
+  HueChannelPlacement,
   HueZone,
   ImageLayer,
   RoomMapConfig,
@@ -77,6 +78,9 @@ interface RoomDockPanelProps {
   onRefreshChannels?: () => void;
   isRefreshingChannels?: boolean;
   channelsStatus?: string | null;
+  /** The active area's channels. The canvas shows one area at a time and object
+   *  ids carry no area, so a list of all of them selects the wrong channel. */
+  hueChannels?: HueChannelPlacement[];
 
   // Every inspector callback is optional on purpose: a read-only embed still
   // renders the inspector, with the affected control disabled.
@@ -142,6 +146,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
     onRefreshChannels,
     isRefreshingChannels,
     channelsStatus,
+    hueChannels,
     onUpdateFurniture,
     onUpdateTvAnchor,
     onUpdateUsbStrip,
@@ -313,7 +318,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           ) : activeTab === "hueZones" && hueZoneEditing ? (
             <HueZonesTab
               hueZones={hueZones}
-              channels={config.hueChannels}
+              channels={hueChannels ?? config.hueChannels}
               activeHueZoneId={activeHueZoneId}
               onSelectHueZone={onSelectHueZone!}
               onAddHueZone={onAddHueZone!}
