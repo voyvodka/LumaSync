@@ -52,9 +52,64 @@ only, and `select_display` on the capture start path is the *single* caller allo
 UI that gated the start on the preflight answer would short-circuit before the request ever ran,
 and a first-run user would never be asked at all. That ordering is load-bearing, not stylistic.
 
-**Smoothing is an EWMA per light, selected by preset.** `LightingSmoothingPreset` in
-`src/shared/contracts/lighting.ts` maps three names to three fixed alpha values, applied uniformly
-to every sink. `HueIntensityPreset` is a deprecated alias kept so pre-v1.4 call sites compile.
+**Smoothing is an EWMA per light; the preset is a ceiling on it.** `LightingSmoothingPreset` in
+`src/shared/contracts/lighting.ts` maps three names to three alpha values. They used to be applied
+as-is; since the scene-adaptive stage below they are the *most* movement a frame may use, and the
+stage picks the value each frame. `HueIntensityPreset` is a deprecated alias kept so pre-v1.4 call
+sites compile.
+
+### Scene-adaptive stage
+
+`src-tauri/src/commands/ambilight_scene.rs`. One sink-agnostic step between the region samplers and
+the per-sink smoothers, driven by the maintainer's side-by-side against Hue Sync: sampling every
+light on its own reads as many independent samples rather than one lit room, while a fixed
+smoothing constant is either too sluggish on a cut or too jittery on a still shot. Every reference
+implementation we read (Hyperion.ng, Prismatik, Luciferin) has exactly two positions — every light
+independent, or every light identical — and the middle ground had to be built. The stage does four
+things, in this order, per frame:
+
+1. **One subsampled pass over the frame** (stride 8, inside the black-border insets) yields the
+   frame mean and a 64-bin colour histogram. The histogram's L1 distance to the previous frame's is
+   the *change* signal — the classical shot-boundary measure, chosen because the edge-based
+   alternatives cost far more for no better hit rate.
+2. **Coherence** is an edge-preserving (bilateral) filter over the *chain of lights* — neighbours by
+   strip order for a USB strip, by position for a Hue set. Two lights blend in proportion to how
+   close they are *and* how similar their colours are, so a uniform sky wraps around a corner but a
+   sky-over-grass boundary stays a step. "Similar" is measured in Y and CIE u′v′ — the unit CIE
+   specifies for light-source chromaticity difference; ΔE00 needs a white reference and RGB
+   distance changes meaning with hue — and the scale of "similar" is set **per frame** from the
+   median difference between adjacent lights: only what is unusual *in this frame* survives as an
+   edge. Chroma is related over a wider neighbourhood than luminance, because chromatic contrast
+   sensitivity is low-pass and luminance sensitivity is not — smoothing hue across neighbours is
+   nearly free perceptually, smoothing brightness the same way flattens visible structure.
+3. **Ambience blend.** The stage keeps a slow memory of the frame mean (the room's ambience colour)
+   and mixes a little of it into every light. How much depends on two things: *what the frame is*
+   (a flat frame leans more, since nothing is lost; a structured one keeps its region colours) and
+   *where the light is* — `screen_affinity`, `1.0` for a strip LED on the screen edge and lower for
+   a Hue channel placed away from the TV wall. A bulb behind the viewer therefore shows mostly the
+   room's colour with a hint of its side of the screen, instead of a hard sample of the bottom of
+   the frame; that is the "defensible colour for a light with no screen region" the product bar
+   asks for. Today affinity for Hue comes from the bridge's own `y`; the room map will supply a
+   metre-based value through the same per-light `f32` when placement drives the runtime.
+4. **Alpha as a continuous function of change.** The change signal is run through an envelope with
+   instant attack and slow release; alpha is interpolated between a floor (30 % of the preset) and
+   the preset ceiling by that envelope. A hard cut lifts every sink to the ceiling for a few frames
+   and the lights follow decisively; a still or slowly drifting scene sits at the floor and steers
+   gently. There is deliberately **no cut detector and no state reset** — nothing is declared, the
+   filter simply moves as fast as the content did, so a pan or an explosion raises alpha for a
+   moment without ever producing a discontinuity. Both the USB `RuntimeQualityController` and the
+   Hue `HueChannelSmoother` read the same alpha.
+
+Cost, measured with the `#[ignore]`d `cost_on_a_full_frame` test on a 640×360 frame and 200 LEDs:
+about 22 µs per frame in release, ~160 µs in debug — three orders of magnitude under the frame
+budget. Every threshold in the module is a tuning constant expressed in u′v′ / Y, not a derived
+one; no published number exists for how far apart two adjacent lights may be before a wall stops
+reading as one surface, and the module header says so.
+
+Two things stay outside the stage: **synthetic test frames** bypass it (a test pattern must reach
+the strip exactly as painted), and **`LUMASYNC_AMBILIGHT_LEGACY=1`** in the environment at worker
+start bypasses it for a live session — a development A/B switch for bisecting a report, not a
+setting, and it is read once when the worker starts.
 
 ## Gotchas
 

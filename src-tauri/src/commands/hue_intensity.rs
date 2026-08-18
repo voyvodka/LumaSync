@@ -14,8 +14,9 @@ use serde::{Deserialize, Serialize};
 /// User-facing smoothing tier for all lighting sinks (USB ambilight + Hue stream).
 ///
 /// Unified from the earlier `HueIntensityPreset` (Hue-only) in v1.4 so that
-/// one control governs both output paths. The EWMA coefficient is applied to
-/// the per-frame colour stream on every active sink:
+/// one control governs both output paths. The coefficient is the **ceiling**
+/// on the per-frame EWMA alpha; `ambilight_scene::SceneAnalyzer` picks the
+/// value actually used each frame and never exceeds it. Applied on every sink:
 ///
 /// ```text
 /// smoothed = alpha * newSample + (1 - alpha) * prevSmoothed
@@ -37,7 +38,7 @@ pub enum LightingSmoothingPreset {
 }
 
 impl LightingSmoothingPreset {
-    /// EWMA coefficient applied to the lighting stream on all sinks.
+    /// EWMA alpha ceiling for the lighting stream on all sinks.
     ///
     /// Must stay in lockstep with the frontend contract constant.
     pub fn coefficient(self) -> f32 {

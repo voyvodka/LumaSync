@@ -351,7 +351,9 @@ pub fn sample_frame_for_sequence(
 
     let half_w = ((w as f32 * window_frac) / 2.0).max(1.0) as usize;
     let half_h = ((h as f32 * window_frac) / 2.0).max(1.0) as usize;
-    const STEP: usize = 4;
+    // Stride 4 left ~24 samples per LED at 640×360 (half the window is off-frame
+    // on an edge LED); that noise floor read as "sharp". Stride 2 is ~100.
+    const STEP: usize = 2;
 
     sequence
         .iter()
