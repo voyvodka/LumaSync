@@ -97,7 +97,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
       readyHint: "Bir kanalı bölgeye sürükleyin veya Taşı eylemini kullanın.",
       emptyHint: "Bu alanda ışık yok. Hue uygulamasından ekleyebilirsin.",
       unreadHint: "Son bilinen ışıklar gösteriliyor — köprü o günden beri yanıt vermedi.",
-      refresh: "Işıkları yeniden oku",
+      refresh: "Yenile",
       refreshing: "Okunuyor…",
       refreshTitle: "Köprüye bu alanda şu an hangi ışıklar var diye sor",
       offlineTitle: "Köprü çevrimdışı",

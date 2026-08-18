@@ -266,3 +266,36 @@ describe("HueZoneInspector — headroom at the wall", () => {
     expect(slider.disabled).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// W4-K row layout — the wrap must not separate a label from its control
+// ---------------------------------------------------------------------------
+
+describe("edge / hex row grouping", () => {
+  /** The row wraps at the dock's 280 px, and a flat row wrapped between the HEX
+   *  label and the hex input — leaving the label orphaned on the line above.
+   *  Grouping is the fix, so the grouping is what this pins. */
+  it("keeps each label in the same group element as the input it names", () => {
+    render(<HueZoneInspector zone={BASE_ZONE} onUpdate={vi.fn()} roomWidthM={5} roomDepthM={4} />);
+
+    for (const [labelText, testId] of [
+      ["Edge", "hue-zone-size-edge-input"],
+      ["Hex", "hue-zone-hex-input"],
+    ] as const) {
+      const label = screen.getByText(labelText);
+      const input = screen.getByTestId(testId);
+      const group = label.closest(".lm-zone-inspector-pair-group");
+      expect(group).not.toBeNull();
+      expect(group!.contains(input)).toBe(true);
+    }
+  });
+
+  it("puts the two groups in one row, so the wrap falls between them", () => {
+    render(<HueZoneInspector zone={BASE_ZONE} onUpdate={vi.fn()} roomWidthM={5} roomDepthM={4} />);
+
+    const row = screen.getByText("Edge").closest(".lm-zone-inspector-pair");
+    expect(row).not.toBeNull();
+    expect(row!.querySelectorAll(".lm-zone-inspector-pair-group")).toHaveLength(2);
+  });
+});
+
