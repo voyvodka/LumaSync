@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    window::Color, AppHandle, LogicalPosition, LogicalSize, Manager, Position, Runtime, Size,
-    State, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, LogicalPosition, LogicalSize, Manager, Position, Runtime, Size, State, WebviewUrl,
+    WebviewWindowBuilder,
 };
 
 /// Metadata for one enumerated display, used to size and position the
@@ -149,7 +149,12 @@ pub fn build_transparent_overlay<R: Runtime>(
         .skip_taskbar(true)
         .shadow(false)
         .transparent(true)
-        .background_color(Color(0, 0, 0, 0))
+        // No `background_color`: wry forces (0,0,0,0) on a transparent webview
+        // anyway, while tao's window layer drops the alpha and erases the client
+        // area with an opaque brush. `focusable(false)` keeps the overlay out of
+        // the activation chain (WS_EX_NOACTIVATE on Windows).
+        // See docs/architecture/ui-and-shell.md.
+        .focusable(false)
         .visible(true);
     if let Some(script) = init_script {
         builder = builder.initialization_script(script);
@@ -190,12 +195,11 @@ pub fn build_transparent_overlay<R: Runtime>(
         .set_ignore_cursor_events(true)
         .map_err(|error| format!("OVERLAY_WINDOW_CLICKTHROUGH_FAILED: {error}"))?;
 
-    // On Windows, WebView2 creates child windows that do not inherit
-    // WS_EX_TRANSPARENT from the parent. Propagate the flag to all child
-    // windows so the overlay is truly click-through.
+    // WebView2's children do not inherit the parent's ex-style; see
+    // docs/architecture/ui-and-shell.md for what may and may not be ORed on.
     #[cfg(target_os = "windows")]
     {
-        propagate_transparent_to_children(&window);
+        propagate_transparent_to_children(&window, "initial");
         schedule_clickthrough_resweeps(&window);
     }
 
@@ -231,14 +235,10 @@ fn open_overlay_window<R: Runtime>(
 /// Re-sweep schedule, in milliseconds after the initial synchronous sweep.
 ///
 /// WebView2 does not have all of its child HWNDs in place when `build()` returns —
-/// the render-widget child is created when content loads, which is later still. So
-/// the one sweep on the line after `build()` can find nothing to mark, the child
-/// that captures the mouse stays opaque to input, and the overlay swallows every
-/// click on the desktop underneath it, leaving an app that `closable(false)` and
-/// `skip_taskbar(true)` also make impossible to close. Sweeping again is the fix,
-/// not a retry-until-it-works hedge: the ex-style bits are idempotent, so a sweep
-/// that finds an already-marked window changes nothing. The tail is long enough to
-/// outlast a cold WebView2 start on a slow machine.
+/// the render-widget child appears when content loads, later still — so the sweep
+/// on the next line can find nothing to mark. The tail outlasts a cold WebView2
+/// start on a slow machine, and the ex-style bits are idempotent, so a sweep that
+/// finds an already-marked child costs nothing.
 #[cfg(target_os = "windows")]
 const CLICKTHROUGH_RESWEEP_DELAYS_MS: [u64; 5] = [50, 150, 400, 1000, 2500];
 
@@ -263,7 +263,7 @@ fn schedule_clickthrough_resweeps<R: Runtime>(window: &tauri::WebviewWindow<R>) 
             let sweep_label = label.clone();
             let dispatched = app.run_on_main_thread(move || {
                 if let Some(window) = sweep_app.get_webview_window(&sweep_label) {
-                    propagate_transparent_to_children(&window);
+                    propagate_transparent_to_children(&window, &format!("resweep+{delay_ms}ms"));
                 }
             });
             if dispatched.is_err() {
@@ -273,15 +273,81 @@ fn schedule_clickthrough_resweeps<R: Runtime>(window: &tauri::WebviewWindow<R>) 
     });
 }
 
-/// Walk every child HWND of the overlay window and apply WS_EX_TRANSPARENT | WS_EX_LAYERED
-/// so that WebView2's internal child windows do not intercept mouse events. Without this,
-/// the WebView2 host HWND (a child of our outer window) captures mouse events even though
-/// the outer window has WS_EX_TRANSPARENT, making the overlay block all clicks behind it.
+/// What the Windows child-HWND sweep is allowed to OR onto each descendant.
+///
+/// `WS_EX_LAYERED` is deliberately NOT the default: a window handed that bit by
+/// `SetWindowLongPtr` stays invisible until somebody calls
+/// `SetLayeredWindowAttributes`/`UpdateLayeredWindow` on it, and nothing does for
+/// WebView2's windows. See docs/architecture/ui-and-shell.md.
 #[cfg(target_os = "windows")]
-fn propagate_transparent_to_children<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ChildSweepMode {
+    /// Touch no child at all — the top-level's own click-through has to carry it.
+    Off,
+    /// `WS_EX_TRANSPARENT` only. Default.
+    Transparent,
+    /// `WS_EX_TRANSPARENT | WS_EX_LAYERED` — reproduces the <= 1.5.5 behaviour,
+    /// kept only so the two can be compared on one machine.
+    TransparentLayered,
+}
+
+/// Read `LUMASYNC_WIN_OVERLAY_SWEEP` once per process.
+#[cfg(target_os = "windows")]
+fn child_sweep_mode() -> ChildSweepMode {
+    static MODE: std::sync::OnceLock<ChildSweepMode> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| {
+        let raw = std::env::var("LUMASYNC_WIN_OVERLAY_SWEEP").unwrap_or_default();
+        let mode = match raw.trim().to_ascii_lowercase().as_str() {
+            "" | "transparent" => ChildSweepMode::Transparent,
+            "off" | "none" => ChildSweepMode::Off,
+            "transparent+layered" | "layered" => ChildSweepMode::TransparentLayered,
+            other => {
+                log::warn!(
+                    "[overlay-sweep] unknown LUMASYNC_WIN_OVERLAY_SWEEP='{other}' — using 'transparent'"
+                );
+                ChildSweepMode::Transparent
+            }
+        };
+        log::info!("[overlay-sweep] child sweep mode = {mode:?}");
+        mode
+    })
+}
+
+/// Per-sweep counters, handed to `EnumChildWindows` through its `LPARAM`.
+#[cfg(target_os = "windows")]
+struct ChildSweepTally {
+    tag: String,
+    added_bits: isize,
+    found: u32,
+    changed: u32,
+    already: u32,
+    failed: u32,
+    frame_failed: u32,
+}
+
+/// Walk every child HWND of the overlay window and OR the configured
+/// click-through bits onto it, because WebView2's host and render-widget windows
+/// do not inherit the parent's `WS_EX_TRANSPARENT`. The bits are idempotent, so a
+/// sweep that finds an already-marked window changes nothing.
+///
+/// `tag` names the sweep ("initial" / "resweep+400ms") in the log.
+#[cfg(target_os = "windows")]
+fn propagate_transparent_to_children<R: Runtime>(window: &tauri::WebviewWindow<R>, tag: &str) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
-    use windows_sys::Win32::UI::WindowsAndMessaging::EnumChildWindows;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumChildWindows, WS_EX_LAYERED, WS_EX_TRANSPARENT,
+    };
+
+    let mode = child_sweep_mode();
+    let added_bits: isize = match mode {
+        ChildSweepMode::Off => {
+            log::debug!("[overlay-sweep] {tag}: skipped (LUMASYNC_WIN_OVERLAY_SWEEP=off)");
+            return;
+        }
+        ChildSweepMode::Transparent => WS_EX_TRANSPARENT as isize,
+        ChildSweepMode::TransparentLayered => (WS_EX_TRANSPARENT | WS_EX_LAYERED) as isize,
+    };
 
     let parent_hwnd: HWND = match window.window_handle() {
         Ok(handle) => match handle.as_raw() {
@@ -292,24 +358,142 @@ fn propagate_transparent_to_children<R: Runtime>(window: &tauri::WebviewWindow<R
         Err(_) => return,
     };
 
-    unsafe extern "system" fn set_clickthrough(hwnd: HWND, _: LPARAM) -> i32 {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TRANSPARENT,
-        };
-        unsafe {
-            let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-            SetWindowLongPtrW(
-                hwnd,
-                GWL_EXSTYLE,
-                ex | WS_EX_TRANSPARENT as isize | WS_EX_LAYERED as isize,
-            );
-        }
-        1
-    }
+    let mut tally = ChildSweepTally {
+        tag: tag.to_string(),
+        added_bits,
+        found: 0,
+        changed: 0,
+        already: 0,
+        failed: 0,
+        frame_failed: 0,
+    };
 
     unsafe {
-        EnumChildWindows(parent_hwnd, Some(set_clickthrough), 0);
+        EnumChildWindows(
+            parent_hwnd,
+            Some(mark_child_clickthrough),
+            &mut tally as *mut ChildSweepTally as LPARAM,
+        );
     }
+
+    log::info!(
+        "[overlay-sweep] {}: mode={:?} bits={:#x} found={} changed={} already={} set-failed={} frame-failed={}",
+        tally.tag,
+        mode,
+        tally.added_bits,
+        tally.found,
+        tally.changed,
+        tally.already,
+        tally.failed,
+        tally.frame_failed
+    );
+}
+
+/// `EnumChildWindows` callback. `lparam` is the `ChildSweepTally` the caller kept
+/// alive for the duration of the enumeration.
+#[cfg(target_os = "windows")]
+unsafe extern "system" fn mark_child_clickthrough(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    lparam: windows_sys::Win32::Foundation::LPARAM,
+) -> i32 {
+    use windows_sys::Win32::Foundation::{GetLastError, SetLastError};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetWindowLongPtrW, GetWindowThreadProcessId, SetWindowLongPtrW,
+        SetWindowPos, GWL_EXSTYLE, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE,
+        SWP_NOZORDER,
+    };
+
+    // SAFETY: `EnumChildWindows` passes back exactly the pointer we handed it,
+    // and the tally outlives the enumeration on the calling stack frame.
+    let tally = unsafe { &mut *(lparam as *mut ChildSweepTally) };
+    tally.found += 1;
+
+    let mut class_buffer = [0u16; 128];
+    let class_len =
+        unsafe { GetClassNameW(hwnd, class_buffer.as_mut_ptr(), class_buffer.len() as i32) };
+    let class_name = if class_len > 0 {
+        String::from_utf16_lossy(&class_buffer[..class_len as usize])
+    } else {
+        String::from("<unknown>")
+    };
+
+    let mut owner_pid: u32 = 0;
+    unsafe { GetWindowThreadProcessId(hwnd, &mut owner_pid) };
+
+    let ex_before = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    let ex_wanted = ex_before | tally.added_bits;
+
+    if ex_before == ex_wanted {
+        tally.already += 1;
+        log::debug!(
+            "[overlay-sweep] {}: hwnd={:#x} class='{}' pid={} ex={:#x} (already marked)",
+            tally.tag,
+            hwnd as usize,
+            class_name,
+            owner_pid,
+            ex_before
+        );
+        return 1;
+    }
+
+    // SetWindowLongPtrW returns 0 both for "previous value was 0" and for
+    // failure, so the error has to be read out of the thread's last-error slot —
+    // a cross-process/UIPI refusal on WebView2's windows must not look like success.
+    unsafe { SetLastError(0) };
+    let previous_ex = unsafe { SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_wanted) };
+    let set_error = unsafe { GetLastError() };
+    if previous_ex == 0 && set_error != 0 {
+        tally.failed += 1;
+        log::debug!(
+            "[overlay-sweep] {}: hwnd={:#x} class='{}' pid={} ex={:#x} -> {:#x} SET FAILED err={}",
+            tally.tag,
+            hwnd as usize,
+            class_name,
+            owner_pid,
+            ex_before,
+            ex_wanted,
+            set_error
+        );
+        return 1;
+    }
+
+    // An ex-style written with SetWindowLongPtr is cached until a frame change is
+    // forced; without this the new bits are not in effect.
+    unsafe { SetLastError(0) };
+    let framed = unsafe {
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        )
+    };
+    let frame_error = if framed == 0 {
+        unsafe { GetLastError() }
+    } else {
+        0
+    };
+    if framed == 0 {
+        tally.frame_failed += 1;
+    }
+
+    let ex_after = unsafe { GetWindowLongPtrW(hwnd, GWL_EXSTYLE) };
+    tally.changed += 1;
+    log::debug!(
+        "[overlay-sweep] {}: hwnd={:#x} class='{}' pid={} ex={:#x} -> {:#x} frame-err={}",
+        tally.tag,
+        hwnd as usize,
+        class_name,
+        owner_pid,
+        ex_before,
+        ex_after,
+        frame_error
+    );
+
+    1
 }
 
 fn default_overlay_preview_payload() -> OverlayPreviewPayload {
@@ -342,36 +526,64 @@ fn build_overlay_webview_url() -> Result<WebviewUrl, String> {
     Ok(WebviewUrl::App(PathBuf::from("calibration-overlay.html")))
 }
 
+/// Result of the window work an overlay open performs, carried back to the
+/// bookkeeping step so the two can be separated by a lock release.
+#[derive(Debug, PartialEq, Eq)]
+enum OverlayOpenOutcome {
+    Opened,
+    ClosePreviousFailed(String),
+    OpenNextFailed(String),
+}
+
+/// Close the previous overlay, then open the next one. Split out of
+/// `apply_overlay_open_transition` so the window calls — `destroy()` and
+/// `build()` — run with the `OverlayState` lock *released*; see
+/// docs/architecture/ui-and-shell.md for the nested-message-pump reason.
+fn run_overlay_open_transition(
+    close_previous: impl FnOnce() -> Result<(), String>,
+    open_next: impl FnOnce() -> Result<(), String>,
+) -> OverlayOpenOutcome {
+    if let Err(reason) = close_previous() {
+        return OverlayOpenOutcome::ClosePreviousFailed(reason);
+    }
+
+    if let Err(reason) = open_next() {
+        return OverlayOpenOutcome::OpenNextFailed(reason);
+    }
+
+    OverlayOpenOutcome::Opened
+}
+
+/// Commit the bookkeeping for an already-performed open. A failure to close the
+/// previous overlay leaves the recorded state alone — that overlay is still up —
+/// while a failure to open the next one clears it, since nothing is showing.
 fn apply_overlay_open_transition(
     runtime: &mut OverlayRuntimeState,
     display_id: &str,
     next_window_label: &str,
-    close_previous: impl FnOnce() -> Result<(), String>,
-    open_next: impl FnOnce() -> Result<(), String>,
+    outcome: OverlayOpenOutcome,
 ) -> DisplayOverlayCommandResult {
-    let close_result = close_previous();
-    if let Err(reason) = close_result {
-        return overlay_error_result(
+    match outcome {
+        OverlayOpenOutcome::ClosePreviousFailed(reason) => overlay_error_result(
             "OVERLAY_OPEN_FAILED",
             "Could not open display overlay.",
             &reason,
-        );
+        ),
+        OverlayOpenOutcome::OpenNextFailed(reason) => {
+            runtime.active_display_id = None;
+            runtime.active_overlay_label = None;
+            overlay_error_result(
+                "OVERLAY_OPEN_FAILED",
+                "Could not open display overlay.",
+                &reason,
+            )
+        }
+        OverlayOpenOutcome::Opened => {
+            runtime.active_display_id = Some(display_id.to_string());
+            runtime.active_overlay_label = Some(next_window_label.to_string());
+            overlay_result("OVERLAY_OPENED", "Display overlay opened.")
+        }
     }
-
-    let open_result = open_next();
-    if let Err(reason) = open_result {
-        runtime.active_display_id = None;
-        runtime.active_overlay_label = None;
-        return overlay_error_result(
-            "OVERLAY_OPEN_FAILED",
-            "Could not open display overlay.",
-            &reason,
-        );
-    }
-
-    runtime.active_display_id = Some(display_id.to_string());
-    runtime.active_overlay_label = Some(next_window_label.to_string());
-    overlay_result("OVERLAY_OPENED", "Display overlay opened.")
 }
 
 /// List every enumerated display for the frontend's display picker. Falls
@@ -474,18 +686,22 @@ pub fn open_display_overlay<R: Runtime>(
 
     let resolved_display_id = target_display.id.as_str();
 
-    let mut runtime = overlay_state
-        .runtime
-        .lock()
-        .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
+    // Read what we need and let the lock go before touching any window: on
+    // Windows `build()` runs a nested message pump that can re-enter this
+    // command on the same thread, and `std::sync::Mutex` is not reentrant.
+    // See docs/architecture/ui-and-shell.md.
+    let (previous_window_label, next_window_label) = {
+        let runtime = overlay_state
+            .runtime
+            .lock()
+            .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
+        (
+            runtime.active_overlay_label.clone(),
+            build_overlay_window_label(resolved_display_id),
+        )
+    };
 
-    let previous_window_label = runtime.active_overlay_label.clone();
-    let next_window_label = build_overlay_window_label(resolved_display_id);
-
-    let result = apply_overlay_open_transition(
-        &mut runtime,
-        resolved_display_id,
-        next_window_label.as_str(),
+    let outcome = run_overlay_open_transition(
         || {
             if let Some(label) = previous_window_label {
                 close_overlay_window(&app, label.as_str())?;
@@ -503,11 +719,17 @@ pub fn open_display_overlay<R: Runtime>(
         },
     );
 
-    if !result.ok {
-        return Ok(result);
-    }
+    let mut runtime = overlay_state
+        .runtime
+        .lock()
+        .map_err(|error| format!("OVERLAY_STATE_LOCK_FAILED: {error}"))?;
 
-    Ok(result)
+    Ok(apply_overlay_open_transition(
+        &mut runtime,
+        resolved_display_id,
+        next_window_label.as_str(),
+        outcome,
+    ))
 }
 
 #[tauri::command]
@@ -634,7 +856,8 @@ mod tests {
 
     use super::{
         apply_overlay_close_all_transition, apply_overlay_open_transition,
-        build_overlay_webview_url, OverlayRuntimeState,
+        build_overlay_webview_url, run_overlay_open_transition, OverlayOpenOutcome,
+        OverlayRuntimeState,
     };
 
     #[test]
@@ -654,8 +877,7 @@ mod tests {
             &mut runtime,
             "display-1",
             "window-1",
-            || Ok(()),
-            || Ok(()),
+            OverlayOpenOutcome::Opened,
         );
 
         assert!(result.ok);
@@ -707,10 +929,7 @@ mod tests {
         };
         let order = RefCell::new(Vec::new());
 
-        let result = apply_overlay_open_transition(
-            &mut runtime,
-            "display-2",
-            "window-2",
+        let outcome = run_overlay_open_transition(
             || {
                 order.borrow_mut().push("close-old");
                 Ok(())
@@ -721,10 +940,37 @@ mod tests {
             },
         );
 
-        assert!(result.ok);
+        assert_eq!(outcome, OverlayOpenOutcome::Opened);
         assert_eq!(*order.borrow(), vec!["close-old", "open-new"]);
+
+        let result = apply_overlay_open_transition(&mut runtime, "display-2", "window-2", outcome);
+
+        assert!(result.ok);
         assert_eq!(runtime.active_display_id.as_deref(), Some("display-2"));
         assert_eq!(runtime.active_overlay_label.as_deref(), Some("window-2"));
+    }
+
+    /// A close that fails means the previous overlay is still on screen, so the
+    /// state must keep pointing at it — clearing it here would hide the window
+    /// from both `close_display_overlay` and the tray rescue.
+    #[test]
+    fn open_transition_that_cannot_close_the_old_one_never_opens_a_new_one() {
+        let mut runtime = OverlayRuntimeState {
+            active_display_id: Some("display-1".to_string()),
+            active_overlay_label: Some("window-1".to_string()),
+        };
+
+        let outcome = run_overlay_open_transition(
+            || Err("OVERLAY_WINDOW_CLOSE_FAILED: wedged".to_string()),
+            || panic!("the new overlay must not be opened when the old one is still up"),
+        );
+
+        let result = apply_overlay_open_transition(&mut runtime, "display-2", "window-2", outcome);
+
+        assert!(!result.ok);
+        assert_eq!(result.code, "OVERLAY_OPEN_FAILED");
+        assert_eq!(runtime.active_display_id.as_deref(), Some("display-1"));
+        assert_eq!(runtime.active_overlay_label.as_deref(), Some("window-1"));
     }
 
     #[test]
@@ -734,13 +980,10 @@ mod tests {
             active_overlay_label: Some("window-1".to_string()),
         };
 
-        let result = apply_overlay_open_transition(
-            &mut runtime,
-            "display-2",
-            "window-2",
-            || Ok(()),
-            || Err("Permission denied".to_string()),
-        );
+        let outcome =
+            run_overlay_open_transition(|| Ok(()), || Err("Permission denied".to_string()));
+
+        let result = apply_overlay_open_transition(&mut runtime, "display-2", "window-2", outcome);
 
         assert!(!result.ok);
         assert_eq!(result.code, "OVERLAY_OPEN_FAILED");
