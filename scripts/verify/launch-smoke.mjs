@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Start a built app, assert STARTUP_READY_MARKER, quit. Flags: --binary <path>,
-// --log-file <path>, --hard-kill. The default binary needs `pnpm tauri build
+// --log-file <path> (scanned from its size at launch; never deleted), --hard-kill. The default binary needs `pnpm tauri build
 // --debug --no-bundle`; plain `cargo build` writes a dev-URL binary there.
 
 import { spawn, spawnSync } from "node:child_process";
@@ -112,6 +112,14 @@ function describeLog(logFile) {
   }
 }
 
+function sizeQuietly(target) {
+  try {
+    return statSync(target).size;
+  } catch {
+    return 0;
+  }
+}
+
 function removeQuietly(target) {
   try {
     rmSync(target, { force: true });
@@ -131,8 +139,10 @@ async function main() {
   // miss the chunk even when it is correctly embedded.
   if (opts.binary === DEFAULT_BINARY) assertFrontendIsEmbedded(opts.binary);
 
-  // A leftover log would match the marker without the app ever having started.
-  if (opts.logFile !== null) removeQuietly(opts.logFile);
+  // A leftover log would match the marker without the app ever having started,
+  // so only what the app appends after this point counts. Not deleted: on a
+  // developer machine this is the live log, and it has been lost that way once.
+  const logStart = opts.logFile !== null ? sizeQuietly(opts.logFile) : 0;
   if (!IS_WINDOWS) removeQuietly(SINGLE_INSTANCE_SOCKET);
 
   console.log(`[launch-smoke] launching ${opts.binary}`);
@@ -164,7 +174,10 @@ async function main() {
   const readLog = () => {
     if (opts.logFile === null) return "";
     try {
-      return readFileSync(opts.logFile, "utf8");
+      const bytes = readFileSync(opts.logFile);
+      // A file shorter than it was at launch was rotated or truncated: it is
+      // all new, and the old offset would skip the marker.
+      return bytes.subarray(bytes.length < logStart ? 0 : logStart).toString("utf8");
     } catch {
       return "";
     }

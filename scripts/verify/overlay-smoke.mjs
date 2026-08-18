@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Windows-only R29 probe. Flags: --mode <default|transparent|transparent+layered|off>,
-// --out <dir>, --binary <path>, --log-file <path>, --i-know, --gate (fail unless the
+// --out <dir>, --binary <path>, --log-file <path> (scanned from its size at launch,
+// never deleted), --gate (fail unless the
 // overlay painted its edge band and both hit-test points fell through it).
 // See docs/architecture/build-and-release.md.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,7 +53,6 @@ function parseArgs(argv) {
     out: path.join(REPO_ROOT, "overlay-smoke"),
     binary: DEFAULT_BINARY,
     logFile: DEFAULT_LOG_FILE,
-    iKnow: false,
     gate: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
@@ -82,9 +82,6 @@ function parseArgs(argv) {
         break;
       case "--gate":
         opts.gate = true;
-        break;
-      case "--i-know":
-        opts.iKnow = true;
         break;
       default:
         fail(`unknown argument: ${argv[i]}`);
@@ -122,6 +119,14 @@ function assertFrontendIsEmbedded(binary) {
       `${binary} does not embed ${asset[0]}: this is a dev-URL build, not a\n` +
         "       `tauri build --debug --no-bundle` one, and would time out silently",
     );
+  }
+}
+
+function sizeQuietly(target) {
+  try {
+    return statSync(target).size;
+  } catch {
+    return 0;
   }
 }
 
@@ -176,15 +181,9 @@ async function main() {
   if (opts.binary === DEFAULT_BINARY) assertFrontendIsEmbedded(opts.binary);
   if (!existsSync(PROBE_SCRIPT)) fail(`probe script not found: ${PROBE_SCRIPT}`);
 
-  // Deleting the log is what makes the marker scan honest, and it is a
-  // data-loss footgun outside CI — same caveat as launch-smoke's --log-file.
-  if (process.env.CI === undefined && !opts.iKnow) {
-    fail(
-      `refusing to delete ${opts.logFile} outside CI.\n` +
-        "       Pass --i-know if you really want the local log wiped.",
-    );
-  }
-  removeQuietly(opts.logFile);
+  // Only what the app appends after this point counts — same rule as
+  // launch-smoke, and for the same reason: never delete a developer's live log.
+  const logStart = sizeQuietly(opts.logFile);
 
   const triggerFile = path.join(opts.out, "overlay-trigger");
   removeQuietly(triggerFile);
@@ -222,7 +221,8 @@ async function main() {
 
   const readLog = () => {
     try {
-      return readFileSync(opts.logFile, "utf8");
+      const bytes = readFileSync(opts.logFile);
+      return bytes.subarray(bytes.length < logStart ? 0 : logStart).toString("utf8");
     } catch {
       return "";
     }
