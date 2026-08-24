@@ -1639,34 +1639,50 @@ mod tests {
         }
     }
 
-    /// Drive the loop with a firehose of updates for `duration`, then drop the
-    /// sender so the loop exits.
+    /// Safety net for [`run_loop_under_load`], not a measurement window: it
+    /// only decides how long a starved host is allowed to take before the
+    /// test gives up and reports what it actually observed.
+    const LOAD_TEST_DEADLINE: Duration = Duration::from_secs(10);
+
+    /// Drive the loop with a firehose of updates until `enough` says the sink
+    /// has seen what the caller needs, then drop the sender so the loop exits.
+    ///
+    /// Feeding for a fixed wall-clock span instead turns every "at least N
+    /// requests got through" assertion into a race against the host's timer
+    /// granularity. Windows rounds both `thread::sleep` and the loop's
+    /// `recv_timeout` up to the ~15.6 ms system tick, so the same code that
+    /// lands sixteen requests locally lands three on the CI runner and the
+    /// lower bound fails for a reason the test was never about. Upper bounds
+    /// (the budget, the minimum gap) stay honest under any slowdown; lower
+    /// bounds have to wait for the work rather than time-box it.
     fn run_loop_under_load(
         channels: &[HueAreaChannel],
         budget: u32,
-        duration: Duration,
         sink: &RecordingSink,
+        enough: impl Fn(&RecordingSink) -> bool + Send,
     ) {
         let slots = flatten_light_slots(channels);
         let channel_count = channels.len();
         let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(2);
 
-        let feeder = thread::spawn(move || {
-            let deadline = Instant::now() + duration;
-            let mut tick: u8 = 0;
-            while Instant::now() < deadline {
-                tick = tick.wrapping_add(7);
-                let _ = tx.try_send(HueColorUpdate {
-                    channel_colors: vec![(tick, tick, tick); channel_count],
-                    brightness: 1.0,
-                });
-                thread::sleep(Duration::from_millis(5));
-            }
-        });
+        thread::scope(|scope| {
+            scope.spawn(move || {
+                let deadline = Instant::now() + LOAD_TEST_DEADLINE;
+                let mut tick: u8 = 0;
+                while Instant::now() < deadline && !enough(sink) {
+                    tick = tick.wrapping_add(7);
+                    let _ = tx.try_send(HueColorUpdate {
+                        channel_colors: vec![(tick, tick, tick); channel_count],
+                        brightness: 1.0,
+                    });
+                    thread::sleep(Duration::from_millis(5));
+                }
+                drop(tx);
+            });
 
-        let mut pacer = RequestPacer::new(budget);
-        run_http_fallback_loop(sink, &slots, &rx, &mut pacer);
-        feeder.join().expect("feeder thread did not panic");
+            let mut pacer = RequestPacer::new(budget);
+            run_http_fallback_loop(sink, &slots, &rx, &mut pacer);
+        });
     }
 
     /// F1: the pre-fix loop issued one PUT per light per iteration at 20 Hz —
@@ -1684,7 +1700,9 @@ mod tests {
 
         let budget = 10u32;
         let sink = RecordingSink::default();
-        run_loop_under_load(&channels, budget, Duration::from_millis(1_500), &sink);
+        // Twelve requests at a ten-per-second ceiling means the window the
+        // budget is checked over spans more than a second either way.
+        run_loop_under_load(&channels, budget, &sink, |s| s.timestamps().len() >= 12);
 
         let timestamps = sink.timestamps();
         assert!(
@@ -1702,7 +1720,12 @@ mod tests {
     fn http_fallback_spreads_the_budget_across_every_light() {
         let channels = vec![channel_with_lights(0, &["a", "b", "c", "d"])];
         let sink = RecordingSink::default();
-        run_loop_under_load(&channels, 40, Duration::from_millis(400), &sink);
+        run_loop_under_load(&channels, 40, &sink, |s| {
+            let ids = s.light_ids();
+            ["a", "b", "c", "d"]
+                .iter()
+                .all(|want| ids.iter().any(|id| id == want))
+        });
 
         let ids = sink.light_ids();
         for expected in ["a", "b", "c", "d"] {
@@ -1767,10 +1790,16 @@ mod tests {
             latency: Some(Duration::from_millis(120)),
             ..RecordingSink::default()
         };
-        run_loop_under_load(&channels, 20, Duration::from_millis(900), &sink);
+        // Five requests give four consecutive gaps to inspect, which is more
+        // than enough for a catch-up burst to show up in one of them.
+        run_loop_under_load(&channels, 20, &sink, |s| s.timestamps().len() >= 5);
 
         let timestamps = sink.timestamps();
-        assert!(timestamps.len() >= 3);
+        assert!(
+            timestamps.len() >= 3,
+            "expected the loop to keep sending, got {} requests",
+            timestamps.len()
+        );
         assert_within_budget(&timestamps, 20);
         for pair in timestamps.windows(2) {
             let gap = pair[1].saturating_duration_since(pair[0]);
@@ -1827,7 +1856,9 @@ mod tests {
             ..RecordingSink::default()
         };
         let budget = 100;
-        run_loop_under_load(&channels, budget, Duration::from_millis(700), &sink);
+        // The gap under inspection is between requests 5 and 6, so six is the
+        // smallest run that can carry the assertion.
+        run_loop_under_load(&channels, budget, &sink, |s| s.timestamps().len() >= 6);
 
         let timestamps = sink.timestamps();
         assert!(timestamps.len() >= 6, "got {} requests", timestamps.len());
