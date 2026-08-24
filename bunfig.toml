@@ -6,3 +6,10 @@
 # so only the 17 declared dependencies sit at the top level.
 [install]
 linker = "isolated"
+
+# `bun test` runs Bun's own runner, which ignores vitest.config.ts and would
+# collapse the suite into hundreds of failures that read like a regression.
+# Confining its search to the guard directory turns that wall of noise into one
+# failing test whose name is the correct command.
+[test]
+root = "scripts/bun-test-guard"

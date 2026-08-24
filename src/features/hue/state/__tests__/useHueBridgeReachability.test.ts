@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_STATUS } from "@/shared/contracts/hue";
@@ -68,7 +68,9 @@ describe("useHueBridgeReachability (INV-30)", () => {
     expect(validateHueCredentialsMock).not.toHaveBeenCalled();
 
     visibility.mockReturnValue("visible");
-    document.dispatchEvent(new Event("visibilitychange"));
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
     await waitFor(() => expect(validateHueCredentialsMock).toHaveBeenCalledOnce());
     visibility.mockRestore();
   });

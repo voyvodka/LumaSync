@@ -2,7 +2,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import type { LightingModeConfig } from "../features/mode/model/contracts";
-import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
+import { DEVICE_COMMANDS } from "@/shared/contracts/device";
+import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";
 import { appliedResult } from "@/test/modeCommandResult";
 
 const loadShellStateMock = vi.fn();
@@ -18,6 +19,14 @@ let mockIsConnected = true;
 
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 const invokeMock = vi.fn();
+
+// App renders without the I18nextProvider that providers.tsx supplies in the
+// real shell, so any component reaching for `t` warns NO_I18NEXT_INSTANCE and
+// silently falls back. Assertions here match stub-provided names, not
+// translated copy, so returning the key is the honest substitute.
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
@@ -218,6 +227,37 @@ vi.mock("../features/settings/SettingsLayout", () => ({
 import App from "../App";
 import { __resetHueReadCacheForTests } from "../features/hue/hueReadCache";
 
+/** Serial status is the only per-test variable; every other command keeps the
+ * shape its contract declares. Overriding invokeMock wholesale used to discard
+ * those shapes, so callers reading `.status.code` fell into their own catch. */
+function installInvokeDispatch(serialConnected: boolean): void {
+  invokeMock.mockImplementation((command: string) => {
+    switch (command) {
+      case HUE_COMMANDS.VALIDATE_CREDENTIALS:
+        return Promise.resolve({
+          status: { code: HUE_STATUS.CREDENTIAL_VALID, message: "ok", details: null },
+          valid: true,
+        });
+      case DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY:
+        return Promise.resolve({
+          usb: {
+            captureFps: 0,
+            sendFps: 0,
+            queueHealth: "Idle",
+            frameLatencyMs: 0,
+            linkConstrained: false,
+            linkMaxFps: 0,
+            lastCaptureErrorCode: null,
+            lastCaptureErrorAtSecs: null,
+          },
+          hue: null,
+        });
+      default:
+        return Promise.resolve({ connected: serialConnected });
+    }
+  });
+}
+
 describe("App mode orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -226,16 +266,21 @@ describe("App mode orchestration", () => {
     __resetHueReadCacheForTests();
     vi.useRealTimers();
     mockIsConnected = true;
-    // Default: serial connection status and any other bootstrap invokes.
-    // useRuntimeTelemetry is mocked at module level so get_runtime_telemetry
-    // never reaches invokeMock.
-    invokeMock.mockResolvedValue({ connected: true });
+    // One flat resolved value cannot serve every command: a caller reading
+    // `.status.code` or `.usb` off `{ connected: true }` throws into its own
+    // catch, so the test still passed while the app measured its failure
+    // branch. Dispatch on the command name and give each the shape its
+    // contract declares; the serial-status default stays for the rest.
+    installInvokeDispatch(true);
     getHueStreamStatusMock.mockResolvedValue({
       active: false,
       lastSolidColor: null,
       status: { state: "Idle", code: "HUE_STREAM_STOPPED", message: "Stopped", details: null },
     });
-    setHueSolidColorMock.mockResolvedValue({ ok: true });
+    setHueSolidColorMock.mockResolvedValue({
+      active: true,
+      status: { state: "Running", code: "HUE_SOLID_COLOR_APPLIED", message: "ok", details: null },
+    });
     loadShellStateMock.mockResolvedValue({
       lastSection: "general",
       ledCalibration: {
@@ -487,7 +532,7 @@ describe("App mode orchestration", () => {
   it("filters persisted USB target when USB is not connected on startup", async () => {
     // Setup: loadShellStateMock returns lastOutputTargets: ["usb", "hue"], useDeviceConnection returns isConnected: false
     mockIsConnected = false;
-    invokeMock.mockResolvedValue({ connected: false });
+    installInvokeDispatch(false);
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
       ledCalibration: null,
@@ -519,7 +564,7 @@ describe("App mode orchestration", () => {
   it("auto-adds usb target on first pair (false→true transition, hue-only baseline)", async () => {
     // Cold launch: persisted Hue-only session, USB cable unplugged.
     mockIsConnected = false;
-    invokeMock.mockResolvedValue({ connected: false });
+    installInvokeDispatch(false);
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
       ledCalibration: null,
@@ -571,7 +616,7 @@ describe("App mode orchestration", () => {
     // CONNECTED state from frame 1, so the false→true transition should
     // never fire and outputTargets must NOT pick up a duplicate "usb".
     mockIsConnected = true;
-    invokeMock.mockResolvedValue({ connected: true });
+    installInvokeDispatch(true);
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
       ledCalibration: {
@@ -611,7 +656,7 @@ describe("App mode orchestration", () => {
   it("silently drops USB target when USB is unplugged during dual-target session", async () => {
     // Setup: Start with targets=["usb", "hue"], isConnected=true
     mockIsConnected = true;
-    invokeMock.mockResolvedValue({ connected: true });
+    installInvokeDispatch(true);
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
       ledCalibration: {
@@ -658,7 +703,7 @@ describe("App mode orchestration", () => {
   it("auto-dismisses the USB disconnect toast even though the unplug changes output targets", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockIsConnected = true;
-    invokeMock.mockResolvedValue({ connected: true });
+    installInvokeDispatch(true);
     loadShellStateMock.mockResolvedValueOnce({
       lastSection: "general",
       ledCalibration: {
@@ -1219,7 +1264,7 @@ describe("App mode orchestration", () => {
       // `connected: false`. Persisted state has ["usb"] from a prior
       // session.
       mockIsConnected = false;
-      invokeMock.mockResolvedValue({ connected: false });
+      installInvokeDispatch(false);
       loadShellStateMock.mockResolvedValueOnce({
         lastSection: "general",
         ledCalibration: null,

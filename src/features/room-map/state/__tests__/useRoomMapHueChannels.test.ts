@@ -207,7 +207,9 @@ describe("useRoomMapHueChannels", () => {
     const { result } = renderHook(() => useRoomMapHueChannels(args()));
     await waitFor(() => expect(getAreaChannelsMock).toHaveBeenCalledTimes(1));
 
-    result.current.refreshChannels();
+    await act(async () => {
+      result.current.refreshChannels();
+    });
 
     await waitFor(() => expect(getAreaChannelsMock).toHaveBeenCalledTimes(2));
   });

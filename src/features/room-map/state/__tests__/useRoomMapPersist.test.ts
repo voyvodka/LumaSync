@@ -123,7 +123,11 @@ describe("useRoomMapPersist (ROOM-07)", () => {
     const { result } = renderHook(() => useRoomMapPersist());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    await result.current.updateConfig({ dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 } });
+    await act(async () => {
+      await result.current.updateConfig({
+        dimensions: { widthMeters: 8, depthMeters: 6, heightMeters: 3 },
+      });
+    });
 
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({

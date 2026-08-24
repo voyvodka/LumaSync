@@ -62,7 +62,12 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       runSerialHealthCheck,
     });
@@ -95,7 +100,12 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       runSerialHealthCheck: vi.fn().mockResolvedValue(healthResult(false)),
     });
@@ -130,7 +140,12 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       runSerialHealthCheck,
     });
@@ -162,7 +177,12 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       runSerialHealthCheck: vi.fn().mockResolvedValue({
         ...healthResult(true),
@@ -193,7 +213,12 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       runSerialHealthCheck: vi.fn().mockResolvedValue(healthResult(false)),
       firmwareProfileEvents,
@@ -221,7 +246,12 @@ describe("health check flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       runSerialHealthCheck: vi.fn().mockRejectedValue(new Error("IPC dropped")),
       firmwareProfileEvents,

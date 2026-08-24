@@ -45,7 +45,12 @@ describe("selection memory", () => {
           details: null,
         },
       }),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort,
     });
 
@@ -86,7 +91,12 @@ describe("selection memory", () => {
           details: "busy",
         },
       }),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort,
     });
 

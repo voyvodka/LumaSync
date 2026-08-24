@@ -23,3 +23,23 @@
 # CI/release so the floor holds in every build context.
 [env]
 MACOSX_DEPLOYMENT_TARGET = { value = "12.3", force = true }
+
+# Silence LNK4099 on Windows: 4,690 lines of one warning per CI run.
+#
+# `openssl` is vendored, so `openssl-src` compiles OpenSSL's C sources itself
+# and ships static libs with no PDB alongside them. The MSVC linker then warns
+# once per object file it cannot find debug symbols for — `warning LNK4099: PDB
+# 'ossl_static.pdb' was not found with 'libopenssl_sys-*.rlib(libcrypto-lib-*)'`
+# — which on the last run buried the real build output under 4,690 repetitions
+# of the same line. It affects debug symbols for OpenSSL internals only: our own
+# code, and every other dependency, keep theirs.
+#
+# Suppressing it is the standard remedy because the cause is upstream and has no
+# fix — `openssl-src` does not build PDBs, and the alternative (dropping the
+# `vendored` feature) would make the Windows build depend on a system OpenSSL.
+# Scoped to the MSVC targets so no other platform's link step is touched.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/IGNORE:4099"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/IGNORE:4099"]
