@@ -1,4 +1,4 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
@@ -60,7 +60,9 @@ describe("useCaptureStallNotice", () => {
     );
 
     const { result, rerender } = renderHook(() => useCaptureStallNotice(true));
-    await flushMicrotasks();
+    await act(async () => {
+      await flushMicrotasks();
+    });
     rerender();
 
     expect(result.current).toEqual({

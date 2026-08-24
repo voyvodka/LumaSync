@@ -25,7 +25,12 @@ vi.mock("@/features/persistence/shellStore", () => ({
 }));
 
 vi.mock("../hueOnboardingApi", () => ({
-  checkHueStreamReadiness: vi.fn(),
+  // The readiness poller chains .then() onto this; a bare vi.fn() resolves to
+  // undefined and the chain throws into the poller's own catch instead.
+  checkHueStreamReadiness: vi.fn().mockResolvedValue({
+    status: { code: "HUE_STREAM_READY", message: "ok", details: null },
+    readiness: { ready: true, reasons: [] },
+  }),
   discoverHueBridges: vi.fn(),
   getHueAreaChannels: vi.fn().mockResolvedValue({
     status: { code: "HUE_AREA_CHANNELS_EMPTY", message: "", details: null },

@@ -54,7 +54,12 @@ describe("manual connect flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       refreshMinIntervalMs: 250,
       refreshVisibleWaitMs: 0,
@@ -101,7 +106,12 @@ describe("manual connect flow", () => {
         ]),
       ),
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM7",
     });
@@ -141,7 +151,12 @@ describe("manual connect flow", () => {
         ]),
       ),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
     });
 
@@ -180,7 +195,12 @@ describe("manual connect flow", () => {
         ]),
       ),
       connectSerialPort,
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
     });
 
@@ -265,7 +285,12 @@ describe("manual connect flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM7",
       refreshMinIntervalMs: 250,
@@ -302,7 +327,12 @@ describe("manual connect flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       initialLastSuccessfulPort: "COM5",
       refreshMinIntervalMs: 250,
@@ -342,7 +372,12 @@ describe("manual connect flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       refreshMinIntervalMs: 250,
       refreshVisibleWaitMs: 0,
@@ -380,7 +415,12 @@ describe("manual connect flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       refreshMinIntervalMs: 250,
       now: () => nowMs,
@@ -413,7 +453,12 @@ describe("manual connect flow", () => {
     const controller = createDeviceConnectionController({
       listSerialPorts,
       connectSerialPort: vi.fn(),
-      getSerialConnectionStatus: vi.fn(),
+      getSerialConnectionStatus: vi.fn().mockResolvedValue({
+        connected: false,
+        portName: null,
+        updatedAtUnixMs: 0,
+        status: { code: "NOT_CONNECTED", message: "Idle", details: null },
+      }),
       persistLastSuccessfulPort: vi.fn(),
       refreshMinIntervalMs: 250,
       refreshVisibleWaitMs: 0,

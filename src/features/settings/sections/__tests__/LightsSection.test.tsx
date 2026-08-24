@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,6 +39,14 @@ vi.mock("@/features/room-map/roomMapApi", () => ({
 
 vi.mock("@/features/calibration/calibrationApi", () => ({
   listDisplays: () => Promise.resolve([]),
+}));
+
+// LightsSection renders EdgeSignalGrid, which subscribes to a Tauri event on
+// mount. Unmocked the subscription rejects into the grid's own catch, so the
+// section rendered but the signal path was never the one under test. Resolve
+// an unlisten fn so the effect's cleanup has something to call.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => {}),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -232,7 +240,7 @@ describe("LightsSection", () => {
 // must stay unreachable while nothing is connected, and the user must be told
 // why. Off is exempt — parking the outputs is always safe.
 describe("LightsSection — output availability gate", () => {
-  function renderWithOutputs(
+  async function renderWithOutputs(
     props: Partial<{
       usbConnected: boolean;
       hueConfigured: boolean;
@@ -244,8 +252,14 @@ describe("LightsSection — output availability gate", () => {
       onModeChange: (next: LightingModeConfig) => void;
     }> = {},
   ) {
-    return render(
-      <LightsSection
+    // LightsSection hydrates from shellStore and listDisplays on mount; those
+    // promises settle after a synchronous test body returns, which is exactly
+    // the update React warns about. Flush them here so every caller observes
+    // the hydrated component instead of the first paint.
+    let result!: ReturnType<typeof render>;
+    await act(async () => {
+      result = render(
+        <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
         usbConnected={props.usbConnected ?? false}
@@ -260,8 +274,10 @@ describe("LightsSection — output availability gate", () => {
         onOutputTargetsChange={vi.fn()}
         onOpenCalibration={vi.fn()}
         onOpenDevices={props.onOpenDevices}
-      />,
-    );
+        />,
+      );
+    });
+    return result;
   }
 
   beforeEach(() => {
@@ -272,7 +288,7 @@ describe("LightsSection — output availability gate", () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();
     const onOpenDevices = vi.fn();
-    renderWithOutputs({ onModeChange, onOpenDevices });
+    await renderWithOutputs({ onModeChange, onOpenDevices });
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
@@ -294,7 +310,7 @@ describe("LightsSection — output availability gate", () => {
   it("offers a manual retry once the bridge probe has given up", async () => {
     const user = userEvent.setup();
     const onRetryHueProbe = vi.fn();
-    renderWithOutputs({ hueConfigured: true, hueProbeGaveUp: true, onRetryHueProbe });
+    await renderWithOutputs({ hueConfigured: true, hueProbeGaveUp: true, onRetryHueProbe });
 
     expect(
       screen.getByText(
@@ -306,8 +322,8 @@ describe("LightsSection — output availability gate", () => {
     expect(onRetryHueProbe).toHaveBeenCalledOnce();
   });
 
-  it("keeps the retry on screen while the retry it triggered is in flight", () => {
-    renderWithOutputs({
+  it("keeps the retry on screen while the retry it triggered is in flight", async () => {
+    await renderWithOutputs({
       hueConfigured: true,
       hueProbeGaveUp: true,
       hueProbeChecking: true,
@@ -322,8 +338,8 @@ describe("LightsSection — output availability gate", () => {
     expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
   });
 
-  it("hides the retry while the probe is still trying", () => {
-    renderWithOutputs({ hueConfigured: true, onRetryHueProbe: vi.fn() });
+  it("hides the retry while the probe is still trying", async () => {
+    await renderWithOutputs({ hueConfigured: true, onRetryHueProbe: vi.fn() });
 
     expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
     expect(
@@ -333,44 +349,48 @@ describe("LightsSection — output availability gate", () => {
     ).toBeInTheDocument();
   });
 
-  it("blocks scene presets too — every scene tile activates SOLID", () => {
-    renderWithOutputs();
+  it("blocks scene presets too — every scene tile activates SOLID", async () => {
+    await renderWithOutputs();
 
     for (const label of ["Movie", "Game", "Music", "Chill", "Read"]) {
       expect(screen.getByRole("button", { name: label })).toBeDisabled();
     }
   });
 
-  it("treats a configured-but-unreachable bridge as no output", () => {
-    renderWithOutputs({ hueConfigured: true, hueReachable: false });
+  it("treats a configured-but-unreachable bridge as no output", async () => {
+    await renderWithOutputs({ hueConfigured: true, hueReachable: false });
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByText("No reachable output")).toBeInTheDocument();
   });
 
-  it("enables the non-Off modes once a reachable bridge is the only output", () => {
-    renderWithOutputs({ hueConfigured: true, hueReachable: true });
+  it("enables the non-Off modes once a reachable bridge is the only output", async () => {
+    await renderWithOutputs({ hueConfigured: true, hueReachable: true });
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Solid/ })).toBeEnabled();
     expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
   });
 
-  it("keeps the calibration reason distinct from the offline reason", () => {
-    render(
-      <LightsSection
-        mode={{ kind: "off" }}
-        outputTargets={["usb"]}
-        usbConnected={true}
-        hueConfigured={false}
-        hueStreaming={false}
-        modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
-        onModeChange={vi.fn()}
-        onOutputTargetsChange={vi.fn()}
-        onOpenCalibration={vi.fn()}
-        onOpenDevices={vi.fn()}
-      />,
-    );
+  it("keeps the calibration reason distinct from the offline reason", async () => {
+    // Renders LightsSection directly rather than through renderWithOutputs, so
+    // it needs the same mount-effect flush the helper performs.
+    await act(async () => {
+      render(
+        <LightsSection
+          mode={{ kind: "off" }}
+          outputTargets={["usb"]}
+          usbConnected={true}
+          hueConfigured={false}
+          hueStreaming={false}
+          modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
+          onModeChange={vi.fn()}
+          onOutputTargetsChange={vi.fn()}
+          onOpenCalibration={vi.fn()}
+          onOpenDevices={vi.fn()}
+        />,
+      );
+    });
 
     expect(screen.getByText("Calibration required")).toBeInTheDocument();
     expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();

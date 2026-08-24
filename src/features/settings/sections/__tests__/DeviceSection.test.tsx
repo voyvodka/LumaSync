@@ -40,6 +40,16 @@ vi.mock("@/features/calibration/calibrationApi", () => ({
   listDisplays: vi.fn().mockResolvedValue([]),
 }));
 
+// WledCategory mounts useActiveWledSink, which reaches the Tauri boundary on
+// mount. Unmocked it throws into the hook's own catch, so the section still
+// rendered but every test measured the failure branch.
+vi.mock("@/features/device/wledApi", () => ({
+  discoverWledDevices: vi.fn(),
+  connectWledSink: vi.fn(),
+  testWledBridge: vi.fn(),
+  getWledSinkStatus: vi.fn().mockResolvedValue({ connected: false, sink: null }),
+}));
+
 // Stub heavy sub-components that make their own invoke calls.
 vi.mock("../WledDevicePicker", () => ({
   WledDevicePicker: () => null,
