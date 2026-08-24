@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Start a built app, assert STARTUP_READY_MARKER, quit. Flags: --binary <path>,
-// --log-file <path> (scanned from its size at launch; never deleted), --hard-kill. The default binary needs `pnpm tauri build
+// --log-file <path> (scanned from its size at launch; never deleted), --hard-kill. The default binary needs `bun run tauri build
 // --debug --no-bundle`; plain `cargo build` writes a dev-URL binary there.
 //
 // Bench flags, all repeatable and all inert unless passed: --expect <substring>
@@ -177,7 +177,7 @@ async function main() {
   const marker = readStartupMarker();
 
   if (!existsSync(opts.binary)) {
-    fail(`binary not found: ${opts.binary}\n       build it: pnpm tauri build --debug --no-bundle`);
+    fail(`binary not found: ${opts.binary}\n       build it: bun run tauri build --debug --no-bundle`);
   }
   // Cargo output path only: a bundle is a container, so the string search would
   // miss the chunk even when it is correctly embedded.

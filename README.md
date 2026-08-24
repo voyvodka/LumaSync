@@ -43,7 +43,7 @@ Compact tray-sized mode (320×480) and full workspace mode (900×620) — amber 
 - Frontend: Vite, React 19, TypeScript (strict), Tailwind CSS
 - Desktop runtime: Tauri v2, Rust
 - Testing: Vitest + Testing Library, Cargo test
-- Package manager: pnpm
+- Package manager: Bun
 
 ## Supported Hardware
 
@@ -88,40 +88,40 @@ Profile is selected per device in the Devices section.
 
 ### Prerequisites
 
-- Node.js 22+
-- pnpm 10+
+- Bun 1.4+
+- Node.js 22+ (vitest, wdio and the Tauri CLI still run under Node)
 - Rust toolchain (stable)
 - Tauri platform prerequisites for your OS
 
 ### Install
 
 ```bash
-pnpm install
+bun install
 ```
 
 ### Development
 
 ```bash
-pnpm tauri dev
+bun run tauri dev
 ```
 
 ### Build
 
 ```bash
-pnpm tauri build
+bun run tauri build
 ```
 
 ## Common Scripts
 
-- `pnpm dev`: run web-only Vite dev server
-- `pnpm tauri dev`: run desktop app in development mode
-- `pnpm typecheck`: run TypeScript type checks (no emit)
-- `pnpm lint`: alias for typecheck
-- `pnpm vitest run`: run frontend unit tests once
-- `pnpm vitest`: run frontend tests in watch mode
-- `pnpm verify:shell-contracts`: validate Rust command handlers match frontend contract definitions
-- `pnpm check:rust`: run Rust `cargo check`
-- `pnpm check:all`: run JS + Rust + shell contract checks together
+- `bun run dev`: run web-only Vite dev server
+- `bun run tauri dev`: run desktop app in development mode
+- `bun run typecheck`: run TypeScript type checks (no emit)
+- `bun run lint`: alias for typecheck
+- `bun run test`: run frontend unit tests once
+- `bunx vitest`: run frontend tests in watch mode
+- `bun run verify:shell-contracts`: validate Rust command handlers match frontend contract definitions
+- `bun run check:rust`: run Rust `cargo check`
+- `bun run check:all`: run JS + Rust + shell contract checks together
 
 ## Project Structure
 

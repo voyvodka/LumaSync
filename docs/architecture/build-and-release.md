@@ -99,13 +99,44 @@ expensive moment to learn it: the work is already merged.
 missing. `check:i18n` is the orphaned-translation-key ratchet, and a tag push runs no CI, so this is
 the only place it can catch one before publication.
 
+## The package manager and its dependency overrides
+
+**Bun is the package manager, and `bunfig.toml` pins `linker = "isolated"`.** Bun defaults to the
+hoisted linker for a single-package repo, which flattens every transitive dependency into the top
+level of `node_modules`. That silently removes the phantom-dependency protection the previous pnpm
+setup gave us: an import of a package we never declared would resolve at runtime and pass CI, then
+break for anyone installing with a different resolver. Isolated keeps the symlinked layout, so only
+the declared dependencies sit at the top level — `ls node_modules | wc -l` should report 17, not
+several hundred. Do not drop the file to "simplify" the install.
+
+**Three dependency overrides in `package.json` are security fixes, not preferences.** `package.json`
+is strict JSON and cannot carry the reasoning inline, so it lives here — they were annotated in
+`pnpm-workspace.yaml` before the move to Bun. Each one exists to clear a GitHub advisory that the
+direct dependency tree cannot resolve on its own:
+
+- **`undici` → `^7.29.0`.** Reached transitively through jsdom in the vitest test environment, so
+  dev-only. Clears the advisories against `undici` < 7.29.0 — SOCKS5 cross-origin routing and TLS
+  certificate validation bypass among them.
+- **`serialize-javascript` → `^7.1.0`.** mocha still pins `^6.0.2`, which both GHSA-5c6j-r48x-rmvq
+  (RCE) and GHSA-qj8w-gfj5-8c6v cover. 7.0.5 was the first release clear of the pair.
+- **`@puppeteer/browsers` → `^3.2.0`.** The 2.x line pulls `extract-zip` (GHSA-jmr9-qjv8-65gv),
+  which is unmaintained and has no patched release. Bumping the parent is the only exit.
+
+Drop one when its upstream ships a clean release, not before — `cargo audit`'s frontend counterpart
+is the weekly `license-scan` and Dependabot, and neither will re-raise a silenced advisory.
+
+**`trustedDependencies` is limited to `esbuild`.** Bun runs no install scripts unless the package is
+listed. `edgedriver` and `geckodriver` both arrive with `@wdio/cli`, and the e2e suite uses the
+embedded WebDriver provider, so their driver downloads are dead weight; leaving them unlisted skips
+those downloads. `esbuild` genuinely needs its postinstall to fetch a platform binary.
+
 ## Gotchas
 
-- **`cargo build` and `pnpm tauri build --debug` write the same path and produce different binaries.** Both land on `src-tauri/target/debug/lumasync`. The cargo one loads the frontend from the Vite dev server, so launching it without `pnpm dev` running gives a blank window and `Could not connect to localhost:1420` in the Web Inspector — an intact app with no content, indistinguishable from a broken one. Nothing about the path reveals which is there. Use `pnpm tauri dev`, or rebuild with `--debug --no-bundle` to embed the frontend. `scripts/verify/launch-smoke.mjs` asserts the frontend is embedded and fails immediately rather than waiting out its timeout.
+- **`cargo build` and `bun run tauri build --debug` write the same path and produce different binaries.** Both land on `src-tauri/target/debug/lumasync`. The cargo one loads the frontend from the Vite dev server, so launching it without `bun run dev` running gives a blank window and `Could not connect to localhost:1420` in the Web Inspector — an intact app with no content, indistinguishable from a broken one. Nothing about the path reveals which is there. Use `bun run tauri dev`, or rebuild with `--debug --no-bundle` to embed the frontend. `scripts/verify/launch-smoke.mjs` asserts the frontend is embedded and fails immediately rather than waiting out its timeout.
 - **`build.rs` embeds `windows-app-manifest.xml` into every linked target**, not just the bin. Test binaries reach comctl32 v6 through tauri's tray/menu stack, and Windows refuses to load them without the manifest (`STATUS_ENTRYPOINT_NOT_FOUND`).
 - **CI passes `--test-threads=1` to `cargo test`, and it is not required.** The worker-touching `lighting_mode` tests serialise themselves on a `WORKER_TEST_GUARD` mutex shared by both test modules, so the suite passes at default parallelism. The flag predates that guard. Reproduce CI exactly only when chasing a CI-only failure.
 - **A green CI run proves the debug binary starts, not the installer.** `scripts/verify/launch-smoke.mjs` launches debug binaries on all three platforms; Windows uses `tauri.windows-smoke.conf.json` because WebView2 can lose the embedded top-level request when a debug webview starts hidden. `release.yml` launches the mounted `.dmg`, the AppImage, and the Windows release binary before the draft is published. The `.msi` and `.deb` installers themselves are not installed in CI.
-- **Log lines twice: `tauri_plugin_log::Builder::new()` already carries `[Stdout, LogDir { file_name: None }]`, and `.target()` appends.** Two `.target()` calls therefore made four sinks: stdout twice (every line doubled in `pnpm tauri dev` and in CI's captured stdout), our named file, and a second file named after the package — `LumaSync.log`. In release that second name and our `lumasync.log` are the same file on macOS and Windows, so the release log carried every line twice; in dev it left a stray `LumaSync.log` next to `lumasync-dev.log`, which is the file the smoke `--log-file` deletion below once destroyed. `.targets([...])` replaces the default set instead of adding to it. A line seen once on stdout and once in the file is the two sinks doing their job; the same line twice in one place is a regression of this.
+- **Log lines twice: `tauri_plugin_log::Builder::new()` already carries `[Stdout, LogDir { file_name: None }]`, and `.target()` appends.** Two `.target()` calls therefore made four sinks: stdout twice (every line doubled in `bun run tauri dev` and in CI's captured stdout), our named file, and a second file named after the package — `LumaSync.log`. In release that second name and our `lumasync.log` are the same file on macOS and Windows, so the release log carried every line twice; in dev it left a stray `LumaSync.log` next to `lumasync-dev.log`, which is the file the smoke `--log-file` deletion below once destroyed. `.targets([...])` replaces the default set instead of adding to it. A line seen once on stdout and once in the file is the two sinks doing their job; the same line twice in one place is a regression of this.
 - **`launch-smoke.mjs --log-file` scans the file from its size at launch and never deletes it.** A stale log would match the startup marker without the app ever starting, so only bytes appended after the script starts count; a file that is *shorter* than it was at launch was rotated or truncated and is read from the top. It used to delete the file instead, which on a developer machine is the live log — and on macOS's case-insensitive filesystem `lumasync.log` and `LumaSync.log` are the same file, so it once destroyed months of history. `overlay-smoke.mjs` follows the same rule.
 - **No duplicate `## [X.Y.Z]` headings in `CHANGELOG.md`.** `release.yml` extracts notes with `awk` and stops at the first match.
 - **`chunkSizeWarningLimit` is raised to 900 kB, and that is a ratchet rather than a mute.** Vite's 500 kB default measures download cost over a network; a Tauri bundle is read off local disk and never pays it, so the default fired on every build on macOS and Ubuntu and said nothing actionable. The limit sits just above the current bundle so real growth still trips it. Code-splitting the room-map editor would cut startup parse time — that is a genuine win, but a separate change, not a way to silence this.
@@ -218,7 +249,7 @@ out of the hook including the failing ones — a leaked entry outlives the proce
 on Windows shows up in the user's Credential Manager.
 
 **`backend=` is the whole point of the line.** A debug build seeds `DevFileStore` in
-`setup` so `pnpm tauri dev` stays out of the OS keychain, so the hook on its own would
+`setup` so `bun run tauri dev` stays out of the OS keychain, so the hook on its own would
 happily round-trip a JSON file and report success. The CI step therefore also sets
 `LUMASYNC_DEV_USE_KEYCHAIN=1`, and the expectation is on the full
 `backend=keychain roundtrip=ok` rather than on `roundtrip=ok` — that pairing is what
@@ -301,7 +332,7 @@ stands between a broken binary and a published release on all three platforms.
 
 ## Keychain prompts in dev
 
-macOS asks for the login-keychain password on almost every `pnpm tauri dev` start —
+macOS asks for the login-keychain password on almost every `bun run tauri dev` start —
 *"lumasync wants to use your confidential information stored in com.lumasync.app"* — and
 **"Always Allow" does not stop it**. Nothing in the credential code is at fault, and the
 number of reads is already down to one per account per process (`CachedStore`).
@@ -368,7 +399,7 @@ convenience.
 
 ## The e2e suite runs against the real app, and its state
 
-`pnpm e2e` builds a debug binary and drives it through the `embedded` WebDriver provider, so a run
+`bun run e2e` builds a debug binary and drives it through the `embedded` WebDriver provider, so a run
 opens a real window and switches modes and tabs on screen. It also reads and writes the same
 `shell-state.json` the installed app uses — there is no isolated profile.
 

@@ -6,7 +6,7 @@ How the TypeScript and Rust halves agree on anything, and what survives a restar
 
 **Contract-first, always.** Every shape crossing the boundary is defined in
 `src/shared/contracts/` **before** implementation. That directory is the source of truth — work
-from it rather than from any summary, including this one. Run `pnpm verify:shell-contracts` after
+from it rather than from any summary, including this one. Run `bun run verify:shell-contracts` after
 touching either side; it checks that Rust handlers match the frontend definitions.
 
 **Coded status, never a bare string.** A command returns a stable machine-readable status code

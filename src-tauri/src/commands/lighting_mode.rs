@@ -5252,7 +5252,7 @@ mod lighting_mode_tests {
         // inverse-square-root anchor). Avoids the "encoded all zeros" Bug B.
         let payload = &packet[5..5 + 3 * 59];
         assert_eq!(payload.len() % 3, 0);
-        for chunk in payload.chunks_exact(3) {
+        for chunk in payload.as_chunks::<3>().0 {
             assert!(
                 chunk[0] > 0,
                 "every LED's red channel must be > 0 (input red 255 must not collapse to zero)"

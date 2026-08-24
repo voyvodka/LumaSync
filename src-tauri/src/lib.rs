@@ -754,7 +754,7 @@ pub fn run() {
                 .build(&app_handle)?;
 
             // Dev-only: catch SIGINT (Ctrl+C in the terminal that ran
-            // `pnpm tauri dev`) and run the same orderly shutdown path
+            // `bun run tauri dev`) and run the same orderly shutdown path
             // so the dev terminal returns promptly instead of waiting on
             // cargo to send SIGTERM after a 10s grace.
             //

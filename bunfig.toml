@@ -1,0 +1,8 @@
+# Bun defaults to the hoisted linker for a single-package repo, which flattens
+# every transitive dependency into the top level of node_modules. That silently
+# removes the phantom-dependency protection pnpm gave us: an import of a package
+# we never declared would resolve at runtime and pass CI, then break for anyone
+# installing with a different resolver. `isolated` keeps the symlinked layout,
+# so only the 17 declared dependencies sit at the top level.
+[install]
+linker = "isolated"

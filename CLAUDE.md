@@ -102,12 +102,12 @@ already have wastes a warm-up cycle.
 
 ## Commands
 
-`pnpm tauri dev` is the primary development command; `pnpm dev` runs the Vite server alone with no
+`bun run tauri dev` is the primary development command; `bun run dev` runs the Vite server alone with no
 Tauri runtime. Everything else is in `package.json` — read it there. The verification sequence is
 below under **Verification Flow**; `cargo audit` ignores live in `.cargo/audit.toml`.
 
 Three traps live in the build and test setup, including one where `cargo build` and
-`pnpm tauri build --debug` write the same path and produce different binaries — read
+`bun run tauri build --debug` write the same path and produce different binaries — read
 `docs/architecture/build-and-release.md` before losing an afternoon to any of them.
 
 ## Architecture
@@ -125,7 +125,7 @@ Frontend (React/TS)  →  Tauri Commands (Rust)  →  Device Layer (Serial/HTTP)
 All frontend–backend communication is defined in `src/shared/contracts/` **before**
 implementation. That directory is the source of truth; list it rather than working from any
 summary. `scripts/verify/phase01-shell-contracts.mjs` checks that Rust handlers match the
-frontend definitions — run `pnpm verify:shell-contracts` after touching either side.
+frontend definitions — run `bun run verify:shell-contracts` after touching either side.
 
 A green verifier means every status code crossing the IPC boundary is *declared*, not that it is
 *correct*. It is a drift guard, not a coverage score.
@@ -183,8 +183,8 @@ Coded errors, never swallowing a failure, contracts as the source of truth, and 
 together are decisions rather than style — see `docs/architecture/contracts-and-state.md`.
 
 **Testing.** **Test execution is permitted in this project** — the global "do not run tests
-unless explicitly asked" rule does NOT apply here. `pnpm vitest run`, `cargo test`, and
-`pnpm verify:shell-contracts` are part of the normal loop and may be run without asking. Tests
+unless explicitly asked" rule does NOT apply here. `bun run test`, `cargo test`, and
+`bun run verify:shell-contracts` are part of the normal loop and may be run without asking. Tests
 live in a `__tests__/` subfolder beside the code under test (`foo.ts` → `__tests__/foo.test.ts`),
 never co-located. Mock the Tauri boundary for deterministic frontend tests. Only add or adjust
 tests for changed behaviour.
@@ -193,15 +193,15 @@ tests for changed behaviour.
 
 Run after any change, lightest checks first:
 
-1. `pnpm typecheck`
-2. `pnpm vitest run <changed-test-or-folder>`
-3. `pnpm verify:shell-contracts` (if contracts/commands touched)
-4. `pnpm check:i18n` (if a file that reads translation keys was added, moved, or **deleted** — deleting a file orphans every key it alone referenced, and the orphan ratchet fails CI on it)
-5. `pnpm check:rust` (if Rust touched)
+1. `bun run typecheck`
+2. `bun run test <changed-test-or-folder>`
+3. `bun run verify:shell-contracts` (if contracts/commands touched)
+4. `bun run check:i18n` (if a file that reads translation keys was added, moved, or **deleted** — deleting a file orphans every key it alone referenced, and the orphan ratchet fails CI on it)
+5. `bun run check:rust` (if Rust touched)
 6. `cargo fmt --all -- --check` + `cargo clippy --all-targets --all-features -- -D warnings` + `cargo test -- --test-threads=1` (if Rust touched — CI enforces all three, clippy at deny level)
-7. `pnpm build` (integration confidence)
+7. `bun run build` (integration confidence)
 
-Before opening a PR, run `pnpm check:all` — it is what CI runs, and it is a superset of steps 1, 3,
+Before opening a PR, run `bun run check:all` — it is what CI runs, and it is a superset of steps 1, 3,
 4 and 5. Running the four individually is not the same thing; that gap is how a green local tree
 still fails the build.
 
@@ -246,7 +246,7 @@ classify sequence below. The manual path:
 # Kill any running instance, clear the leaked single-instance socket, start fresh
 pkill -9 -f "tauri dev" 2>/dev/null; pkill -9 -f "target/debug/lumasync" 2>/dev/null; sleep 2
 rm -f /tmp/com_lumasync_app_si.sock
-pnpm tauri dev > /tmp/lumasync-debug-stdout.log 2>&1 &
+bun run tauri dev > /tmp/lumasync-debug-stdout.log 2>&1 &
 ```
 
 - **One log file holds everything.** `src/main.tsx` wraps `console.log/info/warn/error`
@@ -294,7 +294,7 @@ installer as verified on the strength of a green run.
 
 Four things must stay true regardless of who does the work:
 
-- **Four version locations move in lockstep**: `src-tauri/Cargo.toml`, `package.json`, `SECURITY.md`, and `bundle.windows.wix.version` in `tauri.conf.json`. Then `cargo check` to refresh `Cargo.lock`. The first three carry the full version including any prerelease suffix; the wix one carries the bare `X.Y.Z`, because MSI rejects a non-numeric prerelease identifier. The tag gate in `release.yml` checks all four, and `pnpm verify:version-parity` (inside `check:all`) checks the same rules on every PR so a drift fails before it is merged rather than at tag time.
+- **Four version locations move in lockstep**: `src-tauri/Cargo.toml`, `package.json`, `SECURITY.md`, and `bundle.windows.wix.version` in `tauri.conf.json`. Then `cargo check` to refresh `Cargo.lock`. The first three carry the full version including any prerelease suffix; the wix one carries the bare `X.Y.Z`, because MSI rejects a non-numeric prerelease identifier. The tag gate in `release.yml` checks all four, and `bun run verify:version-parity` (inside `check:all`) checks the same rules on every PR so a drift fails before it is merged rather than at tag time.
 - **No duplicate `## [X.Y.Z]` headings in CHANGELOG.md** — `release.yml` extracts notes with `awk` and stops at the first match.
 - **Work lands on `main` through pull requests.** Branch protection requires four checks: `Build and Check (ubuntu-24.04)`, `Build and Check (macos-latest)`, `Build and Check (windows-latest)`, `Analyze (javascript-typescript)`. Renaming a workflow job renames its status context — a required context no job produces blocks every PR until an admin overrides it.
 - **Tagging publishes in two stages.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the updater feed never sees a platform-incomplete `latest.json`; a `publish` job then asserts all four platform keys before undrafting. A `-` in the tag (e.g. `-rc.1`) marks it prerelease.

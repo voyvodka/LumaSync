@@ -146,14 +146,24 @@ jobs:
           fi
           echo "Introduced by ${MERGED} merged pull request(s)."
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
 
+      # Kept deliberately: vitest, wdio and the Tauri CLI still resolve through a
+      # Node shebang, so removing this breaks the run even though Bun installs.
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -212,13 +222,13 @@ jobs:
           echo "macOS SDK: $(xcrun --sdk macosx --show-sdk-version)"
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: TypeScript type check
-        run: pnpm typecheck
+        run: bun run typecheck
 
       - name: Rust check (cargo check)
-        run: pnpm check:rust
+        run: bun run check:rust
 
       - name: Rust format check (cargo fmt)
         run: cargo fmt --all -- --check
@@ -238,22 +248,22 @@ jobs:
       # parity for these JS-only checks).
       - name: Verify shell contracts (Linux only)
         if: matrix.os == 'ubuntu-24.04'
-        run: pnpm verify:shell-contracts
+        run: bun run verify:shell-contracts
 
       - name: Run frontend tests (Linux only)
         if: matrix.os == 'ubuntu-24.04'
-        run: pnpm vitest run
+        run: bun run test
 
       # The two members of `check:all` the release was missing. check:i18n is the
       # ratchet for an orphaned translation key — exactly what a release must not
       # carry — and it can only be caught here, since a tag push runs no CI.
       - name: E2E type check (Linux only)
         if: matrix.os == 'ubuntu-24.04'
-        run: pnpm typecheck:e2e
+        run: bun run typecheck:e2e
 
       - name: Verify i18n catalogue (Linux only)
         if: matrix.os == 'ubuntu-24.04'
-        run: pnpm check:i18n
+        run: bun run check:i18n
 
       - name: Rust audit (Linux only)
         if: matrix.os == 'ubuntu-24.04'

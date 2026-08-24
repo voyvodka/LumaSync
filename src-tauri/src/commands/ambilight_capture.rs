@@ -46,7 +46,7 @@ fn subsample_rgb(src: &[u8], width: usize, height: usize, stride: usize) -> Vec<
     // Stride 1 keeps the original tight loop; the strided walk skips rows and
     // columns so a 3840×2160 frame collapses to ~640×360 on the host CPU.
     if stride == 1 {
-        for pixel in src.chunks_exact(4) {
+        for pixel in src.as_chunks::<4>().0 {
             pixels_rgb.push([pixel[0], pixel[1], pixel[2]]);
         }
     } else {

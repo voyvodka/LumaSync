@@ -4,8 +4,8 @@
  * Scope: Unit tests only (no Tauri runtime, no browser APIs).
  * Tests mock Tauri plugin dependencies to run fast and deterministically.
  *
- * Run: pnpm vitest run
- * Watch: pnpm vitest
+ * Run: bun run test
+ * Watch: bunx vitest
  */
 
 import { defineConfig } from "vitest/config";

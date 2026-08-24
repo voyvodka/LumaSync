@@ -12,11 +12,11 @@ Describe what changed and why.
 
 ## Validation
 
-- [ ] `pnpm typecheck`
+- [ ] `bun run typecheck`
 - [ ] Targeted frontend tests (if applicable)
-- [ ] `pnpm check:rust` (if Rust/Tauri touched)
-- [ ] `pnpm verify:shell-contracts` (if contracts touched)
-- [ ] `pnpm build` (when integration confidence is needed)
+- [ ] `bun run check:rust` (if Rust/Tauri touched)
+- [ ] `bun run verify:shell-contracts` (if contracts touched)
+- [ ] `bun run build` (when integration confidence is needed)
 
 ## Screenshots / Recordings
 

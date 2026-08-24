@@ -89,7 +89,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 xcap = "0.9.6"
 
 [features]
-# Embeds a W3C WebDriver server in the binary for the `pnpm e2e` suite. Off by
+# Embeds a W3C WebDriver server in the binary for the `bun run e2e` suite. Off by
 # default and never enabled by `tauri build`, so release bundles never carry it.
 e2e = ["dep:tauri-plugin-wdio-webdriver"]
 

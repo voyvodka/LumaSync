@@ -57,7 +57,7 @@ not seen until restart.
 
 **A debug build does not use the OS keychain at all.** `lib.rs` seeds the shared store with a
 `DevFileStore` — a plaintext JSON file, `dev-credentials.json`, `0600` in the app data dir —
-before any Hue command can run. The reason is the macOS keychain prompt on every `pnpm tauri dev`
+before any Hue command can run. The reason is the macOS keychain prompt on every `bun run tauri dev`
 relink, which nothing on the keychain side fixes; see `build-and-release.md`. Three consequences,
 and they are the whole cost: a debug build cannot see credentials a release build stored, so a dev
 session pairs the bridge once and keeps it in the file; the file is plaintext, which is the right
