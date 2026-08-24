@@ -47,14 +47,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
 
+      # Kept deliberately: vitest, wdio and the Tauri CLI still resolve through a
+      # Node shebang, so removing this breaks the run even though Bun installs.
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: pnpm
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -113,15 +123,15 @@ jobs:
             gnome-keyring
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: TypeScript type check and shell contracts (Linux only)
         if: runner.os == 'Linux'
-        run: pnpm check:all
+        run: bun run check:all
 
       - name: Run frontend tests (Linux only)
         if: runner.os == 'Linux'
-        run: pnpm vitest run
+        run: bun run test
 
       - name: Rust fmt check
         working-directory: src-tauri
@@ -160,14 +170,14 @@ jobs:
         # Not `cargo build`: that emits a dev-cfg binary to the same path which
         # loads the Vite dev URL, so it comes up blank and proves nothing.
         # `--no-bundle` skips packaging, which launch does not exercise.
-        run: pnpm tauri build --debug --no-bundle
+        run: bun run tauri build --debug --no-bundle
 
       - name: Build app for the Windows launch smoke test
         if: runner.os == 'Windows'
         # WebView2 can skip WebResourceRequested when an embedded debug webview
         # starts hidden (#181). The shipped config remains hidden; this override
         # exposes only the CI window until React takes over.
-        run: pnpm tauri build --debug --no-bundle --config src-tauri/tauri.windows-smoke.conf.json
+        run: bun run tauri build --debug --no-bundle --config src-tauri/tauri.windows-smoke.conf.json
 
       - name: Launch smoke test (Linux)
         if: runner.os == 'Linux'

@@ -1,8 +1,9 @@
 # Dependabot configuration for LumaSync.
 #
-# Three ecosystems: Cargo (src-tauri), npm (pnpm at the repo root), and
-# GitHub Actions. Cadence is weekly — Monday mornings — so dependency
-# noise lands before the week's feature work starts. Minor and patch
+# Three ecosystems: Cargo (src-tauri), npm (Bun at the repo root — Dependabot
+# reads bun.lock under the npm ecosystem), and GitHub Actions. Cadence is
+# weekly — Monday mornings — so dependency noise lands before the week's
+# feature work starts. Minor and patch
 # updates are grouped per ecosystem to keep the PR queue short; majors
 # stay ungrouped so upstream breaking changes get individual review.
 #
@@ -75,12 +76,3 @@ updates:
     labels:
       - dependencies
       - ci
-    ignore:
-      # pnpm/action-setup v6 silently installs pnpm 11 on macOS/Windows despite
-      # package.json's packageManager pinning pnpm 10 — pnpm 11 requires Node
-      # 22.13+ and crashes under Node 20 with ERR_UNKNOWN_BUILTIN_MODULE on
-      # node:sqlite. Pin to the v4 major track until upstream fixes the
-      # packageManager parsing across platforms or we move to Node 22.
-      - dependency-name: 'pnpm/action-setup'
-        update-types:
-          - version-update:semver-major

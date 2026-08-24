@@ -13,16 +13,17 @@
   },
   "license": "MIT",
   "author": "voyvodka",
-  "packageManager": "pnpm@11.21.0",
+  "packageManager": "bun@1.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "typecheck:e2e": "tsc --noEmit -p tsconfig.e2e.json",
-    "lint": "pnpm typecheck",
+    "test": "vitest run",
+    "lint": "bun run typecheck",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
-    "check:all": "pnpm lint && pnpm typecheck:e2e && pnpm check:rust && pnpm verify:shell-contracts && pnpm check:i18n && pnpm verify:version-parity",
+    "check:all": "bun run lint && bun run typecheck:e2e && bun run check:rust && bun run verify:shell-contracts && bun run check:i18n && bun run verify:version-parity",
     "preview": "vite preview",
     "tauri": "tauri",
     "check:i18n": "node scripts/verify/i18n-keys.mjs",
@@ -31,8 +32,16 @@
     "verify:launch-smoke": "node scripts/verify/launch-smoke.mjs",
     "verify:overlay-smoke": "node scripts/verify/overlay-smoke.mjs",
     "e2e:build": "tauri build --debug --no-bundle --features e2e",
-    "e2e": "pnpm e2e:build && wdio run wdio.conf.ts",
+    "e2e": "bun run e2e:build && wdio run wdio.conf.ts",
     "e2e:run": "wdio run wdio.conf.ts"
+  },
+  "trustedDependencies": [
+    "esbuild"
+  ],
+  "overrides": {
+    "undici": "^7.29.0",
+    "serialize-javascript": "^7.1.0",
+    "@puppeteer/browsers": "^3.2.0"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
@@ -48,10 +57,10 @@
     "@tauri-apps/plugin-store": "^2.4.4",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@tauri-apps/plugin-window-state": "^2.4.1",
-    "i18next": "^26.3.6",
+    "i18next": "^26.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-i18next": "^17.0.11"
+    "react-i18next": "^17.0.12"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -59,23 +68,23 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.4",
+    "@testing-library/user-event": "^14.6.6",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react": "^6.0.5",
-    "@wdio/cli": "^9.30.1",
-    "@wdio/globals": "^9.29.1",
-    "@wdio/local-runner": "^9.30.1",
-    "@wdio/mocha-framework": "^9.30.1",
-    "@wdio/spec-reporter": "^9.30.1",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
+    "@wdio/cli": "^9.31.2",
+    "@wdio/globals": "^9.31.1",
+    "@wdio/local-runner": "^9.31.2",
+    "@wdio/mocha-framework": "^9.31.2",
+    "@wdio/spec-reporter": "^9.31.2",
     "@wdio/tauri-service": "^1.3.0",
-    "happy-dom": "^20.11.2",
+    "happy-dom": "^20.11.6",
     "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
-    "vite": "^8.2.1",
-    "vitest": "^4.1.10",
-    "webdriverio": "^9.30.1"
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11",
+    "webdriverio": "^9.31.2"
   }
 }

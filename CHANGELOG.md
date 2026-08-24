@@ -7,6 +7,16 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+
+- Package manager migrated from pnpm 11 to Bun 1.4. `bunfig.toml` pins the isolated linker so the
+  symlinked `node_modules` layout — and with it the phantom-dependency protection pnpm provided —
+  survives the move; `pnpm-workspace.yaml` is gone, with its three security overrides and its
+  build-script allowlist relocated to `package.json` and their reasoning to
+  `docs/architecture/build-and-release.md`. CI keeps Node alongside Bun, since vitest, wdio and the
+  Tauri CLI still run under a Node shebang.
+- Frontend and Rust dependencies refreshed to their latest stable releases across both ecosystems.
+
 ## [1.5.5]
 
 ### Fixed

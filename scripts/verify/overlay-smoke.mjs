@@ -182,7 +182,7 @@ async function main() {
   mkdirSync(opts.out, { recursive: true });
 
   if (!existsSync(opts.binary)) {
-    fail(`binary not found: ${opts.binary}\n       build it: pnpm tauri build --debug --no-bundle`);
+    fail(`binary not found: ${opts.binary}\n       build it: bun run tauri build --debug --no-bundle`);
   }
   if (opts.binary === DEFAULT_BINARY) assertFrontendIsEmbedded(opts.binary);
   if (!existsSync(PROBE_SCRIPT)) fail(`probe script not found: ${PROBE_SCRIPT}`);

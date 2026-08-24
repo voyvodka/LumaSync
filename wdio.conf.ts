@@ -1,5 +1,5 @@
 // `embedded` provider: WebDriver runs inside the app, because `tauri-driver` is
-// Windows+Linux only (tauri-apps/tauri#7068). Run via `pnpm e2e`, which
+// Windows+Linux only (tauri-apps/tauri#7068). Run via `bun run e2e`, which
 // rebuilds: `cargo test` emits a dev-cfg binary to this same path that loads
 // the Vite dev URL instead of embedded assets, so the window comes up blank.
 //

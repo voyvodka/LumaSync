@@ -2,7 +2,7 @@
 //!
 //! These drive real `#[tauri::command]` handlers through the real invoke
 //! pipeline against a real `AppHandle` and real managed state. That is the gap
-//! `pnpm verify:shell-contracts` cannot close: it proves names and shapes agree,
+//! `bun run verify:shell-contracts` cannot close: it proves names and shapes agree,
 //! not that a given input yields the documented `status.code`.
 
 mod device_commands;

@@ -15,13 +15,13 @@ This guide helps you contribute in a way that keeps the codebase stable and main
 ### 1) Install dependencies
 
 ```bash
-pnpm install
+bun install
 ```
 
 ### 2) Run the app
 
 ```bash
-pnpm tauri dev
+bun run tauri dev
 ```
 
 ## Code Style Expectations
@@ -37,31 +37,31 @@ pnpm tauri dev
 Run only what is relevant to your change.
 
 ```bash
-pnpm typecheck
+bun run typecheck
 ```
 
 Frontend tests (targeted):
 
 ```bash
-pnpm vitest run src/features/<feature>
+bun run test src/features/<feature>
 ```
 
 Rust checks (if Rust/Tauri touched):
 
 ```bash
-pnpm check:rust
+bun run check:rust
 ```
 
 Contract checks (if shell/contracts touched):
 
 ```bash
-pnpm verify:shell-contracts
+bun run verify:shell-contracts
 ```
 
 Integration confidence:
 
 ```bash
-pnpm build
+bun run build
 ```
 
 ## Workflow
