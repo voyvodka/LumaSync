@@ -298,6 +298,7 @@ export function RoomMapCanvas({
   const panRef = useRef<{ active: boolean; startX: number; startY: number; ox: number; oy: number }>({
     active: false, startX: 0, startY: 0, ox: 0, oy: 0,
   });
+  const rafRef = useRef<number | null>(null);
   const spaceRef = useRef(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
 
@@ -310,7 +311,13 @@ export function RoomMapCanvas({
     };
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-    return () => { window.removeEventListener("keydown", handleKeyDown); window.removeEventListener("keyup", handleKeyUp); };
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
   }, []);
 
   const handleCanvasWheel = useCallback(
@@ -351,7 +358,13 @@ export function RoomMapCanvas({
       if (!panRef.current.active) return;
       const dx = e.clientX - panRef.current.startX;
       const dy = e.clientY - panRef.current.startY;
-      onPanChange?.({ x: panRef.current.ox + dx, y: panRef.current.oy + dy });
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+      rafRef.current = requestAnimationFrame(() => {
+        onPanChange?.({ x: panRef.current.ox + dx, y: panRef.current.oy + dy });
+        rafRef.current = null;
+      });
     },
     [onPanChange],
   );
