@@ -298,6 +298,11 @@ export function RoomMapCanvas({
   const panRef = useRef<{ active: boolean; startX: number; startY: number; ox: number; oy: number }>({
     active: false, startX: 0, startY: 0, ox: 0, oy: 0,
   });
+  // ⚡ Bolt: Throttle high-frequency pointermove events with requestAnimationFrame to prevent React component tree re-render thrashing during canvas pan.
+  const canvasTickRef = useRef(false);
+  const latestCanvasEventRef = useRef<{ dx: number; dy: number } | null>(null);
+  const canvasRafRef = useRef<number | null>(null);
+
   const spaceRef = useRef(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
 
@@ -351,10 +356,31 @@ export function RoomMapCanvas({
       if (!panRef.current.active) return;
       const dx = e.clientX - panRef.current.startX;
       const dy = e.clientY - panRef.current.startY;
-      onPanChange?.({ x: panRef.current.ox + dx, y: panRef.current.oy + dy });
+
+      latestCanvasEventRef.current = { dx, dy };
+      if (!canvasTickRef.current) {
+        canvasTickRef.current = true;
+        canvasRafRef.current = requestAnimationFrame(() => {
+          canvasTickRef.current = false;
+          if (latestCanvasEventRef.current) {
+            onPanChange?.({
+              x: panRef.current.ox + latestCanvasEventRef.current.dx,
+              y: panRef.current.oy + latestCanvasEventRef.current.dy
+            });
+          }
+        });
+      }
     },
     [onPanChange],
   );
+
+  useEffect(() => {
+    return () => {
+      if (canvasRafRef.current !== null) {
+        cancelAnimationFrame(canvasRafRef.current);
+      }
+    };
+  }, []);
 
   const handleCanvasPointerUp = useCallback(() => {
     panRef.current.active = false;
