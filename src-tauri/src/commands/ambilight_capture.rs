@@ -611,7 +611,7 @@ mod platform {
                     return;
                 }
 
-                let buffer = match sample.image_buffer() {
+                let buffer = match sample.pixel_buffer() {
                     Some(buf) => buf,
                     None => return,
                 };
@@ -624,7 +624,12 @@ mod platform {
                 let width = guard.width() as u32;
                 let height = guard.height() as u32;
                 let bytes_per_row = guard.bytes_per_row();
-                let raw_data = guard.as_slice();
+                // SAFETY: the READ_ONLY lock is held by `guard` for the slice's whole
+                // lifetime, we never unlock manually, and nothing here writes to it.
+                let raw_data = match unsafe { guard.as_slice() } {
+                    Some(data) => data,
+                    None => return,
+                };
 
                 if width == 0 || height == 0 || raw_data.is_empty() {
                     return;

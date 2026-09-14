@@ -9,11 +9,13 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- WLED boards can be found, connected and tested again. The app sent each of these requests in a shape the other side of the app did not accept, so every one was turned away before it did anything: Discover showed an error straight away, Connect and Test never reached the board, and a WLED board saved from an earlier session was not re-connected at launch. The requests now use the shape the app expects, and a test drives all three through the real request path so the two sides cannot drift apart silently again.
 - Pairing a Hue bridge now finishes when you press the button on the bridge. The app asked the bridge once, and when the button had not been pressed yet it showed a "press the button, then wait a moment" card that never asked again, so the press opened the bridge's 30-second pairing window with nothing listening ([#337](https://github.com/voyvodka/LumaSync/issues/337)). The app now keeps asking every two seconds for a minute and pairs as soon as the press registers, with no extra click. If the minute runs out the card says so and offers Try again. "+ Pair" on a discovered bridge starts pairing straight away instead of opening a card about repairing credentials, and cancelling no longer leaves the bridge stuck on the old pairing card when you pick it again.
 
 ### Changed
 
 - Frontend and Rust dependencies refreshed to their latest stable releases, including Vitest 4 → 5 for the test runner, React 19.3, and the Tauri plugins kept on matching npm and crate versions.
+- `screencapturekit` 8.0.1 → 10.0.3 (macOS capture). The frame callback now reads the pixel buffer through the crate's lockable `CVPixelBuffer` accessor and its checked byte view; downscale, cursor suppression, display selection and the Swift runtime linkage are unchanged.
 
 ## [1.5.5]
 
