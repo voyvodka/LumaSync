@@ -35,7 +35,10 @@ export default {
     invalid: "Enter a valid IPv4 address before submitting.",
   },
   pair: {
-    linkButtonHint: "Press the physical button on top of your Hue bridge, then wait a moment.",
+    linkButtonHint: "Press the button on top of your Hue bridge. LumaSync keeps checking for it, so there is nothing else to click.",
+    timedOutTitle: "Button press not detected",
+    timedOutHint: "Select Try again, then press the button on top of your Hue bridge within a minute.",
+    tryAgain: "Try again",
   },
   pairing: {
     errors: {
@@ -334,6 +337,7 @@ export default {
       offline: "OFFLINE",
       reconnecting: "RECONNECTING",
       failed: "FAILED",
+      timedOut: "TIMED OUT",
       discovered: "DISCOVERED",
     },
   },

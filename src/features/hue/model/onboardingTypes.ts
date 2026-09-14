@@ -71,7 +71,9 @@ export interface UseHueOnboardingResult {
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
   submitManualIp: () => Promise<void>;
-  pair: () => Promise<void>;
+  /** Pairs the selected bridge, or selects `bridgeId` first. Keeps re-asking
+   *  while the bridge waits for its link button, for a bounded window. */
+  pair: (bridgeId?: string) => Promise<void>;
   refreshAreas: () => Promise<void>;
   selectArea: (areaId: string | null) => void;
   revalidateArea: () => Promise<void>;

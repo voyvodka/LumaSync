@@ -8,6 +8,7 @@ export type HueBridgeCardState =
   | "reconnecting"
   | "offline"
   | "pairingLinkButton"
+  | "pairingTimedOut"
   | "pairingFailed"
   | "authError"
   | "pairing"
@@ -45,11 +46,13 @@ export function deriveHueBridgeCardState({
   if (bridgeUnreachable) return "offline";
   if (credentialState === "needs_repair" && !isPairing) {
     // A rejected link button is a pairing step the user can still complete —
-    // never surface it as "credentials expired" (#167).
-    if (hueStatus?.code === "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED") return "pairingLinkButton";
+    // never surface it as "credentials expired" (#167). Outside a pairing run
+    // it only survives once the polling window has run out (#337).
+    if (hueStatus?.code === "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED") return "pairingTimedOut";
     return hueStatus?.code === "HUE_PAIRING_FAILED" ? "pairingFailed" : "authError";
   }
   if (isPairing) {
+    // Minted by useHueOnboardingCore between polls; Rust never sends it.
     return hueStatus?.code === "HUE_PAIRING_PENDING_LINK_BUTTON" ? "pairingLinkButton" : "pairing";
   }
   if (credentialState === "valid") {

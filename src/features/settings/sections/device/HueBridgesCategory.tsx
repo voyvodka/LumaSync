@@ -125,6 +125,8 @@ export function HueBridgesCategory({
               ? `${selectedArea?.name ?? "—"} · ${t("hue:page.pill.ready").toLowerCase()}`
               : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton"
               ? t("hue:wizard.pairingStep")
+              : hueBridgeState === "pairingTimedOut"
+              ? t("hue:pair.timedOutTitle")
               : hueBridgeState === "areaSelect"
               ? t("hue:wizard.areaStep")
               : hueBridgeState === "authError"
@@ -195,7 +197,7 @@ export function HueBridgesCategory({
                     <button
                       type="button"
                       className="lm-dcard-act"
-                      onClick={(e) => { e.stopPropagation(); selectBridge(bridge.id); }}
+                      onClick={(e) => { e.stopPropagation(); void pair(bridge.id); }}
                     >
                       {t("hue:page.addBridge")}
                     </button>
@@ -247,7 +249,7 @@ export function HueBridgesCategory({
               hueBridgeState === "streaming" ? " is-on" :
               hueBridgeState === "offline" ? " is-offline" :
               hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" || hueBridgeState === "reconnecting" ? " is-warn-state" :
-              hueBridgeState === "stale" ? " is-warn-state" :
+              hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" ? " is-warn-state" :
               hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" || hueBridgeState === "areaSelect" ? " is-ghost" :
               ""
             }`}>
@@ -268,6 +270,7 @@ export function HueBridgesCategory({
                        hueBridgeState === "idle" ? t("hue:page.pill.ready") :
                        hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? t("hue:page.pill.awaiting") :
                        hueBridgeState === "pairingFailed" ? t("hue:page.pill.failed") :
+                       hueBridgeState === "pairingTimedOut" ? t("hue:page.pill.timedOut") :
                        hueBridgeState === "areaSelect" ? t("hue:page.pill.paired") :
                        hueBridgeState === "authError" ? t("hue:page.pill.authError") :
                        hueBridgeState === "offline" ? t("hue:bridge.unreachable") :
@@ -504,9 +507,19 @@ export function HueBridgesCategory({
 
               {/* State C: Link button wait */}
               {hueBridgeState === "pairingLinkButton" ? (
-                <div className="lm-hue-wait">
-                  <span className="lm-hue-wait-sp" />
+                <div className="lm-hue-wait" role="status" aria-live="polite">
+                  <span className="lm-hue-wait-sp" aria-hidden="true" />
                   <span>{t("hue:pair.linkButtonHint")}</span>
+                </div>
+              ) : null}
+
+              {hueBridgeState === "pairingTimedOut" ? (
+                <div className="lm-hue-repair" role="status" aria-live="polite">
+                  <IconInfo />
+                  <div className="lm-hue-repair-tx">
+                    <div className="lm-hue-repair-title">{t("hue:pair.timedOutTitle")}</div>
+                    <div className="lm-hue-repair-sub">{t("hue:pair.timedOutHint")}</div>
+                  </div>
                 </div>
               ) : null}
 
@@ -668,9 +681,18 @@ export function HueBridgesCategory({
                     </button>
                   </>
                 ) : hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" ? (
-                  <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
+                  <button type="button" className="lm-dcard-act is-danger is-tap" onClick={() => { selectBridge(null); }}>
                     {t("hue:page.cancel")}
                   </button>
+                ) : hueBridgeState === "pairingTimedOut" ? (
+                  <>
+                    <button type="button" className="lm-dcard-act is-tap" onClick={() => { void pair(); }}>
+                      {t("hue:pair.tryAgain")}
+                    </button>
+                    <button type="button" className="lm-dcard-act is-danger is-tap" onClick={() => { selectBridge(null); }}>
+                      {t("hue:page.cancel")}
+                    </button>
+                  </>
                 ) : hueBridgeState === "areaSelect" ? (
                   <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
                     {isLoadingAreas ? t("hue:actions.loadingAreas") : t("hue:actions.refreshAreas")}

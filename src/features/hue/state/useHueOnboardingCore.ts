@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   HUE_CREDENTIAL_BACKENDS,
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
+  HUE_STATUS,
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
 import { shellStore } from "../../persistence/shellStore";
@@ -27,7 +28,11 @@ import {
   type HueOnboardingState,
   type HueStep,
 } from "../model/onboardingTypes";
-import { READINESS_STALE_MS } from "../model/pollingCadence";
+import {
+  HUE_PAIRING_POLL_INTERVAL_MS,
+  HUE_PAIRING_POLL_WINDOW_MS,
+  READINESS_STALE_MS,
+} from "../model/pollingCadence";
 import {
   checkHueStreamReadiness,
   discoverHueBridges,
@@ -56,10 +61,14 @@ export interface UseHueOnboardingCoreResult {
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;
   submitManualIp: () => Promise<void>;
-  pair: () => Promise<void>;
+  pair: (bridgeId?: string) => Promise<void>;
   refreshAreas: () => Promise<void>;
   selectArea: (areaId: string | null) => void;
   revalidateArea: () => Promise<void>;
+}
+
+function isPairingStatus(status: HueOnboardingStatus | null): boolean {
+  return status?.code.startsWith("HUE_PAIRING_") ?? false;
 }
 
 async function persistResumeState(step: HueStep): Promise<void> {
@@ -209,8 +218,13 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
   // Credentials come in as an argument because `pair()` calls this before its
   // captured `state.credentials` has caught up — still null on a first pairing,
   // still the superseded key on a re-pair.
-  const refreshAreasWith = useCallback(async (credentials: HuePairingCredentials | null) => {
-    if (!selectedBridge || !credentials) {
+  // The bridge is an argument too: a pairing started from "+ Pair" or finished
+  // by a timer-driven retry runs before `selectedBridge` has re-rendered.
+  const refreshAreasWith = useCallback(async (
+    credentials: HuePairingCredentials | null,
+    bridge: HueBridgeSummary | null = selectedBridge,
+  ) => {
+    if (!bridge || !credentials) {
       return;
     }
 
@@ -220,7 +234,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     }));
 
     try {
-      const response = await listHueEntertainmentAreas(selectedBridge.ip, credentials.username);
+      const response = await listHueEntertainmentAreas(bridge.ip, credentials.username);
       const normalizedGroups = normalizeAreas(response.areas, readinessById);
 
       patchState((prev) => {
@@ -306,16 +320,44 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     [patchState],
   );
 
+  const pairingRunRef = useRef(0);
+  const pairingBridgeIdRef = useRef<string | null>(null);
+  const pairingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Bumping the run id orphans any request still in flight: its answer is
+  // dropped instead of resurrecting a pairing the user walked away from.
+  const stopPairingPoll = useCallback(() => {
+    pairingRunRef.current += 1;
+    pairingBridgeIdRef.current = null;
+    if (pairingTimerRef.current !== null) {
+      clearTimeout(pairingTimerRef.current);
+      pairingTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopPairingPoll, [stopPairingPoll]);
+
   const selectBridge = useCallback(
     (bridgeId: string | null) => {
-      patchState((prev) => ({
-        ...prev,
-        selectedBridgeId: bridgeId,
-        // Clear unreachable flag when bridge is removed or a different bridge is selected.
-        bridgeUnreachable: bridgeId !== null && bridgeId === prev.selectedBridgeId ? prev.bridgeUnreachable : false,
-      }));
+      const stopsPairing = pairingBridgeIdRef.current !== null && pairingBridgeIdRef.current !== bridgeId;
+      if (stopsPairing) {
+        stopPairingPoll();
+      }
+      patchState((prev) => {
+        const bridgeChanged = bridgeId === null || bridgeId !== prev.selectedBridgeId;
+        return {
+          ...prev,
+          selectedBridgeId: bridgeId,
+          // Clear unreachable flag when bridge is removed or a different bridge is selected.
+          bridgeUnreachable: bridgeChanged ? false : prev.bridgeUnreachable,
+          isPairing: stopsPairing ? false : prev.isPairing,
+          // A pairing verdict belongs to the bridge it came from; carried over, it
+          // lands a reselected bridge straight back on the stale pairing card.
+          status: bridgeChanged && isPairingStatus(prev.status) ? null : prev.status,
+        };
+      });
     },
-    [patchState],
+    [patchState, stopPairingPoll],
   );
 
   const submitManualIp = useCallback(async () => {
@@ -370,66 +412,116 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
     }
   }, [patchState, state.manualIp]);
 
-  const pair = useCallback(async () => {
-    if (!selectedBridge) {
+  const pair = useCallback(async (bridgeId?: string) => {
+    const bridge = bridgeId === undefined
+      ? selectedBridge
+      : state.bridges.find((candidate) => candidate.id === bridgeId) ?? null;
+    if (!bridge) {
       return;
     }
 
+    stopPairingPoll();
+    const run = pairingRunRef.current;
+    pairingBridgeIdRef.current = bridge.id;
+    const deadline = Date.now() + HUE_PAIRING_POLL_WINDOW_MS;
+
     patchState((prev) => ({
       ...prev,
+      selectedBridgeId: bridge.id,
+      bridgeUnreachable: bridge.id === prev.selectedBridgeId ? prev.bridgeUnreachable : false,
       isPairing: true,
+      status: isPairingStatus(prev.status) ? null : prev.status,
     }));
 
-    try {
-      const response = await pairHueBridge(selectedBridge.ip);
-      patchState((prev) => ({
-        ...prev,
-        credentials: response.credentials,
-        credentialState: response.credentials
-          ? HUE_CREDENTIAL_STATUS.VALID
-          : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
-        // HUE_PAIRING_FAILED is used for both network errors and bridge rejections.
-        // If the bridge actually responded (link button, ok, etc.) we know it's reachable.
-        // For HUE_PAIRING_FAILED we can't tell, so preserve existing state.
-        bridgeUnreachable: response.status.code === "HUE_PAIRING_FAILED" ? prev.bridgeUnreachable : false,
-        isPairing: false,
-        // Contract status omits `details`; this hook's state nulls it.
-        status: { ...response.status, details: response.status.details ?? null },
-      }));
+    const attempt = async (): Promise<void> => {
+      try {
+        const response = await pairHueBridge(bridge.ip);
+        if (run !== pairingRunRef.current) {
+          return;
+        }
 
-      if (response.credentials) {
-        // Only the literal `"keychain"` licenses the delete — see docs/architecture/hue.md.
-        const keychainOwnsCredentials =
-          response.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;
+        const waitingForLinkButton =
+          response.status.code === HUE_STATUS.PAIRING_LINK_BUTTON_NOT_PRESSED
+          && Date.now() + HUE_PAIRING_POLL_INTERVAL_MS <= deadline;
 
-        await shellStore.save({
-          lastHueBridge: selectedBridge,
-          // `undefined` is dropped by the IPC JSON serialisation, so this
-          // removes the key rather than writing an empty value over it.
-          hueAppKey: keychainOwnsCredentials ? undefined : response.credentials.username,
-          hueClientKey: keychainOwnsCredentials ? undefined : response.credentials.clientKey,
-          credentialStorageBackend: keychainOwnsCredentials
-            ? HUE_CREDENTIAL_BACKENDS.KEYCHAIN
-            : HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
-          hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
-          hueOnboardingStep: HUE_ONBOARDING_STEP.PAIR,
-        });
-        hueCredentialEvents.emit({ reason: "paired" });
-        await refreshAreasWith(response.credentials);
+        if (waitingForLinkButton) {
+          patchState((prev) => ({
+            ...prev,
+            credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+            bridgeUnreachable: false,
+            isPairing: true,
+            status: {
+              code: HUE_STATUS.PAIRING_PENDING_LINK_BUTTON,
+              message: "Waiting for the bridge link button to be pressed.",
+              details: null,
+            },
+          }));
+          pairingTimerRef.current = setTimeout(() => {
+            pairingTimerRef.current = null;
+            void attempt();
+          }, HUE_PAIRING_POLL_INTERVAL_MS);
+          return;
+        }
+
+        // Anything else ends the run, including a 101 past the deadline, which
+        // the card shows as timed out. Rate-limited and busy answers stop here
+        // too: retrying into a throttling bridge only extends the throttle.
+        pairingBridgeIdRef.current = null;
+        patchState((prev) => ({
+          ...prev,
+          credentials: response.credentials,
+          credentialState: response.credentials
+            ? HUE_CREDENTIAL_STATUS.VALID
+            : HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+          // HUE_PAIRING_FAILED is used for both network errors and bridge rejections.
+          // If the bridge actually responded (link button, ok, etc.) we know it's reachable.
+          // For HUE_PAIRING_FAILED we can't tell, so preserve existing state.
+          bridgeUnreachable: response.status.code === "HUE_PAIRING_FAILED" ? prev.bridgeUnreachable : false,
+          isPairing: false,
+          // Contract status omits `details`; this hook's state nulls it.
+          status: { ...response.status, details: response.status.details ?? null },
+        }));
+
+        if (response.credentials) {
+          // Only the literal `"keychain"` licenses the delete — see docs/architecture/hue.md.
+          const keychainOwnsCredentials =
+            response.credentialStorageBackend === HUE_CREDENTIAL_BACKENDS.KEYCHAIN;
+
+          await shellStore.save({
+            lastHueBridge: bridge,
+            // `undefined` is dropped by the IPC JSON serialisation, so this
+            // removes the key rather than writing an empty value over it.
+            hueAppKey: keychainOwnsCredentials ? undefined : response.credentials.username,
+            hueClientKey: keychainOwnsCredentials ? undefined : response.credentials.clientKey,
+            credentialStorageBackend: keychainOwnsCredentials
+              ? HUE_CREDENTIAL_BACKENDS.KEYCHAIN
+              : HUE_CREDENTIAL_BACKENDS.PLAINTEXT_LEGACY,
+            hueCredentialStatus: HUE_CREDENTIAL_STATUS.VALID,
+            hueOnboardingStep: HUE_ONBOARDING_STEP.PAIR,
+          });
+          hueCredentialEvents.emit({ reason: "paired" });
+          await refreshAreasWith(response.credentials, bridge);
+        }
+      } catch (error) {
+        if (run !== pairingRunRef.current) {
+          return;
+        }
+        pairingBridgeIdRef.current = null;
+        patchState((prev) => ({
+          ...prev,
+          credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
+          isPairing: false,
+          status: {
+            code: CODE.PAIRING_FAILED,
+            message: "Pairing request failed.",
+            details: toErrorDetails(error),
+          },
+        }));
       }
-    } catch (error) {
-      patchState((prev) => ({
-        ...prev,
-        credentialState: HUE_CREDENTIAL_STATUS.NEEDS_REPAIR,
-        isPairing: false,
-        status: {
-          code: CODE.PAIRING_FAILED,
-          message: "Pairing request failed.",
-          details: toErrorDetails(error),
-        },
-      }));
-    }
-  }, [patchState, refreshAreasWith, selectedBridge]);
+    };
+
+    await attempt();
+  }, [patchState, refreshAreasWith, selectedBridge, state.bridges, stopPairingPoll]);
 
   const selectArea = useCallback(
     (areaId: string | null) => {
