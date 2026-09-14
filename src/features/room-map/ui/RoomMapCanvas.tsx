@@ -298,7 +298,7 @@ export function RoomMapCanvas({
   const panRef = useRef<{ active: boolean; startX: number; startY: number; ox: number; oy: number }>({
     active: false, startX: 0, startY: 0, ox: 0, oy: 0,
   });
-  // ⚡ Bolt: Throttle high-frequency pointermove events with requestAnimationFrame to prevent React component tree re-render thrashing during canvas pan.
+  // pointermove can fire several times per frame; coalesce pan updates to one per rAF.
   const canvasTickRef = useRef(false);
   const latestCanvasEventRef = useRef<{ dx: number; dy: number } | null>(null);
   const canvasRafRef = useRef<number | null>(null);
