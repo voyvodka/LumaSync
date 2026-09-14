@@ -72,14 +72,14 @@ describe("deriveHueBridgeCardState", () => {
   });
 
   describe("needs_repair branches (#167)", () => {
-    it("maps a rejected link button to pairingLinkButton, never authError", () => {
+    it("maps a link button still unpressed after the polling window to pairingTimedOut, never authError", () => {
       expect(
         deriveHueBridgeCardState({
           ...BASE,
           credentialState: "needs_repair",
           hueStatus: status("HUE_PAIRING_LINK_BUTTON_NOT_PRESSED"),
         }),
-      ).toBe("pairingLinkButton");
+      ).toBe("pairingTimedOut");
     });
 
     it("maps an ambiguous pairing failure to pairingFailed", () => {

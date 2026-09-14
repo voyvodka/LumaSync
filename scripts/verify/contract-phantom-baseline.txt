@@ -20,10 +20,9 @@ OVERLAY_NO_DISPLAY
 # declaration — it was always frontend-minted, just undeclared.
 HEALTH_CHECK_NOT_AVAILABLE
 
-# MISSING PRODUCER — DeviceSection.tsx:254 branches on this to show the
-# "press the link button" card while pairing is in flight. Nothing emits it, so
-# that branch is dead and the prompt only appears after pairing FAILS with
-# HUE_PAIRING_LINK_BUTTON_NOT_PRESSED (line 250). Reported, not fixed.
+# Legitimate, same category: `useHueOnboardingCore.ts` holds it while it re-asks
+# a bridge that answered HUE_PAIRING_LINK_BUTTON_NOT_PRESSED (#337). Was listed
+# as a MISSING PRODUCER until the frontend started minting it.
 HUE_PAIRING_PENDING_LINK_BUTTON
 
 # No producer, but EN+TR strings exist under device.health.codes.*. The handshake

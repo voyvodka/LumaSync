@@ -38,7 +38,10 @@ const hue: Catalogue<typeof enHue> = {
     invalid: "Göndermeden önce geçerli bir IPv4 adresi gir.",
   },
   pair: {
-    linkButtonHint: "Hue bridge'inizin üstündeki fiziksel butona basın ve bir an bekleyin.",
+    linkButtonHint: "Hue bridge'inizin üstündeki butona basın. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklamanız gerekmiyor.",
+    timedOutTitle: "Buton basışı algılanmadı",
+    timedOutHint: "Tekrar dene'yi seçin, ardından bir dakika içinde Hue bridge'inizin üstündeki butona basın.",
+    tryAgain: "Tekrar dene",
   },
   pairing: {
     errors: {
@@ -337,6 +340,7 @@ const hue: Catalogue<typeof enHue> = {
       offline: "ÇEVRIMDIŞI",
       reconnecting: "YEN. BAĞLANIYOR",
       failed: "BAŞARISIZ",
+      timedOut: "SÜRE DOLDU",
       discovered: "KEŞFEDİLDİ",
     },
   },

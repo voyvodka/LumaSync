@@ -82,6 +82,10 @@ export const HUE_STATUS = {
   IP_INVALID: "HUE_IP_INVALID",
   IP_UNREACHABLE: "HUE_IP_UNREACHABLE",
   PAIRING_OK: "HUE_PAIRING_OK",
+  /**
+   * Frontend-minted, never on the wire: the onboarding hook holds it while it
+   * re-asks a bridge that answered `PAIRING_LINK_BUTTON_NOT_PRESSED`.
+   */
   PAIRING_PENDING_LINK_BUTTON: "HUE_PAIRING_PENDING_LINK_BUTTON",
   /**
    * Catch-all pairing failure. Kept for backwards compatibility with

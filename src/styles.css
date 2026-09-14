@@ -1413,6 +1413,9 @@
   .lm-updater-spinner::before {
     animation-duration: 2.2s;
   }
+  .lm-hue-wait-sp {
+    animation-duration: 2.2s;
+  }
 
   /* Decorative infinite loops — kill outright (UI Gap 7).
      Functional spinners (lm-spin) keep ticking but at a calmer cadence. */
@@ -2131,6 +2134,14 @@
 .lm-dcard-act:hover:not(:disabled) {
   border-color: var(--lm-amber, #ffb020);
   color: var(--lm-amber, #ffb020);
+}
+/* Pairing-flow actions sit alone in their row, so the 32 px floor can apply
+   without leaving them taller than a neighbour. */
+.lm-dcard-act.is-tap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
 }
 .lm-dcard-act:disabled {
   opacity: 0.5;

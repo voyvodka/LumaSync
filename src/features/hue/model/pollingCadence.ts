@@ -30,3 +30,8 @@ export const STREAMING_RUNTIME_STATES = new Set<HueRuntimeStatus["state"]>([
   "Running",
   "Reconnecting",
 ]);
+// The bridge answers 101 until its link button is pressed, then accepts a
+// pairing for 30 s. Re-asking every 2 s for 60 s catches that window even
+// when the user is slow to reach the bridge.
+export const HUE_PAIRING_POLL_INTERVAL_MS = 2_000;
+export const HUE_PAIRING_POLL_WINDOW_MS = 60_000;

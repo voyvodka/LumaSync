@@ -205,12 +205,40 @@ describe("HueReadySummaryCard", () => {
     });
   });
 
-  it("shows the awaiting-link-button pill instead of auth error when the link button was not pressed", async () => {
+  it("tells the user it is checking on its own while it waits for the link button", async () => {
+    await renderHueTab(createHueHookState({
+      credentialState: "needs_repair",
+      isPairing: true,
+      selectedAreaId: null,
+      selectedArea: null,
+      canStartHue: false,
+      status: {
+        code: "HUE_PAIRING_PENDING_LINK_BUTTON",
+        message: "Waiting for the bridge link button to be pressed.",
+        details: null,
+      },
+    }));
+
+    await waitFor(() => {
+      expect(screen.getByText("hue:page.pill.awaiting")).toBeInTheDocument();
+    });
+    const live = screen.getByText("hue:pair.linkButtonHint").closest("[aria-live]");
+    expect(live).toHaveAttribute("aria-live", "polite");
+    expect(screen.queryByText("hue:page.pill.authError")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "hue:page.cancel" })).toBeInTheDocument();
+  });
+
+  it("offers Try again instead of auth error once the link-button window has run out", async () => {
+    const pair = vi.fn();
+    const selectBridge = vi.fn();
+    const user = userEvent.setup();
     await renderHueTab(createHueHookState({
       credentialState: "needs_repair",
       selectedAreaId: null,
       selectedArea: null,
       canStartHue: false,
+      pair,
+      selectBridge,
       status: {
         code: "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED",
         message: "Press the bridge link button and retry within 30 seconds.",
@@ -219,9 +247,34 @@ describe("HueReadySummaryCard", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getByText("hue:page.pill.awaiting")).toBeInTheDocument();
-      expect(screen.queryByText("hue:page.pill.authError")).not.toBeInTheDocument();
+      expect(screen.getByText("hue:page.pill.timedOut")).toBeInTheDocument();
     });
+    expect(screen.queryByText("hue:page.pill.authError")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "hue:pair.tryAgain" }));
+    expect(pair).toHaveBeenCalledWith();
+
+    await user.click(screen.getByRole("button", { name: "hue:page.cancel" }));
+    expect(selectBridge).toHaveBeenCalledWith(null);
+  });
+
+  it("starts pairing straight from + Pair on a discovered bridge", async () => {
+    const pair = vi.fn();
+    const selectBridge = vi.fn();
+    const user = userEvent.setup();
+    await renderHueTab(createHueHookState({
+      selectedBridgeId: null,
+      selectedBridge: null,
+      credentialState: "needs_repair",
+      selectedAreaId: null,
+      selectedArea: null,
+      canStartHue: false,
+      pair,
+      selectBridge,
+    }));
+
+    await user.click(await screen.findByRole("button", { name: "hue:page.addBridge" }));
+    expect(pair).toHaveBeenCalledWith("test-bridge");
   });
 
   it("still shows auth error when credentials genuinely expired", async () => {

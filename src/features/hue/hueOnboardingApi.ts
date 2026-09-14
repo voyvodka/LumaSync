@@ -82,8 +82,9 @@ export async function verifyHueBridgeIp(bridgeIp: string): Promise<HueVerifyBrid
 }
 
 /**
- * Request pairing with the bridge at `bridgeIp`. Requires the physical link
- * button to have been pressed recently; returns `HUE_PAIRING_PENDING_LINK_BUTTON` otherwise.
+ * Request pairing with the bridge at `bridgeIp`. One attempt: returns
+ * `HUE_PAIRING_LINK_BUTTON_NOT_PRESSED` until the physical link button has been
+ * pressed, so the caller owns any retrying.
  */
 export async function pairHueBridge(bridgeIp: string): Promise<HuePairBridgeResponse> {
   return invoke<HuePairBridgeResponse>(HUE_COMMANDS.PAIR_BRIDGE, { bridgeIp });
