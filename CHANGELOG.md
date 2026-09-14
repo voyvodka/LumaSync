@@ -7,6 +7,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+
+- `screencapturekit` 8.0.1 → 10.0.3 (macOS capture). The frame callback now reads the pixel buffer through the crate's lockable `CVPixelBuffer` accessor and its checked byte view; downscale, cursor suppression, display selection and the Swift runtime linkage are unchanged.
+
 ## [1.5.5]
 
 ### Fixed
