@@ -10,6 +10,7 @@ https://keepachangelog.com/en/1.1.0/
 ### Changed
 
 - Frontend and Rust dependencies refreshed to their latest stable releases, including Vitest 4 → 5 for the test runner, React 19.3, and the Tauri plugins kept on matching npm and crate versions.
+- `screencapturekit` 8.0.1 → 10.0.3 (macOS capture). The frame callback now reads the pixel buffer through the crate's lockable `CVPixelBuffer` accessor and its checked byte view; downscale, cursor suppression, display selection and the Swift runtime linkage are unchanged.
 
 ## [1.5.5]
 
