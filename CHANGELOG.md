@@ -7,6 +7,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Fixed
+
+- WLED boards can be found, connected and tested again. The app sent each of these requests in a shape the other side of the app did not accept, so every one was turned away before it did anything: Discover showed an error straight away, Connect and Test never reached the board, and a WLED board saved from an earlier session was not re-connected at launch. The requests now use the shape the app expects, and a test drives all three through the real request path so the two sides cannot drift apart silently again.
+
 ### Changed
 
 - Frontend and Rust dependencies refreshed to their latest stable releases, including Vitest 4 → 5 for the test runner, React 19.3, and the Tauri plugins kept on matching npm and crate versions.

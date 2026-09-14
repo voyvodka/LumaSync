@@ -74,7 +74,7 @@ describe("discoverWledDevices", () => {
     expect(result).toEqual(response);
   });
 
-  it("happy path: invokes discover_wled_devices with ip payload when manualIp is supplied", async () => {
+  it("happy path: invokes discover_wled_devices with the ip nested under `request`", async () => {
     invokeMock.mockResolvedValueOnce({
       status: makeStatus(WLED_STATUS.DISCOVERY_OK),
       devices: [DEVICE_OK],
@@ -84,7 +84,7 @@ describe("discoverWledDevices", () => {
 
     expect(invokeMock).toHaveBeenCalledWith(
       DEVICE_COMMANDS.DISCOVER_WLED_DEVICES,
-      { ip: "192.168.1.42" },
+      { request: { ip: "192.168.1.42" } },
     );
   });
 
@@ -155,18 +155,27 @@ describe("connectWledSink", () => {
     expect(result).toEqual(response);
   });
 
-  it("happy path: invokes connect_wled_sink with { device } wrapping the WledDeviceInfo", async () => {
+  it("happy path: invokes connect_wled_sink with the device nested under `request`", async () => {
     invokeMock.mockResolvedValueOnce({
       status: makeStatus("WLED_CONNECT_OK"),
     });
 
     await connectWledSink(DEVICE_OK);
 
-    // The Rust WledConnectRequest expects { device: WledDeviceInfo, port?: u16, protocol?: String }.
-    // The TS wrapper sends { device } — port and protocol are Rust-optional and NOT sent by the wrapper.
     expect(invokeMock).toHaveBeenCalledWith(
       DEVICE_COMMANDS.CONNECT_WLED_SINK,
-      { device: DEVICE_OK },
+      { request: { device: DEVICE_OK, port: undefined, protocol: undefined } },
+    );
+  });
+
+  it("happy path: a transport override travels inside `request`", async () => {
+    invokeMock.mockResolvedValueOnce({ status: makeStatus("WLED_CONNECT_OK") });
+
+    await connectWledSink(DEVICE_OK, { port: 21324, protocol: "drgb" });
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      DEVICE_COMMANDS.CONNECT_WLED_SINK,
+      { request: { device: DEVICE_OK, port: 21324, protocol: "drgb" } },
     );
   });
 
@@ -180,13 +189,14 @@ describe("connectWledSink", () => {
 
     await connectWledSink(deviceWithMinimalFields);
 
-    const [, payload] = invokeMock.mock.calls[0] as [string, { device: WledDeviceInfo }];
-    expect(payload.device.ip).toBe("10.0.0.20");
-    expect(payload.device.ledCount).toBe(144);
+    const [, payload] = invokeMock.mock.calls[0] as [string, { request: { device: WledDeviceInfo } }];
+    const { device } = payload.request;
+    expect(device.ip).toBe("10.0.0.20");
+    expect(device.ledCount).toBe(144);
     // optional fields absent — must not be injected as defined
-    expect(payload.device.mac).toBeUndefined();
-    expect(payload.device.name).toBeUndefined();
-    expect(payload.device.version).toBeUndefined();
+    expect(device.mac).toBeUndefined();
+    expect(device.name).toBeUndefined();
+    expect(device.version).toBeUndefined();
   });
 
   it("coded failure: resolves (does not throw) with WLED_INVALID_IP", async () => {
@@ -250,7 +260,7 @@ describe("testWledBridge", () => {
     expect(result.sendLatencyMs).toBe(3);
   });
 
-  it("happy path: invokes test_wled_bridge with { device } wrapping the WledDeviceInfo", async () => {
+  it("happy path: invokes test_wled_bridge with the device nested under `request`", async () => {
     invokeMock.mockResolvedValueOnce({
       status: makeStatus("WLED_TEST_LIVE_CONFIRMED"),
       sendLatencyMs: 2,
@@ -260,7 +270,7 @@ describe("testWledBridge", () => {
 
     expect(invokeMock).toHaveBeenCalledWith(
       DEVICE_COMMANDS.TEST_WLED_BRIDGE,
-      { device: DEVICE_OK },
+      { request: { device: DEVICE_OK } },
     );
   });
 

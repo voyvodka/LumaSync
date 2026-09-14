@@ -36,12 +36,16 @@ export type WledTransportOverride = Pick<WledUdpSinkConfig, "port" | "protocol">
 
 export type WledTestResponse = ContractWledTestResponse;
 
+// All three WLED handlers take a single struct parameter named `request`, and
+// Tauri matches top-level invoke keys to parameter names: flat args are
+// rejected before the handler runs.
+
 /** Probe a single WLED instance's `/json/info` at `ip`. Never throws. */
 export async function discoverWledDevices(
   ip: string,
 ): Promise<WledDiscoveryResponse> {
   return invoke<WledDiscoveryResponse>(DEVICE_COMMANDS.DISCOVER_WLED_DEVICES, {
-    ip,
+    request: { ip },
   });
 }
 
@@ -55,9 +59,11 @@ export async function connectWledSink(
   transport?: WledTransportOverride,
 ): Promise<WledConnectResponse> {
   return invoke<WledConnectResponse>(DEVICE_COMMANDS.CONNECT_WLED_SINK, {
-    device,
-    port: transport?.port,
-    protocol: transport?.protocol,
+    request: {
+      device,
+      port: transport?.port,
+      protocol: transport?.protocol,
+    },
   });
 }
 
@@ -80,6 +86,6 @@ export async function testWledBridge(
   device: WledDeviceInfo,
 ): Promise<WledTestResponse> {
   return invoke<WledTestResponse>(DEVICE_COMMANDS.TEST_WLED_BRIDGE, {
-    device,
+    request: { device },
   });
 }

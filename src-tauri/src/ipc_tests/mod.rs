@@ -12,6 +12,7 @@ mod overlay_commands;
 mod preview_commands;
 mod room_map_commands;
 mod telemetry_commands;
+mod wled_commands;
 
 use serde_json::Value;
 use tauri::ipc::{CallbackFn, InvokeBody};
