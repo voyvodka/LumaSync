@@ -7,6 +7,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Changed
+
+- Frontend and Rust dependencies refreshed to their latest stable releases, including Vitest 4 → 5 for the test runner, React 19.3, and the Tauri plugins kept on matching npm and crate versions.
+
 ## [1.5.5]
 
 ### Fixed
