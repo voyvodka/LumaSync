@@ -7,20 +7,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
-### Fixed
-
-- WLED boards can be found, connected and tested again. The app sent each of these requests in a shape the other side of the app did not accept, so every one was turned away before it did anything: Discover showed an error straight away, Connect and Test never reached the board, and a WLED board saved from an earlier session was not re-connected at launch. The requests now use the shape the app expects, and a test drives all three through the real request path so the two sides cannot drift apart silently again.
-- Pairing a Hue bridge now finishes when you press the button on the bridge. The app asked the bridge once, and when the button had not been pressed yet it showed a "press the button, then wait a moment" card that never asked again, so the press opened the bridge's 30-second pairing window with nothing listening ([#337](https://github.com/voyvodka/LumaSync/issues/337)). The app now keeps asking every two seconds for a minute and pairs as soon as the press registers, with no extra click. If the minute runs out the card says so and offers Try again. "+ Pair" on a discovered bridge starts pairing straight away instead of opening a card about repairing credentials, and cancelling no longer leaves the bridge stuck on the old pairing card when you pick it again.
-
-### Changed
-
-- Frontend and Rust dependencies refreshed to their latest stable releases, including Vitest 4 → 5 for the test runner, React 19.3, and the Tauri plugins kept on matching npm and crate versions.
-- `screencapturekit` 8.0.1 → 10.0.3 (macOS capture). The frame callback now reads the pixel buffer through the crate's lockable `CVPixelBuffer` accessor and its checked byte view; downscale, cursor suppression, display selection and the Swift runtime linkage are unchanged.
-
 ## [1.5.5]
 
 ### Fixed
 
+- WLED boards can be found, connected and tested again. The app sent each of these requests in a shape the other side of the app did not accept, so every one was turned away before it did anything: Discover showed an error straight away, Connect and Test never reached the board, and a WLED board saved from an earlier session was not re-connected at launch. The requests now use the shape the app expects, and a test drives all three through the real request path so the two sides cannot drift apart silently again.
+- Pairing a Hue bridge now finishes when you press the button on the bridge. The app asked the bridge once, and when the button had not been pressed yet it showed a "press the button, then wait a moment" card that never asked again, so the press opened the bridge's 30-second pairing window with nothing listening ([#337](https://github.com/voyvodka/LumaSync/issues/337)). The app now keeps asking every two seconds for a minute and pairs as soon as the press registers, with no extra click. If the minute runs out the card says so and offers Try again. "+ Pair" on a discovered bridge starts pairing straight away instead of opening a card about repairing credentials, and cancelling no longer leaves the bridge stuck on the old pairing card when you pick it again.
 - Saving Hue light positions to the bridge no longer moves the wrong light. Each position was addressed by the light's place in the list rather than by the number the bridge itself gave it, and those two only agree while the numbering has no gaps — which it stops having as soon as a light is removed from an entertainment area. Positions are now sent under the bridge's own number. A light the app has not yet matched to the bridge is skipped and reported instead of being written under a guess, and the lights beside it still save.
 - The Hue channel panel no longer vanishes, or says the same thing, whenever it has no lights to show. An area with no lights, a bridge that never answered, and a reply the app could not read all produced the same empty result — usually no panel at all — so a dropped bridge was indistinguishable from an area you had emptied on purpose. Each now says which it is, and when the bridge stops answering the last known lights stay listed and marked as such, with the save-to-bridge button held back until it answers again.
 - A Hue bridge that stops answering no longer empties the channel list. A brief network drop looked exactly like an area that had been deleted: the lights vanished from the panel, and only a reconnect brought them back. Not being able to reach the bridge is now told apart from the bridge saying there is nothing there, and the last known lights stay on screen. Nothing saved is removed either way.
@@ -101,6 +93,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Changed
 
+- Frontend and Rust dependencies refreshed to their latest stable releases, including Vitest 4 → 5 for the test runner, React 19.3, and the Tauri plugins kept on matching npm and crate versions.
+- `screencapturekit` 8.0.1 → 10.0.3 (macOS capture). The frame callback now reads the pixel buffer through the crate's lockable `CVPixelBuffer` accessor and its checked byte view; downscale, cursor suppression, display selection and the Swift runtime linkage are unchanged.
 - Ambilight relates the lights to each other and to the scene instead of sampling each one on its own. Neighbouring LEDs used to land on unrelated colours — twenty independent samples down one edge rather than one lit room — and every sink moved at one fixed rate whatever was on screen. Each frame is now analysed once: lights that sit close and read close are drawn together, while a genuine boundary (sky over grass, a split-screen) stays a boundary; every light takes a little of the room's overall colour, and a Hue bulb placed away from the TV wall takes mostly that, with a hint of its side of the screen, instead of a hard sample of the bottom of the frame. The Subtle / Moderate / Intense choice keeps its name and now sets the *most* the lights may move: a still scene steers gently below it, a hard cut uses all of it. The strip is also sampled twice as densely per LED. Both changes cost well under a tenth of a millisecond per frame.
 - LED Setup is drawn in the app's own colours. It was still using the stock palette it was built against, so its greys read lighter, its amber duller, and its preview toggle was a near-white slab in an otherwise dark window. Nothing moves or changes behaviour; the page now matches every other surface.
 - The window opens in whichever mode you left it in. Every launch forced compact and threw away the persisted choice, so anyone who preferred the wide layout re-selected it after every restart. The stated reason was a visible big-to-small flash during startup, which is not something that can happen: the window is created hidden and only shown once its size and position have been applied. Wide mode is now restored — at the size you last left it — before the window appears.
@@ -124,10 +118,8 @@ https://keepachangelog.com/en/1.1.0/
   build-script allowlist relocated to `package.json` and their reasoning to
   `docs/architecture/build-and-release.md`. CI keeps Node alongside Bun, since vitest, wdio and the
   Tauri CLI still run under a Node shebang.
-- Frontend and Rust dependencies refreshed to their latest stable releases across both ecosystems.
 
 ### Security
-
 
 - The Hue application key is no longer written to `shell-state.json`. Both Hue secrets now live only in the OS keychain — macOS Keychain, Windows Credential Manager, Linux Secret Service — and the CLIP v2 command surface resolves the key there rather than taking it from a plaintext file. Two limits worth stating plainly: on a platform with no working keychain (a Linux box without D-Bus) both keys still land on disk, because the alternative is an app that cannot pair; and upgrading does not scrub the existing file at install time — the key is removed on the next launch, once the migration has verified the keychain holds a copy, or on the next successful pairing.
 - Cleared the `extract-zip` symlink path-traversal advisory (GHSA-jmr9-qjv8-65gv), which reached the tree through the WebdriverIO E2E toolchain (dev-only). The package is unmaintained and its last release is the vulnerable one, so the exit is pinning its parent `@puppeteer/browsers` to 3.x, which dropped the dependency outright.
