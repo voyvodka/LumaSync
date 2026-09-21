@@ -59,4 +59,12 @@ describe("PropertyBar — Hue channel fields resolve by identity", () => {
 
     expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
   });
+
+  it("says what the empty bar is for instead of showing a bare dash", () => {
+    // The dash read as a rendering fault rather than an empty state, and gave
+    // a screen reader nothing at all.
+    renderPropertyBar(GAPPED_CONFIG, hueChannelObjectId(1));
+
+    expect(screen.getByText("roomMap:propertyBar.empty")).toBeInTheDocument();
+  });
 });

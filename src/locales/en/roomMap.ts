@@ -192,6 +192,7 @@ export default {
     imageHint: "Use the canvas handles to scale and position the image. Lower opacity to keep the room outline visible.",
   },
   propertyBar: {
+    empty: "Select an object to edit its properties",
     aspectLocked: "Aspect ratio locked",
     aspectUnlocked: "Aspect ratio unlocked",
     resetScale: "Reset aspect ratio",
