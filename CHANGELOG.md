@@ -7,6 +7,17 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Fixed
+
+- Connecting to a Hue bridge other than the one paired most recently no longer asks you to pair
+  again for no reason. The saved key was handed to whichever bridge the app connected to, without
+  checking which bridge had issued it, so a second bridge — or the same one re-entered by address
+  — was given credentials it had never seen. It refused them, and the app read that refusal as
+  "your key has expired" and offered to re-pair a bridge that was working. The app now remembers
+  which bridge a saved key belongs to and only offers it there. A key saved before this update has
+  no bridge recorded against it and keeps working exactly as before; it is labelled the next time
+  you pair.
+
 ### Added
 
 - A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs

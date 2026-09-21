@@ -405,6 +405,7 @@ pub async fn pair_hue_bridge(bridge_ip: String) -> HuePairBridgeResponse {
                 let store = super::hue::credential_store::default_store();
                 let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
                     store.as_ref(),
+                    &bridge_ip,
                     &creds.username,
                     &creds.client_key,
                 );
@@ -495,8 +496,15 @@ pub fn migrate_hue_credentials(
     client_key: String,
 ) -> HueCredentialMigrationResponse {
     let store = super::hue::credential_store::default_store();
+    // No bridge context here: this is the boot cleanup for installs that
+    // paired before the keychain existed, and the caller only carries the two
+    // plaintext halves. The pair stays unscoped, which is exactly the
+    // behaviour it already had, and the owner is recorded on the next real
+    // pairing. Adding a bridge argument would be a command-surface change for
+    // a path that has nothing to put in it.
     let outcome = super::hue::credential_store::migrate_hue_credentials_to_keychain(
         store.as_ref(),
+        "",
         &username,
         &client_key,
     );
