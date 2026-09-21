@@ -9,6 +9,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The window could not be moved or closed while the room-map rename box or the firmware
+  override warning was open. Both covered the whole window, including the title bar that
+  carries the drag region and the window controls, so the window stayed pinned until the
+  dialog was answered. They now start below the title bar, as the update dialog already
+  did. Both also return keyboard focus to whatever opened them when they close, which
+  previously dropped you back at the top of the screen.
 - The room map's property bar showed a lone dash whenever nothing was selected, which read
   as something failing to render rather than as an empty state, and told a screen reader
   nothing at all. It now says what the bar is for. The strip stays reserved on purpose:
