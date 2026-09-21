@@ -69,6 +69,27 @@ export async function initI18n(language: string = I18N_DEFAULT_LANGUAGE): Promis
     // No automatic detection — we use languagePolicy for explicit control
     detection: undefined,
   });
+
+  syncDocumentLanguage();
+}
+
+/**
+ * Keeps `<html lang>` on the language actually being rendered.
+ *
+ * `index.html` ships `lang="en"` and nothing updated it, so the whole Turkish
+ * UI was announced to a screen reader as English — it applies English
+ * pronunciation rules to Turkish text, which is the difference between
+ * understandable and not. Hooked to `languageChanged` rather than written at
+ * each call site so the runtime switch and the boot path cannot diverge.
+ */
+function syncDocumentLanguage(): void {
+  const apply = (lang: string) => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = lang;
+    }
+  };
+  apply(i18next.resolvedLanguage ?? i18next.language ?? I18N_DEFAULT_LANGUAGE);
+  i18next.on("languageChanged", apply);
 }
 
 /** Change the active language at runtime and persist the selection. */

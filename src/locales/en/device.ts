@@ -109,6 +109,7 @@ export default {
       wled: "WLED",
       displays: "Displays",
       manualEntry: "Manual Entry",
+      countLabel: "{{count}} connected",
     },
     header: {
       usbTitle: "USB Strips",

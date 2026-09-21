@@ -42,6 +42,53 @@ export interface DeviceSectionProps {
   onChipTypeChange?: (next: LedChipType) => void;
 }
 
+interface RailButtonProps {
+  icon: React.ReactNode;
+  label: string;
+  /** Rendered as a badge when non-zero. */
+  count: number;
+  /** What the badge means, for anyone who cannot see it sit next to the label. */
+  countLabel?: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+/**
+ * One category in the Devices rail.
+ *
+ * `aria-current` is the point of extracting this. The rail previously carried
+ * its active category in an `is-on` class and nothing else, so five buttons
+ * were announced identically and the open one was indistinguishable — while
+ * the app's own top-level section tabs have always exposed `aria-selected`.
+ * The codebase disagreed with itself.
+ *
+ * `aria-current="page"` rather than a `role="tablist"`: this is a `<nav>`, and
+ * a tablist would promise arrow-key navigation the rail does not implement.
+ * Promising the wrong interaction is worse than promising none.
+ *
+ * The badge is `aria-hidden` with its meaning on the button instead, because a
+ * bare "2" read after a label is ambiguous — two of what.
+ */
+function RailButton({ icon, label, count, countLabel, active, onClick }: RailButtonProps) {
+  return (
+    <button
+      type="button"
+      className={`lm-device-cat ${active ? "is-on" : ""}`}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+    >
+      <span className="lm-device-cat-ic">{icon}</span>
+      <span className="lm-device-cat-tx">{label}</span>
+      {count > 0 ? (
+        <span className="lm-device-cat-cnt" aria-hidden="true">
+          {count}
+        </span>
+      ) : null}
+      {count > 0 && countLabel !== undefined ? <span className="sr-only">{countLabel}</span> : null}
+    </button>
+  );
+}
+
 export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceSectionProps = {}) {
   const { t } = useTranslation();
 
@@ -176,51 +223,46 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
       {/* ── Left category rail ───────────────────────────────── */}
       <nav className="lm-device-rail">
         <div className="lm-device-rail-h">{t("device:page.rail.connected")}</div>
-        <button
-          type="button"
-          className={`lm-device-cat ${activeCategory === "usb" ? "is-on" : ""}`}
+        <RailButton
+          icon={<IconUsb />}
+          label={t("device:page.rail.usbStrips")}
+          count={ports.length}
+          countLabel={t("device:page.rail.countLabel", { count: ports.length })}
+          active={activeCategory === "usb"}
           onClick={() => setActiveCategory("usb")}
-        >
-          <span className="lm-device-cat-ic"><IconUsb /></span>
-          <span className="lm-device-cat-tx">{t("device:page.rail.usbStrips")}</span>
-          {ports.length > 0 ? <span className="lm-device-cat-cnt">{ports.length}</span> : null}
-        </button>
-        <button
-          type="button"
-          className={`lm-device-cat ${activeCategory === "hue" ? "is-on" : ""}`}
+        />
+        <RailButton
+          icon={<IconHueBridgeGlyph />}
+          label={t("device:page.rail.hueBridges")}
+          count={selectedBridge ? 1 : 0}
+          countLabel={t("device:page.rail.countLabel", { count: 1 })}
+          active={activeCategory === "hue"}
           onClick={() => setActiveCategory("hue")}
-        >
-          <span className="lm-device-cat-ic"><IconHueBridgeGlyph /></span>
-          <span className="lm-device-cat-tx">{t("device:page.rail.hueBridges")}</span>
-          {selectedBridge ? <span className="lm-device-cat-cnt">1</span> : null}
-        </button>
-        <button
-          type="button"
-          className={`lm-device-cat ${activeCategory === "wled" ? "is-on" : ""}`}
+        />
+        <RailButton
+          icon={<IconWledGlyph />}
+          label={t("device:page.rail.wled")}
+          count={0}
+          active={activeCategory === "wled"}
           onClick={() => setActiveCategory("wled")}
-        >
-          <span className="lm-device-cat-ic"><IconWledGlyph /></span>
-          <span className="lm-device-cat-tx">{t("device:page.rail.wled")}</span>
-        </button>
-        <button
-          type="button"
-          className={`lm-device-cat ${activeCategory === "displays" ? "is-on" : ""}`}
+        />
+        <RailButton
+          icon={<IconDisplayGlyph />}
+          label={t("device:page.rail.displays")}
+          count={displays.length}
+          countLabel={t("device:page.rail.countLabel", { count: displays.length })}
+          active={activeCategory === "displays"}
           onClick={() => setActiveCategory("displays")}
-        >
-          <span className="lm-device-cat-ic"><IconDisplayGlyph /></span>
-          <span className="lm-device-cat-tx">{t("device:page.rail.displays")}</span>
-          {displays.length > 0 ? <span className="lm-device-cat-cnt">{displays.length}</span> : null}
-        </button>
+        />
 
         <div className="lm-device-rail-h">{t("device:page.rail.other")}</div>
-        <button
-          type="button"
-          className={`lm-device-cat ${activeCategory === "manual" ? "is-on" : ""}`}
+        <RailButton
+          icon={<IconPencil />}
+          label={t("device:page.rail.manualEntry")}
+          count={0}
+          active={activeCategory === "manual"}
           onClick={() => setActiveCategory("manual")}
-        >
-          <span className="lm-device-cat-ic"><IconPencil /></span>
-          <span className="lm-device-cat-tx">{t("device:page.rail.manualEntry")}</span>
-        </button>
+        />
       </nav>
 
       {/* ── Main content area ────────────────────────────────── */}
