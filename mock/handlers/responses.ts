@@ -18,7 +18,7 @@
  * `import type` throughout — nothing here reaches the app at runtime.
  */
 
-import type { DisplayInfo } from "../../src/shared/contracts/display";
+import type { DisplayInfo, DisplayOverlayCommandResult } from "../../src/shared/contracts/display";
 import type {
   ScreenCapturePermissionResult,
   ScreenCaptureSettingsResult,
@@ -29,7 +29,12 @@ import type {
   HueChannelWritebackStatus,
   HueCredentialMigrationResponse,
 } from "../../src/shared/contracts/hue";
-import type { LedTestPatternResult, TwinOverlayResult } from "../../src/shared/contracts/preview";
+import type {
+  ControlPopupResult,
+  LedPreviewStatus,
+  LedTestPatternResult,
+  TwinOverlayResult,
+} from "../../src/shared/contracts/preview";
 import type {
   UpdateCheckResponse,
   UpdateInstallResponse,
@@ -119,6 +124,21 @@ export interface CommandResponse {
   stop_led_test_pattern: LedTestPatternResult;
   check_for_update: UpdateCheckResponse;
   download_and_install_update: UpdateInstallResponse;
+
+  // --- windowless -----------------------------------------------------------
+  // Answered even though the effect needs a second webview or an OS surface;
+  // see `windowless.ts` for why leaving them unanswered was a defect.
+  open_led_control_popup: ControlPopupResult;
+  show_led_control_popup: ControlPopupResult;
+  hide_led_control_popup: ControlPopupResult;
+  get_led_preview_status: LedPreviewStatus;
+  open_display_overlay: DisplayOverlayCommandResult;
+  close_display_overlay: DisplayOverlayCommandResult;
+  update_display_overlay_preview: DisplayOverlayCommandResult;
+  show_notification: null;
+  request_notification_permission: string;
+  open_log_dir: null;
+  update_tray_labels: null;
 }
 
 /** A command this table types. */
