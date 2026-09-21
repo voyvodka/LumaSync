@@ -19,21 +19,26 @@
 
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 
+import { dispatch, hasFixture } from "./dispatch";
+import { DEFAULT_SCENARIO, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "./scenarios";
+import { MOCK_HAS_REAL_IPC } from "./runtime";
+import { setWorld } from "./state";
+
 /**
  * Read back out of this file by `scripts/verify/mock-not-shipped.mjs`, and
  * logged rather than merely declared so no optimizer can fold it away.
  */
 export const MOCK_BUILD_SENTINEL = "LUMASYNC_DEV_MOCK_ACTIVE_DO_NOT_SHIP";
 
-/** `webview.rs` defines this in every real Tauri window; a browser tab has nothing. */
-const hasTauriRuntime = "isTauri" in window && window.isTauri === true;
+const hasTauriRuntime = MOCK_HAS_REAL_IPC;
 
-/**
- * Whether passthrough can reach anything. False in the browser, where a control
- * that triggers real backend behaviour has no backend to trigger and must be
- * presented as unavailable rather than quietly doing nothing.
- */
-export const MOCK_HAS_REAL_IPC = hasTauriRuntime;
+function requestedScenario(): ScenarioId {
+  const asked = new URLSearchParams(window.location.search).get("scenario");
+  return SCENARIO_IDS.includes(asked as ScenarioId) ? (asked as ScenarioId) : DEFAULT_SCENARIO;
+}
+
+const scenario = requestedScenario();
+setWorld(SCENARIOS[scenario].build());
 
 if (!hasTauriRuntime) {
   // The label picks the branch `main.tsx` takes between the app tree, the LED
@@ -41,16 +46,57 @@ if (!hasTauriRuntime) {
   // at all, since only the `main` window handle is exposed there.
   const label = new URLSearchParams(window.location.search).get("window") ?? "main";
   mockWindows(label);
-  mockIPC(
-    async (command) => {
+  // Without a Rust process there is nothing behind passthrough, so anything the
+  // fixture table does not answer has to fail here rather than hang.
+  mockIPC(async (command, payload) => {
+    if (!hasFixture(command)) {
       throw new Error(
-        `[LumaSync][mock] "${command}" reached the browser IPC fallback. There is no Rust process here, so it cannot be answered — add a fixture in mock/handlers/.`,
+        `[LumaSync][mock] "${command}" has no fixture and there is no Rust process to pass it to. Add a fixture under mock/handlers/, or run it under \`bun run tauri:mock\` where passthrough works.`,
       );
-    },
-    { shouldMockEvents: true },
-  );
+    }
+    return dispatch(command, payload as Record<string, unknown> | undefined);
+  }, { shouldMockEvents: true });
 }
 
 console.info(
-  `[LumaSync][mock] ${MOCK_BUILD_SENTINEL} — runtime=${hasTauriRuntime ? "tauri" : "browser"}, passthrough=${MOCK_HAS_REAL_IPC ? "live" : "unavailable"}`,
+  `[LumaSync][mock] ${MOCK_BUILD_SENTINEL} — runtime=${hasTauriRuntime ? "tauri" : "browser"}, scenario=${scenario}, passthrough=${MOCK_HAS_REAL_IPC ? "live" : "unavailable"}`,
 );
+
+/**
+ * The panel gets its own React root appended to `<body>`, outside the app's
+ * tree entirely. That keeps `src/` free of any reference to `mock/` — the
+ * structural half of the ship-safety guarantee — and means a render crash in
+ * the app cannot take the panel down with it, which is exactly when a
+ * scenario switch is most wanted.
+ *
+ * A scenario change reloads with the id in the query string rather than
+ * re-keying a component, because re-keying would mean editing `App.tsx` and
+ * naming the mock from `src/`. Shift-click skips the reload and swaps the
+ * fixtures under the running app, which is the mode that surfaces a response
+ * landing after its scenario is gone.
+ */
+async function mountPanel(): Promise<void> {
+  const [{ createRoot }, { DevPanel }, React] = await Promise.all([
+    import("react-dom/client"),
+    import("./ui/DevPanel"),
+    import("react"),
+  ]);
+  const host = document.createElement("div");
+  host.id = "lumasync-dev-mock-panel";
+  document.body.appendChild(host);
+  createRoot(host).render(
+    React.createElement(DevPanel, {
+      onScenarioChange: (id: string) => {
+        const url = new URL(window.location.href);
+        url.searchParams.set("scenario", id);
+        window.location.href = url.toString();
+      },
+    }),
+  );
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => void mountPanel());
+} else {
+  void mountPanel();
+}
