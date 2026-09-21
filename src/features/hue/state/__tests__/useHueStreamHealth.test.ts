@@ -138,16 +138,23 @@ describe("useHueStreamHealth", () => {
   });
 
   /**
-   * Falsifying this one takes removing **both** guards, not either.
+   * Falsifying this takes removing **both** `inFlight` terms, not either one.
    *
-   * `poll()` checks `inFlight` on entry and the `visibilitychange` handler
-   * checks `!inFlight` before calling it, and at the moment this test fires
-   * the event `timerId` is still null — the mount-time `poll()` has not
-   * reached `scheduleNext` yet — so the handler's own `timerId === null` term
-   * does not help either. The two `inFlight` terms cover for each other
-   * exactly, so deleting one leaves this test green and proves nothing about
-   * it. Delete both and it fails. Verified; noted because the single-guard
-   * mutation reads as a false guard and it is not one.
+   * `handleVisibilityChange` is the only reachable path back into `poll()`
+   * while a read is pending, and it carries `!inFlight` ahead of the call;
+   * `poll()` then checks `inFlight` again on entry. The timer path cannot
+   * race them, because `scheduleNext` only arms the timer after `poll()`'s
+   * `finally` has already reset the flag. So the two checks cover each other
+   * on every path that exists today, and deleting one leaves this green.
+   *
+   * That makes it look like a false guard under a one-line mutation, and it
+   * is not one — delete both and it fails, alone. Keep it. The behaviour it
+   * pins is real: a concurrent poll means two reads of the stream racing to
+   * mutate the same target list. The one-line-mutation heuristic is a way of
+   * finding weak tests, not a definition of what a test must be, and applied
+   * literally here it deletes a regression guard because the source happens
+   * to be defensively doubled. If a later refactor collapses the two checks
+   * into one, this is the test that catches the next person removing it.
    */
   it("does not start a second poll while one is already in flight", async () => {
     let resolveFirst!: (value: ReturnType<typeof runningStatus>) => void;
