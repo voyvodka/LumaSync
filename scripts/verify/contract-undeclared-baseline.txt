@@ -64,3 +64,11 @@ CLIENT_INIT
 WLED_FRAME_TOO_LONG
 WLED_SEND_FAILED
 WLED_SOCKET_BIND_FAILED
+
+# Log-only, and the one entry here that is not an error. `WledUdpSink` compares
+# the frame length against the panel's own reported length once per session and
+# warns; it never crosses IPC, so there is nothing for the frontend to branch
+# on. Promote it the moment the mismatch gets a surface in the UI — which it
+# should, because the user is the one who has to fix it, and a log line only
+# reaches whoever thinks to look.
+WLED_LENGTH_MISMATCH

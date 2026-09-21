@@ -9,6 +9,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The window could not be moved or closed while the room-map rename box or the firmware
+  override warning was open. Both covered the whole window, including the title bar that
+  carries the drag region and the window controls, so the window stayed pinned until the
+  dialog was answered. They now start below the title bar, as the update dialog already
+  did. Both also return keyboard focus to whatever opened them when they close, which
+  previously dropped you back at the top of the screen.
 - A WLED panel whose length does not match your LED Setup now says so in the log instead of
   failing silently. The frame is sized by the calibration and the panel by its own
   configuration, and nothing made the two agree — if the calibration is longer, the end of
