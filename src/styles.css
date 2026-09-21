@@ -56,12 +56,6 @@
   --lm-focus-ring:       0 0 0 2px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-inset: inset 0 0 0 2px rgba(255, 176, 32, 0.45);
   --lm-focus-ring-soft:  0 0 0 2px rgba(255, 176, 32, 0.35), 0 0 0 4px rgba(255, 176, 32, 0.12);
-
-  /* Lighting accent — driven by useAccentTheme. Fallbacks below match
-     AMBILIGHT_ACCENT so the UI has a sensible default before the hook mounts. */
-  --accent-color: rgb(20, 184, 166);
-  --accent-color-soft: rgba(20, 184, 166, 0.12);
-  --accent-gradient: linear-gradient(180deg, var(--accent-color-soft), transparent 70%);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
