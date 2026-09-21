@@ -123,6 +123,7 @@ https://keepachangelog.com/en/1.1.0/
 
 - The Hue application key is no longer written to `shell-state.json`. Both Hue secrets now live only in the OS keychain — macOS Keychain, Windows Credential Manager, Linux Secret Service — and the CLIP v2 command surface resolves the key there rather than taking it from a plaintext file. Two limits worth stating plainly: on a platform with no working keychain (a Linux box without D-Bus) both keys still land on disk, because the alternative is an app that cannot pair; and upgrading does not scrub the existing file at install time — the key is removed on the next launch, once the migration has verified the keychain holds a copy, or on the next successful pairing.
 - Cleared the `extract-zip` symlink path-traversal advisory (GHSA-jmr9-qjv8-65gv), which reached the tree through the WebdriverIO E2E toolchain (dev-only). The package is unmaintained and its last release is the vulnerable one, so the exit is pinning its parent `@puppeteer/browsers` to 3.x, which dropped the dependency outright.
+- Resolved RUSTSEC-2026-0285 (5.3 medium) by bumping the transitive `rustls` crate 0.23.44 → 0.23.45; TLS 1.3 handshake messages were accepted across encryption level boundaries. The crate reaches LumaSync through the `reqwest` chain used for Hue CLIP v2 and the updater. The `cargo audit` CI gate is green again.
 
 ## [1.5.4] — 2026-08-10
 
