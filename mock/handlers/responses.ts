@@ -24,7 +24,11 @@ import type {
   ScreenCaptureSettingsResult,
 } from "../../src/shared/contracts/capture";
 import type { WledSinkStatus } from "../../src/shared/contracts/device";
-import type { HueChannelWritebackStatus } from "../../src/shared/contracts/hue";
+import type {
+  HueAreaChannelListResponse,
+  HueChannelWritebackStatus,
+  HueCredentialMigrationResponse,
+} from "../../src/shared/contracts/hue";
 import type { LedTestPatternResult, TwinOverlayResult } from "../../src/shared/contracts/preview";
 import type {
   UpdateCheckResponse,
@@ -102,6 +106,8 @@ export interface CommandResponse {
   list_hue_entertainment_areas: HueEntertainmentAreaListResponse;
   check_hue_stream_readiness: HueStreamReadinessResponse;
   update_hue_channel_positions: HueChannelWritebackStatus;
+  get_hue_area_channels: HueAreaChannelListResponse;
+  migrate_hue_credentials: HueCredentialMigrationResponse;
 
   // --- shell ----------------------------------------------------------------
   list_displays: DisplayInfo[];

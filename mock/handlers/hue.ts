@@ -15,6 +15,7 @@
  */
 
 import {
+  HUE_AREA_CHANNELS_STATUS,
   HUE_COMMANDS,
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_STATUS,
@@ -219,6 +220,62 @@ export const hueHandlers = {
   [HUE_COMMANDS.GET_STREAM_STATUS]: () => ({
     active: getWorld().hue.streaming,
     status: currentRuntime(),
+  }),
+
+  /**
+   * `index` and `channelId` are different numbers and the difference matters:
+   * ours is the local ordinal, the bridge's is its own identity, and they
+   * agree only on a contiguous area. Addressing a light by the wrong one is a
+   * bug this app has already shipped once.
+   */
+  [HUE_COMMANDS.GET_AREA_CHANNELS]: () => {
+    const { hue } = getWorld();
+    // This family carries its own three codes. Unreachable, empty and
+    // key-rejected are three different answers, and collapsing any two of them
+    // is the bug this scenario set exists to keep reproducible.
+    if (!hue.reachable) {
+      return {
+        status: status(HUE_AREA_CHANNELS_STATUS.UNREACHABLE, "Bridge unreachable"),
+        channels: [],
+      };
+    }
+    if (!hue.credentialValid) {
+      return {
+        status: status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Key rejected"),
+        channels: [],
+      };
+    }
+    return {
+      status: status(
+        hue.channels.length > 0 ? HUE_AREA_CHANNELS_STATUS.OK : HUE_AREA_CHANNELS_STATUS.EMPTY,
+        `${hue.channels.length} channel(s)`,
+      ),
+      channels: hue.channels.map((c, ordinal) => ({
+        index: ordinal,
+        channelId: c.index,
+        lightIds: [`light-${c.index}`],
+        positionX: 0,
+        positionY: 0,
+        lightCount: 1,
+        autoRegion: "none",
+      })),
+    };
+  },
+
+  [HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS]: () => {
+    const { hue } = getWorld();
+    return hue.reachable
+      ? status(HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED, "Saved to bridge")
+      : status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Bridge unreachable");
+  },
+
+  /**
+   * Only the literal `"keychain"` licenses the app to delete its plaintext
+   * copy of the key, so this fixture is a write as much as a read.
+   */
+  [HUE_COMMANDS.MIGRATE_CREDENTIALS]: () => ({
+    status: status(HUE_STATUS.PAIRING_OK, "Nothing to migrate"),
+    backend: "keychain" as const,
   }),
 
   [HUE_COMMANDS.SET_SOLID_COLOR]: () => {

@@ -89,12 +89,18 @@ export const INTENTIONALLY_UNMAPPED = [
   PLATFORM_COMMANDS.REQUEST_NOTIFICATION_PERMISSION,
   PLATFORM_COMMANDS.OPEN_LOG_DIR,
   SHELL_COMMANDS.UPDATE_TRAY_LABELS,
-  HUE_COMMANDS.MIGRATE_CREDENTIALS,
 ] as const;
 
 export type UnmappedCommandName = (typeof INTENTIONALLY_UNMAPPED)[number];
 
-const staticHandlers: Record<string, Handler> = {
+/**
+ * Deliberately unannotated. A `Record<string, Handler>` here widens `keyof` to
+ * `string`, which silently makes `HandledCommandName` cover every command and
+ * turns the exhaustiveness guard below into a no-op. Verified by deleting a
+ * handler: with the annotation the build stayed green, without it the guard
+ * names the missing command.
+ */
+const staticHandlers = {
   ...deviceHandlers,
   ...hueHandlers,
   ...shellHandlers,
@@ -102,10 +108,10 @@ const staticHandlers: Record<string, Handler> = {
 };
 
 export function handlerFor(command: string): Handler | undefined {
-  return staticHandlers[command] ?? windowPluginHandler(command);
+  return (staticHandlers as Record<string, Handler>)[command] ?? windowPluginHandler(command);
 }
 
-export const handlers = staticHandlers;
+export const handlers: Record<string, Handler> = staticHandlers;
 
 // --- The guard -------------------------------------------------------------
 //
@@ -116,17 +122,16 @@ export const handlers = staticHandlers;
 type Covered = PassthroughCommandName | UnmappedCommandName | HandledCommandName;
 type Uncovered = Exclude<TauriCommandName, Covered>;
 
-/** The commands with a fixture above, as literal types rather than `string`. */
-type HandledCommandName =
-  | ValuesOf<typeof DEVICE_COMMANDS>
-  | Exclude<ValuesOf<typeof HUE_COMMANDS>, typeof HUE_COMMANDS.MIGRATE_CREDENTIALS>
-  | typeof DISPLAY_OVERLAY_COMMANDS.LIST_DISPLAYS
-  | ValuesOf<typeof CAPTURE_COMMANDS>
-  | typeof PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY
-  | typeof PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY
-  | typeof PREVIEW_COMMANDS.START_TEST_PATTERN
-  | typeof PREVIEW_COMMANDS.STOP_TEST_PATTERN
-  | ValuesOf<typeof UPDATER_COMMANDS>;
+/**
+ * Derived from the handler objects themselves, not restated.
+ *
+ * The first version listed the covered commands by hand and promptly went
+ * stale: three Hue commands were dropped from the handler map during a rewrite
+ * and the list still claimed them, so the guard passed while two commands had
+ * no fixture at all. Reading the keys means the claim cannot disagree with the
+ * code it describes.
+ */
+type HandledCommandName = keyof typeof staticHandlers & TauriCommandName;
 
 // If this line errors, read the type it reports: that command needs a fixture,
 // a passthrough entry, or a listed reason.
