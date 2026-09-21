@@ -18,6 +18,17 @@ https://keepachangelog.com/en/1.1.0/
   are dev-server only, a production build aborts outright if the flag is set, and
   `bun run verify:mock-not-shipped` proves all three on every run of `check:all` by running into the
   guard rather than reading the code that implements it.
+- The development mode now answers with fixtures and ships a scenario picker, so every screen can be
+  reached without hardware. Ten scenarios, and the eight past "nothing configured" and "fully
+  furnished" each reproduce a state the app once got wrong: an entertainment area that is genuinely
+  empty, a bridge that cannot be reached, a key the bridge no longer accepts, a Hue-only session, a
+  pairing waiting on the link button, refused screen-recording permission, and a store that rejects
+  every write. An empty state and a failed state look identical from outside, which is why both are
+  one click away. The picker sits on the left edge under `Ctrl+Shift+M`; clicking a scenario reloads
+  into it, shift-clicking swaps the fixtures under the running app so a response that lands after
+  its scenario is gone reports itself. Fixtures never answer on a microtask, and the delay is
+  adjustable, because a mock that answers instantly hides every loading state and ordering bug
+  behind it.
 
 
 ## [1.5.5]
