@@ -23,10 +23,10 @@ interface SystemSectionProps {
   onCheckForUpdates: () => void;
   isCheckingForUpdates: boolean;
   devSetUpdaterState?: (state: UpdaterState) => void;
-  usbConnected: boolean;
+  localOutputConnected: boolean;
 }
 
-export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetUpdaterState, usbConnected }: SystemSectionProps) {
+export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetUpdaterState, localOutputConnected }: SystemSectionProps) {
   const { t, i18n } = useTranslation();
   const currentLanguage: I18nLanguage = i18n.language.toLowerCase().startsWith("tr") ? "tr" : "en";
   const [startupEnabled, setStartupEnabled] = useState(false);
@@ -223,7 +223,7 @@ export function SystemSection({ onCheckForUpdates, isCheckingForUpdates, devSetU
 
       {/* Telemetry (preserved) */}
       <section className="lm-settings-group">
-        <TelemetrySection usbConnected={usbConnected} />
+        <TelemetrySection localOutputConnected={localOutputConnected} />
       </section>
     </div>
   );

@@ -7,6 +7,7 @@ import { MODE_GUARD_REASONS } from "@/features/mode/state/modeGuard";
 import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
+import type { LocalSink } from "@/features/device/localSink";
 import { LightsSection } from "../LightsSection";
 
 const { shellStateRef, saveMock, createHueZoneMock, telemetryMock } = vi.hoisted(() => ({
@@ -75,6 +76,8 @@ vi.mock("react-i18next", () => ({
         "lights:dock.outputs": "Outputs",
         "lights:dock.rows.usbName": "USB",
         "lights:dock.rows.usbType": "CH340",
+        "lights:dock.rows.usbSubUnavailable": "No strip connected",
+        "lights:dock.rows.wledName": "WLED",
         "lights:dock.rows.hueName": "HUE",
         "lights:dock.rows.hueType": "ENTERTAINMENT",
         "lights:dock.rows.hueSubIdle": "Bridge · standby",
@@ -118,7 +121,8 @@ describe("LightsSection", () => {
       <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
-        usbConnected={true}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
         hueStreaming={false}
         modeLockReason={null}
@@ -149,7 +153,8 @@ describe("LightsSection", () => {
         <LightsSection
           mode={mode}
           outputTargets={["usb"]}
-          usbConnected={true}
+          localOutputConnected={true}
+          localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
           hueConfigured={false}
           hueStreaming={false}
           modeLockReason={null}
@@ -192,7 +197,8 @@ describe("LightsSection", () => {
       <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
-        usbConnected={true}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
         hueStreaming={false}
         modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
@@ -219,7 +225,8 @@ describe("LightsSection", () => {
       <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
-        usbConnected={true}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
         hueConfigured={true}
         hueStreaming={false}
         modeLockReason={null}
@@ -239,10 +246,67 @@ describe("LightsSection", () => {
 // Guard parity with CompactLayout: a mode that needs somewhere to send frames
 // must stay unreachable while nothing is connected, and the user must be told
 // why. Off is exempt — parking the outputs is always safe.
+describe("LightsSection — the local output row names what is actually bound", () => {
+  function renderWithSink(localSink: LocalSink | null) {
+    const view = render(
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        localOutputConnected={localSink !== null}
+        localSink={localSink}
+        hueConfigured={false}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+    // Asserted against the row itself rather than the document: "USB" also
+    // appears in the status bar, so a loose text query passes even when the
+    // dock is wrong — which is exactly how this defect stayed invisible.
+    const row = view.container.querySelector(".lm-out-row");
+    return { view, row, text: (row?.textContent ?? "").replace(/\s+/g, " ").trim() };
+  }
+
+  /**
+   * The defect: the row was gated on a serial port and hardcoded to say USB,
+   * so a WLED-only setup saw "No strip connected" on a disabled control while
+   * Rust was perfectly able to drive the panel through `UsbOutputPlan::Wled`.
+   */
+  it("offers a WLED panel as a usable output rather than calling it a missing strip", () => {
+    const { row, text } = renderWithSink({ transport: "wled", id: "192.168.1.42" });
+
+    expect(text).toContain("WLED");
+    expect(text).toContain("192.168.1.42");
+    expect(text).not.toContain("CH340");
+    expect(text).not.toContain("No strip connected");
+    expect(row).not.toHaveClass("is-unavailable");
+  });
+
+  it("still names the chip when the bound sink is a serial strip", () => {
+    const { text } = renderWithSink({
+      transport: "serial",
+      id: "/dev/cu.usbserial-1420",
+    });
+
+    expect(text).toContain("USB");
+    expect(text).toContain("CH340");
+    expect(text).not.toContain("WLED");
+  });
+
+  it("reports nothing connected when neither transport is bound", () => {
+    const { row, text } = renderWithSink(null);
+
+    expect(text).toContain("No strip connected");
+    expect(row).toHaveClass("is-unavailable");
+  });
+});
+
 describe("LightsSection — output availability gate", () => {
   async function renderWithOutputs(
     props: Partial<{
-      usbConnected: boolean;
+      localOutputConnected: boolean;
       hueConfigured: boolean;
       hueReachable: boolean;
       hueProbeGaveUp: boolean;
@@ -262,7 +326,8 @@ describe("LightsSection — output availability gate", () => {
         <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["usb"]}
-        usbConnected={props.usbConnected ?? false}
+        localOutputConnected={props.localOutputConnected ?? false}
+        localSink={(props.localOutputConnected ?? false) ? { transport: "serial" as const, id: "/dev/cu.usbserial-1420" } : null}
         hueConfigured={props.hueConfigured ?? false}
         hueReachable={props.hueReachable ?? false}
         hueProbeGaveUp={props.hueProbeGaveUp ?? false}
@@ -380,7 +445,8 @@ describe("LightsSection — output availability gate", () => {
         <LightsSection
           mode={{ kind: "off" }}
           outputTargets={["usb"]}
-          usbConnected={true}
+          localOutputConnected={true}
+          localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
           hueConfigured={false}
           hueStreaming={false}
           modeLockReason={MODE_GUARD_REASONS.CALIBRATION_REQUIRED}
@@ -428,7 +494,8 @@ describe("LightsSection — Add Hue zone", () => {
       <LightsSection
         mode={{ kind: "off" }}
         outputTargets={["hue"]}
-        usbConnected={false}
+        localOutputConnected={false}
+        localSink={null}
         hueConfigured={true}
         hueReachable={true}
         hueStreaming={false}
@@ -516,7 +583,8 @@ describe("LightsSection — serial link budget note", () => {
       <LightsSection
         mode={{ kind: "ambilight", ambilight: { brightness: 1 } }}
         outputTargets={["usb"]}
-        usbConnected={true}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
         hueStreaming={false}
         modeLockReason={null}
@@ -596,7 +664,8 @@ describe("LightsSection — the signal pill names its sink", () => {
       <LightsSection
         mode={{ kind: "ambilight", ambilight: { brightness: 1 } }}
         outputTargets={targets}
-        usbConnected={targets.includes("usb")}
+        localOutputConnected={targets.includes("usb")}
+        localSink={targets.includes("usb") ? { transport: "serial" as const, id: "/dev/cu.usbserial-1420" } : null}
         hueConfigured={targets.includes("hue")}
         hueReachable={targets.includes("hue")}
         hueStreaming={targets.includes("hue")}

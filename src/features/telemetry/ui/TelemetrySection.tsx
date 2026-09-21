@@ -48,16 +48,16 @@ function LinkMaxTile({ usb }: LinkMaxTileProps) {
 }
 
 interface TelemetrySectionProps {
-  usbConnected: boolean;
+  localOutputConnected: boolean;
 }
 
 /**
  * Renders the CONTENTS of a `lm-settings-group` — the caller owns the section
  * element, so this matches the Language / Updates / About cards around it.
  */
-export function TelemetrySection({ usbConnected }: TelemetrySectionProps) {
+export function TelemetrySection({ localOutputConnected }: TelemetrySectionProps) {
   const { t } = useTranslation();
-  const { snapshot, error, isLoading } = useFullTelemetryPoll(usbConnected, POLL_INTERVAL_MS);
+  const { snapshot, error, isLoading } = useFullTelemetryPoll(localOutputConnected, POLL_INTERVAL_MS);
   // Only an error once a tick failed AND no snapshot ever landed: a transient
   // failure must not yank live values off screen for one poll interval.
   const hasError = error !== null && snapshot === null;

@@ -73,6 +73,8 @@ const lights: Catalogue<typeof enLights> = {
       usbType: "CH340",
       usbSub: "{{count}} LED · <b>seri</b>",
       usbSubUnavailable: "Şerit bağlı değil",
+      wledName: "WLED",
+      wledSub: "{{count}} LED · <b>UDP</b>",
       hueName: "HUE",
       hueType: "ENTERTAINMENT",
       hueSubStreaming: "Köprü · <b>DTLS 50hz</b>",

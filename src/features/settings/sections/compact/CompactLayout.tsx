@@ -42,7 +42,7 @@ import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 interface CompactLayoutProps {
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
-  usbConnected: boolean;
+  localOutputConnected: boolean;
   hueConfigured: boolean;
   hueReachable: boolean;
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
@@ -80,7 +80,7 @@ const DEFAULT_AMBILIGHT = {
 export function CompactLayout({
   lightingMode,
   outputTargets,
-  usbConnected,
+  localOutputConnected,
   hueConfigured,
   hueReachable,
   hueProbeGaveUp = false,
@@ -126,7 +126,7 @@ export function CompactLayout({
 
   // Without this gate the worker spins up with nowhere to send frames — a
   // running Ambilight state and no reachable output.
-  const hasAnyOutput = usbConnected || (hueConfigured && hueReachable);
+  const hasAnyOutput = localOutputConnected || (hueConfigured && hueReachable);
   const activationBlocked = !hasAnyOutput;
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
   const nonOffDisabled = isModeTransitioning || activationBlocked || calibrationLocked;

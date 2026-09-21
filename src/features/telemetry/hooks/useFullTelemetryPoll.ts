@@ -28,7 +28,7 @@ const INITIAL_RESULT: FullTelemetryPollResult = {
  * Full telemetry payload (USB + Hue) from the shared loop in
  * `../telemetrySource`, which owns cadence, visibility gating and the
  * in-flight guard. `enabled` is the caller's domain gate (`isAmbilight`,
- * `usbConnected`); the shared loop stops once every consumer is disabled.
+ * `localOutputConnected`); the shared loop stops once every consumer is disabled.
  */
 export function useFullTelemetryPoll(
   enabled: boolean,

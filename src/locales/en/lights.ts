@@ -71,6 +71,8 @@ export default {
       usbType: "CH340",
       usbSub: "{{count}} LEDs · <b>serial</b>",
       usbSubUnavailable: "No strip connected",
+      wledName: "WLED",
+      wledSub: "{{count}} LEDs · <b>UDP</b>",
       hueName: "HUE",
       hueType: "ENTERTAINMENT",
       hueSubStreaming: "Bridge · <b>DTLS 50hz</b>",

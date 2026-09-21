@@ -2,6 +2,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import type { LightingModeConfig } from "../features/mode/model/contracts";
+import type { LocalSink } from "../features/device/localSink";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
 import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";
 import { appliedResult } from "@/test/modeCommandResult";
@@ -16,6 +17,7 @@ const stopHueMock = vi.fn();
 
 // Controllable isConnected for hot-plug tests
 let mockIsConnected = true;
+let mockActiveWledIp: string | null = null;
 
 // Mock invoke for Tauri commands (used in bootstrap for USB status check)
 const invokeMock = vi.fn();
@@ -81,7 +83,26 @@ vi.mock("../features/shell/windowLifecycle", () => ({
 }));
 
 vi.mock("../features/device/useDeviceConnection", () => ({
-  useDeviceConnection: () => ({ isConnected: mockIsConnected }),
+  useDeviceConnection: () => ({
+    isConnected: mockIsConnected,
+    connectedPort: mockIsConnected ? "/dev/cu.usbserial-test" : null,
+  }),
+}));
+
+// Not a convenience stub. Both hooks read shell state through
+// `shellStore.load()`, which *is* the mocked `windowLifecycle.loadShellState`,
+// so leaving them real gives every scenario's `mockResolvedValueOnce` a second
+// consumer racing App's bootstrap — the loser silently falls through to the
+// beforeEach default and the persisted targets under test disappear.
+vi.mock("../features/device/useWledSink", () => ({
+  useWledSinkRestore: () => undefined,
+  useActiveWledSink: () => ({
+    activeWledIp: mockActiveWledIp,
+    savedSink: null,
+    restoreOutcome: null,
+    ready: true,
+    markConnected: async () => undefined,
+  }),
 }));
 
 vi.mock("../features/calibration/state/entryFlow", () => ({
@@ -127,6 +148,7 @@ vi.mock("../features/settings/SettingsLayout", () => ({
   SettingsLayout: (props: {
     lightingMode: LightingModeConfig;
     outputTargets: Array<"usb" | "hue">;
+    localSink: LocalSink | null;
     calibration?: { totalLeds: number };
     onLightingModeChange: (mode: LightingModeConfig) => void;
     onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
@@ -134,6 +156,9 @@ vi.mock("../features/settings/SettingsLayout", () => ({
     <div>
       <p data-testid="active-mode">{props.lightingMode.kind}</p>
       <p data-testid="output-targets">{props.outputTargets.join(",")}</p>
+      <p data-testid="local-sink">
+        {props.localSink ? `${props.localSink.transport}:${props.localSink.id}` : "none"}
+      </p>
       {/* Bootstrap-applied calibration. `active-mode === "off"` is satisfied by
           the initial state, so it cannot gate a click on bootstrap having run. */}
       <p data-testid="calibration-leds">{props.calibration?.totalLeds ?? ""}</p>
@@ -266,6 +291,7 @@ describe("App mode orchestration", () => {
     __resetHueReadCacheForTests();
     vi.useRealTimers();
     mockIsConnected = true;
+    mockActiveWledIp = null;
     // One flat resolved value cannot serve every command: a caller reading
     // `.status.code` or `.usb` off `{ connected: true }` throws into its own
     // catch, so the test still passed while the app measured its failure
@@ -1421,5 +1447,52 @@ describe("App mode orchestration", () => {
     expect(layoutBox.parentElement).toBe(slot);
     expect(layoutBox.className).toContain("flex-1");
     expect(layoutBox.className).toContain("min-h-0");
+  });
+
+  // ---------------------------------------------------------------------
+  // The defect this covers: the Lights screen asked whether a *serial port*
+  // was connected, so a WLED-only setup was told "no strip connected" and
+  // every non-Off mode stayed disabled — while Rust was perfectly able to
+  // drive the panel. App is where the two transports are folded into one
+  // signal, so this is the only level at which the wiring is observable.
+  // ---------------------------------------------------------------------
+  describe("local output sink wiring", () => {
+    it("hands the Lights screen a WLED sink when no serial port is connected", async () => {
+      mockIsConnected = false;
+      mockActiveWledIp = "192.168.1.42";
+      installInvokeDispatch(false);
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("local-sink")).toHaveTextContent("wled:192.168.1.42");
+      });
+    });
+
+    it("prefers the serial port when both are bound, because the registry holds the serial sink", async () => {
+      mockIsConnected = true;
+      mockActiveWledIp = "192.168.1.42";
+      installInvokeDispatch(true);
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("local-sink")).toHaveTextContent(
+          "serial:/dev/cu.usbserial-test",
+        );
+      });
+    });
+
+    it("reports nothing bound when neither transport is present", async () => {
+      mockIsConnected = false;
+      mockActiveWledIp = null;
+      installInvokeDispatch(false);
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("local-sink")).toHaveTextContent("none");
+      });
+    });
   });
 });
