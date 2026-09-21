@@ -100,6 +100,27 @@ Skip the skill only when the bug is already proven by a stack trace or a
 failing test in this conversation — re-running the app for evidence we
 already have wastes a warm-up cycle.
 
+### Seeing the UI instead of reasoning about it
+
+A screen can be looked at, not just inferred from JSX.
+`e2e/specs/ui-audit.probe.ts` drives the real window, writes a PNG per
+section and a structural report — unnamed controls, selection state
+carried only in CSS, clipped text, a tripped error boundary. Reading the
+PNG beats arguing from the component tree, and it costs one build plus a
+few seconds:
+
+```bash
+bun run e2e:build   # skip if the binary is current; cargo test invalidates it
+LUMASYNC_AUDIT_SECTION=devices npx wdio run wdio.conf.ts --spec e2e/specs/ui-audit.probe.ts
+```
+
+**Read `docs/architecture/testing-and-verification.md` before trusting a
+result.** Three things return a clean, empty, believable answer rather
+than failing: CSS `:hover` never fires (the driver's pointer events are
+synthetic), an IPC hook installed from a spec records zero while the
+backend works, and only the `main` window is reachable. A run also shares
+the real `shell-state.json` — warn before driving a machine in use.
+
 ## Commands
 
 `bun run tauri dev` is the primary development command; `bun run dev` runs the Vite server alone with no

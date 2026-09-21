@@ -20,6 +20,7 @@ in an area needs both.
 | Touching screen capture, the worker, or anything per frame | [`capture-and-pipeline.md`](capture-and-pipeline.md) |
 | Adding or changing a Tauri command, a status code, or persisted state | [`contracts-and-state.md`](contracts-and-state.md) |
 | Building for the first time, changing CI, or cutting a release | [`build-and-release.md`](build-and-release.md) |
+| Writing a test, or trusting one — especially anything that drives the real window | [`testing-and-verification.md`](testing-and-verification.md) |
 | Working on the window, the tray, compact mode, or i18n | [`ui-and-shell.md`](ui-and-shell.md) |
 | Working on the room-map editor, zone geometry, or channel placement | [`room-map.md`](room-map.md) |
 | Chasing a runtime bug with no obvious cause | [`../debugging.md`](../debugging.md), then the area file above |
