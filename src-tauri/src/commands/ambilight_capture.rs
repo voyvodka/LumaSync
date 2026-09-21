@@ -210,6 +210,7 @@ impl AmbilightFrameSource for StaticFrameSource {
 #[cfg(target_os = "windows")]
 mod platform {
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     use windows_capture::capture::{
         CaptureControl, GraphicsCaptureApiError, GraphicsCaptureApiHandler,
@@ -299,12 +300,22 @@ mod platform {
     ) -> Result<Box<dyn AmbilightFrameSource>, AmbilightCaptureError> {
         let latest_frame = Arc::new(Mutex::new(None));
         let monitor = resolve_monitor(display_id)?;
+        // 20 Hz, matching the macOS stream above and the Hue streaming floor.
+        //
+        // `Default` leaves the WGC interval alone, which means `on_frame_arrived`
+        // fires at the compositor's rate — 60, 144, 240 Hz — and every one of
+        // those calls allocates a staging texture and does a full-resolution
+        // GPU-to-CPU `CopyResource`. The worker's own sleep paces what we
+        // *consume*, not what Windows *produces*, so that cost never appeared in
+        // the frame budget while being by far the largest thing in it. On a
+        // 144 Hz display this is roughly a sevenfold reduction in readback for
+        // byte-identical output.
         let settings = Settings::new(
             monitor,
             CursorCaptureSettings::Default,
             DrawBorderSettings::Default,
             SecondaryWindowSettings::Default,
-            MinimumUpdateIntervalSettings::Default,
+            MinimumUpdateIntervalSettings::Custom(Duration::from_millis(50)),
             DirtyRegionSettings::Default,
             ColorFormat::Rgba8,
             Arc::clone(&latest_frame),
