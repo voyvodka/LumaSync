@@ -5929,6 +5929,45 @@ body {
    makes the canvas look like it grew a stray chip. The backdrop is opaque
    enough to stay legible over the brightest zone fill, which is why it is
    not `--lm-panel` at full alpha. */
+/* The third on-canvas surface, alongside the `.lm-room-overlay` pair. Its own
+   class rather than that one because the overlays are corner-anchored and
+   these are chips inside a toolbar — the shared part is the surface, not the
+   position. Raw `bg-black/60` before, which is not a colour the token layer
+   can retune. */
+.lm-room-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 32 px is the project's tap-target floor, not a visual choice. */
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(14, 16, 20, 0.82);
+  color: var(--lm-ink);
+  backdrop-filter: blur(4px);
+  transition: background-color 120ms ease;
+}
+.lm-room-chip:hover:not(.is-disabled) {
+  background: rgba(14, 16, 20, 0.94);
+}
+.lm-room-chip:active:not(.is-disabled) {
+  background: var(--lm-panel);
+}
+.lm-room-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-chip.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--lm-ink-dim);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-chip {
+    transition: none;
+  }
+}
+
 .lm-room-overlay {
   position: absolute;
   bottom: 4px;

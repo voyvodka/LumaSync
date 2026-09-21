@@ -1,6 +1,7 @@
 // useTestPatternRunner — serialised, throttled driver for `start_led_test_pattern`.
-// Every call rebuilds the ambilight worker (apply_mode_change's fast path is off
-// while a test is pending/active), so 20 Hz inputs must go through `refresh()`.
+// A colour or speed change on a running test retunes the worker in place; only a
+// frame-geometry change rebuilds it. Inputs still go through `refresh()`, but for
+// serialisation rather than to spare a teardown — see the floor below.
 
 import { useCallback, useEffect, useRef } from "react";
 
