@@ -90,13 +90,47 @@ the harness does not fail, it just quietly agrees with you.
 
 | To check | Use |
 |---|---|
-| Hover, focus-within, real pointer behaviour | not yet solvable — see the note below |
+| Hover, focus-within, real pointer behaviour | the dev mock in a browser — below |
+| A state that needs hardware you do not have | the dev mock |
 | What the backend actually did | the Rust log — `docs/debugging.md`, and the patterns in `CLAUDE.md` |
-| A second window | a manual run |
+| A second window | a manual run, or the dev mock with `?window=<label>` |
 | Window geometry, tray, native chrome | a manual run |
 
-Hover has no answer today. The path that would give one is the plain browser: `bun run dev` serves
-the frontend to Chrome, where the cursor is real — but every `invoke` rejects there, so the app
-renders entirely in its failure states. Closing that gap means a development mode that answers IPC
-with fixtures, at which point the browser becomes a usable surface for anything that is pure UI.
-Until it exists, hover is checked by a human looking at the screen.
+## The dev mock
+
+`bun run dev:mock` serves the frontend to a real browser with every `invoke` answered from
+fixtures; `bun run tauri:mock` does the same inside the Tauri window, where anything without a
+fixture passes through to Rust. The browser branch is the complete one, and it is what makes hover,
+focus-within and real pointer behaviour checkable at all — the cursor there is the OS cursor.
+
+Nothing under `src/` may name `mock/`, which is what makes the ship-safety guarantee structural
+rather than a matter of trusting tree-shaking; `verify:mock-not-shipped` asserts it and proves the
+build guard by running into it. The reverse direction is fine and deliberate: `mock/` imports
+contract types, and `mock/hotplug.ts` imports two runtime singletons on purpose.
+
+Three things about it are not obvious and each cost a cycle:
+
+- **Fixtures are bound to the real response types.** `handlers/responses.ts` ties each command to
+  its `*Api.ts` return type and `handlers/index.ts` derives its coverage guard from the handler
+  keys, so a new Rust command stops the mock compiling rather than answering `undefined` for a
+  week. The first version was written from command names instead of DTOs and every shape was wrong
+  in a way nothing caught.
+- **Events are a third of the surface and none of them is an `invoke`.** The edge grid, the twin
+  overlay, the tray menu, the update bar and the cross-window mode sync are all pushed from Rust.
+  `mock/events.ts` drives them, sizing each frame from the live calibration rather than a constant
+  so the twin cannot render a believable lie.
+- **`shouldMockEvents` from `@tauri-apps/api/mocks` cannot unsubscribe.** `_unlisten` sends
+  `{ event, eventId }` (`event.js:42`) while the mock's remover reads `args.id` (`mocks.js:120`),
+  so `indexOf(undefined)` never matches and no listener is ever removed. The callback itself *was*
+  unregistered, so every later emit logs `[TAURI] Couldn't find callback id …` — at 10 Hz against a
+  component that remounts, hundreds a second into the console you are trying to read.
+  `mock/eventBridge.ts` replaces it, browser-only, so passthrough still reaches Rust under
+  `tauri:mock`.
+
+**A world edit is not always visible to the app, and the panel says which is which.** Every control
+carries a `[live]` / `[revisit]` / `[reload]` badge. The serial connection is the sharp case:
+nothing polls `get_serial_connection_status` after boot — the controller re-reads it only when a
+sibling publishes on the process-wide `connectionEvents` bus — so editing `connectedPort` alone
+leaves the UI insisting the cable is still in. `mock/hotplug.ts` publishes on the same bus the real
+pair path uses, which is what makes unplug, boot-time port rejection and WLED binding reach the app
+at all.

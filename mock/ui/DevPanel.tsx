@@ -38,6 +38,7 @@ import {
   stopEdgeSignalStream,
   subscribeToEdgeSignalStream,
 } from "../events";
+import { rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
 import { LED_TEST_PATTERN_KIND } from "../../src/shared/contracts/preview";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
@@ -644,13 +645,13 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                       <button
                         type="button"
                         style={{ ...btn, flex: 1, color: connected ? AMBER : "#e7e5e4" }}
-                        onClick={() =>
-                          mutate((w) => {
-                            w.serial.connectedPort = connected ? null : port.name;
-                          })
-                        }
+                        // Nothing polls the serial status after boot, so
+                        // editing the world alone leaves the UI insisting the
+                        // cable is still in. `setSerialConnected` publishes on
+                        // the same bus a real pair does.
+                        onClick={() => setSerialConnected(port.name, !connected)}
                       >
-                        {connected ? "Disconnect" : "Connect"}
+                        {connected ? "Unplug" : "Plug in"}
                       </button>
                       <button
                         type="button"
@@ -734,6 +735,32 @@ export function DevPanel({ onReloadApp }: PanelProps) {
               </button>
             </Ctl>
 
+            <Ctl
+              label="Boot-time port rejection"
+              keywords="PORT_UNSUPPORTED PORT_NOT_FOUND allowlist autoreconnect drop usb target toast"
+              reach="live"
+              query={q}
+            >
+              <div style={{ display: "grid", gap: 4 }}>
+                {(["PORT_UNSUPPORTED", "PORT_NOT_FOUND"] as const).map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    style={{ ...btn, width: "100%", textAlign: "left" }}
+                    disabled={world.serial.ports.length === 0}
+                    onClick={() => rejectSerialPort(world.serial.ports[0].name, reason)}
+                  >
+                    Reject {world.serial.ports[0]?.name ?? "(no port)"} · {reason}
+                  </button>
+                ))}
+              </div>
+              <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
+                Only these two codes mean USB is structurally unavailable for the session, so only
+                these drop `usb` from the output targets. A generic connect failure — set it on the
+                port above — deliberately takes a different path.
+              </div>
+            </Ctl>
+
             <Ctl label="Health check fails at" keywords="health handshake port_visible step" reach="live" query={q}>
               <Pick
                 value={world.serial.healthFailsAt ?? "none"}
@@ -776,18 +803,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                   <Toggle
                     on={world.wled.connectedHost === d.host}
                     label="Bound as the active sink"
-                    onClick={() =>
-                      mutate((w) => {
-                        w.wled.connectedHost = w.wled.connectedHost === d.host ? null : d.host;
-                        w.shellState = {
-                          ...w.shellState,
-                          lastWledSink:
-                            w.wled.connectedHost === null
-                              ? undefined
-                              : { ip: d.host, port: d.port, ledCount: d.ledCount, protocol: d.protocol },
-                        };
-                      })
-                    }
+                    onClick={() => setWledBound(d.host, world.wled.connectedHost !== d.host)}
                   />
                   <Pick
                     value={d.protocol}
