@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- On Windows the screen was being read at the monitor's refresh rate and mostly thrown away. Each
+  of those reads copies a full-resolution frame from the graphics card back to main memory, and on
+  a 144 Hz display that happened seven times for every frame the app actually used. The capture now
+  runs at the same 20 Hz the rest of the pipeline does, which is what macOS already did. The
+  picture is identical; the machine does roughly a seventh of the work for it.
 - On macOS, picking a display could quietly capture a different one. The display list identified
   each screen by its position measured in one unit while the capture side compared against the
   same position measured in another, so the two only agreed when a screen sat at the very top-left
