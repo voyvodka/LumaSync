@@ -9,6 +9,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The room map's property bar showed a lone dash whenever nothing was selected, which read
+  as something failing to render rather than as an empty state, and told a screen reader
+  nothing at all. It now says what the bar is for. The strip stays reserved on purpose:
+  collapsing it would shift the canvas every time you select or deselect an object.
 - A WLED panel with no USB strip attached could not be used at all. The Lights screen asked
   whether a serial port was connected rather than whether any local output was, so a
   WLED-only setup read as "no strip connected", every lighting mode other than Off stayed

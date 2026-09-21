@@ -143,8 +143,12 @@ export function PropertyBar({
 
   if (!fields || !selectedId) {
     return (
+      // The 32 px stays reserved with nothing selected. Collapsing it would
+      // shift the canvas on every select and deselect, which is worse than the
+      // gap; what was wrong was filling it with an em dash, which says nothing
+      // and reads as a rendering fault.
       <div className="lm-room-propbar lm-room-propbar--empty">
-        <span className="lm-room-propbar-empty">—</span>
+        <span className="lm-room-propbar-empty">{t("roomMap:propertyBar.empty")}</span>
       </div>
     );
   }

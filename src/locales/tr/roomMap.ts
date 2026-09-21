@@ -195,6 +195,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     imageHint: "Görseli ölçeklemek ve konumlandırmak için tuval tutamaçlarını kullanın. Oda hatlarının görünür kalması için opaklığı düşürün.",
   },
   propertyBar: {
+    empty: "Özelliklerini düzenlemek için bir nesne seçin",
     aspectLocked: "En boy oranı kilitli",
     aspectUnlocked: "En boy oranı serbest",
     resetScale: "En boy oranını sıfırla",
