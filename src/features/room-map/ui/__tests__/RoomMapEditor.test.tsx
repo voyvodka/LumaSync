@@ -11,7 +11,7 @@
  * Previously existing stub tests are preserved at the bottom.
  */
 import React from "react";
-import { render, act } from "@testing-library/react";
+import { render, act, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { RoomMapEditor } from "../RoomMapEditor";
@@ -79,8 +79,16 @@ vi.mock("../../state/useRoomMapPersist", () => ({
 }));
 
 vi.mock("../RoomMapCanvas", () => ({
-  RoomMapCanvas: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="room-map-canvas">{children}</div>
+  RoomMapCanvas: ({
+    children,
+    panOffset,
+  }: {
+    children?: React.ReactNode;
+    panOffset: { x: number; y: number };
+  }) => (
+    <div data-testid="room-map-canvas" data-pan-x={panOffset.x} data-pan-y={panOffset.y}>
+      {children}
+    </div>
   ),
 }));
 
@@ -101,7 +109,9 @@ vi.mock("../objects/FurnitureObject", () => ({
 }));
 
 vi.mock("../objects/TvAnchorObject", () => ({
-  TvAnchorObject: () => null,
+  TvAnchorObject: ({ onSelect }: { onSelect: () => void }) => (
+    <button type="button" data-testid="select-tv" onClick={onSelect} />
+  ),
 }));
 
 vi.mock("../objects/UsbStripObject", () => ({
@@ -283,3 +293,72 @@ describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)
 // Wave 0 stubs resolved where the decisions are actually made: ROOM-01 by
 // `computeFit` (useRoomMapViewport.test.ts), ROOM-06 by `deriveZones`
 // (deriveZones.test.ts). ROOM-08 dropped with `backgroundImagePath` in v1.5.x.
+
+// ---------------------------------------------------------------------------
+// Arrow-key viewport panning
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — arrow keys route to pan or nudge by selection", () => {
+  class StubResizeObserver {
+    constructor(_cb: ResizeObserverCallback) {}
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  /** The editor root owns `onKeyDown`; it is the outermost div React renders. */
+  function renderEditor() {
+    const { container } = render(<RoomMapEditor />);
+    const root = container.firstElementChild as HTMLElement;
+    const canvas = () => container.querySelector('[data-testid="room-map-canvas"]') as HTMLElement;
+    return { container, root, canvas };
+  }
+
+  it("pans the viewport when nothing is selected", () => {
+    const { root, canvas } = renderEditor();
+    const before = Number(canvas().dataset.panX);
+
+    act(() => {
+      fireEvent.keyDown(root, { key: "ArrowRight" });
+    });
+
+    expect(Number(canvas().dataset.panX)).toBeLessThan(before);
+  });
+
+  it("pans vertically too, so every direction has a keyboard path", () => {
+    const { root, canvas } = renderEditor();
+    const before = Number(canvas().dataset.panY);
+
+    act(() => {
+      fireEvent.keyDown(root, { key: "ArrowDown" });
+    });
+
+    expect(Number(canvas().dataset.panY)).toBeLessThan(before);
+  });
+
+  it("nudges the selected object instead of panning, so selection still wins", () => {
+    const { root, canvas, container } = renderEditor();
+
+    act(() => {
+      (container.querySelector('[data-testid="select-tv"]') as HTMLElement).click();
+    });
+
+    const before = Number(canvas().dataset.panX);
+    act(() => {
+      fireEvent.keyDown(root, { key: "ArrowRight" });
+    });
+
+    expect(Number(canvas().dataset.panX)).toBe(before);
+  });
+});

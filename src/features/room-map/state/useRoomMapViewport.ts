@@ -18,7 +18,14 @@ export interface UseRoomMapViewportReturn {
   spaceHeld: boolean;
   /** Zoom + centre the room inside the measured canvas, leaving `pad` px of margin. */
   fitToView: (pad: number) => void;
+  /** Arrow-key panning for the canvas. Returns true when the key was consumed. */
+  handleArrowPan: (e: React.KeyboardEvent<HTMLDivElement>) => boolean;
 }
+
+/** Screen pixels per arrow press. Deliberately a screen distance, not a world
+ *  distance: a metre-based step would crawl at 0.3× zoom and fly at 3×. */
+export const PAN_STEP_PX = 32;
+export const PAN_STEP_LARGE_PX = 160;
 
 export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewportReturn {
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
@@ -52,6 +59,24 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
     },
     [canvasSize, widthMeters, depthMeters],
   );
+
+  // Arrows move the camera, not the map — ArrowRight reveals what is to the
+  // right, so the offset decreases. This is the opposite sign from space+drag,
+  // where the user grabs the map itself.
+  const handleArrowPan = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    let dx = 0;
+    let dy = 0;
+    const step = e.shiftKey ? PAN_STEP_LARGE_PX : PAN_STEP_PX;
+    if (e.key === "ArrowLeft") dx = step;
+    else if (e.key === "ArrowRight") dx = -step;
+    else if (e.key === "ArrowUp") dy = step;
+    else if (e.key === "ArrowDown") dy = -step;
+    else return false;
+
+    e.preventDefault();
+    setPanOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+    return true;
+  }, []);
 
   const initialFitDone = useRef(false);
 
@@ -95,6 +120,7 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
     setPanOffset,
     spaceHeld,
     fitToView,
+    handleArrowPan,
   };
 }
 

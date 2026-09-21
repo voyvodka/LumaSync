@@ -123,6 +123,7 @@ function ShortcutsHelpButton() {
     { key: "Escape", desc: t("roomMap:shortcuts.deselect") },
     { key: `${shift}Arrow`, desc: t("roomMap:shortcuts.nudgeLarge") },
     { key: "Arrow", desc: t("roomMap:shortcuts.nudge") },
+    { key: "Arrow", desc: t("roomMap:shortcuts.panKeyboard") },
     { key: "Space+Drag", desc: t("roomMap:shortcuts.pan") },
     { key: t("roomMap:shortcuts.scrollWheel"), desc: t("roomMap:shortcuts.zoom") },
   ];

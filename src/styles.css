@@ -5922,6 +5922,107 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+   Viewport controls + coordinate readout — the two canvas overlays
+   ─────────────────────────────────────────────────────────────────────
+   Deliberately a matched pair. They sit on opposite bottom corners of the
+   same canvas, so they share one backdrop treatment; styling either alone
+   makes the canvas look like it grew a stray chip. The backdrop is opaque
+   enough to stay legible over the brightest zone fill, which is why it is
+   not `--lm-panel` at full alpha. */
+.lm-room-overlay {
+  position: absolute;
+  bottom: 4px;
+  z-index: 50;
+  border-radius: 6px;
+  background: rgba(14, 16, 20, 0.82);
+  border: 1px solid var(--lm-line);
+}
+.lm-room-overlay--start {
+  left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+}
+/* `right` clears the zoom group even when the room is narrow: the two never
+   overlap because the coordinate chip is the one that shrinks. */
+.lm-room-overlay--end {
+  right: 4px;
+  pointer-events: none;
+  padding: 3px 6px;
+  font-family: var(--lm-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--lm-ink-dim);
+}
+
+.lm-room-viewport-btn {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  min-width: 32px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--lm-ink-dim);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.lm-room-viewport-btn:hover:not(:disabled) {
+  color: var(--lm-amber);
+  background: rgba(255, 176, 32, 0.08);
+}
+.lm-room-viewport-btn:focus-visible {
+  outline: none;
+  color: var(--lm-amber);
+  box-shadow: var(--lm-focus-ring-soft);
+}
+.lm-room-viewport-btn:disabled {
+  color: var(--lm-ink-faint);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* The readout doubles as the fit-to-view button, so it needs room for "100%"
+   without the group resizing as the digits change. */
+.lm-room-viewport-btn--readout {
+  min-width: 52px;
+  padding: 0 4px;
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lm-room-viewport-btn {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .lm-room-overlay {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+  .lm-room-overlay--end {
+    color: CanvasText;
+  }
+  .lm-room-viewport-btn {
+    color: CanvasText;
+  }
+  .lm-room-viewport-btn:hover:not(:disabled),
+  .lm-room-viewport-btn:focus-visible {
+    color: Highlight;
+    background: Canvas;
+  }
+  .lm-room-viewport-btn:disabled {
+    color: GrayText;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────
    Wave 4-E — Devices section "Paired strips" sub-card
    ─────────────────────────────────────────────────────────────────────
    Surfaces every persisted UsbStripPlacement under the USB ports grid,

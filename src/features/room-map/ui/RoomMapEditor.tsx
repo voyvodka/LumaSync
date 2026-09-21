@@ -134,6 +134,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
     setPanOffset,
     spaceHeld,
     fitToView,
+    handleArrowPan,
   } = useRoomMapViewport(config.dimensions);
 
   // Same `connectionEvents` bus the Lights and Devices flows use, so a pair or
@@ -275,11 +276,15 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
         handleRotate();
       } else if ((e.key === "f" || e.key === "F") && !e.metaKey && !e.ctrlKey) {
         setObjectPanelOpen((v) => !v);
-      } else {
+      } else if (selectedId) {
         handleArrowNudge(e);
+      } else {
+        // Arrows were a dead key with nothing selected, which left keyboard-only
+        // users no way to move the viewport at all.
+        handleArrowPan(e);
       }
     },
-    [handleDelete, handleRotate, handleArrowNudge, handleDuplicate, undo, redo, selectedId, fitToView],
+    [handleDelete, handleRotate, handleArrowNudge, handleArrowPan, handleDuplicate, undo, redo, selectedId, fitToView],
   );
 
   const handleDimensionsChange = useCallback(
@@ -794,7 +799,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
             type="button"
             onClick={dismissHueZoneRejection}
             aria-label={t("roomMap:hueZones.rejected.dismiss")}
-            className="min-h-[32px] px-2 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--lm-accent)]"
+            className="min-h-[32px] px-2 underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--lm-amber)]"
           >
             {t("roomMap:hueZones.rejected.dismiss")}
           </button>

@@ -41,20 +41,15 @@ export function ZoomControl({
     });
   };
 
-  const btn =
-    "flex h-8 w-8 items-center justify-center rounded text-[13px] text-[color:var(--lm-text-dim)] " +
-    "hover:text-[color:var(--lm-text)] disabled:opacity-40 disabled:hover:text-[color:var(--lm-text-dim)] " +
-    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--lm-accent)]";
-
   return (
     <div
-      className="absolute bottom-1 left-1 z-50 flex items-center gap-0.5 rounded bg-black/60 px-0.5"
+      className="lm-room-overlay lm-room-overlay--start"
       role="group"
       aria-label={t("roomMap:zoomControl.label")}
     >
       <button
         type="button"
-        className={btn}
+        className="lm-room-viewport-btn"
         onClick={() => step(-ZOOM_STEP)}
         disabled={zoom <= ZOOM_MIN}
         aria-label={t("roomMap:zoomControl.out")}
@@ -64,7 +59,7 @@ export function ZoomControl({
       </button>
       <button
         type="button"
-        className="h-8 min-w-[52px] rounded px-1 text-[10px] [font-family:var(--lm-mono)] tabular-nums text-[color:var(--lm-text-dim)] hover:text-[color:var(--lm-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--lm-accent)]"
+        className="lm-room-viewport-btn lm-room-viewport-btn--readout"
         onClick={onFitToView}
         aria-label={t("roomMap:zoomControl.fit")}
         title={`${t("roomMap:zoomControl.fit")} · ${isMac ? "⌘0" : "Ctrl+0"}`}
@@ -73,7 +68,7 @@ export function ZoomControl({
       </button>
       <button
         type="button"
-        className={btn}
+        className="lm-room-viewport-btn"
         onClick={() => step(ZOOM_STEP)}
         disabled={zoom >= ZOOM_MAX}
         aria-label={t("roomMap:zoomControl.in")}
