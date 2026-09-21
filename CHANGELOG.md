@@ -7,6 +7,21 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Fixed
+
+- Eleven Turkish strings on the Lights screen were written without their diacritics, so "Çıkış
+  öncesi kanal başına renk düzeltmesi" appeared as "Cikis oncesi kanal basina renk duzeltmesi" a
+  few centimetres from text that had them. The whole colour-correction and firmware-profile block
+  is now written properly. The translation parity test cannot catch this — both languages have the
+  key, only one of them is spelled correctly.
+- The window now tells assistive technology which language it is showing. It always claimed
+  English, so a screen reader read the entire Turkish interface with English pronunciation rules.
+  It follows the language you pick, including when you change it without restarting.
+- The Devices list on the left announces which category is open. All five read identically before,
+  so there was no way to tell from audio alone which one you were looking at — while the main
+  section tabs above have always announced it. The small number beside a category now says what it
+  counts, rather than being read as a bare digit after the name.
+
 ### Added
 
 - A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs

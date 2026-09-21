@@ -112,6 +112,7 @@ const device: Catalogue<typeof enDevice> = {
       wled: "WLED",
       displays: "Ekranlar",
       manualEntry: "Manuel Giriş",
+      countLabel: "{{count}} bağlı",
     },
     header: {
       usbTitle: "USB Şeritleri",
