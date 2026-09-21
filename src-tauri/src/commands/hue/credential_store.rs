@@ -753,6 +753,12 @@ pub struct ResolvedHueAppKey {
 ///
 /// `fallback_username` is the request-supplied value, kept for legacy installs
 /// and for platforms where `default_store()` degraded to `NoopStore`.
+///
+/// `#[track_caller]` so the "no key" line below names the command that asked.
+/// Nine call sites reach this through `effective_hue_app_key`, and an unpaired
+/// launch runs several of them within a second — four identical lines with no
+/// referent read as a loop rather than as four commands each doing their job.
+#[track_caller]
 pub fn resolve_hue_app_key(
     store: &dyn SecretStore,
     fallback_username: &str,
@@ -775,7 +781,10 @@ pub fn resolve_hue_app_key(
         });
     }
 
-    debug!("[hue-cred] no application key available — re-pair required");
+    debug!(
+        "[hue-cred] no application key available — re-pair required (asked by {})",
+        std::panic::Location::caller()
+    );
     None
 }
 
@@ -784,6 +793,7 @@ pub fn resolve_hue_app_key(
 ///
 /// Returning a bare `String` keeps the call sites flat — each of them already
 /// has an "empty username" arm to surface `AUTH_INVALID_RE_PAIR_REQUIRED`.
+#[track_caller]
 pub fn effective_hue_app_key(fallback_username: &str) -> String {
     resolve_hue_app_key(default_store().as_ref(), fallback_username)
         .map(|resolved| resolved.username)

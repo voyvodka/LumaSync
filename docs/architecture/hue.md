@@ -55,6 +55,14 @@ raced a write is discarded via a generation counter, because a stale key survivi
 worse than the reads the cache removes. The accepted cost: a credential edited outside the app is
 not seen until restart.
 
+So the nine `effective_hue_app_key` call sites are **not** nine components each resolving
+independently — they all go through that one cached handle, and an unpaired launch costs one
+backend read, not nine. What an unpaired launch *does* produce is several identical
+`[hue-cred] no application key available` lines within a second, which reads like a loop until you
+know that. `resolve_hue_app_key` is `#[track_caller]` so the line names the command that asked;
+that attribute has to stay on `effective_hue_app_key` too, or every line reports the wrapper
+instead.
+
 **A debug build does not use the OS keychain at all.** `lib.rs` seeds the shared store with a
 `DevFileStore` — a plaintext JSON file, `dev-credentials.json`, `0600` in the app data dir —
 before any Hue command can run. The reason is the macOS keychain prompt on every `bun run tauri dev`
