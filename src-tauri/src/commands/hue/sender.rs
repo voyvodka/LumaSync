@@ -1115,6 +1115,7 @@ pub(crate) fn build_hue_sender_with_counter(
     let store = super::credential_store::default_store();
     let resolved = super::credential_store::resolve_hue_credentials(
         store.as_ref(),
+        &request.bridge_ip,
         &request.username,
         &request.client_key,
     );
