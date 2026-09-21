@@ -95,6 +95,7 @@ mod hue {
         #[allow(dead_code)]
         pub fn migrate_hue_credentials_to_keychain(
             _store: &StubStore,
+            _bridge_id: &str,
             _username: &str,
             _client_key: &str,
         ) -> MigrationOutcome {

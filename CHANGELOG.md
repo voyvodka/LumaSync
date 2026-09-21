@@ -22,6 +22,14 @@ https://keepachangelog.com/en/1.1.0/
   followed the wrong screen, with nothing reported. Both sides now use the same unit. A display
   chosen before this update is re-identified on the next launch, and if it cannot be matched the
   app falls back to the main display exactly as it did before.
+- Connecting to a Hue bridge other than the one paired most recently no longer asks you to pair
+  again for no reason. The saved key was handed to whichever bridge the app connected to, without
+  checking which bridge had issued it, so a second bridge — or the same one re-entered by address
+  — was given credentials it had never seen. It refused them, and the app read that refusal as
+  "your key has expired" and offered to re-pair a bridge that was working. The app now remembers
+  which bridge a saved key belongs to and only offers it there. A key saved before this update has
+  no bridge recorded against it and keeps working exactly as before; it is labelled the next time
+  you pair.
 
 ### Added
 
