@@ -361,4 +361,17 @@ describe("RoomMapEditor — arrow keys route to pan or nudge by selection", () =
 
     expect(Number(canvas().dataset.panX)).toBe(before);
   });
+
+  it("says when it has the keys, instead of suppressing the ring and stopping there", () => {
+    // The root routes every shortcut, and since arrows started panning the
+    // viewport it is also what a keyboard user must be on for panning to work
+    // at all. It shipped with `outline: none` and nothing in its place.
+    const { root } = renderEditor();
+
+    expect(root).toHaveClass("lm-room-editor");
+    expect(root).toHaveAttribute("tabindex", "0");
+    // The inline suppression is gone: it now lives in one rule beside the
+    // replacement, so the next edit cannot reinstate a bare `none`.
+    expect(root.style.outline).toBe("");
+  });
 });

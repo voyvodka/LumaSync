@@ -410,11 +410,10 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
 
   return (
     <div
-      className="flex h-full flex-col"
+      className="lm-room-editor flex h-full flex-col"
       onKeyDown={handleKeyDown}
       onContextMenu={handleContextMenu}
       tabIndex={0}
-      style={{ outline: "none" }}
     >
       <RoomMapToolbar
         hasTv={hasTv}
