@@ -66,8 +66,6 @@ const lights: Catalogue<typeof enLights> = {
     addTooltip: "Yakında — çoklu Hue alanı",
     addHueZoneTooltip: "Yeni bir Hue bölgesi ekle",
     addDisabledTooltip: "Bölge eklemek için bir Hue köprüsü eşleyin",
-    hintTitle: "Oda alanı",
-    hintBody: "Telemetri / mini oda\nönizlemesi / kısayollar\niçin yer tutucu",
     rows: {
       usbName: "USB",
       usbType: "CH340",
