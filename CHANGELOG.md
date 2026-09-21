@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The Lights screen no longer shows a dashed box reading "Room space — placeholder for
+  telemetry / mini room preview / shortcuts". It was scaffolding that reached the product,
+  and it had been translated into Turkish along the way, so nothing marked it as unfinished
+  except the word itself. Nothing took its place: the column simply ends after the outputs,
+  which is what it should have done until there was something to put there.
 - The window could not be moved or closed while the room-map rename box or the firmware
   override warning was open. Both covered the whole window, including the title bar that
   carries the drag region and the window controls, so the window stayed pinned until the

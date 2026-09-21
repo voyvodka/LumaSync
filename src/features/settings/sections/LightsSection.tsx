@@ -831,18 +831,6 @@ export function LightsSection({
             </button>
           </div>
         </div>
-
-        <div className="lm-hint-box">
-          <b>{t("lights:dock.hintTitle")}</b>
-          {t("lights:dock.hintBody")
-            .split("\n")
-            .map((line, idx, arr) => (
-              <span key={idx}>
-                {line}
-                {idx < arr.length - 1 && <br />}
-              </span>
-            ))}
-        </div>
       </aside>
     </div>
   );
