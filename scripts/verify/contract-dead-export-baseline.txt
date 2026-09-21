@@ -22,6 +22,18 @@
 # the code Rust already emits is the correct move even when nothing renders that
 # failure yet, and the line goes the moment something first does.
 #
+# This check covers `export const` and `export function`, and deliberately not
+# `export type`. That was measured rather than assumed: widening it surfaces 23
+# entries, and all but one are derived unions of the shape
+# `typeof X[keyof typeof X]` sitting beside a const that IS consumed. They are
+# public API expressed as a type, not dead weight, so the check would be 22
+# parts noise to 1 part signal and the baseline would absorb the difference —
+# which is how a ratchet stops being read. A dead type is also cheaper than a
+# dead const: it is erased, and carries no values the runtime was supposed to
+# read. The one real case it would have caught, `SinkRef`, was dead for two
+# releases with a JSDoc claiming every sink-targeting command accepted it; what
+# made that harmful was the false comment, not the unused type.
+#
 # Format: `file.ts SYMBOL`. Blank lines and `#` comments ignored.
 
 # Declared 2026-08-13 alongside the codes Rust already emits. Nothing catches

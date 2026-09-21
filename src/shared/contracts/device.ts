@@ -353,28 +353,6 @@ export interface SerialHealthReport {
 // Sink reference (v1.5 W1-B1 — TS mirror of the Rust `LedSink` trait)
 // ---------------------------------------------------------------------------
 
-/**
- * Discriminated union identifying the active LED output sink.
- *
- * This is the frontend mirror of the Rust `LedSink` trait (v1.4 G11).
- * Every command that targets "the active sink" — health check, sampling
- * playground, lighting mode start — accepts a `SinkRef` so the UI no
- * longer special-cases serial vs. WLED. The Rust handler dispatches on
- * `type` and routes to the matching trait implementation.
- *
- * Variants:
- * - `serial` — USB / serial controller identified by its OS-reported
- *   port name (the existing surface; v1.4 contract).
- * - `wled-udp` — WLED instance reached over UDP on the LAN (v1.5 G1).
- *
- * Future variants (v2.0): `openrgb`, `tpm2`, `sacn`, `art-net`,
- * `hyperion-rpc-output`. Keep the discriminant string in lower-kebab so
- * Rust-side `serde(tag = "type")` round-trips unchanged.
- */
-export type SinkRef =
-  | { type: "serial"; portName: string }
-  | { type: "wled-udp"; ip: string; port: number; ledCount: number };
-
 // ---------------------------------------------------------------------------
 // WLED UDP sink (v1.5 G1)
 // ---------------------------------------------------------------------------
