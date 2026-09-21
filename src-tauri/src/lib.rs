@@ -18,7 +18,6 @@ mod commands {
     pub mod hue_http;
     pub mod hue_intensity;
     pub mod hue_onboarding;
-    pub mod hue_stream_lifecycle;
     pub mod led_calibration;
     pub mod led_output;
     pub mod led_preview;
@@ -64,13 +63,14 @@ use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
     ActiveSinkRegistry, SerialConnectionState,
 };
+use commands::hue::commands::{
+    get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
+    simulate_hue_fault, start_hue_stream, stop_hue_stream,
+};
+use commands::hue::state_store::HueRuntimeStateStore;
 use commands::hue_onboarding::{
     check_hue_stream_readiness, discover_hue_bridges, list_hue_entertainment_areas,
     migrate_hue_credentials, pair_hue_bridge, validate_hue_credentials, verify_hue_bridge_ip,
-};
-use commands::hue_stream_lifecycle::{
-    get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
-    simulate_hue_fault, start_hue_stream, stop_hue_stream, HueRuntimeStateStore,
 };
 use commands::led_preview::{
     close_led_twin_overlay, hide_led_control_popup, open_led_control_popup, open_led_twin_overlay,

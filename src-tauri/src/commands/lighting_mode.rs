@@ -20,11 +20,11 @@ use super::ambilight_scene::{
 };
 use super::calibration::list_displays;
 use super::device_connection::{ActiveSinkRegistry, CommandStatus, SerialConnectionState};
-use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
-use super::hue_stream_lifecycle::{
+use super::hue::state_store::{
     apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
     HueActiveOutputContext, HueRuntimeStateStore,
 };
+use super::hue_intensity::{HueIntensityPreset, LightingSmoothingPreset};
 use super::led_calibration::{
     build_led_sequence, derive_base_interval_ms_for, frame_wire_bytes, frame_wire_time_ms,
     link_max_fps, sample_frame_for_sequence, LedCalibrationConfig,

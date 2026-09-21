@@ -168,9 +168,6 @@ Around twenty files plus the `hue/` and `room_map/` subdirectories. Grep for
 `#[tauri::command]`; the `generate_handler![]` block in `src-tauri/src/lib.rs` is the
 authoritative registration list.
 
-`hue_stream_lifecycle.rs` is a re-export shim only — the implementation moved under
-`commands::hue::*`. Import paths still resolve through it; do not add new code there.
-
 ### State persistence
 
 Tauri `plugin-store` writes `shell-state.json` into the app data directory —
