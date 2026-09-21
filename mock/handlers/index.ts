@@ -27,6 +27,7 @@ import { UPDATER_COMMANDS } from "../../src/shared/contracts/updater";
 import { deviceHandlers } from "./device";
 import { hueHandlers } from "./hue";
 import { pluginHandlers, shellHandlers, windowPluginHandler } from "./shell";
+import { windowlessHandlers } from "./windowless";
 import type { CommandResponse } from "./responses";
 import type { Handler } from "./types";
 
@@ -72,24 +73,22 @@ export const PASSTHROUGH_COMMANDS = [
 export type PassthroughCommandName = (typeof PASSTHROUGH_COMMANDS)[number];
 
 /**
- * Answered, but the visible effect cannot exist here — each addresses a
- * separate webview window, or an OS surface the browser has no access to. The
- * calling state machine advances and the buttons are exercisable; nothing
- * appears. Listed rather than handled so the gap is a decision on the record.
+ * Nothing is listed here, and the empty list is the point.
+ *
+ * It used to hold the eleven commands whose *effect* cannot exist in a browser
+ * tab — a second webview, a tray menu, a notification — with a comment saying
+ * they were "answered, the calling state machine advances and the buttons are
+ * exercisable". They were not. This list only ever fed the compile-time
+ * coverage guard below; `handlerFor` never consulted it, so every one of them
+ * returned `undefined` and `boot.ts` threw. `update_tray_labels` fires during
+ * bootstrap, so that was an unhandled rejection on **every** browser launch.
+ *
+ * They are answered for real now, in `windowless.ts`. Keeping the slot because
+ * the guard's three-way split is still the right shape — but a command put
+ * here needs a reason that survives being read back, and "the effect is
+ * invisible" was not a reason to leave the call unanswered.
  */
-export const INTENTIONALLY_UNMAPPED = [
-  PREVIEW_COMMANDS.OPEN_CONTROL_POPUP,
-  PREVIEW_COMMANDS.SHOW_CONTROL_POPUP,
-  PREVIEW_COMMANDS.HIDE_CONTROL_POPUP,
-  PREVIEW_COMMANDS.GET_PREVIEW_STATUS,
-  DISPLAY_OVERLAY_COMMANDS.OPEN_DISPLAY_OVERLAY,
-  DISPLAY_OVERLAY_COMMANDS.CLOSE_DISPLAY_OVERLAY,
-  DISPLAY_OVERLAY_COMMANDS.UPDATE_DISPLAY_OVERLAY_PREVIEW,
-  PLATFORM_COMMANDS.SHOW_NOTIFICATION,
-  PLATFORM_COMMANDS.REQUEST_NOTIFICATION_PERMISSION,
-  PLATFORM_COMMANDS.OPEN_LOG_DIR,
-  SHELL_COMMANDS.UPDATE_TRAY_LABELS,
-] as const;
+export const INTENTIONALLY_UNMAPPED = [] as const;
 
 export type UnmappedCommandName = (typeof INTENTIONALLY_UNMAPPED)[number];
 
@@ -104,6 +103,7 @@ const staticHandlers = {
   ...deviceHandlers,
   ...hueHandlers,
   ...shellHandlers,
+  ...windowlessHandlers,
   ...pluginHandlers,
 };
 
