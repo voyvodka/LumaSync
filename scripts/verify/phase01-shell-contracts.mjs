@@ -1645,9 +1645,12 @@ check(
 // Name-level twin of the code checks. `sample_led_frame` was asserted present
 // for four waves with no handler behind it; presence is not reachability.
 console.log("\n[ Tauri command names — contracts ↔ generate_handler! parity ]");
-// Registered but intentionally unnamed by any contract. Debug-only, so the
-// frontend must never invoke it.
-const UNCONTRACTED_RUST_COMMANDS = new Set(["simulate_hue_fault"]);
+// Empty, and worth keeping that way. `simulate_hue_fault` sat here while it had
+// no frontend name at all; it is now declared as `HUE_DEBUG_COMMANDS` so the dev
+// mock's passthrough set can be typed. The rule it was protecting — production
+// code never invokes it — did not change, it moved to
+// scripts/verify/mock-not-shipped.mjs, which fails on any reference under src/.
+const UNCONTRACTED_RUST_COMMANDS = new Set([]);
 
 const contractCommandNames = new Map();
 for (const file of tsSourceFiles.filter((f) => f.includes("/shared/contracts/"))) {

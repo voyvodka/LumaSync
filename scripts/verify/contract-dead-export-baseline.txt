@@ -36,6 +36,13 @@ telemetry.ts TELEMETRY_COMMAND_ERRORS
 # Debug-only command surface; the frontend must never invoke it.
 hue.ts HUE_DEBUG_COMMAND_CODES
 
+# The command name behind those codes. Its only consumer is `mock/dispatch.ts`,
+# which is outside src/ and so invisible to this check — deliberately: the dev
+# mock must reach it and production code must not. Unreached from src/ is the
+# state we want, not a gap, and scripts/verify/mock-not-shipped.mjs fails the
+# build if that ever stops being true.
+hue.ts HUE_DEBUG_COMMANDS
+
 # Named so a log reader can identify what arrives in a Hue status.details, but
 # deliberately not branched on — the status code is the discriminator. Unlike
 # the LED_OUTPUT_* family there is no Hue equivalent of classifyCaptureFailure
