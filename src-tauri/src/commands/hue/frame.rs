@@ -493,7 +493,12 @@ pub(crate) fn channel_position_to_screen_region(x: f32, y: f32) -> HueScreenRegi
 /// axis — callers can map that to `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS` if
 /// they want strict validation, or fall back to the clamped tuple via
 /// [`resolve_zone_relative_clamped`] for best-effort streaming.
-#[allow(dead_code)] // production wiring lands in W1-A4 sender follow-up; helper is exercised by frame::tests today
+// Genuinely unused in production, unlike its `_clamped` sibling: the strict
+// variant is kept for callers that want a validation failure rather than a
+// silently clamped point, and nothing wants that yet. Exercised by
+// `frame::tests`. Grep will tell you this is used — that is the `_clamped`
+// name matching as a substring. The compiler is the authority here.
+#[allow(dead_code)]
 pub fn resolve_zone_relative(
     center: (f64, f64, f64),
     scale: (f64, f64, f64),
@@ -518,7 +523,6 @@ pub fn resolve_zone_relative(
 /// Suitable for the streaming hot path where dropping a frame because a
 /// single light briefly drifted out of the cube would be worse than
 /// clamping it.
-#[allow(dead_code)] // production wiring lands in W1-A4 sender follow-up; helper is exercised by frame::tests today
 pub fn resolve_zone_relative_clamped(
     center: (f64, f64, f64),
     scale: (f64, f64, f64),
@@ -547,7 +551,12 @@ pub fn resolve_zone_relative_clamped(
 /// `z` is intentionally not stored on `HueAreaChannel` (the bridge frame
 /// only carries 2D screen-region routing); it is resolved purely so the
 /// clamp signal accounts for ceiling/floor placements.
-#[allow(dead_code)] // production wiring lands in W1-A4 sender follow-up; helper is exercised by frame::tests today
+// Unwired. Written for the W1-A4 sender follow-up, which has since shipped
+// without needing it — the clamp signal it was meant to feed is computed from
+// `resolve_zone_relative_clamped` instead. Kept because zone-aware placement
+// is still on the roadmap and this is the non-obvious half of it; delete it
+// if that stops being true rather than letting the note age further.
+#[allow(dead_code)]
 pub fn apply_zone_world_position(
     channels: &mut [HueAreaChannel],
     channel_id: u8,

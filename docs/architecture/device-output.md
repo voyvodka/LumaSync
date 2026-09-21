@@ -40,6 +40,17 @@ they are asked to do. New output types implement the trait rather than branching
 **WLED is driven over UDP with DDP and WARLS.** These are WLED's own realtime protocols; there is
 no HTTP request per frame.
 
+**Nothing makes the frame length and the panel's length agree, so the sink says so once.** The
+frame is sized by the LED calibration and the panel by its own configuration, and the two are
+authored independently — newly easy to get wrong now that a WLED-only setup is reachable without a
+strip. Both failure directions are silent: DDP writes what it is given and the panel ignores
+anything past its end, so a too-long frame leaves the tail of the strip dark, while a short one
+leaves the remainder holding its last colour. `WledUdpSink` compares the two on the first frame of
+each session and logs `WLED_LENGTH_MISMATCH`. Once per `start()`, not per frame — at 20 Hz the
+per-frame version is 1 200 identical lines a minute, which is the same as not reporting it — and
+re-armed on `stop()`, because either side may change between sessions. A panel reporting `0` is
+reporting "unknown" and is not treated as a mismatch.
+
 **Opening a port needs a 2 s settle delay before the handshake.** `BOOTLOADER_SETTLE_DELAY_MS` in
 `commands/device_connection.rs`. Opening the port asserts DTR, which triggers the AVR auto-reset on
 Arduino-style boards; the bootloader owns the bus for ~1.5–2 s before jumping to the sketch, and a

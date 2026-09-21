@@ -1311,8 +1311,13 @@ impl HueGamutType {
 pub struct HueLightMetadata {
     pub light_id: String,
     /// Bulb archetype (e.g. `"sultan_bulb"`, `"hue_go"`) reported by CLIP v2.
-    /// Surfaced for telemetry; consumed by future bulb-specific dimming curves.
-    #[allow(dead_code)] // read-by-W1-C3b frame builder + future telemetry
+    ///
+    /// Parsed and carried, read by nobody in production. The frame builder
+    /// takes `gamut_type` and not this; the telemetry surface it was meant for
+    /// was never built. Kept because bulb-specific dimming curves need it and
+    /// re-deriving it means another CLIP round trip, but do not read the old
+    /// note as a statement that something consumes it — nothing does.
+    #[allow(dead_code)]
     pub archetype: Option<String>,
     /// Gamut triangle this bulb supports — read by the frame builder hot
     /// path for per-bulb CIE xy clipping.

@@ -15,6 +15,12 @@ https://keepachangelog.com/en/1.1.0/
   dialog was answered. They now start below the title bar, as the update dialog already
   did. Both also return keyboard focus to whatever opened them when they close, which
   previously dropped you back at the top of the screen.
+- A WLED panel whose length does not match your LED Setup now says so in the log instead of
+  failing silently. The frame is sized by the calibration and the panel by its own
+  configuration, and nothing made the two agree — if the calibration is longer, the end of
+  the strip simply never lights; if it is shorter, the remainder holds its last colour.
+  Neither reported anything. This became easy to hit now that a WLED panel can be used
+  without a USB strip attached.
 - The room map's property bar showed a lone dash whenever nothing was selected, which read
   as something failing to render rather than as an empty state, and told a screen reader
   nothing at all. It now says what the bar is for. The strip stays reserved on purpose:
