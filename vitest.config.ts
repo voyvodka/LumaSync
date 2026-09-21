@@ -30,8 +30,12 @@ export default defineConfig({
     // Global test APIs (describe, it, expect, vi) — no imports needed in test files
     globals: true,
 
-    // Include only unit test files; exclude Tauri-specific integration tests
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    // Include only unit test files; exclude Tauri-specific integration tests.
+    // `mock/` is dev-only and never ships, but its fixtures are bound to the
+    // real contract types and its frame generator sizes itself from live state
+    // — both are things that break silently, which is exactly what a test is
+    // for. `verify:mock-not-shipped` guards the shipping question separately.
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "mock/**/*.test.ts"],
 
     // Exclude node_modules and build artifacts
     exclude: ["node_modules/**", "dist/**", "src-tauri/**"],

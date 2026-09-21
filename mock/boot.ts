@@ -20,6 +20,7 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 
 import { dispatch, hasFixture } from "./dispatch";
+import { handleEventPluginCommand, isEventPluginCommand } from "./eventBridge";
 import { DEFAULT_SCENARIO, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "./scenarios";
 import { MOCK_HAS_REAL_IPC } from "./runtime";
 import { restoreWorld, setWorld } from "./state";
@@ -52,14 +53,27 @@ if (!hasTauriRuntime) {
   mockWindows(label);
   // Without a Rust process there is nothing behind passthrough, so anything the
   // fixture table does not answer has to fail here rather than hang.
+  //
+  // `shouldMockEvents` is deliberately off. The registry behind it cannot
+  // unsubscribe — see `eventBridge.ts` — so every unmounted listener stays in
+  // it and turns each emit into a `Couldn't find callback id` warning. The
+  // bridge below is the same surface with a working `unlisten`.
   mockIPC(async (command, payload) => {
+    const args = payload as Record<string, unknown> | undefined;
+    if (isEventPluginCommand(command)) {
+      const answered = handleEventPluginCommand(command, args);
+      if (answered !== undefined) return answered;
+      throw new Error(
+        `[LumaSync][mock] the event plugin has a method the bridge does not implement: "${command}".`,
+      );
+    }
     if (!hasFixture(command)) {
       throw new Error(
         `[LumaSync][mock] "${command}" has no fixture and there is no Rust process to pass it to. Add a fixture under mock/handlers/, or run it under \`bun run tauri:mock\` where passthrough works.`,
       );
     }
-    return dispatch(command, payload as Record<string, unknown> | undefined);
-  }, { shouldMockEvents: true });
+    return dispatch(command, args);
+  });
 }
 
 console.info(
