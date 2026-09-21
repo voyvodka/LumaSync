@@ -76,7 +76,7 @@ describe("TelemetrySection", () => {
   });
 
   it("fetches runtime telemetry on mount and renders capture/send/queue values", async () => {
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
 
     await waitFor(() => {
       expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(1);
@@ -93,7 +93,7 @@ describe("TelemetrySection", () => {
   it("cleans the pending poll on unmount and does not leak ticks after remount", async () => {
     vi.useFakeTimers();
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
-    const firstRender = render(<TelemetrySection usbConnected={true} />);
+    const firstRender = render(<TelemetrySection localOutputConnected={true} />);
 
     await act(async () => {
       await Promise.resolve();
@@ -116,7 +116,7 @@ describe("TelemetrySection", () => {
     expect(getFullTelemetrySnapshotMock).toHaveBeenCalledTimes(2);
     expect(clearTimeoutSpy).toHaveBeenCalled();
 
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -151,7 +151,7 @@ describe("TelemetrySection", () => {
       },
     });
 
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Hue Stream")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("TelemetrySection", () => {
   });
 
   it("does not render Hue section when hue is null", async () => {
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Capture FPS")).toBeInTheDocument();
@@ -184,7 +184,7 @@ describe("TelemetrySection", () => {
       hue: null,
     });
 
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Link max")).toBeInTheDocument();
@@ -207,7 +207,7 @@ describe("TelemetrySection", () => {
       hue: null,
     });
 
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
 
     const value = await screen.findByText("19.01 fps");
     expect(value).toHaveClass("is-warn");
@@ -216,7 +216,7 @@ describe("TelemetrySection", () => {
   it("renders error fallback when telemetry request fails", async () => {
     getFullTelemetrySnapshotMock.mockRejectedValueOnce(new Error("boom"));
 
-    render(<TelemetrySection usbConnected={true} />);
+    render(<TelemetrySection localOutputConnected={true} />);
 
     await waitFor(() => {
       expect(screen.getByText("Telemetry unavailable.")).toBeInTheDocument();
@@ -250,7 +250,7 @@ describe("Settings telemetry wiring", () => {
         onSectionChange={vi.fn()}
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
-        usbConnected={true}
+        localSink={{ transport: "serial" as const, id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
         hueStreaming={false}
         modeLockReason={null}
@@ -277,7 +277,7 @@ describe("Settings telemetry wiring", () => {
         onSectionChange={vi.fn()}
         lightingMode={{ kind: "off" }}
         outputTargets={["usb"]}
-        usbConnected={true}
+        localSink={{ transport: "serial" as const, id: "/dev/cu.usbserial-1420" }}
         hueConfigured={false}
         hueStreaming={false}
         modeLockReason={null}

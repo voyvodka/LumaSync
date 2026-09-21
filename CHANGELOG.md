@@ -9,6 +9,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A WLED panel with no USB strip attached could not be used at all. The Lights screen asked
+  whether a serial port was connected rather than whether any local output was, so a
+  WLED-only setup read as "no strip connected", every lighting mode other than Off stayed
+  disabled, and the output dock named a USB device that was not there — even though the
+  backend has always been able to drive the panel. The screen now follows whichever local
+  output is actually bound and names it: the panel's address for WLED, the port for a USB
+  strip. A strip connected while a panel is bound still wins, because that is what the
+  backend switches to.
 - On Windows the screen was being read at the monitor's refresh rate and mostly thrown away. Each
   of those reads copies a full-resolution frame from the graphics card back to main memory, and on
   a 144 Hz display that happened seven times for every frame the app actually used. The capture now

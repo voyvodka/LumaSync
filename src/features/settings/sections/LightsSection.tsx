@@ -1,3 +1,4 @@
+import type { LocalSink } from "@/features/device/localSink";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation, Trans } from "react-i18next";
 
@@ -73,7 +74,10 @@ export function triggerCalibrationFromLock(
 interface LightsSectionProps {
   mode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
-  usbConnected: boolean;
+  /** Any local output — serial strip or WLED panel — is bound. */
+  localOutputConnected: boolean;
+  /** Which one, so the row can name it rather than always saying USB. */
+  localSink: LocalSink | null;
   hueConfigured: boolean;
   hueReachable?: boolean;
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
@@ -132,7 +136,8 @@ function ModeKeybindBadge({ action }: { action: KeybindAction }) {
 export function LightsSection({
   mode,
   outputTargets,
-  usbConnected,
+  localOutputConnected,
+  localSink,
   hueConfigured,
   hueReachable = true,
   hueProbeGaveUp = false,
@@ -155,7 +160,7 @@ export function LightsSection({
   const modeSelectorDisabled = lockState.showReason || isModeTransitioning;
   // Without a reachable sink an activated mode spins up a worker with nowhere to
   // send frames; a configured-but-offline bridge is not one, hence the two Hue terms.
-  const outputMissing = !(usbConnected || (hueConfigured && hueReachable));
+  const outputMissing = !(localOutputConnected || (hueConfigured && hueReachable));
   const nonOffModeDisabled = modeSelectorDisabled || outputMissing;
   const normalizedMode = normalizeLightingModeConfig(mode);
   const activeKind = normalizedMode.kind;
@@ -751,22 +756,35 @@ export function LightsSection({
             <button
               type="button"
               className={`lm-out-row ${
-                !usbConnected ? "is-unavailable" : usbSelected ? "" : "is-off"
+                !localOutputConnected ? "is-unavailable" : usbSelected ? "" : "is-off"
               }`}
-              disabled={modeSelectorDisabled || !usbConnected || (usbSelected && outputTargets.length === 1)}
+              disabled={modeSelectorDisabled || !localOutputConnected || (usbSelected && outputTargets.length === 1)}
               onClick={() => toggleTarget("usb", usbSelected)}
               aria-pressed={usbSelected}
             >
               <span className="st" />
               <div className="tx">
                 <div className="n">
-                  {t("lights:dock.rows.usbName")}{" "}
-                  <em>{t("lights:dock.rows.usbType")}</em>
+                  {localSink?.transport === "wled"
+                    ? t("lights:dock.rows.wledName")
+                    : t("lights:dock.rows.usbName")}{" "}
+                  {/* The identity of the thing actually bound. For WLED that is
+                      its LAN address — the persisted sink config keeps no
+                      friendly name — and for serial it stays the chip. */}
+                  <em>
+                    {localSink?.transport === "wled"
+                      ? localSink.id
+                      : t("lights:dock.rows.usbType")}
+                  </em>
                 </div>
                 <div className="s">
-                  {usbConnected ? (
+                  {localOutputConnected ? (
                     <Trans
-                      i18nKey="lights:dock.rows.usbSub"
+                      i18nKey={
+                        localSink?.transport === "wled"
+                          ? "lights:dock.rows.wledSub"
+                          : "lights:dock.rows.usbSub"
+                      }
                       values={{ count: totalLeds ?? 0 }}
                       components={{ b: <b /> }}
                     />

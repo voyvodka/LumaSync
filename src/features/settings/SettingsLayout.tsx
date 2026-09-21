@@ -1,3 +1,4 @@
+import type { LocalSink } from "@/features/device/localSink";
 import { useState, memo } from "react";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { LightsSection } from "./sections/LightsSection";
@@ -22,7 +23,8 @@ interface SettingsLayoutProps {
   calibration?: LedCalibrationConfig;
   lightingMode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
-  usbConnected: boolean;
+  /** The bound local output — serial strip or WLED panel — or `null` for none. */
+  localSink: LocalSink | null;
   hueConfigured: boolean;
   hueReachable?: boolean;
   /** The Hue bridge probe stopped after a sustained outage; surfaces a retry in the offline banner. */
@@ -78,7 +80,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   calibration,
   lightingMode,
   outputTargets,
-  usbConnected,
+  localSink,
   hueConfigured,
   hueReachable = true,
   hueProbeGaveUp = false,
@@ -100,6 +102,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onSelectedDisplayIdChange,
   onOpenDevices,
 }: SettingsLayoutProps) {
+  const localOutputConnected = localSink !== null;
   const [pendingZoneCounts, setPendingZoneCounts] = useState<LedSegmentCounts | null>(null);
 
   // ── Compact mode ──────────────────────────────────────────────────────
@@ -108,7 +111,7 @@ export const SettingsLayout = memo(function SettingsLayout({
       <CompactLayout
         lightingMode={lightingMode}
         outputTargets={outputTargets}
-        usbConnected={usbConnected}
+        localOutputConnected={localOutputConnected}
         hueConfigured={hueConfigured}
         hueReachable={hueReachable}
         hueProbeGaveUp={hueProbeGaveUp}
@@ -133,7 +136,8 @@ export const SettingsLayout = memo(function SettingsLayout({
             <LightsSection
               mode={lightingMode}
               outputTargets={outputTargets}
-              usbConnected={usbConnected}
+              localOutputConnected={localOutputConnected}
+              localSink={localSink}
               hueConfigured={hueConfigured}
               hueReachable={hueReachable}
               hueProbeGaveUp={hueProbeGaveUp}
@@ -189,7 +193,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onCheckForUpdates={onCheckForUpdates}
               isCheckingForUpdates={isCheckingForUpdates}
               devSetUpdaterState={devSetUpdaterState}
-              usbConnected={usbConnected}
+              localOutputConnected={localOutputConnected}
             />
           </div>
         )}

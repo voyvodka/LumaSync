@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TFunction } from "i18next";
 
+import type { LocalSink } from "@/features/device/localSink";
 import { buildStatusItems, type StatusItemsInput } from "../statusItems";
 
 const t = ((key: string) => key) as unknown as TFunction;
 
 const healthy: StatusItemsInput = {
   ambilightActive: true,
-  usbConnected: true,
+  localSink: { transport: "serial", id: "/dev/cu.usbserial-1420" } satisfies LocalSink,
   hueStreaming: true,
   hueReachable: true,
   hueConfigured: true,
@@ -29,7 +30,7 @@ describe("buildStatusItems", () => {
     const permutations: StatusItemsInput[] = [
       healthy,
       { ...healthy, ambilightActive: false },
-      { ...healthy, usbConnected: false },
+      { ...healthy, localSink: null },
       { ...healthy, hueStreaming: false },
       { ...healthy, hueStreaming: false, hueReachable: false },
       { ...healthy, hueStreaming: false, hueReachable: false, hueConfigured: false },
@@ -74,19 +75,34 @@ describe("buildStatusItems", () => {
     expect(byLabel({ ...healthy, hueStreaming: false }, "HUE").onReconnect).toBeUndefined();
 
     const onOpenDevices = vi.fn();
-    const unhealthy = { ...healthy, usbConnected: false, hueStreaming: false, hueReachable: false, onOpenDevices };
+    const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false, onOpenDevices };
     byLabel(unhealthy, "USB").onReconnect?.();
     byLabel(unhealthy, "HUE").onReconnect?.();
     expect(onOpenDevices).toHaveBeenCalledTimes(2);
   });
 
   it("always labels the reconnect buttons for screen readers", () => {
-    const unhealthy = { ...healthy, usbConnected: false, hueStreaming: false, hueReachable: false };
+    const unhealthy = { ...healthy, localSink: null, hueStreaming: false, hueReachable: false };
     expect(byLabel(unhealthy, "USB").reconnectAriaLabel).toBe(
       "shell:statusBar.reconnect.usbAriaLabel",
     );
     expect(byLabel(unhealthy, "HUE").reconnectAriaLabel).toBe(
       "shell:statusBar.reconnect.hueAriaLabel",
     );
+  });
+
+  // The chip used to read "USB OFF" for the whole life of a WLED-only
+  // session, next to lights the app was actively driving.
+  it("names the transport that is actually bound", () => {
+    const wled = {
+      ...healthy,
+      localSink: { transport: "wled", id: "192.168.1.42" } satisfies LocalSink,
+    };
+    expect(byLabel(wled, "WLED").state).toBe("OK");
+    expect(buildStatusItems(wled, t).map((i) => i.label)).toEqual(["CAP", "WLED", "HUE"]);
+  });
+
+  it("falls back to the USB label when nothing local is bound", () => {
+    expect(byLabel({ ...healthy, localSink: null }, "USB").state).toBe("OFF");
   });
 });

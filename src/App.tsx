@@ -34,7 +34,8 @@ import {
   startCalibrationFromSettings,
 } from "./features/calibration/state/entryFlow";
 import { useDeviceConnection } from "./features/device/useDeviceConnection";
-import { useWledSinkRestore } from "./features/device/useWledSink";
+import { useActiveWledSink, useWledSinkRestore } from "./features/device/useWledSink";
+import { deriveLocalSink } from "./features/device/localSink";
 import { useUsbTargetReconciler } from "./features/device/state/useUsbTargetReconciler";
 import {
   canEnableLedMode,
@@ -87,10 +88,16 @@ function App() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  const { isConnected } = useDeviceConnection();
+  const { isConnected, connectedPort } = useDeviceConnection();
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();
+  // The Lights screen needs to know whether *any* local output is bound, not
+  // whether a serial port is. Without this a WLED-only setup reads as "no
+  // strip connected" and every non-Off mode stays disabled, while Rust is
+  // perfectly able to drive the panel.
+  const { activeWledIp } = useActiveWledSink();
+  const localSink = deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp);
   const wasConnectedRef = useRef(false);
   // Defaults to `true` so a hydrating store never flashes the banner at a user
   // who has already dismissed it; bootstrap flips it false for a fresh install.
@@ -296,7 +303,7 @@ function App() {
     calibration: savedCalibration,
     lightingMode,
     outputTargets: selectedOutputTargets,
-    usbConnected: isConnected,
+    localSink,
     hueConfigured: hueStartConfig !== null,
     hueReachable: hueReachable || hueStreaming,
     hueProbeGaveUp: hueProbe.gaveUp,
@@ -347,7 +354,7 @@ function App() {
   const statusItems = buildStatusItems(
     {
       ambilightActive: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
-      usbConnected: isConnected,
+      localSink,
       hueStreaming,
       hueReachable,
       hueConfigured: hueStartConfig !== null,

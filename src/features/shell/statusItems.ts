@@ -1,11 +1,13 @@
 import type { TFunction } from "i18next";
 
+import type { LocalSink } from "@/features/device/localSink";
 import type { StatusItem } from "./StatusBar";
 
 export interface StatusItemsInput {
   /** CAP is "ok" only while ambilight runs — it is the only frame-consuming mode. */
   ambilightActive: boolean;
-  usbConnected: boolean;
+  /** The bound local output, or null. Null is "nothing bound", not "no USB". */
+  localSink: LocalSink | null;
   hueStreaming: boolean;
   hueReachable: boolean;
   hueConfigured: boolean;
@@ -16,8 +18,9 @@ export interface StatusItemsInput {
 /** Status items for the bottom StatusBar, in mockup order (CAP / USB / HUE).
  *  Every chip pairs colour with a text state — never colour alone. */
 export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusItem[] {
-  const { ambilightActive, usbConnected, hueStreaming, hueReachable, hueConfigured, onOpenDevices } =
+  const { ambilightActive, localSink, hueStreaming, hueReachable, hueConfigured, onOpenDevices } =
     input;
+  const localConnected = localSink !== null;
 
   return [
     {
@@ -26,10 +29,13 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       kind: ambilightActive ? "ok" : "idle",
     },
     {
-      label: "USB",
-      state: usbConnected ? "OK" : "OFF",
-      kind: usbConnected ? "ok" : "off",
-      onReconnect: usbConnected ? undefined : onOpenDevices,
+      // The chip names the transport that is actually bound. "USB" is the
+      // label when nothing is, because the reconnect deep-link lands on the
+      // same screen either way and USB is the path a first-run user takes.
+      label: localSink?.transport === "wled" ? "WLED" : "USB",
+      state: localConnected ? "OK" : "OFF",
+      kind: localConnected ? "ok" : "off",
+      onReconnect: localConnected ? undefined : onOpenDevices,
       reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
     },
     {
