@@ -3,10 +3,16 @@
 // attach when the element appears — yet the fit stays one-shot and first-render.
 import { useState } from "react";
 import { render, act } from "@testing-library/react";
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { Mock } from "vitest";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
 
-import { useRoomMapViewport, ROOM_MAP_PX_PER_METER } from "../useRoomMapViewport";
+import {
+  useRoomMapViewport,
+  ROOM_MAP_PX_PER_METER,
+  PAN_STEP_PX,
+  PAN_STEP_LARGE_PX,
+} from "../useRoomMapViewport";
 import type { UseRoomMapViewportReturn } from "../useRoomMapViewport";
 
 // happy-dom has no layout engine, so a real ResizeObserver would never report a
@@ -168,5 +174,96 @@ describe("useRoomMapViewport", () => {
 
     const observed = StubResizeObserver.instances.flatMap((ro) => ro.observed);
     expect(observed).toContain(getByTestId("canvas-1"));
+  });
+});
+
+describe("useRoomMapViewport — arrow-key panning", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    StubResizeObserver.instances = [];
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  /** The hook takes a React synthetic event; only these three fields are read. */
+  function arrowEvent(key: string, shiftKey = false) {
+    return {
+      key,
+      shiftKey,
+      preventDefault: vi.fn(),
+    } as unknown as React.KeyboardEvent<HTMLDivElement> & { preventDefault: Mock };
+  }
+
+  function mountFitted() {
+    render(<Harness loading={false} dimensions={ROOM_5X4} />);
+    act(() => {
+      for (const ro of StubResizeObserver.instances) ro.emit(800, 600);
+    });
+    return viewport.panOffset;
+  }
+
+  it("pans the viewport with each arrow key", () => {
+    const start = mountFitted();
+
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowRight")));
+    expect(viewport.panOffset).toEqual({ x: start.x - PAN_STEP_PX, y: start.y });
+
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowDown")));
+    expect(viewport.panOffset).toEqual({
+      x: start.x - PAN_STEP_PX,
+      y: start.y - PAN_STEP_PX,
+    });
+
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowLeft")));
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowUp")));
+    expect(viewport.panOffset).toEqual(start);
+  });
+
+  it("moves the camera, not the map — ArrowRight reveals what lies to the right", () => {
+    const start = mountFitted();
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowRight")));
+    expect(viewport.panOffset.x).toBeLessThan(start.x);
+  });
+
+  it("takes a larger step with Shift held", () => {
+    const start = mountFitted();
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowRight", true)));
+    expect(viewport.panOffset.x).toBe(start.x - PAN_STEP_LARGE_PX);
+    expect(PAN_STEP_LARGE_PX).toBeGreaterThan(PAN_STEP_PX);
+  });
+
+  it("steps by a screen distance, so the step does not scale with zoom", () => {
+    const start = mountFitted();
+    act(() => void viewport.setZoom(0.3));
+    act(() => void viewport.handleArrowPan(arrowEvent("ArrowRight")));
+    expect(viewport.panOffset.x).toBe(start.x - PAN_STEP_PX);
+  });
+
+  it("consumes the arrow key so the surrounding scroll container does not also move", () => {
+    mountFitted();
+    const e = arrowEvent("ArrowUp");
+    let consumed = false;
+    act(() => {
+      consumed = viewport.handleArrowPan(e);
+    });
+    expect(consumed).toBe(true);
+    expect(e.preventDefault).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a non-arrow key and leaves it for the other handlers", () => {
+    const start = mountFitted();
+    const e = arrowEvent("r");
+    let consumed = true;
+    act(() => {
+      consumed = viewport.handleArrowPan(e);
+    });
+    expect(consumed).toBe(false);
+    expect(e.preventDefault).not.toHaveBeenCalled();
+    expect(viewport.panOffset).toEqual(start);
   });
 });
