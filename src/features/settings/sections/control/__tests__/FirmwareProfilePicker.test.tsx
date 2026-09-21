@@ -214,7 +214,11 @@ describe("FirmwareProfilePicker — Bug H4 mismatch gating", () => {
     );
     expect(screen.getByTestId("lm-fw-override-dialog")).toBeInTheDocument();
 
-    fireEvent.keyDown(document, { key: "Escape" });
+    // Dispatched on the dialog, not on `document`. Escape is handled by the
+    // shared `useDialogFocus` hook on the container now, and the focus trap
+    // means a real user's keystroke always originates inside it — firing on
+    // `document` only worked against the old document-level listener.
+    fireEvent.keyDown(screen.getByTestId("lm-fw-override-dialog"), { key: "Escape" });
 
     await waitFor(() => {
       expect(screen.queryByTestId("lm-fw-override-dialog")).toBeNull();

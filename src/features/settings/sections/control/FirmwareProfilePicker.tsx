@@ -53,6 +53,7 @@ import {
 } from "@/shared/contracts/device";
 import { useAdvertisedFirmwareProfile } from "@/features/device/useAdvertisedFirmwareProfile";
 import { shellStore } from "@/features/persistence/shellStore";
+import { useDialogFocus } from "@/shared/ui/useDialogFocus";
 
 const DEFAULT_PROFILE: FirmwareProfile = FIRMWARE_PROFILE.LUMASYNC_V1;
 
@@ -224,54 +225,33 @@ function OverrideWarningDialog({
   const titleId = useId();
   const bodyId = useId();
   const [dontAskAgain, setDontAskAgain] = useState(false);
-  const cancelRef = useRef<HTMLButtonElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
 
-  // Focus trap + initial focus on Cancel (safer default).
-  useEffect(() => {
-    cancelRef.current?.focus();
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+  const { containerRef, handleKeyDown } = useDialogFocus<HTMLDivElement>(true, {
+    onClose: onCancel,
+  });
+
+  // Enter is NOT "confirm" here. The dialog guards a destructive override, so
+  // the only way through it is an explicit click or Enter on a focused Confirm
+  // — anything else cancels. The shared hook owns Escape and the Tab cycle;
+  // this is the one rule that is specific to this dialog.
+  const handleDialogKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Enter" && document.activeElement !== confirmRef.current) {
         event.preventDefault();
         onCancel();
         return;
       }
-      if (event.key === "Enter") {
-        // Enter without an explicit focus on Confirm should still cancel
-        // (safer default — destructive action requires explicit click).
-        // If Confirm is focused, the browser will fire its onClick anyway.
-        if (document.activeElement === confirmRef.current) return;
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      if (event.key === "Tab") {
-        // 2-button trap: Tab cycles cancel ⇄ confirm.
-        const root = dialogRef.current;
-        if (!root) return;
-        const focusables = [cancelRef.current, confirmRef.current].filter(
-          (el): el is HTMLButtonElement => el !== null,
-        );
-        if (focusables.length === 0) return;
-        const active = document.activeElement;
-        const idx = focusables.findIndex((el) => el === active);
-        const nextIdx = event.shiftKey
-          ? (idx <= 0 ? focusables.length - 1 : idx - 1)
-          : (idx === focusables.length - 1 ? 0 : idx + 1);
-        event.preventDefault();
-        focusables[nextIdx].focus();
-      }
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [onCancel]);
+      handleKeyDown(event);
+    },
+    [handleKeyDown, onCancel],
+  );
 
   return (
     <div
-      ref={dialogRef}
+      ref={containerRef}
+      onKeyDown={handleDialogKeyDown}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -279,7 +259,9 @@ function OverrideWarningDialog({
       data-testid="lm-fw-override-dialog"
       style={{
         position: "fixed",
-        inset: 0,
+        // Below the title bar, not `inset: 0`: a full-viewport backdrop covers
+        // the drag region and the window controls underneath it.
+        inset: "var(--lm-titlebar-h) 0 0 0",
         zIndex: 9000,
         display: "flex",
         alignItems: "center",
@@ -357,7 +339,6 @@ function OverrideWarningDialog({
           }}
         >
           <button
-            ref={cancelRef}
             type="button"
             onClick={onCancel}
             data-testid="lm-fw-override-cancel"

@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useDialogFocus } from "@/shared/ui/useDialogFocus";
+
 export function RenameDialog({
   currentLabel,
   promptText,
@@ -15,8 +17,9 @@ export function RenameDialog({
   const { t } = useTranslation();
   const [value, setValue] = useState(currentLabel);
   const inputRef = useRef<HTMLInputElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null);
+  const { containerRef, handleKeyDown } = useDialogFocus<HTMLDivElement>(true, {
+    onClose: onCancel,
+  });
   // A1.4 — useId() instead of a static "rename-dialog-label" so multiple
   // RenameDialog instances (or re-mounts) don't collide on the aria-labelledby
   // target. Pure a11y delta on top of the W4 i18n + role="dialog" pass.
@@ -26,33 +29,6 @@ export function RenameDialog({
     inputRef.current?.select();
   }, []);
 
-  // ESC is bound at document level, not on the input: with it on the input the
-  // dialog became un-cancellable by keyboard as soon as focus moved off.
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCancel();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const order: HTMLElement[] = [inputRef.current, cancelRef.current, confirmRef.current].filter(
-        (el): el is HTMLInputElement | HTMLButtonElement => el !== null,
-      );
-      if (order.length === 0) return;
-      const active = document.activeElement as HTMLElement | null;
-      const idx = active ? order.indexOf(active) : -1;
-      const next = event.shiftKey
-        ? order[(idx <= 0 ? order.length : idx) - 1]
-        : order[(idx + 1) % order.length];
-      if (next && next !== active) {
-        event.preventDefault();
-        next.focus();
-      }
-    };
-    document.addEventListener("keydown", handler, true);
-    return () => document.removeEventListener("keydown", handler, true);
-  }, [onCancel]);
 
   const handleSubmit = () => {
     const trimmed = value.trim();
@@ -62,8 +38,14 @@ export function RenameDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center"
-      style={{ background: "rgba(7, 8, 10, 0.55)" }}
+      ref={containerRef}
+      onKeyDown={handleKeyDown}
+      tabIndex={-1}
+      // Starts below the title bar rather than at `inset-0`: a full-viewport
+      // backdrop covers the drag region and the window controls, so the window
+      // cannot be moved or closed for as long as the dialog is up.
+      className="fixed right-0 bottom-0 left-0 z-[200] flex items-center justify-center"
+      style={{ top: "var(--lm-titlebar-h)", background: "rgba(7, 8, 10, 0.55)" }}
       onClick={onCancel}
       role="dialog"
       aria-modal="true"
@@ -108,7 +90,6 @@ export function RenameDialog({
         />
         <div className="mt-3 flex justify-end gap-2">
           <button
-            ref={cancelRef}
             type="button"
             className="rounded text-[11px]"
             style={{
@@ -124,7 +105,6 @@ export function RenameDialog({
             {t("roomMap:contextMenu.renameCancel")}
           </button>
           <button
-            ref={confirmRef}
             type="button"
             className="rounded text-[11px] font-semibold"
             style={{
