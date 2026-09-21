@@ -68,12 +68,17 @@ the harness does not fail, it just quietly agrees with you.
   endpoint. Hover in this app is Tailwind `hover:` throughout and there is not one `onMouseEnter`,
   so **none** of it is verifiable here. A hover test written against this layer passes without
   testing anything.
-- **The IPC boundary is not observable from a spec.** A hook installed on
-  `window.__TAURI_INTERNALS__.invoke` after bootstrap records zero calls while the backend is
-  demonstrably working — proven by switching UI modes, watching `shell-state.json`'s mtime change,
-  and reading zero from the hook in the same run. `@tauri-apps/api/core` reads the property at call
-  time in source, but the bundle does not. Use the Rust log instead; it carries the command, the URL
-  and the failure reason.
+- **The IPC boundary cannot be hooked from a spec at all.** Assigning to
+  `window.__TAURI_INTERNALS__.invoke` records zero calls while the backend is demonstrably
+  working — proven by switching UI modes, watching `shell-state.json`'s mtime change, and reading
+  zero from the hook in the same run. The reason is not timing and not bundling: Tauri defines the
+  property with `Object.defineProperty(…, { value })` and no descriptor flags, so it is
+  `writable: false, configurable: false`, and so is `__TAURI_INTERNALS__` on `window` itself.
+  Measured in the app: `invokeWritable: false`, `assignmentStuck: false`. The assignment silently
+  does nothing in sloppy mode and throws under a module. `@tauri-apps/api/core` genuinely does read
+  the property at call time — late binding is not the problem, the write is. Do not go looking for a
+  bundler explanation. Use the Rust log instead; it carries the command, the URL and the failure
+  reason.
 - **Only the `main` window exists.** `getWindowHandles()` returns one handle, so the LED twin
   overlay and the control popup are out of reach — which is the surface that has historically caused
   the most trouble.
