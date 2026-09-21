@@ -12,6 +12,7 @@ like it proves more than it does.
 | Vitest | every PR | logic, state machines, contract shapes — fast and hermetic |
 | `cargo test` | every PR, three OSes | Rust units, coded-status contracts |
 | `verify:shell-contracts` | every PR | every status code crossing IPC is *declared* — a drift guard, not a coverage score |
+| `verify:design-tokens` | every PR | every bare `var(--lm-*)` names a token that exists — see below |
 | `launch-smoke` / `overlay-smoke` | CI | the debug binary starts; on Windows, the overlay paints and passes clicks through |
 | WDIO e2e (`e2e/`) | **nobody — by hand only** | what a real layout engine and a real window decide |
 
@@ -19,6 +20,24 @@ The last row is the one to read twice. `ci.yml` never invokes `wdio` and `releas
 `typecheck:e2e` alone, which compiles the specs without executing them. The suite runs on a
 maintainer machine or not at all — which is how it came to encode an assumption that had been false
 for several releases. **Treat anything it asserts as unverified until you have run it yourself.**
+
+## The quietest failure CSS has
+
+A reference to an undefined custom property does not warn, does not fall back to
+anything visible, and does not break the layout. The declaration is dropped and the
+element renders as if the rule were never written.
+
+The room-map zoom controls shipped styled entirely in `--lm-text-dim`, `--lm-text` and
+`--lm-accent`. None of the three exists — the token layer is `--lm-ink-dim`, `--lm-ink`,
+`--lm-amber` — so every colour on those buttons resolved to nothing, including
+`focus-visible:outline-[color:var(--lm-accent)]`. The buttons still looked plausible, and the one
+control group that exists for people who cannot use a wheel gesture had no visible focus ring.
+Nothing failed, so nothing was noticed.
+
+`verify:design-tokens` closes that. A typo'd token is the same class of bug as a typo'd i18n key,
+and that already had a ratchet. A `var(--lm-x, fallback)` passes deliberately: the fallback is how
+an author says "undefined here is intended", which is the right shape for a property set inline at
+runtime like `--lm-fill`.
 
 ## Driving the real app
 
