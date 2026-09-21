@@ -7,6 +7,19 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs
+  hardware attached. This first part ships the seam and the guarantees around it; the fixtures and
+  the scenario picker follow. `bun run dev:mock` serves the frontend to a browser with the Tauri
+  runtime simulated, which is the only place real pointer behaviour — CSS `:hover` among it — can be
+  checked at all; `bun run tauri:mock` runs the desktop app with the same seam in place. Neither can
+  reach a shipped build: the mock has no path into the production module graph, both Vite plugins
+  are dev-server only, a production build aborts outright if the flag is set, and
+  `bun run verify:mock-not-shipped` proves all three on every run of `check:all` by running into the
+  guard rather than reading the code that implements it.
+
+
 ## [1.5.5]
 
 ### Fixed

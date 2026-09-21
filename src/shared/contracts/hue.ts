@@ -447,6 +447,28 @@ export const HUE_FAULT_CODES = {
 
 export type HueFaultCode = (typeof HUE_FAULT_CODES)[keyof typeof HUE_FAULT_CODES];
 
+/**
+ * The one debug-only command the frontend may name.
+ *
+ * Declared here rather than left as a string literal so the dev mock's
+ * passthrough set can be typed against it — the command must reach the real
+ * backend even while every other command is answered from a fixture, because
+ * its debug arm fires the shutdown signal on a live DTLS stream and drives the
+ * real reconnect monitor. A fixture would return the same status code and prove
+ * nothing.
+ *
+ * **Production code must never invoke this.** That was the reason it stayed
+ * uncontracted until now, and the rule is unchanged — only its enforcement
+ * moved, from "no name exists" to `scripts/verify/mock-not-shipped.mjs`, which
+ * fails the build on any reference under `src/` outside the dev surface.
+ */
+export const HUE_DEBUG_COMMANDS = {
+  SIMULATE_FAULT: "simulate_hue_fault",
+} as const;
+
+export type HueDebugCommandName =
+  (typeof HUE_DEBUG_COMMANDS)[keyof typeof HUE_DEBUG_COMMANDS];
+
 /** `simulate_hue_fault` is `#[cfg(debug_assertions)]`-gated; the release build
  * registers a stub that reports `SIMULATE_NOT_AVAILABLE_IN_RELEASE`. All three
  * arrive as the `code` of a `HueCommandStatus` — the command never throws, so
