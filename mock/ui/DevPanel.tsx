@@ -27,6 +27,19 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { OFFERED_CODES } from "../handlers/codes";
+import {
+  EDGE_SIGNAL_INTERVAL_MS,
+  SHELL_EVENTS,
+  emitLightingModeChanged,
+  emitMockEvent,
+  emitUpdateDownload,
+  getEdgeSignalStream,
+  startEdgeSignalStream,
+  stopEdgeSignalStream,
+  subscribeToEdgeSignalStream,
+} from "../events";
+import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
+import { LED_TEST_PATTERN_KIND } from "../../src/shared/contracts/preview";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
 import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
@@ -246,6 +259,17 @@ export function DevPanel({ onReloadApp }: PanelProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const world = useSyncExternalStore(subscribe, getWorld);
+  const stream = useSyncExternalStore(subscribeToEdgeSignalStream, getEdgeSignalStream);
+  // Not derived from the world: a preset is a one-way drop into `shellState`,
+  // and the editor writes back over it immediately. Reading the selection back
+  // out of the map would make the picker jump to "none" on the first drag.
+  const [roomMapPreset, setRoomMapPreset] = useState<RoomMapPresetId>(() =>
+    getWorld().shellState.roomMap === undefined ? "none" : "simple",
+  );
+
+  // A stream left running past a reload would keep emitting into a tree that
+  // no longer has the listeners it was started for.
+  useEffect(() => stopEdgeSignalStream, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -744,6 +768,27 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                       ×
                     </button>
                   </Row>
+                  {/* Binding the sink without going through the picker is the
+                      only way to reach a WLED-only session in one click, and
+                      that session is a distinct code path: the output dock
+                      names the panel instead of a port, and mode gating keys
+                      on "any local output" rather than on a serial port. */}
+                  <Toggle
+                    on={world.wled.connectedHost === d.host}
+                    label="Bound as the active sink"
+                    onClick={() =>
+                      mutate((w) => {
+                        w.wled.connectedHost = w.wled.connectedHost === d.host ? null : d.host;
+                        w.shellState = {
+                          ...w.shellState,
+                          lastWledSink:
+                            w.wled.connectedHost === null
+                              ? undefined
+                              : { ip: d.host, port: d.port, ledCount: d.ledCount, protocol: d.protocol },
+                        };
+                      })
+                    }
+                  />
                   <Pick
                     value={d.protocol}
                     options={["ddp", "drgb"] as const}
@@ -1017,6 +1062,167 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 With no USB connected `linkMaxFps` reports the absent sentinel
                 rather than a measured zero — the distinction the readout once
                 got wrong in a Hue-only session.
+              </div>
+            </Ctl>
+          </Section>
+
+          <Section title="ROOM MAP" query={q}>
+            <Ctl
+              label="Content"
+              keywords="roomMap zone channel placement strip furniture editor legacy gapped"
+              reach="reload"
+              query={q}
+            >
+              <Pick
+                value={roomMapPreset}
+                options={ROOM_MAP_PRESET_IDS}
+                onChange={(v) => {
+                  setRoomMapPreset(v);
+                  mutate((w) => {
+                    const built = ROOM_MAP_PRESETS[v].build();
+                    w.shellState = { ...w.shellState, roomMap: built };
+                  });
+                }}
+              />
+              <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
+                {ROOM_MAP_PRESETS[roomMapPreset].summary}
+              </div>
+            </Ctl>
+          </Section>
+
+          {/* Events, not commands. A third of what the app reacts to is pushed
+              from Rust and never appears as a command result, so without these
+              the edge grid, the twin, the tray menu and the update bar are all
+              inert no matter which scenario is loaded. */}
+          <Section title={`EVENTS${stream.running ? ` · streaming #${stream.frame}` : ""}`} query={q}>
+            <Ctl
+              label="Edge signal stream"
+              keywords="ambilight edge-signal event twin preview frame seq pattern live test"
+              reach="live"
+              query={q}
+            >
+              <Toggle
+                on={stream.running}
+                label={stream.running ? `Emitting at ${1000 / EDGE_SIGNAL_INTERVAL_MS} Hz` : "Stopped"}
+                onClick={() =>
+                  stream.running
+                    ? stopEdgeSignalStream()
+                    : startEdgeSignalStream({ pattern: stream.pattern, source: stream.source })
+                }
+              />
+              <Row>
+                <span style={{ color: DIM, fontSize: 10, width: 52 }}>pattern</span>
+                <Pick
+                  value={stream.pattern}
+                  options={LED_TEST_PATTERN_KIND}
+                  onChange={(v) => startEdgeSignalStream({ pattern: v, source: stream.source })}
+                />
+              </Row>
+              <Row>
+                <span style={{ color: DIM, fontSize: 10, width: 52 }}>source</span>
+                <Pick
+                  value={stream.source}
+                  options={["live", "test"] as const}
+                  onChange={(v) => startEdgeSignalStream({ pattern: stream.pattern, source: v })}
+                />
+              </Row>
+              <Row>
+                <span style={{ color: DIM, fontSize: 10, width: 52 }}>drop</span>
+                <Pick
+                  value={String(stream.dropEveryNthFrame) as "0" | "2" | "3" | "5"}
+                  options={["0", "2", "3", "5"] as const}
+                  onChange={(v) =>
+                    startEdgeSignalStream({
+                      pattern: stream.pattern,
+                      source: stream.source,
+                      dropEveryNthFrame: Number(v),
+                    })
+                  }
+                />
+              </Row>
+              <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
+                Frames are sized from the live calibration, so the LED count follows whatever LED
+                SETUP holds. `drop` skips every Nth emission while still advancing `seq` — the
+                twin should report gaps, not renumber around them.
+              </div>
+            </Ctl>
+
+            <Ctl
+              label="Tray & window"
+              keywords="tray menu lights-off resume solid preview close-to-tray startup event"
+              reach="live"
+              query={q}
+            >
+              <div style={{ display: "grid", gap: 4 }}>
+                {(
+                  [
+                    [SHELL_EVENTS.TRAY_LIGHTS_OFF, "Tray → Lights off"],
+                    [SHELL_EVENTS.TRAY_RESUME_LAST_MODE, "Tray → Resume last mode"],
+                    [SHELL_EVENTS.TRAY_SOLID_COLOR, "Tray → Solid colour"],
+                    [SHELL_EVENTS.TRAY_SHOW_LED_PREVIEW, "Tray → Show LED preview"],
+                    [SHELL_EVENTS.CLOSE_TO_TRAY, "Window → Close to tray"],
+                  ] as const
+                ).map(([event, label]) => (
+                  <button
+                    key={event}
+                    type="button"
+                    style={{ ...btn, width: "100%", textAlign: "left" }}
+                    onClick={() => void emitMockEvent(event)}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  style={{ ...btn, width: "100%", textAlign: "left" }}
+                  onClick={() =>
+                    void emitMockEvent(
+                      SHELL_EVENTS.TRAY_STARTUP_STATE_CHANGED,
+                      !world.shell.autostartEnabled,
+                    )
+                  }
+                >
+                  Tray → Autostart flipped to {world.shell.autostartEnabled ? "off" : "on"}
+                </button>
+              </div>
+              <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
+                There is no tray in a browser tab and none of these has an `invoke` behind it, so
+                this is the only place the tray handlers can be reached outside a packaged build.
+              </div>
+            </Ctl>
+
+            <Ctl
+              label="Broadcasts"
+              keywords="lighting mode-changed updater download progress event popup sync"
+              reach="live"
+              query={q}
+            >
+              <div style={{ display: "grid", gap: 4 }}>
+                <button
+                  type="button"
+                  style={{ ...btn, width: "100%", textAlign: "left" }}
+                  onClick={() => void emitLightingModeChanged()}
+                >
+                  Lighting mode changed ({world.lighting.mode.kind})
+                </button>
+                <button
+                  type="button"
+                  style={{ ...btn, width: "100%", textAlign: "left" }}
+                  onClick={() => void emitUpdateDownload({ withTotal: true })}
+                >
+                  Update download (3 s, with total)
+                </button>
+                <button
+                  type="button"
+                  style={{ ...btn, width: "100%", textAlign: "left" }}
+                  onClick={() => void emitUpdateDownload({ withTotal: false })}
+                >
+                  Update download (no Content-Length)
+                </button>
+              </div>
+              <div style={{ color: FAINT, fontSize: 9, lineHeight: 1.35, marginTop: 4 }}>
+                Without a `totalBytes` the bar has to render indeterminate rather than jumping to
+                100 %, which otherwise needs a proxy to reproduce.
               </div>
             </Ctl>
           </Section>
