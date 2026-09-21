@@ -23,9 +23,6 @@
 //! v1.5 W4-F2: the previous `zone` submodule moved to
 //! `commands::room_map::hue_zone` — zones are Hue-only, see
 //! docs/architecture/hue.md.
-//!
-//! `commands::hue_stream_lifecycle` is kept as a re-export shim so external
-//! callers keep resolving; see docs/architecture/hue.md (re-export shim).
 
 pub mod area_cache;
 pub mod commands;

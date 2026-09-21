@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::State;
 
-use super::hue_stream_lifecycle::{acquire_hue_runtime, HueRuntimeStateStore};
+use super::hue::state_store::{acquire_hue_runtime, HueRuntimeStateStore};
 
 const TELEMETRY_WINDOW: Duration = Duration::from_secs(1);
 

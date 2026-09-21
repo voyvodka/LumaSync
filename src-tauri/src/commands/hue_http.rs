@@ -12,10 +12,9 @@
 //! maps to `HueHttpFault::Transient` so we never ask the user to re-pair
 //! on a bogus signal.
 //!
-//! The helpers live here (not inside `hue_onboarding.rs` or
-//! `hue_stream_lifecycle.rs`) so the G8 split of
-//! `hue_stream_lifecycle.rs` (v1.5, P3) can lift them without touching
-//! the contract surface.
+//! The helpers live here rather than inside `hue_onboarding.rs` or the
+//! streaming code so the v1.5 G8 split could lift them without touching the
+//! contract surface. That split has since landed as `commands::hue::*`.
 
 use serde_json::Value;
 
@@ -193,10 +192,10 @@ pub(crate) async fn classify_hue_response(
     Err(classify_status(status_code, &body).with_retry_after(retry_after_ms))
 }
 
-/// Blocking variant used by `hue_stream_lifecycle.rs` (the HTTP-fallback
-/// PUT path). Same semantics as [`classify_hue_response`], duplicated
-/// only because `reqwest::blocking::Response` and `reqwest::Response`
-/// do not share a trait object surface.
+/// Blocking variant used by `hue::sender` (the HTTP-fallback PUT path).
+/// Same semantics as [`classify_hue_response`], duplicated only because
+/// `reqwest::blocking::Response` and `reqwest::Response` do not share a
+/// trait object surface.
 pub(crate) fn classify_hue_response_blocking(
     response: reqwest::blocking::Response,
 ) -> Result<reqwest::blocking::Response, HueHttpFault> {
