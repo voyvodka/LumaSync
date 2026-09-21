@@ -14,6 +14,14 @@ https://keepachangelog.com/en/1.1.0/
   a 144 Hz display that happened seven times for every frame the app actually used. The capture now
   runs at the same 20 Hz the rest of the pipeline does, which is what macOS already did. The
   picture is identical; the machine does roughly a seventh of the work for it.
+- On macOS, picking a display could quietly capture a different one. The display list identified
+  each screen by its position measured in one unit while the capture side compared against the
+  same position measured in another, so the two only agreed when a screen sat at the very top-left
+  of the arrangement or ran at a non-Retina scale. Any other Retina screen failed to match itself
+  and the app fell back to the main display — the picker showed the right choice and the lights
+  followed the wrong screen, with nothing reported. Both sides now use the same unit. A display
+  chosen before this update is re-identified on the next launch, and if it cannot be matched the
+  app falls back to the main display exactly as it did before.
 
 ### Added
 

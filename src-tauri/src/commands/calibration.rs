@@ -590,6 +590,34 @@ fn apply_overlay_open_transition(
 
 /// List every enumerated display for the frontend's display picker. Falls
 /// back to a single placeholder entry when the OS reports no monitors.
+/// The display origin in LOGICAL units, which is what the id is keyed on.
+///
+/// This is load-bearing on macOS. `tao` builds `Monitor::position()` by
+/// multiplying `CGDisplayBounds`' origin — which CoreGraphics reports in
+/// points — by that display's own backing scale factor. The macOS capture path
+/// matches the id against `SCDisplay::frame().origin()`, still in points. Key
+/// the id on the physical value and the two agree only when the scale factor
+/// is 1.0 or the origin is (0, 0), so a HiDPI panel anywhere but the top-left
+/// never matches its own candidate and `select_display_index` falls through to
+/// the primary: the picker looks correct and the wrong screen is captured,
+/// with no coded reason to go on.
+///
+/// Windows and Linux key on the device-name prefix and discard the coordinates
+/// entirely, so this only puts the macOS comparison back on one unit.
+fn logical_origin(x: i32, y: i32, scale_factor: f64) -> (i32, i32) {
+    // A zero or negative factor would be nonsense from the platform; treat it
+    // as 1.0 rather than dividing by it.
+    let factor = if scale_factor > 0.0 {
+        scale_factor
+    } else {
+        1.0
+    };
+    (
+        (f64::from(x) / factor).round() as i32,
+        (f64::from(y) / factor).round() as i32,
+    )
+}
+
 #[tauri::command]
 pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPayload>, String> {
     let monitors = app
@@ -625,18 +653,21 @@ pub fn list_displays<R: Runtime>(app: AppHandle<R>) -> Result<Vec<DisplayInfoPay
                 .unwrap_or_else(|| format!("Display {}", index + 1));
             let position = monitor.position();
             let size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+
+            let (logical_x, logical_y) = logical_origin(position.x, position.y, scale_factor);
             let is_primary = primary_name
                 .as_ref()
                 .is_some_and(|primary| primary == &name);
 
             DisplayInfoPayload {
-                id: format!("{}:{}:{}", name, position.x, position.y),
+                id: format!("{}:{}:{}", name, logical_x, logical_y),
                 label: name,
                 width: size.width,
                 height: size.height,
                 x: position.x,
                 y: position.y,
-                scale_factor: monitor.scale_factor(),
+                scale_factor,
                 is_primary,
             }
         })
@@ -852,15 +883,45 @@ pub fn update_display_overlay_preview<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+
     use std::cell::RefCell;
 
     use tauri::WebviewUrl;
 
     use super::{
         apply_overlay_close_all_transition, apply_overlay_open_transition,
-        build_overlay_webview_url, run_overlay_open_transition, OverlayOpenOutcome,
+        build_overlay_webview_url, logical_origin, run_overlay_open_transition, OverlayOpenOutcome,
         OverlayRuntimeState,
     };
+
+    /// The case that shipped broken: a Retina panel anywhere but the top-left.
+    ///
+    /// `tao` reports (-3024, 0) for a scale-2.0 display whose CoreGraphics
+    /// origin is (-1512, 0). ScreenCaptureKit reports the origin. Keying the
+    /// id on the former never matched, and the capture silently fell back to
+    /// the primary display.
+    #[test]
+    fn logical_origin_recovers_the_points_value_a_hidpi_display_reports() {
+        assert_eq!(logical_origin(-3024, 0, 2.0), (-1512, 0));
+        assert_eq!(logical_origin(3840, 1080, 2.0), (1920, 540));
+    }
+
+    /// The two arrangements that happened to work, and must keep working:
+    /// a 1x display anywhere, and any display at the origin.
+    #[test]
+    fn logical_origin_is_identity_for_the_arrangements_that_already_matched() {
+        assert_eq!(logical_origin(1920, 0, 1.0), (1920, 0));
+        assert_eq!(logical_origin(0, 0, 2.0), (0, 0));
+        assert_eq!(logical_origin(0, 0, 1.0), (0, 0));
+    }
+
+    /// A platform reporting a nonsense factor must not produce a divide-by-zero
+    /// coordinate; falling back to 1.0 keeps the id stable instead.
+    #[test]
+    fn logical_origin_treats_a_nonsense_scale_factor_as_one() {
+        assert_eq!(logical_origin(1512, 0, 0.0), (1512, 0));
+        assert_eq!(logical_origin(1512, 0, -2.0), (1512, 0));
+    }
 
     #[test]
     fn overlay_webview_url_uses_app_surface() {
