@@ -7,6 +7,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Fixed
+
+- On Windows the screen was being read at the monitor's refresh rate and mostly thrown away. Each
+  of those reads copies a full-resolution frame from the graphics card back to main memory, and on
+  a 144 Hz display that happened seven times for every frame the app actually used. The capture now
+  runs at the same 20 Hz the rest of the pipeline does, which is what macOS already did. The
+  picture is identical; the machine does roughly a seventh of the work for it.
+
 ### Added
 
 - A development mode that answers the Tauri IPC boundary from fixtures, so UI work no longer needs
