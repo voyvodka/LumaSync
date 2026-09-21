@@ -77,8 +77,10 @@ function base(): MockWorld {
       lastCaptureErrorAtSecs: null,
     },
     persistFails: false,
-    forcedFailures: [],
+    forcedCodes: {},
+    forcedThrows: [],
     extraLatencyMs: 0,
+    shell: { viewport: "free", notificationPermission: "granted", autostartEnabled: false },
     // The version the app is actually on. Shipping an older one made every
     // boot run the 3→4→5→6 migrations, so the state the app saw was never the
     // state this fixture declares — and nothing said so.

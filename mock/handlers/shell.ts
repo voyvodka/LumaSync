@@ -227,10 +227,11 @@ export const pluginHandlers: Record<string, Handler> = {
 
   "plugin:window-state|save_window_state": () => null,
   "plugin:window-state|restore_state": () => null,
-  "plugin:notification|is_permission_granted": () => true,
-  "plugin:notification|request_permission": () => "granted",
+  "plugin:notification|is_permission_granted": () =>
+    getWorld().shell.notificationPermission === "granted",
+  "plugin:notification|request_permission": () => getWorld().shell.notificationPermission,
   "plugin:notification|notify": () => null,
-  "plugin:autostart|is_enabled": () => false,
+  "plugin:autostart|is_enabled": () => getWorld().shell.autostartEnabled,
   "plugin:autostart|enable": () => null,
   "plugin:autostart|disable": () => null,
   "plugin:opener|open_url": () => null,

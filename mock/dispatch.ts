@@ -17,6 +17,7 @@
  *   missing a guard.
  */
 
+import { applyForcedCode } from "./handlers/codes";
 import { handlerFor, PASSTHROUGH_COMMANDS } from "./handlers";
 import { getWorld } from "./state";
 
@@ -76,16 +77,21 @@ export async function dispatch<T>(command: string, args?: Record<string, unknown
     );
   }
 
-  if (getWorld().forcedFailures.includes(command)) {
+  if (getWorld().forcedThrows.includes(command)) {
     await sleep(latencyFor(command));
-    throw new Error(`[LumaSync][mock] "${command}" failed because the panel forced it to.`);
+    throw new Error(
+      `[LumaSync][mock] "${command}" rejected because the panel forced it to. This is the IPC-layer failure path, not a coded one — most real failures arrive as a status code inside a successful response.`,
+    );
   }
 
   const issuedGeneration = getWorld().generation;
   const startedAt = Date.now();
 
   await sleep(latencyFor(command));
-  const result = handler(args) as T;
+  const forcedCode = getWorld().forcedCodes[command];
+  const result = (
+    forcedCode === undefined ? handler(args) : applyForcedCode(handler(args), forcedCode)
+  ) as T;
 
   const landedGeneration = getWorld().generation;
   if (landedGeneration !== issuedGeneration) {

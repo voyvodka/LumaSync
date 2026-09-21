@@ -136,10 +136,32 @@ export interface MockWorld {
   };
   /** Every write through `plugin:store` fails, reproducing the persist banners. */
   persistFails: boolean;
-  /** Commands the panel has forced to reject. */
-  forcedFailures: string[];
+  /**
+   * Command → the status code it should answer with, overriding the fixture's
+   * own verdict. This is what a real failure looks like here: a coded status
+   * inside a well-formed response, not a rejected promise.
+   */
+  forcedCodes: Record<string, string>;
+  /**
+   * Commands forced to reject outright. Kept separate and deliberately small:
+   * the IPC layer itself failing, or a Rust panic, is a genuinely different
+   * path from a coded failure and the app handles the two differently.
+   */
+  forcedThrows: string[];
   /** Added to every fixture's delay, to make loading states and races visible. */
   extraLatencyMs: number;
+  /**
+   * Surfaces that are not device state but decide what the app shows.
+   * `viewport` is not a `ShellState` field at all: `resizeToMode` ends in a
+   * window call the mock answers with `null`, so compact renders at whatever
+   * width the browser tab happens to be and looks roomier than it is. Clamping
+   * the root is the only way the 320 px layout is honestly reachable here.
+   */
+  shell: {
+    viewport: "free" | "compact" | "compact-min" | "full" | "full-min";
+    notificationPermission: "granted" | "denied" | "prompt";
+    autostartEnabled: boolean;
+  };
   /** What `shell-state.json` holds at boot. */
   shellState: Record<string, unknown>;
 }
