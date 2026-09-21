@@ -78,12 +78,17 @@ pub enum WledProtocol {
 pub struct WledUdpSink {
     ip: std::net::Ipv4Addr,
     port: u16,
-    #[allow(dead_code)] // used for LED-count mismatch detection (v1.5 G1)
+    /// What the panel said it has, from discovery. Compared once per session
+    /// against the frame the calibration actually produces — see `send_frame`.
     led_count: u16,
     protocol: WledProtocol,
     socket: Option<UdpSocket>,
     endpoint: Option<SocketAddrV4>,
     sequence: AtomicU8,
+    /// One report per `start()`. A mismatch is a property of the pairing, not
+    /// of a frame, so logging it per frame would be 20 identical lines a
+    /// second and nobody would read any of them.
+    length_checked: bool,
 }
 
 impl WledUdpSink {
@@ -97,7 +102,33 @@ impl WledUdpSink {
             socket: None,
             endpoint: None,
             sequence: AtomicU8::new(0),
+            length_checked: false,
         }
+    }
+
+    /// The frame is sized by the LED calibration and the panel by its own
+    /// configuration, and nothing has ever made the two agree. DDP writes what
+    /// it is given and the panel ignores anything past its end, so the symptom
+    /// of a too-long frame is that the tail of the strip never lights, with no
+    /// error anywhere. A short frame leaves the remainder holding its last
+    /// value. Both are silent, which is why this is worth a line.
+    fn report_length_mismatch(&mut self, frame_len: usize) {
+        if self.length_checked {
+            return;
+        }
+        self.length_checked = true;
+        if usize::from(self.led_count) == frame_len || self.led_count == 0 {
+            return;
+        }
+        log::warn!(
+            "WLED_LENGTH_MISMATCH: {} reports {} LEDs but the calibration produces {} per frame. \
+             DDP drops the overflow, so the extra {} never light; a short frame leaves the rest \
+             holding their last colour. Re-run LED Setup, or correct the panel's length in WLED.",
+            self.ip,
+            self.led_count,
+            frame_len,
+            frame_len.abs_diff(usize::from(self.led_count)),
+        );
     }
 }
 
@@ -119,6 +150,7 @@ impl LedSink for WledUdpSink {
     }
 
     fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
+        self.report_length_mismatch(colors.len());
         let (socket, endpoint) = match (&self.socket, &self.endpoint) {
             (Some(s), Some(e)) => (s, *e),
             _ => return Err("WLED_SINK_NOT_STARTED: send_frame called before start()".to_string()),
@@ -142,6 +174,10 @@ impl LedSink for WledUdpSink {
     }
 
     fn stop(&mut self) -> Result<(), String> {
+        // Re-armed so the next session reports again: the calibration or the
+        // panel may have changed in between, and a stale "already told you"
+        // would hide the new mismatch.
+        self.length_checked = false;
         self.socket = None;
         self.endpoint = None;
         Ok(())
@@ -342,6 +378,7 @@ pub fn encode_realtime_packets(colors: &[[u8; 3]]) -> Result<Vec<Vec<u8>>, Strin
 
 #[cfg(test)]
 mod tests {
+    use std::net::Ipv4Addr;
     use std::sync::atomic::AtomicU8;
 
     use super::{encode_ddp_packets, encode_realtime_packets, WledProtocol, WledUdpSink};
@@ -574,5 +611,39 @@ mod tests {
         assert!(sink.socket.is_some(), "socket must be Some after start");
         sink.stop().expect("stop must succeed");
         assert!(sink.socket.is_none(), "socket must be None after stop");
+    }
+
+    /// The mismatch is reported once per session, not once per frame. At 20 Hz
+    /// the per-frame version would be 1 200 identical lines a minute, which is
+    /// the same as not reporting it.
+    #[test]
+    fn length_mismatch_is_reported_once_per_session() {
+        let mut sink = WledUdpSink::new(Ipv4Addr::new(127, 0, 0, 1), 4048, 120, WledProtocol::Ddp);
+
+        sink.report_length_mismatch(164);
+        assert!(sink.length_checked, "the first frame must arm the guard");
+
+        // Re-armed on stop, because the calibration or the panel may change
+        // between sessions and a stale flag would hide the new mismatch.
+        sink.stop().expect("stop must succeed");
+        assert!(!sink.length_checked, "stop must re-arm the check");
+    }
+
+    #[test]
+    fn a_matching_length_still_marks_the_check_done() {
+        let mut sink = WledUdpSink::new(Ipv4Addr::new(127, 0, 0, 1), 4048, 164, WledProtocol::Ddp);
+        sink.report_length_mismatch(164);
+        // Agreement is the common case and must not leave the guard armed,
+        // or every frame pays for the comparison forever.
+        assert!(sink.length_checked);
+    }
+
+    /// A panel that reports zero is reporting "unknown", not "no LEDs", so it
+    /// must not be read as a mismatch against every frame we send.
+    #[test]
+    fn an_unknown_panel_length_is_not_a_mismatch() {
+        let mut sink = WledUdpSink::new(Ipv4Addr::new(127, 0, 0, 1), 4048, 0, WledProtocol::Ddp);
+        sink.report_length_mismatch(164);
+        assert!(sink.length_checked);
     }
 }
