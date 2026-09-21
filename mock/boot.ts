@@ -22,7 +22,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { dispatch, hasFixture } from "./dispatch";
 import { DEFAULT_SCENARIO, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "./scenarios";
 import { MOCK_HAS_REAL_IPC } from "./runtime";
-import { setWorld } from "./state";
+import { restoreWorld, setWorld } from "./state";
 
 /**
  * Read back out of this file by `scripts/verify/mock-not-shipped.mjs`, and
@@ -38,7 +38,11 @@ function requestedScenario(): ScenarioId {
 }
 
 const scenario = requestedScenario();
-setWorld(SCENARIOS[scenario].build());
+// A scenario in the query string always wins: it is how the panel applies one.
+// Otherwise a world composed by hand survives the reload.
+const askedExplicitly = new URLSearchParams(window.location.search).has("scenario");
+const restored = askedExplicitly ? null : restoreWorld();
+setWorld(restored ?? SCENARIOS[scenario].build(), { keepGeneration: restored !== null });
 
 if (!hasTauriRuntime) {
   // The label picks the branch `main.tsx` takes between the app tree, the LED
@@ -86,7 +90,7 @@ async function mountPanel(): Promise<void> {
   document.body.appendChild(host);
   createRoot(host).render(
     React.createElement(DevPanel, {
-      onScenarioChange: (id: string) => {
+      onReloadApp: (id: string) => {
         const url = new URL(window.location.href);
         url.searchParams.set("scenario", id);
         window.location.href = url.toString();

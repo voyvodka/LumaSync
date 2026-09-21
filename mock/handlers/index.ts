@@ -27,6 +27,7 @@ import { UPDATER_COMMANDS } from "../../src/shared/contracts/updater";
 import { deviceHandlers } from "./device";
 import { hueHandlers } from "./hue";
 import { pluginHandlers, shellHandlers, windowPluginHandler } from "./shell";
+import type { CommandResponse } from "./responses";
 import type { Handler } from "./types";
 
 const COMMAND_MAPS = [
@@ -130,3 +131,13 @@ type HandledCommandName =
 // If this line errors, read the type it reports: that command needs a fixture,
 // a passthrough entry, or a listed reason.
 export const EVERY_COMMAND_IS_ACCOUNTED_FOR: Uncovered extends never ? true : Uncovered = true;
+
+/**
+ * `responses.ts` spells its keys as literals, so a command renamed in the
+ * contracts would leave a stale entry there that nothing else notices. This
+ * catches it: a key that is not a declared command name fails the build.
+ */
+type UnknownResponseKey = Exclude<keyof CommandResponse, TauriCommandName>;
+export const NO_UNKNOWN_RESPONSE_KEY: UnknownResponseKey extends never
+  ? true
+  : UnknownResponseKey = true;

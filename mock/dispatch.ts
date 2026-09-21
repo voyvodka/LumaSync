@@ -76,7 +76,7 @@ export async function dispatch<T>(command: string, args?: Record<string, unknown
     );
   }
 
-  if (getWorld().forcedFailures.has(command)) {
+  if (getWorld().forcedFailures.includes(command)) {
     await sleep(latencyFor(command));
     throw new Error(`[LumaSync][mock] "${command}" failed because the panel forced it to.`);
   }

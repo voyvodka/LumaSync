@@ -1,0 +1,119 @@
+/**
+ * What each command must return, derived rather than restated.
+ *
+ * This file exists because the first fixture table was written by guessing
+ * shapes from command names. Six of twelve Hue handlers returned something the
+ * backend cannot produce, two status codes were invented outright, and the
+ * telemetry handler returned a payload whose every field name was wrong — none
+ * of which failed anywhere. It surfaced three screens away as an empty panel.
+ *
+ * Every entry below points at the type the real `*Api.ts` bridge already
+ * declares, so a fixture with the wrong shape is a compile error in
+ * `bun run typecheck:mock` rather than a blank panel. Where a response type
+ * lives in a feature module rather than `src/shared/contracts/`, that is where
+ * it is imported from: roughly half the surface is declared at the bridge
+ * layer, and binding only to the contracts directory would type half the table
+ * against the wrong thing while compiling clean.
+ *
+ * `import type` throughout — nothing here reaches the app at runtime.
+ */
+
+import type { DisplayInfo } from "../../src/shared/contracts/display";
+import type {
+  ScreenCapturePermissionResult,
+  ScreenCaptureSettingsResult,
+} from "../../src/shared/contracts/capture";
+import type { WledSinkStatus } from "../../src/shared/contracts/device";
+import type { HueChannelWritebackStatus } from "../../src/shared/contracts/hue";
+import type { LedTestPatternResult, TwinOverlayResult } from "../../src/shared/contracts/preview";
+import type {
+  UpdateCheckResponse,
+  UpdateInstallResponse,
+} from "../../src/shared/contracts/updater";
+import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
+
+import type {
+  HealthCheckResult,
+  SerialConnectionStatus,
+  SerialPortListResponse,
+} from "../../src/features/device/deviceConnectionApi";
+import type {
+  WledConnectResponse,
+  WledDiscoveryResponse,
+  WledTestResponse,
+} from "../../src/features/device/wledApi";
+import type {
+  HueDiscoveryResponse,
+  HueEntertainmentAreaListResponse,
+  HuePairBridgeResponse,
+  HueStreamReadinessResponse,
+  HueValidateCredentialsResponse,
+  HueVerifyBridgeIpResponse,
+} from "../../src/features/hue/hueOnboardingApi";
+import type {
+  HueRuntimeCommandResult,
+  ModeCommandResult,
+} from "../../src/features/mode/modeApi";
+
+/**
+ * The response each mocked command must produce.
+ *
+ * Keys are the command names as literals rather than computed from the
+ * `*COMMANDS` maps, because TypeScript will not take a computed literal as an
+ * index signature. The drift that spelling would have caught is caught instead
+ * by `NoUnknownResponseKey` in `index.ts`, which fails when a key here is not
+ * a command the contracts declare.
+ */
+export interface CommandResponse {
+  // --- serial ---------------------------------------------------------------
+  list_serial_ports: SerialPortListResponse;
+  connect_serial_port: SerialConnectionStatus;
+  get_serial_connection_status: SerialConnectionStatus;
+  run_serial_health_check: HealthCheckResult;
+
+  // --- wled -----------------------------------------------------------------
+  discover_wled_devices: WledDiscoveryResponse;
+  connect_wled_sink: WledConnectResponse;
+  test_wled_bridge: WledTestResponse;
+  get_wled_sink_status: WledSinkStatus;
+
+  // --- lighting -------------------------------------------------------------
+  set_lighting_mode: ModeCommandResult;
+  stop_lighting: ModeCommandResult;
+  get_lighting_mode_status: ModeCommandResult;
+
+  /**
+   * The one command whose bridge return type is NOT the wire type —
+   * `telemetryApi.ts` maps a DTO on the way through and does not export it — so
+   * the contract type is the honest binding here.
+   */
+  get_runtime_telemetry: FullTelemetrySnapshot;
+
+  // --- hue ------------------------------------------------------------------
+  discover_hue_bridges: HueDiscoveryResponse;
+  verify_hue_bridge_ip: HueVerifyBridgeIpResponse;
+  pair_hue_bridge: HuePairBridgeResponse;
+  start_hue_stream: HueRuntimeCommandResult;
+  stop_hue_stream: HueRuntimeCommandResult;
+  restart_hue_stream: HueRuntimeCommandResult;
+  get_hue_stream_status: HueRuntimeCommandResult;
+  set_hue_solid_color: HueRuntimeCommandResult;
+  validate_hue_credentials: HueValidateCredentialsResponse;
+  list_hue_entertainment_areas: HueEntertainmentAreaListResponse;
+  check_hue_stream_readiness: HueStreamReadinessResponse;
+  update_hue_channel_positions: HueChannelWritebackStatus;
+
+  // --- shell ----------------------------------------------------------------
+  list_displays: DisplayInfo[];
+  get_screen_capture_permission: ScreenCapturePermissionResult;
+  open_screen_capture_settings: ScreenCaptureSettingsResult;
+  open_led_twin_overlay: TwinOverlayResult;
+  close_led_twin_overlay: TwinOverlayResult;
+  start_led_test_pattern: LedTestPatternResult;
+  stop_led_test_pattern: LedTestPatternResult;
+  check_for_update: UpdateCheckResponse;
+  download_and_install_update: UpdateInstallResponse;
+}
+
+/** A command this table types. */
+export type TypedCommandName = keyof CommandResponse & string;

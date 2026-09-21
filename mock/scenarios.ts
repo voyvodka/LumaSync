@@ -10,6 +10,7 @@
  * that is precisely why both need to be one click away.
  */
 
+import { SHELL_STATE_SCHEMA_VERSION } from "../src/shared/contracts/shell";
 import type { MockWorld } from "./state";
 
 export const SCENARIO_IDS = [
@@ -45,38 +46,76 @@ function base(): MockWorld {
   return {
     scenario: "empty",
     generation: 0,
-    serial: { ports: [], connectedPort: null },
-    wled: { devices: [], connectedHost: null },
+    serial: { ports: [], connectedPort: null, healthFailsAt: null },
+    wled: { devices: [], connectedHost: null, testOutcome: "WLED_TEST_LIVE_CONFIRMED" },
     hue: {
       bridges: [],
+      selectedBridgeId: null,
       appKey: null,
       reachable: true,
       credentialValid: true,
       areas: [],
+      selectedAreaId: null,
       channels: [],
       streaming: false,
       linkButtonPressesRemaining: 0,
+      everActive: false,
+      totalReconnects: 0,
+      activeStreamerElsewhere: false,
     },
     displays: DISPLAYS,
     capture: { permissionGranted: true },
-    lighting: { mode: "off" },
+    lighting: { mode: { kind: "off" } },
+    telemetry: {
+      captureFps: 0,
+      sendFps: 0,
+      queueHealth: "healthy",
+      frameLatencyMs: 0,
+      linkConstrained: false,
+      linkMaxFps: 0,
+      lastCaptureErrorCode: null,
+      lastCaptureErrorAtSecs: null,
+    },
     persistFails: false,
-    forcedFailures: new Set<string>(),
+    forcedFailures: [],
     extraLatencyMs: 0,
-    shellState: { schemaVersion: 3, uiMode: "full", trayHintShown: true },
+    // The version the app is actually on. Shipping an older one made every
+    // boot run the 3→4→5→6 migrations, so the state the app saw was never the
+    // state this fixture declares — and nothing said so.
+    shellState: { schemaVersion: SHELL_STATE_SCHEMA_VERSION, uiMode: "full", trayHintShown: true },
   };
 }
 
-const PORTS = [
-  { name: "/dev/cu.usbserial-1420", supported: true, product: "CH340 USB Serial" },
-  { name: "/dev/cu.debug-console", supported: false, product: null },
+const PORTS: MockWorld["serial"]["ports"] = [
+  {
+    name: "/dev/cu.usbserial-1420",
+    supported: true,
+    vid: 0x1a86,
+    pid: 0x7523,
+    manufacturer: "wch.cn",
+    product: "CH340 USB Serial",
+    connectOutcome: "OK",
+    firmwareProfile: "lumasync-v1",
+    chipType: "ws2812b-grb",
+  },
+  {
+    name: "/dev/cu.debug-console",
+    supported: false,
+    vid: 0x0000,
+    pid: 0x0000,
+    manufacturer: null,
+    product: null,
+    connectOutcome: "FAILED",
+    firmwareProfile: "lumasync-v1",
+    chipType: "ws2812b-grb",
+  },
 ];
 
 const BRIDGE = { id: "bridge-c8a76249", ip: "192.168.1.180", name: "Hue Bridge" };
 
-const AREAS = [
-  { id: "area-living", name: "Living room", channelCount: 4 },
-  { id: "area-desk", name: "Desk", channelCount: 2 },
+const AREAS: MockWorld["hue"]["areas"] = [
+  { id: "area-living", name: "Living room", channelCount: 4, roomName: "Living room", activeStreamer: false },
+  { id: "area-desk", name: "Desk", channelCount: 2, roomName: "Study", activeStreamer: false },
 ];
 
 const CHANNELS = [
@@ -88,27 +127,43 @@ const CHANNELS = [
 
 function furnished(): MockWorld {
   const w = base();
-  w.serial = { ports: PORTS, connectedPort: PORTS[0].name };
+  w.serial = { ports: PORTS, connectedPort: PORTS[0].name, healthFailsAt: null };
   w.wled = {
-    devices: [{ host: "192.168.1.42", name: "WLED Panel", ledCount: 120 }],
+    devices: [{ host: "192.168.1.42", name: "WLED Panel", ledCount: 120, port: 4048, protocol: "ddp" }],
     connectedHost: "192.168.1.42",
+    testOutcome: "WLED_TEST_LIVE_CONFIRMED",
   };
   w.hue = {
     bridges: [BRIDGE],
+    selectedBridgeId: BRIDGE.id,
     appKey: "mock-application-key",
     reachable: true,
     credentialValid: true,
     areas: AREAS,
+    selectedAreaId: AREAS[0].id,
     channels: CHANNELS,
     streaming: true,
     linkButtonPressesRemaining: 0,
+    everActive: true,
+    totalReconnects: 0,
+    activeStreamerElsewhere: false,
   };
-  w.lighting = { mode: "ambilight" };
+  w.lighting = { mode: { kind: "ambilight" } };
+  w.telemetry = {
+    captureFps: 58.4,
+    sendFps: 58.1,
+    queueHealth: "healthy",
+    frameLatencyMs: 4.2,
+    linkConstrained: false,
+    linkMaxFps: 74,
+    lastCaptureErrorCode: null,
+    lastCaptureErrorAtSecs: null,
+  };
   w.shellState = {
     ...w.shellState,
     lastSuccessfulPort: PORTS[0].name,
     lastOutputTargets: ["usb", "hue"],
-    lastWledSink: { host: "192.168.1.42", port: 4048, protocol: "ddp" },
+    lastWledSink: { ip: "192.168.1.42", port: 4048, ledCount: 120, protocol: "ddp" },
     lastHueBridge: { id: BRIDGE.id, internalipaddress: BRIDGE.ip, name: BRIDGE.name },
     lastHueAreaId: AREAS[0].id,
     hueAppKey: "mock-application-key",
@@ -152,8 +207,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     summary: "A connected strip and no Hue at all.",
     build: () => {
       const w = base();
-      w.serial = { ports: PORTS, connectedPort: PORTS[0].name };
-      w.lighting = { mode: "ambilight" };
+      w.serial = { ports: PORTS, connectedPort: PORTS[0].name, healthFailsAt: null };
+      w.lighting = { mode: { kind: "ambilight" } };
       w.shellState = {
         ...w.shellState,
         lastSuccessfulPort: PORTS[0].name,
@@ -169,8 +224,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     summary: "Bridge streaming, no USB. The signal readout used to show zeros here.",
     build: () => {
       const w = furnished();
-      w.serial = { ports: [], connectedPort: null };
-      w.wled = { devices: [], connectedHost: null };
+      w.serial = { ports: [], connectedPort: null, healthFailsAt: null };
+      w.wled = { devices: [], connectedHost: null, testOutcome: "WLED_TEST_LIVE_CONFIRMED" };
       return { ...w, scenario: "hue-only" };
     },
   },
@@ -181,7 +236,10 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     build: () => {
       const w = furnished();
       w.hue.channels = [];
-      w.hue.areas = [{ id: "area-living", name: "Living room", channelCount: 0 }];
+      w.hue.areas = [
+        { id: "area-living", name: "Living room", channelCount: 0, roomName: "Living room", activeStreamer: false },
+      ];
+      w.hue.selectedAreaId = "area-living";
       w.hue.streaming = false;
       return { ...w, scenario: "hue-area-empty" };
     },
@@ -216,6 +274,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     build: () => {
       const w = base();
       w.hue.bridges = [BRIDGE];
+      w.hue.selectedBridgeId = BRIDGE.id;
       w.hue.linkButtonPressesRemaining = 3;
       return { ...w, scenario: "hue-link-button" };
     },
@@ -227,7 +286,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
     build: () => {
       const w = furnished();
       w.capture = { permissionGranted: false };
-      w.lighting = { mode: "off" };
+      w.lighting = { mode: { kind: "off" } };
       return { ...w, scenario: "capture-denied" };
     },
   },

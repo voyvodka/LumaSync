@@ -12,8 +12,9 @@ import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
 import { PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
 import { UPDATER_COMMANDS, UPDATER_STATUS } from "../../src/shared/contracts/updater";
 import { SHELL_STORE_KEY } from "../../src/shared/contracts/shell";
-import { getWorld } from "../state";
-import type { Handler } from "./types";
+import { getWorld, mutate } from "../state";
+import { status } from "./status";
+import type { Handler, TypedHandlers } from "./types";
 
 /**
  * Backs `plugin:store`. Seeded from the scenario at first read and then left
@@ -21,6 +22,22 @@ import type { Handler } from "./types";
  */
 const storeBacking = new Map<string, unknown>();
 let seededGeneration = -1;
+
+/**
+ * Writes a shell-state key so both halves agree. Without this a panel edit
+ * lands in `world.shellState`, renders correctly in the panel, and is never
+ * seen by `plugin:store|get` — `ensureSeeded` only re-reads the world when the
+ * generation changes, and a hand edit deliberately does not bump it. A control
+ * that looks alive and does nothing is worse than no control.
+ */
+export function writeShellStateKey(key: string, value: unknown): void {
+  ensureSeeded();
+  const state = { ...(storeBacking.get(SHELL_STORE_KEY) as Record<string, unknown>), [key]: value };
+  storeBacking.set(SHELL_STORE_KEY, state);
+  mutate((w) => {
+    w.shellState = state;
+  });
+}
 
 function ensureSeeded(): void {
   const w = getWorld();
@@ -30,7 +47,7 @@ function ensureSeeded(): void {
   storeBacking.set(SHELL_STORE_KEY, w.shellState);
 }
 
-export const shellHandlers: Record<string, Handler> = {
+export const shellHandlers = {
   // A bare array, not an envelope: `listDisplays()` in calibrationApi.ts is
   // typed `Promise<DisplayInfo[]>` and calls `.find` on the result directly.
   [DISPLAY_OVERLAY_COMMANDS.LIST_DISPLAYS]: () =>
@@ -45,40 +62,55 @@ export const shellHandlers: Record<string, Handler> = {
       isPrimary: index === 0,
     })),
 
+  // Flat `code`, no envelope. Three of the result types in this file keep the
+  // code at the top level rather than under `status` — preview and capture —
+  // and guessing the envelope is how the first version of this file went wrong.
   [CAPTURE_COMMANDS.GET_SCREEN_CAPTURE_PERMISSION]: () => ({
-    status: {
-      code: getWorld().capture.permissionGranted
-        ? "CAPTURE_PERMISSION_GRANTED"
-        : "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
-    },
-    granted: getWorld().capture.permissionGranted,
+    code: getWorld().capture.permissionGranted
+      ? ("SCREEN_CAPTURE_PERMISSION_GRANTED" as const)
+      : ("SCREEN_CAPTURE_PERMISSION_DENIED" as const),
   }),
 
   [CAPTURE_COMMANDS.OPEN_SCREEN_CAPTURE_SETTINGS]: () => ({
-    status: { code: "CAPTURE_SETTINGS_OPENED" },
+    code: "SCREEN_CAPTURE_SETTINGS_OPENED" as const,
+    message: null,
   }),
 
   // These address separate webview windows. The status codes let the calling
   // state machine advance and the buttons be exercised; no window appears, and
-  // that gap is real — see docs/architecture/dev-mock.md.
-  [PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY]: () => ({ status: { code: "TWIN_OVERLAY_OPENED" } }),
-  [PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY]: () => ({ status: { code: "TWIN_OVERLAY_CLOSED" } }),
-  [PREVIEW_COMMANDS.START_TEST_PATTERN]: () => ({ status: { code: "LED_TEST_PATTERN_STARTED" } }),
-  [PREVIEW_COMMANDS.STOP_TEST_PATTERN]: () => ({ status: { code: "LED_TEST_PATTERN_STOPPED" } }),
+  // that gap is real.
+  [PREVIEW_COMMANDS.OPEN_TWIN_OVERLAY]: () => ({
+    ok: true,
+    code: "TWIN_OVERLAY_OPENED" as const,
+    message: "Opened",
+  }),
+  [PREVIEW_COMMANDS.CLOSE_TWIN_OVERLAY]: () => ({
+    ok: true,
+    code: "TWIN_OVERLAY_CLOSED" as const,
+    message: "Closed",
+  }),
+  [PREVIEW_COMMANDS.START_TEST_PATTERN]: () => ({
+    active: true,
+    // Nothing downstream of here is real: no strip receives the pattern, and
+    // the twin overlay is a window the browser does not have.
+    previewOnly: true,
+    status: { code: "LED_TEST_PATTERN_STARTED" as const, message: "Started" },
+  }),
+  [PREVIEW_COMMANDS.STOP_TEST_PATTERN]: () => ({
+    active: false,
+    previewOnly: true,
+    status: { code: "LED_TEST_PATTERN_STOPPED" as const, message: "Stopped" },
+  }),
 
-  // Up to date, always. Leaving this unanswered surfaced as the update-failed
-  // modal over every screen, because the app cannot tell "no backend" from
-  // "the feed refused" — and an install fixture would be worse: in the real app
-  // UPDATER_INSTALL_STARTED means the binary is being replaced.
   [UPDATER_COMMANDS.CHECK_FOR_UPDATE]: () => ({
-    status: { code: UPDATER_STATUS.UP_TO_DATE },
-    channel: "stable",
+    status: status(UPDATER_STATUS.UP_TO_DATE, "Up to date"),
+    channel: "stable" as const,
     update: null,
   }),
   [UPDATER_COMMANDS.DOWNLOAD_AND_INSTALL_UPDATE]: () => ({
-    status: { code: UPDATER_STATUS.UP_TO_DATE },
+    status: status(UPDATER_STATUS.UP_TO_DATE, "Nothing pending"),
   }),
-};
+} satisfies TypedHandlers;
 
 /**
  * Tauri routes plugin traffic through `invoke` as `plugin:<name>|<method>`.
@@ -205,8 +237,11 @@ export const pluginHandlers: Record<string, Handler> = {
   "plugin:opener|open_path": () => null,
   "plugin:updater|check": () => null,
   "plugin:process|restart": () => null,
-  "plugin:event|listen": () => 1,
-  "plugin:event|unlisten": () => null,
-  "plugin:event|emit": () => null,
-  "plugin:event|emit_to": () => null,
+  // `plugin:event|*` is deliberately absent. Answering `listen` here made the
+  // shim resolve before `mockIPC`'s event registry ever saw the call, so every
+  // Tauri event was silently dead — including `ambilight://edge-signal`, which
+  // meant the signal readout showed zeros in *every* scenario and the mock
+  // could not tell the bug it was built to reproduce from its own limitation.
+  // Leaving them unhandled lets mockIPC own them in the browser and lets
+  // passthrough reach the real subscription under `tauri:mock`.
 };
