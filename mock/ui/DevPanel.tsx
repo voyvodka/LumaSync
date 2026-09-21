@@ -530,7 +530,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
 
             <Ctl label="uiMode" keywords="uiMode compact full layout" reach="reload" query={q}>
               <Pick
-                value={(world.shellState.uiMode as string) ?? "full"}
+                value={world.shellState.uiMode ?? "full"}
                 options={["compact", "full"] as const}
                 onChange={(v) =>
                   mutate((w) => {
@@ -566,7 +566,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
 
             <Ctl label="lastSection" keywords="lastSection boot screen" reach="reload" query={q}>
               <Pick
-                value={(world.shellState.lastSection as string) ?? "lights"}
+                value={world.shellState.lastSection ?? "lights"}
                 options={["lights", "led-setup", "devices", "room-map", "system"] as const}
                 onChange={(v) =>
                   mutate((w) => {

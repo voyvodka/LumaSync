@@ -47,10 +47,8 @@ describe("buildEdgeSignalFrame", () => {
     expect(buildEdgeSignalFrame("solid", 1, "live").ledCount).toBe(164);
 
     mutate((w) => {
-      w.shellState = {
-        ...w.shellState,
-        ledCalibration: { ...(w.shellState.ledCalibration as object), totalLeds: 42 },
-      };
+      const calibration = w.shellState.ledCalibration;
+      if (calibration) w.shellState = { ...w.shellState, ledCalibration: { ...calibration, totalLeds: 42 } };
     });
 
     const frame = buildEdgeSignalFrame("solid", 1, "live");

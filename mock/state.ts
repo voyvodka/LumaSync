@@ -20,6 +20,7 @@ import type {
   WledProtocol,
 } from "../src/shared/contracts/device";
 import type { TelemetryQueueHealth } from "../src/shared/contracts/telemetry";
+import type { ShellState } from "../src/shared/contracts/shell";
 import type { ScenarioId } from "./scenarios";
 
 export interface MockSerialPort {
@@ -162,8 +163,21 @@ export interface MockWorld {
     notificationPermission: "granted" | "denied" | "prompt";
     autostartEnabled: boolean;
   };
-  /** What `shell-state.json` holds at boot. */
-  shellState: Record<string, unknown>;
+  /**
+   * What `shell-state.json` holds at boot.
+   *
+   * `Partial<ShellState>`, not `Record<string, unknown>`. The loose type let
+   * `lastHueBridge` be written as `{ internalipaddress }` — the Hue *discovery
+   * endpoint's* field name — while `HueBridgeSummary` declares `ip`, so
+   * `toHueStartConfig` returned null and every scenario built on `furnished`
+   * rendered Hue as "Not configured" while the status bar said STREAMING. A
+   * comment in `handlers/hue.ts` warns about that exact confusion; the comment
+   * did not stop it, and the type does.
+   *
+   * `Partial` because a scenario is allowed to omit a field — that is how a
+   * first run is expressed.
+   */
+  shellState: Partial<ShellState>;
 }
 
 const STORAGE_KEY = "lumasync.mock.world";
