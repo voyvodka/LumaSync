@@ -549,6 +549,29 @@ mod tests {
         assert_eq!(frame_wire_time_ms(0, 3), 1);
     }
 
+    /// A 164-LED strip runs at 23 fps and that is the wire, not the software.
+    ///
+    /// This number has been read as a pipeline shortfall more than once, and
+    /// the proposed fixes — moving the sink write off the capture thread,
+    /// splitting the frame across two channels — were aimed at a bottleneck
+    /// that is not there. `164 * 3 + 6 = 498` bytes against 11 520 B/s is
+    /// 23.1 fps exactly. The link is full. Nothing above it is slow.
+    ///
+    /// Raising it means raising the baud rate, which is a firmware contract
+    /// and not a constant to edit: every device on the allowlist would have to
+    /// agree, and the Adalight profile is pinned at 115 200 by its own
+    /// convention. If this assertion ever fails, that negotiation happened —
+    /// update the number, do not delete the test.
+    #[test]
+    fn a_164_led_strip_is_capped_by_the_link_at_23_fps() {
+        assert_eq!(frame_wire_bytes(164, 3), 498);
+        let ceiling = link_max_fps(164, 3);
+        assert!(
+            (23.0..24.0).contains(&ceiling),
+            "expected the 115 200-baud ceiling near 23 fps, got {ceiling}"
+        );
+    }
+
     #[test]
     fn rgbw_costs_a_third_more_wire_time_than_grb() {
         let grb = frame_wire_time_ms(100, 3);

@@ -19,7 +19,20 @@ stranger's device.
 **Read the constant. Never hardcode the list elsewhere.** A second copy is a second thing to keep
 in sync, and the failure is silent: a device works in one code path and is rejected in another.
 
-**Serial link is 115200 baud, 8N1.**
+**Serial link is 115200 baud, 8N1 — and on a long strip that, not the software, is the frame-rate
+ceiling.** 11 520 bytes/s against a `6 + N × bpp` frame gives `link_max_fps` in
+`led_calibration.rs`: 23 fps at 164 LEDs in GRB, 17 fps in RGBW. The pacer already clamps to it and
+telemetry already reports it through `linkConstrained` and `linkMaxFps`. Read that number as "the
+link is full", not as a pipeline shortfall — it has been misread as one, and the fixes that follow
+from the misreading (moving the sink write off the capture thread, splitting the frame across two
+channels) aim at a bottleneck that is not there. Moving the write off the capture thread is worth
+doing for latency; it will not add a frame.
+
+Raising the ceiling means raising the baud, and that is a contract with firmware that is already
+flashed rather than a constant to edit. Every chip on the allowlist supports far more than
+115 200 — but the host and the device have to agree, and the Adalight profile is pinned at 115 200
+by Adalight's own convention, so it could never move. `a_164_led_strip_is_capped_by_the_link_at_23_fps`
+pins the arithmetic so the next person meets the explanation instead of the number alone.
 
 **Every sink goes through the `LedSink` trait.** Serial and WLED differ in transport, not in what
 they are asked to do. New output types implement the trait rather than branching at the call site.
