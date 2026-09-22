@@ -9,6 +9,20 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- When macOS screen recording was refused, LumaSync still opened showing Ambilight on, the
+  capture as OK, Hue as streaming and a frame rate, while nothing was running and nothing said
+  why. It also kept the Hue bridge's entertainment stream claimed for a mode that never
+  started, which locks out any other app that wants the bridge. At launch the app now checks
+  whether the saved mode actually started: if it did not, the Lights screen shows Off, the
+  bridge is released, and the same notice you get when starting Ambilight by hand explains
+  what to fix. Your saved mode is kept, so the next launch tries it again.
+- With the Hue bridge unreachable, the status bar said HUE STREAMING and the Hue output row
+  showed a live stream rate for as long as the outage lasted, sometimes hours, while the
+  bridge card said it was reconnecting. Both now say the bridge is reconnecting until it
+  answers again.
+- The first-run banner could stay on "3/3 — calibrate your strip" for a strip that was already
+  calibrated. It moved on by one step at a time and only when something else on the screen
+  changed, so it could stop one step short. It now skips every step you have already done.
 - Turkish screens showed English in several places: the Hue stream figures in Telemetry
   (uptime, packet rate, reconnect counts, how long ago the last error was, and the stream
   state itself), the latency and frame-rate readout on the Lights screen, the "Loading..."

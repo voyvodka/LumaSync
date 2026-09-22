@@ -1,11 +1,15 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 import {
   LIGHTING_MODE_KIND,
   type LightingModeConfig,
 } from "@/features/mode/model/contracts";
 import type { LightingModeDispatcher } from "@/features/mode/state/useLightingModeDispatch";
-import { HUE_RUNTIME_STATES, type HueRuntimeTarget } from "@/shared/contracts/hue";
+import {
+  HUE_RUNTIME_STATES,
+  type HueRuntimeState,
+  type HueRuntimeTarget,
+} from "@/shared/contracts/hue";
 
 import { readHueStreamStatus } from "../hueReadCache";
 
@@ -34,6 +38,24 @@ export interface HueStreamHealthInput {
   setActiveOutputTargets: (update: (prev: HueRuntimeTarget[]) => HueRuntimeTarget[]) => void;
 }
 
+export interface HueStreamHealth {
+  /** Last state the backend reported; `null` until the first poll lands. */
+  runtimeState: HueRuntimeState | null;
+}
+
+/**
+ * Whether a Hue session the app still owns is actually delivering frames.
+ * RECONNECTING keeps "hue" in `activeOutputTargets` — the backend is retrying
+ * and a bridge can stay unreachable for hours — so membership alone would
+ * report a stream that sends nothing.
+ */
+export function isHueSessionReconnecting(
+  sessionActive: boolean,
+  runtimeState: HueRuntimeState | null,
+): boolean {
+  return sessionActive && runtimeState === HUE_RUNTIME_STATES.RECONNECTING;
+}
+
 // Two-way Hue health reconciler. The restore direction is the fix: the poll
 // used to `return` on the first dead reading, stranding "hue" out of
 // `activeOutputTargets` forever so every Solid colour change was dropped.
@@ -44,9 +66,14 @@ export function useHueStreamHealth({
   selectedOutputTargetsRef,
   dispatchRef,
   setActiveOutputTargets,
-}: HueStreamHealthInput): void {
+}: HueStreamHealthInput): HueStreamHealth {
+  const [runtimeState, setRuntimeState] = useState<HueRuntimeState | null>(null);
+
   useEffect(() => {
-    if (!hueTargetSelected) return;
+    if (!hueTargetSelected) {
+      setRuntimeState(null);
+      return;
+    }
 
     let active = true;
     let timerId: number | null = null;
@@ -64,6 +91,7 @@ export function useHueStreamHealth({
       try {
         const result = await readHueStreamStatus();
         if (!active) return;
+        setRuntimeState(result.status.state);
 
         const backendDead =
           result.status.state === HUE_RUNTIME_STATES.FAILED ||
@@ -138,4 +166,6 @@ export function useHueStreamHealth({
     // ONLY dep on purpose — taking `dispatch` or the target array itself would
     // restart the loop on every identity change and storm the bridge.
   }, [hueTargetSelected]);
+
+  return { runtimeState };
 }

@@ -104,6 +104,26 @@ export function nextStep(
 }
 
 /**
+ * Advance until no guard moves the step any further. `nextStep` moves one step
+ * per call, so a user whose later guards already hold (calibration saved on an
+ * earlier install, a strip already connected) must not wait for an unrelated
+ * re-render to walk past each one.
+ */
+export function settleStep(
+  current: OnboardingStep,
+  guards: OnboardingGuardSnapshot,
+): OnboardingStep {
+  let step = current;
+  // Bounded by the step count, so a future non-monotonic guard cannot spin.
+  for (let i = 0; i <= ONBOARDING_STEP_ORDER.length; i += 1) {
+    const next = nextStep(step, guards);
+    if (next === step) return step;
+    step = next;
+  }
+  return step;
+}
+
+/**
  * Initial step. Always `LIGHTS` for users who do not have
  * `hasCompletedOnboarding === true` set on disk; the banner mounts and
  * begins the walk-through.

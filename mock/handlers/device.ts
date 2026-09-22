@@ -17,9 +17,11 @@ import {
   SERIAL_CONNECT_STATUS,
   SERIAL_PORT_LIST_STATUS,
 } from "../../src/shared/contracts/device";
+import { HUE_RUNTIME_STATES } from "../../src/shared/contracts/hue";
 import { LINK_MAX_FPS_ABSENT } from "../../src/shared/contracts/telemetry";
 import type { HealthStepResult } from "../../src/features/device/deviceConnectionApi";
 import { getWorld, mutate } from "../state";
+import { hueRuntimeFault } from "./hue";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
@@ -49,7 +51,7 @@ export const deviceHandlers = {
   },
 
   [DEVICE_COMMANDS.CONNECT_PORT]: (args) => {
-    const portName = typeof args?.portName === "string" ? args.portName : null;
+    const { portName } = args;
     const port = getWorld().serial.ports.find((p) => p.name === portName);
     // The two-stage gate: a port can enumerate and still be refused, and the
     // refusal carries its own code rather than the generic failure.
@@ -169,9 +171,8 @@ export const deviceHandlers = {
 
   [DEVICE_COMMANDS.CONNECT_WLED_SINK]: (args) => {
     // `{ request: { device, port, protocol } }` — the ip is a level deeper
-    // than it looks, and reading `request.ip` silently matched nothing.
-    const request = args?.request as { device?: { ip?: string } } | undefined;
-    const host = typeof request?.device?.ip === "string" ? request.device.ip : null;
+    // than it looks; reading `request.ip` used to silently match nothing.
+    const host = args.request.device.ip;
     const device = getWorld().wled.devices.find((d) => d.host === host);
     if (device === undefined) {
       return { status: status("WLED_BRIDGE_UNREACHABLE", "No such device") };
@@ -200,8 +201,10 @@ export const deviceHandlers = {
   }),
 
   [DEVICE_COMMANDS.SET_LIGHTING_MODE]: (args) => {
-    const requested = args?.mode as { kind?: string } | undefined;
-    const kind = typeof requested?.kind === "string" ? requested.kind : "off";
+    // `setLightingMode` in `modeApi.ts` sends `{ payload }`, never `{ mode }` —
+    // reading `args.mode` made every call apply as "off", so the capture-
+    // permission gate below was unreachable and Solid mode could never start.
+    const { kind } = args.payload;
     const w = getWorld();
     // Ambilight is the only mode that needs the screen, so it is the only one
     // the permission gate can refuse.
@@ -213,7 +216,7 @@ export const deviceHandlers = {
       };
     }
     mutate((draft) => {
-      draft.lighting.mode = { ...draft.lighting.mode, kind: kind as never };
+      draft.lighting.mode = { ...draft.lighting.mode, kind };
     });
     return {
       active: kind !== "off",
@@ -255,6 +258,11 @@ export const deviceHandlers = {
     const w = getWorld();
     const t = w.telemetry;
     const usbLive = w.serial.connectedPort !== null;
+    // Reuses `hueRuntimeFault` from `hue.ts` rather than re-deriving it from
+    // `reachable`/`credentialValid` here: this handler used to report "Idle"
+    // for both an unreachable bridge and an expired key, collapsing exactly
+    // the distinction `get_hue_stream_status` already got right.
+    const fault = hueRuntimeFault(w.hue);
     return {
       usb: {
         captureFps: t.captureFps,
@@ -268,14 +276,22 @@ export const deviceHandlers = {
       },
       hue: w.hue.everActive
         ? {
-            state: w.hue.streaming ? "Running" : "Idle",
+            state: w.hue.streaming
+              ? HUE_RUNTIME_STATES.RUNNING
+              : (fault?.state ?? HUE_RUNTIME_STATES.IDLE),
             uptimeSecs: w.hue.streaming ? 128 : null,
             packetRate: w.hue.streaming ? 20 : 0,
-            lastErrorCode: null,
-            lastErrorAtSecs: null,
+            lastErrorCode: w.hue.streaming ? null : (fault?.code ?? null),
+            lastErrorAtSecs: w.hue.streaming ? null : fault !== null ? 4 : null,
             totalReconnects: w.hue.totalReconnects,
-            successfulReconnects: w.hue.totalReconnects,
-            failedReconnects: 0,
+            // Mirrors `session_reconnect_success` /
+            // `session_reconnect_total.saturating_sub(session_reconnect_success)`
+            // in `runtime_telemetry.rs`: a bridge still unreachable has never
+            // *succeeded* a reconnect, so every attempt so far counts as failed.
+            successfulReconnects:
+              fault?.state === HUE_RUNTIME_STATES.RECONNECTING ? 0 : w.hue.totalReconnects,
+            failedReconnects:
+              fault?.state === HUE_RUNTIME_STATES.RECONNECTING ? w.hue.totalReconnects : 0,
             dtlsActive: w.hue.streaming,
             dtlsCipher: w.hue.streaming ? "TLS_PSK_WITH_AES_128_GCM_SHA256" : null,
             dtlsConnectedAtSecs: w.hue.streaming ? 128 : null,

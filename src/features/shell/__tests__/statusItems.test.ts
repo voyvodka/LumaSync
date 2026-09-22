@@ -10,6 +10,7 @@ const healthy: StatusItemsInput = {
   ambilightActive: true,
   localSink: { transport: "serial", id: "/dev/cu.usbserial-1420" } satisfies LocalSink,
   hueStreaming: true,
+  hueReconnecting: false,
   hueReachable: true,
   hueConfigured: true,
   onOpenDevices: () => {},
@@ -66,6 +67,15 @@ describe("buildStatusItems", () => {
         "HUE",
       ),
     ).toMatchObject({ state: "OFF", kind: "off" });
+  });
+
+  // A bridge unreachable for hours kept "hue" in the active targets, so the
+  // chip read STREAMING while the Devices card said Reconnecting.
+  it("reads a retrying Hue session as retrying, never as streaming", () => {
+    const item = byLabel({ ...healthy, hueReconnecting: true, hueReachable: false }, "HUE");
+    expect(item).toMatchObject({ state: "RETRYING", kind: "active" });
+    // The backend is already retrying; a second retry affordance would lie.
+    expect(item.onReconnect).toBeUndefined();
   });
 
   it("offers the reconnect deep-link exactly when a chip is unhealthy", () => {
