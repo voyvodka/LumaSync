@@ -5,6 +5,7 @@
 import { useState, useCallback, useRef } from "react";
 import type { UIMode } from "@/shared/contracts/shell";
 import { resizeToMode } from "./windowLifecycle";
+import { waitForFrames } from "./frameWait";
 
 /** Fade-out / fade-in duration. Kept short so total transition feels snappy. */
 export const UI_MODE_FADE_DURATION_MS = 160;
@@ -43,14 +44,6 @@ function waitForOpacityTransition(el: HTMLElement | null): Promise<void> {
   });
 }
 
-function nextDoublePaint(): Promise<void> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve());
-    });
-  });
-}
-
 export function useUIMode() {
   const [currentMode, setCurrentMode] = useState<UIMode>("compact");
   const [isContentVisible, setIsContentVisible] = useState(true);
@@ -78,10 +71,15 @@ export function useUIMode() {
         // window size, wait one paint cycle to ensure it renders at
         // opacity 0, then trigger the fade-in.
         setCurrentMode(nextMode);
-        await nextDoublePaint();
+        await waitForFrames(2);
         setIsContentVisible(true);
         await waitForOpacityTransition(contentRef.current);
+      } catch (err) {
+        console.error("[LumaSync] switchUIMode failed:", err);
       } finally {
+        // Idempotent on success. On a failed resize the old layout fades back
+        // in rather than staying at opacity 0 with pointer events off.
+        setIsContentVisible(true);
         setIsUITransitioning(false);
         transitionLockRef.current = false;
       }

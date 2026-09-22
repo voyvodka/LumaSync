@@ -34,6 +34,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Switching between the compact and full window could stop working after the window had been
+  hidden, covered or left behind a locked screen: the switch made in that state never finished, the
+  window content stayed blank, and later switches from the title bar, the settings shortcut or the
+  tray did nothing until the window was shown again. The switch now always completes.
 - Reopening the app within a few seconds of it closing unexpectedly left lighting off when the
   last mode used Hue. The Hue bridge was still holding the old session for 10–20 seconds and
   turned the new one away, and the app never asked again. At launch it now waits for the bridge to
