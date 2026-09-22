@@ -34,6 +34,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- USB: a failed connection no longer leaves the port behind as if it were the connected one.
+  After a port was refused, for example an unplugged strip or a port that is not a supported USB
+  adapter, the room map could show a strip on that port as online. Starting a lighting mode
+  would also try to send colors to the refused port. Now nothing counts as connected until a
+  port has actually been opened.
 - Reopening the app within a few seconds of it closing unexpectedly left lighting off when the
   last mode used Hue. The Hue bridge was still holding the old session for 10–20 seconds and
   turned the new one away, and the app never asked again. At launch it now waits for the bridge to

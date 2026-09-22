@@ -33,7 +33,11 @@ export interface SerialPortListResponse {
   ports: SerialPortDescriptor[];
 }
 
-/** Current serial connection state; `portName` is `null` when nothing is connected. */
+/**
+ * Current serial connection state. `portName` is the port that was opened and
+ * is `null` whenever `connected` is false; a refused or failed attempt's name
+ * appears only in `status.details`, as `port="..."`.
+ */
 export interface SerialConnectionStatus {
   portName: string | null;
   connected: boolean;
