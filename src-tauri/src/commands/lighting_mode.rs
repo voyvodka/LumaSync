@@ -843,11 +843,13 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     // Do NOT close the cached serial port handle here — reopening the port
     // toggles DTR and resets the MCU before the packet lands. See
     // docs/architecture/device-output.md (DTR reset).
-    let cleared_port = owner.active_port.take();
+    // `active_port` is deliberately kept: it is the only record of which port
+    // holds a cached session, and `set_active_port` needs it after this stop
+    // to release that port when the next mode switches to a different one.
     let total_ms = t0.elapsed().as_millis();
     info!(
-        "[stop_previous] completed in {total_ms}ms had_worker={had_worker} cleared_port={:?} (cached serial session preserved to avoid DTR-reset cycle)",
-        cleared_port
+        "[stop_previous] completed in {total_ms}ms had_worker={had_worker} last_port={:?} (cached serial session preserved to avoid DTR-reset cycle)",
+        owner.active_port
     );
 }
 
@@ -3536,6 +3538,37 @@ mod tests {
 
         assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
         assert!(result.active);
+    }
+
+    #[test]
+    fn switching_ports_through_apply_mode_change_releases_the_old_port_only() {
+        // The helper alone is not enough: every apply runs stop_previous first,
+        // so this goes through the real path to prove the old port survives it.
+        let (mut owner, recorder) = owner_with_recording_sender();
+        let apply = |owner: &mut LightingRuntimeOwner, port: &str| {
+            apply_mode_change(
+                owner,
+                solid_mode(),
+                true,
+                Some(port),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        };
+
+        assert_eq!(apply(&mut owner, "COM_A").status.code, "SOLID_MODE_APPLIED");
+        assert_eq!(apply(&mut owner, "COM_A").status.code, "SOLID_MODE_APPLIED");
+        assert!(
+            recorder.disconnected_ports().is_empty(),
+            "a restart on the same port must keep its cached session (DTR)"
+        );
+
+        assert_eq!(apply(&mut owner, "COM_B").status.code, "SOLID_MODE_APPLIED");
+        assert_eq!(recorder.disconnected_ports(), vec!["COM_A".to_string()]);
+        assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
     }
 
     #[test]
