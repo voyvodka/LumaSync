@@ -32,7 +32,6 @@ SetHueSolidColorRequest
 SolidColorPayload
 StartHueStreamRequest
 TestPatternConfig
-UpdaterCommandStatus
 UsbPortMetadata
 WledConnectResponse
 WledDiscoveryResponse

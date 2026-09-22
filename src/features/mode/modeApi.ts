@@ -14,6 +14,7 @@ import {
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
+import type { CommandStatusOf } from "@/shared/contracts/status";
 // Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
 // neither side calls across the cycle at module-eval time.
 import { invalidateHueStreamStatus } from "../hue/hueReadCache";
@@ -37,11 +38,7 @@ function isDeviceErrorCode(value: unknown): value is DeviceErrorCode {
 export interface ModeCommandResult {
   active: boolean;
   mode: LightingModeConfig;
-  status: {
-    code: LightingModeStatusCode;
-    message: string;
-    details: string | null;
-  };
+  status: CommandStatusOf<LightingModeStatusCode>;
   /** Non-fatal: the stream started but part of the WLED strip will not track.
    * Rides alongside a success status rather than replacing it. */
   wledAdvisory?: WledLiveFrameAdvisory | null;

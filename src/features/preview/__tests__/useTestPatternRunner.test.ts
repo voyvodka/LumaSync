@@ -16,11 +16,11 @@ type StartFn = (request: TestPatternRunRequest) => Promise<LedTestPatternResult>
 const MIN_INTERVAL = 250;
 
 function ok(code: string = LED_TEST_STATUS.PATTERN_STARTED): LedTestPatternResult {
-  return { active: true, previewOnly: false, status: { code: code as never, message: "" } };
+  return { active: true, previewOnly: false, status: { code: code as never, message: "", details: null } };
 }
 
 function err(code: string = LED_TEST_STATUS.PATTERN_NO_CALIBRATION): LedTestPatternResult {
-  return { active: false, previewOnly: false, status: { code: code as never, message: "" } };
+  return { active: false, previewOnly: false, status: { code: code as never, message: "", details: null } };
 }
 
 function request(overrides: Partial<TestPatternRunRequest> = {}): TestPatternRunRequest {

@@ -51,7 +51,7 @@ function result(overrides?: Partial<LedTestPatternResult>): LedTestPatternResult
   return {
     active: true,
     previewOnly: false,
-    status: { code: LED_TEST_STATUS.PATTERN_STARTED, message: "started" },
+    status: { code: LED_TEST_STATUS.PATTERN_STARTED, message: "started", details: null },
     ...overrides,
   };
 }
@@ -75,7 +75,7 @@ describe("createTestPatternFlow", () => {
       startPattern: vi.fn(async () =>
         result({
           previewOnly: true,
-          status: { code: LED_TEST_STATUS.PATTERN_PREVIEW_ONLY, message: "no sink" },
+          status: { code: LED_TEST_STATUS.PATTERN_PREVIEW_ONLY, message: "no sink", details: null },
         }),
       ),
       stopPattern: vi.fn(async () => result({ active: false })),
@@ -95,7 +95,7 @@ describe("createTestPatternFlow", () => {
       startPattern: vi.fn(async () =>
         result({
           active: false,
-          status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "no calibration" },
+          status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "no calibration", details: null },
         }),
       ),
       stopPattern: vi.fn(async () => result({ active: false })),
@@ -180,7 +180,7 @@ describe("createDefaultTestPatternFlow", () => {
   it("hands the stream back when the start is refused, since no stop will follow", async () => {
     storeState = { lastOutputTargets: ["hue"] };
     startLedTestPatternMock.mockResolvedValue(
-      result({ active: false, status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "" } }),
+      result({ active: false, status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "", details: null } }),
     );
 
     await createDefaultTestPatternFlow(createConfig()).toggle(true);

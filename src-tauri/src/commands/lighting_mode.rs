@@ -19,7 +19,7 @@ use super::ambilight_scene::{
     hue_default_screen_affinity, LightSetState, LightTopology, SceneAnalyzer,
 };
 use super::calibration::list_displays;
-use super::device_connection::{ActiveSinkRegistry, CommandStatus, SerialConnectionState};
+use super::device_connection::{ActiveSinkRegistry, SerialConnectionState};
 use super::hue::state_store::{
     apply_hue_channels_with_context, apply_hue_color_with_context, snapshot_hue_output_context,
     HueActiveOutputContext, HueRuntimeStateStore,
@@ -44,6 +44,7 @@ use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQual
 use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
 };
+use super::status::CommandStatus;
 use super::test_pattern::{
     create_synthetic_frame_source, TestPatternConfig, TestPatternKind, TestPatternLive,
     TestPatternLiveSlot, TestPatternSpeed, DEFAULT_DISPLAY_ASPECT,

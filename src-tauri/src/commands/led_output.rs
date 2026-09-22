@@ -1139,10 +1139,9 @@ mod tests {
         LedColorOrder, LedOutputBridge, LedOutputError, LedPacketSender, SerialSink,
         WirePixelLayout,
     };
-    use crate::commands::device_connection::{
-        CommandStatus, SerialConnectionState, SerialConnectionStatus,
-    };
+    use crate::commands::device_connection::{SerialConnectionState, SerialConnectionStatus};
     use crate::commands::led_sink::LedSink;
+    use crate::commands::status::CommandStatus;
 
     #[derive(Default)]
     struct FakeSender {

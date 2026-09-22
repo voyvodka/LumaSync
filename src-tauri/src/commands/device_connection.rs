@@ -12,6 +12,7 @@ use super::led_output::{
     ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
 };
 use super::led_sink::LedSink;
+use super::status::CommandStatus;
 use super::wled_sink::WledSinkConfig;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
@@ -52,14 +53,6 @@ const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
     (0x10C4, 0xEA70), // CP2104 (Silicon Labs)
     (0x0403, 0x6014), // FT232H (FTDI Hi-Speed Single-Channel)
 ];
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandStatus {
-    pub code: String,
-    pub message: String,
-    pub details: Option<String>,
-}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
