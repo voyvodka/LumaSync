@@ -1545,10 +1545,26 @@ describe("App mode orchestration", () => {
   // No layout engine here, so only the structure is assertable, not the heights
   // it decides — as a block column the banner clipped 162 px at 320×480.
   it("gives the onboarding banner its own row instead of letting it push the layout out", async () => {
+    // The describe-level `beforeEach` shell state already carries a saved
+    // calibration and a persisted `lightingMode`, and leaves `mockIsConnected`
+    // at its default `true` — so all three onboarding guards
+    // (`hasInteractedWithMode`, `hasReachableOutput`, `hasSavedCalibration`)
+    // are satisfied the instant bootstrap finishes. `settleStep` walks
+    // LIGHTS → DEVICES → LED_SETUP → COMPLETE in that single settle, so
+    // `OnboardingFlow` mounts the banner and its own effect unmounts it again
+    // within the same `act()` flush — a one-tick flash that a `waitFor`
+    // poll only sometimes catches before the next synchronous assertion
+    // runs. Give this test a fresh-install shell state instead, where no
+    // guard is met, so the banner mounts and *stays* mounted at step 1 —
+    // which is also the only shell state this banner is actually meant to
+    // be seen in.
+    mockIsConnected = false;
+    loadShellStateMock.mockResolvedValue({ lastSection: "general" });
+
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("active-mode")).toBeInTheDocument();
+      expect(document.querySelector(".lm-onboarding-banner")).not.toBeNull();
     });
 
     const banner = document.querySelector(".lm-onboarding-banner");
