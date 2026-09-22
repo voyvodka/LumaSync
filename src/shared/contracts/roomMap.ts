@@ -628,9 +628,12 @@ export const CHANNEL_WRITEBACK_STATUS = {
   NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
   /** Area id failed the path-traversal guard before any request was built. */
   AREA_INVALID: "HUE_AREA_INVALID",
-  /** At least one placement had no `channelId`, so it was skipped rather than
-   * addressed by its ordinal. Resolved channels in the same request are still
-   * written — one unresolvable marker must not block syncing the rest. */
+  /** Nothing could be written: no placement had a `channelId`, or none mapped
+   * onto a single bridge position (a gradient segment, a grouped channel). A
+   * skipped placement is never addressed by its ordinal or approximated. When
+   * some can be written they are, and the response is
+   * `HUE_CHANNEL_POSITIONS_UPDATED` with the skipped ones named in `details` —
+   * one unwritable marker must not block syncing the rest. */
   UNRESOLVED_CHANNEL: "CHAN_WB_UNRESOLVED_CHANNEL",
 } as const;
 
