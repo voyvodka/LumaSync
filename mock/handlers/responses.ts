@@ -28,7 +28,9 @@ import type {
   HueAreaChannelListResponse,
   HueChannelWritebackStatus,
   HueCredentialMigrationResponse,
+  HueOnboardingWireStatusCode,
 } from "../../src/shared/contracts/hue";
+import type { CommandStatusOf } from "../../src/shared/contracts/status";
 import type {
   ControlPopupResult,
   LedPreviewStatus,
@@ -56,13 +58,33 @@ import type {
   HueEntertainmentAreaListResponse,
   HuePairBridgeResponse,
   HueStreamReadinessResponse,
-  HueValidateCredentialsResponse,
   HueVerifyBridgeIpResponse,
 } from "../../src/features/hue/hueOnboardingApi";
 import type {
   HueRuntimeCommandResult,
   ModeCommandResult,
 } from "../../src/features/mode/modeApi";
+
+/**
+ * `validate_hue_credentials`'s own status codes, narrowed out of the shared
+ * `HueOnboardingWireStatusCode` union that `HueValidateCredentialsResponse`
+ * is typed against. That union covers all six onboarding commands at once —
+ * discover, verify, pair, validate, list-areas, check-readiness — so a
+ * fixture returning `HUE_IP_VALID` (verify's code) here instead of
+ * `HUE_CREDENTIAL_VALID` (this command's) still satisfied the wide type and
+ * passed `typecheck:mock` clean. Only this entry is narrowed, not the shared
+ * contract type: the other five onboarding fixtures have pre-existing code
+ * choices of their own that narrowing here does not touch.
+ */
+type ValidateHueCredentialsCode = Extract<
+  HueOnboardingWireStatusCode,
+  "HUE_IP_INVALID" | "HUE_CREDENTIAL_VALID" | "HUE_CREDENTIAL_INVALID" | "HUE_CREDENTIAL_CHECK_FAILED"
+>;
+
+type ValidateHueCredentialsMockResponse = {
+  status: CommandStatusOf<ValidateHueCredentialsCode>;
+  valid: boolean;
+};
 
 /**
  * The response each mocked command must produce.
@@ -107,7 +129,7 @@ export interface CommandResponse {
   restart_hue_stream: HueRuntimeCommandResult;
   get_hue_stream_status: HueRuntimeCommandResult;
   set_hue_solid_color: HueRuntimeCommandResult;
-  validate_hue_credentials: HueValidateCredentialsResponse;
+  validate_hue_credentials: ValidateHueCredentialsMockResponse;
   list_hue_entertainment_areas: HueEntertainmentAreaListResponse;
   check_hue_stream_readiness: HueStreamReadinessResponse;
   update_hue_channel_positions: HueChannelWritebackStatus;
