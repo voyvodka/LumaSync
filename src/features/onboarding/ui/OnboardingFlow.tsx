@@ -29,12 +29,13 @@
  * flow does not import `SECTION_IDS` directly so the contract surface
  * stays in App.tsx where every other section transition lives.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import {
   INITIAL_ONBOARDING_STEP,
+  onboardingRevealDelayMs,
   ONBOARDING_STEPS,
   ONBOARDING_TOTAL_STEPS,
   type OnboardingGuardSnapshot,
@@ -48,6 +49,13 @@ export interface OnboardingFlowProps {
   hasCompleted: boolean;
   /** Live guard snapshot — drives step advancement. */
   guards: OnboardingGuardSnapshot;
+  /**
+   * The persisted guards have been read. Until then the guards are defaults,
+   * and a step shown from them flashes at a user who is already past it.
+   */
+  guardsLoaded?: boolean;
+  /** A reachability probe that could still satisfy the devices step is out. */
+  reachabilityPending?: boolean;
   /** Deep-link handlers — invoked when the primary action button is clicked. */
   onOpenLights: () => void;
   onOpenDevices: () => void;
@@ -59,6 +67,8 @@ export interface OnboardingFlowProps {
 export function OnboardingFlow({
   hasCompleted,
   guards,
+  guardsLoaded = true,
+  reachabilityPending = false,
   onOpenLights,
   onOpenDevices,
   onOpenCalibration,
@@ -84,6 +94,25 @@ export function OnboardingFlow({
       settleStep(current, { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration }),
     );
   }, [hasInteractedWithMode, hasReachableOutput, hasSavedCalibration]);
+  // Settled during render too, so the reveal below never judges the step the
+  // effect above is about to replace.
+  const shownStep = settleStep(step, { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration });
+
+  // Latched: once shown, the banner leaves only by completing or dismissing.
+  const [revealed, setRevealed] = useState(false);
+  const loadedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (revealed || !guardsLoaded || shownStep === ONBOARDING_STEPS.COMPLETE) return;
+    if (loadedAtRef.current === null) loadedAtRef.current = Date.now();
+    const remaining =
+      onboardingRevealDelayMs(shownStep, reachabilityPending) - (Date.now() - loadedAtRef.current);
+    if (remaining <= 0) {
+      setRevealed(true);
+      return;
+    }
+    const timerId = window.setTimeout(() => setRevealed(true), remaining);
+    return () => window.clearTimeout(timerId);
+  }, [revealed, guardsLoaded, shownStep, reachabilityPending]);
 
   // Drive the `onComplete` side effect when the step machine reaches
   // COMPLETE, including the explicit dismiss path below.
@@ -96,8 +125,8 @@ export function OnboardingFlow({
   // Banner copy + primary action map per step. Memoised so the banner
   // does not re-render its primary action object on every parent tick.
   const bannerProps = useMemo(() => {
-    if (step === ONBOARDING_STEPS.COMPLETE) return null;
-    if (step === ONBOARDING_STEPS.LIGHTS) {
+    if (shownStep === ONBOARDING_STEPS.COMPLETE) return null;
+    if (shownStep === ONBOARDING_STEPS.LIGHTS) {
       return {
         title: t("common:ui.onboarding.step1.title"),
         body: t("common:ui.onboarding.step1.body"),
@@ -107,7 +136,7 @@ export function OnboardingFlow({
         },
       };
     }
-    if (step === ONBOARDING_STEPS.DEVICES) {
+    if (shownStep === ONBOARDING_STEPS.DEVICES) {
       return {
         title: t("common:ui.onboarding.step2.title"),
         body: t("common:ui.onboarding.step2.body"),
@@ -125,16 +154,16 @@ export function OnboardingFlow({
         onClick: onOpenCalibration,
       },
     };
-  }, [step, t, onOpenLights, onOpenDevices, onOpenCalibration]);
+  }, [shownStep, t, onOpenLights, onOpenDevices, onOpenCalibration]);
 
   if (hasCompleted) return null;
-  if (!bannerProps) return null;
+  if (!bannerProps || !revealed) return null;
 
   return (
     <OnboardingBanner
       title={bannerProps.title}
       body={bannerProps.body}
-      step={stepIndex(step)}
+      step={stepIndex(shownStep)}
       totalSteps={ONBOARDING_TOTAL_STEPS}
       primaryAction={bannerProps.primaryAction}
       // Dismiss collapses straight to COMPLETE — the user has opted out

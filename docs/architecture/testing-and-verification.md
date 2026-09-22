@@ -134,8 +134,8 @@ Three things about it are not obvious and each cost a cycle:
   keys, so a new Rust command stops the mock compiling rather than answering `undefined` for a
   week. The first version was written from command names instead of DTOs and every shape was wrong
   in a way nothing caught.
-- **Events are a third of the surface and none of them is an `invoke`.** The edge grid, the twin
-  overlay, the tray menu, the update bar and the cross-window mode sync are all pushed from Rust.
+- **Events are a third of the surface and none of them is an `invoke`.** The twin overlay, the
+  tray menu, the update bar and the cross-window mode sync are all pushed from Rust.
   `mock/events.ts` drives them, sizing each frame from the live calibration rather than a constant
   so the twin cannot render a believable lie.
 - **`shouldMockEvents` from `@tauri-apps/api/mocks` cannot unsubscribe.** `_unlisten` sends

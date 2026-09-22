@@ -38,18 +38,6 @@ vi.mock("@/features/room-map/roomMapApi", () => ({
   },
 }));
 
-vi.mock("@/features/calibration/calibrationApi", () => ({
-  listDisplays: () => Promise.resolve([]),
-}));
-
-// LightsSection renders EdgeSignalGrid, which subscribes to a Tauri event on
-// mount. Unmocked the subscription rejects into the grid's own catch, so the
-// section rendered but the signal path was never the one under test. Resolve
-// an unlisten fn so the effect's cleanup has something to call.
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
-}));
-
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) => {
@@ -73,9 +61,6 @@ vi.mock("react-i18next", () => ({
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
-        "lights:signal.latencyFormat": "{{ms}}ms",
-        "lights:signal.fpsFormat": "{{fps}} fps",
-        "lights:signal.packetRateFormat": "{{rate}} pkt/s",
         "lights:dock.outputs": "Outputs",
         "lights:dock.rows.usbName": "USB",
         "lights:dock.rows.usbType": "CH340",
@@ -388,7 +373,7 @@ describe("LightsSection — output availability gate", () => {
       onModeChange: (next: LightingModeConfig) => void;
     }> = {},
   ) {
-    // LightsSection hydrates from shellStore and listDisplays on mount; those
+    // LightsSection hydrates from shellStore on mount; those
     // promises settle after a synchronous test body returns, which is exactly
     // the update React warns about. Flush them here so every caller observes
     // the hydrated component instead of the first paint.
@@ -702,32 +687,18 @@ describe("LightsSection — serial link budget note", () => {
   });
 });
 
-describe("LightsSection — the signal pill names its sink", () => {
-  /** `usb` is non-nullable in the wire shape, so a Hue-only session still
-   *  carries a struct. Zeros here are "not measuring", not "measured zero". */
-  function hueOnlySnapshot(packetRate: number) {
+describe("LightsSection — Ambilight mode settings card", () => {
+  function usbSnapshot() {
     return {
       usb: {
-        captureFps: 0,
-        sendFps: 0,
+        captureFps: 60,
+        sendFps: 58,
         queueHealth: "healthy" as const,
-        frameLatencyMs: 0,
+        frameLatencyMs: 12,
         linkConstrained: false,
-        linkMaxFps: 0,
+        linkMaxFps: 60,
       },
-      hue: {
-        state: "streaming",
-        uptimeSecs: 42,
-        packetRate,
-        lastErrorCode: null,
-        lastErrorAtSecs: null,
-        totalReconnects: 0,
-        successfulReconnects: 0,
-        failedReconnects: 0,
-        dtlsActive: true,
-        dtlsCipher: "TLS_PSK_WITH_AES_128_GCM_SHA256",
-        dtlsConnectedAtSecs: 1,
-      },
+      hue: null,
     };
   }
 
@@ -754,44 +725,29 @@ describe("LightsSection — the signal pill names its sink", () => {
     shellStateRef.current = {};
   });
 
-  it("never reports the USB zeros as a measurement in a Hue-only session", async () => {
-    telemetryMock.mockResolvedValue(hueOnlySnapshot(25.4));
-    renderAmbilight(["hue"]);
+  it("keeps the tuning controls and shows no live capture readout", async () => {
+    telemetryMock.mockResolvedValue(usbSnapshot());
+    renderAmbilight(["usb"]);
+
+    expect(await screen.findByText("lights:slab.modeSettingsText")).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "lights:signal.profile.brightness" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "lights:signal.profile.saturation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "lights:signal.profile.blackBorder" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("radiogroup", { name: "lights:signal.smoothing.title" }),
+    ).toBeInTheDocument();
 
     await waitFor(() => expect(telemetryMock).toHaveBeenCalled());
-    // The bug: "0ms" and "0 fps" under a Signal heading while Hue streams fine.
-    await waitFor(() => {
-      expect(screen.queryByText("0ms")).not.toBeInTheDocument();
-      expect(screen.queryByText("0 fps")).not.toBeInTheDocument();
-    });
+    expect(screen.queryByText(/\bfps\b|pkt\/s|\d+ms\b/)).not.toBeInTheDocument();
   });
 
-  it("shows the Hue packet rate and no latency, under a Hue-named heading", async () => {
-    telemetryMock.mockResolvedValue(hueOnlySnapshot(25.4));
-    renderAmbilight(["hue"]);
-
-    expect(await screen.findByText("25 pkt/s")).toBeInTheDocument();
-    expect(await screen.findByText("—")).toBeInTheDocument();
-    expect(await screen.findByText("lights:signal.titleHue")).toBeInTheDocument();
-  });
-
-  it("keeps the USB numbers and heading when USB is a target", async () => {
-    telemetryMock.mockResolvedValue({
-      ...hueOnlySnapshot(25.4),
-      usb: {
-        captureFps: 60,
-        sendFps: 58,
-        queueHealth: "healthy" as const,
-        frameLatencyMs: 12,
-        linkConstrained: false,
-        linkMaxFps: 60,
-      },
+  it("does not poll telemetry when no local output is a target", async () => {
+    telemetryMock.mockResolvedValue(usbSnapshot());
+    await act(async () => {
+      renderAmbilight(["hue"]);
     });
-    renderAmbilight(["usb", "hue"]);
 
-    expect(await screen.findByText("12ms")).toBeInTheDocument();
-    expect(await screen.findByText("58 fps")).toBeInTheDocument();
-    expect(screen.queryByText("25 pkt/s")).not.toBeInTheDocument();
+    expect(telemetryMock).not.toHaveBeenCalled();
   });
 });
 

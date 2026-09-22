@@ -133,3 +133,36 @@ describe("stop_led_test_pattern always reports previewOnly: false", () => {
     expect(result.previewOnly).toBe(false);
   });
 });
+
+// Rust answers with the restored mode's `active`, not a constant `false`.
+describe("stop_led_test_pattern reports the restored mode's activity", () => {
+  it("is active when the mode that ran before the test resumes", async () => {
+    setWorld(SCENARIOS["usb-only"].build());
+    expect(getWorld().lighting.mode.kind).toBe("ambilight");
+
+    const result = await dispatch<LedTestPatternResult>(PREVIEW_COMMANDS.STOP_TEST_PATTERN);
+
+    expect(result.active).toBe(true);
+    expect(getWorld().lighting.mode.kind).toBe("ambilight");
+  });
+
+  it("is inactive when nothing ran before the test", async () => {
+    setWorld(SCENARIOS.empty.build());
+
+    const result = await dispatch<LedTestPatternResult>(PREVIEW_COMMANDS.STOP_TEST_PATTERN);
+
+    expect(result.active).toBe(false);
+  });
+
+  it("falls back to Off when the restore's own gate refuses it", async () => {
+    const world = SCENARIOS["usb-only"].build();
+    world.lighting.mode = { kind: "ambilight", targets: ["usb"] };
+    world.serial.connectedPort = null;
+    setWorld(world);
+
+    const result = await dispatch<LedTestPatternResult>(PREVIEW_COMMANDS.STOP_TEST_PATTERN);
+
+    expect(result.active).toBe(false);
+    expect(getWorld().lighting.mode.kind).toBe("off");
+  });
+});

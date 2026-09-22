@@ -5,8 +5,8 @@ const lights: Catalogue<typeof enLights> = {
   slab: {
     modeText: "Aydınlatma",
     modeAccent: "Modu",
-    signalText: "Kenar sinyali",
-    signalAccent: "· canlı · mod ayarları",
+    modeSettingsText: "Mod",
+    modeSettingsAccent: "ayarları",
     scenesText: "Sahne",
     scenesAccent: "ön ayarları",
   },
@@ -26,27 +26,9 @@ const lights: Catalogue<typeof enLights> = {
     },
   },
   signal: {
-    title: "Yakalama → Şerit",
-    titleHue: "Yakalama → Hue",
-    delta: "Δ",
-    fps: "Σ",
-    latencyFormat: "{{ms}} ms",
-    fpsFormat: "{{fps}} fps",
-    packetRateFormat: "{{rate}} pkt/s",
-    edgesAria: "Canlı kenar önizlemesi",
     linkBudget: {
       constrained: "USB bağlantı sınırı — 115.200 baud hızında bu şerit yaklaşık {{fps}} fps taşıyabiliyor.",
       hint: "Daha akıcı bir efekt için şeridi kısaltın, iki denetleyiciye bölün ya da çıkışı WLED üzerinden verin.",
-    },
-    edges: {
-      top: "ÜST · {{count}}",
-      bot: "ALT · {{count}}",
-      left: "SOL · {{count}}",
-      right: "SAĞ · {{count}}",
-    },
-    display: {
-      label: "EKRAN {{index}}",
-      sub: "—",
     },
     profile: {
       brightness: "Parlaklık",
