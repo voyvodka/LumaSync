@@ -87,6 +87,8 @@ interface LightsSectionProps {
   hueProbeChecking?: boolean;
   onRetryHueProbe?: () => void;
   hueStreaming: boolean;
+  /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
+  hueReconnecting?: boolean;
   calibration?: LedCalibrationConfig;
   modeLockReason: ModeGuardReason | null;
   isModeTransitioning?: boolean;
@@ -145,6 +147,7 @@ export function LightsSection({
   hueProbeChecking = false,
   onRetryHueProbe,
   hueStreaming,
+  hueReconnecting = false,
   calibration,
   modeLockReason,
   isModeTransitioning = false,
@@ -809,7 +812,15 @@ export function LightsSection({
               onClick={() => toggleTarget("hue", hueSelected)}
               aria-pressed={hueSelected}
             >
-              <span className="st" />
+              <span
+                className="st"
+                // Amber while retrying; the green default would read as a live stream.
+                style={
+                  hueAvailable && hueSelected && hueReconnecting
+                    ? { background: "var(--lm-amber)", boxShadow: "0 0 8px var(--lm-amber)" }
+                    : undefined
+                }
+              />
               <div className="tx">
                 <div className="n">
                   {t("lights:dock.rows.hueName")}{" "}
@@ -818,6 +829,11 @@ export function LightsSection({
                 <div className="s">
                   {!hueAvailable ? (
                     t("lights:dock.rows.hueSubUnavailable")
+                  ) : hueReconnecting ? (
+                    <Trans
+                      i18nKey="lights:dock.rows.hueSubReconnecting"
+                      components={{ b: <b /> }}
+                    />
                   ) : hueStreaming ? (
                     <Trans
                       i18nKey="lights:dock.rows.hueSubStreaming"

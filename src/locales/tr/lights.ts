@@ -80,6 +80,7 @@ const lights: Catalogue<typeof enLights> = {
       hueType: "EĞLENCE",
       hueSubStreaming: "Köprü · <b>DTLS {{hz}} Hz</b>",
       hueSubIdle: "Köprü · <b>bekleme</b>",
+      hueSubReconnecting: "Köprü · <b>yeniden bağlanıyor</b>",
       hueSubUnavailable: "Yapılandırılmadı",
     },
   },
