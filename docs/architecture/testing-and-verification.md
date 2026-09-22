@@ -60,6 +60,15 @@ restoring the persisted mode; on a machine last left in full, the first three sp
 then the suite *repaired itself*, because the section-routing spec ends by switching back to
 compact, so a second run passed and the failure read as a flake.
 
+A locked screen (or a minimized/occluded window) produces its own believable-looking failure: the
+run just times out on `switchUiMode` with "UI mode did not settle on compact". `useUIMode.ts`'s
+fade/resize chain needs real paint cycles — a native window-resize animation, and a fade-in gated on
+a double `requestAnimationFrame` with no safety timeout — so it cannot finish while the window is
+not actually painting. This is not a spec bug and a spec cannot make the window paint; what a spec
+*can* do is say so. `e2e/support/shell.ts`'s `switchUiMode`/`waitForAppReady` check
+`document.visibilityState` on a timeout and rethrow with that diagnosis instead of the bare WDIO
+message. Unlock the screen (or bring the window to the front) and re-run.
+
 ## Seeing the screen
 
 `browser.saveScreenshot` works, and it is the reason this layer is worth more than its assertions.
