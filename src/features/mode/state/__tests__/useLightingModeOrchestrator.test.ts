@@ -1004,6 +1004,134 @@ describe("useLightingModeOrchestrator", () => {
     });
   });
 
+  // The same rule from the other side: "usb" (a serial strip or WLED) goes
+  // active only once the backend runs it.
+  describe("USB added to a running Hue mode", () => {
+    const running: LightingModeConfig = { kind: LIGHTING_MODE_KIND.AMBILIGHT, targets: ["hue"] };
+
+    async function addUsb() {
+      const view = harness();
+      act(() => {
+        view.result.current.setLightingMode(running);
+        view.result.current.setSelectedOutputTargets(["hue"]);
+        view.result.current.setActiveOutputTargets(["hue"]);
+      });
+      await act(async () => {
+        await view.result.current.handleOutputTargetsChange(["usb", "hue"]);
+      });
+      return view;
+    }
+
+    function lastOutputTargetWrites() {
+      return saveShellStateMock.mock.calls
+        .map(([patch]) => patch as Record<string, unknown>)
+        .filter((patch) => "lastOutputTargets" in patch);
+    }
+
+    it("keeps USB out of the active set when the device gate refuses the re-apply", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: running,
+        status: {
+          code: "DEVICE_NOT_CONNECTED",
+          message: "Cannot apply lighting mode while device is disconnected.",
+          details: "Connect a supported serial controller before changing mode.",
+        },
+      });
+
+      const view = await addUsb();
+
+      expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+      expect(setLightingModeMock.mock.calls[0][0].targets).toEqual(["usb", "hue"]);
+      expect(view.result.current.activeOutputTargets).toEqual(["hue"]);
+      expect(view.result.current.selectedOutputTargets).toEqual(["hue"]);
+      // D-06: the gate returns before teardown, so Hue keeps running untouched.
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(view.result.current.startFailedNotice?.bucket).toBe("output");
+      // The explicit add stays persisted; nothing rewrites it without USB.
+      expect(lastOutputTargetWrites()).toEqual([{ lastOutputTargets: ["usb", "hue"] }]);
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+
+    it("drops USB from the selection when the dispatch throws", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      setLightingModeMock.mockRejectedValue(new Error("ipc down"));
+
+      const view = await addUsb();
+
+      expect(view.result.current.activeOutputTargets).toEqual(["hue"]);
+      expect(view.result.current.selectedOutputTargets).toEqual(["hue"]);
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      expect(view.result.current.startFailedNotice).toBeNull();
+      expect(lastOutputTargetWrites()).toEqual([{ lastOutputTargets: ["usb", "hue"] }]);
+      errorSpy.mockRestore();
+    });
+
+    it("shows Off and releases Hue when the re-apply tore the running mode down", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      setLightingModeMock.mockResolvedValue({
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "Ambilight runtime could not start.",
+          details: "LED_OUTPUT_PORT_OPEN_FAILED",
+        },
+      });
+
+      const view = await addUsb();
+
+      expect(view.result.current.activeOutputTargets).toEqual([]);
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+      expect(view.result.current.startFailedNotice?.bucket).toBe("output");
+      // The teardown leaves the Hue stream open with nothing feeding it.
+      expect(stopHueMock).toHaveBeenCalledWith("system");
+      expect(view.result.current.stopFailedNotice).toBeNull();
+      expect(lastOutputTargetWrites()).toEqual([{ lastOutputTargets: ["usb", "hue"] }]);
+      errorSpy.mockRestore();
+    });
+
+    it("keeps hue listed when the release after a teardown does not confirm", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      setLightingModeMock.mockResolvedValue({
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "Ambilight runtime could not start.",
+          details: "LED_OUTPUT_PORT_OPEN_FAILED",
+        },
+      });
+      stopHueMock.mockResolvedValue({ active: true, status: { code: "HUE_STOP_TIMEOUT_PARTIAL" } });
+
+      const view = await addUsb();
+
+      expect(view.result.current.activeOutputTargets).toEqual(["hue"]);
+      expect(view.result.current.stopFailedNotice).toEqual(["hue"]);
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+      errorSpy.mockRestore();
+    });
+
+    it("adds USB when the backend runs it", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const view = await addUsb();
+
+      expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+      expect(view.result.current.activeOutputTargets).toEqual(["hue", "usb"]);
+      expect(view.result.current.selectedOutputTargets).toEqual(["usb", "hue"]);
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      expect(view.result.current.startFailedNotice).toBeNull();
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    });
+  });
+
   describe("start notice precedence", () => {
     const savedCalibration = {
       totalLeds: 60,

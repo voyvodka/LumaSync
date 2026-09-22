@@ -1,4 +1,5 @@
 import {
+  AMBILIGHT_CAPTURE_REASON,
   CAPTURE_FAILURE_BUCKET,
   describeCaptureFailure,
   type CaptureFailureNotice,
@@ -64,6 +65,27 @@ export function pickStartFailureNotice(
     return probeNotice;
   }
   return backendNotice;
+}
+
+/**
+ * The notice for a USB output the backend would not start, or `null` when no
+ * existing copy names the cause. The device gate carries no reason of its own,
+ * so it borrows the output bucket's; a failed solid start is named only for an
+ * output reason, because every other bucket's copy is about screen capture.
+ */
+export function usbStartRefusalNotice(result: ModeCommandResult): CaptureFailureNotice | null {
+  switch (result.status.code) {
+    case LIGHTING_MODE_GATE_STATUS.DEVICE_NOT_CONNECTED:
+      return describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.LED_OUTPUT_DEVICE_NOT_CONNECTED);
+    case LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED:
+      return describeCaptureFailure(result.status.details);
+    case LIGHTING_MODE_STATUS.SOLID_MODE_APPLY_FAILED: {
+      const notice = describeCaptureFailure(result.status.details);
+      return notice.bucket === CAPTURE_FAILURE_BUCKET.OUTPUT ? notice : null;
+    }
+    default:
+      return null;
+  }
 }
 
 export interface HueReleaseInput {
