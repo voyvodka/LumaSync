@@ -37,7 +37,7 @@ import {
   useTestPatternRunner,
   type TestPatternRunRequest,
 } from "../state/useTestPatternRunner";
-import { PatternPicker } from "./PatternPicker";
+import { isPickerPatternKind, PatternPicker, type PickerPatternKind } from "./PatternPicker";
 
 // Output stamps (calibration, colour correction, firmware profile, chip type)
 // are deliberately absent: `set_lighting_mode` hydrates them from disk, while
@@ -82,7 +82,7 @@ interface SolidDraft {
 }
 
 function buildRunRequest(
-  kind: LedTestPatternKind,
+  kind: PickerPatternKind,
   color: SolidDraft,
   speed: TestPatternSpeed,
   targets: HueRuntimeTarget[],
@@ -114,7 +114,7 @@ export function ControlPopupApp() {
   const { mode, preview } = useLightingModeSync();
 
   const stampsRef = useRef<ModeStamps>({ targets: ["usb"] });
-  const [patternKind, setPatternKind] = useState<LedTestPatternKind>("gamut");
+  const [patternKind, setPatternKind] = useState<PickerPatternKind>("gamut");
   const [speed, setSpeed] = useState<TestPatternSpeed>("med");
   const [runError, setRunError] = useState<string | null>(null);
   // FE-3: PREVIEW_ONLY is a success, not an error — surfaced as a distinct
@@ -143,8 +143,9 @@ export function ControlPopupApp() {
       .then((state) => {
         if (!alive) return;
         stampsRef.current = stampsFrom(state);
-        if (state.lastLedTestPattern) {
-          setPatternKind(state.lastLedTestPattern.kind);
+        const lastKind = state.lastLedTestPattern?.kind;
+        if (lastKind && isPickerPatternKind(lastKind)) {
+          setPatternKind(lastKind);
         }
       })
       .catch((error) => {
@@ -309,7 +310,7 @@ export function ControlPopupApp() {
 
   // ── Test pattern selection — every change applies immediately ────────────
   const handleSelectKind = useCallback(
-    (next: LedTestPatternKind) => {
+    (next: PickerPatternKind) => {
       setPatternKind(next);
       setTestDesired(true);
       runner.apply(buildRunRequest(next, draft, speed, stampsRef.current.targets));

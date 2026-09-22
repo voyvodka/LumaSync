@@ -206,6 +206,35 @@ export const LED_CHIP_TYPE = {
 export type LedChipType = (typeof LED_CHIP_TYPE)[keyof typeof LED_CHIP_TYPE];
 
 // ---------------------------------------------------------------------------
+// LED colour order — host-side correction for the serial sink
+// ---------------------------------------------------------------------------
+
+/**
+ * Host-side colour-order correction for the USB serial sink.
+ *
+ * RELATIVE, not absolute: the value corrects whatever order the firmware
+ * already reorders into, it does not name the strip's datasheet order. Wire
+ * slot `i` carries logical channel `order[i]` after colour correction, so
+ * `"grb"` sends G, R, B. `"rgb"` is the identity and is byte-identical to the
+ * output before this setting existed. On `sk6812-rgbw` only R'G'B' are
+ * permuted; W stays in the fourth slot. WLED ignores it — WLED sets its colour
+ * order on the device.
+ *
+ * Mirrors Rust `LedColorOrder` (`led_output.rs`); `verify:shell-contracts`
+ * checks the values. Stored under `ShellState.ledColorOrder`; absent ⇒ `"rgb"`.
+ */
+export const LED_COLOR_ORDER = {
+  RGB: "rgb",
+  RBG: "rbg",
+  GRB: "grb",
+  GBR: "gbr",
+  BRG: "brg",
+  BGR: "bgr",
+} as const;
+
+export type LedColorOrder = (typeof LED_COLOR_ORDER)[keyof typeof LED_COLOR_ORDER];
+
+// ---------------------------------------------------------------------------
 // Color correction (v1.4 G4 — per-channel gamma, Kelvin, saturation)
 // ---------------------------------------------------------------------------
 

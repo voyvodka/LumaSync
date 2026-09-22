@@ -78,10 +78,20 @@ AA 55 7F 01 00 FF 00 38 46
 | `ws2812b-grb` (default) | 3 | `R G B` |
 | `sk6812-rgbw` | 4 | `R' G' B' W` |
 
-**Pixel bytes are logical R, G, B — never the chip's order.** Despite the `ws2812b-grb` name, the
-host sends red first. The device reorders into its strip's colour order, which today is whatever
-its build compiled in; there is no host-side colour-order setting yet (one is planned). A strip that
-shows red and green swapped is a device build with the wrong order, not a host bug.
+**Pixel bytes are logical R, G, B by default — never the chip's order.** Despite the `ws2812b-grb`
+name, the host sends red first. The device reorders into its strip's colour order, which is
+whatever its build compiled in. A strip that shows red and green swapped is a device build with the
+wrong order, not a host bug.
+
+**The host can correct that order without a reflash.** `LedColorOrder` (`led_output.rs`, persisted
+as `ledColorOrder`) permutes the three colour bytes after correction: wire slot `i` carries logical
+channel `order[i]`, so `grb` sends G, R, B. It is *relative* — a correction applied on top of
+whatever the firmware already does, not the strip's datasheet order — so the right value for a
+strip with red and green swapped is `grb` whatever the chip's data sheet says. `rgb` is the
+identity and every byte stays as it was before the setting existed. On RGBW only R'G'B' move; W
+stays fourth, because `W = min(R, G, B)` does not depend on order. Both framings honour it; the
+firmware never sees anything but three (or four) bytes per pixel. The variant order matches the
+proposed TLV `0x02` numbering in §2.1.
 
 **Pixels arrive fully corrected.** The host applies saturation, then Kelvin white balance, then a
 gamma lookup table, before packing (`led_output.rs:618`, `:678`, `:801`). A device must
@@ -224,8 +234,9 @@ changing an existing one.
 
 What the host does with it: a `chip` that disagrees with the user's chip type, or a `led_count` that
 disagrees with the calibration, is surfaced to the user the way a firmware-profile mismatch is —
-never corrected silently. The colour order is displayed, and is what the planned host-side
-colour-order setting will default to.
+never corrected silently. The compiled colour order is displayed. It does not become the host-side
+colour-order value: that setting is relative to the firmware (§1.3), so knowing the compiled order
+tells the user what the strip receives, and the host setting stays `rgb` unless the two disagree.
 
 ### 2.2 Baud negotiation — SET_BAUD `0x14` / ACK `0x15`
 
@@ -310,8 +321,9 @@ a sink over UDP — DDP by default, or DRGB/DNRGB (`WledProtocol`, `commands/wle
 
 - **APA102 and SK9822** — WLED drives clocked strips natively. Wire the strip to a WLED controller
   (ESP32 or ESP8266) and choose the WLED sink in LumaSync.
-- **Any strip that needs its own colour order** — WLED has a per-output colour-order setting, so the
-  order is set on the device rather than compiled into firmware.
+- **Colour order** — WLED has a per-output colour-order setting, so the order is set on the device.
+  The host-side colour order (§1.3) is serial-only and never applied to WLED output; applying both
+  would correct the order twice.
 
 Over WLED the host sends RGB with brightness scaled into the pixel values, because DDP and DRGB have
 no brightness field (`CorrectedWledSink`, `wled_sink.rs:227`). The serial link budget does not

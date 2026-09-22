@@ -112,7 +112,15 @@ function calibratedLedCount(): number {
   return typeof total === "number" && total > 0 ? total : 60;
 }
 
-function pixelAt(pattern: LedTestPatternKind, index: number, count: number, frame: number): Rgb {
+type ProbeSlot = 0 | 1 | 2;
+
+function pixelAt(
+  pattern: LedTestPatternKind,
+  index: number,
+  count: number,
+  frame: number,
+  slot: ProbeSlot,
+): Rgb {
   const position = count <= 1 ? 0 : index / (count - 1);
   switch (pattern) {
     case "solid":
@@ -133,12 +141,20 @@ function pixelAt(pattern: LedTestPatternKind, index: number, count: number, fram
       // Three flat bands — the case where a gamut-clipping bug is legible,
       // which a continuous sweep hides.
       return position < 1 / 3 ? [255, 0, 0] : position < 2 / 3 ? [0, 255, 0] : [0, 0, 255];
+    case "channelProbe":
+      // The whole strip in one primary, as the real probe renders it.
+      return slot === 0 ? [255, 0, 0] : slot === 1 ? [0, 255, 0] : [0, 0, 255];
   }
 }
 
-function edgeSamples(pattern: LedTestPatternKind, frame: number, offset: number): Rgb[] {
+function edgeSamples(
+  pattern: LedTestPatternKind,
+  frame: number,
+  offset: number,
+  slot: ProbeSlot,
+): Rgb[] {
   return Array.from({ length: EDGE_SIGNAL_SAMPLES_PER_EDGE }, (_, i) =>
-    pixelAt(pattern, i + offset, EDGE_SIGNAL_SAMPLES_PER_EDGE * 4, frame),
+    pixelAt(pattern, i + offset, EDGE_SIGNAL_SAMPLES_PER_EDGE * 4, frame, slot),
   );
 }
 
@@ -146,19 +162,20 @@ export function buildEdgeSignalFrame(
   pattern: LedTestPatternKind,
   frame: number,
   source: "test" | "live",
+  slot: ProbeSlot = 0,
 ): EdgeSignalPayload {
   const world = getWorld();
   const ledCount = calibratedLedCount();
   const perEdge = EDGE_SIGNAL_SAMPLES_PER_EDGE;
   return {
-    top: edgeSamples(pattern, frame, 0),
-    right: edgeSamples(pattern, frame, perEdge),
-    bottom: edgeSamples(pattern, frame, perEdge * 2),
-    left: edgeSamples(pattern, frame, perEdge * 3),
-    leds: Array.from({ length: ledCount }, (_, i) => pixelAt(pattern, i, ledCount, frame)),
+    top: edgeSamples(pattern, frame, 0, slot),
+    right: edgeSamples(pattern, frame, perEdge, slot),
+    bottom: edgeSamples(pattern, frame, perEdge * 2, slot),
+    left: edgeSamples(pattern, frame, perEdge * 3, slot),
+    leds: Array.from({ length: ledCount }, (_, i) => pixelAt(pattern, i, ledCount, frame, slot)),
     ledCount,
     hueChannels: world.hue.channels.map((_, i) =>
-      pixelAt(pattern, i, Math.max(world.hue.channels.length, 1), frame),
+      pixelAt(pattern, i, Math.max(world.hue.channels.length, 1), frame, slot),
     ),
     source,
     pattern: source === "test" ? pattern : undefined,
@@ -172,6 +189,8 @@ export function buildEdgeSignalFrame(
 export interface EdgeSignalStreamState {
   running: boolean;
   pattern: LedTestPatternKind;
+  /** Wire slot a `channelProbe` stream lights; ignored by every other pattern. */
+  probeSlot: ProbeSlot;
   source: "test" | "live";
   /** Frames emitted since the stream last started. Drives `seq`. */
   frame: number;
@@ -187,6 +206,7 @@ export interface EdgeSignalStreamState {
 let stream: EdgeSignalStreamState = {
   running: false,
   pattern: "rainbow",
+  probeSlot: 0,
   source: "live",
   frame: 0,
   dropEveryNthFrame: 0,
@@ -217,11 +237,16 @@ function tick(): void {
   setStream({ frame });
   const drop = stream.dropEveryNthFrame;
   if (drop > 1 && frame % drop === 0) return;
-  void emitMockEvent(EDGE_SIGNAL_EVENT, buildEdgeSignalFrame(stream.pattern, frame, stream.source));
+  void emitMockEvent(
+    EDGE_SIGNAL_EVENT,
+    buildEdgeSignalFrame(stream.pattern, frame, stream.source, stream.probeSlot),
+  );
 }
 
 export function startEdgeSignalStream(
-  options?: Partial<Pick<EdgeSignalStreamState, "pattern" | "source" | "dropEveryNthFrame">>,
+  options?: Partial<
+    Pick<EdgeSignalStreamState, "pattern" | "probeSlot" | "source" | "dropEveryNthFrame">
+  >,
 ): void {
   stopEdgeSignalStream();
   setStream({ ...options, running: true, frame: 0 });
@@ -253,15 +278,22 @@ export function currentPreviewStatus(): LedPreviewStatus {
     testActive: running && stream.source === "test",
     source: running ? stream.source : "idle",
     activePattern:
-      running && stream.source === "test" ? patternPayload(stream.pattern) : undefined,
+      running && stream.source === "test"
+        ? patternPayload(stream.pattern, stream.probeSlot)
+        : undefined,
     twinDisplays: [],
     popupVisible: false,
     liveTwinSupported: true,
   };
 }
 
-function patternPayload(kind: LedTestPatternKind): NonNullable<LedPreviewStatus["activePattern"]> {
-  return kind === "solid" || kind === "chase" ? { kind, r: 251, g: 191, b: 36 } : { kind };
+function patternPayload(
+  kind: LedTestPatternKind,
+  slot: ProbeSlot,
+): NonNullable<LedPreviewStatus["activePattern"]> {
+  if (kind === "solid" || kind === "chase") return { kind, r: 251, g: 191, b: 36 };
+  if (kind === "channelProbe") return { kind, slot };
+  return { kind };
 }
 
 export async function emitPreviewState(): Promise<void> {

@@ -18,7 +18,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LED_TEST_PATTERN_KIND } from "@/shared/contracts/preview";
-import { PatternPicker } from "../ui/PatternPicker";
+import { PatternPicker, PICKER_PATTERN_KINDS } from "../ui/PatternPicker";
 
 // ---------------------------------------------------------------------------
 // react-i18next stub — returns the translation key so assertions stay
@@ -68,7 +68,7 @@ describe("PatternPicker — active tile and aria-checked", () => {
   it("the selected pattern tile has aria-checked=true; all others are false", () => {
     renderPicker({ selectedKind: "rainbow" });
 
-    for (const kind of LED_TEST_PATTERN_KIND) {
+    for (const kind of PICKER_PATTERN_KINDS) {
       // Each tile's text content includes the translation key of the kind.
       const tile = screen.getByText(`preview:pattern.${kind}`).closest("button");
       expect(tile).not.toBeNull();
@@ -155,11 +155,24 @@ describe("PatternPicker — running indicator", () => {
   });
 });
 
+describe("PatternPicker — channel probe", () => {
+  // A probe needs a slot the picker cannot ask for; the backend refuses one
+  // without it, so a tile for it would be a button that always fails.
+  it("offers every pattern kind except the channel probe", () => {
+    renderPicker();
+
+    expect(screen.queryByText("preview:pattern.channelProbe")).toBeNull();
+    expect(PICKER_PATTERN_KINDS).toEqual(
+      LED_TEST_PATTERN_KIND.filter((kind) => kind !== "channelProbe"),
+    );
+  });
+});
+
 describe("PatternPicker — disabled prop gates tiles", () => {
   it("all pattern tiles are disabled when disabled=true", () => {
     renderPicker({ disabled: true, selectedKind: "chase" });
 
-    for (const kind of LED_TEST_PATTERN_KIND) {
+    for (const kind of PICKER_PATTERN_KINDS) {
       const tile = screen.getByText(`preview:pattern.${kind}`).closest("button");
       expect(tile).toBeDisabled();
     }

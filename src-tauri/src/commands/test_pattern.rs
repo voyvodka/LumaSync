@@ -112,15 +112,29 @@ impl TestPatternSpeed {
 /// Discriminated union of synthetic test patterns (discriminator `kind`).
 ///
 /// Mirrors the TS `LedTestPattern` union exactly: `solid`/`chase` carry an
-/// explicit RGB triple; `rainbow`/`spiral`/`gamut` are fully procedural.
+/// explicit RGB triple; `rainbow`/`spiral`/`gamut` are fully procedural;
+/// `channelProbe` lights one wire slot (0..=2) across the whole strip.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TestPatternKind {
-    Solid { r: u8, g: u8, b: u8 },
-    Chase { r: u8, g: u8, b: u8 },
+    Solid {
+        r: u8,
+        g: u8,
+        b: u8,
+    },
+    Chase {
+        r: u8,
+        g: u8,
+        b: u8,
+    },
     Rainbow,
     Spiral,
     Gamut,
+    /// Full-frame pure red / green / blue by `slot`. `start_led_test_pattern`
+    /// pins the identity colour order for it and rejects a slot above 2.
+    ChannelProbe {
+        slot: u8,
+    },
 }
 
 impl TestPatternKind {
@@ -133,6 +147,7 @@ impl TestPatternKind {
             TestPatternKind::Rainbow => "rainbow",
             TestPatternKind::Spiral => "spiral",
             TestPatternKind::Gamut => "gamut",
+            TestPatternKind::ChannelProbe { .. } => "channelProbe",
         }
     }
 }
@@ -327,6 +342,9 @@ impl SyntheticFrameSource {
             TestPatternKind::Gamut => {
                 render_gamut(&mut pixels_rgb, w, h);
             }
+            TestPatternKind::ChannelProbe { slot } => {
+                pixels_rgb.resize(w * h, channel_probe_color(slot));
+            }
         }
 
         CapturedFrame {
@@ -471,6 +489,16 @@ fn render_comet(
 /// the perimeter therefore cycles through the spectrum *around the ring* and
 /// the whole rainbow appears to rotate — not a linear left→right sweep (which
 /// left the side edges a constant colour and read as a flat horizontal slide).
+/// Out-of-range slots never reach here (the command rejects them); blue is
+/// only the total-function fallback.
+fn channel_probe_color(slot: u8) -> [u8; 3] {
+    match slot {
+        0 => [255, 0, 0],
+        1 => [0, 255, 0],
+        _ => [0, 0, 255],
+    }
+}
+
 fn render_rainbow(pixels: &mut Vec<[u8; 3]>, w: usize, h: usize, phase: f32) {
     let cx = w as f32 / 2.0;
     let cy = h as f32 / 2.0;
@@ -637,6 +665,36 @@ mod tests {
         assert_eq!(TestPatternKind::Rainbow.tag(), "rainbow");
         assert_eq!(TestPatternKind::Spiral.tag(), "spiral");
         assert_eq!(TestPatternKind::Gamut.tag(), "gamut");
+        assert_eq!(
+            TestPatternKind::ChannelProbe { slot: 0 }.tag(),
+            "channelProbe"
+        );
+    }
+
+    #[test]
+    fn channel_probe_deserializes_with_its_slot() {
+        let probe: TestPatternKind =
+            serde_json::from_str(r#"{"kind":"channelProbe","slot":2}"#).expect("probe");
+        assert_eq!(probe, TestPatternKind::ChannelProbe { slot: 2 });
+        assert!(
+            serde_json::from_str::<TestPatternKind>(r#"{"kind":"channelProbe"}"#).is_err(),
+            "a probe without a slot is not a probe"
+        );
+    }
+
+    #[test]
+    fn channel_probe_fills_the_whole_frame_with_one_primary_per_slot() {
+        for (slot, expected) in [(0, [255, 0, 0]), (1, [0, 255, 0]), (2, [0, 0, 255])] {
+            let mut src = source(
+                TestPatternKind::ChannelProbe { slot },
+                TestPatternSpeed::Med,
+            );
+            let frame = src.capture_frame().expect("frame");
+            assert!(
+                frame.pixels_rgb.iter().all(|p| *p == expected),
+                "slot {slot} must paint every pixel {expected:?}"
+            );
+        }
     }
 
     #[test]

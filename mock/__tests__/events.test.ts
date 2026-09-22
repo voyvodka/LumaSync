@@ -147,6 +147,18 @@ describe("the edge-signal stream", () => {
     stopEdgeSignalStream();
   });
 
+  // A probe without its slot does not type-check against LedTestPattern, and a
+  // twin painted in the wrong primary would teach the wrong answer.
+  it("carries the probe slot and paints the whole strip in that slot's primary", () => {
+    startEdgeSignalStream({ pattern: "channelProbe", probeSlot: 1, source: "test" });
+    expect(currentPreviewStatus().activePattern).toEqual({ kind: "channelProbe", slot: 1 });
+    stopEdgeSignalStream();
+
+    const frame = buildEdgeSignalFrame("channelProbe", 1, "test", 2);
+    expect(frame.leds?.every(([r, g, b]) => r === 0 && g === 0 && b === 255)).toBe(true);
+    expect(frame.pattern).toBe("channelProbe");
+  });
+
   it("restarting replaces the interval rather than stacking a second one", async () => {
     vi.useFakeTimers();
     startEdgeSignalStream({ pattern: "solid", source: "live" });

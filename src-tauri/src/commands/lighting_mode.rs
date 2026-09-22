@@ -2,7 +2,7 @@
 //! the ambilight capture→sample→correct→send worker thread, and the LED
 //! test-pattern preview path that reuses the same worker plumbing.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -32,7 +32,7 @@ use super::led_calibration::{
 use super::led_output::{
     apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_output,
     gamma_luts_for, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, GammaLuts, LedChipType,
-    LedOutputBridge, SerialSink, WirePixelLayout,
+    LedColorOrder, LedOutputBridge, SerialSink, WirePixelLayout,
 };
 use super::led_preview::{
     build_preview_status, emit_preview_state_changed, LedPreviewStatus, LedTwinState,
@@ -185,6 +185,12 @@ pub struct LightingModeConfig {
     /// budget — see `derive_base_interval_ms_for` / `frame_wire_time_ms`.
     #[serde(default)]
     pub chip_type: Option<LedChipType>,
+    /// Host-side colour-order correction relative to the firmware (serial only).
+    /// Absent ⇒ `Rgb`, the identity. Retuned live, not by a worker restart.
+    /// Skipped when absent so the echoed mode stays byte-identical for everyone
+    /// who never set it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_order: Option<LedColorOrder>,
     /// Room-aware Hue sampling input (P3). Absent ⇒ no TV anchor, and the worker
     /// samples exactly as before. Skipped when absent so the echoed mode stays
     /// byte-identical for a user without a TV anchor.
@@ -204,6 +210,7 @@ impl Default for LightingModeConfig {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -279,6 +286,8 @@ struct AmbilightLiveSettings {
     smoothing_alpha: AtomicU32,
     /// Saturation factor as f32 bit pattern. Range [0.5, 2.0]. 1.0 = identity.
     saturation: AtomicU32,
+    /// `LedColorOrder as u8`. Set from every apply, running or starting.
+    color_order: AtomicU8,
 }
 
 impl AmbilightLiveSettings {
@@ -294,7 +303,16 @@ impl AmbilightLiveSettings {
             black_border_detection: AtomicBool::new(black_border_detection),
             smoothing_alpha: AtomicU32::new(clamped_alpha.to_bits()),
             saturation: AtomicU32::new(saturation.clamp(0.5, 2.0).to_bits()),
+            color_order: AtomicU8::new(LedColorOrder::Rgb as u8),
         })
+    }
+
+    fn read_color_order(&self) -> LedColorOrder {
+        LedColorOrder::from_u8(self.color_order.load(Ordering::Relaxed))
+    }
+
+    fn store_color_order(&self, order: LedColorOrder) {
+        self.color_order.store(order as u8, Ordering::Relaxed);
     }
 
     fn read_brightness(&self) -> f32 {
@@ -705,6 +723,7 @@ struct PersistedOutputStamps {
     color_correction: Option<ColorCorrectionConfig>,
     firmware_profile: Option<FirmwareProfile>,
     chip_type: Option<LedChipType>,
+    color_order: Option<LedColorOrder>,
 }
 
 fn parse_output_stamps_from_shell_state(raw: &str) -> PersistedOutputStamps {
@@ -720,6 +739,7 @@ fn parse_output_stamps_from_shell_state(raw: &str) -> PersistedOutputStamps {
         firmware_profile: read("firmwareProfile").and_then(|v| serde_json::from_value(v).ok()),
         // The chip picker persists under `selectedChipType`, not `chipType`.
         chip_type: read("selectedChipType").and_then(|v| serde_json::from_value(v).ok()),
+        color_order: read("ledColorOrder").and_then(|v| serde_json::from_value(v).ok()),
     }
 }
 
@@ -768,6 +788,7 @@ fn maybe_hydrate_output_stamps(
     if payload.color_correction.is_some()
         && payload.firmware_profile.is_some()
         && payload.chip_type.is_some()
+        && payload.color_order.is_some()
     {
         return;
     }
@@ -784,11 +805,15 @@ fn maybe_hydrate_output_stamps(
     if payload.chip_type.is_none() {
         payload.chip_type = stamps.chip_type;
     }
+    if payload.color_order.is_none() {
+        payload.color_order = stamps.color_order;
+    }
     info!(
-        "[preview] output stamps hydrated — correction={} profile={:?} chip={:?}",
+        "[preview] output stamps hydrated — correction={} profile={:?} chip={:?} order={:?}",
         payload.color_correction.is_some(),
         payload.firmware_profile,
         payload.chip_type,
+        payload.color_order,
     );
 }
 
@@ -799,6 +824,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
     let color_correction = config.color_correction.clone();
     let firmware_profile = config.firmware_profile;
     let chip_type = config.chip_type;
+    let color_order = config.color_order;
     match config.kind {
         LightingModeKind::Off => LightingModeConfig {
             targets,
@@ -806,6 +832,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
             color_correction,
             firmware_profile,
             chip_type,
+            color_order,
             ..LightingModeConfig::default()
         },
         LightingModeKind::Ambilight => {
@@ -827,6 +854,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 color_correction,
                 firmware_profile,
                 chip_type,
+                color_order,
                 // Only the ambilight worker samples by room; Off and Solid drop it.
                 room_geometry: config.room_geometry,
             }
@@ -853,6 +881,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 color_correction,
                 firmware_profile,
                 chip_type,
+                color_order,
                 room_geometry: None,
             }
         }
@@ -1393,6 +1422,14 @@ impl ActiveUsbSink {
         }
     }
 
+    /// WLED owns its colour order on the device, so only serial reorders.
+    fn set_color_order(&mut self, order: LedColorOrder) {
+        match self {
+            Self::Serial(s) => s.set_color_order(order),
+            Self::Wled(_) => {}
+        }
+    }
+
     fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
         match self {
             Self::Serial(s) => s.send_frame(colors),
@@ -1591,8 +1628,8 @@ fn start_ambilight_worker(
         telemetry_window.record_slot_overwrite();
     }
 
-    // Built once at worker start; brightness is synced each iteration via
-    // `set_brightness` before `send_frame`.
+    // Built once at worker start; brightness and colour order are synced each
+    // iteration via `set_brightness` / `set_color_order` before `send_frame`.
     let mut usb_sink: Option<ActiveUsbSink> = usb_plan.as_ref().map(|plan| match plan {
         UsbOutputPlan::Serial(port) => ActiveUsbSink::Serial(SerialSink::with_chip_type(
             output_bridge.clone(),
@@ -1616,6 +1653,7 @@ fn start_ambilight_worker(
         let initial_brightness = live_settings.read_brightness();
         if let Some(ref mut sink) = usb_sink {
             sink.set_brightness(initial_brightness);
+            sink.set_color_order(live_settings.read_color_order());
         }
         let initial_sent =
             quality_state.try_send_latest(&mut frame_slot, Instant::now(), |frame| {
@@ -1750,6 +1788,7 @@ fn start_ambilight_worker(
                 // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
                 border_cache.set_enabled(live_settings.read_black_border_detection());
                 let brightness = live_settings.read_brightness();
+                let color_order = live_settings.read_color_order();
                 let saturation = live_settings.read_saturation();
                 // Update black border detection cache from the raw (uncropped) frame.
                 border_cache.update_if_due(&raw_frame);
@@ -1790,6 +1829,7 @@ fn start_ambilight_worker(
                     // USB send path: sync brightness then dispatch via LedSink trait.
                     if let Some(ref mut sink) = usb_sink {
                         sink.set_brightness(brightness);
+                        sink.set_color_order(color_order);
                     }
                     // Capture the per-frame led_count for the diagnostic log
                     // BEFORE handing the slice to the closure (the closure
@@ -2142,6 +2182,8 @@ fn apply_mode_change_inner(
     // restart — each is read only when the encoder is built, so retuning atomics ignores them.
     // room_geometry deliberately does NOT: the worker re-reads it from `room_geometry_live`, so
     // it is written into that cell below instead — adding it here would restart per drag commit.
+    // color_order does NOT either: the worker re-reads it from `ambilight_live` every frame, and a
+    // restart would re-open capture for what is a byte shuffle.
     if normalized_next.kind == LightingModeKind::Ambilight
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
@@ -2183,6 +2225,9 @@ fn apply_mode_change_inner(
                 next_saturation,
                 cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
             );
+            // Unconditional: the atomic is the worker's only copy, so it must
+            // follow every apply, including one that returns to the default.
+            live.store_color_order(normalized_next.color_order.unwrap_or_default());
             if normalized_next.room_geometry != owner.active_mode.room_geometry {
                 if let Some(cell) = &owner.room_geometry_live {
                     log::info!(
@@ -2299,7 +2344,8 @@ fn apply_mode_change_inner(
                             solid_chip,
                             payload.brightness,
                             &solid_triplets,
-                            &EncoderPlan::new(&solid_corrections),
+                            &EncoderPlan::new(&solid_corrections)
+                                .with_color_order(normalized_next.color_order.unwrap_or_default()),
                         );
                         owner
                             .output_bridge
@@ -2416,6 +2462,7 @@ fn apply_mode_change_inner(
                     .lighting_smoothing_preset
                     .or(ambilight_cfg.hue_intensity_preset),
             );
+            live_settings.store_color_order(normalized_next.color_order.unwrap_or_default());
 
             info!("[apply_mode_change] starting ambilight — needs_usb={needs_usb} needs_hue={needs_hue} hue_output={}", hue_output.is_some());
 
@@ -2959,6 +3006,17 @@ pub fn start_led_test_pattern<R: Runtime>(
             ),
         });
     }
+    if matches!(payload.pattern, TestPatternKind::ChannelProbe { slot } if slot > 2) {
+        return Ok(LedTestPatternResult {
+            active: false,
+            preview_only: false,
+            status: command_status(
+                LED_TEST_PATTERN_INVALID_PARAMS,
+                "Channel probe slot must be 0, 1 or 2.",
+                None,
+            ),
+        });
+    }
 
     let test_config = TestPatternConfig {
         kind: payload.pattern.clone(),
@@ -3012,6 +3070,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         color_correction: None,
         firmware_profile: None,
         chip_type: None,
+        color_order: test_pattern_color_order(&payload.pattern),
         room_geometry: None,
     };
 
@@ -3103,6 +3162,17 @@ pub fn start_led_test_pattern<R: Runtime>(
     Ok(outcome)
 }
 
+/// The colour order a test pattern pins, overriding the saved one (caller-wins
+/// hydration keeps it). A channel probe lights one wire slot so the user can
+/// say which colour appears, which only means something when nothing reorders
+/// the slots. Every other pattern keeps the saved order, like any output.
+fn test_pattern_color_order(kind: &TestPatternKind) -> Option<LedColorOrder> {
+    match kind {
+        TestPatternKind::ChannelProbe { .. } => Some(LedColorOrder::Rgb),
+        _ => None,
+    }
+}
+
 /// A test pattern reaches the lights through either arm of `apply_mode_change`:
 /// a fresh worker, or the in-place retune a running test takes. Accepting only
 /// the former reported every change after the first as a failed start.
@@ -3123,6 +3193,7 @@ fn restore_mode_after_test(
     restore.chip_type = None;
     restore.firmware_profile = None;
     restore.color_correction = None;
+    restore.color_order = None;
     if let Some(snapshot_calibration) = restore.led_calibration.take() {
         maybe_hydrate_led_calibration(&mut restore, load);
         if restore.led_calibration.is_none() {
@@ -3303,9 +3374,10 @@ mod tests {
     use super::{
         apply_mode_change, resolve_quality_config, set_active_port, start_ambilight_worker,
         stop_previous, AmbilightLiveSettings, AmbilightPayload, AmbilightWorkerQualityState,
-        FirmwareProfile, LedChipType, LightingModeConfig, LightingModeKind, LightingRuntimeOwner,
-        SerialSendBudget, SolidColorPayload, UsbOutputPlan, ACTIVE_AMBILIGHT_WORKERS,
-        AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
+        FirmwareProfile, LedChipType, LedColorOrder, LightingModeConfig, LightingModeKind,
+        LightingRuntimeOwner, SerialSendBudget, SolidColorPayload, UsbOutputPlan,
+        ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS,
+        SOLID_OUTPUT_ATTEMPTS,
     };
 
     // -----------------------------------------------------------------------
@@ -3557,6 +3629,7 @@ mod tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -3577,6 +3650,7 @@ mod tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -4321,6 +4395,7 @@ mod tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -4420,6 +4495,192 @@ mod tests {
         stop_previous(&mut owner, &mut cleanup_trace);
         wait_for_worker_count(0);
     }
+
+    // -----------------------------------------------------------------------
+    // Colour order — read live by the worker, not by a restart
+    // -----------------------------------------------------------------------
+
+    fn owner_with_red_frame() -> (LightingRuntimeOwner, Arc<FakeLedSender>) {
+        let recorder: Arc<FakeLedSender> = Arc::new(FakeLedSender::default());
+        let owner = LightingRuntimeOwner {
+            active_mode: LightingModeConfig::default(),
+            active_port: None,
+            worker: None,
+            ambilight_live: None,
+            room_geometry_live: None,
+            output_bridge: LedOutputBridge::from_sender(recorder.clone()),
+            preview: Default::default(),
+            frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
+                Ok(Box::new(FakeFrameSource {
+                    frame: CapturedFrame {
+                        width: 4,
+                        height: 4,
+                        pixels_rgb: vec![[255, 0, 0]; 16],
+                    },
+                    fail_with_unavailable: false,
+                }))
+            }),
+        };
+        (owner, recorder)
+    }
+
+    /// Red dominates wire slot 0 under the identity order and slot 2 under
+    /// BGR; the scene stage may blend, but it cannot swap which slot leads.
+    fn first_pixel(packet: &[u8]) -> [u8; 3] {
+        [packet[5], packet[6], packet[7]]
+    }
+
+    fn apply_on(
+        owner: &mut LightingRuntimeOwner,
+        mode: LightingModeConfig,
+    ) -> super::LightingModeCommandResult {
+        apply_mode_change(
+            owner,
+            mode,
+            true,
+            Some("COM-ORDER"),
+            None,
+            None,
+            Some(shared_runtime_telemetry()),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn a_color_order_change_retunes_the_running_worker_in_place() {
+        let _guard = acquire_worker_test_guard();
+        let (mut owner, recorder) = owner_with_red_frame();
+        let mode = ambilight_mode_with_calibration(8);
+
+        assert_eq!(
+            apply_on(&mut owner, mode.clone()).status.code,
+            "AMBILIGHT_MODE_STARTED"
+        );
+        let live = Arc::clone(owner.ambilight_live.as_ref().expect("live after start"));
+        let [r, _, b] = first_pixel(&recorder.writes.lock().unwrap()[0].1);
+        assert!(r > b, "identity order leaves red in slot 0");
+
+        let reordered = LightingModeConfig {
+            color_order: Some(LedColorOrder::Bgr),
+            ..mode.clone()
+        };
+        let result = apply_on(&mut owner, reordered);
+        assert_eq!(
+            result.status.code, "AMBILIGHT_MODE_UPDATED",
+            "a colour-order change must not restart the worker"
+        );
+        assert!(Arc::ptr_eq(&live, owner.ambilight_live.as_ref().unwrap()));
+        assert_eq!(live.read_color_order(), LedColorOrder::Bgr);
+        assert_eq!(result.mode.color_order, Some(LedColorOrder::Bgr));
+
+        let seen = recorder.writes.lock().unwrap().len();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let reached_the_wire = loop {
+            let reordered_frame =
+                recorder.writes.lock().unwrap()[seen..]
+                    .iter()
+                    .any(|(_, packet)| {
+                        let [r, _, b] = first_pixel(packet);
+                        b > r
+                    });
+            if reordered_frame || Instant::now() > deadline {
+                break reordered_frame;
+            }
+            thread::sleep(Duration::from_millis(20));
+        };
+        assert!(reached_the_wire, "the running worker sends red in slot 2");
+
+        assert_eq!(
+            apply_on(&mut owner, mode).status.code,
+            "AMBILIGHT_MODE_UPDATED"
+        );
+        assert_eq!(
+            live.read_color_order(),
+            LedColorOrder::Rgb,
+            "dropping the order returns to the identity"
+        );
+
+        let mut cleanup_trace = None;
+        stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_worker_count(0);
+    }
+
+    /// The first frame is sent before the loop starts; without its own
+    /// `set_color_order` it would go out in the identity order.
+    #[test]
+    fn the_first_frame_already_carries_the_color_order() {
+        let _guard = acquire_worker_test_guard();
+        let (mut owner, recorder) = owner_with_red_frame();
+        let mode = LightingModeConfig {
+            color_order: Some(LedColorOrder::Bgr),
+            ..ambilight_mode_with_calibration(8)
+        };
+
+        assert_eq!(
+            apply_on(&mut owner, mode).status.code,
+            "AMBILIGHT_MODE_STARTED"
+        );
+        let [r, _, b] = first_pixel(&recorder.writes.lock().unwrap()[0].1);
+        assert!(b > r, "the synchronous first send is already reordered");
+
+        let mut cleanup_trace = None;
+        stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_worker_count(0);
+    }
+
+    #[test]
+    fn solid_writes_in_the_requested_color_order() {
+        let (mut owner, recorder) = owner_with_red_frame();
+        let mode = LightingModeConfig {
+            kind: LightingModeKind::Solid,
+            solid: Some(SolidColorPayload {
+                r: 255,
+                g: 0,
+                b: 0,
+                brightness: 1.0,
+            }),
+            targets: Some(vec!["usb".to_string()]),
+            led_calibration: Some(ambilight_calibration_with_total_leds(4)),
+            color_order: Some(LedColorOrder::Gbr),
+            ..LightingModeConfig::default()
+        };
+        assert_eq!(apply_on(&mut owner, mode).status.code, "SOLID_MODE_APPLIED");
+        let writes = recorder.writes.lock().unwrap();
+        assert_eq!(first_pixel(&writes[0].1), [0, 0, 255]);
+    }
+
+    /// WLED has its own colour-order setting on the device; reordering here
+    /// too would apply the correction twice.
+    #[test]
+    fn a_wled_sink_ignores_the_color_order() {
+        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        receiver
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("read timeout");
+        let config = WledSinkConfig {
+            ip: "127.0.0.1".parse().expect("valid IPv4"),
+            port: receiver.local_addr().expect("addr").port(),
+            led_count: 2,
+            protocol: WledProtocol::Ddp,
+        };
+        let mut sink = super::ActiveUsbSink::Wled(Box::new(super::CorrectedWledSink::new(
+            config.build(),
+            Default::default(),
+        )));
+        sink.start().expect("start");
+
+        let pixels = |sink: &mut super::ActiveUsbSink| {
+            sink.send_frame(&[[255, 0, 0], [0, 0, 255]]).expect("send");
+            let mut buf = [0_u8; 64];
+            let n = receiver.recv(&mut buf).expect("datagram");
+            buf[10..n].to_vec()
+        };
+        assert_eq!(pixels(&mut sink), vec![255, 0, 0, 0, 0, 255]);
+        sink.set_color_order(LedColorOrder::Bgr);
+        assert_eq!(pixels(&mut sink), vec![255, 0, 0, 0, 0, 255]);
+        sink.stop().expect("stop");
+    }
 }
 
 #[cfg(test)]
@@ -4433,7 +4694,7 @@ mod lighting_mode_tests {
     use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 
     use super::{
-        apply_mode_change, normalize_mode_config, AmbilightPayload, LedChipType,
+        apply_mode_change, normalize_mode_config, AmbilightPayload, LedChipType, LedColorOrder,
         LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SolidColorPayload,
         TestPatternConfig, TestPatternKind, TestPatternSpeed,
     };
@@ -4573,6 +4834,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -4593,6 +4855,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -4702,6 +4965,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -5174,6 +5438,7 @@ mod lighting_mode_tests {
             color_correction: Some(corrections.clone()),
             firmware_profile: Some(profile),
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         };
 
@@ -5206,6 +5471,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         };
 
@@ -5238,6 +5504,7 @@ mod lighting_mode_tests {
             color_correction: Some(ColorCorrectionConfig::default()),
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         };
 
@@ -5360,6 +5627,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -5935,6 +6203,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            color_order: None,
             room_geometry: None,
         }
     }
@@ -6680,5 +6949,116 @@ mod lighting_mode_tests {
         let ctx = super::build_preview_emit_context(true, None, None, None)
             .expect("a test always yields an emit context");
         assert!(ctx.should_enrich());
+    }
+
+    // -----------------------------------------------------------------------
+    // Colour order — contract, persistence, hydration, test patterns
+    // -----------------------------------------------------------------------
+
+    const BGR_SHELL_STATE: &str = r#"{"shell-state":{"ledColorOrder":"bgr"}}"#;
+
+    #[test]
+    fn color_order_round_trips_as_color_order_and_is_omitted_when_absent() {
+        let parsed: LightingModeConfig =
+            serde_json::from_str(r#"{"kind":"ambilight","colorOrder":"grb"}"#).expect("parse");
+        assert_eq!(parsed.color_order, Some(LedColorOrder::Grb));
+        let echoed = serde_json::to_value(&parsed).expect("serialize");
+        assert_eq!(echoed["colorOrder"], serde_json::json!("grb"));
+
+        let plain = serde_json::to_value(LightingModeConfig::default()).expect("serialize");
+        assert!(
+            plain.get("colorOrder").is_none(),
+            "an unset order keeps the echoed mode byte-identical"
+        );
+    }
+
+    /// The order is persisted under `ledColorOrder`; the IPC field name
+    /// `colorOrder` is not a shell-state key and must not be read as one.
+    #[test]
+    fn output_stamps_read_the_persisted_color_order_key() {
+        assert_eq!(
+            super::parse_output_stamps_from_shell_state(BGR_SHELL_STATE).color_order,
+            Some(LedColorOrder::Bgr)
+        );
+        assert_eq!(
+            super::parse_output_stamps_from_shell_state(r#"{"shell-state":{"colorOrder":"bgr"}}"#)
+                .color_order,
+            None
+        );
+    }
+
+    /// A payload with every other stamp still has to read the order off disk —
+    /// the all-present early return must count it.
+    #[test]
+    fn hydration_fills_the_color_order_even_when_every_other_stamp_is_set() {
+        let mut stamped = solid_with_calibration(10);
+        stamped.color_correction = Some(ColorCorrectionConfig::default());
+        stamped.firmware_profile = Some(FirmwareProfile::LumaSyncV1);
+        stamped.chip_type = Some(LedChipType::Ws2812bGrb);
+        let hydrated = hydrated_like_set_lighting_mode(stamped, BGR_SHELL_STATE);
+        assert_eq!(hydrated.color_order, Some(LedColorOrder::Bgr));
+    }
+
+    #[test]
+    fn hydration_never_overrides_a_stamped_color_order() {
+        let mut stamped = solid_with_calibration(10);
+        stamped.color_order = Some(LedColorOrder::Rgb);
+        let hydrated = hydrated_like_set_lighting_mode(stamped, BGR_SHELL_STATE);
+        assert_eq!(hydrated.color_order, Some(LedColorOrder::Rgb));
+    }
+
+    #[test]
+    fn normalize_mode_config_carries_the_color_order_for_every_kind() {
+        for kind in [
+            LightingModeKind::Off,
+            LightingModeKind::Solid,
+            LightingModeKind::Ambilight,
+        ] {
+            let label = format!("{kind:?}");
+            let config = LightingModeConfig {
+                kind,
+                color_order: Some(LedColorOrder::Brg),
+                ..LightingModeConfig::default()
+            };
+            assert_eq!(
+                normalize_mode_config(config).color_order,
+                Some(LedColorOrder::Brg),
+                "{label}"
+            );
+        }
+    }
+
+    /// The probe asks "which colour is slot N?", which a saved order would
+    /// answer for the user. Every other pattern keeps the saved order.
+    #[test]
+    fn a_channel_probe_pins_the_identity_order_over_the_saved_one() {
+        let hydrate_test = |kind: TestPatternKind| {
+            let mut config = solid_with_calibration(10);
+            config.color_order = super::test_pattern_color_order(&kind);
+            hydrated_like_set_lighting_mode(config, BGR_SHELL_STATE).color_order
+        };
+        assert_eq!(
+            hydrate_test(TestPatternKind::ChannelProbe { slot: 1 }),
+            Some(LedColorOrder::Rgb)
+        );
+        assert_eq!(
+            hydrate_test(TestPatternKind::Chase { r: 255, g: 0, b: 0 }),
+            Some(LedColorOrder::Bgr)
+        );
+    }
+
+    #[test]
+    fn stopping_a_test_re_reads_the_color_order() {
+        let mut prior = solid_with_calibration(10);
+        prior.color_order = Some(LedColorOrder::Grb);
+
+        let restored = restored_after_test(prior.clone(), BGR_SHELL_STATE.to_string());
+        assert_eq!(restored.color_order, Some(LedColorOrder::Bgr));
+
+        let restored = restored_after_test(prior, r#"{"shell-state":{}}"#.to_string());
+        assert_eq!(
+            restored.color_order, None,
+            "an order cleared on disk mid-test is not revived from the snapshot"
+        );
     }
 }

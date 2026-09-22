@@ -84,6 +84,58 @@ pub enum LedChipType {
     Sk6812Rgbw,
 }
 
+/// Host-side colour-order correction, applied on top of whatever order the
+/// firmware already reorders into — not the strip's datasheet order. `Rgb` is
+/// the identity and leaves every byte as it was before the setting existed.
+///
+/// Wire slot `i` carries logical channel `order[i]`, after the correction
+/// LUTs. On SK6812 RGBW it permutes R'G'B' only; W stays in the fourth slot.
+/// Serial only: WLED owns its colour order on the device.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+#[repr(u8)]
+pub enum LedColorOrder {
+    #[default]
+    Rgb,
+    Rbg,
+    Grb,
+    Gbr,
+    Brg,
+    Bgr,
+}
+
+impl LedColorOrder {
+    /// Which logical channel (0 R, 1 G, 2 B) each wire slot carries.
+    pub fn source_slots(self) -> [usize; 3] {
+        match self {
+            Self::Rgb => [0, 1, 2],
+            Self::Rbg => [0, 2, 1],
+            Self::Grb => [1, 0, 2],
+            Self::Gbr => [1, 2, 0],
+            Self::Brg => [2, 0, 1],
+            Self::Bgr => [2, 1, 0],
+        }
+    }
+
+    /// Inverse of `self as u8`, for the worker's live atomic. Unknown ⇒ `Rgb`.
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            1 => Self::Rbg,
+            2 => Self::Grb,
+            3 => Self::Gbr,
+            4 => Self::Brg,
+            5 => Self::Bgr,
+            _ => Self::Rgb,
+        }
+    }
+
+    #[inline(always)]
+    fn permute(self, channels: [u8; 3]) -> [u8; 3] {
+        let [x, y, z] = self.source_slots();
+        [channels[x], channels[y], channels[z]]
+    }
+}
+
 /// The pixel layout a profile + chip pair actually puts on the wire.
 ///
 /// SK6812 RGBW is only encodable under LumaSync v1: Adalight has no provision
@@ -409,6 +461,9 @@ pub struct EncoderPlan {
     kelvin_muls: Option<[f32; 3]>,
     /// `None` at 1.0, the identity.
     saturation: Option<f32>,
+    /// Unlike the fields above, retunable on a running sink: it costs nothing
+    /// to change, so it is patched in place rather than rebuilding the plan.
+    color_order: LedColorOrder,
 }
 
 impl EncoderPlan {
@@ -430,6 +485,27 @@ impl EncoderPlan {
             luts,
             kelvin_muls,
             saturation,
+            color_order: LedColorOrder::Rgb,
+        }
+    }
+
+    pub fn with_color_order(mut self, order: LedColorOrder) -> Self {
+        self.color_order = order;
+        self
+    }
+
+    /// Patches only the order; the LUTs and the other stages are untouched.
+    pub fn set_color_order(&mut self, order: LedColorOrder) {
+        self.color_order = order;
+    }
+
+    /// Corrected pixel in wire slot order. `Rgb` returns `correct` unchanged.
+    #[inline(always)]
+    fn wire_rgb(&self, pixel: [u8; 3]) -> [u8; 3] {
+        let corrected = self.correct(pixel);
+        match self.color_order {
+            LedColorOrder::Rgb => corrected,
+            order => order.permute(corrected),
         }
     }
 
@@ -734,7 +810,7 @@ pub fn encode_lumasync_v1_packet(
     packet.extend_from_slice(&led_count.to_le_bytes());
 
     for &pixel in rgb_triplets {
-        packet.extend_from_slice(&plan.correct(pixel));
+        packet.extend_from_slice(&plan.wire_rgb(pixel));
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
@@ -791,7 +867,7 @@ pub fn encode_adalight_packet(
     packet.push(header_checksum);
 
     for &pixel in rgb_triplets {
-        let [r, g, b] = plan.correct(pixel);
+        let [r, g, b] = plan.wire_rgb(pixel);
         packet.extend_from_slice(&[scale(r), scale(g), scale(b)]);
     }
 
@@ -886,7 +962,9 @@ pub fn encode_sk6812_packet(
 
     for &pixel in rgb_triplets {
         // W is extracted after correction, so it never passes through the LUT.
-        packet.extend_from_slice(&extract_rgbw(plan.correct(pixel)));
+        // min() ignores channel order, so reordering first permutes R'G'B'
+        // exactly and W stays in the fourth slot.
+        packet.extend_from_slice(&extract_rgbw(plan.wire_rgb(pixel)));
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
@@ -948,6 +1026,7 @@ pub struct SerialSink {
     profile: FirmwareProfile,
     // Corrections never change under a running sink — a new config restarts
     // the worker, which builds a new sink — so the plan is built exactly once.
+    // Only its colour order is patched live, via `set_color_order`.
     plan: EncoderPlan,
     chip_type: LedChipType,
 }
@@ -996,6 +1075,11 @@ impl SerialSink {
     /// with the live `AmbilightLiveSettings` atomic.
     pub fn set_brightness(&mut self, brightness: f32) {
         self.brightness = brightness.clamp(0.0, 1.0);
+    }
+
+    /// Retune the colour order in place, next to `set_brightness`.
+    pub fn set_color_order(&mut self, order: LedColorOrder) {
+        self.plan.set_color_order(order);
     }
 
     #[cfg(test)]
@@ -1052,7 +1136,8 @@ mod tests {
         encode_led_packet_with_kelvin, encode_lumasync_v1_packet, encode_packet_for_output,
         encode_packet_for_profile, encode_sk6812_packet, extract_rgbw, kelvin_to_rgb_multipliers,
         send_ambilight_frame, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
-        LedOutputBridge, LedOutputError, LedPacketSender, SerialSink, WirePixelLayout,
+        LedColorOrder, LedOutputBridge, LedOutputError, LedPacketSender, SerialSink,
+        WirePixelLayout,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -2160,5 +2245,150 @@ mod tests {
             WirePixelLayout::for_output(FirmwareProfile::Adalight, LedChipType::Sk6812Rgbw),
             WirePixelLayout::Rgb,
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Colour order
+    // ---------------------------------------------------------------------------
+
+    const ORDER_FRAME: [[u8; 3]; 3] = [[200, 100, 50], [10, 20, 30], [255, 128, 0]];
+
+    fn linear_plan() -> EncoderPlan {
+        EncoderPlan::new(&ColorCorrectionConfig {
+            gamma_r: 1.0,
+            gamma_g: 1.0,
+            gamma_b: 1.0,
+            kelvin: 6500,
+            saturation: 1.0,
+        })
+    }
+
+    /// The pixel bytes of each encoder at the default order, pinned as literals
+    /// so the identity order cannot drift from what shipped before it existed.
+    #[test]
+    fn default_color_order_keeps_every_encoder_byte_identical() {
+        let lumasync = [0xAA, 0x55, 127, 3, 0, 149, 33, 7, 0, 1, 2, 255, 56, 0, 244];
+        let adalight = [0x41, 0x64, 0x61, 0, 2, 87, 75, 17, 4, 0, 1, 1, 128, 28, 0];
+        let sk6812 = [
+            0xAA, 0x55, 127, 3, 0, 142, 26, 0, 7, 0, 1, 2, 0, 255, 56, 0, 0, 212,
+        ];
+        for plan in [
+            EncoderPlan::default(),
+            EncoderPlan::default().with_color_order(LedColorOrder::Rgb),
+        ] {
+            assert_eq!(
+                encode_lumasync_v1_packet(0.5, &ORDER_FRAME, &plan),
+                lumasync.to_vec()
+            );
+            assert_eq!(
+                encode_adalight_packet(0.5, &ORDER_FRAME, &plan),
+                adalight.to_vec()
+            );
+            assert_eq!(
+                encode_sk6812_packet(0.5, &ORDER_FRAME, &plan),
+                sk6812.to_vec()
+            );
+        }
+        // The literals are the shared correction pipeline, not whatever the
+        // encoder happens to produce today.
+        for (i, &pixel) in ORDER_FRAME.iter().enumerate() {
+            let (r, g, b) = apply_color_correction_rgb(
+                (pixel[0], pixel[1], pixel[2]),
+                &ColorCorrectionConfig::default(),
+            );
+            assert_eq!(&lumasync[5 + i * 3..8 + i * 3], &[r, g, b]);
+        }
+    }
+
+    #[test]
+    fn every_color_order_permutes_the_wire_slots() {
+        let cases = [
+            (LedColorOrder::Rgb, [1, 2, 3]),
+            (LedColorOrder::Rbg, [1, 3, 2]),
+            (LedColorOrder::Grb, [2, 1, 3]),
+            (LedColorOrder::Gbr, [2, 3, 1]),
+            (LedColorOrder::Brg, [3, 1, 2]),
+            (LedColorOrder::Bgr, [3, 2, 1]),
+        ];
+        for (order, wire) in cases {
+            let plan = linear_plan().with_color_order(order);
+            let v1 = encode_lumasync_v1_packet(1.0, &[[1, 2, 3]], &plan);
+            assert_eq!(&v1[5..8], &wire, "{order:?} on LumaSync v1");
+            assert_eq!(
+                *v1.last().unwrap(),
+                v1[..v1.len() - 1].iter().fold(0, |acc, b| acc ^ b),
+                "{order:?}: the checksum covers the reordered bytes"
+            );
+            let ada = encode_adalight_packet(1.0, &[[1, 2, 3]], &plan);
+            assert_eq!(&ada[6..9], &wire, "{order:?} on Adalight");
+        }
+    }
+
+    #[test]
+    fn rgbw_reorders_rgb_and_keeps_w_in_the_fourth_slot() {
+        // Linear: corrected == input, so W = min(200, 100, 50) = 50 and
+        // R'G'B' = 150, 50, 0 before the order is applied.
+        let cases = [
+            (LedColorOrder::Rgb, [150, 50, 0, 50]),
+            (LedColorOrder::Grb, [50, 150, 0, 50]),
+            (LedColorOrder::Bgr, [0, 50, 150, 50]),
+            (LedColorOrder::Brg, [0, 150, 50, 50]),
+        ];
+        for (order, wire) in cases {
+            let plan = linear_plan().with_color_order(order);
+            let packet = encode_sk6812_packet(1.0, &[[200, 100, 50]], &plan);
+            assert_eq!(&packet[5..9], &wire, "{order:?} on SK6812");
+        }
+    }
+
+    #[test]
+    fn color_order_serde_and_u8_round_trip() {
+        for (order, wire) in [
+            (LedColorOrder::Rgb, "\"rgb\""),
+            (LedColorOrder::Rbg, "\"rbg\""),
+            (LedColorOrder::Grb, "\"grb\""),
+            (LedColorOrder::Gbr, "\"gbr\""),
+            (LedColorOrder::Brg, "\"brg\""),
+            (LedColorOrder::Bgr, "\"bgr\""),
+        ] {
+            assert_eq!(serde_json::to_string(&order).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<LedColorOrder>(wire).unwrap(), order);
+            assert_eq!(LedColorOrder::from_u8(order as u8), order);
+        }
+        assert_eq!(LedColorOrder::from_u8(6), LedColorOrder::Rgb);
+        assert_eq!(LedColorOrder::from_u8(u8::MAX), LedColorOrder::Rgb);
+    }
+
+    /// A live order change must not rebuild the LUTs — a non-default gamma
+    /// costs 768 `powf`s, and the worker applies the order every frame.
+    #[test]
+    fn serial_sink_set_color_order_patches_only_the_order() {
+        let sender = Arc::new(FakeSender::successful());
+        let mut sink = SerialSink::with_chip_type(
+            LedOutputBridge::from_sender(sender.clone()),
+            Some("COM-ORDER".to_string()),
+            1.0,
+            FirmwareProfile::LumaSyncV1,
+            ColorCorrectionConfig {
+                gamma_r: 1.0,
+                gamma_g: 1.0,
+                gamma_b: 1.0,
+                ..ColorCorrectionConfig::default()
+            },
+            LedChipType::Ws2812bGrb,
+        );
+        let luts = sink.plan_luts_ptr();
+        sink.send_frame(&[[1, 2, 3]]).expect("send");
+        sink.set_color_order(LedColorOrder::Bgr);
+        assert_eq!(
+            sink.plan_luts_ptr(),
+            luts,
+            "the LUTs are reused, not rebuilt"
+        );
+        sink.send_frame(&[[1, 2, 3]]).expect("send");
+
+        let writes = sender.writes();
+        assert_eq!(&writes[0].1[5..8], &[1, 2, 3]);
+        assert_eq!(&writes[1].1[5..8], &[3, 2, 1]);
     }
 }

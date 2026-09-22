@@ -106,6 +106,8 @@ const REQUIRED_V15_STATE_FIELDS = [
   "updateChannel",
   "selectedChipType",
   "dontWarnFirmwareProfileMismatch",
+  // Colour-order correction; additive like the rest, absent ⇒ "rgb".
+  "ledColorOrder",
 ];
 
 /** v1.5 contract surface that must be exported alongside the new fields. */
@@ -1165,6 +1167,71 @@ check(
     && lightingSource.includes("isLightingModeGateCode"),
   "LIGHTING_MODE_GATE_STATUS + isLightingModeGateCode exported",
   "MISSING LIGHTING_MODE_GATE_STATUS / isLightingModeGateCode in lighting.ts"
+);
+
+// ---------------------------------------------------------------------------
+// LED colour order — derived Rust ↔ device.ts parity. Unlike the chip-type
+// block above (presence only), the values are read from both sides: a variant
+// added in Rust without its TS twin would deserialise from nothing the UI can
+// send, and one added only in TS would be a serde rejection at the IPC boundary.
+// ---------------------------------------------------------------------------
+console.log("\n[ LED colour order — Rust ↔ device.ts parity ]");
+const rustLedOutputSource = readOrEmpty(
+  resolve(ROOT, "src-tauri/src/commands/led_output.rs"),
+  "rust led_output"
+);
+const rustColorOrderBlock = rustLedOutputSource.match(
+  /pub enum LedColorOrder\s*\{([\s\S]*?)\n\}/
+);
+const rustColorOrders = rustColorOrderBlock
+  ? [...rustColorOrderBlock[1].matchAll(/^\s*([A-Z][A-Za-z]*),/gm)].map((m) => m[1].toLowerCase())
+  : [];
+const tsColorOrderBlock = deviceSource.match(/LED_COLOR_ORDER\s*=\s*\{([\s\S]*?)\}\s*as const/);
+const tsColorOrders = tsColorOrderBlock
+  ? [...tsColorOrderBlock[1].matchAll(/:\s*"([a-z]+)"/g)].map((m) => m[1])
+  : [];
+check(
+  rustColorOrders.length > 0 && tsColorOrders.length > 0,
+  `extracted ${rustColorOrders.length} Rust / ${tsColorOrders.length} TS colour orders`,
+  "EXTRACTION FAILED: could not read Rust LedColorOrder or TS LED_COLOR_ORDER"
+);
+check(
+  rustColorOrders.join(",") === tsColorOrders.join(","),
+  `LED_COLOR_ORDER matches Rust LedColorOrder in order (${tsColorOrders.join(" ")})`,
+  `COLOUR ORDER DRIFT:\n     Rust: ${rustColorOrders.join(" ")}\n     TS  : ${tsColorOrders.join(" ")}`
+);
+// The backend hydrates the order straight off disk, so the key it reads and
+// the key the frontend writes must be the same string.
+check(
+  source.includes("ledColorOrder?:") && rustLightingProduction.includes('read("ledColorOrder")'),
+  "ShellState.ledColorOrder is the key lighting_mode.rs hydrates from",
+  "PERSISTED KEY DRIFT: ShellState.ledColorOrder and lighting_mode.rs read(\"ledColorOrder\") disagree"
+);
+
+console.log("\n[ LED test pattern kinds — Rust ↔ preview.ts parity ]");
+const rustTestPatternSource = readOrEmpty(
+  resolve(ROOT, "src-tauri/src/commands/test_pattern.rs"),
+  "rust test_pattern"
+);
+const rustPatternBlock = rustTestPatternSource.match(/pub enum TestPatternKind\s*\{([\s\S]*?)\n\}/);
+const rustPatternKinds = rustPatternBlock
+  ? [...rustPatternBlock[1].matchAll(/^    ([A-Z][A-Za-z]*)\b/gm)].map(
+      (m) => m[1][0].toLowerCase() + m[1].slice(1)
+    )
+  : [];
+const tsPatternBlock = previewSource.match(/LED_TEST_PATTERN_KIND\s*=\s*\[([\s\S]*?)\]\s*as const/);
+const tsPatternKinds = tsPatternBlock
+  ? [...tsPatternBlock[1].matchAll(/"([A-Za-z]+)"/g)].map((m) => m[1])
+  : [];
+check(
+  rustPatternKinds.length > 0 && tsPatternKinds.length > 0,
+  `extracted ${rustPatternKinds.length} Rust / ${tsPatternKinds.length} TS test pattern kinds`,
+  "EXTRACTION FAILED: could not read Rust TestPatternKind or TS LED_TEST_PATTERN_KIND"
+);
+check(
+  rustPatternKinds.join(",") === tsPatternKinds.join(","),
+  `LED_TEST_PATTERN_KIND matches Rust TestPatternKind in order (${tsPatternKinds.join(" ")})`,
+  `TEST PATTERN DRIFT:\n     Rust: ${rustPatternKinds.join(" ")}\n     TS  : ${tsPatternKinds.join(" ")}`
 );
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import type {
   ColorCorrectionConfig,
   FirmwareProfile,
   LedChipType,
+  LedColorOrder,
   WledUdpSinkConfig,
 } from "./device";
 import type { DisplayId } from "./display";
@@ -326,6 +327,13 @@ export interface ShellState {
    * with host-side W = min(R,G,B) extraction). Absent ⇒ `WS2812B_GRB`.
    */
   selectedChipType?: LedChipType;
+  /**
+   * Host-side colour-order correction for the USB serial sink, relative to
+   * the firmware's own order (see `LED_COLOR_ORDER`). Absent ⇒ `"rgb"`, the
+   * identity. Read by the backend straight off disk when a mode payload
+   * carries no `colorOrder`. Additive — no schema bump, no migration.
+   */
+  ledColorOrder?: LedColorOrder;
   /**
    * Update channel preference (v1.5 W2-C6). Defaults to `"stable"` when
    * absent — `"beta"` opts the user into the prerelease feed served from

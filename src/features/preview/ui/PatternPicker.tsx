@@ -1,7 +1,7 @@
 /**
  * PatternPicker — choose a synthetic test pattern + its animation cadence.
  *
- * Two-column tiles for the five `LED_TEST_PATTERN_KIND` values plus a shared
+ * Two-column tiles for the `PICKER_PATTERN_KINDS` subset plus a shared
  * slow / med / fast speed control. Speed only applies to time-varying patterns
  * (`chase` / `rainbow` / `spiral`); for the static `solid` / `gamut` patterns
  * the speed control is disabled with `aria-disabled` so it reads as
@@ -26,17 +26,31 @@ const SWATCH: Record<LedTestPatternKind, string> = {
   rainbow: "linear-gradient(90deg, #ef5b5b, #ffb020, #4ade80, #22d3ee, #a855f7)",
   spiral: "conic-gradient(from 0deg, #ef5b5b, #ffb020, #4ade80, #22d3ee, #a855f7, #ef5b5b)",
   gamut: "linear-gradient(135deg, #ffb020, #ff7a1a, #a855f7, #22d3ee)",
+  channelProbe: "linear-gradient(90deg, #ef5b5b 33%, #4ade80 33% 66%, #22d3ee 66%)",
 };
+
+/**
+ * Every kind except `channelProbe`, which needs a slot the picker has no way
+ * to ask for — offering it here would send a probe the backend rejects.
+ */
+export type PickerPatternKind = Exclude<LedTestPatternKind, "channelProbe">;
+
+export function isPickerPatternKind(kind: LedTestPatternKind): kind is PickerPatternKind {
+  return kind !== "channelProbe";
+}
+
+export const PICKER_PATTERN_KINDS: readonly PickerPatternKind[] =
+  LED_TEST_PATTERN_KIND.filter(isPickerPatternKind);
 
 const STATIC_KINDS: ReadonlySet<LedTestPatternKind> = new Set(["solid", "gamut"]);
 const SPEEDS: TestPatternSpeed[] = ["slow", "med", "fast"];
 
 export interface PatternPickerProps {
-  selectedKind: LedTestPatternKind;
+  selectedKind: PickerPatternKind;
   speed: TestPatternSpeed;
   running: boolean;
   disabled?: boolean;
-  onSelectKind: (kind: LedTestPatternKind) => void;
+  onSelectKind: (kind: PickerPatternKind) => void;
   onSpeedChange: (speed: TestPatternSpeed) => void;
 }
 
@@ -66,7 +80,7 @@ export function PatternPicker({
       </div>
 
       <div className="lm-pattern-grid" role="radiogroup" aria-label={t("preview:test.title")}>
-        {LED_TEST_PATTERN_KIND.map((kind) => {
+        {PICKER_PATTERN_KINDS.map((kind) => {
           const on = kind === selectedKind;
           return (
             <button
