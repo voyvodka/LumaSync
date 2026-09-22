@@ -278,6 +278,9 @@ https://keepachangelog.com/en/1.1.0/
   notice says Hue was left out and why. Hue is not retried in the background: turn it back on
   once the bridge is back, and the next launch tries it again on its own, because your saved
   output selection is not changed.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
+  sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
 
 ## [1.5.5]
