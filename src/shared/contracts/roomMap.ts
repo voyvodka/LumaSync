@@ -36,6 +36,16 @@ export interface ZoneRelativePosition {
   z: number;
 }
 
+/** Where a placement's `z` came from — mirrors Rust's `HueChannelHeightOrigin`.
+ * See docs/architecture/room-map.md for why an unknown origin is not "0". */
+export const HUE_CHANNEL_HEIGHT_ORIGIN = {
+  BRIDGE: "bridge",
+  USER: "user",
+} as const;
+
+export type HueChannelHeightOrigin =
+  (typeof HUE_CHANNEL_HEIGHT_ORIGIN)[keyof typeof HUE_CHANNEL_HEIGHT_ORIGIN];
+
 /** Persisted position of a Hue channel; when `zoneId` is set, `zoneRelativePosition`
  * is authoritative and absolute `x/y/z` are derived from the zone at runtime. */
 export interface HueChannelPlacement {
@@ -56,6 +66,9 @@ export interface HueChannelPlacement {
   y: number;
   /** Height: -1=floor, +1=ceiling */
   z: number;
+  /** Absent ⇒ unknown: a record from before height was carried, whose `0` may
+   * be a placeholder. Nullable: Rust echoes `None` as `null`. */
+  zOrigin?: HueChannelHeightOrigin | null;
   /** Optional user-assigned label */
   label?: string | null;
   /** Nullable because the Rust mirror puts `None` on the wire as `null`. */

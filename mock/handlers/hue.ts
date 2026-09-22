@@ -31,6 +31,8 @@ import { getWorld, mutate, type MockWorld } from "../state";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
 
+const MOCK_BRIDGE_HEIGHTS: readonly number[] = [0.1, 0.1, 0.9];
+
 /**
  * Bridge-fault verdict for the current world — reachability wins over an
  * invalid key, matching `register_transient_fault` / `register_auth_invalid`
@@ -277,6 +279,9 @@ export const hueHandlers = {
         lightIds: [`light-${c.index}`],
         positionX: 0,
         positionY: 0,
+        // Matches the heights in `mock/roomMaps.ts`; the lamp's is left
+        // unreported so the "bridge sent no z" path is reachable too.
+        positionZ: MOCK_BRIDGE_HEIGHTS[c.index] ?? null,
         lightCount: 1,
         autoRegion: "none",
       })),

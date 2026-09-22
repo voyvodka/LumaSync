@@ -4,7 +4,7 @@
 
 import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
-import { findHueChannel } from "@/shared/contracts/roomMap";
+import { HUE_CHANNEL_HEIGHT_ORIGIN, findHueChannel } from "@/shared/contracts/roomMap";
 
 import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "./hueChannelPosition";
 
@@ -26,7 +26,9 @@ export function resolveChannelPlacement(
       channelId: ch.channelId,
       x: ch.positionX,
       y: ch.positionY,
-      z: 0,
+      ...(ch.positionZ !== null
+        ? { z: ch.positionZ, zOrigin: HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE }
+        : { z: 0, zOrigin: null }),
     };
   }
   // Editors work in world coordinates, so a bound channel's absolute pair is
@@ -36,13 +38,30 @@ export function resolveChannelPlacement(
     channelId: ch.channelId,
     ...resolveHueChannelWorld(saved, zones),
     z: resolveHueChannelWorldZ(saved, zones),
+    ...legacyHeight(saved, ch),
   };
+}
+
+/** Provenance for a record saved before heights were tracked. Seeding wrote
+ *  `z: 0` for every channel, so a legacy `0` is a placeholder the bridge's own
+ *  height may replace, while any other value was set by hand. A zone-bound
+ *  record is left alone: its height is the zone's, not a seeded default.
+ *  See docs/architecture/room-map.md. */
+function legacyHeight(
+  saved: HueChannelPlacement,
+  ch: HueAreaChannelInfo,
+): Pick<HueChannelPlacement, "z" | "zOrigin"> | null {
+  if (saved.zOrigin || saved.zoneId) return null;
+  if (saved.z !== 0) return { z: saved.z, zOrigin: HUE_CHANNEL_HEIGHT_ORIGIN.USER };
+  if (ch.positionZ === null) return null;
+  return { z: ch.positionZ, zOrigin: HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE };
 }
 
 export interface ChannelSeedResult {
   resolved: HueChannelPlacement[];
-  /** True when the store is behind the bridge — a channel it has never seen, or
-   *  one saved before placements carried the bridge's id. */
+  /** True when the store is behind the bridge — a channel it has never seen,
+   *  one saved before placements carried the bridge's id, or one whose height
+   *  provenance was just settled. */
   needsWrite: boolean;
 }
 
@@ -55,7 +74,11 @@ export function seedChannelPlacements(
   const resolved = channels.map((ch) => resolveChannelPlacement(ch, placements, zones));
   const needsWrite = resolved.some((p) => {
     const stored = findHueChannel(placements, p.channelIndex);
-    return !stored || stored.channelId !== p.channelId;
+    return (
+      !stored ||
+      stored.channelId !== p.channelId ||
+      (stored.zOrigin ?? null) !== (p.zOrigin ?? null)
+    );
   });
   return { resolved, needsWrite };
 }

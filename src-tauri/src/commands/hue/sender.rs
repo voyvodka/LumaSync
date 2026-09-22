@@ -971,16 +971,7 @@ pub(crate) async fn fetch_area_channels(
             .and_then(|v| v.as_u64())
             .unwrap_or(idx as u64) as u8;
 
-        // Extract position.x and position.y (default 0.0 if absent).
-        let pos = raw_ch.get("position");
-        let pos_x = pos
-            .and_then(|p| p.get("x"))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0) as f32;
-        let pos_y = pos
-            .and_then(|p| p.get("y"))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0) as f32;
+        let (pos_x, pos_y, pos_z) = parse_channel_position(raw_ch);
 
         let screen_region = channel_position_to_screen_region(pos_x, pos_y);
 
@@ -993,6 +984,7 @@ pub(crate) async fn fetch_area_channels(
                 screen_region,
                 position_x: pos_x,
                 position_y: pos_y,
+                position_z: pos_z,
             });
             continue;
         };
@@ -1018,10 +1010,23 @@ pub(crate) async fn fetch_area_channels(
             screen_region,
             position_x: pos_x,
             position_y: pos_y,
+            position_z: pos_z,
         });
     }
 
     Ok(result)
+}
+
+/// A bridge channel's `position` as `(x, y, z)`. A missing `x`/`y` reads as
+/// 0.0, but a missing `z` stays `None`: the height is carried to the room map,
+/// and a made-up 0 would be seeded there as if the bridge had measured it.
+pub(crate) fn parse_channel_position(raw_channel: &serde_json::Value) -> (f32, f32, Option<f32>) {
+    let pos = raw_channel.get("position");
+    let axis = |key: &str| pos.and_then(|p| p.get(key)).and_then(|v| v.as_f64());
+    let x = axis("x").unwrap_or(0.0) as f32;
+    let y = axis("y").unwrap_or(0.0) as f32;
+    let z = axis("z").map(|z| (z as f32).clamp(-1.0, 1.0));
+    (x, y, z)
 }
 
 /// Overlay the user's own placements onto a channel list fetched from the bridge.
@@ -1042,6 +1047,9 @@ pub(crate) fn apply_channel_placements(
         };
         channel.position_x = placement.position_x.clamp(-1.0, 1.0);
         channel.position_y = placement.position_y.clamp(-1.0, 1.0);
+        if let Some(z) = placement.position_z {
+            channel.position_z = Some(z.clamp(-1.0, 1.0));
+        }
         // Always re-derived, never carried on the wire — that is what keeps the
         // region a label rather than a second writable source.
         channel.screen_region =
@@ -1494,6 +1502,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }
     }
 
@@ -1507,6 +1516,7 @@ mod tests {
             channel_id: 5,
             position_x: -0.9,
             position_y: 0.0,
+            position_z: None,
         }];
 
         apply_channel_placements(&mut channels, &placements);
@@ -1527,6 +1537,7 @@ mod tests {
                 channel_id: 0,
                 position_x: -0.9,
                 position_y: 0.0,
+                position_z: None,
             }],
         );
         assert_eq!(channels[0].screen_region, HueScreenRegion::Left);
@@ -1542,6 +1553,7 @@ mod tests {
                 channel_id: 9,
                 position_x: 1.0,
                 position_y: 1.0,
+                position_z: None,
             }],
         );
         assert_eq!(channels[0].position_x, 0.0);
@@ -1557,10 +1569,76 @@ mod tests {
                 channel_id: 0,
                 position_x: 4.0,
                 position_y: -7.5,
+                position_z: None,
             }],
         );
         assert_eq!(channels[0].position_x, 1.0);
         assert_eq!(channels[0].position_y, -1.0);
+    }
+
+    #[test]
+    fn a_placed_height_changes_nothing_but_the_height() {
+        let place = |position_z: Option<f32>| {
+            let mut channel = bridge_channel(0);
+            channel.position_z = Some(0.3);
+            let mut channels = vec![channel];
+            apply_channel_placements(
+                &mut channels,
+                &[HueChannelPlacementOverride {
+                    channel_id: 0,
+                    position_x: 0.7,
+                    position_y: -0.5,
+                    position_z,
+                }],
+            );
+            channels.remove(0)
+        };
+
+        let without = place(None);
+        let with = place(Some(0.9));
+        let clamped = place(Some(4.0));
+
+        for placed in [&with, &clamped] {
+            assert_eq!(placed.position_x, without.position_x);
+            assert_eq!(placed.position_y, without.position_y);
+            assert_eq!(placed.screen_region, without.screen_region);
+        }
+        assert_eq!(
+            without.position_z,
+            Some(0.3),
+            "no local height keeps the bridge's"
+        );
+        assert_eq!(with.position_z, Some(0.9));
+        assert_eq!(clamped.position_z, Some(1.0));
+    }
+
+    #[test]
+    fn an_override_written_before_height_existed_still_deserializes() {
+        let old: HueChannelPlacementOverride =
+            serde_json::from_str(r#"{"channelId":2,"positionX":0.5,"positionY":-0.25}"#).unwrap();
+        assert_eq!(old.channel_id, 2);
+        assert_eq!(old.position_z, None);
+        // And an absent height stays absent on the way back out.
+        assert!(!serde_json::to_string(&old).unwrap().contains("positionZ"));
+    }
+
+    #[test]
+    fn a_bridge_channel_without_z_has_no_height_rather_than_zero() {
+        let parse = |raw: serde_json::Value| parse_channel_position(&raw);
+
+        assert_eq!(
+            parse(serde_json::json!({ "position": { "x": 0.5, "y": -0.5 } })),
+            (0.5, -0.5, None)
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "position": { "x": 0.0, "y": 0.0, "z": 0.4 } })),
+            (0.0, 0.0, Some(0.4))
+        );
+        assert_eq!(
+            parse(serde_json::json!({ "position": { "x": 0.0, "y": 0.0, "z": -3.0 } })).2,
+            Some(-1.0)
+        );
+        assert_eq!(parse(serde_json::json!({})), (0.0, 0.0, None));
     }
 
     #[test]
@@ -1650,6 +1728,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }
     }
 
@@ -1963,6 +2042,7 @@ mod tests {
                 screen_region: HueScreenRegion::Center,
                 position_x: 0.0,
                 position_y: 0.0,
+                position_z: None,
             },
             HueAreaChannel {
                 channel_id: 1,
@@ -1970,6 +2050,7 @@ mod tests {
                 screen_region: HueScreenRegion::Center,
                 position_x: 0.0,
                 position_y: 0.0,
+                position_z: None,
             },
         ];
         let ids = unique_light_ids(&channels);

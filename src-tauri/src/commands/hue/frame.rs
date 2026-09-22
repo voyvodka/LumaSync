@@ -69,6 +69,10 @@ pub struct HueAreaChannel {
     pub position_x: f32,
     /// Raw position Y reported by the bridge (-1 bottom ... +1 top).
     pub position_y: f32,
+    /// Height (-1 floor ... +1 ceiling). `None` when the bridge sent no `z` —
+    /// never defaulted to 0, which would read as a real height of mid-room.
+    /// Carried only: no region, topology or affinity reads it yet.
+    pub position_z: Option<f32>,
 }
 
 /// Serialisable summary of a single Hue entertainment channel for the UI.
@@ -84,6 +88,7 @@ pub struct HueAreaChannelInfo {
     pub light_ids: Vec<String>,
     pub position_x: f32,
     pub position_y: f32,
+    pub position_z: Option<f32>,
     pub light_count: usize,
     /// Auto-detected screen region ("left", "right", "top", "bottom", "center").
     pub auto_region: String,
@@ -485,6 +490,7 @@ pub(crate) fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChanne
             light_ids: ch.light_ids.clone(),
             position_x: ch.position_x,
             position_y: ch.position_y,
+            position_z: ch.position_z,
             light_count: ch.light_ids.len(),
             auto_region: ch.screen_region.as_str().to_string(),
         })
@@ -508,6 +514,7 @@ mod tests {
                 screen_region: HueScreenRegion::Left,
                 position_x: 0.0,
                 position_y: 0.0,
+                position_z: None,
             })
             .collect();
 
@@ -534,6 +541,7 @@ mod tests {
                 screen_region: HueScreenRegion::Left,
                 position_x: -0.8,
                 position_y: 0.0,
+                position_z: None,
             },
             HueAreaChannel {
                 channel_id: 1,
@@ -541,6 +549,7 @@ mod tests {
                 screen_region: HueScreenRegion::Right,
                 position_x: 0.8,
                 position_y: 0.0,
+                position_z: None,
             },
         ];
         let colors = vec![(255, 0, 0), (0, 255, 0)];
@@ -584,6 +593,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }];
         let colors = vec![(255, 255, 255)];
         let frame = build_huestream_frame(
@@ -721,6 +731,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }];
         let colors = vec![(0u8, 255u8, 255u8)];
         let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -800,6 +811,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }];
         let colors = vec![(0u8, 0u8, 255u8)];
         let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -894,6 +906,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }];
         let colors = vec![(0u8, 220u8, 220u8)];
         let area = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -949,6 +962,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }];
         let mut meta = HashMap::new();
         meta.insert(

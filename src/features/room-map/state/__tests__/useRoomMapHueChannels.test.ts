@@ -25,6 +25,7 @@ const CHANNELS: HueAreaChannelInfo[] = [0, 2, 5].map((channelId, i) => ({
   lightIds: [`light-${channelId}`],
   positionX: i - 1,
   positionY: 0,
+  positionZ: null,
   lightCount: 2,
   autoRegion: "center",
 }));

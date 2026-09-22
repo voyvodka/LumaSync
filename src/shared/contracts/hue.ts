@@ -333,6 +333,10 @@ export interface HueChannelPlacementOverride {
   channelId: number;
   positionX: number;
   positionY: number;
+  /** Sent only when the local height is known to be real (`zOrigin` set);
+   * absent ⇒ the stream keeps the bridge's own height. Optional so snapshots
+   * written before height was carried stay valid. */
+  positionZ?: number;
 }
 
 export interface HueAreaChannelInfo {
@@ -346,6 +350,9 @@ export interface HueAreaChannelInfo {
   lightIds: string[];
   positionX: number;
   positionY: number;
+  /** Height, -1 floor … +1 ceiling. `null` when the bridge reported none —
+   * distinct from a real `0`. */
+  positionZ: number | null;
   lightCount: number;
   autoRegion: string;
 }

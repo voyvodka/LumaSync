@@ -210,6 +210,7 @@ mod tests {
             x: f64::from(channel_index) / 10.0,
             y: 0.0,
             z: 0.0,
+            z_origin: None,
             label: None,
             locked: None,
             entertainment_area_id: Some("area-1".to_string()),

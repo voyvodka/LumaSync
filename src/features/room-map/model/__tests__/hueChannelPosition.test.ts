@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import { HUE_CHANNEL_HEIGHT_ORIGIN } from "@/shared/contracts/roomMap";
 import {
   moveHueChannelToWorld,
   nudgeHueChannel,
   resolveHueChannelWorld,
+  setHueChannelWorldZ,
 } from "../hueChannelPosition";
 
 const ZONE: HueZone = {
@@ -105,5 +107,17 @@ describe("nudgeHueChannel", () => {
       x: expect.closeTo(0.15, 10),
       y: expect.closeTo(0.15, 10),
     });
+  });
+});
+
+describe("setHueChannelWorldZ", () => {
+  it("stamps the height as the user's on both the free and the bound path", () => {
+    const free = setHueChannelWorldZ(FREE, [ZONE], 0.6);
+    expect(free).toMatchObject({ z: 0.6, zOrigin: HUE_CHANNEL_HEIGHT_ORIGIN.USER });
+
+    const bound = setHueChannelWorldZ(BOUND, [ZONE], 0.25);
+    expect(bound.zOrigin).toBe(HUE_CHANNEL_HEIGHT_ORIGIN.USER);
+    // centreZ 0 + scaleZ 0.5 * relative 0.5 ⇒ 0.25
+    expect(bound.zoneRelativePosition?.z).toBeCloseTo(0.5, 6);
   });
 });

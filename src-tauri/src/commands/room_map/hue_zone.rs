@@ -564,6 +564,7 @@ pub fn assign_channel_to_hue_zone(request: AssignChannelRequest) -> HueZoneComma
             x: wx,
             y: wy,
             z: wz,
+            z_origin: None,
             label: None,
             locked: None,
             // A zone belongs to exactly one area, so the synthesised placement
@@ -712,6 +713,7 @@ mod tests {
             x: 0.8,
             y: 0.8,
             z: 0.0,
+            z_origin: None,
             label: None,
             locked: None,
             entertainment_area_id: Some("area-1".to_string()),
@@ -801,6 +803,7 @@ mod tests {
             x: 0.0,
             y: 0.0,
             z: 0.0,
+            z_origin: None,
             label: None,
             locked: None,
             entertainment_area_id: Some("area-1".to_string()),

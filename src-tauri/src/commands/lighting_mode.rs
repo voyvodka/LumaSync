@@ -1604,8 +1604,8 @@ fn start_ambilight_worker(
             for ch in &ctx.channels {
                 let norm_x = (ch.position_x.clamp(-1.0, 1.0) + 1.0) / 2.0;
                 let norm_y = (1.0 - ch.position_y.clamp(-1.0, 1.0)) / 2.0;
-                info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) screen_norm=({:.1}%,{:.1}%) region={:?}",
-                    ch.channel_id, ch.position_x, ch.position_y,
+                info!("[ambilight-worker] hue ch#{} bridge_pos=({:.3},{:.3}) z={:?} screen_norm=({:.1}%,{:.1}%) region={:?}",
+                    ch.channel_id, ch.position_x, ch.position_y, ch.position_z,
                     norm_x * 100.0, norm_y * 100.0, ch.screen_region);
             }
         }
@@ -1633,20 +1633,7 @@ fn start_ambilight_worker(
         let mut strip_scene_state = LightSetState::default();
         let (hue_topology, hue_affinity) = hue_output.as_ref().map_or_else(
             || (LightTopology::Points(Vec::new()), Vec::new()),
-            |ctx| {
-                (
-                    LightTopology::Points(
-                        ctx.channels
-                            .iter()
-                            .map(|ch| (ch.position_x, ch.position_y))
-                            .collect(),
-                    ),
-                    ctx.channels
-                        .iter()
-                        .map(|ch| hue_default_screen_affinity(ch.position_y))
-                        .collect::<Vec<f32>>(),
-                )
-            },
+            |ctx| hue_topology_and_affinity(&ctx.channels),
         );
         let mut hue_scene_state = LightSetState::default();
         let mut hue_scene_scratch: Vec<[u8; 3]> = Vec::new();
@@ -3100,6 +3087,25 @@ pub fn get_led_preview_status(
     Ok(build_preview_status(snapshot, led_twin_state.inner()))
 }
 
+/// Scene-stage inputs for the Hue set. Reads `x`/`y` only: a channel's height
+/// is carried end to end but deliberately does not yet change what it samples.
+fn hue_topology_and_affinity(
+    channels: &[crate::commands::hue::frame::HueAreaChannel],
+) -> (LightTopology, Vec<f32>) {
+    (
+        LightTopology::Points(
+            channels
+                .iter()
+                .map(|ch| (ch.position_x, ch.position_y))
+                .collect(),
+        ),
+        channels
+            .iter()
+            .map(|ch| hue_default_screen_affinity(ch.position_y))
+            .collect(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
@@ -4423,6 +4429,7 @@ mod lighting_mode_tests {
                     screen_region: HueScreenRegion::Center,
                     position_x: 0.0,
                     position_y: 0.0,
+                    position_z: None,
                 })
                 .collect(),
             color_sender: HueColorSender {
@@ -4430,6 +4437,42 @@ mod lighting_mode_tests {
                 channel_count: channel_count.max(1),
             },
         }
+    }
+
+    #[test]
+    fn a_channel_height_does_not_reach_the_scene_stage() {
+        let at_height = |position_z: Option<f32>| {
+            vec![
+                HueAreaChannel {
+                    channel_id: 0,
+                    light_ids: vec!["light-0".to_string()],
+                    screen_region: HueScreenRegion::Left,
+                    position_x: -0.7,
+                    position_y: 0.4,
+                    position_z,
+                },
+                HueAreaChannel {
+                    channel_id: 3,
+                    light_ids: vec!["light-3".to_string()],
+                    screen_region: HueScreenRegion::Bottom,
+                    position_x: 0.1,
+                    position_y: -0.9,
+                    position_z: position_z.map(|z| -z),
+                },
+            ]
+        };
+        let points = |topology: crate::commands::ambilight_scene::LightTopology| match topology {
+            crate::commands::ambilight_scene::LightTopology::Points(points) => points,
+            other => panic!("expected points, got {other:?}"),
+        };
+
+        let (flat_topology, flat_affinity) = super::hue_topology_and_affinity(&at_height(None));
+        for z in [Some(0.0), Some(1.0), Some(-1.0)] {
+            let (topology, affinity) = super::hue_topology_and_affinity(&at_height(z));
+            assert_eq!(points(topology), points(flat_topology.clone()));
+            assert_eq!(affinity, flat_affinity);
+        }
+        assert_eq!(points(flat_topology), vec![(-0.7, 0.4), (0.1, -0.9)]);
     }
 
     #[test]
