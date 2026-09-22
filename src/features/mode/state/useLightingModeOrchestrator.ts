@@ -28,7 +28,11 @@ import {
   resolveHueRuntimePlan,
   type HueTargetCommandResult,
 } from "./hueModeRuntimeFlow";
-import { readModeApplyOutcome } from "./modeApplyOutcome";
+import {
+  pickStartFailureNotice,
+  readModeApplyOutcome,
+  shouldReleaseHueAfterRefusal,
+} from "./modeApplyOutcome";
 import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
 import { useLightingModePersistence } from "./useLightingModePersistence";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
@@ -485,9 +489,9 @@ export function useLightingModeOrchestrator({
         // Phase 2 — this is what starts the ambilight worker, so it must run for
         // Hue-only targets too or the stream comes up with no colour driver.
         const hueStartedOk = targetResults.hue?.ok === true;
-        // A transient Hue failure still attempts the start — the worker can run
-        // without Hue context and reconnect within ~30 s. If the backend gates it
-        // instead, the commit below refuses and the UI stays off, not ON.
+        // A failed Hue start still attempts the apply, but a gated start leaves
+        // no stream context and nothing retrying it: the backend's Hue gate
+        // refuses (HUE_NOT_READY) and the commit below keeps the UI off.
         const hueTransientFail =
           !hueStartedOk &&
           normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
@@ -500,25 +504,34 @@ export function useLightingModeOrchestrator({
         // Set by Phase 2 when the backend reports it is not running the requested
         // mode, so Phase 3's commit below can refuse to record a mode that never ran.
         let applyRefused = false;
+        // What the backend is running after a refusal. A thrown apply reports
+        // nothing, so the previous mode is assumed to still be live.
+        let runningAfterRefusal: Pick<LightingModeConfig, "kind" | "targets"> = {
+          kind: lightingMode.kind,
+          targets: activeOutputTargets,
+        };
 
         if (needsLightingModeApply) {
+          let probeNotice: CaptureFailureNotice | null = null;
           // Advisory probe, never a gate: the OS prompt only appears from the
           // Rust start path below, so short-circuiting here would leave a
           // first-run user unable to ever grant the permission.
           if (normalizedNextMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
             const permission = await getScreenCapturePermission();
             if (isScreenCaptureBlocked(permission.code)) {
-              setStartFailedNotice(describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.PERMISSION_DENIED));
+              probeNotice = describeCaptureFailure(AMBILIGHT_CAPTURE_REASON.PERMISSION_DENIED);
+              setStartFailedNotice(probeNotice);
             }
           }
           try {
             const applyResult = await dispatchSetLightingMode(normalizedNextMode, { force: true });
             const outcome = readModeApplyOutcome(applyResult, normalizedNextMode.kind);
             if (outcome.startFailure) {
-              setStartFailedNotice(outcome.startFailure);
+              setStartFailedNotice(pickStartFailureNotice(probeNotice, outcome.startFailure));
             }
             if (applyResult !== null && outcome.refused) {
               applyRefused = true;
+              runningAfterRefusal = applyResult.mode;
               if (runtimePlan.startTargets.includes("usb")) {
                 targetResults.usb = {
                   ok: false,
@@ -538,11 +551,33 @@ export function useLightingModeOrchestrator({
           }
         }
 
+        let hueReleased = false;
+        let hueReleaseFailed = false;
+        if (
+          applyRefused &&
+          shouldReleaseHueAfterRefusal({
+            hueStartedOk,
+            hueStartCode: targetResults.hue?.code,
+            hueActiveBefore: runtimePlan.activeBefore.includes("hue"),
+            runningMode: runningAfterRefusal,
+          })
+        ) {
+          try {
+            const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+            hueReleased = isHueStopCodeOk(stopResult.status.code);
+          } catch (error) {
+            console.error("[LumaSync] Hue release after a refused mode apply failed:", error);
+          }
+          hueReleaseFailed = !hueReleased;
+          if (hueReleaseFailed) setStopFailedNotice(["hue"]);
+        }
+
         // Phase 3: Push initial solid color to Hue (solid mode only).
         // The backend set_lighting_mode already handles this via apply_hue_color_with_context,
         // but an explicit push here guarantees the bridge receives the latest UI color.
         if (
           hueStartedOk &&
+          !applyRefused &&
           normalizedNextMode.kind === LIGHTING_MODE_KIND.SOLID &&
           normalizedNextMode.solid
         ) {
@@ -560,7 +595,19 @@ export function useLightingModeOrchestrator({
         }
 
         const merged = applyRuntimeResultToTargets(runtimePlan, targetResults);
-        setActiveOutputTargets(merged.activeTargets);
+        if (applyRefused && runningAfterRefusal.kind === LIGHTING_MODE_KIND.OFF) {
+          // The backend tore the previous mode down before the start failed, so
+          // nothing outputs; only a Hue stream that would not stop is still held.
+          setActiveOutputTargets(hueReleaseFailed ? ["hue"] : []);
+          // UI only, as on boot: the persisted mode stays for the next launch.
+          if (lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
+            setLightingModeState({ ...normalizedNextMode, kind: LIGHTING_MODE_KIND.OFF });
+          }
+        } else {
+          setActiveOutputTargets(
+            hueReleased ? merged.activeTargets.filter((t) => t !== "hue") : merged.activeTargets,
+          );
+        }
         // Only reflect user intent in the UI when at least one backend command was
         // issued and the backend accepted it. A gate-blocked or failed start must
         // not be shown as ON, nor persisted for the next launch to restore.

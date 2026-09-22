@@ -8,6 +8,7 @@ import {
 import { getSerialConnectionStatus } from "@/features/device/deviceConnectionApi";
 import {
   isHueStartCodeOk,
+  isHueStopCodeOk,
   toHueStartConfig,
   type HueStartConfig,
 } from "@/features/hue/model/hueStartConfig";
@@ -276,9 +277,10 @@ export async function restoreLightingSession({
     }
   }
 
-  // Same rule as the interactive path: Ambilight still starts after a failed
-  // Hue start, because the worker can run without Hue context and the health
-  // reconciler hands it the stream once the bridge answers.
+  // Same rule as the interactive path: Ambilight is still attempted after a
+  // failed Hue start. A gated start leaves no stream context and nothing
+  // retrying it, so the Rust Hue gate refuses this apply (HUE_NOT_READY) and
+  // the restore reads as not running — Off, never a pending retry.
   const hueTransientFail = !hueStarted && hueWanted && mode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
   const usbWanted = bootTargets.includes("usb");
   if (!usbWanted && !hueStarted && !hueTransientFail) {
@@ -305,14 +307,23 @@ export async function restoreLightingSession({
     );
     // The bridge allows one entertainment streamer. Holding it for a mode that
     // is not running sends nothing and locks out every other client.
+    let hueStillHeld = false;
     if (hueStarted) {
       try {
-        await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+        const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+        hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
       } catch (err) {
+        hueStillHeld = true;
         console.error("[LumaSync] Bootstrap Hue rollback after refused restore failed:", err);
       }
     }
-    return { running: false, activeTargets: [], startFailure: outcome.startFailure };
+    // A stream that would not stop stays listed, or the chip denies a session
+    // the bridge still counts as its streamer.
+    return {
+      running: false,
+      activeTargets: hueStillHeld ? ["hue"] : [],
+      startFailure: outcome.startFailure,
+    };
   }
 
   // The backend already pushes the colour through apply_hue_color_with_context;
