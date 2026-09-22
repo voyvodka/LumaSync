@@ -38,7 +38,8 @@ pub enum FirmwareProfile {
     #[default]
     #[serde(rename = "lumasync-v1")]
     LumaSyncV1,
-    /// Adalight-compatible protocol (no brightness byte, big-endian count-1):
+    /// Adalight-compatible protocol (no brightness byte — the host scales the
+    /// pixels instead — and big-endian count-1):
     /// `[0x41 0x64 0x61] [HIGH(count-1)] [LOW(count-1)] [HIGH^LOW^0x55] [R G B ...]`
     Adalight,
 }
@@ -83,13 +84,32 @@ pub enum LedChipType {
     Sk6812Rgbw,
 }
 
-impl LedChipType {
-    /// Bytes this chip occupies per pixel on the wire. Drives the 115 200-baud
-    /// frame budget — RGBW costs a third more than GRB at the same LED count.
+/// The pixel layout a profile + chip pair actually puts on the wire.
+///
+/// SK6812 RGBW is only encodable under LumaSync v1: Adalight has no provision
+/// for 4-byte pixels, so Adalight + SK6812 falls back to 3-byte pixels rather
+/// than dropping output silently. `encode_packet_for_output` dispatches on this
+/// and the 115 200-baud frame budget sizes frames from it, so the two cannot
+/// disagree — the budget once charged that fallback 4 bytes a pixel and
+/// capped its frame rate a quarter below what the link carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WirePixelLayout {
+    Rgb,
+    Rgbw,
+}
+
+impl WirePixelLayout {
+    pub fn for_output(profile: FirmwareProfile, chip_type: LedChipType) -> Self {
+        match (chip_type, profile) {
+            (LedChipType::Sk6812Rgbw, FirmwareProfile::LumaSyncV1) => Self::Rgbw,
+            _ => Self::Rgb,
+        }
+    }
+
     pub fn bytes_per_pixel(self) -> usize {
         match self {
-            Self::Ws2812bGrb => 3,
-            Self::Sk6812Rgbw => 4,
+            Self::Rgb => 3,
+            Self::Rgbw => 4,
         }
     }
 }
@@ -150,6 +170,8 @@ pub struct GammaLuts {
 /// Build three independent gamma LUTs from the supplied per-channel exponents.
 /// Each entry: `round((i / 255)^gamma * 255)`.
 pub fn build_gamma_luts(gamma_r: f32, gamma_g: f32, gamma_b: f32) -> GammaLuts {
+    #[cfg(test)]
+    GAMMA_LUT_BUILDS.with(|n| n.set(n.get() + 1));
     let mut r = [0u8; 256];
     let mut g = [0u8; 256];
     let mut b = [0u8; 256];
@@ -162,26 +184,35 @@ pub fn build_gamma_luts(gamma_r: f32, gamma_g: f32, gamma_b: f32) -> GammaLuts {
     GammaLuts { r, g, b }
 }
 
+// Per-thread so the plan-is-built-once tests are not disturbed by other tests
+// building LUTs concurrently.
+#[cfg(test)]
+thread_local! {
+    static GAMMA_LUT_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Default gamma 2.2 / 2.2 / 2.2 tables — identical to the old unified
 /// `GAMMA_LUT`, kept as a static to avoid re-computing on every frame.
-static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<GammaLuts> =
-    std::sync::LazyLock::new(|| build_gamma_luts(2.2, 2.2, 2.2));
+static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<Arc<GammaLuts>> =
+    std::sync::LazyLock::new(|| Arc::new(build_gamma_luts(2.2, 2.2, 2.2)));
+
+// EXACT comparison (`== 2.2_f32`): a near-2.2 user gamma must still go through
+// `build_gamma_luts` to stay byte-identical with what a full build would have
+// produced. Do NOT use a tolerance here.
+fn uses_default_gamma(corrections: &ColorCorrectionConfig) -> bool {
+    corrections.gamma_r == 2.2_f32
+        && corrections.gamma_g == 2.2_f32
+        && corrections.gamma_b == 2.2_f32
+}
 
 /// Return a reference to the pre-computed default 2.2/2.2/2.2 LUT when all
 /// three gamma values equal exactly 2.2, otherwise build and return a new LUT.
 ///
-/// The 2.2 comparison is EXACT (`== 2.2_f32`): a near-2.2 user gamma must still
-/// go through `build_gamma_luts` to stay byte-identical with what a full build
-/// would have produced. Do NOT use a tolerance here.
-///
-/// Used by `encode_adalight_packet` and `encode_sk6812_packet` to avoid
-/// rebuilding the LUT every frame when the user has not changed gamma settings.
+/// Used by the Hue worker and `CorrectedWledSink`, each of which calls it once
+/// per worker/sink lifetime. Serial encoders take an `EncoderPlan` instead.
 pub fn gamma_luts_for(corrections: &ColorCorrectionConfig) -> std::borrow::Cow<'static, GammaLuts> {
-    if corrections.gamma_r == 2.2_f32
-        && corrections.gamma_g == 2.2_f32
-        && corrections.gamma_b == 2.2_f32
-    {
-        std::borrow::Cow::Borrowed(&*DEFAULT_GAMMA_LUTS)
+    if uses_default_gamma(corrections) {
+        std::borrow::Cow::Borrowed(&**DEFAULT_GAMMA_LUTS)
     } else {
         std::borrow::Cow::Owned(build_gamma_luts(
             corrections.gamma_r,
@@ -288,8 +319,8 @@ pub fn apply_saturation_to_pixel(rgb: [u8; 3], saturation: f32) -> [u8; 3] {
 ///
 /// Pipeline order: saturation → Kelvin → gamma LUT.
 ///
-/// This mirrors the order used inside `encode_led_packet_with_corrections`
-/// (the USB batch encoder) so that Hue single-pixel output and USB batch
+/// This mirrors the order used inside `EncoderPlan::correct`
+/// (the USB batch encoders) so that Hue single-pixel output and USB batch
 /// output produce identical colour rendering when given the same
 /// `ColorCorrectionConfig`. Any change to the USB encoder order **must**
 /// be reflected here to preserve LED-strip vs Hue bulb parity.
@@ -356,6 +387,81 @@ pub fn apply_color_correction_rgb_with_luts(
 
     // Step 3 — Per-channel gamma LUT (caller-supplied).
     (luts.r[r as usize], luts.g[g as usize], luts.b[b as usize])
+}
+
+// ---------------------------------------------------------------------------
+// Encoder plan — colour corrections derived once, applied per pixel
+// ---------------------------------------------------------------------------
+
+/// Everything the serial encoders apply per pixel, derived from a
+/// `ColorCorrectionConfig` once.
+///
+/// Build it when the corrections change — `SerialSink` construction, or once
+/// per Solid write — never per frame: a non-default gamma costs 768 `powf`s.
+/// Every serial encoder takes the same plan, so a new per-pixel stage is one
+/// more field here plus one line in `correct`, and no encoder can skip it.
+#[derive(Clone)]
+pub struct EncoderPlan {
+    // Arc, not inline: 768 bytes inline would make `SerialSink` dwarf the
+    // boxed WLED variant of the worker's `ActiveUsbSink`.
+    luts: Arc<GammaLuts>,
+    /// `None` at 6500 K, the identity.
+    kelvin_muls: Option<[f32; 3]>,
+    /// `None` at 1.0, the identity.
+    saturation: Option<f32>,
+}
+
+impl EncoderPlan {
+    pub fn new(corrections: &ColorCorrectionConfig) -> Self {
+        let luts = if uses_default_gamma(corrections) {
+            Arc::clone(&DEFAULT_GAMMA_LUTS)
+        } else {
+            Arc::new(build_gamma_luts(
+                corrections.gamma_r,
+                corrections.gamma_g,
+                corrections.gamma_b,
+            ))
+        };
+        let kelvin_muls =
+            (corrections.kelvin != 6500).then(|| kelvin_to_rgb_multipliers(corrections.kelvin));
+        let saturation = ((corrections.saturation - 1.0_f32).abs() >= f32::EPSILON)
+            .then_some(corrections.saturation);
+        Self {
+            luts,
+            kelvin_muls,
+            saturation,
+        }
+    }
+
+    /// Pipeline order: saturation → Kelvin → gamma LUT — the same order as
+    /// `apply_color_correction_rgb`, so strip and Hue render alike.
+    #[inline(always)]
+    fn correct(&self, pixel: [u8; 3]) -> [u8; 3] {
+        let pixel = match self.saturation {
+            Some(saturation) => apply_saturation_to_pixel(pixel, saturation),
+            None => pixel,
+        };
+        let [r, g, b] = match &self.kelvin_muls {
+            Some(muls) => apply_kelvin_to_pixel(pixel, muls),
+            None => pixel,
+        };
+        [
+            self.luts.r[r as usize],
+            self.luts.g[g as usize],
+            self.luts.b[b as usize],
+        ]
+    }
+
+    #[cfg(test)]
+    fn luts_ptr(&self) -> *const GammaLuts {
+        Arc::as_ptr(&self.luts)
+    }
+}
+
+impl Default for EncoderPlan {
+    fn default() -> Self {
+        Self::new(&ColorCorrectionConfig::default())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -607,19 +713,16 @@ impl Default for LedOutputBridge {
 /// binary while retaining full regression coverage in the test suite.
 #[cfg(test)]
 pub fn encode_led_packet(brightness: f32, rgb_triplets: &[[u8; 3]]) -> Vec<u8> {
-    encode_led_packet_with_corrections(brightness, rgb_triplets, 6500, 1.0)
+    encode_lumasync_v1_packet(brightness, rgb_triplets, &EncoderPlan::default())
 }
 
-/// Encode a LumaSync v1 packet with full per-channel colour corrections.
-///
-/// Pipeline order: saturation → Kelvin → gamma LUT
+/// Encode a LumaSync v1 packet, applying every correction in `plan`.
 ///
 /// Wire format: `[0xAA 0x55] [brightness_u8] [led_count_u16_le] [R G B ...] [xor_checksum]`
-pub fn encode_led_packet_with_corrections(
+pub fn encode_lumasync_v1_packet(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
-    kelvin: u16,
-    saturation: f32,
+    plan: &EncoderPlan,
 ) -> Vec<u8> {
     let clamped_brightness = (brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
     let led_count = u16::try_from(rgb_triplets.len()).unwrap_or(u16::MAX);
@@ -630,25 +733,8 @@ pub fn encode_led_packet_with_corrections(
     packet.push(clamped_brightness);
     packet.extend_from_slice(&led_count.to_le_bytes());
 
-    let luts = &*DEFAULT_GAMMA_LUTS;
-    let kelvin_muls = kelvin_to_rgb_multipliers(kelvin);
-    let kelvin_identity = kelvin == 6500;
-    let sat_identity = (saturation - 1.0_f32).abs() < f32::EPSILON;
-
     for &pixel in rgb_triplets {
-        let after_sat = if sat_identity {
-            pixel
-        } else {
-            apply_saturation_to_pixel(pixel, saturation)
-        };
-
-        let [r, g, b] = if kelvin_identity {
-            after_sat
-        } else {
-            apply_kelvin_to_pixel(after_sat, &kelvin_muls)
-        };
-
-        packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
+        packet.extend_from_slice(&plan.correct(pixel));
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
@@ -665,7 +751,11 @@ pub fn encode_led_packet_with_kelvin(
     rgb_triplets: &[[u8; 3]],
     kelvin: u16,
 ) -> Vec<u8> {
-    encode_led_packet_with_corrections(brightness, rgb_triplets, kelvin, 1.0)
+    let plan = EncoderPlan::new(&ColorCorrectionConfig {
+        kelvin,
+        ..ColorCorrectionConfig::default()
+    });
+    encode_lumasync_v1_packet(brightness, rgb_triplets, &plan)
 }
 
 /// Encode an Adalight-compatible packet.
@@ -674,11 +764,17 @@ pub fn encode_led_packet_with_kelvin(
 /// `[0x41 0x64 0x61] [HIGH(count-1)] [LOW(count-1)] [HIGH^LOW^0x55] [R G B ...]`
 ///
 /// Colour corrections (saturation, Kelvin, gamma) are applied before packing
-/// in the same order as the LumaSync v1 encoder.
+/// in the same order as the LumaSync v1 encoder. Brightness is scaled into the
+/// corrected pixels: Adalight firmware has no brightness input from the host,
+/// so without this the brightness slider did nothing under this profile. The
+/// scaling matches `CorrectedWledSink`, and 1.0 leaves every byte unchanged.
 pub fn encode_adalight_packet(
+    brightness: f32,
     rgb_triplets: &[[u8; 3]],
-    corrections: &ColorCorrectionConfig,
+    plan: &EncoderPlan,
 ) -> Vec<u8> {
+    let brightness = brightness.clamp(0.0, 1.0);
+    let scale = |v: u8| (v as f32 * brightness).round().clamp(0.0, 255.0) as u8;
     let count = rgb_triplets.len();
     let count_minus_one = u16::try_from(count.saturating_sub(1)).unwrap_or(u16::MAX);
     let hi = (count_minus_one >> 8) as u8;
@@ -694,25 +790,9 @@ pub fn encode_adalight_packet(
     packet.push(lo);
     packet.push(header_checksum);
 
-    let luts = gamma_luts_for(corrections);
-    let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
-    let kelvin_identity = corrections.kelvin == 6500;
-    let sat_identity = (corrections.saturation - 1.0_f32).abs() < f32::EPSILON;
-
     for &pixel in rgb_triplets {
-        let after_sat = if sat_identity {
-            pixel
-        } else {
-            apply_saturation_to_pixel(pixel, corrections.saturation)
-        };
-
-        let [r, g, b] = if kelvin_identity {
-            after_sat
-        } else {
-            apply_kelvin_to_pixel(after_sat, &kelvin_muls)
-        };
-
-        packet.extend_from_slice(&[luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]]);
+        let [r, g, b] = plan.correct(pixel);
+        packet.extend_from_slice(&[scale(r), scale(g), scale(b)]);
     }
 
     packet
@@ -720,44 +800,35 @@ pub fn encode_adalight_packet(
 
 /// Dispatch encoder based on `FirmwareProfile`.
 ///
-/// For `LumaSyncV1` the brightness value is encoded in the packet header.
-/// For `Adalight` the brightness byte is absent — it is handled in firmware.
+/// For `LumaSyncV1` the brightness value is encoded in the packet header and
+/// applied by LumaSync firmware. Adalight has no brightness byte, so the host
+/// scales the pixels instead.
 pub fn encode_packet_for_profile(
     profile: FirmwareProfile,
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
-    corrections: &ColorCorrectionConfig,
+    plan: &EncoderPlan,
 ) -> Vec<u8> {
     match profile {
-        FirmwareProfile::LumaSyncV1 => encode_led_packet_with_corrections(
-            brightness,
-            rgb_triplets,
-            corrections.kelvin,
-            corrections.saturation,
-        ),
-        FirmwareProfile::Adalight => encode_adalight_packet(rgb_triplets, corrections),
+        FirmwareProfile::LumaSyncV1 => encode_lumasync_v1_packet(brightness, rgb_triplets, plan),
+        FirmwareProfile::Adalight => encode_adalight_packet(brightness, rgb_triplets, plan),
     }
 }
 
 /// Dispatch on both wire axes — framing (`FirmwareProfile`) and pixel layout
-/// (`LedChipType`). Every serial write goes through here so Solid and the
-/// ambilight worker can never disagree on the bytes for the same strip.
-///
-/// SK6812 RGBW is only encodable under LumaSync v1: Adalight has no provision
-/// for 4-byte pixels, so Adalight + SK6812 falls back to the 3-byte Adalight
-/// frame rather than dropping output silently.
+/// (`LedChipType`, resolved through `WirePixelLayout`). Every serial write goes
+/// through here so Solid and the ambilight worker can never disagree on the
+/// bytes for the same strip.
 pub fn encode_packet_for_output(
     profile: FirmwareProfile,
     chip_type: LedChipType,
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
-    corrections: &ColorCorrectionConfig,
+    plan: &EncoderPlan,
 ) -> Vec<u8> {
-    match (chip_type, profile) {
-        (LedChipType::Sk6812Rgbw, FirmwareProfile::LumaSyncV1) => {
-            encode_sk6812_packet(brightness, rgb_triplets, corrections)
-        }
-        _ => encode_packet_for_profile(profile, brightness, rgb_triplets, corrections),
+    match WirePixelLayout::for_output(profile, chip_type) {
+        WirePixelLayout::Rgbw => encode_sk6812_packet(brightness, rgb_triplets, plan),
+        WirePixelLayout::Rgb => encode_packet_for_profile(profile, brightness, rgb_triplets, plan),
     }
 }
 
@@ -801,7 +872,7 @@ pub fn extract_rgbw(corrected_rgb: [u8; 3]) -> [u8; 4] {
 pub fn encode_sk6812_packet(
     brightness: f32,
     rgb_triplets: &[[u8; 3]],
-    corrections: &ColorCorrectionConfig,
+    plan: &EncoderPlan,
 ) -> Vec<u8> {
     let clamped_brightness = (brightness.clamp(0.0, 1.0) * 255.0).floor() as u8;
     let led_count = u16::try_from(rgb_triplets.len()).unwrap_or(u16::MAX);
@@ -813,32 +884,9 @@ pub fn encode_sk6812_packet(
     packet.push(clamped_brightness);
     packet.extend_from_slice(&led_count.to_le_bytes());
 
-    let luts = gamma_luts_for(corrections);
-    let kelvin_muls = kelvin_to_rgb_multipliers(corrections.kelvin);
-    let kelvin_identity = corrections.kelvin == 6500;
-    let sat_identity = (corrections.saturation - 1.0_f32).abs() < f32::EPSILON;
-
     for &pixel in rgb_triplets {
-        // Step 1 — saturation
-        let after_sat = if sat_identity {
-            pixel
-        } else {
-            apply_saturation_to_pixel(pixel, corrections.saturation)
-        };
-
-        // Step 2 — Kelvin
-        let [r, g, b] = if kelvin_identity {
-            after_sat
-        } else {
-            apply_kelvin_to_pixel(after_sat, &kelvin_muls)
-        };
-
-        // Step 3 — gamma LUT (RGB only; W bypasses)
-        let corrected = [luts.r[r as usize], luts.g[g as usize], luts.b[b as usize]];
-
-        // Step 4 — W extraction
-        let [r_prime, g_prime, b_prime, w] = extract_rgbw(corrected);
-        packet.extend_from_slice(&[r_prime, g_prime, b_prime, w]);
+        // W is extracted after correction, so it never passes through the LUT.
+        packet.extend_from_slice(&extract_rgbw(plan.correct(pixel)));
     }
 
     let checksum = packet.iter().fold(0_u8, |acc, byte| acc ^ byte);
@@ -898,7 +946,9 @@ pub struct SerialSink {
     port_name: Option<String>,
     brightness: f32,
     profile: FirmwareProfile,
-    corrections: ColorCorrectionConfig,
+    // Corrections never change under a running sink — a new config restarts
+    // the worker, which builds a new sink — so the plan is built exactly once.
+    plan: EncoderPlan,
     chip_type: LedChipType,
 }
 
@@ -915,7 +965,7 @@ impl SerialSink {
             port_name,
             brightness,
             profile: FirmwareProfile::default(),
-            corrections: ColorCorrectionConfig::default(),
+            plan: EncoderPlan::default(),
             chip_type: LedChipType::default(),
         }
     }
@@ -935,7 +985,7 @@ impl SerialSink {
             port_name,
             brightness,
             profile,
-            corrections,
+            plan: EncoderPlan::new(&corrections),
             chip_type,
         }
     }
@@ -946,6 +996,11 @@ impl SerialSink {
     /// with the live `AmbilightLiveSettings` atomic.
     pub fn set_brightness(&mut self, brightness: f32) {
         self.brightness = brightness.clamp(0.0, 1.0);
+    }
+
+    #[cfg(test)]
+    fn plan_luts_ptr(&self) -> *const GammaLuts {
+        self.plan.luts_ptr()
     }
 }
 
@@ -965,7 +1020,7 @@ impl super::led_sink::LedSink for SerialSink {
             self.chip_type,
             self.brightness,
             colors,
-            &self.corrections,
+            &self.plan,
         );
 
         self.bridge
@@ -994,10 +1049,10 @@ mod tests {
     use super::{
         apply_color_correction_rgb, apply_kelvin_to_pixel, apply_saturation_to_pixel,
         apply_solid_payload, build_gamma_luts, encode_adalight_packet, encode_led_packet,
-        encode_led_packet_with_corrections, encode_led_packet_with_kelvin,
+        encode_led_packet_with_kelvin, encode_lumasync_v1_packet, encode_packet_for_output,
         encode_packet_for_profile, encode_sk6812_packet, extract_rgbw, kelvin_to_rgb_multipliers,
-        send_ambilight_frame, ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge,
-        LedOutputError, LedPacketSender, SerialSink,
+        send_ambilight_frame, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, LedChipType,
+        LedOutputBridge, LedOutputError, LedPacketSender, SerialSink, WirePixelLayout,
     };
     use crate::commands::device_connection::{
         CommandStatus, SerialConnectionState, SerialConnectionStatus,
@@ -1106,7 +1161,7 @@ mod tests {
     fn default_corrections_produce_byte_exact_output() {
         let frame = &[[255_u8, 0, 128], [64, 200, 10]];
         let default_packet = encode_led_packet(0.75, frame);
-        let corrections_packet = encode_led_packet_with_corrections(0.75, frame, 6500, 1.0);
+        let corrections_packet = encode_lumasync_v1_packet(0.75, frame, &EncoderPlan::default());
         assert_eq!(
             default_packet, corrections_packet,
             "default corrections must be byte-exact with encode_led_packet"
@@ -1120,7 +1175,7 @@ mod tests {
     #[test]
     fn adalight_header_is_byte_exact() {
         // 1 LED → count-1 = 0 → hi=0, lo=0, checksum = 0^0^0x55 = 0x55
-        let packet = encode_adalight_packet(&[[255, 0, 0]], &ColorCorrectionConfig::default());
+        let packet = encode_adalight_packet(1.0, &[[255, 0, 0]], &EncoderPlan::default());
         assert_eq!(
             &packet[..6],
             &[0x41, 0x64, 0x61, 0x00, 0x00, 0x55],
@@ -1135,7 +1190,7 @@ mod tests {
         // 300 LEDs → count-1 = 299 = 0x012B → hi=0x01, lo=0x2B
         // checksum = 0x01 ^ 0x2B ^ 0x55 = 0x7F
         let colors: Vec<[u8; 3]> = vec![[0u8; 3]; 300];
-        let packet = encode_adalight_packet(&colors, &ColorCorrectionConfig::default());
+        let packet = encode_adalight_packet(1.0, &colors, &EncoderPlan::default());
         assert_eq!(packet[3], 0x01, "HIGH byte of count-1 for 300 LEDs");
         assert_eq!(packet[4], 0x2B, "LOW byte of count-1 for 300 LEDs");
         assert_eq!(
@@ -1148,7 +1203,7 @@ mod tests {
     #[test]
     fn adalight_has_no_brightness_byte() {
         let colors = vec![[128_u8; 3]; 10];
-        let packet = encode_adalight_packet(&colors, &ColorCorrectionConfig::default());
+        let packet = encode_adalight_packet(1.0, &colors, &EncoderPlan::default());
         assert_eq!(
             packet.len(),
             6 + 10 * 3,
@@ -1161,8 +1216,12 @@ mod tests {
         let frame = &[[100_u8, 150, 200]];
         let corrections = ColorCorrectionConfig::default();
         let direct = encode_led_packet(0.8, frame);
-        let dispatched =
-            encode_packet_for_profile(FirmwareProfile::LumaSyncV1, 0.8, frame, &corrections);
+        let dispatched = encode_packet_for_profile(
+            FirmwareProfile::LumaSyncV1,
+            0.8,
+            frame,
+            &EncoderPlan::new(&corrections),
+        );
         assert_eq!(
             direct, dispatched,
             "LumaSyncV1 dispatch must match direct encoder"
@@ -1173,9 +1232,13 @@ mod tests {
     fn adalight_profile_dispatch_matches_direct_encoder() {
         let frame = &[[100_u8, 150, 200]];
         let corrections = ColorCorrectionConfig::default();
-        let direct = encode_adalight_packet(frame, &corrections);
-        let dispatched =
-            encode_packet_for_profile(FirmwareProfile::Adalight, 0.8, frame, &corrections);
+        let direct = encode_adalight_packet(0.8, frame, &EncoderPlan::new(&corrections));
+        let dispatched = encode_packet_for_profile(
+            FirmwareProfile::Adalight,
+            0.8,
+            frame,
+            &EncoderPlan::new(&corrections),
+        );
         assert_eq!(
             direct, dispatched,
             "Adalight dispatch must match direct encoder"
@@ -1266,7 +1329,7 @@ mod tests {
     fn saturation_default_packet_is_byte_exact_with_encode_led_packet() {
         let frame = &[[200_u8, 100, 50], [10, 20, 30]];
         let default_packet = encode_led_packet(0.8, frame);
-        let corrections_packet = encode_led_packet_with_corrections(0.8, frame, 6500, 1.0);
+        let corrections_packet = encode_lumasync_v1_packet(0.8, frame, &EncoderPlan::default());
         assert_eq!(default_packet, corrections_packet);
     }
 
@@ -1633,8 +1696,8 @@ mod tests {
         let (r_out, g_out, b_out) =
             apply_color_correction_rgb((pixel[0], pixel[1], pixel[2]), &cfg);
 
-        // The USB encoder applies the same pipeline via encode_led_packet_with_corrections.
-        let packet = encode_led_packet_with_corrections(1.0, &[pixel], cfg.kelvin, cfg.saturation);
+        // The USB encoder applies the same pipeline via EncoderPlan.
+        let packet = encode_lumasync_v1_packet(1.0, &[pixel], &EncoderPlan::new(&cfg));
         // RGB payload starts at index 5 (after 0xAA 0x55 brightness count_lo count_hi).
         let (batch_r, batch_g, batch_b) = (packet[5], packet[6], packet[7]);
 
@@ -1720,7 +1783,7 @@ mod tests {
     fn sk6812_packet_has_correct_framing_and_4_bytes_per_pixel() {
         let corrections = ColorCorrectionConfig::default();
         let frame = &[[255_u8, 0, 0], [0, 255, 0], [0, 0, 255]];
-        let packet = encode_sk6812_packet(1.0, frame, &corrections);
+        let packet = encode_sk6812_packet(1.0, frame, &EncoderPlan::new(&corrections));
 
         // Header: [0xAA, 0x55, brightness, count_lo, count_hi]
         assert_eq!(packet[0], 0xAA, "magic byte 0");
@@ -1741,7 +1804,7 @@ mod tests {
     fn sk6812_packet_checksum_is_xor_of_all_preceding_bytes() {
         let corrections = ColorCorrectionConfig::default();
         let frame = &[[100_u8, 50, 25]];
-        let packet = encode_sk6812_packet(0.5, frame, &corrections);
+        let packet = encode_sk6812_packet(0.5, frame, &EncoderPlan::new(&corrections));
 
         let expected_checksum = packet[..packet.len() - 1]
             .iter()
@@ -1766,7 +1829,7 @@ mod tests {
         };
         // With linear gamma + identity Kelvin + identity sat, corrected = input
         // W = min(100, 60, 20) = 20; R'=80, G'=40, B'=0, W=20
-        let packet = encode_sk6812_packet(1.0, &[[100, 60, 20]], &corrections);
+        let packet = encode_sk6812_packet(1.0, &[[100, 60, 20]], &EncoderPlan::new(&corrections));
         // pixel bytes start at index 5
         assert_eq!(packet[5], 80, "R' = 100-20 = 80");
         assert_eq!(packet[6], 40, "G' = 60-20 = 40");
@@ -1794,7 +1857,7 @@ mod tests {
         let writes = sender.writes();
         assert_eq!(writes.len(), 1);
 
-        let expected = encode_sk6812_packet(1.0, &frame, &ColorCorrectionConfig::default());
+        let expected = encode_sk6812_packet(1.0, &frame, &EncoderPlan::default());
         assert_eq!(
             writes[0].1, expected,
             "SerialSink with SK6812 must use RGBW encoder"
@@ -1832,6 +1895,270 @@ mod tests {
             LedChipType::default(),
             LedChipType::Ws2812bGrb,
             "LedChipType default must be WS2812B_GRB for backward compat"
+        );
+    }
+
+    // ---------------------------------------------------------------------------
+    // EncoderPlan — one plan feeds every serial encoder
+    // ---------------------------------------------------------------------------
+
+    const GOLDEN_FRAME: [[u8; 3]; 4] =
+        [[200, 100, 50], [128, 64, 32], [255, 255, 255], [0, 7, 250]];
+
+    fn custom_corrections() -> ColorCorrectionConfig {
+        ColorCorrectionConfig {
+            gamma_r: 1.8,
+            gamma_g: 2.0,
+            gamma_b: 2.6,
+            kelvin: 4000,
+            saturation: 1.3,
+        }
+    }
+
+    const ENCODERS: [(FirmwareProfile, LedChipType); 3] = [
+        (FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb),
+        (FirmwareProfile::Adalight, LedChipType::Ws2812bGrb),
+        (FirmwareProfile::LumaSyncV1, LedChipType::Sk6812Rgbw),
+    ];
+
+    // Brightness 0.8 on v1 frames exercises the header byte. Adalight is written
+    // at 1.0: it ignored brightness before, so only its full-brightness bytes
+    // are comparable with the captured ones.
+    fn golden_brightness(profile: FirmwareProfile) -> f32 {
+        match profile {
+            FirmwareProfile::LumaSyncV1 => 0.8,
+            FirmwareProfile::Adalight => 1.0,
+        }
+    }
+
+    fn sink_writes(
+        profile: FirmwareProfile,
+        chip: LedChipType,
+        corrections: ColorCorrectionConfig,
+        frame: &[[u8; 3]],
+    ) -> Vec<u8> {
+        sink_writes_at(
+            golden_brightness(profile),
+            profile,
+            chip,
+            corrections,
+            frame,
+        )
+    }
+
+    fn sink_writes_at(
+        brightness: f32,
+        profile: FirmwareProfile,
+        chip: LedChipType,
+        corrections: ColorCorrectionConfig,
+        frame: &[[u8; 3]],
+    ) -> Vec<u8> {
+        let sender = Arc::new(FakeSender::successful());
+        let bridge = LedOutputBridge::from_sender(sender.clone());
+        let mut sink = SerialSink::with_chip_type(
+            bridge,
+            Some("COM9".into()),
+            brightness,
+            profile,
+            corrections,
+            chip,
+        );
+        sink.send_frame(frame).expect("send should succeed");
+        sender.writes().remove(0).1
+    }
+
+    /// Bytes captured from the pre-plan encoders; the plan must not move one.
+    #[test]
+    fn default_corrections_are_byte_identical_to_the_pre_plan_encoders() {
+        let expected: [&[u8]; 3] = [
+            &[
+                170, 85, 204, 4, 0, 149, 33, 7, 56, 12, 3, 255, 255, 255, 0, 0, 244, 184,
+            ],
+            &[
+                65, 100, 97, 0, 3, 86, 149, 33, 7, 56, 12, 3, 255, 255, 255, 0, 0, 244,
+            ],
+            &[
+                170, 85, 204, 4, 0, 142, 26, 0, 7, 53, 9, 0, 3, 0, 0, 0, 255, 0, 0, 244, 0, 144,
+            ],
+        ];
+        for ((profile, chip), bytes) in ENCODERS.into_iter().zip(expected) {
+            let written = sink_writes(
+                profile,
+                chip,
+                ColorCorrectionConfig::default(),
+                &GOLDEN_FRAME,
+            );
+            assert_eq!(written, bytes, "{profile:?} + {chip:?} drifted at defaults");
+        }
+    }
+
+    /// Adalight and SK6812 already honoured gamma; only their LUT build moved.
+    #[test]
+    fn custom_corrections_on_adalight_and_sk6812_are_byte_identical_to_before() {
+        let adalight = sink_writes(
+            FirmwareProfile::Adalight,
+            LedChipType::Ws2812bGrb,
+            custom_corrections(),
+            &GOLDEN_FRAME,
+        );
+        assert_eq!(
+            adalight,
+            [65, 100, 97, 0, 3, 86, 200, 22, 0, 90, 9, 0, 255, 166, 84, 0, 0, 84]
+        );
+        let rgbw = sink_writes(
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Sk6812Rgbw,
+            custom_corrections(),
+            &GOLDEN_FRAME,
+        );
+        assert_eq!(
+            rgbw,
+            [170, 85, 204, 4, 0, 200, 22, 0, 0, 90, 9, 0, 0, 171, 82, 0, 84, 0, 0, 84, 0, 67]
+        );
+    }
+
+    /// The default setup used to hardcode gamma 2.2, so the sliders did nothing
+    /// on it. Its pixels must now match the Adalight pixels for the same config.
+    #[test]
+    fn v1_ws2812b_serial_sink_applies_the_user_gamma() {
+        let v1 = sink_writes(
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            custom_corrections(),
+            &GOLDEN_FRAME,
+        );
+        let adalight = sink_writes(
+            FirmwareProfile::Adalight,
+            LedChipType::Ws2812bGrb,
+            custom_corrections(),
+            &GOLDEN_FRAME,
+        );
+        assert_eq!(&v1[..5], &[0xAA, 0x55, 204, 4, 0]);
+        assert_eq!(&v1[5..v1.len() - 1], &adalight[6..]);
+
+        let linear = ColorCorrectionConfig {
+            gamma_r: 1.0,
+            gamma_g: 1.0,
+            gamma_b: 1.0,
+            ..ColorCorrectionConfig::default()
+        };
+        let mid_grey = [[128_u8, 128, 128]];
+        let at_linear = sink_writes(
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            linear,
+            &mid_grey,
+        );
+        let at_default = sink_writes(
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            ColorCorrectionConfig::default(),
+            &mid_grey,
+        );
+        assert_eq!(&at_linear[5..8], &[128, 128, 128], "gamma 1.0 is linear");
+        assert_eq!(&at_default[5..8], &[56, 56, 56], "gamma 2.2 maps 128 to 56");
+    }
+
+    #[test]
+    fn serial_sink_builds_its_gamma_lut_once_not_per_frame() {
+        for (profile, chip) in ENCODERS {
+            let sender = Arc::new(FakeSender::successful());
+            let bridge = LedOutputBridge::from_sender(sender.clone());
+            let before = super::GAMMA_LUT_BUILDS.with(|n| n.get());
+            let mut sink = SerialSink::with_chip_type(
+                bridge,
+                Some("COM9".into()),
+                1.0,
+                profile,
+                custom_corrections(),
+                chip,
+            );
+            let lut = sink.plan_luts_ptr();
+            for _ in 0..10 {
+                sink.send_frame(&GOLDEN_FRAME).unwrap();
+            }
+            let builds = super::GAMMA_LUT_BUILDS.with(|n| n.get()) - before;
+            assert_eq!(
+                builds, 1,
+                "{profile:?} + {chip:?} rebuilt its LUT per frame"
+            );
+            assert_eq!(sink.plan_luts_ptr(), lut);
+            assert_eq!(sender.writes().len(), 10);
+        }
+    }
+
+    #[test]
+    fn default_plan_shares_the_static_lut_and_builds_nothing() {
+        let _ = EncoderPlan::default();
+        let before = super::GAMMA_LUT_BUILDS.with(|n| n.get());
+        let a = EncoderPlan::default();
+        let b = EncoderPlan::new(&ColorCorrectionConfig::default());
+        assert_eq!(super::GAMMA_LUT_BUILDS.with(|n| n.get()), before);
+        assert_eq!(a.luts_ptr(), b.luts_ptr());
+    }
+
+    /// Adalight firmware has no brightness input, so the slider did nothing
+    /// under that profile until the host scaled the pixels itself.
+    #[test]
+    fn adalight_scales_brightness_into_the_corrected_pixels() {
+        let frame = [[255_u8, 128, 0]];
+        let full = sink_writes_at(
+            1.0,
+            FirmwareProfile::Adalight,
+            LedChipType::Ws2812bGrb,
+            ColorCorrectionConfig::default(),
+            &frame,
+        );
+        let half = sink_writes_at(
+            0.5,
+            FirmwareProfile::Adalight,
+            LedChipType::Ws2812bGrb,
+            ColorCorrectionConfig::default(),
+            &frame,
+        );
+        let off = sink_writes_at(
+            0.0,
+            FirmwareProfile::Adalight,
+            LedChipType::Ws2812bGrb,
+            ColorCorrectionConfig::default(),
+            &frame,
+        );
+        // Gamma 2.2 first (128 → 56), then brightness: 255 * 0.5 → 128, 56 * 0.5 → 28.
+        assert_eq!(&full[6..], &[255, 56, 0]);
+        assert_eq!(&half[6..], &[128, 28, 0]);
+        assert_eq!(&off[6..], &[0, 0, 0]);
+        assert_eq!(&half[..6], &full[..6], "the header carries no brightness");
+    }
+
+    #[test]
+    fn wire_pixel_layout_follows_the_encoder_dispatch() {
+        for profile in [FirmwareProfile::LumaSyncV1, FirmwareProfile::Adalight] {
+            for chip in [LedChipType::Ws2812bGrb, LedChipType::Sk6812Rgbw] {
+                let bpp = WirePixelLayout::for_output(profile, chip).bytes_per_pixel();
+                let two = encode_packet_for_output(
+                    profile,
+                    chip,
+                    1.0,
+                    &[[1, 2, 3]; 2],
+                    &EncoderPlan::default(),
+                );
+                let one = encode_packet_for_output(
+                    profile,
+                    chip,
+                    1.0,
+                    &[[1, 2, 3]],
+                    &EncoderPlan::default(),
+                );
+                assert_eq!(
+                    two.len() - one.len(),
+                    bpp,
+                    "{profile:?} + {chip:?}: budget and encoder disagree on pixel size"
+                );
+            }
+        }
+        assert_eq!(
+            WirePixelLayout::for_output(FirmwareProfile::Adalight, LedChipType::Sk6812Rgbw),
+            WirePixelLayout::Rgb,
         );
     }
 }
