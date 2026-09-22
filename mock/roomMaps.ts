@@ -15,13 +15,16 @@
  * editor has to handle and would otherwise only meet in a user's file.
  */
 
-import type {
-  HueChannelPlacement,
-  HueZone,
-  RoomMapConfig,
+import {
+  HUE_CHANNEL_HEIGHT_ORIGIN,
+  type HueChannelHeightOrigin,
+  type HueChannelPlacement,
+  type HueZone,
+  type RoomMapConfig,
+  type TvAnchorPlacement,
 } from "../src/shared/contracts/roomMap";
 
-export const ROOM_MAP_PRESET_IDS = ["none", "simple", "zoned", "legacy-gapped"] as const;
+export const ROOM_MAP_PRESET_IDS = ["none", "simple", "zoned", "legacy-gapped", "tv-anchored"] as const;
 
 export type RoomMapPresetId = (typeof ROOM_MAP_PRESET_IDS)[number];
 
@@ -35,13 +38,24 @@ export interface RoomMapPreset {
 
 const DIMENSIONS = { widthMeters: 5.2, depthMeters: 4.1, heightMeters: 2.6 };
 
+// Room-metre frame throughout this file (see `TvAnchorPlacement` on the
+// contract): origin at the TV-wall/left-wall floor corner, +x toward the
+// right wall, +y away from the TV wall. x/y is each object's top-left
+// corner, never its centre — furniture and the TV anchor both live here.
+// Hue channel x/y/z stay in the separate native [-1, 1] frame documented at
+// the top of `roomMap.ts` and are untouched by this note.
 const FURNITURE: RoomMapConfig["furniture"] = [
-  { id: "sofa-1", type: "sofa", x: 0, y: 0.55, width: 2.1, height: 0.9, rotation: 0, label: "Sofa" },
-  { id: "table-1", type: "table", x: 0, y: 0.1, width: 1.1, height: 0.6, rotation: 0, label: "Coffee table" },
-  { id: "chair-1", type: "chair", x: -1.6, y: 0.2, width: 0.6, height: 0.6, rotation: 35, label: "Armchair" },
+  { id: "sofa-1", type: "sofa", x: 1.55, y: 2.9, width: 2.1, height: 0.9, rotation: 0, label: "Sofa" },
+  { id: "table-1", type: "table", x: 2.05, y: 1.9, width: 1.1, height: 0.6, rotation: 0, label: "Coffee table" },
+  { id: "chair-1", type: "chair", x: 0.4, y: 2.2, width: 0.6, height: 0.6, rotation: 35, label: "Armchair" },
 ];
 
-const TV_ANCHOR = { x: 0, y: -0.85, width: 1.6, height: 0.9 };
+const TV_ANCHOR: TvAnchorPlacement = {
+  x: (DIMENSIONS.widthMeters - 1.6) / 2,
+  y: 0.15,
+  width: 1.6,
+  height: 0.08,
+};
 
 function channel(
   channelIndex: number,
@@ -49,6 +63,7 @@ function channel(
   y: number,
   z: number,
   label: string,
+  zOrigin?: HueChannelHeightOrigin,
 ): HueChannelPlacement {
   return {
     channelIndex,
@@ -59,6 +74,7 @@ function channel(
     z,
     label,
     locked: false,
+    ...(zOrigin ? { zOrigin } : {}),
   };
 }
 
@@ -75,10 +91,10 @@ function simple(): RoomMapConfig {
     usbStrips: [
       {
         stripId: "strip-tv",
-        startX: -0.8,
-        startY: -0.95,
-        endX: 0.8,
-        endY: -0.95,
+        startX: 0.3,
+        startY: 0.05,
+        endX: 4.9,
+        endY: 0.05,
         ledCount: 164,
         portName: "/dev/cu.usbserial-1420",
       },
@@ -150,9 +166,52 @@ function legacyGapped(): RoomMapConfig {
       { channelIndex: 5, x: 0, y: 0.4, z: 0.9, label: "Ceiling" },
     ],
     usbStrips: [
-      { stripId: "strip-legacy", startX: -0.8, startY: -0.95, endX: 0.8, endY: -0.95, ledCount: 120 },
+      { stripId: "strip-legacy", startX: 0.5, startY: 0.05, endX: 4.5, endY: 0.05, ledCount: 120 },
     ],
     furniture: FURNITURE,
+    zones: [],
+    imageLayers: [],
+  };
+}
+
+const TV_ANCHOR_MOUNTED: TvAnchorPlacement = {
+  ...TV_ANCHOR,
+  // Explicit mount height — the room-aware sampler has no snapshot fallback
+  // to fall back on once a `RoomGeometry` carries this, unlike the 40%-of
+  // -room-height default `mountHeightMeters` gets when absent.
+  mountHeightMeters: 1.35,
+};
+
+/**
+ * A TV anchor with a known mount height, plus Hue channels whose `z` origin
+ * is recorded (mixed `bridge`/`user`, mixed floor/mid/ceiling) — the shape
+ * the room-aware sampler needs once the frontend starts sending
+ * `RoomGeometry` on stream start. `simple` and `zoned` both predate height
+ * tracking, so every channel there has `zOrigin` absent (unknown-origin),
+ * which is a real state but not this one.
+ */
+function tvAnchored(): RoomMapConfig {
+  return {
+    dimensions: DIMENSIONS,
+    hueChannels: [
+      channel(0, -0.85, -0.7, -0.95, "Floor left", HUE_CHANNEL_HEIGHT_ORIGIN.USER),
+      channel(1, 0.85, -0.7, -0.95, "Floor right", HUE_CHANNEL_HEIGHT_ORIGIN.USER),
+      channel(2, -0.9, 0.1, 0.05, "Shelf", HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE),
+      channel(3, 0, 0.5, 0.95, "Ceiling", HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE),
+    ],
+    usbStrips: [
+      {
+        stripId: "strip-tv-mounted",
+        startX: 0.3,
+        startY: 0.05,
+        endX: 4.9,
+        endY: 0.05,
+        ledCount: 164,
+        portName: "/dev/cu.usbserial-1420",
+      },
+    ],
+    furniture: FURNITURE,
+    tvAnchor: TV_ANCHOR_MOUNTED,
     zones: [],
     imageLayers: [],
   };
@@ -182,5 +241,11 @@ export const ROOM_MAP_PRESETS: Record<RoomMapPresetId, RoomMapPreset> = {
     label: "Legacy, gapped indices",
     summary: "Pre-v1.5 shape: channelIndex 0/2/5, no area id, strip with no port.",
     build: legacyGapped,
+  },
+  "tv-anchored": {
+    id: "tv-anchored",
+    label: "TV-anchored, known heights",
+    summary: "TV with an explicit mount height, channels with recorded floor/mid/ceiling z-origins.",
+    build: tvAnchored,
   },
 };
