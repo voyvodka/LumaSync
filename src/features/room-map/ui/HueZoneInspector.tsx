@@ -50,6 +50,7 @@ import { useTranslation } from "react-i18next";
 
 import type { HueZone } from "@/shared/contracts/roomMap";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
+import { normalizeHex } from "@/shared/lib/color";
 import { clamp, roundTo } from "@/shared/lib/math";
 
 interface HueZoneInspectorProps {
@@ -82,13 +83,6 @@ function resolveDisplayHex(value: string | null | undefined, fallback: string): 
   const palette = ZONE_PALETTE.find((p) => p.cssVar === value);
   if (palette) return palette.hex;
   return fallback;
-}
-
-function normaliseHexDraft(raw: string): string | null {
-  const trimmed = raw.trim();
-  const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) return null;
-  return `#${withHash.slice(1).toLowerCase()}`;
 }
 
 // Mirrors `HUE_ZONE_SCALE_MIN` / `HUE_ZONE_SCALE_MAX` in
@@ -205,7 +199,7 @@ export function HueZoneInspector({
 
   const commitHex = useCallback(() => {
     setEditingHex(false);
-    const normalised = normaliseHexDraft(hexDraft);
+    const normalised = normalizeHex(hexDraft);
     if (!normalised) {
       setHexDraft(borderHex.toUpperCase());
       return;

@@ -1,25 +1,8 @@
 import { useTranslation } from "react-i18next";
 
+import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { useSolidColorDraft } from "./useSolidColorDraft";
-
-function toHexPair(value: number): string {
-  return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
-}
-
-function toHexColor(draft: { r: number; g: number; b: number }): string {
-  return `#${toHexPair(draft.r)}${toHexPair(draft.g)}${toHexPair(draft.b)}`;
-}
-
-function parseHexColor(value: string): { r: number; g: number; b: number } {
-  const safe = value.startsWith("#") ? value.slice(1) : value;
-  if (!/^[0-9a-fA-F]{6}$/.test(safe)) return { r: 255, g: 255, b: 255 };
-  return {
-    r: Number.parseInt(safe.slice(0, 2), 16),
-    g: Number.parseInt(safe.slice(2, 4), 16),
-    b: Number.parseInt(safe.slice(4, 6), 16),
-  };
-}
 
 interface SolidColorPanelProps {
   incoming: { r: number; g: number; b: number; brightness: number };
@@ -48,7 +31,7 @@ export function SolidColorPanel({
   const { t } = useTranslation();
   const { draft, setColor, setBrightness } = useSolidColorDraft({ incoming, onCommit });
 
-  const hexColor = toHexColor(draft);
+  const hexColor = rgbToHex(draft);
   const brightnessPercent = Math.round(draft.brightness * 100);
   const solidActiveAlpha = (0.3 + draft.brightness * 0.7).toFixed(3);
   const trackColor = `rgba(${draft.r}, ${draft.g}, ${draft.b}, ${solidActiveAlpha})`;
@@ -74,7 +57,10 @@ export function SolidColorPanel({
         >
           <HsvColorPicker
             value={hexColor}
-            onChange={(hex) => setColor(parseHexColor(hex))}
+            onChange={(hex) => {
+              const rgb = parseHex(hex);
+              if (rgb) setColor(rgb);
+            }}
             disabled={disabled}
             ariaLabel={t("common:mode.solidColor")}
           />

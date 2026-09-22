@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
+import { parseHex } from "@/shared/lib/color";
+
 import { HeroColorCard } from "./HeroColorCard";
 import { SelfContainedBrightnessRow } from "./SelfContainedBrightnessRow";
 
@@ -43,11 +45,9 @@ export function CompactSolidSection({
 
   const handleColorChange = useCallback(
     (hex: string) => {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      const current = incomingRef.current;
-      onCommit({ r, g, b, brightness: current.brightness });
+      const rgb = parseHex(hex);
+      if (!rgb) return;
+      onCommit({ ...rgb, brightness: incomingRef.current.brightness });
     },
     [onCommit],
   );
