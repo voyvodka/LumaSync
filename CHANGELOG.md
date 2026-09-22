@@ -29,17 +29,31 @@ https://keepachangelog.com/en/1.1.0/
 - SK6812 strips using the Adalight profile are sent three bytes per LED, since Adalight has no
   RGBW format. The frame-rate limit counted four, which held these strips about a quarter below
   the frame rate the USB link can carry. The limit now counts what is actually sent.
+- USB health check: the firmware handshake always waited its full 2 s timeout even when the
+  strip answered at once, so the reported round-trip read about 2000 ms. It now finishes as soon
+  as the reply arrives and reports the real round-trip time. Stray bytes before the reply, or a
+  reply split across reads, no longer fail the check.
 - Turning Hue on while a mode was already running on USB showed Hue as on even when the bridge
   could not take the stream, so nothing was driving the lights. Hue now shows as on only once the
   app is actually sending to it. Otherwise USB keeps running, the Hue toggle goes back off, a
   notice says why (bridge unreachable, re-pair needed, or not set up), and any Hue reconnect the
   attempt left running is stopped. Your choice to use Hue is still saved, so the next launch
   tries it again.
+- Turning USB (a serial strip or WLED device) on while a mode was already running on Hue showed
+  USB as on even when the app refused it because no device was connected. USB now shows as on
+  only once the app is actually driving it. Otherwise Hue keeps running, the USB toggle goes back
+  off, and a notice says no LED output is available. If the attempt stopped the running mode, the
+  app now shows it as off and releases the Hue stream. Your choice to use USB is still saved, so
+  the next launch tries it again.
 - SK6812 RGBW strips: picking Ambilight from the LED test popup restarted a running strip in the
   WS2812B format, and Solid colour was always sent that way from any window. Both now use the
   four-byte RGBW format. The popup also stopped sending colour correction, firmware profile and
   calibration it had read when it first opened, so changes made in the main window since then
   now apply.
+- Stopping an LED test pattern put back the chip type, firmware profile, colour correction and LED
+  layout from when the test started, so a change made while it ran (such as switching SK6812 and
+  WS2812B, or saving a new layout in LED Setup) was undone on stop. The restored mode now uses the
+  saved settings.
 - The Hue channel map now notices a changed light height, not just a moved light, when it says
   whether the bridge still has your arrangement. Areas saved before this update are compared on
   position alone, so updating does not mark them as unsaved.
@@ -192,7 +206,8 @@ https://keepachangelog.com/en/1.1.0/
   screen that matches where it stands: its height picks the band — a floor lamp takes the bottom
   of the picture, a ceiling light the top — and its position left or right of the TV picks the
   side. Its distance from the TV sets how much it follows the screen and how much it keeps a
-  softer room-wide colour; no light is ever switched off for being far away. Every room template
+  softer room-wide colour; no light is ever switched off for being far away, and even the
+  farthest light keeps part of its own side of the picture. Every room template
   except Empty places a TV, so if you set up your room map from one of those templates this turns
   on by itself when you update. Lights whose height LumaSync does not know yet sample the middle
   of the screen. Moving a light or the TV applies to running Ambilight within about half a second,

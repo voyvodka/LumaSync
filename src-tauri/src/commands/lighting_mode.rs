@@ -3110,6 +3110,28 @@ fn is_ambilight_start_ok(code: &str) -> bool {
     code == "AMBILIGHT_MODE_STARTED" || code == "AMBILIGHT_MODE_UPDATED"
 }
 
+/// The pre-test mode with its output stamps and calibration re-read from disk.
+/// The snapshot dates from test start and hydration is caller-wins, so stale
+/// values would revert a chip / profile / correction change made mid-test and
+/// the calibration editor's save-then-stop. The snapshot's layout survives only
+/// when disk has none, instead of dropping to the legacy 1-LED frame.
+fn restore_mode_after_test(
+    prior: Option<LightingModeConfig>,
+    load: &dyn Fn() -> Option<String>,
+) -> LightingModeConfig {
+    let mut restore = prior.unwrap_or_default();
+    restore.chip_type = None;
+    restore.firmware_profile = None;
+    restore.color_correction = None;
+    if let Some(snapshot_calibration) = restore.led_calibration.take() {
+        maybe_hydrate_led_calibration(&mut restore, load);
+        if restore.led_calibration.is_none() {
+            restore.led_calibration = Some(snapshot_calibration);
+        }
+    }
+    restore
+}
+
 /// Stop the running LED test pattern and restore the mode that was active
 /// before it started (or force `Off` if that restore itself gets gated by a
 /// disconnected sink, so the synthetic worker never gets stranded running).
@@ -3124,7 +3146,9 @@ pub fn stop_led_test_pattern<R: Runtime>(
     sink_registry: State<'_, ActiveSinkRegistry>,
 ) -> Result<LedTestPatternResult, String> {
     let wled_sink = sink_registry.active_wled_config();
-    let restore = led_twin_state.take_prior_mode().unwrap_or_default();
+    let restore = restore_mode_after_test(led_twin_state.take_prior_mode(), &|| {
+        read_persisted_shell_state(&app)
+    });
     let mut result = apply_and_broadcast(
         &app,
         restore,
@@ -6544,6 +6568,87 @@ mod lighting_mode_tests {
         stamped.chip_type = Some(LedChipType::Ws2812bGrb);
         let hydrated = hydrated_like_set_lighting_mode(stamped, SK6812_SHELL_STATE);
         assert_eq!(hydrated.chip_type, Some(LedChipType::Ws2812bGrb));
+    }
+
+    /// `stop_led_test_pattern`'s restore, run through the real chain: the
+    /// snapshot helper, the hydration `apply_and_broadcast` performs, then
+    /// `apply_mode_change`, with the persisted shell state injected.
+    fn restored_after_test(prior: LightingModeConfig, shell_state: String) -> LightingModeConfig {
+        let load = || Some(shell_state.clone());
+        let mut restore = super::restore_mode_after_test(Some(prior), &load);
+        super::hydrate_mode_payload(&mut restore, &load);
+        restore
+    }
+
+    /// The snapshot is taken at test start; a chip switch made while the test
+    /// ran must survive the stop instead of reverting to the old encoder.
+    #[test]
+    fn stopping_a_test_restores_the_chip_type_saved_during_it() {
+        let (mut owner, recorder) = owner_with_recording_sender();
+        let mut prior = solid_with_calibration(10);
+        prior.chip_type = Some(LedChipType::Ws2812bGrb);
+        prior.firmware_profile = Some(FirmwareProfile::LumaSyncV1);
+
+        let restored = restored_after_test(prior, SK6812_SHELL_STATE.to_string());
+        assert_eq!(restored.chip_type, Some(LedChipType::Sk6812Rgbw));
+
+        let result = apply_mode_change(
+            &mut owner,
+            restored,
+            true,
+            Some("COM-RGBW"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+        assert_eq!(owner.active_mode.chip_type, Some(LedChipType::Sk6812Rgbw));
+        let writes = recorder.writes.lock().expect("writes lock poisoned");
+        let (_, packet) = &writes[0];
+        assert_eq!(packet.len(), 5 + 4 * 10 + 1, "restored Solid frame is RGBW");
+    }
+
+    /// The calibration editor saves, then stops its test. The stale layout on
+    /// the snapshot has more than one LED, so caller-wins hydration would keep
+    /// it over the layout just written to disk.
+    #[test]
+    fn stopping_a_test_restores_the_calibration_saved_during_it() {
+        let (mut owner, recorder) = owner_with_recording_sender();
+        let prior = solid_with_calibration(10);
+        let shell_state = serde_json::json!({
+            "shell-state": { "ledCalibration": calibration_with_total_leds(20) }
+        })
+        .to_string();
+
+        let restored = restored_after_test(prior, shell_state);
+        let result = apply_mode_change(
+            &mut owner,
+            restored,
+            true,
+            Some("COM-CAL"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+        let writes = recorder.writes.lock().expect("writes lock poisoned");
+        let (_, packet) = &writes[0];
+        assert_eq!(u16::from_le_bytes([packet[3], packet[4]]), 20);
+    }
+
+    /// With no usable layout on disk the snapshot's is still better than the
+    /// legacy 1-LED frame clearing it would fall to.
+    #[test]
+    fn stopping_a_test_keeps_the_snapshot_calibration_when_disk_has_none() {
+        let restored = restored_after_test(
+            solid_with_calibration(10),
+            r#"{"shell-state":{}}"#.to_string(),
+        );
+        assert_eq!(restored.led_calibration.map(|cal| cal.total_leds), Some(10));
     }
 
     /// Only twin overlays read the enriched buffer, so a running test with no

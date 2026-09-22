@@ -3,8 +3,9 @@
 //! to the TV. Pure — no I/O, no state. See docs/architecture/room-map.md.
 //!
 //! Distance only ever chooses the sample point and the ambience blend. It never
-//! widens or narrows the sample window and never drops a light: affinity `0`
-//! means "all ambience", not "dark".
+//! widens or narrows the sample window and never drops a light, and affinity
+//! never falls below `ROOM_AFFINITY_FLOOR`, so the farthest light still keeps
+//! part of its own screen region.
 
 use crate::commands::hue::frame::HueAreaChannel;
 use crate::models::room_map::RoomGeometry;
@@ -13,9 +14,14 @@ use crate::models::room_map::RoomGeometry;
 /// TV anchor carries no explicit mount height.
 pub const DEFAULT_TV_MOUNT_HEIGHT_FRACTION: f64 = 0.4;
 
+/// Affinity at the farthest point in the room. Without it a far light takes
+/// the frame-wide ambience alone and loses its side of the picture entirely.
+pub const ROOM_AFFINITY_FLOOR: f64 = 0.25;
+
 /// One channel's room-aware sampling input. `sample_x`/`sample_y` are in the
 /// sampler's `[-1, 1]` screen space (`+y` = top row); `affinity` feeds the
-/// scene stage (`1` = at the screen, `0` = the farthest point in the room).
+/// scene stage (`1` = at the screen, `ROOM_AFFINITY_FLOOR` = the farthest point
+/// in the room).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HueRoomSample {
     pub sample_x: f32,
@@ -129,7 +135,9 @@ impl ResolvedRoom {
             + (y_m - self.screen_y).powi(2)
             + (z_m - self.mount).powi(2))
         .sqrt();
-        let affinity = (1.0 - distance / self.max_distance).clamp(0.0, 1.0);
+        let nearness = 1.0 - distance / self.max_distance;
+        let affinity = (ROOM_AFFINITY_FLOOR + (1.0 - ROOM_AFFINITY_FLOOR) * nearness)
+            .clamp(ROOM_AFFINITY_FLOOR, 1.0);
 
         HueRoomSample {
             sample_x: sample_x as f32,
@@ -252,12 +260,39 @@ mod tests {
             );
             previous = a;
         }
-        // The farthest corner: back wall, right side, floor/ceiling farthest from 1.0 m.
-        let corner = one(&geo, channel(1.0, -1.0, Some(1.0))).affinity;
+        assert!(previous > ROOM_AFFINITY_FLOOR as f32, "{previous}");
+    }
+
+    #[test]
+    fn the_farthest_corner_keeps_exactly_the_floor() {
+        // Back wall, right side, the ceiling — farther from the 1.0 m mount than the floor.
+        let corner = one(&room(None), channel(1.0, -1.0, Some(1.0))).affinity;
+        // Pinned as a literal: comparing against the constant alone would pass
+        // with the floor set to 0, which is the regression this guards.
         assert!(
-            corner.abs() < 1e-5,
-            "farthest corner must be 0, got {corner}"
+            (corner - 0.25).abs() < 1e-5,
+            "farthest corner must keep a quarter of its own region, got {corner}"
         );
+    }
+
+    #[test]
+    fn affinity_is_monotonic_from_the_screen_centre_to_the_farthest_corner() {
+        let geo = room(None);
+        let steps = 20;
+        let mut previous = f32::INFINITY;
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            // Straight line from the screen centre (Hue 0, 1, mount) to the far corner.
+            let z = hz(1.0) + t * (1.0 - hz(1.0));
+            let a = one(&geo, channel(t, 1.0 - 2.0 * t, Some(z))).affinity;
+            assert!(a < previous, "step {i}: {a} !< {previous}");
+            assert!(
+                (ROOM_AFFINITY_FLOOR as f32 - 1e-5..=1.0 + 1e-5).contains(&a),
+                "{a}"
+            );
+            previous = a;
+        }
+        assert!((previous - ROOM_AFFINITY_FLOOR as f32).abs() < 1e-5);
     }
 
     #[test]
@@ -278,7 +313,7 @@ mod tests {
                 assert!(v.is_finite() && (-1.0..=1.0).contains(&v), "{s:?}");
             }
             assert!(
-                s.affinity.is_finite() && (0.0..=1.0).contains(&s.affinity),
+                s.affinity.is_finite() && (ROOM_AFFINITY_FLOOR as f32..=1.0).contains(&s.affinity),
                 "{s:?}"
             );
         }

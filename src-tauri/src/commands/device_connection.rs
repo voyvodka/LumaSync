@@ -596,9 +596,7 @@ pub fn get_serial_connection_status(
 /// 2. `PORT_SUPPORTED`  — VID:PID matches the allowlist.
 /// 3. `CONNECT_AND_VERIFY` — port can be opened at 115 200 baud.
 /// 4. `HANDSHAKE`       — LumaSync v1 PING → PONG round-trip succeeded.
-///    (v1.4: firmware companion not shipped yet — this step will report
-///    `SERIAL_HEALTH_HANDSHAKE_TIMEOUT` when pointed at non-LumaSync firmware.
-///    Real firmware integration arrives in v1.5.)
+///    No companion firmware ships yet, so non-LumaSync firmware fails this step.
 ///
 /// The command never throws; it always returns a `HealthCheckResult`.
 ///
@@ -801,11 +799,9 @@ fn run_serial_health_check_blocking(port_name: String) -> HealthCheckResult {
     // -----------------------------------------------------------------------
     // Step 4: HANDSHAKE — LumaSync v1 PING → PONG round-trip
     //
-    // v1.4: firmware companion not yet shipped. Non-LumaSync firmware will
-    // not respond to the PING, producing SERIAL_HEALTH_HANDSHAKE_TIMEOUT.
-    // This is expected; the step is non-fatal (pass=false) so the UI can
-    // surface an explanation without blocking the user from using the port
-    // with the Adalight profile.
+    // No companion firmware ships yet, so non-LumaSync firmware fails here.
+    // The step is non-fatal (pass=false) so the UI can explain it without
+    // blocking the user from using the port with the Adalight profile.
     // -----------------------------------------------------------------------
     let mut timed_port = TimedSerialPort::new(port_handle);
     let handshake_result = perform_handshake(&mut timed_port, HANDSHAKE_ROUND_TRIP_TIMEOUT);
@@ -1325,7 +1321,7 @@ mod tests {
         let garbled = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33];
         let mut port = MockPort::with_response(garbled);
 
-        let err_result = match perform_handshake(&mut port, Duration::from_millis(1_000)) {
+        let err_result = match perform_handshake(&mut port, Duration::from_millis(100)) {
             Ok((response, elapsed_ms)) => HealthCheckResult {
                 pass: true,
                 steps: vec![],
