@@ -30,7 +30,7 @@ use super::led_calibration::{
     link_max_fps, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
-    apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_profile,
+    apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_output,
     gamma_luts_for, ColorCorrectionConfig, FirmwareProfile, GammaLuts, LedChipType,
     LedOutputBridge, SerialSink,
 };
@@ -547,8 +547,8 @@ fn parse_led_calibration_from_shell_state(raw: &str) -> Option<LedCalibrationCon
     serde_json::from_value::<LedCalibrationConfig>(calibration).ok()
 }
 
-/// Read the persisted shell-state JSON file and extract `ledCalibration` if
-/// present. The frontend `shellStore` writes this via the
+/// Read the raw persisted shell-state JSON file. The frontend `shellStore`
+/// writes it via the
 /// `tauri-plugin-store` instance whose default file name is
 /// `<SHELL_STORE_KEY>.json` (currently `shell-state.json`). Reading the file
 /// directly side-steps the plugin-store API surface — the store registers
@@ -573,13 +573,21 @@ fn parse_led_calibration_from_shell_state(raw: &str) -> Option<LedCalibrationCon
 /// 3. If both are absent, leave `None` so the existing legacy 1-LED
 ///    fallback inside `apply_mode_change` keeps the v1.3 firmware
 ///    compat path unchanged.
-fn hydrate_led_calibration_from_disk<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Option<LedCalibrationConfig> {
+fn read_persisted_shell_state<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
     let app_data_dir = app.path().app_data_dir().ok()?;
-    let store_path = app_data_dir.join("shell-state.json");
-    let raw = std::fs::read_to_string(&store_path).ok()?;
-    parse_led_calibration_from_shell_state(&raw)
+    std::fs::read_to_string(app_data_dir.join("shell-state.json")).ok()
+}
+
+/// Every payload hydrator, run by both mode entry points (`set_lighting_mode`
+/// and `apply_and_broadcast`). One function so neither can run a subset: when
+/// `set_lighting_mode` skipped the output stamps, an unstamped LED-control-popup
+/// click restarted a running SK6812 worker onto the WS2812B encoder. `load`
+/// is the shell-state reader, injected so the chain is testable without an
+/// `AppHandle`; it is only called when a field is actually missing.
+fn hydrate_mode_payload(payload: &mut LightingModeConfig, load: &dyn Fn() -> Option<String>) {
+    maybe_hydrate_led_calibration(payload, load);
+    maybe_hydrate_ambilight_settings(payload, load);
+    maybe_hydrate_output_stamps(payload, load);
 }
 
 /// Apply backend-side calibration fallback to an incoming
@@ -594,7 +602,10 @@ fn hydrate_led_calibration_from_disk<R: Runtime>(
 /// user having a 59-LED calibration on disk). Callers that already
 /// own a fully-hydrated payload pay no observable cost — the function
 /// short-circuits on the `total_leds > 1` check before touching disk.
-fn maybe_hydrate_led_calibration<R: Runtime>(app: &AppHandle<R>, payload: &mut LightingModeConfig) {
+fn maybe_hydrate_led_calibration(
+    payload: &mut LightingModeConfig,
+    load: &dyn Fn() -> Option<String>,
+) {
     let payload_total_leds = payload
         .led_calibration
         .as_ref()
@@ -605,7 +616,7 @@ fn maybe_hydrate_led_calibration<R: Runtime>(app: &AppHandle<R>, payload: &mut L
         return;
     }
 
-    if let Some(persisted) = hydrate_led_calibration_from_disk(app) {
+    if let Some(persisted) = load().and_then(|raw| parse_led_calibration_from_shell_state(&raw)) {
         if persisted.total_leds > 1 {
             info!(
                 "[set_lighting_mode] led_calibration fallback engaged — payload_total_leds={payload_total_leds} disk_total_leds={} (frontend payload missing or degenerate; using persisted shell-state)",
@@ -652,19 +663,6 @@ fn parse_ambilight_from_shell_state(raw: &str) -> Option<AmbilightPayload> {
     serde_json::from_value::<AmbilightPayload>(ambilight).ok()
 }
 
-/// Read the persisted shell-state JSON file and extract
-/// `lightingMode.ambilight` if present. Mirrors
-/// `hydrate_led_calibration_from_disk` in resolution semantics —
-/// frontend remains the source of truth, this is a pure recovery path.
-fn hydrate_ambilight_settings_from_disk<R: Runtime>(
-    app: &AppHandle<R>,
-) -> Option<AmbilightPayload> {
-    let app_data_dir = app.path().app_data_dir().ok()?;
-    let store_path = app_data_dir.join("shell-state.json");
-    let raw = std::fs::read_to_string(&store_path).ok()?;
-    parse_ambilight_from_shell_state(&raw)
-}
-
 /// Apply backend-side ambilight-settings fallback to an incoming
 /// `LightingModeConfig` (v1.5 H1 fix — bug H1). Triggers ONLY when
 /// `kind == Ambilight` and the payload's `ambilight` field is entirely
@@ -678,9 +676,9 @@ fn hydrate_ambilight_settings_from_disk<R: Runtime>(
 /// helper is the matching backend recovery path so a single missed
 /// frontend stamp (e.g. a future code path that bypasses the hydrator
 /// chain) doesn't strip the user's settings down to backend defaults.
-fn maybe_hydrate_ambilight_settings<R: Runtime>(
-    app: &AppHandle<R>,
+fn maybe_hydrate_ambilight_settings(
     payload: &mut LightingModeConfig,
+    load: &dyn Fn() -> Option<String>,
 ) {
     if payload.kind != LightingModeKind::Ambilight {
         return;
@@ -690,7 +688,7 @@ fn maybe_hydrate_ambilight_settings<R: Runtime>(
         // present-but-default value. Do NOT compare to defaults here.
         return;
     }
-    if let Some(persisted) = hydrate_ambilight_settings_from_disk(app) {
+    if let Some(persisted) = load().and_then(|raw| parse_ambilight_from_shell_state(&raw)) {
         info!(
             "[set_lighting_mode] ambilight settings fallback engaged — payload.ambilight=None disk.ambilight=Some (frontend payload missing; using persisted shell-state)"
         );
@@ -698,9 +696,10 @@ fn maybe_hydrate_ambilight_settings<R: Runtime>(
     }
 }
 
-/// Output stamps the frontend attaches to every `set_lighting_mode` payload
-/// (see `App.tsx > withColorCorrectionAndFirmwareProfile`). Commands that
-/// build a mode config server-side have no such payload to inherit from.
+/// Output stamps a caller may leave off a mode payload. The main window stamps
+/// them (`withColorCorrectionAndFirmwareProfile`); the LED control popup does
+/// not, and server-built configs have no payload to inherit from — so every
+/// entry point hydrates them from the persisted shell state.
 #[derive(Default)]
 struct PersistedOutputStamps {
     color_correction: Option<ColorCorrectionConfig>,
@@ -724,13 +723,6 @@ fn parse_output_stamps_from_shell_state(raw: &str) -> PersistedOutputStamps {
     }
 }
 
-/// Fill any output stamp the caller left unset from the persisted shell state
-/// (caller-wins: a stamp already on the payload is never overwritten).
-///
-/// Without this a synthetic test drives an SK6812 RGBW strip through the
-/// WS2812B encoder and an Adalight controller through the LumaSync v1 header,
-/// and drops the user's colour correction entirely — so the test lights
-/// nothing, or the wrong colours, on exactly the hardware it exists to verify.
 /// Aspect (width / height) of the display the strip surrounds, used to weight
 /// the synthetic frame's perimeter. Prefers the user's selected display so it
 /// matches the twin overlay, then the primary one; falls back to 16:9.
@@ -762,17 +754,24 @@ fn resolve_display_aspect<R: Runtime>(app: &AppHandle<R>) -> f32 {
     }
 }
 
-fn maybe_hydrate_output_stamps<R: Runtime>(app: &AppHandle<R>, payload: &mut LightingModeConfig) {
+/// Fill any output stamp the caller left unset from the persisted shell state
+/// (caller-wins: a stamp already on the payload is never overwritten).
+///
+/// Without this a synthetic test drives an SK6812 RGBW strip through the
+/// WS2812B encoder and an Adalight controller through the LumaSync v1 header,
+/// and drops the user's colour correction entirely — so the test lights
+/// nothing, or the wrong colours, on exactly the hardware it exists to verify.
+fn maybe_hydrate_output_stamps(
+    payload: &mut LightingModeConfig,
+    load: &dyn Fn() -> Option<String>,
+) {
     if payload.color_correction.is_some()
         && payload.firmware_profile.is_some()
         && payload.chip_type.is_some()
     {
         return;
     }
-    let Ok(dir) = app.path().app_data_dir() else {
-        return;
-    };
-    let Ok(raw) = std::fs::read_to_string(dir.join("shell-state.json")) else {
+    let Some(raw) = load() else {
         return;
     };
     let stamps = parse_output_stamps_from_shell_state(&raw);
@@ -2251,6 +2250,7 @@ fn apply_mode_change_inner(
                 let solid_corrections =
                     normalized_next.color_correction.clone().unwrap_or_default();
                 let solid_profile = normalized_next.firmware_profile.unwrap_or_default();
+                let solid_chip = normalized_next.chip_type.unwrap_or_default();
 
                 // Must paint EVERY LED, not just LED #0 (historical bug: a
                 // 1-element slice left 58/59 LEDs dark). Falls back to a
@@ -2288,8 +2288,9 @@ fn apply_mode_change_inner(
                 // keeps encoding brightness into the packet header as before.
                 let send_result: Result<(), String> = match &plan {
                     UsbOutputPlan::Serial(port_name) => {
-                        let solid_packet = encode_packet_for_profile(
+                        let solid_packet = encode_packet_for_output(
                             solid_profile,
+                            solid_chip,
                             payload.brightness,
                             &solid_triplets,
                             &solid_corrections,
@@ -2535,7 +2536,8 @@ fn apply_mode_change_inner(
 }
 
 /// Apply a full `LightingModeConfig` from the frontend: hydrates missing
-/// calibration/ambilight settings from persisted shell-state, then starts,
+/// calibration, ambilight settings and output stamps (colour correction,
+/// firmware profile, chip type) from persisted shell-state, then starts,
 /// reconfigures, or stops the worker to match the requested mode. Broadcasts
 /// `LIGHTING_MODE_CHANGED_EVENT` and the preview snapshot on every call.
 #[tauri::command]
@@ -2573,8 +2575,7 @@ pub fn set_lighting_mode<R: Runtime>(
     // saved value. The frontend remains the source of truth; this is a
     // pure recovery path that fires only when the payload is missing
     // or carries `total_leds <= 1`.
-    maybe_hydrate_led_calibration(&app, &mut payload);
-
+    //
     // Backend-side ambilight settings safety net (v1.5 H1 fix).
     //
     // Frontend `withAmbilightSettings` (App.tsx) stamps the persisted
@@ -2586,7 +2587,10 @@ pub fn set_lighting_mode<R: Runtime>(
     // because the frontend is source of truth for present-but-default
     // values (a deliberate slider commit at saturation 1.0 must round-
     // trip without backend interference).
-    maybe_hydrate_ambilight_settings(&app, &mut payload);
+    //
+    // Output stamps (colour correction, firmware profile, chip type) follow
+    // the same caller-wins rule; the LED control popup sends none of them.
+    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(&app));
 
     let connection_snapshot = connection_state
         .last_status
@@ -2825,9 +2829,7 @@ fn apply_and_broadcast<R: Runtime>(
     // WLED-only session runs preview-only and its restore is gated on stop.
     wled_sink: Option<WledSinkConfig>,
 ) -> Result<LightingModeCommandResult, String> {
-    maybe_hydrate_led_calibration(app, &mut payload);
-    maybe_hydrate_ambilight_settings(app, &mut payload);
-    maybe_hydrate_output_stamps(app, &mut payload);
+    hydrate_mode_payload(&mut payload, &|| read_persisted_shell_state(app));
 
     let connection_snapshot = connection_state
         .last_status
@@ -3013,7 +3015,7 @@ pub fn start_led_test_pattern<R: Runtime>(
     // chase band is sized for FALLBACK_TOTAL_LEDS — a misleading single-dot
     // preview. Route the user to the calibration flow with a coded status
     // instead. (Never throws — coded status on the Ok result.)
-    maybe_hydrate_led_calibration(&app, &mut config);
+    maybe_hydrate_led_calibration(&mut config, &|| read_persisted_shell_state(&app));
     let effective_total_leds = config
         .led_calibration
         .as_ref()
@@ -6284,6 +6286,150 @@ mod lighting_mode_tests {
         assert!(super::parse_output_stamps_from_shell_state("{}")
             .firmware_profile
             .is_none());
+    }
+
+    const SK6812_SHELL_STATE: &str = r#"{"shell-state":{"selectedChipType":"sk6812-rgbw"}}"#;
+
+    /// A payload as the LED control popup sends it — kind + settings, no
+    /// output stamps — run through the same hydration chain `set_lighting_mode`
+    /// uses, with the persisted shell state injected in place of the disk read.
+    fn hydrated_like_set_lighting_mode(
+        mut payload: LightingModeConfig,
+        shell_state: &'static str,
+    ) -> LightingModeConfig {
+        super::hydrate_mode_payload(&mut payload, &|| Some(shell_state.to_string()));
+        payload
+    }
+
+    /// The popup's Ambilight click carried no chip type, so the fast-path chip
+    /// comparison failed against a running SK6812 worker and the restart fell
+    /// back to `LedChipType::default()` — the WS2812B encoder, three bytes per
+    /// pixel on a four-byte strip.
+    #[test]
+    fn unstamped_ambilight_click_keeps_a_running_sk6812_worker_on_rgbw() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_with_fake_sender();
+
+        let mut running = ambilight_with_payload(AmbilightPayload {
+            brightness: 0.8,
+            ..Default::default()
+        });
+        running.chip_type = Some(LedChipType::Sk6812Rgbw);
+        let up = apply_mode_change(
+            &mut owner,
+            running.clone(),
+            true,
+            Some("COM-RGBW"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(up.status.code, "AMBILIGHT_MODE_STARTED");
+
+        let mut popup_click = running.clone();
+        popup_click.chip_type = None;
+        popup_click.firmware_profile = None;
+        popup_click.color_correction = None;
+        let hydrated = hydrated_like_set_lighting_mode(popup_click, SK6812_SHELL_STATE);
+        let after = apply_mode_change(
+            &mut owner,
+            hydrated,
+            true,
+            Some("COM-RGBW"),
+            None,
+            None,
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+
+        assert_eq!(
+            after.status.code, "AMBILIGHT_MODE_UPDATED",
+            "an unstamped click must retune the running worker, not rebuild it",
+        );
+        assert_eq!(owner.active_mode.chip_type, Some(LedChipType::Sk6812Rgbw));
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
+    }
+
+    /// Solid built its packet from the firmware profile alone, so an SK6812
+    /// strip got three-byte pixels from every window, stamped or not.
+    #[test]
+    fn solid_on_sk6812_writes_four_byte_rgbw_pixels() {
+        let (mut owner, recorder) = owner_with_recording_sender();
+        let mut solid = solid_with_calibration(10);
+        solid.solid = Some(SolidColorPayload {
+            r: 255,
+            g: 255,
+            b: 255,
+            brightness: 1.0,
+        });
+        let hydrated = hydrated_like_set_lighting_mode(solid, SK6812_SHELL_STATE);
+
+        let result = apply_mode_change(
+            &mut owner,
+            hydrated,
+            true,
+            Some("COM-RGBW"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+
+        let writes = recorder.writes.lock().expect("writes lock poisoned");
+        let (_, packet) = &writes[0];
+        assert_eq!(packet.len(), 5 + 4 * 10 + 1, "SK6812 Solid frame is RGBW");
+        assert_eq!(u16::from_le_bytes([packet[3], packet[4]]), 10);
+        // White drives the dedicated W emitter, not the three colour dies.
+        assert_eq!(&packet[5..9], &[0, 0, 0, 255]);
+        let checksum = packet[..packet.len() - 1]
+            .iter()
+            .fold(0_u8, |acc, byte| acc ^ byte);
+        assert_eq!(packet[packet.len() - 1], checksum);
+    }
+
+    /// Adalight has no four-byte pixel, so SK6812 under it must still write the
+    /// three-byte Adalight frame — the same fallback the ambilight sink takes.
+    #[test]
+    fn solid_on_sk6812_under_adalight_keeps_the_adalight_frame() {
+        let (mut owner, recorder) = owner_with_recording_sender();
+        let mut solid = solid_with_calibration(10);
+        solid.chip_type = Some(LedChipType::Sk6812Rgbw);
+        solid.firmware_profile = Some(FirmwareProfile::Adalight);
+
+        let result = apply_mode_change(
+            &mut owner,
+            solid,
+            true,
+            Some("COM-ADA"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+
+        let writes = recorder.writes.lock().expect("writes lock poisoned");
+        let (_, packet) = &writes[0];
+        assert_eq!(&packet[0..3], b"Ada");
+        assert_eq!(packet.len(), 6 + 3 * 10);
+    }
+
+    /// Caller-wins: a stamp the payload already carries is never replaced.
+    #[test]
+    fn hydration_never_overrides_a_stamped_chip_type() {
+        let mut stamped = solid_with_calibration(10);
+        stamped.chip_type = Some(LedChipType::Ws2812bGrb);
+        let hydrated = hydrated_like_set_lighting_mode(stamped, SK6812_SHELL_STATE);
+        assert_eq!(hydrated.chip_type, Some(LedChipType::Ws2812bGrb));
     }
 
     /// Only twin overlays read the enriched buffer, so a running test with no

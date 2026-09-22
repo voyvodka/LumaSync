@@ -321,6 +321,50 @@ describe("ControlPopupApp run controls", () => {
   });
 });
 
+describe("ControlPopupApp mode payload stamps", () => {
+  // The webview outlives every hide, so a mount-time copy of the output
+  // settings went stale — and it never carried the chip type at all, which
+  // restarted a running SK6812 worker onto the WS2812B encoder.
+  it("leaves the output stamps to the backend and reads the rest fresh", async () => {
+    const user = userEvent.setup();
+    storeState = {
+      ...storeState,
+      colorCorrection: { gammaR: 2.2, gammaG: 2.2, gammaB: 2.2, kelvin: 6500, saturation: 1 },
+      firmwareProfile: "lumasync-v1",
+      selectedChipType: "ws2812b-grb",
+      ledCalibration: { totalLeds: 30 },
+      lightingMode: { kind: "ambilight", ambilight: { brightness: 0.4 } },
+      selectedDisplayId: "display-1",
+    };
+    render(<ControlPopupApp />);
+    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
+
+    // Changed in the main window while the popup webview stayed alive.
+    storeState = {
+      ...storeState,
+      firmwareProfile: "adalight",
+      selectedChipType: "sk6812-rgbw",
+      lastOutputTargets: ["usb", "hue"],
+      lightingMode: { kind: "ambilight", ambilight: { brightness: 0.9 } },
+      selectedDisplayId: "display-2",
+    };
+
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
+    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+
+    const payload = setLightingMode.mock.calls[0][0] as Record<string, unknown>;
+    for (const key of ["colorCorrection", "firmwareProfile", "chipType", "ledCalibration"]) {
+      expect(payload[key], key).toBeUndefined();
+    }
+    expect(payload).toMatchObject({
+      kind: LIGHTING_MODE_KIND.AMBILIGHT,
+      targets: ["usb", "hue"],
+      displayId: "display-2",
+      ambilight: { brightness: 0.9 },
+    });
+  });
+});
+
 /** Every `shellStore.save` call that carried a persisted popup centre. */
 function centreWrites() {
   return storeSave.mock.calls.filter(

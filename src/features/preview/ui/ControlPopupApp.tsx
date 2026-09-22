@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-import { shellStore } from "@/features/persistence/shellStore";
+import { shellStore, type ShellState } from "@/features/persistence/shellStore";
 import { showNotification } from "@/features/platform/platformApi";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
@@ -18,7 +18,6 @@ import {
   type LightingModeConfig,
   type LightingModeKind,
 } from "@/features/mode/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile } from "@/shared/contracts/device";
 import type { DisplayId } from "@/shared/contracts/display";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
@@ -38,13 +37,24 @@ import {
 } from "../state/useTestPatternRunner";
 import { PatternPicker } from "./PatternPicker";
 
+// Output stamps (calibration, colour correction, firmware profile, chip type)
+// are deliberately absent: `set_lighting_mode` hydrates them from disk, while
+// a copy here goes stale because the webview outlives every hide.
 interface ModeStamps {
   targets: HueRuntimeTarget[];
-  ledCalibration?: LightingModeConfig["ledCalibration"];
-  colorCorrection?: ColorCorrectionConfig;
-  firmwareProfile?: FirmwareProfile;
   ambilight?: AmbilightPayload;
   displayId?: DisplayId;
+}
+
+function stampsFrom(state: ShellState): ModeStamps {
+  return {
+    targets:
+      state.lastOutputTargets && state.lastOutputTargets.length > 0
+        ? state.lastOutputTargets
+        : ["usb"],
+    ambilight: state.lightingMode?.ambilight,
+    displayId: state.selectedDisplayId,
+  };
 }
 
 const DEFAULT_SOLID = { r: 255, g: 255, b: 255, brightness: 1 };
@@ -109,6 +119,16 @@ export function ControlPopupApp() {
   const [testDesired, setTestDesired] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  // Re-read before each use, not once: the webview is kept alive across hides,
+  // so a mount-time snapshot misses every settings change made since.
+  const refreshStamps = useCallback(async () => {
+    try {
+      stampsRef.current = stampsFrom(await shellStore.load());
+    } catch (error) {
+      console.error("[LumaSync] ControlPopupApp stamp refresh failed:", error);
+    }
+  }, []);
+
   // ── Load persisted stamps + last test pattern once on mount ──────────────
   useEffect(() => {
     let alive = true;
@@ -116,17 +136,7 @@ export function ControlPopupApp() {
       .load()
       .then((state) => {
         if (!alive) return;
-        stampsRef.current = {
-          targets:
-            state.lastOutputTargets && state.lastOutputTargets.length > 0
-              ? state.lastOutputTargets
-              : ["usb"],
-          ledCalibration: state.ledCalibration,
-          colorCorrection: state.colorCorrection,
-          firmwareProfile: state.firmwareProfile,
-          ambilight: state.lightingMode?.ambilight,
-          displayId: state.selectedDisplayId,
-        };
+        stampsRef.current = stampsFrom(state);
         if (state.lastLedTestPattern) {
           setPatternKind(state.lastLedTestPattern.kind);
         }
@@ -217,9 +227,6 @@ export function ControlPopupApp() {
       ...base,
       targets: base.targets ?? s.targets,
       displayId: base.displayId ?? s.displayId,
-      colorCorrection: base.colorCorrection ?? s.colorCorrection,
-      firmwareProfile: base.firmwareProfile ?? s.firmwareProfile,
-      ledCalibration: base.ledCalibration ?? s.ledCalibration,
       ambilight: base.ambilight ?? s.ambilight,
     };
   }, []);
@@ -326,6 +333,7 @@ export function ControlPopupApp() {
           // pattern restart cannot resolve on top of the mode the user just chose.
           runner.cancel();
           await runner.settled();
+          await refreshStamps();
           if (next === LIGHTING_MODE_KIND.OFF) {
             await stopLighting();
             return;
@@ -350,7 +358,7 @@ export function ControlPopupApp() {
         }
       })();
     },
-    [runner, withStamps, draft.r, draft.g, draft.b, draft.brightness],
+    [runner, refreshStamps, withStamps, draft.r, draft.g, draft.b, draft.brightness],
   );
 
   // ── Auto-start ───────────────────────────────────────────────────────────
@@ -370,9 +378,14 @@ export function ControlPopupApp() {
     // Not suppressed when the mode strip reads Off: testing a strip with the
     // room lighting off is the normal case, and closing restores the prior mode.
     if (!gate.armed && !revealed) return;
-    gate.armed = false;
-    startSelectedRef.current();
-  }, [hydrated, popupVisible]);
+    if (gate.armed) {
+      gate.armed = false;
+      startSelectedRef.current();
+      return;
+    }
+    // A re-reveal of the kept-alive webview: refresh before the start reads targets.
+    void refreshStamps().then(() => startSelectedRef.current());
+  }, [hydrated, popupVisible, refreshStamps]);
 
   // ── Close + first-close reopen hint ──────────────────────────────────────
   // `hide_led_control_popup` keeps the webview alive only for a cheap re-show;
