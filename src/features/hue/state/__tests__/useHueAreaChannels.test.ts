@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HUE_AREA_CHANNELS_STATUS, HUE_RUNTIME_STATUS } from "@/shared/contracts/hue";
@@ -11,6 +11,19 @@ const getAreaChannelsMock = vi.fn();
 vi.mock("../../hueOnboardingApi", () => ({
   getHueAreaChannels: (...args: unknown[]) => getAreaChannelsMock(...args),
 }));
+
+const getHueStreamStatusMock = vi.fn();
+
+vi.mock("@/features/mode/modeApi", () => ({
+  getHueStreamStatus: (...args: unknown[]) => getHueStreamStatusMock(...args),
+}));
+
+function runtimeIn(state: string) {
+  return {
+    active: state !== "Idle",
+    status: { state, code: "HUE_STREAM_IDLE", message: "", details: null, triggerSource: "system" },
+  };
+}
 
 const BRIDGE = { id: "bridge-1", ip: "192.168.1.20", name: "Test Bridge" };
 const CREDENTIALS = { username: "app-key", clientKey: "psk" };
@@ -34,6 +47,7 @@ describe("useHueAreaChannels", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.OK, [CHANNEL]));
+    getHueStreamStatusMock.mockResolvedValue(runtimeIn("Idle"));
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
@@ -198,5 +212,62 @@ describe("useHueAreaChannels", () => {
     const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, null));
 
     await waitFor(() => expect(result.current.channelsStatus).toBeNull());
+  });
+
+  describe("whether the list is the bridge's own", () => {
+    it("is, when the runtime was idle on both sides of the read", async () => {
+      const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
+
+      await waitFor(() => expect(result.current.channelsFromBridge).toBe(true));
+    });
+
+    it("is not, while lighting is on — the command answers with our placements", async () => {
+      getHueStreamStatusMock.mockResolvedValue(runtimeIn("Running"));
+      const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
+
+      await waitFor(() => expect(result.current.areaChannels).toEqual([CHANNEL]));
+      expect(result.current.channelsFromBridge).toBe(false);
+    });
+
+    it("is not, when a stream started while the read was in flight", async () => {
+      getHueStreamStatusMock
+        .mockResolvedValueOnce(runtimeIn("Idle"))
+        .mockResolvedValueOnce(runtimeIn("Running"));
+      const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
+
+      await waitFor(() => expect(result.current.areaChannels).toEqual([CHANNEL]));
+      expect(result.current.channelsFromBridge).toBe(false);
+    });
+
+    it("is not, when the runtime state cannot be read", async () => {
+      getHueStreamStatusMock.mockRejectedValue({ code: "IPC", message: "torn down" });
+      const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
+
+      await waitFor(() => expect(result.current.areaChannels).toEqual([CHANNEL]));
+      expect(result.current.channelsFromBridge).toBe(false);
+      expect(console.warn).toHaveBeenCalledWith(expect.stringContaining("torn down"));
+    });
+
+    it("hands the caller of a refresh the read it asked for", async () => {
+      const { result } = renderHook(() => useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1"));
+      await waitFor(() => expect(result.current.isLoadingChannels).toBe(false));
+      const moved = { ...CHANNEL, positionX: 0.4 };
+      getAreaChannelsMock.mockResolvedValue(response(HUE_AREA_CHANNELS_STATUS.OK, [moved]));
+
+      let read: unknown;
+      act(() => {
+        void result.current.refreshChannels().then((r) => {
+          read = r;
+        });
+      });
+
+      await waitFor(() =>
+        expect(read).toEqual({
+          status: HUE_AREA_CHANNELS_STATUS.OK,
+          channels: [moved],
+          fromBridge: true,
+        }),
+      );
+    });
   });
 });

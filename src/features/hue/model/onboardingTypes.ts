@@ -36,6 +36,16 @@ export interface HueAreaGroup {
   areas: HueAreaRow[];
 }
 
+/** One settled channel read. */
+export interface HueAreaChannelsRead {
+  status: string;
+  channels: HueAreaChannelInfo[];
+  /** The list is the bridge's own. False unless the runtime was idle on both
+   *  sides of the read — otherwise `get_hue_area_channels` may have answered
+   *  from the running stream, whose channels carry our placements. */
+  fromBridge: boolean;
+}
+
 export interface UseHueOnboardingResult {
   step: HueStep;
   bridges: HueBridgeSummary[];
@@ -66,7 +76,10 @@ export interface UseHueOnboardingResult {
   isLoadingChannels: boolean;
   /** Last channel-fetch code, `null` before the first answer. */
   channelsStatus: string | null;
-  refreshChannels: () => void;
+  /** `areaChannels` was read from the bridge with the runtime idle, so its
+   *  positions are the bridge's rather than our own placements. */
+  channelsFromBridge: boolean;
+  refreshChannels: () => Promise<HueAreaChannelsRead | null>;
   discover: () => Promise<void>;
   selectBridge: (bridgeId: string | null) => void;
   setManualIp: (value: string) => void;

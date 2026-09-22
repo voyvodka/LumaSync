@@ -51,6 +51,8 @@ export interface MockWledDevice {
 export interface MockHueChannel {
   index: number;
   name: string;
+  /** What a save wrote to the bridge. Absent ⇒ the fixture's default position. */
+  stored?: { x: number; y: number; z: number | null };
 }
 
 export interface MockHueArea {

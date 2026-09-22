@@ -72,6 +72,20 @@ function rows(): HTMLElement[] {
   return screen.getAllByRole("group");
 }
 
+type User = ReturnType<typeof userEvent.setup>;
+
+/** Push and pull ask in the app's own dialog; its last button confirms. */
+async function answerDialog(user: User, confirm: boolean) {
+  const dialog = await screen.findByRole("dialog");
+  const buttons = dialog.querySelectorAll("button");
+  await user.click(confirm ? buttons[buttons.length - 1]! : buttons[0]!);
+}
+
+async function clickAndConfirm(user: User, name: RegExp) {
+  await user.click(screen.getByRole("button", { name }));
+  await answerDialog(user, true);
+}
+
 // ---------------------------------------------------------------------------
 // Seeding: the room map is bridge-blind and draws persisted placements only
 // ---------------------------------------------------------------------------
@@ -216,13 +230,13 @@ describe("CHAN-05: save to bridge write-back", () => {
   it("cancelling confirm dialog does not invoke write-back", async () => {
     const { invoke: mockInvoke } = await import("@tauri-apps/api/core");
     vi.mocked(mockInvoke).mockClear();
-    // happy-dom does not define window.confirm; assign a mock function directly
-    window.confirm = vi.fn().mockReturnValueOnce(false);
 
     const user = userEvent.setup();
     render(<HueChannelMapPanel {...writebackProps} />);
     await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await answerDialog(user, false);
 
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(mockInvoke).not.toHaveBeenCalledWith("update_hue_channel_positions", expect.anything());
   });
 
@@ -232,11 +246,10 @@ describe("CHAN-05: save to bridge write-back", () => {
       code: "CHAN_WB_SCHEMA_REJECTED",
       message: "Bridge rejected the format",
     });
-    window.confirm = vi.fn().mockReturnValueOnce(true);
 
     const user = userEvent.setup();
     render(<HueChannelMapPanel {...writebackProps} />);
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await clickAndConfirm(user, /saveToBridge$/);
 
     const errorEls = await screen.findAllByText(/channelMap\.saveToBridgeError/);
     expect(errorEls.length).toBeGreaterThan(0);
@@ -285,6 +298,7 @@ describe("zone-bound channels survive an edit here", () => {
         placements={placements}
         zones={[ZONE]}
         onPositionChange={onPositionChange}
+        channelsFromBridge
         bridgeIp="192.168.1.10"
         username="test-user-key"
         areaId="area-uuid-123"
@@ -296,9 +310,9 @@ describe("zone-bound channels survive an edit here", () => {
    *  zone-preservation guarantees have to hold. */
   async function pull(onPositionChange: PositionSpy) {
     const user = userEvent.setup();
-    window.confirm = vi.fn().mockReturnValue(true);
     renderBound(onPositionChange);
-    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    await clickAndConfirm(user, /pullFromBridge/);
+    await screen.findByText(/hue:channelMap\.pulled/);
   }
 
   it("keeps the zone binding, label and lock instead of rebuilding a bare record", async () => {
@@ -359,9 +373,9 @@ describe("bridge sync state", () => {
       positionY: p.y,
     }));
 
-  it("says nothing has been pushed when there is no snapshot", () => {
+  it("says the bridge's arrangement is unknown with neither a read nor a snapshot", () => {
     render(<HueChannelMapPanel {...syncProps} />);
-    expect(screen.getByText("hue:channelMap.sync.neverPushed")).toBeTruthy();
+    expect(screen.getByText("hue:channelMap.sync.unknown")).toBeTruthy();
   });
 
   it("says the bridge has this arrangement when the snapshot matches", () => {
@@ -385,15 +399,17 @@ describe("bridge sync state", () => {
 
   it("records what was pushed, so the state survives a restart", async () => {
     const { invoke: mockInvoke } = await import("@tauri-apps/api/core");
-    vi.mocked(mockInvoke).mockResolvedValueOnce({ code: "HUE_CHANNEL_POSITIONS_UPDATED" });
-    window.confirm = vi.fn().mockReturnValue(true);
+    vi.mocked(mockInvoke).mockResolvedValueOnce({
+      code: "HUE_CHANNEL_POSITIONS_UPDATED",
+      details: null,
+    });
     const onSyncedPositionsChange = vi.fn();
 
     const user = userEvent.setup();
     render(
       <HueChannelMapPanel {...syncProps} onSyncedPositionsChange={onSyncedPositionsChange} />,
     );
-    await user.click(screen.getByRole("button", { name: /saveToBridge$/ }));
+    await clickAndConfirm(user, /saveToBridge$/);
 
     await vi.waitFor(() => expect(onSyncedPositionsChange).toHaveBeenCalled());
     expect(onSyncedPositionsChange.mock.calls[0]![0]).toEqual([
@@ -404,20 +420,21 @@ describe("bridge sync state", () => {
   });
 
   it("asks before taking the bridge's arrangement, because it replaces yours", async () => {
-    window.confirm = vi.fn().mockReturnValue(false);
     const onPositionChange = vi.fn();
 
     const user = userEvent.setup();
-    render(<HueChannelMapPanel {...syncProps} onPositionChange={onPositionChange} />);
+    render(
+      <HueChannelMapPanel {...syncProps} channelsFromBridge onPositionChange={onPositionChange} />,
+    );
     onPositionChange.mockClear();
     await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    expect(screen.getByRole("dialog").textContent).toContain("hue:channelMap.pullConfirmTitle");
+    await answerDialog(user, false);
 
-    expect(window.confirm).toHaveBeenCalled();
     expect(onPositionChange).not.toHaveBeenCalled();
   });
 
-  it("adopts the bridge's positions and records them as sent", async () => {
-    window.confirm = vi.fn().mockReturnValue(true);
+  it("adopts the bridge's positions and records them as the bridge's", async () => {
     const onPositionChange = vi.fn();
     const onSyncedPositionsChange = vi.fn();
     const moved = storedAtBridgePositions();
@@ -430,26 +447,36 @@ describe("bridge sync state", () => {
         placements={moved}
         onPositionChange={onPositionChange}
         onSyncedPositionsChange={onSyncedPositionsChange}
+        onRefreshChannels={async () => ({
+          status: HUE_AREA_CHANNELS_STATUS.OK,
+          channels: makeChannels(),
+          fromBridge: true,
+        })}
       />,
     );
     onPositionChange.mockClear();
-    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    await clickAndConfirm(user, /pullFromBridge/);
 
+    await vi.waitFor(() => expect(onPositionChange).toHaveBeenCalled());
     const adopted = onPositionChange.mock.calls[0]![0];
     // Channel 0's bridge position is (-1, 0); the local edit is discarded.
     expect(adopted.find((p: { channelIndex: number }) => p.channelIndex === 0).x).toBeCloseTo(-1, 6);
-    expect(onSyncedPositionsChange).toHaveBeenCalled();
+    expect(onSyncedPositionsChange).toHaveBeenLastCalledWith([
+      { channelId: 0, positionX: -1, positionY: 0 },
+      { channelId: 2, positionX: 0, positionY: 0 },
+      { channelId: 5, positionX: 1, positionY: 0 },
+    ]);
   });
 
   it("re-reads the bridge first, because a list fetched mid-stream is ours", async () => {
-    window.confirm = vi.fn().mockReturnValue(true);
-    const onRefreshChannels = vi.fn();
+    const onRefreshChannels = vi.fn(async () => null);
 
     const user = userEvent.setup();
     render(<HueChannelMapPanel {...syncProps} onRefreshChannels={onRefreshChannels} />);
-    await user.click(screen.getByRole("button", { name: /pullFromBridge/ }));
+    await clickAndConfirm(user, /pullFromBridge/);
 
     expect(onRefreshChannels).toHaveBeenCalled();
+    expect(await screen.findByText("hue:channelMap.pullFailed")).toBeTruthy();
   });
 
   it("refuses to take the bridge's arrangement while the runtime holds the channels", () => {
