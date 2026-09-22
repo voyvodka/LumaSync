@@ -186,6 +186,7 @@ function App() {
     runtimeConfig,
     reportHueSolidColorStatus,
     reportStartFailure: mode.reportStartFailure,
+    reportHueLeftOut: mode.reportHueLeftOut,
   });
 
   const { usbDisconnectNotice, usbUnsupportedNotice, armUsbConnected } =
@@ -464,6 +465,7 @@ function App() {
         usbUnsupported={usbUnsupportedNotice}
         stopFailedTargets={mode.stopFailedNotice}
         startFailure={mode.startFailedNotice}
+        hueLeftOut={mode.hueLeftOutNotice}
         captureStalled={captureStalledNotice}
         hueColorNotice={hueColorNotice}
         onOpenCaptureSettings={() => void openScreenCaptureSettings()}

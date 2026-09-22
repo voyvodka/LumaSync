@@ -19,12 +19,20 @@ import {
   normalizeOutputTargets,
   type LightingModeConfig,
 } from "@/features/mode/model/contracts";
-import { readModeApplyOutcome, type ModeApplyOutcome } from "@/features/mode/state/modeApplyOutcome";
+import {
+  hueLeftOutReason,
+  hueLeftOutRetryTargets,
+  readModeApplyOutcome,
+  shouldCancelHueAfterLeavingOut,
+  type ModeApplyOutcome,
+} from "@/features/mode/state/modeApplyOutcome";
+import type { ModeCommandResult } from "@/features/mode/modeApi";
 import type { ModeRuntimeConfig } from "@/features/mode/state/useModeRuntimeConfig";
 import { showNotification } from "@/features/platform/platformApi";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
+import type { HueLeftOutReason } from "@/shared/contracts/lighting";
 
 import { pushTrayLabels } from "./useTrayIntegration";
 import { initWindowLifecycle, loadShellState } from "./windowLifecycle";
@@ -49,6 +57,8 @@ export interface ShellBootstrapSink {
   reportHueSolidColorStatus: (code: string) => void;
   /** The interactive start's toast, raised when a restored mode fails to start. */
   reportStartFailure: (notice: CaptureFailureNotice) => void;
+  /** The interactive "running on USB only" notice, raised when a restore left Hue out. */
+  reportHueLeftOut: (reason: HueLeftOutReason) => void;
 }
 
 /** Runs the shell boot sequence exactly once and reports when it has settled. */
@@ -208,6 +218,15 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
           ) {
             sink.reportStartFailure(restore.startFailure);
           }
+          if (restore.hueLeftOut !== null) {
+            // Session-only, like the interactive drop: `lastOutputTargets` keeps
+            // Hue so the next launch tries it again. The live mode carries the
+            // targets that ran, or hot-reload re-dispatches hit the Hue gate.
+            const ranTargets = bootTargets.filter((target) => target !== "hue");
+            sink.setSelectedOutputTargets(restoredTargets.filter((target) => target !== "hue"));
+            sink.setLightingMode({ ...restoredMode, targets: ranTargets });
+            sink.reportHueLeftOut(restore.hueLeftOut);
+          }
         } else {
           sink.setActiveOutputTargets([]);
         }
@@ -246,6 +265,8 @@ interface LightingSessionRestore {
   running: boolean;
   activeTargets: HueRuntimeTarget[];
   startFailure: CaptureFailureNotice | null;
+  /** Set when the Hue gate refused and the restore runs on USB alone. */
+  hueLeftOut: HueLeftOutReason | null;
 }
 
 /**
@@ -262,12 +283,14 @@ export async function restoreLightingSession({
 }: LightingSessionRestoreInput): Promise<LightingSessionRestore> {
   const hueWanted = bootTargets.includes("hue");
   let hueStarted = false;
+  let hueStartCode: string | undefined;
 
   // Hue first: `snapshot_hue_output_context()` needs a live stream to hand the
   // worker, or it comes up with `hue_output=None` and never drives the bulbs.
   if (hueWanted && hueConfig) {
     try {
       const startResult = await startHue(hueConfig);
+      hueStartCode = startResult.status.code;
       hueStarted = isHueStartCodeOk(startResult.status.code);
       if (!hueStarted) {
         console.warn("[LumaSync] Bootstrap Hue start refused:", startResult.status.code);
@@ -280,21 +303,46 @@ export async function restoreLightingSession({
   // Same rule as the interactive path: Ambilight is still attempted after a
   // failed Hue start. A gated start leaves no stream context and nothing
   // retrying it, so the Rust Hue gate refuses this apply (HUE_NOT_READY) and
-  // the restore reads as not running — Off, never a pending retry.
+  // the restore reads as not running — Off, never a pending retry. With USB
+  // restored too, the apply is retried without Hue instead.
   const hueTransientFail = !hueStarted && hueWanted && mode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
   const usbWanted = bootTargets.includes("usb");
   if (!usbWanted && !hueStarted && !hueTransientFail) {
-    return { running: false, activeTargets: [], startFailure: null };
+    return { running: false, activeTargets: [], startFailure: null, hueLeftOut: null };
   }
 
   let outcome: ModeApplyOutcome;
+  let hueLeftOut = false;
+  let hueStillHeld = false;
   try {
     // Routed through setLightingMode even for Solid, to keep the backend mode
     // machine aligned with what the UI paints first — and, since Bug #39, so a
     // USB-only session re-applies its persisted knobs rather than backend defaults.
-    const applyResult = await setLightingMode(
+    let applyResult: ModeCommandResult = await setLightingMode(
       runtimeConfig.hydrate({ ...mode, targets: bootTargets }),
     );
+    const usbOnlyTargets = hueLeftOutRetryTargets(applyResult, bootTargets);
+    if (usbOnlyTargets !== null) {
+      hueLeftOut = true;
+      console.warn(
+        `[LumaSync] Bootstrap restore: Hue gate refused (start code ${hueStartCode ?? "none"}); retrying on USB only.`,
+      );
+      // At boot nothing else can own the runtime, so any start that left it
+      // non-idle is ours to cancel — otherwise its retry runs on unseen.
+      if (shouldCancelHueAfterLeavingOut({ hueStartCode, hueActiveBefore: true })) {
+        try {
+          const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+          hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
+        } catch (err) {
+          hueStillHeld = true;
+          console.error("[LumaSync] Bootstrap Hue cancel after leaving it out failed:", err);
+        }
+      }
+      hueStarted = false;
+      applyResult = await setLightingMode(
+        runtimeConfig.hydrate({ ...mode, targets: usbOnlyTargets }),
+      );
+    }
     outcome = readModeApplyOutcome(applyResult, mode.kind);
   } catch (err) {
     console.error("[LumaSync] Bootstrap lighting mode restore failed:", err);
@@ -307,7 +355,6 @@ export async function restoreLightingSession({
     );
     // The bridge allows one entertainment streamer. Holding it for a mode that
     // is not running sends nothing and locks out every other client.
-    let hueStillHeld = false;
     if (hueStarted) {
       try {
         const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
@@ -323,6 +370,8 @@ export async function restoreLightingSession({
       running: false,
       activeTargets: hueStillHeld ? ["hue"] : [],
       startFailure: outcome.startFailure,
+      // Nothing runs, so "running on USB only" would be false.
+      hueLeftOut: null,
     };
   }
 
@@ -344,6 +393,11 @@ export async function restoreLightingSession({
 
   const activeTargets: HueRuntimeTarget[] = [];
   if (usbWanted) activeTargets.push("usb");
-  if (hueStarted) activeTargets.push("hue");
-  return { running: true, activeTargets, startFailure: outcome.startFailure };
+  if (hueStarted || hueStillHeld) activeTargets.push("hue");
+  return {
+    running: true,
+    activeTargets,
+    startFailure: outcome.startFailure,
+    hueLeftOut: hueLeftOut ? hueLeftOutReason(hueConfig !== null, hueStartCode) : null,
+  };
 }

@@ -1,13 +1,17 @@
 import { useTranslation } from "react-i18next";
 
+import type { TranslationKey } from "@/features/i18n/catalogue";
 import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
+import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 
 export interface ShellNoticesProps {
   usbDisconnected: boolean;
   usbUnsupported: boolean;
   stopFailedTargets: HueRuntimeTarget[] | null;
   startFailure: CaptureFailureNotice | null;
+  /** A `[usb, hue]` start ran on USB alone this session. */
+  hueLeftOut: HueLeftOutReason | null;
   /** Capture died *after* a successful start — a live condition, not an event. */
   captureStalled: CaptureFailureNotice | null;
   hueColorNotice: HueSolidColorStatusCode | null;
@@ -19,6 +23,12 @@ export interface ShellNoticesProps {
 
 const TOAST_GAP_PX = 8;
 
+const HUE_LEFT_OUT_COPY: Record<HueLeftOutReason, TranslationKey> = {
+  [HUE_LEFT_OUT_REASON.UNREACHABLE]: "common:hueLeftOut.unreachable",
+  [HUE_LEFT_OUT_REASON.AUTH]: "common:hueLeftOut.auth",
+  [HUE_LEFT_OUT_REASON.CONFIG]: "common:hueLeftOut.config",
+};
+
 /**
  * The shell's transient toast stack. Purely presentational — every notice is
  * owned and auto-dismissed by the hook that raises it.
@@ -28,6 +38,7 @@ export function ShellNotices({
   usbUnsupported,
   stopFailedTargets,
   startFailure,
+  hueLeftOut,
   captureStalled,
   hueColorNotice,
   onOpenCaptureSettings,
@@ -39,6 +50,8 @@ export function ShellNotices({
   // start toast wins to keep that invariant obvious if one ever does.
   const stalled = startFailure === null ? captureStalled : null;
   const bottom = `${statusBarHeightPx + TOAST_GAP_PX}px`;
+  const hueLeftOutSlots =
+    (usbDisconnected || stopFailed ? 1 : 0) + (startFailure !== null || stalled !== null ? 1 : 0);
 
   return (
     <>
@@ -158,6 +171,30 @@ export function ShellNotices({
                 ? t("common:captureStalled.generic", { reason: stalled.reason })
                 : t("common:captureStalled.genericNoReason")}
           </span>
+        </div>
+      )}
+      {hueLeftOut && (
+        <div
+          data-testid="hue-left-out-notice"
+          // Full width in compact, where this copy runs two lines at 320 px.
+          className="fixed left-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2 sm:left-auto sm:max-w-sm"
+          role="status"
+          aria-live="polite"
+          style={{
+            bottom,
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-amber)",
+            color: "var(--lm-ink)",
+            // Topmost: it can co-fire with a start or stop notice from the same apply.
+            transform: hueLeftOutSlots > 0 ? `translateY(-${hueLeftOutSlots * 3.5}rem)` : undefined,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="shrink-0"
+            style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }}
+          />
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t(HUE_LEFT_OUT_COPY[hueLeftOut])}</span>
         </div>
       )}
       {hueColorNotice && (

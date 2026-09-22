@@ -183,6 +183,14 @@ https://keepachangelog.com/en/1.1.0/
   adjustable, because a mock that answers instantly hides every loading state and ordering bug
   behind it.
 
+### Changed
+
+- With both USB and Hue selected, a lighting mode now starts on USB when the Hue bridge cannot be
+  used — unreachable, needing a re-pair, or not set up — instead of refusing to start at all. A
+  notice says Hue was left out and why. Hue is not retried in the background: turn it back on
+  once the bridge is back, and the next launch tries it again on its own, because your saved
+  output selection is not changed.
+
 
 ## [1.5.5]
 

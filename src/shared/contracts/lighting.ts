@@ -110,3 +110,17 @@ export function isLightingModeGateCode(code: string): code is LightingModeGateSt
   return code === LIGHTING_MODE_GATE_STATUS.DEVICE_NOT_CONNECTED
     || code === LIGHTING_MODE_GATE_STATUS.HUE_NOT_READY;
 }
+
+/**
+ * Why a `[usb, hue]` start ran on USB alone after the Hue gate refused it.
+ * Frontend-minted and never on the wire, so deliberately outside
+ * `LIGHTING_MODE_STATUS` — the contract verifier requires that set to equal
+ * the Rust literals exactly.
+ */
+export const HUE_LEFT_OUT_REASON = {
+  UNREACHABLE: "unreachable",
+  AUTH: "auth",
+  CONFIG: "config",
+} as const;
+
+export type HueLeftOutReason = (typeof HUE_LEFT_OUT_REASON)[keyof typeof HUE_LEFT_OUT_REASON];

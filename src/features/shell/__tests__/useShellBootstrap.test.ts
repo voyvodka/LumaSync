@@ -1,3 +1,4 @@
+import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
@@ -19,14 +20,23 @@ vi.mock("@/features/mode/modeApi", () => ({
   setHueSolidColor: (payload: unknown) => setHueSolidColorMock(payload),
 }));
 
-// The module also pulls in window lifecycle, tray and platform bridges; none of
-// them run from `restoreLightingSession`, so they only need to import cleanly.
-vi.mock("../windowLifecycle", () => ({ initWindowLifecycle: vi.fn(), loadShellState: vi.fn() }));
+const loadShellStateMock = vi.fn();
+const saveShellStateMock = vi.fn();
+const getSerialConnectionStatusMock = vi.fn();
+
+// `restoreLightingSession` touches none of these; the hook-level tests below do.
+vi.mock("../windowLifecycle", () => ({
+  initWindowLifecycle: vi.fn(() => Promise.resolve()),
+  loadShellState: () => loadShellStateMock(),
+  saveShellState: (patch: unknown) => saveShellStateMock(patch),
+}));
 vi.mock("../useTrayIntegration", () => ({ pushTrayLabels: vi.fn() }));
 vi.mock("@/features/platform/platformApi", () => ({ showNotification: vi.fn() }));
-vi.mock("@/features/device/deviceConnectionApi", () => ({ getSerialConnectionStatus: vi.fn() }));
+vi.mock("@/features/device/deviceConnectionApi", () => ({
+  getSerialConnectionStatus: () => getSerialConnectionStatusMock(),
+}));
 
-import { restoreLightingSession } from "../useShellBootstrap";
+import { restoreLightingSession, useShellBootstrap, type ShellBootstrapSink } from "../useShellBootstrap";
 
 const hueConfig = {
   bridgeIp: "192.168.1.10",
@@ -89,6 +99,7 @@ describe("restoreLightingSession", () => {
       running: true,
       activeTargets: ["usb", "hue"],
       startFailure: null,
+      hueLeftOut: null,
     });
     expect(stopHueMock).not.toHaveBeenCalled();
   });
@@ -112,7 +123,7 @@ describe("restoreLightingSession", () => {
 
     const result = await restore(solid, ["hue"]);
 
-    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null });
+    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null, hueLeftOut: null });
     expect(stopHueMock).toHaveBeenCalledTimes(1);
     expect(setHueSolidColorMock).not.toHaveBeenCalled();
   });
@@ -123,7 +134,7 @@ describe("restoreLightingSession", () => {
     const result = await restore(ambilight, ["hue"]);
 
     expect(setLightingModeMock).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ running: true, activeTargets: [], startFailure: null });
+    expect(result).toEqual({ running: true, activeTargets: [], startFailure: null, hueLeftOut: null });
   });
 
   // What the real backend answers with the bridge unreachable: the start is
@@ -147,7 +158,7 @@ describe("restoreLightingSession", () => {
 
     const result = await restore(ambilight, ["hue"]);
 
-    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null });
+    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null, hueLeftOut: null });
     expect(stopHueMock).not.toHaveBeenCalled();
   });
 
@@ -173,12 +184,158 @@ describe("restoreLightingSession", () => {
   it("starts Hue before the mode and pushes the Solid colour after it", async () => {
     const result = await restore(solid, ["hue"]);
 
-    expect(result).toEqual({ running: true, activeTargets: ["hue"], startFailure: null });
+    expect(result).toEqual({ running: true, activeTargets: ["hue"], startFailure: null, hueLeftOut: null });
     expect(startHueMock.mock.invocationCallOrder[0]).toBeLessThan(
       setLightingModeMock.mock.invocationCallOrder[0],
     );
     expect(setHueSolidColorMock.mock.invocationCallOrder[0]).toBeGreaterThan(
       setLightingModeMock.mock.invocationCallOrder[0],
     );
+  });
+
+  describe("Hue left out of a [usb, hue] restore", () => {
+    const hueGated = {
+      active: false,
+      mode: { kind: "off" },
+      status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+    };
+
+    function gateOnHue() {
+      setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+        Promise.resolve((payload.targets ?? []).includes("hue") ? hueGated : appliedResult(payload)),
+      );
+    }
+
+    function hueStart(code: string, state = "Idle") {
+      return { active: false, status: { code, message: "hue", details: null, state } };
+    }
+
+    it("re-dispatches on USB alone and reports the session running without Hue", async () => {
+      startHueMock.mockResolvedValue(hueStart("CONFIG_NOT_READY_GATE_BLOCKED"));
+      gateOnHue();
+
+      const result = await restore(ambilight, ["usb", "hue"]);
+
+      expect(setLightingModeMock).toHaveBeenCalledTimes(2);
+      expect(setLightingModeMock.mock.calls[1][0].targets).toEqual(["usb"]);
+      expect(result).toEqual({
+        running: true,
+        activeTargets: ["usb"],
+        startFailure: null,
+        hueLeftOut: "unreachable",
+      });
+      expect(stopHueMock).not.toHaveBeenCalled();
+    });
+
+    it("cancels a start that left Hue retrying", async () => {
+      startHueMock.mockResolvedValue(hueStart("TRANSIENT_RETRY_SCHEDULED", "Reconnecting"));
+      gateOnHue();
+
+      const result = await restore(solid, ["usb", "hue"]);
+
+      expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+      expect(stopHueMock.mock.invocationCallOrder[0]).toBeLessThan(
+        setLightingModeMock.mock.invocationCallOrder[1],
+      );
+      expect(result.activeTargets).toEqual(["usb"]);
+      expect(setHueSolidColorMock).not.toHaveBeenCalled();
+    });
+
+    it("names a re-pair for an auth-invalid start", async () => {
+      startHueMock.mockResolvedValue(hueStart("AUTH_INVALID_CREDENTIALS", "Failed"));
+      gateOnHue();
+
+      const result = await restore(ambilight, ["usb", "hue"]);
+
+      expect(result.hueLeftOut).toBe("auth");
+    });
+
+    it("raises nothing when the USB retry is refused too", async () => {
+      startHueMock.mockResolvedValue(hueStart("CONFIG_NOT_READY_GATE_BLOCKED"));
+      setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+        Promise.resolve((payload.targets ?? []).includes("hue") ? hueGated : captureDenied),
+      );
+
+      const result = await restore(ambilight, ["usb", "hue"]);
+
+      expect(result.running).toBe(false);
+      expect(result.hueLeftOut).toBeNull();
+      expect(result.startFailure?.bucket).toBe(CAPTURE_FAILURE_BUCKET.PERMISSION);
+    });
+  });
+});
+
+describe("useShellBootstrap with Hue left out", () => {
+  function sink(): ShellBootstrapSink {
+    return {
+      t: ((key: string) => key) as unknown as ShellBootstrapSink["t"],
+      setUIMode: vi.fn(),
+      setActiveSection: vi.fn(),
+      setSavedCalibration: vi.fn(),
+      setHasCompletedOnboarding: vi.fn(),
+      setHasInteractedWithMode: vi.fn(),
+      setLightingMode: vi.fn(),
+      setSelectedOutputTargets: vi.fn(),
+      setActiveOutputTargets: vi.fn(),
+      setHueStartConfig: vi.fn(),
+      armUsbConnected: vi.fn(),
+      runtimeConfig: {
+        hydrate: (mode: LightingModeConfig) => mode,
+        setCalibration: vi.fn(),
+        prime: vi.fn(),
+        setAmbilight: vi.fn(),
+      } as unknown as ModeRuntimeConfig,
+      reportHueSolidColorStatus: vi.fn(),
+      reportStartFailure: vi.fn(),
+      reportHueLeftOut: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    loadShellStateMock.mockResolvedValue({
+      uiMode: "compact",
+      lightingMode: { kind: "ambilight" },
+      lastOutputTargets: ["usb", "hue"],
+      lastHueBridge: { ip: "192.168.1.10" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+    getSerialConnectionStatusMock.mockResolvedValue({ connected: true });
+    startHueMock.mockResolvedValue({
+      active: false,
+      status: { code: "CONFIG_NOT_READY_GATE_BLOCKED", message: "blocked", details: null, state: "Idle" },
+    });
+    stopHueMock.mockResolvedValue({ active: false, status: { code: "HUE_STREAM_STOPPED" } });
+    setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+      Promise.resolve(
+        (payload.targets ?? []).includes("hue")
+          ? {
+              active: false,
+              mode: { kind: "off" },
+              status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+            }
+          : appliedResult(payload),
+      ),
+    );
+  });
+
+  it("runs on USB, drops Hue for the session only, and raises the notice", async () => {
+    const bag = sink();
+    const { result } = renderHook(() => useShellBootstrap(bag));
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+
+    expect(bag.setActiveOutputTargets).toHaveBeenLastCalledWith(["usb"]);
+    expect(bag.setSelectedOutputTargets).toHaveBeenLastCalledWith(["usb"]);
+    expect(bag.setLightingMode).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "ambilight", targets: ["usb"] }),
+    );
+    expect(bag.reportHueLeftOut).toHaveBeenCalledWith("unreachable");
+    // The next launch must try Hue again: nothing rewrites the persisted set.
+    const patches = saveShellStateMock.mock.calls.map(([patch]) => patch as Record<string, unknown>);
+    expect(patches.some((patch) => "lastOutputTargets" in patch)).toBe(false);
   });
 });

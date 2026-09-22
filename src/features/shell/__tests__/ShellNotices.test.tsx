@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { CAPTURE_FAILURE_BUCKET } from "@/shared/contracts/capture";
+import { HUE_LEFT_OUT_REASON } from "@/shared/contracts/lighting";
 
 import { ShellNotices, type ShellNoticesProps } from "../ShellNotices";
 
@@ -18,6 +19,7 @@ function renderNotices(overrides: Partial<ShellNoticesProps> = {}) {
       usbUnsupported={false}
       stopFailedTargets={null}
       startFailure={null}
+      hueLeftOut={null}
       captureStalled={null}
       hueColorNotice={null}
       onOpenCaptureSettings={onOpenCaptureSettings}
@@ -112,5 +114,26 @@ describe("ShellNotices", () => {
 
     expect(screen.getByTestId("capture-start-failed-notice")).toBeTruthy();
     expect(screen.queryByTestId("capture-permission-settings-button")).toBeNull();
+  });
+
+  it.each([
+    [HUE_LEFT_OUT_REASON.UNREACHABLE, "common:hueLeftOut.unreachable"],
+    [HUE_LEFT_OUT_REASON.AUTH, "common:hueLeftOut.auth"],
+    [HUE_LEFT_OUT_REASON.CONFIG, "common:hueLeftOut.config"],
+  ])("says why Hue was left out for the %s reason", (reason, key) => {
+    renderNotices({ hueLeftOut: reason });
+
+    const notice = screen.getByTestId("hue-left-out-notice");
+    expect(notice).toHaveTextContent(key);
+    expect(notice).toHaveAttribute("role", "status");
+  });
+
+  it("stacks the Hue notice above a start failure from the same apply", () => {
+    renderNotices({
+      hueLeftOut: HUE_LEFT_OUT_REASON.UNREACHABLE,
+      startFailure: { bucket: CAPTURE_FAILURE_BUCKET.PERMISSION, reason: "" },
+    });
+
+    expect(screen.getByTestId("hue-left-out-notice").style.transform).toBe("translateY(-3.5rem)");
   });
 });
