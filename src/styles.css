@@ -2975,67 +2975,12 @@
   background: linear-gradient(to right, transparent, #ffb020, transparent);
 }
 
-/* Edge signal + profile */
+/* Ambilight mode settings card (Lights page) */
 .lm-signal {
-  background: #0e1014;
-  border: 1px solid #1a1e25;
+  background: var(--lm-panel);
+  border: 1px solid var(--lm-line);
   border-radius: 10px;
   overflow: hidden;
-}
-.lm-signal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 11px 14px 11px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.lm-signal-head .l {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: #eaeef4;
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex-shrink: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lm-signal-head .l::before {
-  content: "";
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: #ffb020;
-  box-shadow: 0 0 6px #ffb020;
-}
-.lm-signal-head .meta-pill {
-  display: flex;
-  gap: 14px;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9.5px;
-  color: #4d5564;
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-.lm-signal-head .meta-pill b {
-  color: #ffb020;
-  font-weight: 500;
-  /* Δ latency / Σ fps tick ~1 Hz, and `.lm-signal-head` is a wrapping
-     space-between flex row — an unreserved value box makes the whole pill
-     slide sideways on every tick and, at narrow widths, wrap onto a second
-     line and back. Reserve the widest realistic reading ("144 fps") so the
-     box never resizes. The pill is mono, so 1ch is exactly one glyph. */
-  display: inline-block;
-  min-width: 7ch;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 /* Serial link-budget note. Amber, not red: a baud ceiling is a limit the user
    can act on, not a failure. Deliberately un-animated — the value behind it is
@@ -3066,128 +3011,16 @@
   font-weight: 500;
 }
 
-.lm-edges {
-  display: grid;
-  grid-template-columns: 30px 1fr 30px;
-  grid-template-rows: 12px 1fr 12px;
-  gap: 4px;
-  height: 110px;
-  margin: 10px 14px 12px;
-}
-.lm-edge {
-  background: #0a0c10;
-  border: 1px solid #1a1e25;
-  border-radius: 4px;
-  position: relative;
-  overflow: hidden;
-}
-.lm-edge .label {
-  position: absolute;
-  inset: auto 5px 2px auto;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 7.5px;
-  color: rgba(255, 255, 255, 0.72);
-  letter-spacing: 0.1em;
-}
-.lm-edge-top {
-  grid-column: 2;
-  grid-row: 1;
-  background: linear-gradient(
-    90deg,
-    #ff7a1a,
-    #ffb030,
-    #ffd060,
-    #ffa820,
-    #ff5a22,
-    #cc2e1a,
-    #aa2040,
-    #802056,
-    #5a1a4a,
-    #2a1858,
-    #0e1a48,
-    #08182e
-  );
-}
-.lm-edge-bot {
-  grid-column: 2;
-  grid-row: 3;
-  background: linear-gradient(
-    90deg,
-    #091527,
-    #0b2038,
-    #13324b,
-    #1b4462,
-    #245679,
-    #2c6990,
-    #1e5078,
-    #17385a,
-    #10253e,
-    #081a2e,
-    #061328,
-    #051027
-  );
-}
-.lm-edge-l {
-  grid-column: 1;
-  grid-row: 2;
-  background: linear-gradient(
-    #201305,
-    #3f2408,
-    #62380c,
-    #8a4b10,
-    #a55414,
-    #b25818,
-    #90461a,
-    #5e2e10,
-    #3a1c08,
-    #1a0e04
-  );
-}
-.lm-edge-r {
-  grid-column: 3;
-  grid-row: 2;
-  background: linear-gradient(
-    #1c0b25,
-    #2b1234,
-    #3b1a4a,
-    #4d2563,
-    #5c2f7a,
-    #63358b,
-    #542c76,
-    #3d1f5a,
-    #281240,
-    #14072a
-  );
-}
-.lm-edge-c {
-  grid-column: 2;
-  grid-row: 2;
-  background: #05070a;
-  display: grid;
-  place-items: center;
-  border: 1px dashed #252b34;
-}
-.lm-edge-c .scene {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9px;
-  color: #4d5564;
-  text-align: center;
-  line-height: 1.55;
-  letter-spacing: 0.08em;
-}
-.lm-edge-c .scene b {
-  color: #8a94a3;
-  font-weight: 500;
-  display: block;
-  margin-bottom: 2px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
 .lm-profile {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 0;
   border-top: 1px solid #1a1e25;
+}
+/* The smoothing control above it mounts after an async hydrate; until then
+   the row is the card's first child and its divider would double the border. */
+.lm-signal > .lm-profile:first-child {
+  border-top: 0;
 }
 .lm-psl {
   padding: 10px 14px 14px;

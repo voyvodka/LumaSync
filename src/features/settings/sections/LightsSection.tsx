@@ -23,7 +23,6 @@ import { roomAwareStatus } from "@/features/room-map/model/roomAware";
 import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
 import type { HueZone, RoomMapConfig, TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
-import type { DisplayInfo } from "@/shared/contracts/display";
 import {
   FIRMWARE_PROFILE,
   type ColorCorrectionConfig,
@@ -35,7 +34,6 @@ import {
   getKeybindDefinition,
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
-import { listDisplays } from "@/features/calibration/calibrationApi";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
 import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
@@ -49,7 +47,6 @@ import { shellStore } from "@/features/persistence/shellStore";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
 
-import { EdgeSignalGrid } from "./EdgeSignalGrid";
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
@@ -370,65 +367,20 @@ export function LightsSection({
 
   const totalLeds = calibration?.totalLeds;
 
-  // Poll runtime telemetry while Ambilight is active so the meta pill
-  // (Δ latency / Σ fps) reflects live worker state. The shared hook pauses
-  // automatically when the tray window is hidden and re-arms with an
-  // immediate tick on resume — nothing to do here beyond passing the
-  // domain gate.
-  const { snapshot: liveTelemetry } = useFullTelemetryPoll(isAmbilight, TELEMETRY_POLL_INTERVAL_MS);
+  // Polled only for the serial link-budget note, so it runs only while
+  // Ambilight is driving the local output. The shared hook pauses while the
+  // tray window is hidden and re-arms with an immediate tick on resume.
+  const { snapshot: liveTelemetry } = useFullTelemetryPoll(
+    isAmbilight && usbSelected,
+    TELEMETRY_POLL_INTERVAL_MS,
+  );
   const liveUsb = liveTelemetry?.usb ?? null;
-
-  // `usb` is non-nullable in the snapshot, so a Hue-only session still gets a
-  // struct — of zeros. Reading it unconditionally painted "0ms / 0 fps" under a
-  // "Signal" heading while Hue streamed fine, which reads as a dead pipeline.
-  const showUsbSignal = usbSelected;
-  const liveHue = liveTelemetry?.hue ?? null;
-
-  const latencyLabel =
-    showUsbSignal && liveUsb
-      ? t("lights:signal.latencyFormat", { ms: Math.round(liveUsb.frameLatencyMs) })
-      : "—";
-  // Hue measures no latency, only a packet rate — so Σ carries a different unit
-  // here, and the heading names the sink rather than letting the two be confused.
-  const fpsLabel = showUsbSignal
-    ? liveUsb
-      ? t("lights:signal.fpsFormat", { fps: Math.round(liveUsb.sendFps) })
-      : "—"
-    : liveHue
-      ? t("lights:signal.packetRateFormat", { rate: Math.round(liveHue.packetRate) })
-      : "—";
-  const signalTitle =
-    !showUsbSignal && hueSelected ? t("lights:signal.titleHue") : t("lights:signal.title");
 
   // Gate on the flag, never on `linkMaxFps < 30` — the 0 sentinel means "no
   // serial link this session", so a raw comparison would paint every Hue-only
   // and WLED-only session as maximally constrained.
   const linkConstrained =
     liveUsb !== null && hasSerialLinkBudget(liveUsb) && liveUsb.linkConstrained;
-
-  // Primary display info for the edge center tile. Loaded once on mount.
-  const [displays, setDisplays] = useState<DisplayInfo[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    listDisplays()
-      .then((result) => {
-        if (!cancelled) setDisplays(result);
-      })
-      .catch(() => {
-        if (!cancelled) setDisplays([]);
-      });
-    return () => { cancelled = true; };
-  }, []);
-
-  const primaryDisplay = displays.find((d) => d.isPrimary) ?? displays[0];
-  const displayIndex = primaryDisplay
-    ? Math.max(1, displays.findIndex((d) => d.id === primaryDisplay.id) + 1)
-    : 1;
-  const resolutionLabel = primaryDisplay
-    ? `${primaryDisplay.width} × ${primaryDisplay.height}`
-    : null;
-
-  const counts = calibration?.counts;
 
   const saturationValue = Math.round((incomingAmbilight.saturation ?? 1) * 100);
   const saturationFillPercent = Math.round(((saturationValue - 50) / 150) * 100);
@@ -585,45 +537,12 @@ export function LightsSection({
           </div>
         )}
 
-        {/* Edge signal + profile — only when Ambilight is active */}
+        {/* Ambilight tuning — only when Ambilight is active */}
         {isAmbilight && <div>
           <div className="lm-lights-slab">
-            {t("lights:slab.signalText")} <b>{t("lights:slab.signalAccent")}</b>
+            {t("lights:slab.modeSettingsText")} <b>{t("lights:slab.modeSettingsAccent")}</b>
           </div>
           <div className="lm-signal">
-            <div className="lm-signal-head">
-              <span className="l">{signalTitle}</span>
-              <span className="meta-pill">
-                <span>
-                  {t("lights:signal.delta")} <b>{latencyLabel}</b>
-                </span>
-                <span>
-                  {t("lights:signal.fps")} <b>{fpsLabel}</b>
-                </span>
-              </span>
-            </div>
-            {/* role="status", never "alert": `linkMaxFps` is derived once at
-                worker start from LED count + chip type and never re-sampled,
-                so this is a steady-state condition, announced once. */}
-            {linkConstrained && liveUsb ? (
-              <div className="lm-signal-note" role="status">
-                <span className="lm-signal-note-dot" aria-hidden />
-                <span>
-                  <b>
-                    {t("lights:signal.linkBudget.constrained", {
-                      fps: Math.round(liveUsb.linkMaxFps),
-                    })}
-                  </b>{" "}
-                  {t("lights:signal.linkBudget.hint")}
-                </span>
-              </div>
-            ) : null}
-            <EdgeSignalGrid
-              isAmbilight={isAmbilight}
-              counts={counts}
-              displayIndex={displayIndex}
-              resolutionLabel={resolutionLabel}
-            />
             {advancedHydrated && (
               <LightingSmoothingPresetControl
                 initialPreset={initialHueIntensityPreset}
@@ -717,6 +636,22 @@ export function LightsSection({
                 </div>
               </div>
             </div>
+            {/* role="status", never "alert": `linkMaxFps` is derived once at
+                worker start from LED count + chip type and never re-sampled,
+                so this is a steady-state condition, announced once. */}
+            {linkConstrained && liveUsb ? (
+              <div className="lm-signal-note" role="status">
+                <span className="lm-signal-note-dot" aria-hidden />
+                <span>
+                  <b>
+                    {t("lights:signal.linkBudget.constrained", {
+                      fps: Math.round(liveUsb.linkMaxFps),
+                    })}
+                  </b>{" "}
+                  {t("lights:signal.linkBudget.hint")}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>}
 
