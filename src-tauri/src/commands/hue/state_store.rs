@@ -23,7 +23,6 @@
 //! packet counters, cipher, error codes, and reconnect tallies without a
 //! getter API surface — same crate-wide access as before the split.
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -166,7 +165,6 @@ pub struct HueRuntimeGateEvidence {
 // Retry policy struct (definition + Default impl) — consumed by retry.rs
 // ---------------------------------------------------------------------------
 
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Debug)]
 pub(crate) struct HueRetryPolicy {
     pub(crate) max_attempts: u8,
@@ -240,7 +238,6 @@ pub(crate) struct HueRuntimeOwner {
     /// `status_refresh_with_evidence` on each health poll) silently
     /// invalidated — so a queued color was never flushed on the DTLS path.
     pub(crate) pending_solid_color: Option<HueSolidColorSnapshot>,
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) retry_policy: HueRetryPolicy,
     /// Instant when the current stream session started (for uptime calculation).
     pub(crate) stream_started_at: Option<Instant>,
@@ -266,8 +263,6 @@ pub(crate) struct HueRuntimeOwner {
 pub(crate) struct HueActiveStreamContext {
     pub(crate) bridge_ip: String,
     pub(crate) username: String,
-    #[allow(dead_code)]
-    pub(crate) client_key: String,
     pub(crate) area_id: String,
     pub(crate) channels: Vec<HueAreaChannel>,
     pub(crate) color_sender: HueColorSender,
@@ -276,12 +271,6 @@ pub(crate) struct HueActiveStreamContext {
     /// Fires when the background sender thread exits. Used by `stop_hue_stream`
     /// to wait for graceful shutdown before reporting success or timeout.
     pub(crate) shutdown_signal: ShutdownSignal,
-    /// Per-light archetype + gamut_type cache keyed by CLIP v2 light id.
-    /// Pre-fetched at activation time (W1-C3a) and read lock-free by the
-    /// DTLS frame builder hot path (W1-C3b) for per-bulb gamut clipping.
-    /// Missing entries fall back to `HueGamutType::Other` (no clipping).
-    #[allow(dead_code)] // read by the sender thread + frame builder, not the runtime owner
-    pub(crate) light_metadata: Arc<HashMap<String, super::sender::HueLightMetadata>>,
     /// One-shot dedupe primitive for the entertainment-configuration
     /// deactivation PUT. Shared by the sender thread (drains it during
     /// `close_notify` cleanup), the foreground `stop_hue_stream` Tauri
@@ -569,7 +558,6 @@ pub(crate) mod test_helpers {
         HueActiveStreamContext {
             bridge_ip: "192.168.1.2".to_string(),
             username: "username".to_string(),
-            client_key: String::new(),
             area_id: "area".to_string(),
             channels: vec![HueAreaChannel {
                 channel_id: 0,
@@ -584,7 +572,6 @@ pub(crate) mod test_helpers {
             },
             uses_dtls: false,
             shutdown_signal: new_shutdown_signal(),
-            light_metadata: Arc::new(std::collections::HashMap::new()),
             deactivate_token: DeactivateToken::new(),
         }
     }

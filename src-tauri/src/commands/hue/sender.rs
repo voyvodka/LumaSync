@@ -1055,7 +1055,7 @@ pub(crate) fn apply_channel_placements(
 
 /// No-op sender used when the HTTP client cannot be built. Centralised so we
 /// avoid scattering the `tx`/`channel_count` initialiser across the failure
-/// paths of `build_hue_sender_with_counter`.
+/// paths of `build_hue_sender`.
 pub(crate) fn no_op_sender() -> HueColorSender {
     let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
     HueColorSender {
@@ -1074,38 +1074,43 @@ pub(crate) fn settled_shutdown_signal() -> ShutdownSignal {
     signal
 }
 
+/// A sender that has been spawned but not yet stored into `HueRuntimeOwner`.
+pub(crate) struct SpawnedHueSender {
+    pub(crate) color_sender: HueColorSender,
+    pub(crate) uses_dtls: bool,
+    pub(crate) shutdown_signal: ShutdownSignal,
+    pub(crate) cipher_name: Option<String>,
+    /// Shared by the sender thread, foreground `stop_hue_stream`, and the
+    /// reconnect monitor — the one-shot dedupe primitive for the deactivate PUT.
+    pub(crate) deactivate_token: Arc<DeactivateToken>,
+}
+
+impl SpawnedHueSender {
+    /// Stand-in for a sender that never started: nothing to stop, nothing to
+    /// deactivate, and nothing to count.
+    pub(crate) fn inert() -> Self {
+        Self {
+            color_sender: no_op_sender(),
+            uses_dtls: false,
+            shutdown_signal: settled_shutdown_signal(),
+            cipher_name: None,
+            deactivate_token: DeactivateToken::new(),
+        }
+    }
+}
+
 /// Spawn the Hue color sender (DTLS or HTTP fallback) **outside** any mutex
 /// lock.  This function performs blocking network I/O (DTLS handshake, HTTP
 /// activate) and must never be called while the `HueRuntimeOwner` lock is held.
-/// Returns `(sender, uses_dtls, shutdown_signal, deactivate_token)`. The
-/// caller stores the token in `HueActiveStreamContext` so foreground
-/// `stop_hue_stream` and the reconnect monitor share the same one-shot
-/// dedupe primitive as the sender thread itself.
+///
+/// `packet_counter` must be the owner's `packet_send_count` — telemetry reads
+/// that one, so a counter of the caller's own reports 0 pkt/s forever.
 pub(crate) fn build_hue_sender(
     request: &super::state_store::StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
-) -> (HueColorSender, bool, ShutdownSignal, Arc<DeactivateToken>) {
-    let packet_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
-    let (sender, uses_dtls, shutdown, _cipher, token) =
-        build_hue_sender_with_counter(request, channels, light_metadata, packet_counter);
-    (sender, uses_dtls, shutdown, token)
-}
-
-/// Variant of `build_hue_sender` that takes an external packet counter and
-/// returns the negotiated cipher together with the deactivate dedupe token.
-pub(crate) fn build_hue_sender_with_counter(
-    request: &super::state_store::StartHueStreamRequest,
-    channels: Vec<HueAreaChannel>,
-    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
-) -> (
-    HueColorSender,
-    bool,
-    ShutdownSignal,
-    Option<String>,
-    Arc<DeactivateToken>,
-) {
+) -> SpawnedHueSender {
     // v1.5 W2-A2 — keychain-first credential resolution. The request
     // values from the Tauri command are treated as a downgrade-safe
     // fallback for legacy v1.4 users whose credentials still live in
@@ -1181,7 +1186,13 @@ pub(crate) fn build_hue_sender_with_counter(
                 {
                     Ok(Ok((sender, shutdown, cipher_name))) => {
                         info!("DTLS entertainment stream established successfully.");
-                        (sender, true, shutdown, cipher_name, deactivate_token)
+                        SpawnedHueSender {
+                            color_sender: sender,
+                            uses_dtls: true,
+                            shutdown_signal: shutdown,
+                            cipher_name,
+                            deactivate_token,
+                        }
                     }
                     Ok(Err(err)) => {
                         warn!("DTLS connection failed ({err}), falling back to HTTP.");
@@ -1191,7 +1202,13 @@ pub(crate) fn build_hue_sender_with_counter(
                             resolved_username.clone(),
                             channels.clone(),
                         );
-                        (sender, false, shutdown, None, deactivate_token)
+                        SpawnedHueSender {
+                            color_sender: sender,
+                            uses_dtls: false,
+                            shutdown_signal: shutdown,
+                            cipher_name: None,
+                            deactivate_token,
+                        }
                     }
                     Err(_timeout) => {
                         warn!(
@@ -1221,19 +1238,22 @@ pub(crate) fn build_hue_sender_with_counter(
                             resolved_username.clone(),
                             channels.clone(),
                         );
-                        (sender, false, shutdown, None, deactivate_token)
+                        SpawnedHueSender {
+                            color_sender: sender,
+                            uses_dtls: false,
+                            shutdown_signal: shutdown,
+                            cipher_name: None,
+                            deactivate_token,
+                        }
                     }
                 }
             }
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
-                (
-                    no_op_sender(),
-                    false,
-                    settled_shutdown_signal(),
-                    None,
+                SpawnedHueSender {
                     deactivate_token,
-                )
+                    ..SpawnedHueSender::inert()
+                }
             }
         }
     } else {
@@ -1246,17 +1266,20 @@ pub(crate) fn build_hue_sender_with_counter(
                     resolved_username.clone(),
                     channels.clone(),
                 );
-                (sender, false, shutdown, None, deactivate_token)
+                SpawnedHueSender {
+                    color_sender: sender,
+                    uses_dtls: false,
+                    shutdown_signal: shutdown,
+                    cipher_name: None,
+                    deactivate_token,
+                }
             }
             Err(err) => {
                 error!("HUE_SENDER_INIT_FAILED: {err}");
-                (
-                    no_op_sender(),
-                    false,
-                    settled_shutdown_signal(),
-                    None,
+                SpawnedHueSender {
                     deactivate_token,
-                )
+                    ..SpawnedHueSender::inert()
+                }
             }
         }
     }

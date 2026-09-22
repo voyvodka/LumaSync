@@ -9,6 +9,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The Hue telemetry panel showed 0 packets per second and no DTLS cipher for a stream you
+  had just started, even while the lights were visibly following the screen. The stream
+  counted its packets into a counter nothing read, and the negotiated cipher was dropped on
+  the way in; only a stream that had dropped and reconnected on its own reported either. A
+  newly started or restarted stream now shows its real packet rate and cipher from the
+  first reading.
 - On a large display the full window opened tiny the first time you switched to it. It always
   started at 900×620 whatever the screen, which on a 4K monitor is a small box in a sea of
   desktop. It now opens at a size that fits the screen it is on, and never smaller than before.
