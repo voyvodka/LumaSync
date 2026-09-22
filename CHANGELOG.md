@@ -9,10 +9,6 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
-- Saving Hue channel positions to the bridge reset every light's height to the middle of the
-  room. LumaSync never read the height the bridge had and sent 0 in its place, so a ceiling
-  light or a floor lamp set up in the Hue app lost its height the moment you saved. Heights
-  are now read from the bridge and kept; one you set yourself in LumaSync is still saved.
 - Turkish screens showed English in several places: the Hue stream figures in Telemetry
   (uptime, packet rate, reconnect counts, how long ago the last error was, and the stream
   state itself), the latency and frame-rate readout on the Lights screen, the "Loading..."
