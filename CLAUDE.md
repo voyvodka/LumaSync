@@ -142,7 +142,7 @@ Frontend (React/TS)  →  Tauri Commands (Rust)  →  Device Layer (Serial/HTTP)
 
 - **Frontend** (`src/`): React 19, TypeScript strict, Tailwind CSS 4, i18next
 - **Tauri Runtime** (`src-tauri/src/`): Rust 2021 edition, tray, window state, auto-updates
-- **Device Layer**: Serial port (USB microcontrollers at 115200 baud), WLED over UDP (DDP/WARLS), and the Philips Hue CLIP v2 API
+- **Device Layer**: Serial port (USB microcontrollers at 115200 baud), WLED over UDP (DDP, or DRGB/DNRGB), and the Philips Hue CLIP v2 API
 
 ### Contract-First Design
 
