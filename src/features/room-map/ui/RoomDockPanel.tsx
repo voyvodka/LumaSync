@@ -218,6 +218,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
           <TvAnchorInspector
             key="tv:singleton"
             tv={inspectorTarget.tv}
+            roomHeightMeters={config.dimensions.heightMeters}
             onUpdate={(patch) => onUpdateTvAnchor?.(patch)}
             onToggleLock={() => onToggleLock("tv")}
           />

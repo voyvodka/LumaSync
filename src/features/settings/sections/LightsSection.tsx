@@ -19,7 +19,9 @@ import {
 } from "@/features/mode/model/scenePresets";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
 import { createHueZone } from "@/features/room-map/roomMapApi";
-import type { HueZone, RoomMapConfig } from "@/shared/contracts/roomMap";
+import { isRoomAwareActive } from "@/features/room-map/model/roomAware";
+import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
+import type { HueZone, RoomMapConfig, TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
 import type { DisplayInfo } from "@/shared/contracts/display";
 import {
@@ -243,11 +245,15 @@ export function LightsSection({
   // the full useHueOnboarding state machine here; the area id alone is
   // enough to author a logical zone.
   const [lastHueAreaId, setLastHueAreaId] = useState<string | null>(null);
+  // Read once on mount: the room map is a different section, so returning
+  // here from an edit remounts this one.
+  const [tvAnchor, setTvAnchor] = useState<TvAnchorPlacement | null>(null);
   useEffect(() => {
     let cancelled = false;
     void shellStore.load().then((state) => {
       if (cancelled) return;
       setLastHueAreaId(state.lastHueAreaId ?? null);
+      setTvAnchor(state.roomMap?.tvAnchor ?? null);
     }).catch((error) => {
       console.error("[LumaSync] LightsSection hueAreaId hydrate failed:", error);
     });
@@ -878,6 +884,9 @@ export function LightsSection({
               </div>
               <span className="tg" />
             </button>
+            {isRoomAwareActive(tvAnchor, outputTargets) && (
+              <RoomAwareIndicator variant="inline" />
+            )}
           </div>
         </div>
       </aside>

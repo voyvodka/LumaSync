@@ -217,6 +217,10 @@ export interface TvAnchorPlacement {
   mountHeightMeters?: number;
 }
 
+/** Mirrors `DEFAULT_TV_MOUNT_HEIGHT_FRACTION` in `commands/room_affinity.rs`;
+ * `verify:shell-contracts` fails if the two drift. */
+export const DEFAULT_TV_MOUNT_HEIGHT_FRACTION = 0.4;
+
 // ---------------------------------------------------------------------------
 // Room Dimensions
 // ---------------------------------------------------------------------------

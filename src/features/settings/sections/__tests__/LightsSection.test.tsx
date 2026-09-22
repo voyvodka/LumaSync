@@ -794,3 +794,52 @@ describe("LightsSection — the signal pill names its sink", () => {
     expect(screen.queryByText("25 pkt/s")).not.toBeInTheDocument();
   });
 });
+
+// Room-aware turns on by itself when the room map has a TV (a template adds
+// one), so the dock says so — only while Hue is an output, since nothing else
+// is sampled by room position.
+describe("LightsSection — room-aware indicator", () => {
+  const tvAnchor = { x: 1.5, y: 0, width: 1.2, height: 0.1 };
+  const chipName = "roomMap:roomAware.ariaLabel";
+
+  beforeEach(() => {
+    shellStateRef.current = {};
+  });
+
+  function renderWithTargets(outputTargets: Array<"usb" | "hue">) {
+    render(
+      <LightsSection
+        mode={{ kind: "ambilight" }}
+        outputTargets={outputTargets}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
+        hueConfigured={true}
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+  }
+
+  it("shows when the room map has a TV and Hue is an output", async () => {
+    shellStateRef.current = { roomMap: { ...DEFAULT_ROOM_MAP, tvAnchor } };
+    renderWithTargets(["usb", "hue"]);
+    expect(await screen.findByRole("button", { name: chipName })).toBeInTheDocument();
+  });
+
+  it("stays hidden without a TV anchor", async () => {
+    shellStateRef.current = { roomMap: { ...DEFAULT_ROOM_MAP } };
+    renderWithTargets(["usb", "hue"]);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: chipName })).not.toBeInTheDocument();
+  });
+
+  it("stays hidden when Hue is not an output", async () => {
+    shellStateRef.current = { roomMap: { ...DEFAULT_ROOM_MAP, tvAnchor } };
+    renderWithTargets(["usb"]);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: chipName })).not.toBeInTheDocument();
+  });
+});
