@@ -36,6 +36,7 @@ import {
   readModeApplyOutcome,
   shouldCancelHueAfterLeavingOut,
   shouldReleaseHueAfterRefusal,
+  usbStartRefusalNotice,
 } from "./modeApplyOutcome";
 import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
 import { useLightingModePersistence } from "./useLightingModePersistence";
@@ -221,6 +222,8 @@ export function useLightingModeOrchestrator({
     let liveTargets = successfullyStopped.length > 0
       ? currentActive.filter((t) => !successfullyStopped.includes(t))
       : currentActive;
+    // The targets each delta-start re-apply asks for; a refused USB add leaves it.
+    let requestTargets = normalizedTargets;
 
     // Delta-start: for each added target, start the current mode on it.
     // D-06: a target that fails to start never disturbs the ones already running.
@@ -229,21 +232,74 @@ export function useLightingModeOrchestrator({
       // change can supersede this run partway through the list.
       if (!isLatest()) return;
       if (target === "usb") {
-        // Note: was previously using invoke("set_lighting_mode", { request: {...} })
-        // which is the wrong key name (Tauri expects "payload") and silently failed.
+        let applyResult: ModeCommandResult | null = null;
         try {
-          await dispatchSetLightingMode({
+          applyResult = await dispatchSetLightingMode({
             kind: lightingMode.kind,
             solid: lightingMode.solid,
             ambilight: lightingMode.ambilight,
-            targets: normalizedTargets,
+            targets: requestTargets,
           }, { force: true });
-          if (!isLatest()) return;
+        } catch (err) {
+          console.error("[LumaSync] USB delta-start dispatch failed; the running targets continue:", err);
+        }
+        if (!isLatest()) return;
+
+        // Read as the Hue add below reads it: a gate refusal (DEVICE_NOT_CONNECTED)
+        // echoes the running mode, which has the same kind. Absent or empty
+        // targets mean USB-required to the backend (legacy D-10).
+        const outcome = readModeApplyOutcome(applyResult, lightingMode.kind);
+        const runningTargets = applyResult?.mode.targets;
+        const usbDriven =
+          applyResult !== null &&
+          !outcome.refused &&
+          (runningTargets === undefined || runningTargets.length === 0 || runningTargets.includes("usb"));
+
+        if (usbDriven) {
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
           liveTargets = [...new Set([...liveTargets, "usb" as HueRuntimeTarget])];
-        } catch (err) {
-          console.error("[LumaSync] USB delta-start failed; the running targets continue:", err);
+          continue;
         }
+
+        // A later Hue add in this same change must not re-trip the USB gate.
+        requestTargets = requestTargets.filter((t) => t !== "usb");
+        const notice = applyResult === null ? null : usbStartRefusalNotice(applyResult);
+
+        if (applyResult !== null && outcome.refused && applyResult.mode.kind === LIGHTING_MODE_KIND.OFF) {
+          // The backend tore the running mode down before the start failed, so
+          // nothing outputs. The teardown leaves the Hue stream open with nothing
+          // feeding it, and the bridge admits one streamer — give back the one
+          // this session held, as the slow path does. UI only: the persisted
+          // mode stays for the next launch.
+          console.error(
+            `[LumaSync] USB delta-start re-apply stopped the running mode (${applyResult.status.code}).`,
+          );
+          let hueStillHeld = false;
+          if (liveTargets.includes("hue")) {
+            try {
+              const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+              hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
+            } catch (err) {
+              hueStillHeld = true;
+              console.error("[LumaSync] Hue release after the USB delta-start stopped the mode failed:", err);
+            }
+            if (hueStillHeld) setStopFailedNotice(["hue"]);
+          }
+          if (!isLatest()) return;
+          setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
+          setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
+          if (notice) setStartFailedNotice(notice);
+          return;
+        }
+
+        // D-06: the gate returns before teardown, so the running targets are
+        // untouched. Session-only, as for a left-out Hue: `lastOutputTargets`
+        // keeps the explicit add saved above, so the next launch retries USB.
+        console.error(
+          `[LumaSync] USB delta-start was not applied (${applyResult?.status.code ?? "dispatch threw"}); the running targets continue.`,
+        );
+        setSelectedOutputTargets((prev) => prev.filter((t) => t !== "usb"));
+        if (notice) setStartFailedNotice(notice);
       }
       if (target === "hue") {
         let runtimeHueConfig = hueStartConfig;
@@ -275,7 +331,7 @@ export function useLightingModeOrchestrator({
               kind: lightingMode.kind,
               solid: lightingMode.solid,
               ambilight: lightingMode.ambilight,
-              targets: normalizedTargets,
+              targets: requestTargets,
             }, { force: true });
           } catch (err) {
             console.error("[LumaSync] Hue delta-start mode dispatch failed:", err);
@@ -356,7 +412,7 @@ export function useLightingModeOrchestrator({
         const hueWasTheReason =
           hueStartCode === undefined ||
           !isHueStartCodeOk(hueStartCode) ||
-          hueLeftOutRetryTargets(applyResult, normalizedTargets) !== null;
+          hueLeftOutRetryTargets(applyResult, requestTargets) !== null;
         if (hueWasTheReason && liveTargets.includes("usb")) {
           setHueLeftOutNotice(hueLeftOutReason(runtimeHueConfig !== null, hueStartCode));
         } else {
