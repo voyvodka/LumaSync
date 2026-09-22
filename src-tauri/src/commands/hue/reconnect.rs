@@ -33,7 +33,7 @@ use std::time::{Duration, Instant};
 
 use log::info;
 
-use super::super::hue_onboarding::check_hue_stream_readiness_with_freshness;
+use super::super::hue_onboarding::{check_hue_stream_readiness_with_freshness, ActiveStreamerView};
 use super::area_cache::HueReadFreshness;
 use super::frame::HueAreaChannel;
 use super::retry::register_transient_fault;
@@ -443,6 +443,7 @@ async fn internal_restart_stream(
         request.username.clone(),
         request.area_id.clone(),
         HueReadFreshness::Force,
+        ActiveStreamerView::Foreign,
     )
     .await;
 

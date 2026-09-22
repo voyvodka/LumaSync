@@ -286,6 +286,22 @@ export const hueHandlers = {
     if (!hue.reachable || !hue.credentialValid) {
       return { active: false, status: currentRuntime() };
     }
+    // Same `details` shape `start_with_evidence` builds (see
+    // `CONFIG_NOT_READY_GATE_BLOCKED` in hue.ts), so a consumer reads the mock
+    // exactly as it reads Rust.
+    if (hue.activeStreamerElsewhere) {
+      return {
+        active: false,
+        status: {
+          ...runtimeStatus(
+            HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
+            HUE_RUNTIME_STATES.IDLE,
+            "Hue stream start blocked by strict backend readiness gate.",
+          ),
+          details: `Missing prerequisites: ready; readiness: ${HUE_STATUS.STREAM_NOT_READY}, ${HUE_READINESS_REASON.ACTIVE_STREAMER}`,
+        },
+      };
+    }
     mutate((w) => {
       w.hue.streaming = true;
       w.hue.everActive = true;

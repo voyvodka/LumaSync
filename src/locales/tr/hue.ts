@@ -303,6 +303,7 @@ const hue: Catalogue<typeof enHue> = {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Köprü konum formatını reddetti.",
         CHAN_WB_NETWORK_ERROR: "Köprüye ulaşılamıyor.",
+        CHAN_WB_AREA_NOT_FOUND: "Bu eğlence alanı artık köprüde yok. Alanı yeniden seçin.",
       },
     },
   },

@@ -225,4 +225,19 @@ describe("the five onboarding handlers answer with their own command's codes, no
     expect(result.status.code).toBe(HUE_STATUS.STREAM_NOT_READY);
     expect(result.readiness.reasons).toContain(HUE_READINESS_REASON.ACTIVE_STREAMER);
   });
+
+  it("start_hue_stream is gate-blocked by a foreign streamer, and says so in details", async () => {
+    setWorld(SCENARIOS.furnished.build());
+    mutate((w) => {
+      w.hue.streaming = false;
+      w.hue.activeStreamerElsewhere = true;
+    });
+
+    const result = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
+
+    expect(result.active).toBe(false);
+    expect(result.status.code).toBe(HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED);
+    expect(result.status.state).toBe(HUE_RUNTIME_STATES.IDLE);
+    expect(result.status.details).toContain(HUE_READINESS_REASON.ACTIVE_STREAMER);
+  });
 });

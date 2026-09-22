@@ -300,6 +300,7 @@ export default {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Bridge rejected the position format.",
         CHAN_WB_NETWORK_ERROR: "Could not reach the bridge.",
+        CHAN_WB_AREA_NOT_FOUND: "This entertainment area no longer exists on the bridge. Select an area again.",
       },
     },
   },
