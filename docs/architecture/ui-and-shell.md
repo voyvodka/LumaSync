@@ -30,6 +30,20 @@ size produces progressive clipping — a cross-fade needs both layouts live at o
 is always the wrong size for part of the transition. A second `switchUIMode` call while one is
 already running is ignored rather than queued or interrupted.
 
+**No wait in that chain may depend on animation frames alone.** The webview stops firing
+`requestAnimationFrame` while the window is hidden, occluded, or behind a locked screen. The resize
+animator's per-frame wait and the double paint before the fade-in both awaited rAF unbounded, so a
+toggle made in that state — tray, ⌘, or a title-bar click as the window was covered — never
+finished: the lock stayed held, the content sat at opacity 0 with pointer events and shortcuts off,
+and every later toggle was dropped until frames resumed. Both now go through `waitForFrames` in
+`frameWait.ts`, which races the frames against a 250 ms timer and cancels the loser. That is far
+above a visible double paint (~33 ms, ~66 ms at a throttled 30 Hz), so it does not win while the
+window is on screen; if a janky frame does let it win, the fade-in only starts a frame early from a
+container that is already at opacity 0, so nothing flashes. The animator's progress is wall-clock,
+so a timer-paced loop still lands on the final rect. Timers can themselves be throttled while
+hidden, but they fire; rAF does not. The opacity waits already had their own safety timeout. A
+rejected resize is logged and fades the old layout back in instead of leaving it invisible.
+
 **Every launch opens compact, whatever the last session used.** The persisted `uiMode` is read but
 deliberately ignored at startup, so the app always appears with the same small tray-style footprint.
 That is only flash-free because the Tauri window is *created* at compact dimensions in
