@@ -33,6 +33,7 @@ export default {
     rainbow: "Rainbow",
     spiral: "Spiral",
     gamut: "Gamut",
+    channelProbe: "Color order check",
   },
   twin: {
     scopeTest: "Test",

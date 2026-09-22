@@ -59,6 +59,7 @@ export const LED_TEST_PATTERN_KIND = [
   "rainbow",
   "spiral",
   "gamut",
+  "channelProbe",
 ] as const;
 
 export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
@@ -69,13 +70,20 @@ export type LedTestPatternKind = (typeof LED_TEST_PATTERN_KIND)[number];
  * - `solid` / `chase` carry an explicit RGB triple (0..255 per channel).
  * - `rainbow` / `spiral` / `gamut` are fully procedural — the Rust generator
  *   owns their colour math, so no payload travels with them.
+ * - `channelProbe` paints the whole strip pure red / green / blue for wire
+ *   slot 0 / 1 / 2, under the identity colour order whatever the saved
+ *   `ledColorOrder` is, so the user can report which colour each slot shows.
+ *   Chip type, firmware profile and colour correction still apply. A slot
+ *   above 2 is refused with `LED_TEST_PATTERN_INVALID_PARAMS`. Not offered by
+ *   the pattern picker — a probe without a slot is not a probe.
  */
 export type LedTestPattern =
   | { kind: "solid"; r: number; g: number; b: number }
   | { kind: "chase"; r: number; g: number; b: number }
   | { kind: "rainbow" }
   | { kind: "spiral" }
-  | { kind: "gamut" };
+  | { kind: "gamut" }
+  | { kind: "channelProbe"; slot: 0 | 1 | 2 };
 
 /** Animation cadence for time-varying patterns (chase / rainbow / spiral). */
 export type TestPatternSpeed = "slow" | "med" | "fast";

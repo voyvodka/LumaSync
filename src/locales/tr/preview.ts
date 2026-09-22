@@ -36,6 +36,7 @@ const preview: Catalogue<typeof enPreview> = {
     rainbow: "Gökkuşağı",
     spiral: "Spiral",
     gamut: "Renk gamı",
+    channelProbe: "Renk sırası kontrolü",
   },
   twin: {
     scopeTest: "Test",

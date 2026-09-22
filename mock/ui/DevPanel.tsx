@@ -40,7 +40,7 @@ import {
 } from "../events";
 import { rejectSerialPort, setSerialConnected, setWledBound } from "../hotplug";
 import { ROOM_MAP_PRESETS, ROOM_MAP_PRESET_IDS, type RoomMapPresetId } from "../roomMaps";
-import { LED_TEST_PATTERN_KIND } from "../../src/shared/contracts/preview";
+import { PICKER_PATTERN_KINDS } from "../../src/features/preview/ui/PatternPicker";
 import { MOCK_HAS_REAL_IPC } from "../runtime";
 import { SCENARIOS, SCENARIO_IDS, type ScenarioId } from "../scenarios";
 import { clearStoredWorld, getWorld, mutate, setWorld, subscribe } from "../state";
@@ -1130,7 +1130,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 <span style={{ color: DIM, fontSize: 10, width: 52 }}>pattern</span>
                 <Pick
                   value={stream.pattern}
-                  options={LED_TEST_PATTERN_KIND}
+                  options={PICKER_PATTERN_KINDS}
                   onChange={(v) => startEdgeSignalStream({ pattern: v, source: stream.source })}
                 />
               </Row>

@@ -54,6 +54,30 @@ fn an_invalid_brightness_is_a_coded_refusal_not_a_rejection() {
     }
 }
 
+/// Slots 0..=2 are the three wire bytes of a pixel; anything past them names
+/// a byte that does not exist.
+#[test]
+fn a_channel_probe_past_the_third_slot_is_a_coded_refusal() {
+    let app = app();
+    let webview = main_webview(&app);
+
+    let response = invoke(
+        &webview,
+        "start_led_test_pattern",
+        json!({
+            "payload": {
+                "pattern": { "kind": "channelProbe", "slot": 3 },
+                "brightness": 0.5,
+                "targets": ["usb"]
+            }
+        }),
+    )
+    .expect("start_led_test_pattern must resolve, never reject");
+
+    assert_eq!(status_code(&response), "LED_TEST_PATTERN_INVALID_PARAMS");
+    assert_eq!(response["active"], json!(false));
+}
+
 /// Stop is reached from the popup's close button and from a mode-strip
 /// takeover, neither of which knows whether a pattern is actually running.
 #[test]
