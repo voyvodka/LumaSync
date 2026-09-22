@@ -17,6 +17,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- USB health check: the firmware handshake always waited its full 2 s timeout even when the
+  strip answered at once, so the reported round-trip read about 2000 ms. It now finishes as soon
+  as the reply arrives and reports the real round-trip time. Stray bytes before the reply, or a
+  reply split across reads, no longer fail the check.
 - Turning Hue on while a mode was already running on USB showed Hue as on even when the bridge
   could not take the stream, so nothing was driving the lights. Hue now shows as on only once the
   app is actually sending to it. Otherwise USB keeps running, the Hue toggle goes back off, a

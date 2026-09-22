@@ -41,12 +41,13 @@
 //!
 //! Total: 7 bytes.
 //!
-//! ## Firmware companion (v1.5)
+//! ## Reading the response
 //!
-//! Real firmware integration is deferred to v1.5. The current Rust implementation
-//! is complete and tested using mock PONG responses. When the firmware companion
-//! repository is opened, integration tests will drive a real Arduino via a CI
-//! self-hosted runner with a USB loopback fixture.
+//! The reply is read frame-aware: bytes before the magic are skipped, the
+//! opcode fixes the frame length, and the round-trip returns the moment a
+//! complete valid PONG is buffered rather than waiting out the timeout.
+//!
+//! No companion firmware ships yet; the PONG path is exercised by mock ports.
 
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
@@ -226,10 +227,10 @@ pub trait SerialRoundTrip {
 
     /// Read bytes into `buf` with a wall-clock `timeout`.
     ///
-    /// Returns the number of bytes read, or an I/O error on failure / timeout.
-    /// Implementations may return fewer bytes than `buf.len()` if the timeout
-    /// elapses; a return of `0` with `Ok(0)` is treated as TooShort by the
-    /// caller.
+    /// Returns as soon as any bytes arrive, which may be fewer than
+    /// `buf.len()`; `Ok(0)` means nothing arrived within `timeout`. The caller
+    /// reassembles frames across calls, so waiting to fill `buf` only adds
+    /// latency.
     fn read_with_timeout(&mut self, buf: &mut [u8], timeout: Duration) -> std::io::Result<usize>;
 }
 
@@ -254,28 +255,122 @@ impl<P: Read + Write> SerialRoundTrip for TimedSerialPort<P> {
     }
 
     fn read_with_timeout(&mut self, buf: &mut [u8], timeout: Duration) -> std::io::Result<usize> {
-        // Poll in a tight loop until we accumulate at least 7 bytes (minimum
-        // valid PONG) or the deadline passes. The underlying serial port should
-        // already have its per-call timeout set to a short value so each
-        // `read` call returns quickly even when no data is available.
+        // Return on the first non-empty read: the caller's frame reader decides
+        // when a response is complete. Waiting to fill `buf` held every health
+        // check for the full timeout, since a PONG is shorter than the buffer.
         let deadline = Instant::now() + timeout;
-        let mut total = 0usize;
 
-        while Instant::now() < deadline && total < buf.len() {
-            match self.inner.read(&mut buf[total..]) {
-                Ok(0) => break,
-                Ok(n) => total += n,
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                    if Instant::now() >= deadline {
-                        break;
-                    }
-                    // poll again
-                }
+        while Instant::now() < deadline {
+            match self.inner.read(buf) {
+                Ok(n) => return Ok(n),
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
                 Err(e) => return Err(e),
             }
         }
 
-        Ok(total)
+        Ok(0)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ResponseReader — resynchronising frame accumulator
+// ---------------------------------------------------------------------------
+
+/// Length of a PONG frame on the wire.
+const PONG_FRAME_LEN: usize = 7;
+
+/// What the buffered bytes hold at the next magic boundary.
+#[derive(Debug, PartialEq, Eq)]
+enum Candidate {
+    /// Not enough bytes yet to know or complete the frame.
+    Pending,
+    /// A complete frame of this many bytes starts at the front of the buffer.
+    Complete(usize),
+    /// A magic prefix followed by an opcode this host does not expect.
+    UnknownOpcode,
+}
+
+/// Total frame length (magic through checksum) of the response carrying
+/// `opcode`, or `None` when the opcode is not an expected response.
+///
+/// A future length-prefixed response (`opcode, payload_len, payload, xor`)
+/// would widen this to take the buffered header and read `payload_len`; the
+/// resync and deadline logic in `ResponseReader` stays as it is.
+fn response_frame_len(opcode: u8) -> Option<usize> {
+    match opcode {
+        HANDSHAKE_OPCODE_PONG => Some(PONG_FRAME_LEN),
+        _ => None,
+    }
+}
+
+/// Accumulates bytes across reads and yields frames aligned on `FRAME_MAGIC`.
+#[derive(Default)]
+struct ResponseReader {
+    pending: Vec<u8>,
+    /// Bytes were dropped because they did not start a frame.
+    skipped_noise: bool,
+}
+
+impl ResponseReader {
+    fn extend(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
+    }
+
+    fn pending(&self) -> &[u8] {
+        &self.pending
+    }
+
+    /// Drop everything before the next magic prefix, then classify what follows.
+    fn next_candidate(&mut self) -> Candidate {
+        let start = self
+            .pending
+            .windows(FRAME_MAGIC.len())
+            .position(|w| w == FRAME_MAGIC)
+            .unwrap_or_else(|| {
+                // Keep a trailing magic_hi: its magic_lo may be in the next read.
+                if self.pending.last() == Some(&FRAME_MAGIC[0]) {
+                    self.pending.len() - 1
+                } else {
+                    self.pending.len()
+                }
+            });
+        if start > 0 {
+            self.pending.drain(..start);
+            self.skipped_noise = true;
+        }
+
+        let Some(&opcode) = self.pending.get(FRAME_MAGIC.len()) else {
+            return Candidate::Pending;
+        };
+        match response_frame_len(opcode) {
+            None => Candidate::UnknownOpcode,
+            Some(len) if self.pending.len() >= len => Candidate::Complete(len),
+            Some(_) => Candidate::Pending,
+        }
+    }
+
+    /// Discard the frame at the front after it has been handled.
+    fn consume(&mut self, len: usize) {
+        self.pending.drain(..len.min(self.pending.len()));
+    }
+
+    /// Step past a rejected magic so a real frame starting inside it is found.
+    fn skip_one(&mut self) {
+        self.consume(1);
+        self.skipped_noise = true;
+    }
+
+    /// The error to report when the deadline passes without a valid PONG.
+    fn timeout_error(&self, last_rejection: Option<HandshakeError>) -> HandshakeError {
+        if let Some(err) = last_rejection {
+            return err;
+        }
+        let holds_partial_frame = self.pending.starts_with(&FRAME_MAGIC);
+        if self.skipped_noise && !holds_partial_frame {
+            HandshakeError::BadMagic
+        } else {
+            HandshakeError::TooShort
+        }
     }
 }
 
@@ -289,6 +384,10 @@ impl<P: Read + Write> SerialRoundTrip for TimedSerialPort<P> {
 /// elapsed wall-clock time from the moment the PING is flushed and returns it
 /// alongside the parsed `HandshakePongResponse` so the caller can populate
 /// `SerialHealthReport.roundTripMs`.
+///
+/// Returns on the first valid PONG. A frame that fails validation is skipped
+/// rather than fatal, because a real PONG may still follow it; its error is
+/// what gets reported if the deadline passes first.
 ///
 /// # Errors
 ///
@@ -304,20 +403,41 @@ pub fn perform_handshake<T: SerialRoundTrip>(
         .map_err(|_| HandshakeError::TooShort)?;
 
     let start = Instant::now();
+    let deadline = start + timeout;
+    let mut reader = ResponseReader::default();
+    let mut last_rejection: Option<HandshakeError> = None;
+    let mut chunk = [0u8; 16];
 
-    let mut buf = [0u8; 16];
-    let n = port
-        .read_with_timeout(&mut buf, timeout)
-        .map_err(|_| HandshakeError::TooShort)?;
+    loop {
+        loop {
+            match reader.next_candidate() {
+                Candidate::Pending => break,
+                Candidate::UnknownOpcode => {
+                    last_rejection = Some(HandshakeError::WrongOpcode);
+                    reader.skip_one();
+                }
+                Candidate::Complete(len) => match decode_handshake_pong(&reader.pending()[..len]) {
+                    Ok(response) => {
+                        let elapsed_ms = start.elapsed().as_millis().min(u32::MAX as u128) as u32;
+                        return Ok((response, elapsed_ms));
+                    }
+                    Err(err) => {
+                        last_rejection = Some(err);
+                        reader.skip_one();
+                    }
+                },
+            }
+        }
 
-    let elapsed_ms = start.elapsed().as_millis().min(u32::MAX as u128) as u32;
-
-    if n < 7 {
-        return Err(HandshakeError::TooShort);
+        let now = Instant::now();
+        if now >= deadline {
+            return Err(reader.timeout_error(last_rejection));
+        }
+        let n = port
+            .read_with_timeout(&mut chunk, deadline - now)
+            .map_err(|_| HandshakeError::TooShort)?;
+        reader.extend(&chunk[..n]);
     }
-
-    let response = decode_handshake_pong(&buf[..n])?;
-    Ok((response, elapsed_ms))
 }
 
 // ---------------------------------------------------------------------------
@@ -328,6 +448,7 @@ pub fn perform_handshake<T: SerialRoundTrip>(
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+    use std::io::{Read, Write};
 
     // -----------------------------------------------------------------------
     // MockPort — deterministic scripted responses for unit tests
@@ -339,31 +460,29 @@ mod tests {
     // -----------------------------------------------------------------------
 
     struct MockPort {
-        /// Bytes pre-loaded by the test that `read_with_timeout` will drain.
-        read_queue: VecDeque<u8>,
+        /// One entry per `read_with_timeout` call, drained in order.
+        reads: VecDeque<Vec<u8>>,
         /// Captures every byte written by `write_all`.
         written: Vec<u8>,
-        /// When `true`, `read_with_timeout` returns 0 bytes (simulates timeout).
-        silent: bool,
     }
 
     impl MockPort {
         /// Port that returns `response` bytes when read.
         fn with_response(response: Vec<u8>) -> Self {
+            Self::with_chunks(vec![response])
+        }
+
+        /// Port that delivers each chunk on a separate read.
+        fn with_chunks(chunks: Vec<Vec<u8>>) -> Self {
             Self {
-                read_queue: VecDeque::from(response),
+                reads: VecDeque::from(chunks),
                 written: Vec::new(),
-                silent: false,
             }
         }
 
         /// Port that returns no bytes — simulates a device that never replies.
         fn silent() -> Self {
-            Self {
-                read_queue: VecDeque::new(),
-                written: Vec::new(),
-                silent: true,
-            }
+            Self::with_chunks(Vec::new())
         }
     }
 
@@ -378,20 +497,69 @@ mod tests {
             buf: &mut [u8],
             _timeout: Duration,
         ) -> std::io::Result<usize> {
-            if self.silent {
+            let Some(mut chunk) = self.reads.pop_front() else {
                 return Ok(0);
+            };
+            let n = chunk.len().min(buf.len());
+            buf[..n].copy_from_slice(&chunk[..n]);
+            if n < chunk.len() {
+                self.reads.push_front(chunk.split_off(n));
             }
-            let mut count = 0usize;
-            for slot in buf.iter_mut() {
-                match self.read_queue.pop_front() {
-                    Some(b) => {
-                        *slot = b;
-                        count += 1;
-                    }
-                    None => break,
-                }
+            Ok(n)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // ScriptedSerial — a `Read + Write` port on the real clock, for driving
+    // `TimedSerialPort`. Each chunk becomes readable `ready_after` the PING is
+    // written; until then a read blocks for one poll interval and reports
+    // `TimedOut`, the way a serialport handle with a short timeout does.
+    // -----------------------------------------------------------------------
+
+    const SCRIPTED_POLL: Duration = Duration::from_millis(5);
+
+    struct ScriptedSerial {
+        script: VecDeque<(Duration, Vec<u8>)>,
+        written_at: Option<Instant>,
+    }
+
+    impl ScriptedSerial {
+        fn new(script: Vec<(Duration, Vec<u8>)>) -> Self {
+            Self {
+                script: VecDeque::from(script),
+                written_at: None,
             }
-            Ok(count)
+        }
+    }
+
+    impl Write for ScriptedSerial {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.written_at.get_or_insert_with(Instant::now);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Read for ScriptedSerial {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let ready = match (self.written_at, self.script.front()) {
+                (Some(at), Some((after, _))) => at.elapsed() >= *after,
+                _ => false,
+            };
+            if !ready {
+                std::thread::sleep(SCRIPTED_POLL);
+                return Err(std::io::ErrorKind::TimedOut.into());
+            }
+            let (after, mut chunk) = self.script.pop_front().expect("checked above");
+            let n = chunk.len().min(buf.len());
+            buf[..n].copy_from_slice(&chunk[..n]);
+            if n < chunk.len() {
+                self.script.push_front((after, chunk.split_off(n)));
+            }
+            Ok(n)
         }
     }
 
@@ -552,7 +720,7 @@ mod tests {
         let garbled = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x11, 0x22, 0x33];
         let mut port = MockPort::with_response(garbled);
 
-        let err = perform_handshake(&mut port, Duration::from_millis(1_000))
+        let err = perform_handshake(&mut port, Duration::from_millis(100))
             .expect_err("garbled bytes should fail");
 
         // Bad magic is the first error caught
@@ -574,6 +742,143 @@ mod tests {
         assert_eq!(response.firmware_profile, FirmwareProfile::Adalight);
         // elapsed_ms is u32; 0 is valid for in-memory mock
         assert!(elapsed_ms < 1_000, "mock elapsed should be well under 1 s");
+    }
+
+    // -----------------------------------------------------------------------
+    // Frame-aware reading: return on a complete PONG, resync past noise
+    // -----------------------------------------------------------------------
+
+    fn pong_v1() -> Vec<u8> {
+        build_valid_pong(0x0104, PROFILE_BYTE_LUMASYNC_V1)
+    }
+
+    #[test]
+    fn perform_handshake_reassembles_pong_split_across_reads() {
+        let pong = pong_v1();
+        let mut port = MockPort::with_chunks(vec![
+            pong[..1].to_vec(),
+            pong[1..4].to_vec(),
+            Vec::new(),
+            pong[4..].to_vec(),
+        ]);
+
+        let (response, _) = perform_handshake(&mut port, Duration::from_millis(1_000))
+            .expect("split PONG should reassemble");
+        assert_eq!(response.firmware_version, 0x0104);
+    }
+
+    #[test]
+    fn perform_handshake_skips_leading_garbage_before_magic() {
+        let mut noise = b"Ada\n".to_vec();
+        noise.extend_from_slice(&[0x00, 0xAA]);
+        let pong = pong_v1();
+        // The trailing 0xAA is a false start; the real magic follows it.
+        let mut port = MockPort::with_chunks(vec![noise, pong[..2].to_vec(), pong[2..].to_vec()]);
+
+        let (response, _) = perform_handshake(&mut port, Duration::from_millis(1_000))
+            .expect("PONG after noise should be found");
+        assert_eq!(response.firmware_profile, FirmwareProfile::LumaSyncV1);
+    }
+
+    #[test]
+    fn perform_handshake_resyncs_past_a_false_magic_with_unknown_opcode() {
+        let mut bytes = vec![0xAA, 0x55, 0xFF];
+        bytes.extend(pong_v1());
+        let mut port = MockPort::with_response(bytes);
+
+        let (response, _) = perform_handshake(&mut port, Duration::from_millis(1_000))
+            .expect("real PONG after a false magic should be found");
+        assert_eq!(response.firmware_version, 0x0104);
+    }
+
+    #[test]
+    fn perform_handshake_with_truncated_pong_times_out_as_too_short() {
+        let pong = pong_v1();
+        let mut port = MockPort::with_response(pong[..5].to_vec());
+
+        let err = perform_handshake(&mut port, Duration::from_millis(100))
+            .expect_err("truncated PONG must not succeed");
+        assert_eq!(err, HandshakeError::TooShort);
+    }
+
+    #[test]
+    fn perform_handshake_reports_bad_checksum_when_no_valid_pong_follows() {
+        let mut pong = pong_v1();
+        pong[6] ^= 0x01;
+        let mut port = MockPort::with_response(pong);
+
+        let err = perform_handshake(&mut port, Duration::from_millis(100))
+            .expect_err("corrupt PONG must not succeed");
+        assert_eq!(err, HandshakeError::BadChecksum);
+    }
+
+    #[test]
+    fn perform_handshake_reports_wrong_opcode_for_an_unknown_response() {
+        let mut port = MockPort::with_response(vec![0xAA, 0x55, 0x42, 0x00, 0x00, 0x00, 0x00]);
+
+        let err = perform_handshake(&mut port, Duration::from_millis(100))
+            .expect_err("unknown opcode must not succeed");
+        assert_eq!(err, HandshakeError::WrongOpcode);
+    }
+
+    // Timing is asserted through `TimedSerialPort` over a real-clock port,
+    // because that is the layer that used to wait for a full 16-byte buffer.
+    const REAL_TIMEOUT: Duration = Duration::from_millis(1_500);
+    const PROMPT_BOUND: Duration = Duration::from_millis(500);
+
+    #[test]
+    fn timed_port_returns_as_soon_as_a_one_chunk_pong_arrives() {
+        let reply_after = Duration::from_millis(40);
+        let mut port = TimedSerialPort::new(ScriptedSerial::new(vec![(reply_after, pong_v1())]));
+
+        let started = Instant::now();
+        let (response, round_trip_ms) =
+            perform_handshake(&mut port, REAL_TIMEOUT).expect("PONG should be read");
+        let wall = started.elapsed();
+
+        assert_eq!(response.firmware_version, 0x0104);
+        assert!(
+            wall < PROMPT_BOUND,
+            "handshake took {wall:?}; it must not wait out the {REAL_TIMEOUT:?} timeout"
+        );
+        assert!(
+            u128::from(round_trip_ms) >= reply_after.as_millis()
+                && u128::from(round_trip_ms) < PROMPT_BOUND.as_millis(),
+            "roundTripMs {round_trip_ms} must reflect the ~40 ms reply, not the timeout"
+        );
+    }
+
+    #[test]
+    fn timed_port_reassembles_a_pong_split_across_delayed_chunks() {
+        let pong = pong_v1();
+        let mut port = TimedSerialPort::new(ScriptedSerial::new(vec![
+            (Duration::from_millis(10), vec![0x00, 0xAA]),
+            (Duration::from_millis(20), pong[..3].to_vec()),
+            (Duration::from_millis(30), pong[3..].to_vec()),
+        ]));
+
+        let started = Instant::now();
+        let (response, round_trip_ms) =
+            perform_handshake(&mut port, REAL_TIMEOUT).expect("split PONG should be read");
+
+        assert_eq!(response.firmware_profile, FirmwareProfile::LumaSyncV1);
+        assert!(started.elapsed() < PROMPT_BOUND);
+        assert!(
+            round_trip_ms >= 30,
+            "roundTripMs {round_trip_ms} ends at the last chunk"
+        );
+    }
+
+    #[test]
+    fn timed_port_with_no_reply_times_out_after_the_deadline() {
+        let timeout = Duration::from_millis(150);
+        let mut port = TimedSerialPort::new(ScriptedSerial::new(Vec::new()));
+
+        let started = Instant::now();
+        let err = perform_handshake(&mut port, timeout).expect_err("silence must fail");
+
+        assert_eq!(err, HandshakeError::TooShort);
+        assert!(started.elapsed() >= timeout);
     }
 
     // -----------------------------------------------------------------------
