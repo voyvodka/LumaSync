@@ -6,7 +6,12 @@ import { CalibrationPage } from "../calibration/ui/CalibrationPage";
 import { DeviceSection } from "./sections/DeviceSection";
 import { SystemSection } from "./sections/SystemSection";
 import type { LedCalibrationConfig, LedSegmentCounts } from "../calibration/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
+import type {
+  ColorCorrectionConfig,
+  FirmwareProfile,
+  LedChipType,
+  LedColorOrder,
+} from "@/shared/contracts/device";
 import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
@@ -66,6 +71,8 @@ interface SettingsLayoutProps {
   /** Forwarded to the chip-type picker in DEVICES; same hot-reload contract as
    *  `onFirmwareProfileChange`, because chip type is also a wire-format change. */
   onChipTypeChange?: (next: LedChipType) => void;
+  /** Forwarded to the colour-order control in DEVICES; retuned in place, no force. */
+  onColorOrderChange?: (next: LedColorOrder) => void;
   /** Forwarded to LED Setup's display picker. Without it a mid-session monitor
    *  switch persists but never reaches the running capture session. */
   onSelectedDisplayIdChange?: (next: string) => void;
@@ -105,6 +112,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   onColorCorrectionChange,
   onFirmwareProfileChange,
   onChipTypeChange,
+  onColorOrderChange,
   onSelectedDisplayIdChange,
   onOpenDevices,
 }: SettingsLayoutProps) {
@@ -191,6 +199,7 @@ export const SettingsLayout = memo(function SettingsLayout({
             <DeviceSection
               onNavigateToRoomMap={() => void onSectionChange(SECTION_IDS.ROOM_MAP)}
               onChipTypeChange={onChipTypeChange}
+              onColorOrderChange={onColorOrderChange}
             />
           </div>
         )}

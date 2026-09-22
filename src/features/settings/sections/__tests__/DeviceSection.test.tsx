@@ -592,6 +592,57 @@ describe("DeviceSection — chip type forwarding", () => {
   });
 });
 
+describe("DeviceSection — colour order", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // An earlier suite can leave an unconsumed `mockRejectedValueOnce` behind.
+    const { shellStore } = await import("@/features/persistence/shellStore");
+    vi.mocked(shellStore.save).mockReset().mockResolvedValue(undefined);
+    activeWledIpMock = null;
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  it("replaces the control with a WLED hint when the local output is WLED", async () => {
+    activeWledIpMock = "192.168.1.42";
+
+    render(<DeviceSection />);
+
+    expect(await screen.findByText("lights:led.colorOrder.wledHint")).toBeInTheDocument();
+    expect(screen.queryByText("lights:led.colorOrder.identify.button")).toBeNull();
+  });
+
+  it("offers Identify when a serial strip is bound, even with a WLED address saved", async () => {
+    activeWledIpMock = "192.168.1.42";
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      isConnected: true,
+      connectedPort: "/dev/cu.usbserial-1420",
+    });
+
+    render(<DeviceSection />);
+
+    const identify = await screen.findByRole("button", {
+      name: "lights:led.colorOrder.identify.button",
+    });
+    expect(identify).not.toBeDisabled();
+    expect(screen.queryByText("lights:led.colorOrder.wledHint")).toBeNull();
+  });
+
+  it("hands a manual order to its own caller after saving", async () => {
+    const onColorOrderChange = vi.fn();
+    const user = userEvent.setup();
+    render(<DeviceSection onColorOrderChange={onColorOrderChange} />);
+
+    await user.selectOptions(
+      await screen.findByLabelText("lights:led.colorOrder.manualLabel"),
+      "grb",
+    );
+
+    await waitFor(() => expect(onColorOrderChange).toHaveBeenCalledWith("grb"));
+  });
+});
+
 describe("DeviceSection — category scroll position", () => {
   beforeEach(() => {
     vi.clearAllMocks();

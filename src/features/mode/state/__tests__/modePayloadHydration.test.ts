@@ -5,6 +5,7 @@ import {
   canonicalLightingModeSignature,
   hydrateModePayload,
   withAmbilightLightingSmoothingPreset,
+  withColorCorrectionAndFirmwareProfile,
   withAmbilightSettings,
   withLedCalibration,
   withRoomGeometry,
@@ -18,6 +19,7 @@ const emptySnapshot: ModeRuntimeConfigSnapshot = {
   colorCorrection: undefined,
   firmwareProfile: undefined,
   chipType: undefined,
+  colorOrder: undefined,
   savedCalibration: undefined,
   savedAmbilight: undefined,
   roomGeometry: undefined,
@@ -181,6 +183,39 @@ describe("hydrateModePayload composition order (INV-5)", () => {
     } as ModeRuntimeConfigSnapshot);
     expect(hydrated.firmwareProfile).toBe("adalight");
     expect(hydrated.chipType).toBe("sk6812-rgbw");
+  });
+});
+
+describe("colour order stamp", () => {
+  it("stamps the cached order onto every kind", () => {
+    for (const kind of Object.values(LIGHTING_MODE_KIND)) {
+      const hydrated = hydrateModePayload({ kind }, { ...emptySnapshot, colorOrder: "grb" });
+      expect(hydrated.colorOrder).toBe("grb");
+    }
+  });
+
+  it("is caller-wins: an explicit order on the payload survives the cache", () => {
+    const hydrated = withColorCorrectionAndFirmwareProfile(
+      { kind: LIGHTING_MODE_KIND.SOLID, colorOrder: "bgr" },
+      { ...emptySnapshot, colorOrder: "grb" },
+    );
+    expect(hydrated.colorOrder).toBe("bgr");
+  });
+
+  it("leaves the field absent when neither side has one, so Rust falls back to disk", () => {
+    const hydrated = hydrateModePayload({ kind: LIGHTING_MODE_KIND.OFF }, emptySnapshot);
+    expect("colorOrder" in hydrated && hydrated.colorOrder !== undefined).toBe(false);
+  });
+
+  it("moves the dedupe signature when only the order changed", () => {
+    const mode = { kind: LIGHTING_MODE_KIND.AMBILIGHT } as LightingModeConfig;
+    const before = canonicalLightingModeSignature(
+      hydrateModePayload(mode, { ...emptySnapshot, colorOrder: "rgb" }),
+    );
+    const after = canonicalLightingModeSignature(
+      hydrateModePayload(mode, { ...emptySnapshot, colorOrder: "grb" }),
+    );
+    expect(after).not.toBe(before);
   });
 });
 

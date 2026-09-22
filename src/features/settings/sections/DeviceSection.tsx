@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { LedChipType } from "@/shared/contracts/device";
+import type { LedChipType, LedColorOrder } from "@/shared/contracts/device";
 import type { DisplayInfo } from "@/shared/contracts/display";
 import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
 import { DEFAULT_ROOM_MAP, hueChannelsForArea, mergeHueChannels } from "@/shared/contracts/roomMap";
@@ -41,6 +41,8 @@ export interface DeviceSectionProps {
   onNavigateToRoomMap?: () => void;
   /** Forwarded to the chip-type picker; see `UsbStripsCategoryProps`. */
   onChipTypeChange?: (next: LedChipType) => void;
+  /** Forwarded to the colour-order control; see `UsbStripsCategoryProps`. */
+  onColorOrderChange?: (next: LedColorOrder) => void;
 }
 
 interface RailButtonProps {
@@ -90,7 +92,11 @@ function RailButton({ icon, label, count, countLabel, active, onClick }: RailBut
   );
 }
 
-export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceSectionProps = {}) {
+export function DeviceSection({
+  onNavigateToRoomMap,
+  onChipTypeChange,
+  onColorOrderChange,
+}: DeviceSectionProps = {}) {
   const { t } = useTranslation();
 
   // Mounted once and handed to the children whole: `useHueOnboarding` composes
@@ -287,6 +293,8 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
           clearPersistError={usbPersistError.clear}
           onNavigateToRoomMap={onNavigateToRoomMap}
           onChipTypeChange={onChipTypeChange}
+          onColorOrderChange={onColorOrderChange}
+          activeWledIp={activeWledIp}
         />
 
         <HueBridgesCategory

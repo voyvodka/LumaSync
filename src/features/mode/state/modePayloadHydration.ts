@@ -7,7 +7,12 @@
  */
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
+import type {
+  ColorCorrectionConfig,
+  FirmwareProfile,
+  LedChipType,
+  LedColorOrder,
+} from "@/shared/contracts/device";
 import type { HueIntensityPreset } from "@/shared/contracts/hue";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 
@@ -24,6 +29,7 @@ export interface ModeRuntimeConfigSnapshot {
   colorCorrection: ColorCorrectionConfig | undefined;
   firmwareProfile: FirmwareProfile | undefined;
   chipType: LedChipType | undefined;
+  colorOrder: LedColorOrder | undefined;
   savedCalibration: LedCalibrationConfig | undefined;
   savedAmbilight: AmbilightPayload | undefined;
   roomGeometry: RoomGeometry | undefined;
@@ -69,8 +75,8 @@ export function withAmbilightLightingSmoothingPreset(
 }
 
 /**
- * Stamp color correction and firmware profile onto any outgoing
- * LightingModeConfig. Both fields are top-level (not nested inside ambilight)
+ * Stamp color correction, firmware profile, chip type and colour order onto
+ * any outgoing LightingModeConfig. Both fields are top-level (not nested inside ambilight)
  * so they apply to all modes (ambilight, solid, off). Absent refs leave the
  * fields undefined — the Rust backend applies its own defaults via
  * #[serde(default)] so no runtime error occurs.
@@ -84,6 +90,9 @@ export function withColorCorrectionAndFirmwareProfile(
     colorCorrection: snapshot.colorCorrection,
     firmwareProfile: snapshot.firmwareProfile,
     chipType: snapshot.chipType,
+    // Caller-wins, unlike the three above, so an explicit order on the payload
+    // is never overwritten by the cache.
+    colorOrder: mode.colorOrder ?? snapshot.colorOrder,
   };
 }
 

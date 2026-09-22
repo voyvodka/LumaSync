@@ -13,7 +13,9 @@ import {
   type ColorCorrectionConfig,
   type FirmwareProfile,
   LED_CHIP_TYPE,
+  LED_COLOR_ORDER,
   type LedChipType,
+  type LedColorOrder,
 } from "@/shared/contracts/device";
 
 export const LIGHTING_MODE_KIND = {
@@ -136,6 +138,12 @@ export interface LightingModeConfig {
    */
   chipType?: LedChipType;
   /**
+   * Host-side colour-order correction for the serial sink, relative to the
+   * firmware's own order. Absent ⇒ Rust reads `ledColorOrder` off disk, then
+   * falls back to `"rgb"`. WLED ignores it.
+   */
+  colorOrder?: LedColorOrder;
+  /**
    * Per-LED calibration payload (v1.4 USB per-LED sampling anchor).
    * The Rust worker uses `totalLeds` to size every emitted USB packet
    * (Solid + Ambilight encoders both consume it). Absent ⇒ backend
@@ -256,6 +264,17 @@ function normalizeChipType(value: unknown): LedChipType | undefined {
     : undefined;
 }
 
+const LED_COLOR_ORDER_VALUES: ReadonlySet<string> = new Set(Object.values(LED_COLOR_ORDER));
+
+/** Absent and unknown both come back `undefined`, never the default: an
+ * invented `"rgb"` would win caller-wins hydration over the saved order, and an
+ * unknown string would fail the whole payload's deserialisation in Rust. */
+export function normalizeColorOrder(value: unknown): LedColorOrder | undefined {
+  return typeof value === "string" && LED_COLOR_ORDER_VALUES.has(value)
+    ? (value as LedColorOrder)
+    : undefined;
+}
+
 export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>): LightingModeConfig {
   const kind = isLightingModeKind(input?.kind) ? input.kind : LIGHTING_MODE_KIND.OFF;
   const normalizedSolid = input?.solid ? normalizeSolidColorPayload(input.solid) : undefined;
@@ -264,6 +283,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
   const normalizedColorCorrection = normalizeColorCorrection(input?.colorCorrection);
   const normalizedFirmwareProfile = normalizeFirmwareProfile(input?.firmwareProfile);
   const normalizedChipType = normalizeChipType(input?.chipType);
+  const normalizedColorOrder = normalizeColorOrder(input?.colorOrder);
 
   if (kind === LIGHTING_MODE_KIND.SOLID) {
     return {
@@ -275,6 +295,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       colorCorrection: normalizedColorCorrection,
       firmwareProfile: normalizedFirmwareProfile,
       chipType: normalizedChipType,
+      colorOrder: normalizedColorOrder,
     };
   }
 
@@ -288,6 +309,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
       colorCorrection: normalizedColorCorrection,
       firmwareProfile: normalizedFirmwareProfile,
       chipType: normalizedChipType,
+      colorOrder: normalizedColorOrder,
     };
   }
 
@@ -300,6 +322,7 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     colorCorrection: normalizedColorCorrection,
     firmwareProfile: normalizedFirmwareProfile,
     chipType: normalizedChipType,
+    colorOrder: normalizedColorOrder,
   };
 }
 

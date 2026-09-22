@@ -14,6 +14,11 @@ https://keepachangelog.com/en/1.1.0/
   meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
   output on the Lights page shows when Hue lights are sampled by where they stand around the TV,
   and opens a short explanation.
+- USB strips: a color order setting for strips whose colors come out swapped, such as red
+  showing as green on many WS2811 strips. Devices → USB Strips has an Identify step that lights
+  the strip one color at a time and asks what you see, then saves the right order and lets you
+  undo it if the colors still look wrong. The order can also be picked by hand. WLED devices set
+  their color order in WLED itself, so the setting is hidden for them.
 
 ### Fixed
 

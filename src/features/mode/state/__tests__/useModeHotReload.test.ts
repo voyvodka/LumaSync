@@ -1,10 +1,13 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const invokeMock = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+
 import { LED_CHIP_TYPE } from "@/shared/contracts/device";
 
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
-import type { LightingModeDispatcher } from "../useLightingModeDispatch";
+import { useLightingModeDispatch, type LightingModeDispatcher } from "../useLightingModeDispatch";
 import { useModeHotReload } from "../useModeHotReload";
 import { useModeRuntimeConfig } from "../useModeRuntimeConfig";
 
@@ -82,6 +85,48 @@ describe("useModeHotReload", () => {
       expect(dispatch).not.toHaveBeenCalled();
       // The mirror still happens, so the next real dispatch carries it.
       expect(result.current.runtimeConfig.getSelectedDisplayId()).toBe("display-2");
+    });
+  });
+
+  describe("onColorOrderChange", () => {
+    it("re-dispatches without force — the order is in the signature and Rust retunes in place", () => {
+      const { dispatch, result } = setup(AMBILIGHT);
+
+      act(() => result.current.handlers.onColorOrderChange("grb"));
+
+      expect(dispatch).toHaveBeenCalledWith(AMBILIGHT);
+      expect(result.current.runtimeConfig.hydrate(AMBILIGHT).colorOrder).toBe("grb");
+    });
+
+    it("reaches set_lighting_mode carrying the new order through the real funnel", async () => {
+      invokeMock.mockResolvedValue({ mode: AMBILIGHT, status: { code: "AMBILIGHT_MODE_UPDATED" } });
+      const { result } = renderHook(() => {
+        const runtimeConfig = useModeRuntimeConfig({ calibration: undefined });
+        const { dispatch } = useLightingModeDispatch(runtimeConfig.hydrate);
+        return useModeHotReload(runtimeConfig, dispatch, AMBILIGHT);
+      });
+
+      await act(async () => {
+        result.current.onColorOrderChange("grb");
+        await Promise.resolve();
+      });
+
+      expect(invokeMock).toHaveBeenCalledWith(
+        "set_lighting_mode",
+        expect.objectContaining({ payload: expect.objectContaining({ colorOrder: "grb" }) }),
+      );
+    });
+  });
+
+  describe("prime", () => {
+    it("stamps the saved order, and the identity when none is saved", () => {
+      const { result } = setup(AMBILIGHT);
+
+      act(() => result.current.runtimeConfig.prime({ ledColorOrder: "bgr" }));
+      expect(result.current.runtimeConfig.hydrate(OFF).colorOrder).toBe("bgr");
+
+      act(() => result.current.runtimeConfig.prime({}));
+      expect(result.current.runtimeConfig.hydrate(OFF).colorOrder).toBe("rgb");
     });
   });
 });

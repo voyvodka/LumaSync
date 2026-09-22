@@ -56,7 +56,6 @@ const device: Catalogue<typeof enDevice> = {
     errorBody: "Bağlantı tamamlanamadı. Yenile, farklı bir port seç ve tekrar dene.",
     nextSteps: "İpucu: Hatırlanan port yeniden görünürse otomatik olarak tekrar seçilir.",
   },
-  usbDisconnected: "Cihaz bağlantısı yok",
   healthCheck: {
     runAction: "Sağlık Kontrolü Çalıştır",
     runningAction: "Sağlık Kontrolü Çalışıyor...",

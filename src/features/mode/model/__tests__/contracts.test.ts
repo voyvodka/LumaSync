@@ -13,6 +13,7 @@ import {
   LIGHTING_MODE_KIND,
   isLightingModeKind,
   normalizeAmbilightPayload,
+  normalizeColorOrder,
   normalizeLightingModeConfig,
   normalizeOutputTargets,
   normalizeSolidColorPayload,
@@ -215,5 +216,37 @@ describe("normalizeLightingModeConfig room geometry", () => {
     for (const kind of [LIGHTING_MODE_KIND.AMBILIGHT, LIGHTING_MODE_KIND.SOLID, LIGHTING_MODE_KIND.OFF]) {
       expect(normalizeLightingModeConfig({ kind, roomGeometry })).not.toHaveProperty("roomGeometry");
     }
+  });
+});
+
+describe("normalizeLightingModeConfig colour order", () => {
+  // The function rebuilds the config field by field per kind, and the shell
+  // verifier cannot see this file, so a branch that forgets the field silently
+  // drops the order from every payload of that kind.
+  it.each(Object.values(LIGHTING_MODE_KIND))("keeps colorOrder on the %s branch", (kind) => {
+    expect(normalizeLightingModeConfig({ kind, colorOrder: "grb" }).colorOrder).toBe("grb");
+  });
+
+  it("keeps it on the fallback branch an unknown kind lands in", () => {
+    const normalized = normalizeLightingModeConfig({
+      kind: "rainbow" as never,
+      colorOrder: "bgr",
+    });
+    expect(normalized.kind).toBe(LIGHTING_MODE_KIND.OFF);
+    expect(normalized.colorOrder).toBe("bgr");
+  });
+
+  it("drops an unknown order instead of letting it fail the Rust payload", () => {
+    expect(
+      normalizeLightingModeConfig({ kind: "solid", colorOrder: "xyz" as never }).colorOrder,
+    ).toBeUndefined();
+  });
+
+  it("never invents the default for an absent order", () => {
+    // A made-up "rgb" would win caller-wins hydration over the saved order.
+    expect(normalizeLightingModeConfig({ kind: "ambilight" }).colorOrder).toBeUndefined();
+    expect(normalizeColorOrder(undefined)).toBeUndefined();
+    expect(normalizeColorOrder("GRB")).toBeUndefined();
+    expect(normalizeColorOrder("gbr")).toBe("gbr");
   });
 });
