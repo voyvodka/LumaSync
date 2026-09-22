@@ -4,13 +4,11 @@
  * Types for the 2D room map configuration, Hue channel spatial placements,
  * USB strip placements, furniture, TV anchor, and zone definitions.
  *
- * Phase 14: Contract foundation — these types are used by Phase 16 (Hue Channel
- * Position Editor) and Phase 17 (Room Map).
- *
  * Hue channel positions use native Hue coordinate space: x/y/z in [-1.0, 1.0].
  * x: -1=left, +1=right
- * y: -1=bottom, +1=top
+ * y: depth — +1 is the TV wall (drawn at the top of the canvas), -1 behind the viewer
  * z: -1=floor, +1=ceiling
+ * See docs/architecture/hue.md for how the runtime maps these onto the screen.
  *
  * Zones are Hue-only (docs/architecture/hue.md). `ScreenZone` / `LedZone`
  * will land later as separate types sharing no discriminator with `HueZone`.
