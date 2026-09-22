@@ -73,6 +73,7 @@ export function HueBridgesCategory({
     areaChannels,
     isLoadingChannels,
     channelsStatus,
+    channelsFromBridge,
     refreshChannels,
     discover,
     selectBridge,
@@ -764,9 +765,11 @@ export function HueBridgesCategory({
                 channels={areaChannels}
                 isLoading={isLoadingChannels}
                 channelsStatus={channelsStatus}
+                channelsFromBridge={channelsFromBridge}
                 syncedPositions={syncedPositions}
                 onSyncedPositionsChange={(snapshot) => { void onSyncedPositionsChange?.(snapshot); }}
                 onRefreshChannels={refreshChannels}
+                onRepair={() => { void pair(); }}
                 onNavigateToRoomMap={onNavigateToRoomMap}
                 placements={channelPlacements}
                 onPositionChange={onPositionChange}

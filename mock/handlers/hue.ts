@@ -23,6 +23,7 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   HUE_STATUS,
 } from "../../src/shared/contracts/hue";
+import { CHANNEL_WRITEBACK_STATUS } from "../../src/shared/contracts/roomMap";
 import type {
   HueRuntimeState,
   HueRuntimeStatus,
@@ -370,22 +371,36 @@ export const hueHandlers = {
         index: ordinal,
         channelId: c.index,
         lightIds: [`light-${c.index}`],
-        positionX: 0,
-        positionY: 0,
+        positionX: c.stored?.x ?? 0,
+        positionY: c.stored?.y ?? 0,
         // Matches the heights in `mock/roomMaps.ts`; the lamp's is left
         // unreported so the "bridge sent no z" path is reachable too.
-        positionZ: MOCK_BRIDGE_HEIGHTS[c.index] ?? null,
+        positionZ: c.stored ? c.stored.z : (MOCK_BRIDGE_HEIGHTS[c.index] ?? null),
         lightCount: 1,
         autoRegion: "none",
       })),
     };
   },
 
-  [HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS]: () => {
+  // Stores what it is sent, so the channel map's re-read after a save finds it.
+  [HUE_COMMANDS.UPDATE_CHANNEL_POSITIONS]: ({ channels }) => {
     const { hue } = getWorld();
-    return hue.reachable
-      ? status(HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED, "Saved to bridge")
-      : status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Bridge unreachable");
+    if (!hue.reachable) {
+      return status(CHANNEL_WRITEBACK_STATUS.NETWORK_ERROR, "Could not reach the bridge");
+    }
+    if (!hue.credentialValid) {
+      return status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Key rejected");
+    }
+    mutate((w) => {
+      for (const placement of channels) {
+        const target = w.hue.channels.find((c) => c.index === placement.channelId);
+        if (!target) continue;
+        // A height of unknown origin keeps the bridge's own, as `merge_service_locations` does.
+        const keptZ = target.stored ? target.stored.z : (MOCK_BRIDGE_HEIGHTS[target.index] ?? null);
+        target.stored = { x: placement.x, y: placement.y, z: placement.zOrigin ? placement.z : keptZ };
+      }
+    });
+    return status(HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED, "Saved to bridge");
   },
 
   /**

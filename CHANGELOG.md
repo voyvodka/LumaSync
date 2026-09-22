@@ -72,6 +72,22 @@ https://keepachangelog.com/en/1.1.0/
   of a gradient light strip, is left as it is rather than written under a guess, and the lights
   beside it still save. A light whose height the app never learned keeps the height the bridge
   already has.
+- Hue channels on the Devices page: "Take bridge's" now takes each light's height from the bridge
+  as well as its position, instead of keeping the old one. A light whose room-map zone cannot reach
+  the bridge's position is named, since it stays at the zone's edge.
+- Hue channels on the Devices page: right after taking the bridge's layout, the panel said the
+  bridge still had an older one. Whether the bridge has your layout is now checked against what the
+  bridge actually reports, read again after saving, after "Validate again" and when lighting stops,
+  so a layout changed in the Hue app shows up too. While lighting is on, the last layout read from
+  the bridge is used.
+- Hue channels on the Devices page: a save the bridge refused showed a raw error code for some
+  failures. Each now has a message, and when the bridge no longer accepts the app's key the
+  message offers Re-pair instead of Try again. When the bridge keeps its own position for some
+  lights, such as sections of a gradient strip, the panel names them and no longer reports those
+  lights as saved.
+- Hue channels on the Devices page: saving to the bridge and taking the bridge's layout ask for
+  confirmation in the app's own dialog rather than a system prompt that froze the window until
+  answered.
 - The "Room-aware" chip said room-aware sampling was on even when the Hue bridge needed re-pairing
   or could not be reached, so nothing was being sampled. It now reads "Room-aware · paused" with a
   hollow dot, and its explanation gives the same reason as the Hue output row. It picks up again by

@@ -1,13 +1,15 @@
-// Whether the bridge's stored arrangement matches ours. From a snapshot of what
-// we last pushed, never a live read: while streaming, `get_hue_area_channels`
-// serves channels that already carry our placements. See docs/architecture/hue.md.
+// Whether the bridge's stored arrangement matches ours. The reference is the
+// bridge's own channel list when it was read with the runtime idle, and the
+// persisted snapshot of the last known bridge arrangement otherwise: while
+// lighting is on, `get_hue_area_channels` serves channels that already carry
+// our placements. See docs/architecture/hue.md.
 
-import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
+import type { HueAreaChannelInfo, HueChannelPlacementOverride } from "@/shared/contracts/hue";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 
 export const HUE_SYNC_STATE = {
-  /** Nothing has been pushed from here, so the bridge holds whatever it holds. */
-  NEVER_PUSHED: "never-pushed",
+  /** Neither a trustworthy read of the bridge nor a snapshot of one exists. */
+  UNKNOWN: "unknown",
   IN_SYNC: "in-sync",
   /** Our arrangement differs from the bridge's copy. **Not a fault**: the
    *  runtime samples the local placement, so the lights already follow this. */
@@ -40,6 +42,59 @@ export function toSyncSnapshot(
     });
 }
 
+/** What the bridge reports, in the snapshot's shape. Only meaningful for a list
+ *  read with the runtime idle; a height the bridge did not report is left off. */
+export function bridgeSnapshot(
+  channels: readonly HueAreaChannelInfo[],
+): HueChannelPlacementOverride[] {
+  return channels.map((ch) => {
+    const entry: HueChannelPlacementOverride = {
+      channelId: ch.channelId,
+      positionX: ch.positionX,
+      positionY: ch.positionY,
+    };
+    if (ch.positionZ !== null) entry.positionZ = ch.positionZ;
+    return entry;
+  });
+}
+
+/** The bridge's arrangement after a push. A channel the bridge skipped keeps
+ *  whatever it held before — recording our value for it would call a channel
+ *  in sync that the push never reached. */
+export function snapshotAfterPush(
+  sent: readonly HueChannelPlacement[],
+  before: readonly HueChannelPlacementOverride[] | undefined,
+  skippedChannelIds: readonly number[],
+): HueChannelPlacementOverride[] {
+  const skipped = new Set(skippedChannelIds);
+  const previous = new Map((before ?? []).map((s) => [s.channelId, s]));
+  return toSyncSnapshot(sent).flatMap((entry) => {
+    if (!skipped.has(entry.channelId)) return [entry];
+    const was = previous.get(entry.channelId);
+    return was ? [was] : [];
+  });
+}
+
+/** Exact equality, height presence included — whether a fresh read is worth
+ *  persisting, not whether two arrangements match. */
+export function sameSnapshot(
+  a: readonly HueChannelPlacementOverride[] | undefined,
+  b: readonly HueChannelPlacementOverride[] | undefined,
+): boolean {
+  if (!a || !b) return a === b;
+  if (a.length !== b.length) return false;
+  const byId = new Map(b.map((s) => [s.channelId, s]));
+  return a.every((s) => {
+    const o = byId.get(s.channelId);
+    return (
+      o !== undefined &&
+      o.positionX === s.positionX &&
+      o.positionY === s.positionY &&
+      o.positionZ === s.positionZ
+    );
+  });
+}
+
 /** Height counts only when both sides carry one. A snapshot from before height
  *  was recorded, or a local height of unknown origin, falls back to x/y —
  *  otherwise every upgraded install would read as local-ahead. */
@@ -60,21 +115,30 @@ function differs(
   );
 }
 
+/** Bridge ids of our placements that sit somewhere else on the bridge. A
+ *  channel the bridge never mentioned is a difference, not a match. */
+export function differingChannelIds(
+  placements: readonly HueChannelPlacement[],
+  bridge: readonly HueChannelPlacementOverride[],
+): number[] {
+  const held = new Map(bridge.map((s) => [s.channelId, s]));
+  return toSyncSnapshot(placements)
+    .filter((c) => {
+      const was = held.get(c.channelId);
+      return !was || differs(c, was);
+    })
+    .map((c) => c.channelId);
+}
+
+/** `bridge` is the bridge's arrangement: a fresh read (`bridgeSnapshot`) or the
+ *  persisted snapshot. Absent ⇒ unknown. */
 export function deriveHueSyncState(
   placements: readonly HueChannelPlacement[],
-  snapshot: readonly HueChannelPlacementOverride[] | undefined,
+  bridge: readonly HueChannelPlacementOverride[] | undefined,
 ): HueSyncState {
-  if (!snapshot) return HUE_SYNC_STATE.NEVER_PUSHED;
-
-  const current = toSyncSnapshot(placements);
-  if (current.length !== snapshot.length) return HUE_SYNC_STATE.LOCAL_AHEAD;
-
-  const pushed = new Map(snapshot.map((s) => [s.channelId, s]));
-  for (const c of current) {
-    const was = pushed.get(c.channelId);
-    // A channel the snapshot never mentioned is a difference, not a match.
-    if (!was) return HUE_SYNC_STATE.LOCAL_AHEAD;
-    if (differs(c, was)) return HUE_SYNC_STATE.LOCAL_AHEAD;
-  }
-  return HUE_SYNC_STATE.IN_SYNC;
+  if (!bridge) return HUE_SYNC_STATE.UNKNOWN;
+  if (toSyncSnapshot(placements).length !== bridge.length) return HUE_SYNC_STATE.LOCAL_AHEAD;
+  return differingChannelIds(placements, bridge).length > 0
+    ? HUE_SYNC_STATE.LOCAL_AHEAD
+    : HUE_SYNC_STATE.IN_SYNC;
 }

@@ -6,7 +6,12 @@ import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { HUE_CHANNEL_HEIGHT_ORIGIN, findHueChannel } from "@/shared/contracts/roomMap";
 
-import { resolveHueChannelWorld, resolveHueChannelWorldZ } from "./hueChannelPosition";
+import {
+  moveHueChannelToWorld,
+  resolveHueChannelWorld,
+  resolveHueChannelWorldZ,
+  setHueChannelWorldZ,
+} from "./hueChannelPosition";
 
 /** The saved record for a bridge channel, or a fresh one seeded from the bridge.
  *  Returning the whole record is the point — handing back a `{x,y,z}` triple is
@@ -40,6 +45,23 @@ export function resolveChannelPlacement(
     z: resolveHueChannelWorldZ(saved, zones),
     ...legacyHeight(saved, ch),
   };
+}
+
+/** Take the bridge's position for a channel, height included when the bridge
+ *  reports one, writing whichever fields are live — a zone-bound channel's
+ *  `zoneRelativePosition` is re-derived, and clamps where its zone cannot
+ *  reach the bridge's position. The height is stamped as the bridge's. */
+export function adoptBridgePlacement(
+  placement: HueChannelPlacement,
+  ch: HueAreaChannelInfo,
+  zones: readonly HueZone[],
+): HueChannelPlacement {
+  const moved = moveHueChannelToWorld(placement, zones, ch.positionX, ch.positionY);
+  const placed =
+    ch.positionZ === null
+      ? moved
+      : setHueChannelWorldZ(moved, zones, ch.positionZ, HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE);
+  return { ...placed, channelId: ch.channelId };
 }
 
 /** Provenance for a record saved before heights were tracked. Seeding wrote

@@ -1,4 +1,8 @@
-import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import type {
+  HueChannelHeightOrigin,
+  HueChannelPlacement,
+  HueZone,
+} from "@/shared/contracts/roomMap";
 import { HUE_CHANNEL_HEIGHT_ORIGIN } from "@/shared/contracts/roomMap";
 
 /** A channel carries two positions and only one is live: once `zoneId` is set,
@@ -72,15 +76,16 @@ export function resolveHueChannelWorldZ(
   return clampUnit(zone.centerZ + zone.scaleZ * channel.zoneRelativePosition.z);
 }
 
-/** Set the height, writing whichever field is live. Stamped as the user's:
- *  from here on it is real, so it rides the stream and the bridge push. */
+/** Set the height, writing whichever field is live. Stamped as known — the
+ *  user's by default, the bridge's when adopted from there — so from here on
+ *  it is real and rides the stream and the bridge push. */
 export function setHueChannelWorldZ(
   channel: HueChannelPlacement,
   zones: readonly HueZone[],
   worldZ: number,
+  zOrigin: HueChannelHeightOrigin = HUE_CHANNEL_HEIGHT_ORIGIN.USER,
 ): HueChannelPlacement {
   const z = clampUnit(worldZ);
-  const zOrigin = HUE_CHANNEL_HEIGHT_ORIGIN.USER;
   const zone = findBoundZone(channel, zones);
   if (!zone || !channel.zoneRelativePosition || zone.scaleZ === 0) {
     return { ...channel, z, zOrigin };
