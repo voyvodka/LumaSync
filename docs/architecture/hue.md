@@ -190,6 +190,27 @@ retries on launch, which covers returning to the right network later. The retry 
 through a module store (`state/huePollRestart.ts`) because the two loops live in different React
 trees from the control that re-arms them.
 
+**Hue is not retried in the background — except once, at launch, for a busy area.** The rule is that
+a Hue start the bridge refuses is settled on the spot (Off, or USB alone with a notice) and only the
+user or the next launch tries again. The one exception is `mode/state/bootHueRetry.ts`. After an
+unclean exit the bridge keeps counting the dead process as the area's streamer for 10–20 s, so a
+relaunch inside that window has its restore refused and used to land on Off for no reason the user
+could see or fix. When the boot restore ends not running and `start_hue_stream` answered
+`CONFIG_NOT_READY_GATE_BLOCKED`, the frontend polls `check_hue_stream_readiness` every 3 s for up
+to 25 s and, the moment the area is free, re-runs the mode through the interactive handler — once.
+
+- **Busy is decided by readiness, not by the start code.** The gate code also covers an unreachable
+  bridge and an unusable area, and its `details` only name the missing prerequisite. Busy means
+  the readiness reasons are exactly the `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` sentinel; any other
+  answer (unreachable, re-pair, no channels, area gone) ends the wait at the first probe, before
+  any notice shows. An auth code from the start never qualifies at all.
+- **Boot only, Off only.** A restore that ran on USB with Hue left out keeps the existing notice
+  and is not retried; the interactive paths never schedule it.
+- **The user always wins.** Any lighting-mode choice, deselecting Hue, or any `stopHue` call cancels
+  the wait. The last is attached to the command wrapper in `modeApi.ts`, the same way
+  `stop_hue_stream` cancels the backend's own reconnect retry. The waiting notice says lighting will
+  resume by itself; if the window closes first a second notice says it stayed off.
+
 ## Gotchas
 
 - **Hue `+y` is the TV wall, and it is drawn at the *top* of the room-map canvas.** `x` is left/right, `y` is depth with `+1` at the screen and `-1` behind the viewer, `z` is height. Three comments in `HueChannelOverlay.tsx` used to say `+y` was the canvas *bottom*; the code never agreed with them — `hueToMetres(-worldY, …)` maps `+1` to `0 px`. No first-party Signify statement is quotable here: the Entertainment reference is behind a developer-portal login and OpenHue types the field with no description, so the axis is established from two independent implementations — diyHue synthesises the TV-mounted gradient strip at a constant `y = 0.8`, and HyperHDR treats `y >= 0.75` at TV height as the screen's own edge. Note also that without a TV anchor the runtime collapses this depth axis onto screen *vertical*: `+y` samples the top of the screen, `-y` the bottom. With one, height (`z`) picks the vertical band instead and depth only feeds the ambience blend — see `room-map.md`. Anything naming that axis must therefore name it for the room (far/near), not for the screen.

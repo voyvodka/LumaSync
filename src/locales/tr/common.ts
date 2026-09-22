@@ -124,6 +124,10 @@ const common: Catalogue<typeof enCommon> = {
     auth: "Hue yeniden eşleştirilmeli — şimdilik yalnızca USB ile çalışıyor. Cihazlar'dan tekrar eşleştirin.",
     config: "Hue kurulmamış — şimdilik yalnızca USB ile çalışıyor.",
   },
+  hueBootRetry: {
+    waiting: "Hue köprüsü önceki bir oturumu hâlâ tutuyor. Köprü bıraktığı anda aydınlatma kendiliğinden devam edecek.",
+    gaveUp: "Hue köprüsü başka bir oturumla meşgul kaldı, bu yüzden aydınlatma kapalı. Köprü boşalınca yeniden açın.",
+  },
 };
 
 export default common;

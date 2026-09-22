@@ -934,6 +934,7 @@ export function DevPanel({ onReloadApp }: PanelProps) {
                 onClick={() =>
                   mutate((w) => {
                     w.hue.activeStreamerElsewhere = !w.hue.activeStreamerElsewhere;
+                    w.hue.activeStreamerReleasesAt = null;
                   })
                 }
               />

@@ -2,8 +2,8 @@ export default {
   slab: {
     modeText: "Lighting",
     modeAccent: "Mode",
-    signalText: "Edge signal",
-    signalAccent: "· live · mode settings",
+    modeSettingsText: "Mode",
+    modeSettingsAccent: "settings",
     scenesText: "Scene",
     scenesAccent: "presets",
   },
@@ -23,28 +23,9 @@ export default {
     },
   },
   signal: {
-    title: "Capture → Strip",
-    /** Hue-only session: the bridge reports a packet rate and no latency at all. */
-    titleHue: "Capture → Hue",
-    delta: "Δ",
-    fps: "Σ",
-    latencyFormat: "{{ms}}ms",
-    fpsFormat: "{{fps}} fps",
-    packetRateFormat: "{{rate}} pkt/s",
-    edgesAria: "Live edge preview",
     linkBudget: {
       constrained: "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
       hint: "Shorten the strip, split it across two controllers, or output over WLED for a smoother effect.",
-    },
-    edges: {
-      top: "TOP · {{count}}",
-      bot: "BOT · {{count}}",
-      left: "L · {{count}}",
-      right: "R · {{count}}",
-    },
-    display: {
-      label: "DISPLAY {{index}}",
-      sub: "—",
     },
     profile: {
       brightness: "Brightness",

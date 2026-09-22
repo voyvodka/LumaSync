@@ -2,7 +2,7 @@
  * The half of the backend that is not `invoke`.
  *
  * Roughly a third of what the app reacts to never arrives as a command result.
- * The edge grid, the digital twin, the tray menu, the update progress bar and
+ * The digital twin, the tray menu, the update progress bar and
  * the cross-window mode sync are all driven by Tauri events pushed from Rust,
  * and until this file existed the mock answered every `invoke` faithfully and
  * then left all of them dead. The effect was worse than an obvious gap: the
@@ -28,7 +28,6 @@ import { emit } from "@tauri-apps/api/event";
 
 import {
   EDGE_SIGNAL_EVENT,
-  EDGE_SIGNAL_SAMPLES_PER_EDGE,
   LIGHTING_MODE_CHANGED_EVENT,
   type EdgeSignalPayload,
   type LightingModeChangedPayload,
@@ -41,7 +40,7 @@ import {
 import { UPDATER_PROGRESS_EVENT, type UpdateDownloadProgress } from "../src/shared/contracts/updater";
 import { getWorld } from "./state";
 
-/** ~10 Hz, matching the rate `lighting_mode.rs` emits the real signal at. */
+/** ~10 Hz. The real worker feeds an open twin at ~30 Hz; the mock does not need to. */
 export const EDGE_SIGNAL_INTERVAL_MS = 100;
 
 type Rgb = [number, number, number];
@@ -147,17 +146,6 @@ function pixelAt(
   }
 }
 
-function edgeSamples(
-  pattern: LedTestPatternKind,
-  frame: number,
-  offset: number,
-  slot: ProbeSlot,
-): Rgb[] {
-  return Array.from({ length: EDGE_SIGNAL_SAMPLES_PER_EDGE }, (_, i) =>
-    pixelAt(pattern, i + offset, EDGE_SIGNAL_SAMPLES_PER_EDGE * 4, frame, slot),
-  );
-}
-
 export function buildEdgeSignalFrame(
   pattern: LedTestPatternKind,
   frame: number,
@@ -166,12 +154,7 @@ export function buildEdgeSignalFrame(
 ): EdgeSignalPayload {
   const world = getWorld();
   const ledCount = calibratedLedCount();
-  const perEdge = EDGE_SIGNAL_SAMPLES_PER_EDGE;
   return {
-    top: edgeSamples(pattern, frame, 0, slot),
-    right: edgeSamples(pattern, frame, perEdge, slot),
-    bottom: edgeSamples(pattern, frame, perEdge * 2, slot),
-    left: edgeSamples(pattern, frame, perEdge * 3, slot),
     leds: Array.from({ length: ledCount }, (_, i) => pixelAt(pattern, i, ledCount, frame, slot)),
     ledCount,
     hueChannels: world.hue.channels.map((_, i) =>

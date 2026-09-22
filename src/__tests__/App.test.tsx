@@ -1,10 +1,10 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LightingModeConfig } from "../features/mode/model/contracts";
 import type { LocalSink } from "../features/device/localSink";
 import { DEVICE_COMMANDS } from "@/shared/contracts/device";
-import { HUE_COMMANDS, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";
+import { HUE_COMMANDS, HUE_READINESS_REASON, HUE_RUNTIME_TRIGGER_SOURCE, HUE_STATUS } from "@/shared/contracts/hue";
 import { appliedResult } from "@/test/modeCommandResult";
 
 const loadShellStateMock = vi.fn();
@@ -1538,6 +1538,264 @@ describe("App mode orchestration", () => {
 
       await waitFor(() => {
         expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("reconnecting");
+      });
+    });
+
+    // Relaunching within seconds of an unclean exit: the bridge still holds the
+    // old session, so the start is gated and the restore used to land on Off.
+    describe("a bridge still holding the previous session", () => {
+      let bridgeAnswer: "busy" | "free" | "unreachable";
+      let hueUp: boolean;
+
+      beforeEach(() => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "info").mockImplementation(() => {});
+        bridgeAnswer = "busy";
+        hueUp = false;
+        mockIsConnected = false;
+        installInvokeDispatch(false);
+        const base = invokeMock.getMockImplementation()!;
+        invokeMock.mockImplementation((command: string, ...rest: unknown[]) => {
+          if (command !== HUE_COMMANDS.CHECK_STREAM_READINESS) return base(command, ...rest);
+          if (bridgeAnswer === "unreachable") {
+            return Promise.resolve({
+              status: { code: HUE_STATUS.STREAM_READINESS_FAILED, message: "down", details: null },
+              readiness: { ready: false, reasons: ["Bridge unreachable"] },
+            });
+          }
+          const busy = bridgeAnswer === "busy";
+          return Promise.resolve({
+            status: {
+              code: busy ? HUE_STATUS.STREAM_NOT_READY : HUE_STATUS.STREAM_READY,
+              message: "readiness",
+              details: null,
+            },
+            readiness: { ready: !busy, reasons: busy ? [HUE_READINESS_REASON.ACTIVE_STREAMER] : [] },
+          });
+        });
+        loadShellStateMock.mockResolvedValue(hueAmbilightShellState);
+        startHueMock.mockImplementation(() => {
+          if (bridgeAnswer !== "free") {
+            return Promise.resolve({
+              active: false,
+              status: {
+                code: "CONFIG_NOT_READY_GATE_BLOCKED",
+                state: "Idle",
+                message: "blocked",
+                details: "Missing prerequisites: ready",
+              },
+            });
+          }
+          hueUp = true;
+          return Promise.resolve({
+            active: true,
+            status: { code: "HUE_STREAM_RUNNING", state: "Running", message: "ok", details: null },
+          });
+        });
+        setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+          Promise.resolve(
+            (payload.targets ?? []).includes("hue") && !hueUp
+              ? {
+                  active: false,
+                  mode: { kind: "off" },
+                  status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+                }
+              : appliedResult(payload),
+          ),
+        );
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        vi.restoreAllMocks();
+      });
+
+      it("says so while it waits, then resumes the mode once the area is free", async () => {
+        render(<App />);
+
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-boot-retry-notice")).toHaveAttribute("data-state", "waiting");
+        });
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        expect(screen.getByTestId("hue-boot-retry-notice")).toHaveTextContent("common:hueBootRetry.waiting");
+
+        bridgeAnswer = "free";
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_000);
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+        });
+        expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
+        expect(startHueMock).toHaveBeenCalledTimes(2);
+      });
+
+      it("drops the retry when the user picks a mode while it waits", async () => {
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-boot-retry-notice")).toBeInTheDocument();
+        });
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-off" }).click();
+        });
+        expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
+
+        bridgeAnswer = "free";
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+
+      it("drops the retry when the user deselects Hue while it waits", async () => {
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-boot-retry-notice")).toBeInTheDocument();
+        });
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-usb-target" }).click();
+        });
+        expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
+
+        bridgeAnswer = "free";
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+      });
+
+      it("gives up after the window and says lighting stayed off", async () => {
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-boot-retry-notice")).toHaveAttribute("data-state", "waiting");
+        });
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("hue-boot-retry-notice")).toHaveAttribute("data-state", "gaveUp");
+        });
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+
+      it("does not wait on a bridge that is unreachable rather than busy", async () => {
+        bridgeAnswer = "unreachable";
+        render(<App />);
+        await waitFor(() => {
+          expect(screen.getByTestId("calibration-leds")).toBeInTheDocument();
+          expect(startHueMock).toHaveBeenCalledTimes(1);
+        });
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+
+        expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+    });
+  });
+
+  // An upgrader has no `hasCompletedOnboarding` on disk, and bootstrap clears the
+  // flag before it has read the guards that would complete the flow — so the
+  // banner mounted for as long as the slowest guard took, then vanished.
+  describe("onboarding banner for a user who is already set up", () => {
+    /** Records every banner insertion, including one removed before anyone looks. */
+    function watchForBanner() {
+      let seen = false;
+      const holdsBanner = (node: Node) =>
+        node instanceof Element &&
+        (node.matches(".lm-onboarding-banner") || node.querySelector(".lm-onboarding-banner") !== null);
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          if (Array.from(record.addedNodes).some(holdsBanner)) seen = true;
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      return {
+        seen: () => seen || document.querySelector(".lm-onboarding-banner") !== null,
+        stop: () => observer.disconnect(),
+      };
+    }
+
+    function delay(command: string, ms: number) {
+      const base = invokeMock.getMockImplementation()!;
+      invokeMock.mockImplementation((name: string, ...rest: unknown[]) =>
+        name === command
+          ? new Promise((resolve) => setTimeout(() => resolve(base(name, ...rest)), ms))
+          : base(name, ...rest),
+      );
+    }
+
+    const completed = () =>
+      expect(saveShellStateMock).toHaveBeenCalledWith({ hasCompletedOnboarding: true });
+
+    it("never shows it while the serial status bootstrap awaits is slow", async () => {
+      // Every guard is met by the describe-level state: a saved calibration, a
+      // persisted mode and a connected strip.
+      delay(DEVICE_COMMANDS.GET_CONNECTION_STATUS, 300);
+      const banner = watchForBanner();
+
+      render(<App />);
+
+      await waitFor(completed, { timeout: 2_000 });
+      expect(banner.seen()).toBe(false);
+      banner.stop();
+    });
+
+    it("never shows it while the only reachable output is a bridge still being probed", async () => {
+      mockIsConnected = false;
+      installInvokeDispatch(false);
+      loadShellStateMock.mockResolvedValue({
+        lastSection: "general",
+        ledCalibration: {
+          templateId: "monitor-27-16-9",
+          counts: { top: 10, right: 10, bottom: 10, left: 10 },
+          bottomMissing: 0,
+          cornerOwnership: "horizontal",
+          visualPreset: "subtle",
+          startAnchor: "top-start",
+          direction: "cw",
+          totalLeds: 40,
+        },
+        lightingMode: { kind: "off" },
+        lastOutputTargets: ["hue"],
+        lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+        hueAppKey: "app-user",
+        hueClientKey: "AABBCCDD11223344",
+        lastHueAreaId: "area-1",
+      });
+      // The last guard resolves well after bootstrap, in a tick of its own.
+      delay(HUE_COMMANDS.VALIDATE_CREDENTIALS, 400);
+      const banner = watchForBanner();
+
+      render(<App />);
+
+      await waitFor(completed, { timeout: 2_000 });
+      expect(banner.seen()).toBe(false);
+      banner.stop();
+    });
+
+    it("still greets a fresh install at step 1", async () => {
+      mockIsConnected = false;
+      installInvokeDispatch(false);
+      loadShellStateMock.mockResolvedValue({ lastSection: "general" });
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByText("common:ui.onboarding.step1.title")).toBeInTheDocument();
       });
     });
   });

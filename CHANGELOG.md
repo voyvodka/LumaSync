@@ -20,8 +20,30 @@ https://keepachangelog.com/en/1.1.0/
   undo it if the colors still look wrong. The order can also be picked by hand. WLED devices set
   their color order in WLED itself, so the setting is hidden for them.
 
+### Changed
+
+- Lights: the Ambilight card no longer shows the live preview, which was a capture latency and
+  frame-rate readout, a box standing for the screen, and a colour estimate along each edge. The
+  status bar already shows capture and output health. The card is now called "Mode settings" and
+  keeps its controls: lighting responsiveness, brightness, saturation and black border. The USB
+  link-limit note still appears there when a strip is too long for the serial link.
+- Ambilight does less work per frame. It used to sample the screen edges and send them to the app
+  window about ten times a second for the Lights preview removed above, whether or not anything
+  showed them. That stopped. The LED preview overlay still gets its per-LED feed, and only while
+  it is open.
+
 ### Fixed
 
+- Reopening the app within a few seconds of it closing unexpectedly left lighting off when the
+  last mode used Hue. The Hue bridge was still holding the old session for 10–20 seconds and
+  turned the new one away, and the app never asked again. At launch it now waits for the bridge to
+  let go, with a short notice saying so, and turns the mode back on by itself. It waits up to about
+  25 seconds, and stops waiting as soon as you pick a mode or turn Hue off yourself. It does not
+  wait when the bridge cannot be reached or needs to be paired again.
+- The first-run guide banner could flash up for a moment at launch and disappear again for people
+  who were already set up but had updated from a version without it. It now appears only once the
+  app knows which step you are on, so it no longer flashes; a new install still sees the first step
+  right away.
 - Hue: a bridge that no longer accepts the app's key is now recognised. The bridge turns a
   rejected key away with a web page rather than a data reply, which the app took for a passing
   network problem. So the status bar kept showing Hue as OK, the key check at startup said the
@@ -273,6 +295,9 @@ https://keepachangelog.com/en/1.1.0/
   notice says Hue was left out and why. Hue is not retried in the background: turn it back on
   once the bridge is back, and the next launch tries it again on its own, because your saved
   output selection is not changed.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
+  sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
 
 ## [1.5.5]
