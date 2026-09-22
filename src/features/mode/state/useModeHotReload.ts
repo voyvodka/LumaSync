@@ -1,9 +1,11 @@
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
 import type { HueIntensityPreset } from "@/shared/contracts/hue";
+import type { RoomGeometry } from "@/shared/contracts/roomMap";
 
 import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../model/contracts";
 import type { LightingModeDispatcher } from "./useLightingModeDispatch";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
+import type { RoomGeometryChangeHandler } from "./useRoomGeometrySync";
 
 export interface ModeHotReloadHandlers {
   onHueIntensityPresetChange: (preset: HueIntensityPreset) => void;
@@ -11,6 +13,7 @@ export interface ModeHotReloadHandlers {
   onFirmwareProfileChange: (next: FirmwareProfile) => void;
   onChipTypeChange: (next: LedChipType) => void;
   onSelectedDisplayIdChange: (next: string) => void;
+  onRoomGeometryChange: RoomGeometryChangeHandler;
 }
 
 /** Settings panels that mutate a cached knob and want the running worker to pick
@@ -70,6 +73,17 @@ export function useModeHotReload(
           console.error("[LumaSync] Failed to hot-reload capture display:", error);
         });
       }
+    },
+    onRoomGeometryChange: (next: RoomGeometry | undefined) => {
+      // The ref is written whatever the mode, so the next start carries it. No
+      // `force`: the geometry is in the signature, and Rust retunes the running
+      // worker through a live cell — the Hue stream is not restarted.
+      runtimeConfig.setRoomGeometry(next);
+      if (lightingMode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return Promise.resolve(undefined);
+      return dispatch(lightingMode).catch((error) => {
+        console.error("[LumaSync] Failed to hot-reload room geometry:", error);
+        return undefined;
+      });
     },
   };
 }

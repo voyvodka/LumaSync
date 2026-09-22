@@ -147,7 +147,8 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // the banner mounts once for upgraders too — no destructive migration.
         sink.setHasCompletedOnboarding(state.hasCompletedOnboarding === true);
         // Synchronous prime so the bootstrap set_lighting_mode fired below
-        // already honours the persisted display / preset / correction knobs.
+        // already honours the persisted display / preset / correction knobs
+        // and the room geometry projected from `roomMap` + `lastHueAreaId`.
         runtimeConfig.prime(state);
         const restoredMode = normalizeLightingModeConfig(state.lightingMode);
         const restoredTargets = normalizeOutputTargets(state.lastOutputTargets);

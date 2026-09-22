@@ -16,6 +16,7 @@ import { useCaptureStallNotice } from "./features/telemetry/hooks/useCaptureStal
 import { useModeRuntimeConfig } from "./features/mode/state/useModeRuntimeConfig";
 import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNotice";
 import { useModeHotReload } from "./features/mode/state/useModeHotReload";
+import { useRoomGeometrySync } from "./features/mode/state/useRoomGeometrySync";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import {
@@ -295,6 +296,7 @@ function App() {
   useGlobalKeybinds(keybindHandlers, { disabled: !isContentVisible });
 
   const hotReload = useModeHotReload(runtimeConfig, mode.dispatch, lightingMode);
+  useRoomGeometrySync(hotReload.onRoomGeometryChange);
 
   const modeGuard = canEnableLedMode(savedCalibration, selectedOutputTargets);
 

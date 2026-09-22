@@ -19,6 +19,8 @@ import {
   type LightingModeKind,
 } from "@/features/mode/model/contracts";
 import type { DisplayId } from "@/shared/contracts/display";
+import type { RoomGeometry } from "@/shared/contracts/roomMap";
+import { toRoomGeometry } from "@/features/room-map/model/roomGeometry";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import {
   LED_TEST_STATUS,
@@ -39,11 +41,14 @@ import { PatternPicker } from "./PatternPicker";
 
 // Output stamps (calibration, colour correction, firmware profile, chip type)
 // are deliberately absent: `set_lighting_mode` hydrates them from disk, while
-// a copy here goes stale because the webview outlives every hide.
+// a copy here goes stale because the webview outlives every hide. The room
+// geometry is the exception: Rust does not hydrate it, and an Ambilight payload
+// without it switches a running worker back to legacy sampling.
 interface ModeStamps {
   targets: HueRuntimeTarget[];
   ambilight?: AmbilightPayload;
   displayId?: DisplayId;
+  roomGeometry?: RoomGeometry;
 }
 
 function stampsFrom(state: ShellState): ModeStamps {
@@ -54,6 +59,7 @@ function stampsFrom(state: ShellState): ModeStamps {
         : ["usb"],
     ambilight: state.lightingMode?.ambilight,
     displayId: state.selectedDisplayId,
+    roomGeometry: toRoomGeometry(state),
   };
 }
 
@@ -228,6 +234,10 @@ export function ControlPopupApp() {
       targets: base.targets ?? s.targets,
       displayId: base.displayId ?? s.displayId,
       ambilight: base.ambilight ?? s.ambilight,
+      roomGeometry:
+        base.kind === LIGHTING_MODE_KIND.AMBILIGHT
+          ? (base.roomGeometry ?? s.roomGeometry)
+          : base.roomGeometry,
     };
   }, []);
 

@@ -32,6 +32,28 @@ describe("modeApi wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("set_lighting_mode", { payload: SOLID_MODE });
   });
 
+  it("carries the room geometry through the normalize that strips it from persistence", async () => {
+    const invokeMock = vi.fn().mockResolvedValue({
+      active: true,
+      mode: { kind: "ambilight" },
+      status: { code: "AMBILIGHT_MODE_UPDATED", message: "", details: null },
+    });
+    const roomGeometry = {
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      tv: { x: 1.5, y: 0, width: 2, height: 0.3 },
+      huePlacements: [{ channelId: 3, positionX: 0.2, positionY: 0.9 }],
+    };
+
+    await setLightingMode(
+      { kind: "ambilight", ambilight: { brightness: 1 }, roomGeometry },
+      invokeMock,
+    );
+    await setLightingMode({ kind: "ambilight", ambilight: { brightness: 1 } }, invokeMock);
+
+    expect(invokeMock.mock.calls[0][1].payload.roomGeometry).toEqual(roomGeometry);
+    expect(invokeMock.mock.calls[1][1].payload).not.toHaveProperty("roomGeometry");
+  });
+
   it("invokes stop_lighting and get_lighting_mode_status commands", async () => {
     const invokeMock = vi.fn().mockResolvedValue({
       active: false,

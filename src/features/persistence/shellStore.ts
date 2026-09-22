@@ -14,7 +14,12 @@
  *   await shellStore.save({ lastSection: 'startup-tray' });
  */
 
-import { loadShellState, saveShellState } from "../shell/windowLifecycle";
+import {
+  loadShellState,
+  onShellStateSaved,
+  saveShellState,
+  type ShellStateSavedListener,
+} from "../shell/windowLifecycle";
 import type { ShellState } from "@/shared/contracts/shell";
 import { DEFAULT_SHELL_STATE } from "@/shared/contracts/shell";
 
@@ -39,6 +44,11 @@ export const shellStore = {
     return saveShellState(partial);
   },
 
+  /** Fires after every successful save in this window — see {@link onShellStateSaved}. */
+  onSaved(listener: ShellStateSavedListener): () => void {
+    return onShellStateSaved(listener);
+  },
+
   /**
    * Reset shell state to defaults (useful for testing or factory reset).
    */
@@ -51,6 +61,7 @@ export const shellStore = {
 // Named re-exports for direct import convenience
 // ---------------------------------------------------------------------------
 
-export { loadShellState, saveShellState };
+export { loadShellState, onShellStateSaved, saveShellState };
+export type { ShellStateSavedListener };
 export type { ShellState };
 export { DEFAULT_SHELL_STATE };

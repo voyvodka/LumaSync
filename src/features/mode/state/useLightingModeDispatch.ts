@@ -15,7 +15,7 @@ import { canonicalLightingModeSignature } from "./modePayloadHydration";
  * brightness slider at 50 ms (20 Hz), so legit user actions never get
  * dropped by this floor.
  */
-const SET_LIGHTING_MODE_MIN_INTERVAL_MS = 20;
+export const SET_LIGHTING_MODE_MIN_INTERVAL_MS = 20;
 
 /** `null` means deduped or cooled down, never asked. A failed ambilight start
  *  arrives as a resolved `Ok` status, so discarding this return loses it. */

@@ -83,6 +83,7 @@ vi.mock("../features/shell/windowLifecycle", () => ({
   loadShellState: () => loadShellStateMock(),
   saveShellState: (patch: unknown) => saveShellStateMock(patch),
   initWindowLifecycle: () => initWindowLifecycleMock(),
+  onShellStateSaved: () => () => {},
 }));
 
 vi.mock("../features/device/useDeviceConnection", () => ({

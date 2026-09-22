@@ -7,6 +7,7 @@ import {
   withAmbilightLightingSmoothingPreset,
   withAmbilightSettings,
   withLedCalibration,
+  withRoomGeometry,
   withSelectedDisplayId,
   type ModeRuntimeConfigSnapshot,
 } from "../modePayloadHydration";
@@ -19,6 +20,7 @@ const emptySnapshot: ModeRuntimeConfigSnapshot = {
   chipType: undefined,
   savedCalibration: undefined,
   savedAmbilight: undefined,
+  roomGeometry: undefined,
 };
 
 const calibration = {
@@ -63,6 +65,45 @@ describe("withLedCalibration (INV-4)", () => {
       withLedCalibration(bare, { ...emptySnapshot, savedCalibration: calibration })
         .ledCalibration,
     ).toBe(calibration);
+  });
+});
+
+describe("withRoomGeometry", () => {
+  const geometry = {
+    dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+    tv: { x: 1.5, y: 0, width: 2, height: 0.3 },
+    huePlacements: [{ channelId: 3, positionX: 0.2, positionY: 0.9 }],
+  };
+
+  it("stamps an Ambilight payload and nothing else", () => {
+    const snapshot = { ...emptySnapshot, roomGeometry: geometry };
+    expect(withRoomGeometry({ kind: LIGHTING_MODE_KIND.AMBILIGHT }, snapshot).roomGeometry)
+      .toBe(geometry);
+    const solid: LightingModeConfig = { kind: LIGHTING_MODE_KIND.SOLID };
+    expect(withRoomGeometry(solid, snapshot)).toBe(solid);
+    expect(hydrateModePayload(solid, snapshot).roomGeometry).toBeUndefined();
+  });
+
+  it("is caller-wins and leaves the field absent without a TV", () => {
+    const explicit = { ...geometry, huePlacements: [] };
+    expect(
+      withRoomGeometry(
+        { kind: LIGHTING_MODE_KIND.AMBILIGHT, roomGeometry: explicit },
+        { ...emptySnapshot, roomGeometry: geometry },
+      ).roomGeometry,
+    ).toBe(explicit);
+    const bare = hydrateModePayload({ kind: LIGHTING_MODE_KIND.AMBILIGHT }, emptySnapshot);
+    expect(bare).not.toHaveProperty("roomGeometry");
+  });
+
+  it("moves the dedupe signature when only the geometry changed", () => {
+    const mode: LightingModeConfig = { kind: LIGHTING_MODE_KIND.AMBILIGHT, ambilight: { brightness: 1 } };
+    const before = hydrateModePayload(mode, { ...emptySnapshot, roomGeometry: geometry });
+    const moved = hydrateModePayload(mode, {
+      ...emptySnapshot,
+      roomGeometry: { ...geometry, huePlacements: [{ channelId: 3, positionX: -0.4, positionY: 0.9 }] },
+    });
+    expect(canonicalLightingModeSignature(before)).not.toBe(canonicalLightingModeSignature(moved));
   });
 });
 

@@ -13,6 +13,7 @@ import {
   LIGHTING_MODE_KIND,
   isLightingModeKind,
   normalizeAmbilightPayload,
+  normalizeLightingModeConfig,
   normalizeOutputTargets,
   normalizeSolidColorPayload,
 } from "../contracts";
@@ -200,5 +201,19 @@ describe("normalizeOutputTargets (INV-33)", () => {
     const first = normalizeOutputTargets(undefined);
     first.push("hue");
     expect(normalizeOutputTargets(undefined)).toEqual(["usb"]);
+  });
+});
+
+describe("normalizeLightingModeConfig room geometry", () => {
+  // A persisted geometry would outlive the room map it was projected from.
+  it("never round-trips roomGeometry, whatever the kind", () => {
+    const roomGeometry = {
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      tv: { x: 1.5, y: 0, width: 2, height: 0.3 },
+      huePlacements: [],
+    };
+    for (const kind of [LIGHTING_MODE_KIND.AMBILIGHT, LIGHTING_MODE_KIND.SOLID, LIGHTING_MODE_KIND.OFF]) {
+      expect(normalizeLightingModeConfig({ kind, roomGeometry })).not.toHaveProperty("roomGeometry");
+    }
   });
 });

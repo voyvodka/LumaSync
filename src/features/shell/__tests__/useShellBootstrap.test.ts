@@ -36,6 +36,9 @@ vi.mock("@/features/device/deviceConnectionApi", () => ({
   getSerialConnectionStatus: () => getSerialConnectionStatusMock(),
 }));
 
+import { useModeRuntimeConfig } from "@/features/mode/state/useModeRuntimeConfig";
+import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+
 import { restoreLightingSession, useShellBootstrap, type ShellBootstrapSink } from "../useShellBootstrap";
 
 const hueConfig = {
@@ -337,5 +340,64 @@ describe("useShellBootstrap with Hue left out", () => {
     // The next launch must try Hue again: nothing rewrites the persisted set.
     const patches = saveShellStateMock.mock.calls.map(([patch]) => patch as Record<string, unknown>);
     expect(patches.some((patch) => "lastOutputTargets" in patch)).toBe(false);
+  });
+});
+
+describe("useShellBootstrap room geometry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    loadShellStateMock.mockResolvedValue({
+      uiMode: "compact",
+      lightingMode: { kind: "ambilight", ambilight: { brightness: 1 } },
+      lastOutputTargets: ["hue"],
+      lastHueBridge: { ip: "192.168.1.10" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+      roomMap: {
+        ...DEFAULT_ROOM_MAP,
+        hueChannels: [
+          { channelIndex: 0, channelId: 3, x: 0.2, y: 0.8, z: 0, entertainmentAreaId: "area-1" },
+        ],
+        tvAnchor: { x: 1.5, y: 0, width: 2, height: 0.3, mountHeightMeters: 1 },
+      },
+    });
+    getSerialConnectionStatusMock.mockResolvedValue({ connected: false });
+    startHueMock.mockResolvedValue(hueRunning);
+    setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+      Promise.resolve(appliedResult(payload)),
+    );
+  });
+
+  it("primes the geometry before the restore dispatch fires", async () => {
+    const { result } = renderHook(() => {
+      const runtimeConfig = useModeRuntimeConfig({ calibration: undefined });
+      return useShellBootstrap({
+        t: ((key: string) => key) as unknown as ShellBootstrapSink["t"],
+        setUIMode: vi.fn(),
+        setActiveSection: vi.fn(),
+        setSavedCalibration: vi.fn(),
+        setHasCompletedOnboarding: vi.fn(),
+        setHasInteractedWithMode: vi.fn(),
+        setLightingMode: vi.fn(),
+        setSelectedOutputTargets: vi.fn(),
+        setActiveOutputTargets: vi.fn(),
+        setHueStartConfig: vi.fn(),
+        armUsbConnected: vi.fn(),
+        runtimeConfig,
+        reportHueSolidColorStatus: vi.fn(),
+        reportStartFailure: vi.fn(),
+        reportHueLeftOut: vi.fn(),
+      });
+    });
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+
+    expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+    // Unknown height origin: the placement is sent without `positionZ`.
+    expect((setLightingModeMock.mock.calls[0][0] as LightingModeConfig).roomGeometry).toEqual({
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      tv: { x: 1.5, y: 0, width: 2, height: 0.3, mountHeightMeters: 1 },
+      huePlacements: [{ channelId: 3, positionX: 0.2, positionY: 0.8 }],
+    });
   });
 });
