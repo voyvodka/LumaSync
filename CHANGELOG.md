@@ -34,6 +34,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Switching between the compact and full window could stop working after the window had been
+  hidden, covered or left behind a locked screen: the switch made in that state never finished, the
+  window content stayed blank, and later switches from the title bar, the settings shortcut or the
+  tray did nothing until the window was shown again. The switch now always completes.
 - Reopening the app within a few seconds of it closing unexpectedly left lighting off when the
   last mode used Hue. The Hue bridge was still holding the old session for 10–20 seconds and
   turned the new one away, and the app never asked again. At launch it now waits for the bridge to
@@ -44,6 +48,23 @@ https://keepachangelog.com/en/1.1.0/
   who were already set up but had updated from a version without it. It now appears only once the
   app knows which step you are on, so it no longer flashes; a new install still sees the first step
   right away.
+- Hue: a bridge that no longer accepts the app's key is now recognised. The bridge turns a
+  rejected key away with a web page rather than a data reply, which the app took for a passing
+  network problem. So the status bar kept showing Hue as OK, the key check at startup said the
+  key was fine even when it was not, and switching Ambilight on did nothing visible. (Seen on the
+  square Hue Bridge v2; replies from other bridges keep working as before.) The app now
+  asks the bridge for something only a working key can read, and a rejected key opens the
+  re-pair prompt on the Devices page. A router or hotspot login page is still not taken for a
+  rejected key.
+- Hue: while the app itself is streaming, it no longer reports its own session as another app
+  holding the entertainment area, and it stops logging that every few seconds. A session left
+  behind by an earlier run of the app still counts as holding the area.
+- Hue: saving light positions to a bridge whose entertainment area has since been deleted now
+  says the area no longer exists, instead of saying the bridge could not be reached. Saving no
+  longer freezes the app window while it waits for the bridge.
+- Hue: switching lighting off no longer writes an error to the log when the bridge ends the
+  stream as part of that stop. In development builds the log now says the Hue key came from the
+  development credentials file rather than from the system keychain.
 - Saving Hue light positions to the bridge now works. It never did: the bridge turned away every
   save, because the app sent the positions in a form the bridge does not accept, so the Devices
   page showed an error and the bridge kept its old layout. Positions are now written the way the
@@ -278,6 +299,9 @@ https://keepachangelog.com/en/1.1.0/
   notice says Hue was left out and why. Hue is not retried in the background: turn it back on
   once the bridge is back, and the next launch tries it again on its own, because your saved
   output selection is not changed.
+- Frontend and Rust dependencies refreshed to their latest stable releases within their current
+  major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
+  sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
 
 ## [1.5.5]

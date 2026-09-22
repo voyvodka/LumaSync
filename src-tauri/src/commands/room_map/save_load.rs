@@ -241,11 +241,17 @@ fn re_pair_status(details: &str) -> CommandStatus {
     )
 }
 
-/// `AuthInvalid` is the sole re-pair trigger; every other fault keeps the
-/// stage's own code.
+/// `AuthInvalid` is the sole re-pair trigger and a 404 is the area itself
+/// gone (deleted in the Hue app, or the id belongs to another bridge); every
+/// other fault keeps the stage's own code.
 fn fault_status(fault: HueHttpFault, code: &str, message: &str) -> CommandStatus {
     match fault {
         HueHttpFault::AuthInvalid => re_pair_status("The bridge rejected the application key."),
+        HueHttpFault::NotFound => status(
+            "CHAN_WB_AREA_NOT_FOUND",
+            "The entertainment area no longer exists on the bridge. Select an area again.",
+            None,
+        ),
         other => status(code, message, Some(other.to_string())),
     }
 }
@@ -365,8 +371,39 @@ fn write_channel_positions(
 
 /// Push room-map channel positions to the bridge's entertainment
 /// configuration: GET, replace the mapped `service_locations` positions, PUT.
+///
+/// Async so Tauri does not run it on the main thread: the body is a keychain
+/// read and two blocking HTTP calls of up to 5 s each, which froze the UI.
 #[tauri::command]
-pub fn update_hue_channel_positions(
+pub async fn update_hue_channel_positions(
+    channels: Vec<HueChannelPlacement>,
+    bridge_ip: String,
+    username: String,
+    area_id: String,
+) -> CommandStatus {
+    run_writeback_off_thread(move || {
+        update_hue_channel_positions_blocking(channels, bridge_ip, username, area_id)
+    })
+    .await
+}
+
+/// Run a blocking write-back job on the blocking pool. A panicked job still
+/// answers with a coded status: this command never rejects.
+async fn run_writeback_off_thread<F>(job: F) -> CommandStatus
+where
+    F: FnOnce() -> CommandStatus + Send + 'static,
+{
+    match tokio::task::spawn_blocking(job).await {
+        Ok(status) => status,
+        Err(error) => status(
+            "CHAN_WB_NETWORK_ERROR",
+            "The bridge write-back task stopped unexpectedly.",
+            Some(error.to_string()),
+        ),
+    }
+}
+
+fn update_hue_channel_positions_blocking(
     channels: Vec<HueChannelPlacement>,
     bridge_ip: String,
     username: String,
@@ -736,6 +773,13 @@ mod tests {
         /// Answers the queued `(status, body)` pairs in order, one request per
         /// connection; anything past the queue gets a 500.
         fn start(replies: Vec<(u16, String)>) -> Self {
+            Self::start_with_content_type("application/json", replies)
+        }
+
+        fn start_with_content_type(
+            content_type: &'static str,
+            replies: Vec<(u16, String)>,
+        ) -> Self {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             listener.set_nonblocking(true).unwrap();
             let endpoint = format!(
@@ -786,7 +830,7 @@ mod tests {
                     let mut stream = stream;
                     write!(
                         stream,
-                        "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                        "HTTP/1.1 {status} X\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
                         reply.len()
                     )
                     .unwrap();
@@ -882,6 +926,90 @@ mod tests {
         ]);
         let (status, _) = bridge.run(&[placement(Some(0), 0.1, 0.1, 0.1)]);
         assert_eq!(status.code, "AUTH_INVALID_RE_PAIR_REQUIRED");
+    }
+
+    /// Area deleted in the Hue app (or an id from another bridge): the GET
+    /// answers 404, which is neither a network error nor worth a PUT.
+    #[test]
+    fn a_404_on_the_get_is_an_area_not_found_and_never_puts() {
+        let bridge = FakeBridge::start(vec![(
+            404,
+            r#"{"errors":[{"description":"Not Found"}],"data":[]}"#.to_string(),
+        )]);
+        let (status, seen) = bridge.run(&[placement(Some(0), 0.1, 0.1, 0.1)]);
+
+        assert_eq!(status.code, "CHAN_WB_AREA_NOT_FOUND");
+        assert_eq!(seen.len(), 1, "no PUT to an area that is gone");
+    }
+
+    #[test]
+    fn a_404_on_the_put_is_an_area_not_found() {
+        let bridge = FakeBridge::start(vec![
+            (200, two_service_area().to_string()),
+            (
+                404,
+                r#"{"errors":[{"description":"Not Found"}]}"#.to_string(),
+            ),
+        ]);
+        let (status, _) = bridge.run(&[placement(Some(0), 0.1, 0.1, 0.1)]);
+        assert_eq!(status.code, "CHAN_WB_AREA_NOT_FOUND");
+    }
+
+    /// The bridge's own HTML refusal of a bogus key (BSB002 fw 1978293000).
+    #[test]
+    fn the_bridges_html_403_on_the_get_asks_for_a_re_pair() {
+        let bridge = FakeBridge::start_with_content_type(
+            "text/html",
+            vec![(
+                403,
+                crate::commands::hue_http::tests::BRIDGE_403_PAGE.to_string(),
+            )],
+        );
+        let (status, seen) = bridge.run(&[placement(Some(0), 0.1, 0.1, 0.1)]);
+
+        assert_eq!(status.code, "AUTH_INVALID_RE_PAIR_REQUIRED");
+        assert_eq!(seen.len(), 1);
+    }
+
+    /// The command used to be sync, which Tauri runs on the main thread: two
+    /// blocking HTTP calls froze the UI for up to ~10 s. The job must run on
+    /// the blocking pool and leave the calling runtime free meanwhile.
+    #[tokio::test(flavor = "current_thread")]
+    async fn the_write_back_leaves_the_calling_runtime_free() {
+        use std::sync::atomic::AtomicUsize;
+
+        let ticks = Arc::new(AtomicUsize::new(0));
+        let done = Arc::new(AtomicBool::new(false));
+        let ticker = {
+            let (ticks, done) = (Arc::clone(&ticks), Arc::clone(&done));
+            tokio::spawn(async move {
+                while !done.load(Ordering::SeqCst) {
+                    ticks.fetch_add(1, Ordering::SeqCst);
+                    tokio::task::yield_now().await;
+                }
+            })
+        };
+
+        let result = run_writeback_off_thread(|| {
+            std::thread::sleep(Duration::from_millis(150));
+            status("HUE_CHANNEL_POSITIONS_UPDATED", "ok", None)
+        })
+        .await;
+        let observed = ticks.load(Ordering::SeqCst);
+        done.store(true, Ordering::SeqCst);
+        ticker.await.unwrap();
+
+        assert_eq!(result.code, "HUE_CHANNEL_POSITIONS_UPDATED");
+        assert!(
+            observed > 0,
+            "the runtime made no progress while the write-back ran"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_panicking_write_back_still_answers_with_a_code() {
+        let result = run_writeback_off_thread(|| panic!("boom")).await;
+        assert_eq!(result.code, "CHAN_WB_NETWORK_ERROR");
     }
 
     #[test]
