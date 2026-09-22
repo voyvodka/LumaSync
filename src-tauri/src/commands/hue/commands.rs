@@ -9,9 +9,7 @@
 //! live in sibling submodules `frame`, `dtls`, `sender`, `state_store`,
 //! `retry`, and `reconnect`.
 //!
-//! `lib.rs` registers these commands through the
-//! `super::hue_stream_lifecycle::*` re-export shim — that path remains
-//! stable so the Tauri `invoke_handler!` registration list is unchanged.
+//! `lib.rs` registers these commands from `commands::hue::commands` directly.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,16 +29,18 @@ use super::super::hue_onboarding::{
 use super::area_cache::HueReadFreshness;
 use super::credential_store::effective_hue_app_key;
 use super::frame::HueAreaChannelInfo;
-use super::reconnect::{spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard};
+use super::reconnect::{
+    spawn_hue_sender, spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard,
+};
 use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
 };
 #[cfg(debug_assertions)]
 use super::sender::signal_shutdown_complete;
 use super::sender::{
-    apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
-    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, no_op_sender,
-    settled_shutdown_signal, wait_for_shutdown, DeactivateToken,
+    apply_channel_placements, deactivate_with_token, fetch_area_channels,
+    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, wait_for_shutdown,
+    SpawnedHueSender,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
@@ -257,30 +257,21 @@ pub async fn start_hue_stream(
         Arc::new(std::collections::HashMap::new())
     };
 
-    // 4b. Spawn sender on a blocking thread — DTLS handshake / HTTP activate
-    //     create/drop a reqwest::blocking::Client which panics on Tokio workers.
-    let (color_sender, uses_dtls, shutdown_signal, deactivate_token) = if result.active {
-        let req = request.clone();
-        let ch = channels.clone();
-        let meta_for_sender = Arc::clone(&light_metadata);
-        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch, meta_for_sender))
-            .await
-            .unwrap_or_else(|_join_err| {
-                error!("build_hue_sender task panicked, using no-op sender.");
-                (
-                    no_op_sender(),
-                    false,
-                    settled_shutdown_signal(),
-                    DeactivateToken::new(),
-                )
-            })
-    } else {
-        (
-            no_op_sender(),
-            false,
-            settled_shutdown_signal(),
-            DeactivateToken::new(),
+    // 4b. Spawn the sender, wired to the owner's packet counter.
+    let spawned = if result.active {
+        spawn_hue_sender(
+            &runtime_state.runtime_arc(),
+            &request,
+            channels.clone(),
+            light_metadata,
         )
+        .await
+        .unwrap_or_else(|_join_err| {
+            error!("build_hue_sender task panicked, using no-op sender.");
+            SpawnedHueSender::inert()
+        })
+    } else {
+        SpawnedHueSender::inert()
     };
 
     // 4c. Re-acquire lock to store the spawned sender context.
@@ -297,16 +288,7 @@ pub async fn start_hue_stream(
             return Ok(make_result(&owner));
         }
 
-        store_active_stream_context(
-            &mut owner,
-            &request,
-            channels,
-            color_sender,
-            uses_dtls,
-            shutdown_signal,
-            Arc::clone(&light_metadata),
-            Arc::clone(&deactivate_token),
-        );
+        store_active_stream_context(&mut owner, &request, channels, spawned);
         abort_guard.disarm();
 
         if has_no_lights {
@@ -553,29 +535,21 @@ pub async fn restart_hue_stream(
         Arc::new(std::collections::HashMap::new())
     };
 
-    // 5b. Spawn sender on a blocking thread — same rationale as start_hue_stream 4b.
-    let (color_sender, uses_dtls, shutdown_signal, deactivate_token) = if result.active {
-        let req = request.clone();
-        let ch = channels.clone();
-        let meta_for_sender = Arc::clone(&light_metadata);
-        tokio::task::spawn_blocking(move || build_hue_sender(&req, ch, meta_for_sender))
-            .await
-            .unwrap_or_else(|_join_err| {
-                error!("build_hue_sender task panicked, using no-op sender.");
-                (
-                    no_op_sender(),
-                    false,
-                    settled_shutdown_signal(),
-                    DeactivateToken::new(),
-                )
-            })
-    } else {
-        (
-            no_op_sender(),
-            false,
-            settled_shutdown_signal(),
-            DeactivateToken::new(),
+    // 5b. Spawn the sender, wired to the owner's packet counter.
+    let spawned = if result.active {
+        spawn_hue_sender(
+            &runtime_state.runtime_arc(),
+            &request,
+            channels.clone(),
+            light_metadata,
         )
+        .await
+        .unwrap_or_else(|_join_err| {
+            error!("build_hue_sender task panicked, using no-op sender.");
+            SpawnedHueSender::inert()
+        })
+    } else {
+        SpawnedHueSender::inert()
     };
 
     // 5c. Re-acquire lock to store the spawned sender context.
@@ -590,16 +564,7 @@ pub async fn restart_hue_stream(
             return Ok(make_result(&owner));
         }
 
-        store_active_stream_context(
-            &mut owner,
-            &request,
-            channels,
-            color_sender,
-            uses_dtls,
-            shutdown_signal,
-            Arc::clone(&light_metadata),
-            Arc::clone(&deactivate_token),
-        );
+        store_active_stream_context(&mut owner, &request, channels, spawned);
         abort_guard.disarm();
 
         if has_no_lights {

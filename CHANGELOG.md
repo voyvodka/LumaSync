@@ -9,6 +9,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The Hue telemetry panel showed 0 packets per second and no DTLS cipher for a stream you
+  had just started, even while the lights were visibly following the screen. The stream
+  counted its packets into a counter nothing read, and the negotiated cipher was dropped on
+  the way in; only a stream that had dropped and reconnected on its own reported either. A
+  newly started or restarted stream now shows its real packet rate and cipher from the
+  first reading.
 - The Lights screen no longer shows a dashed box reading "Room space — placeholder for
   telemetry / mini room preview / shortcuts". It was scaffolding that reached the product,
   and it had been translated into Turkish along the way, so nothing marked it as unfinished

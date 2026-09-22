@@ -6,9 +6,11 @@
 //! - `StartAbortGuard` — RAII guard that flips the runtime to `Failed` if
 //!   `start_hue_stream`/`restart_hue_stream` exit before the active-stream
 //!   context is stored.
-//! - `store_active_stream_context` (+ `_with_cipher` variant) — the
-//!   in-memory writer that hands a freshly-spawned sender into
-//!   `HueRuntimeOwner` and resets the per-session telemetry counters.
+//! - `spawn_hue_sender` — builds the sender wired to the owner's packet
+//!   counter, so telemetry sees the packets it sends.
+//! - `store_active_stream_context` — the in-memory writer that hands a
+//!   freshly-spawned sender into `HueRuntimeOwner` and resets the
+//!   per-session telemetry counters.
 //! - `spawn_reconnect_monitor` — the Tokio task that polls a
 //!   `ShutdownSignal` and reacts to background sender thread exits with a
 //!   bounded retry ladder.
@@ -25,6 +27,7 @@
 //! race.
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicU32;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -33,12 +36,11 @@ use log::info;
 use super::super::hue_onboarding::check_hue_stream_readiness_with_freshness;
 use super::area_cache::HueReadFreshness;
 use super::frame::HueAreaChannel;
-use super::frame::HueColorSender;
 use super::retry::register_transient_fault;
 use super::sender::{
-    apply_channel_placements, build_hue_sender_with_counter, deactivate_with_token,
-    fetch_area_channels, fetch_light_metadata_for_channels, hue_http_client, wait_for_shutdown,
-    DeactivateToken, HueLightMetadata, ShutdownSignal,
+    apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
+    fetch_light_metadata_for_channels, hue_http_client, wait_for_shutdown, HueLightMetadata,
+    ShutdownSignal, SpawnedHueSender,
 };
 use super::state_store::{
     acquire_hue_runtime, flush_pending_solid_color, status_with, HueActiveStreamContext,
@@ -50,44 +52,49 @@ use super::state_store::{
 // Active-stream-context store
 // ---------------------------------------------------------------------------
 
+/// Build the sender on a blocking thread — DTLS handshake / HTTP activate
+/// create and drop a `reqwest::blocking::Client`, which panics on a Tokio
+/// worker. `Err` means the build task panicked.
+pub(crate) async fn spawn_hue_sender(
+    runtime: &Arc<Mutex<HueRuntimeOwner>>,
+    request: &StartHueStreamRequest,
+    channels: Vec<HueAreaChannel>,
+    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
+) -> Result<SpawnedHueSender, tokio::task::JoinError> {
+    let req = request.clone();
+    spawn_hue_sender_with(runtime, move |packet_counter| {
+        build_hue_sender(&req, channels, light_metadata, packet_counter)
+    })
+    .await
+}
+
+async fn spawn_hue_sender_with<F>(
+    runtime: &Arc<Mutex<HueRuntimeOwner>>,
+    build: F,
+) -> Result<SpawnedHueSender, tokio::task::JoinError>
+where
+    F: FnOnce(Arc<AtomicU32>) -> SpawnedHueSender + Send + 'static,
+{
+    let packet_counter = Arc::clone(&acquire_hue_runtime(runtime).packet_send_count);
+    tokio::task::spawn_blocking(move || build(packet_counter)).await
+}
+
 /// Store an already-spawned sender into the runtime owner.  This function only
 /// touches in-memory fields — no I/O — so it is safe to call under the lock.
-#[allow(clippy::too_many_arguments)] // light_metadata + deactivate_token push the arity past 7; collapsing into a struct hides the per-call-site distinction between fresh-spawn payload and runtime owner mutation
 pub(crate) fn store_active_stream_context(
     owner: &mut HueRuntimeOwner,
     request: &StartHueStreamRequest,
     channels: Vec<HueAreaChannel>,
-    color_sender: HueColorSender,
-    uses_dtls: bool,
-    shutdown_signal: ShutdownSignal,
-    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
-    deactivate_token: Arc<DeactivateToken>,
+    spawned: SpawnedHueSender,
 ) {
-    store_active_stream_context_with_cipher(
-        owner,
-        request,
-        channels,
+    let SpawnedHueSender {
         color_sender,
         uses_dtls,
         shutdown_signal,
-        None,
-        light_metadata,
+        cipher_name,
         deactivate_token,
-    );
-}
+    } = spawned;
 
-#[allow(clippy::too_many_arguments)] // light_metadata + deactivate_token push the active-stream-context store past 7 args; collapsing into a struct here would split the mutation boundary (HueRuntimeOwner) from the fresh-spawn payload and obscure which fields each caller controls
-pub(crate) fn store_active_stream_context_with_cipher(
-    owner: &mut HueRuntimeOwner,
-    request: &StartHueStreamRequest,
-    channels: Vec<HueAreaChannel>,
-    color_sender: HueColorSender,
-    uses_dtls: bool,
-    shutdown_signal: ShutdownSignal,
-    cipher_name: Option<String>,
-    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
-    deactivate_token: Arc<DeactivateToken>,
-) {
     // Keep a persistent clone that survives stream stop/start cycles.
     if !channels.is_empty() {
         owner.persistent_sender = Some(HuePersistentSender {
@@ -100,13 +107,11 @@ pub(crate) fn store_active_stream_context_with_cipher(
     owner.active_stream = Some(HueActiveStreamContext {
         bridge_ip: request.bridge_ip.clone(),
         username: request.username.clone(),
-        client_key: request.client_key.clone(),
         area_id: request.area_id.clone(),
         channels,
         color_sender,
         uses_dtls,
         shutdown_signal,
-        light_metadata,
         deactivate_token,
     });
 
@@ -393,8 +398,6 @@ async fn internal_restart_stream(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     request: &StartHueStreamRequest,
 ) -> RestartOutcome {
-    use super::frame::HueColorUpdate;
-
     // 1. Extract current stream info + dedupe token, then clear state.
     let dtls_deactivate = {
         let mut owner = acquire_hue_runtime(runtime);
@@ -479,30 +482,17 @@ async fn internal_restart_stream(
         fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels).await,
     );
 
-    // 5. Spawn sender (blocking), passing the owner's packet counter.
-    let req = request.clone();
-    let ch = channels.clone();
-    let meta_for_sender = Arc::clone(&light_metadata);
-    let packet_counter = {
-        let owner = acquire_hue_runtime(runtime);
-        Arc::clone(&owner.packet_send_count)
-    };
+    // 5. Spawn sender (blocking), wired to the owner's packet counter.
     // A panicked spawn must not be stored as a live context: its shutdown
     // signal would never fire and the next monitor would wait on it forever.
-    let Ok((color_sender, uses_dtls, shutdown_signal, cipher_name, deactivate_token)) =
-        tokio::task::spawn_blocking(move || {
-            build_hue_sender_with_counter(&req, ch, meta_for_sender, packet_counter)
-        })
-        .await
+    let Ok(spawned) = spawn_hue_sender(runtime, request, channels.clone(), light_metadata).await
     else {
         return RestartOutcome::Retryable(
             "Sender spawn task panicked during reconnect".to_string(),
         );
     };
-
-    // Suppress unused-import warning; HueColorUpdate is referenced indirectly
-    // through HueColorSender's mpsc::SyncSender<HueColorUpdate> generic.
-    let _ = std::marker::PhantomData::<HueColorUpdate>;
+    let shutdown_signal = Arc::clone(&spawned.shutdown_signal);
+    let uses_dtls = spawned.uses_dtls;
 
     // 6. Store context and spawn new monitor.
     {
@@ -513,53 +503,25 @@ async fn internal_restart_stream(
             return RestartOutcome::Abandoned;
         }
 
-        let stream_ctx = HueActiveStreamContext {
-            bridge_ip: request.bridge_ip.clone(),
-            username: request.username.clone(),
-            client_key: request.client_key.clone(),
-            area_id: request.area_id.clone(),
-            channels: channels.clone(),
-            color_sender: color_sender.clone(),
-            uses_dtls,
-            shutdown_signal: Arc::clone(&shutdown_signal),
-            light_metadata: Arc::clone(&light_metadata),
-            deactivate_token: Arc::clone(&deactivate_token),
-        };
-        if !channels.is_empty() {
-            owner.persistent_sender = Some(HuePersistentSender {
-                area_id: request.area_id.clone(),
-                channels: channels.clone(),
-                sender: color_sender.clone(),
-            });
-        }
-        owner.active_stream = Some(stream_ctx);
+        store_active_stream_context(&mut owner, request, channels, spawned);
         owner.state = HueRuntimeState::Running;
-        owner.reconnect_attempt = 0;
-        owner.stream_started_at = Some(Instant::now());
-        owner
-            .packet_send_count
-            .store(0, std::sync::atomic::Ordering::Relaxed);
-        owner.packet_rate_sampled_at = Some(Instant::now());
-        owner.packet_rate_last_count = 0;
-        if uses_dtls {
-            owner.dtls_cipher = cipher_name;
-            owner.dtls_connected_at = Some(Instant::now());
-            owner.last_status = status_with(
+        owner.last_status = if uses_dtls {
+            status_with(
                 HueRuntimeState::Running,
                 "HUE_STREAM_RUNNING_DTLS",
                 "Hue entertainment stream active via DTLS (reconnected).",
                 None,
                 HueRuntimeTriggerSource::System,
-            );
+            )
         } else {
-            owner.last_status = status_with(
+            status_with(
                 HueRuntimeState::Running,
                 "HUE_STREAM_RUNNING",
                 "Hue stream running (reconnected).",
                 None,
                 HueRuntimeTriggerSource::System,
-            );
-        }
+            )
+        };
         flush_pending_solid_color(&mut owner);
     }
 
@@ -573,48 +535,63 @@ async fn internal_restart_stream(
 mod tests {
     use super::*;
 
-    use super::super::frame::{HueColorUpdate, HueScreenRegion};
-    use super::super::retry::start_with_evidence;
-    use super::super::sender::new_shutdown_signal;
-    use super::super::state_store::test_helpers::strict_gate_ready;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
 
-    #[test]
-    fn start_success_persists_active_stream_context_for_status_refresh() {
-        let mut owner = HueRuntimeOwner::default();
-        let request = StartHueStreamRequest {
+    use super::super::super::runtime_telemetry::collect_hue_telemetry;
+    use super::super::frame::{HueColorSender, HueColorUpdate, HueScreenRegion};
+    use super::super::retry::start_with_evidence;
+    use super::super::sender::{new_shutdown_signal, DeactivateToken};
+    use super::super::state_store::test_helpers::strict_gate_ready;
+    use super::super::state_store::HueRuntimeStateStore;
+
+    fn test_request() -> StartHueStreamRequest {
+        StartHueStreamRequest {
             bridge_ip: "192.168.1.2".to_string(),
             username: "hue-user".to_string(),
             client_key: String::new(),
             area_id: "living-room".to_string(),
             trigger_source: Some(HueRuntimeTriggerSource::ModeControl),
             channel_placements: None,
-        };
+        }
+    }
+
+    fn test_channels() -> Vec<HueAreaChannel> {
+        vec![HueAreaChannel {
+            channel_id: 0,
+            light_ids: vec!["light-1".to_string()],
+            screen_region: HueScreenRegion::Center,
+            position_x: 0.0,
+            position_y: 0.0,
+        }]
+    }
+
+    fn dummy_color_sender() -> HueColorSender {
+        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        HueColorSender {
+            tx: Arc::new(tx),
+            channel_count: 1,
+        }
+    }
+
+    #[test]
+    fn start_success_persists_active_stream_context_for_status_refresh() {
+        let mut owner = HueRuntimeOwner::default();
+        let request = test_request();
 
         let _ = start_with_evidence(
             &mut owner,
             &strict_gate_ready(),
             HueRuntimeTriggerSource::ModeControl,
         );
-        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-        let dummy_sender = HueColorSender {
-            tx: Arc::new(tx),
-            channel_count: 1,
-        };
         store_active_stream_context(
             &mut owner,
             &request,
-            vec![HueAreaChannel {
-                channel_id: 0,
-                light_ids: vec!["light-1".to_string()],
-                screen_region: HueScreenRegion::Center,
-                position_x: 0.0,
-                position_y: 0.0,
-            }],
-            dummy_sender,
-            false,
-            new_shutdown_signal(),
-            Arc::new(std::collections::HashMap::new()),
-            DeactivateToken::new(),
+            test_channels(),
+            SpawnedHueSender {
+                color_sender: dummy_color_sender(),
+                ..SpawnedHueSender::inert()
+            },
         );
 
         let active_stream = owner.active_stream.as_ref().expect("active stream context");
@@ -625,6 +602,53 @@ mod tests {
         assert_eq!(
             active_stream.channels[0].light_ids,
             vec!["light-1".to_string()]
+        );
+    }
+
+    /// A freshly started stream — not only a reconnected one — must report the
+    /// packets its sender thread sends and the cipher its handshake negotiated.
+    /// The builder stand-in keeps the counter it was handed and bumps it after
+    /// the context is stored, the way the real sender thread does.
+    #[tokio::test]
+    async fn spawned_sender_packets_and_cipher_reach_telemetry() {
+        let store = HueRuntimeStateStore::default();
+        let runtime = store.runtime_arc();
+        let handed_counter: Arc<Mutex<Option<Arc<AtomicU32>>>> = Arc::new(Mutex::new(None));
+
+        let slot = Arc::clone(&handed_counter);
+        let spawned = spawn_hue_sender_with(&runtime, move |packet_counter| {
+            *slot.lock().unwrap() = Some(packet_counter);
+            SpawnedHueSender {
+                color_sender: dummy_color_sender(),
+                uses_dtls: true,
+                shutdown_signal: new_shutdown_signal(),
+                cipher_name: Some("PSK-AES128-GCM-SHA256".to_string()),
+                deactivate_token: DeactivateToken::new(),
+            }
+        })
+        .await
+        .expect("builder task");
+
+        {
+            let mut owner = acquire_hue_runtime(&runtime);
+            store_active_stream_context(&mut owner, &test_request(), test_channels(), spawned);
+            owner.packet_rate_sampled_at = Some(Instant::now() - Duration::from_secs(1));
+        }
+        handed_counter
+            .lock()
+            .unwrap()
+            .as_ref()
+            .expect("builder received a counter")
+            .fetch_add(20, Ordering::Relaxed);
+
+        let telemetry = collect_hue_telemetry(&store).expect("hue telemetry");
+        assert!(
+            telemetry.packet_rate > 0.0,
+            "packets sent by the sender thread never reached telemetry"
+        );
+        assert_eq!(
+            telemetry.dtls_cipher.as_deref(),
+            Some("PSK-AES128-GCM-SHA256")
         );
     }
 
