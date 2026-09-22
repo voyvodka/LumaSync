@@ -739,6 +739,28 @@ pub fn encode_packet_for_profile(
     }
 }
 
+/// Dispatch on both wire axes — framing (`FirmwareProfile`) and pixel layout
+/// (`LedChipType`). Every serial write goes through here so Solid and the
+/// ambilight worker can never disagree on the bytes for the same strip.
+///
+/// SK6812 RGBW is only encodable under LumaSync v1: Adalight has no provision
+/// for 4-byte pixels, so Adalight + SK6812 falls back to the 3-byte Adalight
+/// frame rather than dropping output silently.
+pub fn encode_packet_for_output(
+    profile: FirmwareProfile,
+    chip_type: LedChipType,
+    brightness: f32,
+    rgb_triplets: &[[u8; 3]],
+    corrections: &ColorCorrectionConfig,
+) -> Vec<u8> {
+    match (chip_type, profile) {
+        (LedChipType::Sk6812Rgbw, FirmwareProfile::LumaSyncV1) => {
+            encode_sk6812_packet(brightness, rgb_triplets, corrections)
+        }
+        _ => encode_packet_for_profile(profile, brightness, rgb_triplets, corrections),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SK6812 RGBW encoder (v1.5 G3)
 //
@@ -938,27 +960,13 @@ impl super::led_sink::LedSink for SerialSink {
             None => return Ok(()),
         };
 
-        let packet = match self.chip_type {
-            LedChipType::Ws2812bGrb => {
-                encode_packet_for_profile(self.profile, self.brightness, colors, &self.corrections)
-            }
-            LedChipType::Sk6812Rgbw => {
-                // SK6812 RGBW encoding is only supported with the LumaSync v1
-                // profile. Adalight has no provision for 4-byte pixels.
-                // If the user somehow sets Adalight + SK6812, fall through to
-                // the WS2812B path so output is never silently dropped.
-                if self.profile == FirmwareProfile::LumaSyncV1 {
-                    encode_sk6812_packet(self.brightness, colors, &self.corrections)
-                } else {
-                    encode_packet_for_profile(
-                        self.profile,
-                        self.brightness,
-                        colors,
-                        &self.corrections,
-                    )
-                }
-            }
-        };
+        let packet = encode_packet_for_output(
+            self.profile,
+            self.chip_type,
+            self.brightness,
+            colors,
+            &self.corrections,
+        );
 
         self.bridge
             .send_packet_to_port(&port, &packet)
