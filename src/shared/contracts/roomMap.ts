@@ -10,9 +10,14 @@
  * z: -1=floor, +1=ceiling
  * See docs/architecture/hue.md for how the runtime maps these onto the screen.
  *
+ * The TV anchor is in room metres instead; see `TvAnchorPlacement` for that
+ * frame and `RoomGeometry` for how the two are sent together.
+ *
  * Zones are Hue-only (docs/architecture/hue.md). `ScreenZone` / `LedZone`
  * will land later as separate types sharing no discriminator with `HueZone`.
  */
+
+import type { HueChannelPlacementOverride } from "./hue";
 
 // ---------------------------------------------------------------------------
 // Room Map Commands
@@ -194,16 +199,22 @@ export interface FurniturePlacement {
 // TV Anchor Placement
 // ---------------------------------------------------------------------------
 
-/** The TV's placement, used as the spatial anchor for channel/strip positions. */
+/** The TV's placement, used as the spatial anchor for channel/strip positions.
+ * Room-metre frame, the one the editor draws in: origin at the corner where the
+ * TV wall meets the left wall, +x toward the right wall, +y away from the TV
+ * wall (canvas down), +z up from the floor. */
 export interface TvAnchorPlacement {
-  /** Center position of the TV */
+  /** Top-left corner of the footprint rectangle, in metres — not its centre. */
   x: number;
   y: number;
-  /** TV width in room units */
+  /** Footprint width along x, in metres. */
   width: number;
-  /** TV height in room units */
+  /** Footprint depth along y, in metres. Not the screen's height. */
   height: number;
   locked?: boolean;
+  /** Screen centre above the floor, in metres. Absent ⇒ 40% of the room height,
+   * resolved at runtime rather than written, so it follows a room-height edit. */
+  mountHeightMeters?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +229,23 @@ export interface RoomDimensions {
   depthMeters: number;
   /** Height in meters (ceiling) */
   heightMeters: number;
+}
+
+// ---------------------------------------------------------------------------
+// Room Geometry (ambilight worker input)
+// ---------------------------------------------------------------------------
+
+/** What the ambilight worker needs to sample by room position. A wire projection
+ * derived from `RoomMapConfig` at dispatch time and never persisted; present only
+ * while a TV anchor exists, which is the room-aware gate. `dimensions` and `tv`
+ * are in the room-metre frame documented on `TvAnchorPlacement`. */
+export interface RoomGeometry {
+  dimensions: RoomDimensions;
+  tv: TvAnchorPlacement;
+  /** The same projection the stream start carries (`toChannelPlacements`), sent
+   * again because the stream's copy is fixed at stream start and a drag must
+   * reach the running worker without restarting the stream. */
+  huePlacements: HueChannelPlacementOverride[];
 }
 
 // ---------------------------------------------------------------------------

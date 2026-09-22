@@ -3,6 +3,7 @@ import type { LightingSmoothingPreset } from "@/shared/contracts/lighting";
 import type { DisplayId } from "@/shared/contracts/display";
 import type { LedCalibrationConfig } from "@/shared/contracts/calibration";
 import type { LedTestPatternKind } from "@/shared/contracts/preview";
+import type { RoomGeometry } from "@/shared/contracts/roomMap";
 import {
   DEFAULT_COLOR_CORRECTION,
   FIRMWARE_PROFILE,
@@ -146,6 +147,14 @@ export interface LightingModeConfig {
    * not round-trip this field.
    */
   ledCalibration?: LedCalibrationConfig;
+  /**
+   * Room-aware sampling input (P3). Absent ⇒ no TV anchor, and the worker runs
+   * exactly as before. Like `ledCalibration`, it is stamped onto outgoing
+   * payloads from the persisted room map and must never be persisted inside
+   * `LightingModeConfig` — `normalizeLightingModeConfig` deliberately does not
+   * round-trip it, or a stale geometry would outlive the room map it came from.
+   */
+  roomGeometry?: RoomGeometry;
 }
 
 /**
