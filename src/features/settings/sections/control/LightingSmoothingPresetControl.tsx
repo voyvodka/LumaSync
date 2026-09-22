@@ -16,7 +16,7 @@
  * generic — always covered both branches). On change the parent
  * hot-reloads the active ambilight worker through `set_lighting_mode` so
  * the new preset rides the next frame without a mode toggle (see
- * `withAmbilightLightingSmoothingPreset` in App.tsx).
+ * `withAmbilightLightingSmoothingPreset` in modePayloadHydration.ts).
  *
  * Accessibility:
  *   - `role="radiogroup"` and per-tile `role="radio"` semantics.

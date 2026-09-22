@@ -178,25 +178,3 @@ export async function hideLedControlPopup(
     return { ok: false, code: CONTROL_POPUP_STATUS.FAILED, message: transportMessage(error), visible: false };
   }
 }
-
-/**
- * Convenience: open the full preview surface (twin overlay for the given
- * display + the interactive control popup) in one call. Used by the LED Setup
- * launch button and the tray `tray:show-led-preview` event handler.
- */
-export async function openLedPreviewSurface(
-  options: { scope: OpenLedTwinOverlayPayload["scope"]; displayId?: string; twinEnabled?: boolean },
-  invoker: PreviewInvoker = defaultInvoke,
-): Promise<void> {
-  const tasks: Promise<unknown>[] = [];
-  if (options.twinEnabled !== false) {
-    tasks.push(
-      openLedTwinOverlay({ scope: options.scope, displayId: options.displayId }, invoker),
-    );
-  }
-  // Open (idempotent) then reveal the control popup.
-  tasks.push(
-    openLedControlPopup(invoker).then(() => showLedControlPopup(invoker)),
-  );
-  await Promise.allSettled(tasks);
-}

@@ -240,8 +240,9 @@ export function useLightingModeOrchestrator({
                 ambilight: lightingMode.ambilight,
                 targets: normalizedTargets,
               }, { force: true });
-            } catch {
+            } catch (err) {
               // Non-fatal for ambilight worker restart; fall through to solid push
+              console.error("[LumaSync] Hue delta-start mode dispatch failed; continuing to solid push:", err);
             }
             if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
               try {

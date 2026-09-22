@@ -73,6 +73,9 @@ vi.mock("react-i18next", () => ({
         "lights:signal.linkBudget.constrained":
           "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
         "lights:signal.linkBudget.hint": "Shorten the strip or output over WLED.",
+        "lights:signal.latencyFormat": "{{ms}}ms",
+        "lights:signal.fpsFormat": "{{fps}} fps",
+        "lights:signal.packetRateFormat": "{{rate}} pkt/s",
         "lights:dock.outputs": "Outputs",
         "lights:dock.rows.usbName": "USB",
         "lights:dock.rows.usbType": "CH340",
@@ -293,6 +296,18 @@ describe("LightsSection — the local output row names what is actually bound", 
     expect(text).toContain("USB");
     expect(text).toContain("CH340");
     expect(text).not.toContain("WLED");
+  });
+
+  // The fallback names one chip; a CP2102 strip labelled CH340 is wrong.
+  it("names the product the OS reported instead of the fallback chip", () => {
+    const { text } = renderWithSink({
+      transport: "serial",
+      id: "/dev/cu.SLAB_USBtoUART",
+      product: "CP2102 USB to UART Bridge Controller",
+    });
+
+    expect(text).toContain("CP2102 USB to UART Bridge Controller");
+    expect(text).not.toContain("CH340");
   });
 
   it("reports nothing connected when neither transport is bound", () => {

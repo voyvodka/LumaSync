@@ -9,6 +9,21 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Turkish screens showed English in several places: the Hue stream figures in Telemetry
+  (uptime, packet rate, reconnect counts, how long ago the last error was, and the stream
+  state itself), the latency and frame-rate readout on the Lights screen, the "Loading..."
+  line of the room map, the capture and send FPS labels, and the "OFFLINE" badge on a
+  paired USB strip. All of them now follow the app language. The Hue output row also claimed
+  "DTLS 50hz" while the bridge card said 20 Hz; LumaSync sends to the bridge at most every
+  50 ms, so both now say 20 Hz. The USB output row names the adapter the system reports
+  instead of always saying CH340.
+- The Hue bridge card showed made-up fault codes — `HUE_STOP_PARTIAL` and `NOT_READY` — that
+  appear nowhere in the log, so searching for them found nothing. It now shows the code the
+  runtime actually reported, and a stop that did not finish explains itself instead of
+  printing a bare "Stop timeout". Error states on the card (rejected key, failed pairing,
+  unfinished stop) were drawn in the same amber as a warning; they are now red, matching
+  their status badge. A failed position save to the bridge now says why in words rather
+  than as a raw code.
 - The Lights screen no longer shows a dashed box reading "Room space — placeholder for
   telemetry / mini room preview / shortcuts". It was scaffolding that reached the product,
   and it had been translated into Turkish along the way, so nothing marked it as unfinished

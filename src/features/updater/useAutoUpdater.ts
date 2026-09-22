@@ -38,7 +38,8 @@ async function readUpdateChannel(): Promise<UpdateChannel> {
   try {
     const state = await shellStore.load();
     return state.updateChannel ?? DEFAULT_UPDATE_CHANNEL;
-  } catch {
+  } catch (err) {
+    console.error("[LumaSync] update channel read failed; using default:", err);
     return DEFAULT_UPDATE_CHANNEL;
   }
 }

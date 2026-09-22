@@ -23,6 +23,7 @@ const KNOWN_DYNAMIC_PREFIXES = [
   "hue:runtime.codes",
   "hue:runtime.states",
   "hue:runtime.triggerSource",
+  "hue:runtime.writeback.codes",
   "common:captureFailed",
   "common:hotplug.targetLabel",
   "preview:pattern",

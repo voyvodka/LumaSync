@@ -13,9 +13,6 @@ import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { TRAY_MENU_IDS } from "@/shared/contracts/shell";
 
-// Tray label i18n moved to trayApi.ts; re-exported to avoid consumer churn.
-export { type TrayLabels, updateTrayLabels } from "./trayApi";
-
 // ---------------------------------------------------------------------------
 // Startup toggle (no tray checkbox — managed in System settings only)
 // ---------------------------------------------------------------------------

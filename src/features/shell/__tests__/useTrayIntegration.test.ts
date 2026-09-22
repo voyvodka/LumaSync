@@ -27,6 +27,9 @@ vi.mock("@/features/tray/trayController", () => ({
     registered.preview = cb;
     return Promise.resolve(unlisten);
   },
+}));
+
+vi.mock("@/features/tray/trayApi", () => ({
   updateTrayLabels: () => Promise.resolve(),
 }));
 

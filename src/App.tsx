@@ -4,10 +4,6 @@
  * calibration, Hue pairing config, onboarding flags), and renders the tree.
  */
 
-// DEV PREVIEW — uncomment + comment out "export default App" below to preview
-// import { HueAreaPreview } from "./dev/HueAreaPreview";
-// export { HueAreaPreview as default };
-
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsLayout } from "./features/settings/SettingsLayout";
@@ -88,7 +84,7 @@ function App() {
   // useEffect with `[]` deps) can read the latest paired-bridge state
   // without re-subscribing on every state mutation.
   const hueStartConfigRef = useRef<HueStartConfig | null>(null);
-  const { isConnected, connectedPort } = useDeviceConnection();
+  const { isConnected, connectedPort, ports } = useDeviceConnection();
   // Boot restore of the persisted WLED sink. Mounted here, not in the picker:
   // the sink must be bound before a lighting mode starts.
   useWledSinkRestore();
@@ -97,7 +93,8 @@ function App() {
   // strip connected" and every non-Off mode stays disabled, while Rust is
   // perfectly able to drive the panel.
   const { activeWledIp } = useActiveWledSink();
-  const localSink = deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp);
+  const connectedProduct = ports.find((port) => port.portName === connectedPort)?.product;
+  const localSink = deriveLocalSink(isConnected, connectedPort ?? null, activeWledIp, connectedProduct);
   const wasConnectedRef = useRef(false);
   // Defaults to `true` so a hydrating store never flashes the banner at a user
   // who has already dismissed it; bootstrap flips it false for a fresh install.

@@ -36,6 +36,18 @@ describe("deriveLocalSink", () => {
     });
   });
 
+  it("carries the USB product string of a serial strip when the OS reported one", () => {
+    expect(deriveLocalSink(true, "/dev/cu.usbserial-1420", null, "USB2.0-Serial")).toEqual({
+      transport: "serial",
+      id: "/dev/cu.usbserial-1420",
+      product: "USB2.0-Serial",
+    });
+    expect(deriveLocalSink(true, "/dev/cu.usbserial-1420", null, "")).toEqual({
+      transport: "serial",
+      id: "/dev/cu.usbserial-1420",
+    });
+  });
+
   it("reports nothing bound when neither is", () => {
     expect(deriveLocalSink(false, null, null)).toBeNull();
   });

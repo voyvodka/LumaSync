@@ -37,6 +37,7 @@ import { listDisplays } from "@/features/calibration/calibrationApi";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
 import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
+import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import { shellStore } from "@/features/persistence/shellStore";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
@@ -347,15 +348,17 @@ export function LightsSection({
   const liveHue = liveTelemetry?.hue ?? null;
 
   const latencyLabel =
-    showUsbSignal && liveUsb ? `${Math.round(liveUsb.frameLatencyMs)}ms` : "—";
+    showUsbSignal && liveUsb
+      ? t("lights:signal.latencyFormat", { ms: Math.round(liveUsb.frameLatencyMs) })
+      : "—";
   // Hue measures no latency, only a packet rate — so Σ carries a different unit
   // here, and the heading names the sink rather than letting the two be confused.
   const fpsLabel = showUsbSignal
     ? liveUsb
-      ? `${Math.round(liveUsb.sendFps)} fps`
+      ? t("lights:signal.fpsFormat", { fps: Math.round(liveUsb.sendFps) })
       : "—"
     : liveHue
-      ? `${Math.round(liveHue.packetRate)} pkt/s`
+      ? t("lights:signal.packetRateFormat", { rate: Math.round(liveHue.packetRate) })
       : "—";
   const signalTitle =
     !showUsbSignal && hueSelected ? t("lights:signal.titleHue") : t("lights:signal.title");
@@ -770,11 +773,12 @@ export function LightsSection({
                     : t("lights:dock.rows.usbName")}{" "}
                   {/* The identity of the thing actually bound. For WLED that is
                       its LAN address — the persisted sink config keeps no
-                      friendly name — and for serial it stays the chip. */}
+                      friendly name — and for serial it is the USB product
+                      string the OS reported, when it reported one. */}
                   <em>
                     {localSink?.transport === "wled"
                       ? localSink.id
-                      : t("lights:dock.rows.usbType")}
+                      : localSink?.product ?? t("lights:dock.rows.usbType")}
                   </em>
                 </div>
                 <div className="s">
@@ -817,6 +821,7 @@ export function LightsSection({
                   ) : hueStreaming ? (
                     <Trans
                       i18nKey="lights:dock.rows.hueSubStreaming"
+                      values={{ hz: HUE_STREAM_MAX_HZ }}
                       components={{ b: <b /> }}
                     />
                   ) : (

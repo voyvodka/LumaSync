@@ -68,3 +68,12 @@ describe("PropertyBar — Hue channel fields resolve by identity", () => {
     expect(screen.getByText("roomMap:propertyBar.empty")).toBeInTheDocument();
   });
 });
+
+describe("PropertyBar — field names", () => {
+  it("names each input in words, not by its one-letter caption", () => {
+    renderPropertyBar(GAPPED_CONFIG, hueChannelObjectId(0));
+
+    expect(screen.getByRole("spinbutton", { name: "roomMap:propertyBar.fields.x" })).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: "roomMap:propertyBar.fields.y" })).toBeInTheDocument();
+  });
+});

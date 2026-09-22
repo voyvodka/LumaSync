@@ -20,8 +20,7 @@ import type { HueRuntimeTarget } from "./hue";
 
 // ---------------------------------------------------------------------------
 // Commands (Tauri invoke targets) — Rust #[tauri::command] names must match
-// each value EXACTLY (snake_case). Phase 0 ships these strings; the Rust
-// handlers + frontend *Api.ts invoke() bridges arrive in Phase 1.
+// each value EXACTLY (snake_case).
 // ---------------------------------------------------------------------------
 
 export const PREVIEW_COMMANDS = {

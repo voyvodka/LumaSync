@@ -87,11 +87,13 @@ function getFieldValues(config: RoomMapConfig, id: string | null): FieldValues |
 
 function NumberInput({
   label,
+  ariaLabel,
   value,
   onChange,
   disabled,
 }: {
   label: string;
+  ariaLabel: string;
   value: string;
   onChange: (val: number) => void;
   disabled?: boolean;
@@ -112,10 +114,11 @@ function NumberInput({
 
   return (
     <label className={`lm-room-propbar-field ${disabled ? "is-disabled" : ""}`}>
-      <span className="lm-room-propbar-field-label">{label}</span>
+      <span className="lm-room-propbar-field-label" aria-hidden>{label}</span>
       <input
         type="number"
         step="any"
+        aria-label={ariaLabel}
         disabled={disabled}
         className="lm-room-propbar-input"
         value={local}
@@ -162,12 +165,14 @@ export function PropertyBar({
       <div className="lm-room-propbar">
         <NumberInput
           label="X"
+          ariaLabel={t("roomMap:propertyBar.fields.x")}
           value={fields.x}
           onChange={(v) => onUpdatePosition(selectedId, v, parseFloat(fields.y))}
           disabled={locked}
         />
         <NumberInput
           label="Y"
+          ariaLabel={t("roomMap:propertyBar.fields.y")}
           value={fields.y}
           onChange={(v) => onUpdatePosition(selectedId, parseFloat(fields.x), v)}
           disabled={locked}
@@ -196,6 +201,7 @@ export function PropertyBar({
         {fields.aspectLocked ? (
           <NumberInput
             label="S"
+            ariaLabel={t("roomMap:propertyBar.fields.scale")}
             value={fields.sx!}
             onChange={(v) => {
               const oldSx = parseFloat(fields.sx!);
@@ -211,12 +217,14 @@ export function PropertyBar({
           <>
             <NumberInput
               label="W"
+              ariaLabel={t("roomMap:propertyBar.fields.scaleX")}
               value={fields.sx!}
               onChange={(v) => onUpdateImageScale?.(imgId, Math.max(0.05, v), parseFloat(fields.sy!))}
               disabled={locked}
             />
             <NumberInput
               label="H"
+              ariaLabel={t("roomMap:propertyBar.fields.scaleY")}
               value={fields.sy!}
               onChange={(v) => onUpdateImageScale?.(imgId, parseFloat(fields.sx!), Math.max(0.05, v))}
               disabled={locked}
@@ -270,30 +278,35 @@ export function PropertyBar({
     <div className="lm-room-propbar">
       <NumberInput
         label="X"
+        ariaLabel={t("roomMap:propertyBar.fields.x")}
         value={fields.x}
         onChange={(v) => onUpdatePosition(selectedId, v, parseFloat(fields.y))}
         disabled={locked}
       />
       <NumberInput
         label="Y"
+        ariaLabel={t("roomMap:propertyBar.fields.y")}
         value={fields.y}
         onChange={(v) => onUpdatePosition(selectedId, parseFloat(fields.x), v)}
         disabled={locked}
       />
       <NumberInput
         label="W"
+        ariaLabel={t("roomMap:propertyBar.fields.width")}
         value={fields.w}
         onChange={(v) => onUpdateSize(selectedId, v, parseFloat(fields.h))}
         disabled={locked}
       />
       <NumberInput
         label="H"
+        ariaLabel={t("roomMap:propertyBar.fields.height")}
         value={fields.h}
         onChange={(v) => onUpdateSize(selectedId, parseFloat(fields.w), v)}
         disabled={locked}
       />
       <NumberInput
         label="R"
+        ariaLabel={t("roomMap:propertyBar.fields.rotation")}
         value={fields.r}
         onChange={(v) => onUpdateRotation(selectedId, v)}
         disabled={locked}

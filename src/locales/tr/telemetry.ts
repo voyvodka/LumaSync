@@ -5,8 +5,8 @@ const telemetry: Catalogue<typeof enTelemetry> = {
   title: "Çalışma telemetrisi",
   description: "Capture/send hızını ve kuyruk baskısını neredeyse gerçek zamanlı izle.",
   metrics: {
-    captureFps: "Capture FPS",
-    sendFps: "Send FPS",
+    captureFps: "Yakalama FPS",
+    sendFps: "Gönderim FPS",
     queueHealth: "Kuyruk sağlığı",
     linkMaxFps: "Bağlantı üst sınırı",
   },
@@ -26,7 +26,7 @@ const telemetry: Catalogue<typeof enTelemetry> = {
     error: "Telemetri şu anda kullanılamıyor.",
   },
   hue: {
-    title: "Hue Stream",
+    title: "Hue Akışı",
     status: "Durum",
     packetRate: "Paket Hızı",
     lastError: "Son Hata",

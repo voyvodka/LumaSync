@@ -291,15 +291,6 @@ export function IconLed() {
   );
 }
 
-export function IconHue() {
-  return (
-    <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="10" cy="10" r="4" />
-      <path d="M10 2v3M10 15v3M2 10h3M15 10h3" />
-    </svg>
-  );
-}
-
 export function IconImage() {
   return (
     <svg viewBox="0 0 20 20" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

@@ -149,7 +149,7 @@ export interface ShellState {
    * across mode flips and across the boot mode-restore.
    *
    * `null` ⇒ no persisted center (fresh launch / never moved); the OS
-   * default placement / `centerOnPrimary` helper is used instead.
+   * default placement is used instead.
    *
    * On restore, the corner is computed as
    * `{ x: centerX - outerWidth / 2, y: centerY - outerHeight / 2 }`

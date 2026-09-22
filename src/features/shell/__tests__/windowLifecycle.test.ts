@@ -8,7 +8,7 @@
  * Mock strategy: stub the Tauri window API at the @tauri-apps/api/window
  * boundary AND the plugin-store at @tauri-apps/plugin-store.  The real
  * loadShellState / saveShellState code paths are exercised (same depth as
- * migration.test.ts) rather than mocking windowLifecycle exports themselves.
+ * the persistence migration.*.test.ts suites) rather than mocking windowLifecycle exports themselves.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

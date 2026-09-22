@@ -37,6 +37,11 @@ vi.mock("react-i18next", () => ({
         "telemetry:hue.reconnects": "Reconnects",
         "telemetry:hue.dtlsCipher": "DTLS Cipher",
         "telemetry:hue.connectionAge": "Connection Age",
+        "telemetry:hue.uptimeFormat": "{{minutes}} min {{seconds}} sec",
+        "telemetry:hue.packetRateFormat": "{{rate}} pkt/s",
+        "telemetry:hue.reconnectsFormat": "{{total}} ({{success}} successful, {{failed}} failed)",
+        "telemetry:hue.noError": "—",
+        "hue:runtime.states.Running": "Running",
         "settings:nav.sections.lights": "Lights",
         "settings:nav.sections.led-setup": "LED Setup",
         "settings:nav.sections.devices": "Devices",
@@ -159,6 +164,10 @@ describe("TelemetrySection", () => {
 
     expect(screen.getByText("18.4 pkt/s")).toBeInTheDocument();
     expect(screen.getByText("PSK-AES128-GCM-SHA256")).toBeInTheDocument();
+    // Every figure goes through the catalogue; these were English literals.
+    expect(screen.getByText("0 (0 successful, 0 failed)")).toBeInTheDocument();
+    expect(screen.getAllByText("12 min 34 sec").length).toBeGreaterThan(0);
+    expect(screen.getByText(/^Running/)).toBeInTheDocument();
   });
 
   it("does not render Hue section when hue is null", async () => {

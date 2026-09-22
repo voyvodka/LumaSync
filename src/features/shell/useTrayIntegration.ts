@@ -12,8 +12,8 @@ import {
   listenTrayResumeLastMode,
   listenTrayShowLedPreview,
   listenTraySolidColor,
-  updateTrayLabels,
 } from "@/features/tray/trayController";
+import { updateTrayLabels } from "@/features/tray/trayApi";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { loadShellState, saveShellState } from "./windowLifecycle";

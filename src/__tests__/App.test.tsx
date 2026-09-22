@@ -54,6 +54,9 @@ vi.mock("../features/tray/trayController", () => ({
   listenTraySolidColor: () => Promise.resolve(() => {}),
   listenTrayShowLedPreview: () => Promise.resolve(() => {}),
   listenStartupToggle: () => Promise.resolve(() => {}),
+}));
+
+vi.mock("../features/tray/trayApi", () => ({
   updateTrayLabels: () => Promise.resolve(),
 }));
 
@@ -86,6 +89,7 @@ vi.mock("../features/device/useDeviceConnection", () => ({
   useDeviceConnection: () => ({
     isConnected: mockIsConnected,
     connectedPort: mockIsConnected ? "/dev/cu.usbserial-test" : null,
+    ports: [],
   }),
 }));
 
@@ -506,7 +510,8 @@ describe("App mode orchestration", () => {
 
   it("repeated set-solid: first call starts hue, second falls into the quick fast path", async () => {
     // Off → Solid is a full transition that opens the Hue stream.
-    // Solid → Solid is a "quick adjustment" (App.tsx ~L716) that pushes the
+    // Solid → Solid is a "quick adjustment" (`handleLightingModeChange` in
+    // useLightingModeOrchestrator.ts) that pushes the
     // new color via setHueSolidColor without re-issuing startHue — that's
     // the optimization that keeps brightness drags from stuttering. So the
     // idempotent contract is: the second click MUST NOT re-trigger startHue,
@@ -585,7 +590,7 @@ describe("App mode orchestration", () => {
   // Bug 10C — auto-add "usb" to outputTargets on the first false→true
   // transition of `isConnected`. Pairing IS the user's "I want USB
   // output" intent; without this fix the Lights output toggle stays
-  // is-off until a WebView reload. See App.tsx hot-plug effect.
+  // is-off until a WebView reload. See useUsbTargetReconciler.ts.
   // ---------------------------------------------------------------------
   it("auto-adds usb target on first pair (false→true transition, hue-only baseline)", async () => {
     // Cold launch: persisted Hue-only session, USB cable unplugged.
@@ -1174,11 +1179,11 @@ describe("App mode orchestration", () => {
       //
       // Scenario shape:
       //   * `lastOutputTargets: ["hue"]` + Hue bridge config → bootstrap
-      //     enters the Hue+Ambilight branch (App.tsx ~L780), dispatching
+      //     enters the Hue+Ambilight branch (useShellBootstrap.ts), dispatching
       //     `set_lighting_mode` with the persisted payload.
       //   * Click `set-both-targets` → addedTargets = ["usb"] →
       //     `handleOutputTargetsChange` USB delta-start branch
-      //     (App.tsx ~L1117) calls `dispatchSetLightingMode` reading
+      //     (useLightingModeOrchestrator.ts) calls `dispatchSetLightingMode` reading
       //     `lightingMode.ambilight` from a closure that pre-fix could
       //     have been stale. With H1 fix the `withAmbilightSettings`
       //     hydrator stamps the persisted values from
@@ -1243,7 +1248,7 @@ describe("App mode orchestration", () => {
       // payload still carries saturation/blackBorder/preset.
       //
       // Note: the `useDeviceConnection` controller `useMemo`
-      // (useDeviceConnection.ts:858-923) still rebuilds when
+      // (useDeviceConnection.ts) still rebuilds when
       // `initialLastSuccessfulPort` settles late — that's a wall-time
       // artifact, not a correctness bug, and is out of scope for H1/H3.
       setLightingModeMock.mockClear();

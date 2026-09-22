@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import type { HueTelemetrySnapshot } from "@/shared/contracts/telemetry";
@@ -6,11 +7,11 @@ interface HueTelemetryGridProps {
   hue: HueTelemetrySnapshot;
 }
 
-function formatDuration(secs: number | null): string {
+function formatDuration(t: TFunction, secs: number | null): string {
   if (secs === null || secs < 0) return "—";
   const minutes = Math.floor(secs / 60);
   const seconds = Math.round(secs % 60);
-  return `${minutes}m ${seconds}s`;
+  return t("telemetry:hue.uptimeFormat", { minutes, seconds });
 }
 
 /** Rev 07 status tint for a stream state. */
@@ -31,31 +32,42 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
         <div className="lm-tele-row">
           <span className="k">{t("telemetry:hue.status")}</span>
           <span className={`v ${stateTint(hue.state)}`}>
-            {hue.state}
+            {t(`hue:runtime.states.${hue.state}`, { defaultValue: hue.state })}
             {hue.uptimeSecs !== null && hue.state === "Running" ? (
-              <span className="age">{formatDuration(hue.uptimeSecs)}</span>
+              <span className="age">{formatDuration(t, hue.uptimeSecs)}</span>
             ) : null}
           </span>
         </div>
 
         <div className="lm-tele-row">
           <span className="k">{t("telemetry:hue.packetRate")}</span>
-          <span className="v">{hue.packetRate.toFixed(1)} pkt/s</span>
+          <span className="v">
+            {t("telemetry:hue.packetRateFormat", { rate: hue.packetRate.toFixed(1) })}
+          </span>
         </div>
 
         <div className="lm-tele-row">
           <span className="k">{t("telemetry:hue.lastError")}</span>
           <span className={`v ${hue.lastErrorCode ? "is-crit" : ""}`}>
-            {hue.lastErrorCode
-              ? `${hue.lastErrorCode}${hue.lastErrorAtSecs !== null ? ` — ${Math.floor(hue.lastErrorAtSecs / 60)}m ago` : ""}`
-              : "—"}
+            {!hue.lastErrorCode
+              ? t("telemetry:hue.noError")
+              : hue.lastErrorAtSecs === null
+                ? hue.lastErrorCode
+                : t("telemetry:hue.errorAgo", {
+                    code: hue.lastErrorCode,
+                    minutes: Math.floor(hue.lastErrorAtSecs / 60),
+                  })}
           </span>
         </div>
 
         <div className="lm-tele-row">
           <span className="k">{t("telemetry:hue.reconnects")}</span>
           <span className="v">
-            {hue.totalReconnects} ({hue.successfulReconnects} ok, {hue.failedReconnects} fail)
+            {t("telemetry:hue.reconnectsFormat", {
+              total: hue.totalReconnects,
+              success: hue.successfulReconnects,
+              failed: hue.failedReconnects,
+            })}
           </span>
         </div>
 
@@ -66,7 +78,7 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
 
         <div className="lm-tele-row">
           <span className="k">{t("telemetry:hue.connectionAge")}</span>
-          <span className="v">{formatDuration(hue.dtlsConnectedAtSecs)}</span>
+          <span className="v">{formatDuration(t, hue.dtlsConnectedAtSecs)}</span>
         </div>
       </div>
     </>

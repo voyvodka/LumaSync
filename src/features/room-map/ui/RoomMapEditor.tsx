@@ -398,7 +398,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="text-sm text-zinc-500">Loading...</span>
+        <span className="text-sm text-[var(--lm-ink-faint)]">{t("roomMap:loading")}</span>
       </div>
     );
   }

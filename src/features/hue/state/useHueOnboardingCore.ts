@@ -600,7 +600,8 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
       let storedState;
       try {
         storedState = await shellStore.load();
-      } catch {
+      } catch (err) {
+        console.error("[LumaSync] Hue onboarding init: shell store load failed:", err);
         return;
       }
 

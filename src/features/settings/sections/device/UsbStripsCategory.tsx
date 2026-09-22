@@ -279,7 +279,7 @@ export function UsbStripsCategory({
       </div>
 
       {!isConnected && (
-        <p className="text-[11px] text-zinc-500">{t("device:usbDisconnected")}</p>
+        <p className="text-[11px] text-[var(--lm-ink-faint)]">{t("device:usbDisconnected")}</p>
       )}
 
       {/* W4-I #2 — "Discover ports" is now a collapsible utility,
@@ -422,19 +422,19 @@ export function UsbStripsCategory({
               : "is-info"
         }`}
       >
-        <p className="text-[11px] font-semibold text-zinc-100">{statusTitle}</p>
-        <p className="mt-0.5 text-[11px] text-zinc-300">{statusBody}</p>
-        {statusModel.details ? <p className="mt-0.5 text-[10px] text-zinc-500">{statusModel.details}</p> : null}
+        <p className="text-[11px] font-semibold text-[var(--lm-ink)]">{statusTitle}</p>
+        <p className="mt-0.5 text-[11px] text-[var(--lm-ink-dim)]">{statusBody}</p>
+        {statusModel.details ? <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{statusModel.details}</p> : null}
         {showHealthStepOutcomes ? (
           <div className="mt-2 space-y-1">
             {healthStepOutcomes.map((stepOutcome) => (
-              <div key={stepOutcome.step} className="flex items-start gap-2 rounded border border-zinc-700 bg-zinc-900/30 px-2 py-1.5">
+              <div key={stepOutcome.step} className="flex items-start gap-2 rounded border border-[var(--lm-line-2)] bg-[var(--lm-panel-2)] px-2 py-1.5">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] font-medium text-zinc-100">
+                  <p className="text-[10px] font-medium text-[var(--lm-ink)]">
                     {t(`device:healthCheck.steps.labels.${stepOutcome.step}`)}
                   </p>
-                  <p className="mt-0.5 text-[10px] text-zinc-400">{stepOutcome.message}</p>
-                  {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-zinc-500">{stepOutcome.details}</p> : null}
+                  <p className="mt-0.5 text-[10px] text-[var(--lm-ink-dim)]">{stepOutcome.message}</p>
+                  {stepOutcome.details ? <p className="mt-0.5 text-[10px] text-[var(--lm-ink-faint)]">{stepOutcome.details}</p> : null}
                 </div>
                 <span
                   className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold ${
@@ -450,7 +450,7 @@ export function UsbStripsCategory({
           </div>
         ) : null}
         {statusCard?.code === "SELECTED_PORT_MISSING" ? (
-          <p className="mt-1 text-[10px] text-zinc-500">
+          <p className="mt-1 text-[10px] text-[var(--lm-ink-faint)]">
             {t("device:port.missingHint", { port: selectedPort ?? "-" })}
           </p>
         ) : null}
