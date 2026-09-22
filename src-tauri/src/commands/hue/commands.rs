@@ -23,9 +23,10 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::super::hue_onboarding::{
-    check_hue_stream_readiness_with_freshness, ActiveStreamerView, AreaListError, CommandStatus,
+    check_hue_stream_readiness_with_freshness, ActiveStreamerView, AreaListError,
     HueStreamReadinessResponse, ACTIVE_STREAMER_REASON,
 };
+use super::super::status::CommandStatus;
 use super::area_cache::HueReadFreshness;
 use super::credential_store::effective_hue_app_key;
 use super::frame::HueAreaChannelInfo;

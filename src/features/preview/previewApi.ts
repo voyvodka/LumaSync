@@ -43,6 +43,7 @@ function failedTestResult(error: unknown): LedTestPatternResult {
     status: {
       code: LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
       message: transportMessage(error),
+      details: null,
     },
   };
 }

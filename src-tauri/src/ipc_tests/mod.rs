@@ -5,6 +5,7 @@
 //! `bun run verify:shell-contracts` cannot close: it proves names and shapes agree,
 //! not that a given input yields the documented `status.code`.
 
+mod command_status_wire;
 mod device_commands;
 mod hue_commands;
 mod lighting_commands;

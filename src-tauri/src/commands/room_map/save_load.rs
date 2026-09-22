@@ -14,7 +14,7 @@ use tauri_plugin_fs::FsExt;
 
 use crate::commands::hue::credential_store::effective_hue_app_key;
 use crate::commands::hue_http::{classify_hue_response_blocking, HueHttpFault};
-use crate::commands::hue_onboarding::CommandStatus;
+use crate::commands::status::CommandStatus;
 use crate::models::room_map::HueChannelPlacement;
 
 /// Copy a user-picked background image into the app data directory under a

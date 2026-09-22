@@ -10,6 +10,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+use super::status::CommandStatus;
+
 /// Resolves through `/releases/latest`, which GitHub defines as the newest
 /// release that is neither a draft nor a prerelease.
 const STABLE_ENDPOINT: &str =
@@ -28,24 +30,6 @@ pub struct PendingUpdate(pub Mutex<Option<Update>>);
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UpdaterCommandStatus {
-    pub code: String,
-    pub message: String,
-    pub details: Option<String>,
-}
-
-impl UpdaterCommandStatus {
-    fn new(code: &str, message: &str, details: Option<String>) -> Self {
-        Self {
-            code: code.to_string(),
-            message: message.to_string(),
-            details,
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UpdateMetadata {
     pub version: String,
     pub current_version: String,
@@ -56,7 +40,7 @@ pub struct UpdateMetadata {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateCheckResponse {
-    pub status: UpdaterCommandStatus,
+    pub status: CommandStatus,
     pub channel: String,
     pub update: Option<UpdateMetadata>,
 }
@@ -64,7 +48,7 @@ pub struct UpdateCheckResponse {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInstallResponse {
-    pub status: UpdaterCommandStatus,
+    pub status: CommandStatus,
 }
 
 #[derive(Clone, Serialize)]
@@ -111,7 +95,7 @@ pub async fn check_for_update<R: Runtime>(
         Ok(url) => url,
         Err(e) => {
             return Ok(UpdateCheckResponse {
-                status: UpdaterCommandStatus::new(
+                status: CommandStatus::new(
                     "UPDATER_ENDPOINT_INVALID",
                     "The update endpoint for this channel is not a valid URL.",
                     Some(format!("{endpoint} -- {e}")),
@@ -126,7 +110,7 @@ pub async fn check_for_update<R: Runtime>(
         Ok(builder) => builder,
         Err(e) => {
             return Ok(UpdateCheckResponse {
-                status: UpdaterCommandStatus::new(
+                status: CommandStatus::new(
                     "UPDATER_ENDPOINT_INVALID",
                     "The update endpoint for this channel was rejected.",
                     Some(e.to_string()),
@@ -141,7 +125,7 @@ pub async fn check_for_update<R: Runtime>(
         Ok(updater) => updater,
         Err(e) => {
             return Ok(UpdateCheckResponse {
-                status: UpdaterCommandStatus::new(
+                status: CommandStatus::new(
                     "UPDATER_CHECK_FAILED",
                     "The updater could not be initialised.",
                     Some(e.to_string()),
@@ -171,7 +155,7 @@ pub async fn check_for_update<R: Runtime>(
                 *slot = Some(update);
             }
             Ok(UpdateCheckResponse {
-                status: UpdaterCommandStatus::new(
+                status: CommandStatus::new(
                     "UPDATER_UPDATE_AVAILABLE",
                     "A newer version is available.",
                     None,
@@ -185,7 +169,7 @@ pub async fn check_for_update<R: Runtime>(
                 *slot = None;
             }
             Ok(UpdateCheckResponse {
-                status: UpdaterCommandStatus::new(
+                status: CommandStatus::new(
                     "UPDATER_UP_TO_DATE",
                     "This is the newest version on the selected channel.",
                     None,
@@ -195,7 +179,7 @@ pub async fn check_for_update<R: Runtime>(
             })
         }
         Err(e) => Ok(UpdateCheckResponse {
-            status: UpdaterCommandStatus::new(
+            status: CommandStatus::new(
                 "UPDATER_CHECK_FAILED",
                 "Could not reach the update feed.",
                 Some(e.to_string()),
@@ -216,7 +200,7 @@ pub async fn download_and_install_update<R: Runtime>(
     let update = pending.0.lock().ok().and_then(|mut slot| slot.take());
     let Some(update) = update else {
         return Ok(UpdateInstallResponse {
-            status: UpdaterCommandStatus::new(
+            status: CommandStatus::new(
                 "UPDATER_NO_PENDING_UPDATE",
                 "No update has been resolved; run a check first.",
                 None,
@@ -259,7 +243,7 @@ pub async fn download_and_install_update<R: Runtime>(
 
     match result {
         Ok(()) => Ok(UpdateInstallResponse {
-            status: UpdaterCommandStatus::new(
+            status: CommandStatus::new(
                 "UPDATER_INSTALL_STARTED",
                 "The update was downloaded and handed to the installer.",
                 None,
@@ -268,7 +252,7 @@ pub async fn download_and_install_update<R: Runtime>(
         Err(e) => {
             log::error!("[updater] install failed: {e}");
             Ok(UpdateInstallResponse {
-                status: UpdaterCommandStatus::new(
+                status: CommandStatus::new(
                     "UPDATER_INSTALL_FAILED",
                     "The update could not be downloaded or verified.",
                     Some(e.to_string()),

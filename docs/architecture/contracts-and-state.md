@@ -15,7 +15,10 @@ call site — a code that exists in one place cannot be handled, translated, or 
 
 **One status envelope, parameterised by a wire union.** `CommandStatusOf<TCode>` in
 `src/shared/contracts/status.ts` is the only coded-status shape; each domain aliases it with its
-own union. `TCode` is always the *wire* union — exactly the set the Rust producer puts on that
+own union. Its one Rust mirror is `CommandStatus` in `src-tauri/src/commands/status.rs`, and the
+verifier fails on any second struct carrying exactly `code`, `message` and `details`: four
+per-module copies once drifted apart on their derives while the TS side typed one of them as
+`details?: string` against a wire that always sends `null`. `TCode` is always the *wire* union — exactly the set the Rust producer puts on that
 shape, no more. Codes the frontend mints (a transport rejection, a synthesised "no command ran")
 live in a separate union that widens the wire one at the consumer holding both, so a
 frontend-invented code can never pose as something the backend can send. `SerialHealthStepWireCode`
