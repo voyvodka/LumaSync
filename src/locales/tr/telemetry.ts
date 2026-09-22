@@ -37,7 +37,8 @@ const telemetry: Catalogue<typeof enTelemetry> = {
     packetRateFormat: "{{rate}} pkt/s",
     reconnectsFormat: "{{total}} ({{success}} başarılı, {{failed}} başarısız)",
     noError: "—",
-    errorAgo: "{{code}} — {{minutes}} dk önce",
+    errorAgo: "{{message}} — {{minutes}} dk önce",
+    errorJustNow: "{{message}} — az önce",
   },
 };
 

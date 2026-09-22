@@ -60,14 +60,14 @@ export function SolidColorPanel({
     <div className="space-y-4">
       {/* Color picker row */}
       <div>
-        <p className="mb-2 text-xs font-medium text-slate-600 dark:text-zinc-300">
+        <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--lm-ink-dim)] [font-family:var(--lm-mono)]">
           {t("common:mode.solidColor")}
-          <span className="ml-2 [font-family:var(--lm-mono)] text-zinc-100">
+          <span className="ml-2 normal-case tracking-normal tabular-nums text-[color:var(--lm-ink)]">
             {hexColor.toUpperCase()}
           </span>
         </p>
         <div
-          className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2.5 dark:border-zinc-700"
+          className="flex items-center gap-3 rounded-lg border border-[color:var(--lm-line-2)] px-3 py-2.5"
           style={{
             background: `linear-gradient(135deg, rgba(${draft.r}, ${draft.g}, ${draft.b}, 0.18) 0%, transparent 100%)`,
           }}
@@ -79,10 +79,10 @@ export function SolidColorPanel({
             ariaLabel={t("common:mode.solidColor")}
           />
           <div className="min-w-0">
-            <p className="text-xs font-medium text-slate-800 dark:text-zinc-100">
+            <p className="text-xs font-medium text-[color:var(--lm-ink)]">
               {t("common:mode.colorModelRgb")}
             </p>
-            <p className="text-xs tabular-nums text-slate-500 dark:text-zinc-400">
+            <p className="text-xs tabular-nums text-[color:var(--lm-ink-dim)]">
               {draft.r}, {draft.g}, {draft.b}
             </p>
           </div>
@@ -91,9 +91,9 @@ export function SolidColorPanel({
 
       {/* Brightness slider — full width */}
       <div>
-        <p className="mb-2 flex items-center justify-between text-xs font-medium text-slate-600 dark:text-zinc-300">
+        <p className="mb-2 flex items-center justify-between text-[10px] font-medium uppercase tracking-[0.12em] text-[color:var(--lm-ink-dim)] [font-family:var(--lm-mono)]">
           <span>{t("common:mode.brightness")}</span>
-          <span className="tabular-nums text-zinc-100">
+          <span className="normal-case tracking-normal tabular-nums text-[color:var(--lm-ink)]">
             {brightnessPercent}%
           </span>
         </p>
@@ -114,13 +114,13 @@ export function SolidColorPanel({
           }}
           onChange={(e) => setBrightness(Number.parseInt(e.currentTarget.value, 10) / 100)}
         />
-        <div className="mt-1.5 flex justify-between text-[10px] text-slate-400 dark:text-zinc-500">
+        <div className="mt-1.5 flex justify-between text-[10px] text-[color:var(--lm-ink-faint)]">
           <span>0%</span>
           <span>100%</span>
         </div>
         {brightnessDisabled && brightnessDisabledReason && (
           <div
-            className="mt-2 [font-family:var(--lm-mono)] text-[10px] leading-snug text-amber-300/80"
+            className="mt-2 [font-family:var(--lm-mono)] text-[10px] leading-snug text-[color:var(--lm-amber)]/80"
             role="note"
           >
             {brightnessDisabledReason}

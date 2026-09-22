@@ -34,6 +34,7 @@ export default {
     packetRateFormat: "{{rate}} pkt/s",
     reconnectsFormat: "{{total}} ({{success}} successful, {{failed}} failed)",
     noError: "—",
-    errorAgo: "{{code}} — {{minutes}} min ago",
+    errorAgo: "{{message}} — {{minutes}} min ago",
+    errorJustNow: "{{message}} — just now",
   },
 };

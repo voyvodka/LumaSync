@@ -82,6 +82,9 @@ const lights: Catalogue<typeof enLights> = {
       hueSubIdle: "Köprü · <b>bekleme</b>",
       hueSubReconnecting: "Köprü · <b>yeniden bağlanıyor</b>",
       hueSubUnavailable: "Yapılandırılmadı",
+      hueSubKeyRejected: "Köprü · <b>yeniden eşleştirme gerekli</b>",
+      hueSubUnreachable: "Köprü · <b>ulaşılamıyor</b>",
+      hueSubChecking: "Köprü · <b>kontrol ediliyor…</b>",
     },
   },
   calibrationBanner: {

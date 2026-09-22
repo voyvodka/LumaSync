@@ -38,6 +38,7 @@ import type { LedCalibrationConfig } from "@/features/calibration/model/contract
 import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetryPoll";
 import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
 import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
+import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { shellStore } from "@/features/persistence/shellStore";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
@@ -72,6 +73,22 @@ export function triggerCalibrationFromLock(
   if (lockState.showOpenCalibrationAction) openCalibration();
 }
 
+/** Why the Hue row is unavailable. A paired bridge is never "not configured":
+ * a rejected key and a silent bridge need different next steps. */
+export function hueUnavailableSubKey(
+  hueConfigured: boolean,
+  verdict: HueProbeVerdict | null,
+):
+  | "lights:dock.rows.hueSubUnavailable"
+  | "lights:dock.rows.hueSubKeyRejected"
+  | "lights:dock.rows.hueSubUnreachable"
+  | "lights:dock.rows.hueSubChecking" {
+  if (!hueConfigured) return "lights:dock.rows.hueSubUnavailable";
+  if (verdict === "credentialRejected") return "lights:dock.rows.hueSubKeyRejected";
+  if (verdict === null) return "lights:dock.rows.hueSubChecking";
+  return "lights:dock.rows.hueSubUnreachable";
+}
+
 interface LightsSectionProps {
   mode: LightingModeConfig;
   outputTargets: HueRuntimeTarget[];
@@ -85,6 +102,8 @@ interface LightsSectionProps {
   hueProbeGaveUp?: boolean;
   /** A bridge probe is in flight, so the retry control shows pending. */
   hueProbeChecking?: boolean;
+  /** What the last bridge probe found; picks the unavailable row's wording. */
+  hueProbeVerdict?: HueProbeVerdict | null;
   onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
@@ -145,6 +164,7 @@ export function LightsSection({
   hueReachable = true,
   hueProbeGaveUp = false,
   hueProbeChecking = false,
+  hueProbeVerdict = null,
   onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
@@ -833,7 +853,10 @@ export function LightsSection({
                 </div>
                 <div className="s">
                   {!hueAvailable ? (
-                    t("lights:dock.rows.hueSubUnavailable")
+                    <Trans
+                      i18nKey={hueUnavailableSubKey(hueConfigured, hueProbeVerdict)}
+                      components={{ b: <b /> }}
+                    />
                   ) : hueReconnecting ? (
                     <Trans
                       i18nKey="lights:dock.rows.hueSubReconnecting"

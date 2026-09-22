@@ -313,6 +313,7 @@ function App() {
     hueConfigured: hueStartConfig !== null,
     hueReachable: hueReachable || hueSessionActive,
     hueProbeGaveUp: hueProbe.gaveUp,
+    hueProbeVerdict: hueProbe.verdict,
     hueProbeChecking: hueProbe.probing,
     onRetryHueProbe: hueProbe.retry,
     hueStreaming,
@@ -466,6 +467,7 @@ function App() {
         captureStalled={captureStalledNotice}
         hueColorNotice={hueColorNotice}
         onOpenCaptureSettings={() => void openScreenCaptureSettings()}
+        statusBarHeightPx={statusBarHeight}
       />
     </>
   );
