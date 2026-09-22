@@ -528,4 +528,176 @@ describe("useLightingModeOrchestrator", () => {
       }),
     );
   });
+
+  // The bridge admits one entertainment streamer, so a refused apply that
+  // leaves a stream open with nothing feeding it locks every other client out.
+  describe("Hue stream after a refused apply", () => {
+    const hueStartConfig = {
+      bridgeIp: "192.168.1.50",
+      username: "app-key",
+      clientKey: "client-key",
+      areaId: "area-1",
+    };
+    const solid = { r: 1, g: 2, b: 3, brightness: 1 };
+
+    function startedHue(code = "HUE_STREAM_RUNNING_DTLS") {
+      return {
+        active: true,
+        status: { code, message: "ok", details: null, state: "Running" },
+      };
+    }
+
+    function captureStartFailed() {
+      return {
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "failed",
+          details: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+        },
+      };
+    }
+
+    function hueOnly(opts: { running?: boolean } = {}) {
+      const view = harness({ hueStartConfig });
+      act(() => {
+        view.result.current.setSelectedOutputTargets(["hue"]);
+        if (opts.running) {
+          view.result.current.setLightingMode({ kind: LIGHTING_MODE_KIND.SOLID, solid });
+          view.result.current.setActiveOutputTargets(["hue"]);
+        }
+      });
+      return view;
+    }
+
+    it("releases a stream this apply opened when the mode never ran", async () => {
+      startHueMock.mockResolvedValue(startedHue());
+      setLightingModeMock.mockResolvedValue(captureStartFailed());
+      const { result } = hueOnly();
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(stopHueMock).toHaveBeenCalledWith("system");
+      expect(result.current.activeOutputTargets).toEqual([]);
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+    });
+
+    it("keeps the stream a still-running mode is using when a gate refuses", async () => {
+      startHueMock.mockResolvedValue(startedHue("HUE_START_NOOP_ALREADY_ACTIVE"));
+      setLightingModeMock.mockResolvedValue({
+        active: true,
+        mode: { kind: LIGHTING_MODE_KIND.SOLID, solid, targets: ["hue"] },
+        status: { code: "DEVICE_NOT_CONNECTED", message: "gated", details: null },
+      });
+      const { result } = hueOnly({ running: true });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(result.current.activeOutputTargets).toEqual(["hue"]);
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.SOLID);
+    });
+
+    it("releases the previous mode's stream once the backend has torn that mode down", async () => {
+      startHueMock.mockResolvedValue(startedHue("HUE_START_NOOP_ALREADY_ACTIVE"));
+      setLightingModeMock.mockResolvedValue(captureStartFailed());
+      const { result } = hueOnly({ running: true });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(stopHueMock).toHaveBeenCalledWith("system");
+      expect(result.current.activeOutputTargets).toEqual([]);
+      // Solid was stopped by the backend before the capture failed.
+      expect(result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+    });
+
+    it("leaves a stream it never held alone", async () => {
+      // A no-op start with "hue" not active: another owner (a test lease) holds it.
+      startHueMock.mockResolvedValue(startedHue("HUE_START_NOOP_ALREADY_ACTIVE"));
+      setLightingModeMock.mockResolvedValue(captureStartFailed());
+      const { result } = hueOnly();
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(stopHueMock).not.toHaveBeenCalled();
+    });
+
+    it("keeps hue listed and raises the stop notice when the release fails", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      startHueMock.mockResolvedValue(startedHue());
+      setLightingModeMock.mockResolvedValue(captureStartFailed());
+      stopHueMock.mockRejectedValue(new Error("bridge gone"));
+      const { result } = hueOnly();
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.activeOutputTargets).toEqual(["hue"]);
+      expect(result.current.stopFailedNotice).toEqual(["hue"]);
+      errorSpy.mockRestore();
+    });
+
+    it("does not stop anything when the apply is accepted", async () => {
+      startHueMock.mockResolvedValue(startedHue());
+      const { result } = hueOnly();
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(result.current.activeOutputTargets).toEqual(["hue"]);
+    });
+  });
+
+  describe("start notice precedence", () => {
+    const savedCalibration = {
+      totalLeds: 60,
+    } as unknown as LightingModeOrchestratorInput["savedCalibration"];
+
+    function startFailed(details: string) {
+      return {
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: { code: "AMBILIGHT_MODE_START_FAILED", message: "failed", details },
+      };
+    }
+
+    it("keeps the permission notice over an unclassified backend reason", async () => {
+      getScreenCapturePermissionMock.mockResolvedValue({ code: "SCREEN_CAPTURE_PERMISSION_DENIED" });
+      setLightingModeMock.mockResolvedValue(startFailed("SCStream error -3801"));
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice).toEqual({
+        bucket: "permission",
+        reason: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+      });
+    });
+
+    it("lets a backend reason that names a cause replace the probe's guess", async () => {
+      getScreenCapturePermissionMock.mockResolvedValue({ code: "SCREEN_CAPTURE_PERMISSION_DENIED" });
+      setLightingModeMock.mockResolvedValue(startFailed("AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND"));
+      const { result } = harness({ savedCalibration });
+
+      await act(async () => {
+        await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.AMBILIGHT });
+      });
+
+      expect(result.current.startFailedNotice?.bucket).toBe("display");
+    });
+  });
 });

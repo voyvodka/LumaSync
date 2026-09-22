@@ -127,15 +127,22 @@ pub(crate) fn start_with_evidence(
         owner.state,
         HueRuntimeState::Starting | HueRuntimeState::Running | HueRuntimeState::Reconnecting
     ) {
-        owner.state = HueRuntimeState::Running;
-        owner.last_status = status_with(
-            HueRuntimeState::Running,
+        let noop = status_with(
+            owner.state.clone(),
             "HUE_START_NOOP_ALREADY_ACTIVE",
             "Hue runtime already active. Start request is a no-op.",
             None,
             trigger_source,
         );
-        return make_result(owner);
+        // A start landing mid-retry must not relabel the runtime Running:
+        // nothing streams until the monitor reconnects, and the retry status
+        // (attempts left, next backoff) is what the UI reports meanwhile.
+        if owner.state == HueRuntimeState::Running {
+            owner.last_status = noop.clone();
+        }
+        let mut result = make_result(owner);
+        result.status = noop;
+        return result;
     }
 
     if evidence.auth_invalid_evidence {
@@ -360,6 +367,49 @@ mod tests {
         assert_eq!(second.status.code, "HUE_START_NOOP_ALREADY_ACTIVE");
         assert_eq!(second.status.state, HueRuntimeState::Running);
         assert!(second.active);
+    }
+
+    #[test]
+    fn start_during_a_retry_keeps_the_runtime_reconnecting() {
+        let mut owner = HueRuntimeOwner::default();
+        let _ = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let _ =
+            register_transient_fault(&mut owner, "udp timeout", HueRuntimeTriggerSource::System);
+
+        let noop = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        assert_eq!(noop.status.code, "HUE_START_NOOP_ALREADY_ACTIVE");
+        assert_eq!(noop.status.state, HueRuntimeState::Reconnecting);
+        assert!(noop.active);
+        assert_eq!(owner.state, HueRuntimeState::Reconnecting);
+        // The retry status the UI and telemetry read survives the no-op.
+        assert_eq!(owner.last_status.code, "TRANSIENT_RETRY_SCHEDULED");
+        assert_eq!(owner.reconnect_attempt, 1);
+    }
+
+    #[test]
+    fn start_while_the_monitor_is_restarting_does_not_claim_running() {
+        let mut owner = HueRuntimeOwner {
+            state: HueRuntimeState::Starting,
+            ..HueRuntimeOwner::default()
+        };
+
+        let noop = start_with_evidence(
+            &mut owner,
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        assert_eq!(noop.status.code, "HUE_START_NOOP_ALREADY_ACTIVE");
+        assert_eq!(owner.state, HueRuntimeState::Starting);
     }
 
     #[test]

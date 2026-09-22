@@ -28,6 +28,14 @@ https://keepachangelog.com/en/1.1.0/
   whether the saved mode actually started: if it did not, the Lights screen shows Off, the
   bridge is released, and the same notice you get when starting Ambilight by hand explains
   what to fix. Your saved mode is kept, so the next launch tries it again.
+- Switching modes by hand could leave the Hue bridge's entertainment stream claimed after the
+  switch failed — for example Ambilight with screen recording refused: the lights showed Off
+  while the status bar still said HUE STREAMING, and no other app could use the bridge. A
+  refused switch now gives the stream back unless the mode that is still running uses it. If
+  the failed switch had already stopped the previous mode, the Lights screen now shows Off
+  instead of that mode. The notice also keeps saying "check screen recording" rather than
+  swapping it for a vague "could not start". And changing mode while Hue was reconnecting no
+  longer made the bridge report a live stream it did not have.
 - With the Hue bridge unreachable, the status bar said HUE STREAMING and the Hue output row
   showed a live stream rate for as long as the outage lasted, sometimes hours, while the
   bridge card said it was reconnecting. Both now say the bridge is reconnecting until it
