@@ -157,6 +157,22 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
     expect(result.status.code).toBe("HUE_NOT_READY");
   });
 
+  it("a gate refusal while a mode is running reports that mode as still active", async () => {
+    // `make_result` derives `active` from the running mode, not the request.
+    const world = SCENARIOS.furnished.build();
+    world.hue.streaming = false;
+    world.lighting.mode = { ...world.lighting.mode, kind: "solid" };
+    setWorld(world);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight", targets: ["usb", "hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("HUE_NOT_READY");
+    expect(result.mode.kind).toBe("solid");
+    expect(result.active).toBe(true);
+  });
+
   it("a hue-target mode succeeds once the Hue stream is actually running", async () => {
     setWorld(SCENARIOS.furnished.build());
     expect(getWorld().hue.streaming).toBe(true);

@@ -226,7 +226,7 @@ export const deviceHandlers = {
     const usbAvailable = w.serial.connectedPort !== null || w.wled.connectedHost !== null;
     if (kind !== "off" && needsUsb && !usbAvailable) {
       return {
-        active: false,
+        active: w.lighting.mode.kind !== "off",
         mode: w.lighting.mode,
         status: status(
           "DEVICE_NOT_CONNECTED",
@@ -248,7 +248,7 @@ export const deviceHandlers = {
     // flips it false on every fault branch).
     if (kind !== "off" && needsHue && !w.hue.streaming) {
       return {
-        active: false,
+        active: w.lighting.mode.kind !== "off",
         mode: w.lighting.mode,
         status: status(
           "HUE_NOT_READY",
