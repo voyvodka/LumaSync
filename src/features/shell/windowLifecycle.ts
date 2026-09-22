@@ -324,6 +324,36 @@ export function fitSizeToWorkArea(
   };
 }
 
+/** Share of the work area a first-run full window takes, and the most it may
+ *  scale past the 900×620 design size. 62% leaves visible desktop on every side
+ *  so the window reads as a panel rather than a maximised app; the cap keeps a
+ *  4K@1x or ultrawide from stretching settings rows to 2000 px. */
+const FIRST_RUN_FULL_FRACTION = 0.62;
+const FIRST_RUN_FULL_MAX_SCALE = 1.6;
+
+/** Full-mode size when nothing is persisted: `UI_MODE_SIZES.full` scaled
+ *  uniformly (so the aspect holds) toward a fraction of the logical work area,
+ *  never below the design size — `fitSizeToWorkArea` still has the last word
+ *  on a screen smaller than that. */
+export function firstRunFullSize(
+  workArea: { width: number; height: number } | null,
+): { width: number; height: number } {
+  const base = UI_MODE_SIZES.full;
+  if (!workArea) return { ...base };
+  const scale = clamp(
+    Math.min(
+      (workArea.width * FIRST_RUN_FULL_FRACTION) / base.width,
+      (workArea.height * FIRST_RUN_FULL_FRACTION) / base.height,
+    ),
+    1,
+    FIRST_RUN_FULL_MAX_SCALE,
+  );
+  return {
+    width: Math.round(base.width * scale),
+    height: Math.round(base.height * scale),
+  };
+}
+
 /** Logical work area of the monitor nearest `rect`, or null when none is known. */
 async function logicalWorkAreaNear(
   rect: WindowRect,
@@ -567,21 +597,6 @@ export async function getCurrentLogicalSize(): Promise<{ width: number; height: 
   };
 }
 
-/**
- * Resolve the target logical size the main window will have when it enters
- * `mode`. Mirrors the sizing logic in `resizeToMode`:
- *  - Entering "full" restores the user's last full-mode size when known.
- *  - Otherwise the default from `UI_MODE_SIZES` is used.
- */
-export async function getTargetModeSize(mode: UIMode): Promise<{ width: number; height: number }> {
-  const state = await loadShellState();
-  if (mode === "full" && state.lastFullSize) {
-    return { ...state.lastFullSize };
-  }
-  const defaults = UI_MODE_SIZES[mode];
-  return { width: defaults.width, height: defaults.height };
-}
-
 /** easeOutCubic — fast start, gentle settle. */
 function easeOutCubic(t: number): number {
   const clamped = clamp(t, 0, 1);
@@ -640,8 +655,8 @@ async function animateWindowRect(
  *
  * Full-size memory:
  *  - Leaving "full" → captures current size into `lastFullSize` (logical px).
- *  - Entering "full" → restores `lastFullSize` if present, else uses
- *    the default UI_MODE_SIZES.full.
+ *  - Entering "full" → restores `lastFullSize` if present, else sizes the
+ *    window to the screen via `firstRunFullSize`.
  *
  * The window is anchored to its current center point — it grows/shrinks in
  * place rather than jumping to monitor center. Final position is clamped
@@ -671,18 +686,6 @@ export async function resizeToMode(
     partialUpdate.lastFullSize = { width: fromWidth, height: fromHeight };
   }
 
-  // Determine target size.
-  let targetWidth: number;
-  let targetHeight: number;
-  if (mode === "full" && currentState.lastFullSize) {
-    targetWidth = currentState.lastFullSize.width;
-    targetHeight = currentState.lastFullSize.height;
-  } else {
-    const defaults = UI_MODE_SIZES[mode];
-    targetWidth = defaults.width;
-    targetHeight = defaults.height;
-  }
-
   // Neither the 900×620 full default nor a size remembered from a larger
   // display is checked against the screen it is about to land on.
   const workArea = await logicalWorkAreaNear(
@@ -694,10 +697,11 @@ export async function resizeToMode(
     },
     scaleFactor,
   );
-  ({ width: targetWidth, height: targetHeight } = fitSizeToWorkArea(
-    { width: targetWidth, height: targetHeight },
-    workArea,
-  ));
+
+  const requested = mode === "full"
+    ? currentState.lastFullSize ?? firstRunFullSize(workArea)
+    : UI_MODE_SIZES[mode];
+  const { width: targetWidth, height: targetHeight } = fitSizeToWorkArea(requested, workArea);
 
   // Anchor target around the current window center so the window grows/shrinks
   // in place instead of teleporting to monitor center.
