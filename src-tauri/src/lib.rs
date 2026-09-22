@@ -25,6 +25,7 @@ mod commands {
     pub mod lighting_mode;
     pub mod notifications;
     pub mod platform;
+    pub mod room_affinity;
     pub mod room_map;
     pub mod runtime_quality;
     pub mod runtime_telemetry;

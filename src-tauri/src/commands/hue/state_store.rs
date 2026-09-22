@@ -119,7 +119,7 @@ pub struct StartHueStreamRequest {
 
 /// One channel's locally authored position. The screen region is never carried:
 /// it is re-derived from the position so there is one writable source.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HueChannelPlacementOverride {
     pub channel_id: u8,
