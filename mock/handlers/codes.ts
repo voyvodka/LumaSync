@@ -81,6 +81,8 @@ export const OFFERED_CODES = {
     "AMBILIGHT_MODE_START_FAILED",
     "SOLID_MODE_APPLIED",
     "SOLID_MODE_HUE_OUTPUT_SKIPPED",
+    "DEVICE_NOT_CONNECTED",
+    "HUE_NOT_READY",
   ],
 } satisfies { [K in keyof CommandResponse]?: InjectableCode<K>[] };
 

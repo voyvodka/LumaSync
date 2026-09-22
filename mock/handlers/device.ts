@@ -205,8 +205,59 @@ export const deviceHandlers = {
     // `setLightingMode` in `modeApi.ts` sends `{ payload }`, never `{ mode }` —
     // reading `args.mode` made every call apply as "off", so the capture-
     // permission gate below was unreachable and Solid mode could never start.
-    const { kind } = args.payload;
+    const { kind, targets } = args.payload;
     const w = getWorld();
+
+    // Target derivation mirrors `apply_mode_change_inner`
+    // (`src-tauri/src/commands/lighting_mode.rs:2004-2008`): empty/absent
+    // `targets` means USB-required for backward compat (D-10); "hue" opts a
+    // mode into the Hue gate below. Order matters — the USB gate (2023-2036)
+    // runs before the Hue gate (2039-2052) in Rust, so it must here too: a
+    // request needing both with neither available reports DEVICE_NOT_CONNECTED,
+    // not HUE_NOT_READY.
+    const requestedTargets = targets ?? [];
+    const needsUsb = requestedTargets.length === 0 || requestedTargets.includes("usb");
+    const needsHue = requestedTargets.includes("hue");
+
+    // USB gate (`lighting_mode.rs:2016-2036`). A registered WLED sink
+    // satisfies it the same way `UsbOutputPlan::Wled` does in Rust, even with
+    // no serial port connected — `usb_available = device_connected ||
+    // usb_plan.is_some()`.
+    const usbAvailable = w.serial.connectedPort !== null || w.wled.connectedHost !== null;
+    if (kind !== "off" && needsUsb && !usbAvailable) {
+      return {
+        active: false,
+        mode: w.lighting.mode,
+        status: status(
+          "DEVICE_NOT_CONNECTED",
+          "Cannot apply lighting mode while device is disconnected.",
+          "Connect a supported serial controller before changing mode.",
+        ),
+      };
+    }
+
+    // Hue gate (`lighting_mode.rs:2039-2052`). `hue_output` there is `Some`
+    // only once `start_hue_stream` has actually spawned a sender —
+    // `snapshot_hue_output_context` (`hue/state_store.rs:451-463`) reads
+    // `owner.active_stream`, which is set only at start's step 4c and cleared
+    // by every stop/gate-block/abort/reconnect path (`hue/retry.rs:150,187,303`,
+    // `hue/reconnect.rs:167,416`). Never-started, `Idle`/gate-blocked,
+    // `Reconnecting` and `Failed` all leave it `None` — only a genuinely
+    // `Running` stream leaves it `Some`. `hue.streaming` is the mock's proxy
+    // for that same fact (see `hueRuntimeFault` in `./hue.ts`, which is what
+    // flips it false on every fault branch).
+    if (kind !== "off" && needsHue && !w.hue.streaming) {
+      return {
+        active: false,
+        mode: w.lighting.mode,
+        status: status(
+          "HUE_NOT_READY",
+          "Hue streaming is not available. Ensure bridge is paired and entertainment area is selected.",
+          "HUE_RUNTIME_GATE_FAILED",
+        ),
+      };
+    }
+
     // Ambilight is the only mode that needs the screen, so it is the only one
     // the permission gate can refuse.
     if (kind === "ambilight" && !w.capture.permissionGranted) {
