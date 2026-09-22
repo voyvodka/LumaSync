@@ -15,9 +15,7 @@ use super::ambilight_capture::{
     create_live_frame_source, detect_black_borders, AmbilightCaptureError, AmbilightFrameSource,
     BlackBorderInsets, CapturedFrame, StaticFrameSource, BLACK_BORDER_THRESHOLD,
 };
-use super::ambilight_scene::{
-    hue_default_screen_affinity, LightSetState, LightTopology, SceneAnalyzer,
-};
+use super::ambilight_scene::{hue_default_screen_affinity, LightTopology};
 use super::calibration::list_displays;
 use super::device_connection::{ActiveSinkRegistry, CommandStatus, SerialConnectionState};
 use super::hue::state_store::{
@@ -30,9 +28,8 @@ use super::led_calibration::{
     link_max_fps, sample_frame_for_sequence, LedCalibrationConfig,
 };
 use super::led_output::{
-    apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_output,
-    gamma_luts_for, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, GammaLuts, LedChipType,
-    LedColorOrder, LedOutputBridge, SerialSink, WirePixelLayout,
+    apply_color_correction_rgb, encode_packet_for_output, ColorCorrectionConfig, EncoderPlan,
+    FirmwareProfile, LedChipType, LedColorOrder, LedOutputBridge, SerialSink, WirePixelLayout,
 };
 use super::led_preview::{
     build_preview_status, emit_preview_state_changed, LedPreviewStatus, LedTwinState,
@@ -50,6 +47,11 @@ use super::test_pattern::{
 };
 use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
 use crate::models::room_map::RoomGeometry;
+
+mod frame_pipeline;
+use frame_pipeline::{
+    strip_topology_for, AmbilightFramePipeline, FramePipelineConfig, FrameSettings,
+};
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -1643,39 +1645,26 @@ fn start_ambilight_worker(
         // can confirm full-strip frames are reaching the wire (e.g. byte
         // count, led_count) without flooding stdout at 60 Hz.
         let mut usb_send_count = 0u32;
-        let mut hue_channel_smoother = HueChannelSmoother::new();
         // Scene-adaptive stage (docs/architecture/capture-and-pipeline.md). Off
         // for synthetic test frames, which must reach the strip exactly as
         // painted, and under LUMASYNC_AMBILIGHT_LEGACY=1 for A/B bisecting.
         let scene_enabled = preview.as_ref().is_none_or(|ctx| ctx.source != "test")
             && std::env::var("LUMASYNC_AMBILIGHT_LEGACY").map_or(true, |v| v != "1");
-        let mut scene = SceneAnalyzer::new();
-        let strip_topology = LightTopology::Chain {
-            closed: led_calibration.as_ref().is_some_and(|cal| {
-                cal.counts.top > 0
-                    && cal.counts.right > 0
-                    && cal.counts.bottom > 0
-                    && cal.counts.left > 0
-                    && cal.bottom_missing == 0
-            }),
-        };
-        let mut strip_scene_state = LightSetState::default();
-        let (mut room_generation, initial_geometry) = room_geometry.snapshot();
-        let mut hue_table = hue_output
-            .as_ref()
-            .map_or_else(HueSampleTable::empty, |ctx| {
-                hue_sample_table(&ctx.channels, initial_geometry.as_ref())
-            });
-        let mut hue_scene_state = LightSetState::default();
-        let mut hue_scene_scratch: Vec<[u8; 3]> = Vec::new();
-        let mut scene_frame_count: u32 = 0;
-        const SCENE_LOG_EVERY: u32 = 600;
+        let mut pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence,
+            led_counts,
+            sample_window,
+            scene_enabled,
+            strip_topology: strip_topology_for(led_calibration.as_ref()),
+            hue_channels: hue_output.as_ref().map(|ctx| ctx.channels.clone()),
+            room_geometry,
+            black_border_detection: live_settings.read_black_border_detection(),
+            color_correction,
+        });
         info!(
             "[ambilight-worker] scene-adaptive stage {}",
             if scene_enabled { "on" } else { "off" }
         );
-        // Border cache is refreshed each iteration from live_settings.
-        let mut border_cache = BlackBorderCache::new(live_settings.read_black_border_detection());
 
         let mut capture_fail_count = 0u32;
         let mut last_edge_emit_at: Option<Instant> = None;
@@ -1683,10 +1672,6 @@ fn start_ambilight_worker(
         // for the enriched edge-signal (only stamped while a preview is active).
         let mut edge_seq: u64 = 0;
         let mut last_hue_colors: Option<Vec<[u8; 3]>> = None;
-        // Hoisted out of the frame loop: a non-2.2 gamma makes `gamma_luts_for`
-        // run 768 `powf`s, and color_correction is fixed for the worker's
-        // lifetime — any change forces a full restart (guard at apply_mode_change).
-        let frame_luts: std::borrow::Cow<'static, GammaLuts> = gamma_luts_for(&color_correction);
         while !cancel_flag.load(Ordering::Relaxed) {
             let capture_started = Instant::now();
             let capture_result: Result<(Arc<CapturedFrame>, Vec<[u8; 3]>), String> =
@@ -1694,12 +1679,7 @@ fn start_ambilight_worker(
                     Ok(mut src) => {
                         AMBILIGHT_CAPTURE_ATTEMPTS.fetch_add(1, Ordering::SeqCst);
                         src.capture_frame().map_err(|e| e.as_reason()).map(|frame| {
-                            let colors = sample_frame_for_sequence(
-                                &frame,
-                                &led_sequence,
-                                &led_counts,
-                                sample_window,
-                            );
+                            let colors = pipeline.sample_strip(&frame);
                             (frame, colors)
                         })
                     }
@@ -1715,43 +1695,31 @@ fn start_ambilight_worker(
                 telemetry_window.record_capture_error(e, Instant::now());
                 let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
             }
-            if let Ok((raw_frame, mut sampled)) = capture_result {
+            if let Ok((raw_frame, sampled)) = capture_result {
                 // Sync live-tunable settings from shared atomic state (zero-cost on hot path).
-                border_cache.set_enabled(live_settings.read_black_border_detection());
                 let brightness = live_settings.read_brightness();
                 let color_order = live_settings.read_color_order();
-                let saturation = live_settings.read_saturation();
-                // Update black border detection cache from the raw (uncropped) frame.
-                border_cache.update_if_due(&raw_frame);
-                // The preset is a ceiling; the scene stage decides how much of it
-                // this frame gets to use, and every sink reads the same answer.
-                let alpha_ceiling = live_settings.read_smoothing_alpha();
-                let frame_alpha = if scene_enabled {
-                    scene.observe_frame(&raw_frame, border_cache.insets(), alpha_ceiling);
-                    scene.process(&mut sampled, &strip_topology, &[], &mut strip_scene_state);
-                    scene_frame_count += 1;
-                    if scene_frame_count <= 2 || scene_frame_count.is_multiple_of(SCENE_LOG_EVERY) {
-                        let (ss, sm, sp, sl) = strip_scene_state.debug_tuple();
-                        let (hs, hm, hp, hl) = hue_scene_state.debug_tuple();
-                        info!(
-                            "[ambilight-worker] scene #{scene_frame_count} — alpha={:.3}/{alpha_ceiling:.3} change={:.3} env={:.3} ambience={:?} strip[sigma={ss:.2} med={sm:.2} spread={sp:.2} lean={sl:.2}] hue[sigma={hs:.2} med={hm:.2} spread={hp:.2} lean={hl:.2}]",
-                            scene.alpha(),
-                            scene.last_change(),
-                            scene.change_envelope(),
-                            scene.ambience_srgb()
-                        );
-                    }
-                    scene.alpha()
-                } else {
-                    alpha_ceiling
+                let settings = FrameSettings {
+                    black_border_detection: live_settings.read_black_border_detection(),
+                    alpha_ceiling: live_settings.read_smoothing_alpha(),
+                    saturation: live_settings.read_saturation(),
                 };
-                quality_state.set_smoothing_alpha(frame_alpha);
-                let capture_ms = capture_started.elapsed().as_secs_f32() * 1000.0;
+                // Compute only, Hue channels included; the sends below keep
+                // their order (USB, then Hue).
+                let step = pipeline.process(
+                    &raw_frame,
+                    sampled,
+                    settings,
+                    &mut quality_state,
+                    &mut frame_slot,
+                );
+                let capture_ms = step
+                    .analyzed_at
+                    .duration_since(capture_started)
+                    .as_secs_f32()
+                    * 1000.0;
                 telemetry_window.record_capture();
-                // Apply saturation before smoothing/sending so the quality gate sees
-                // the corrected colors and temporal smoothing operates on final values.
-                apply_saturation_inplace(&mut sampled, saturation);
-                if quality_state.queue_processed_frame(&mut frame_slot, sampled.as_slice()) {
+                if step.slot_overwritten {
                     telemetry_window.record_slot_overwrite();
                 }
 
@@ -1806,68 +1774,28 @@ fn start_ambilight_worker(
                 };
 
                 // Hue update: sample raw screen regions, apply per-channel EWMA
-                // smoothing, then send every frame to the bridge. Sending every
-                // frame (instead of delta-skipping) lets the bridge's internal
-                // ~100ms hardware interpolation produce smooth gradients.
+                // smoothing (both in `pipeline.process`), then send every frame to
+                // the bridge. Sending every frame (instead of delta-skipping) lets
+                // the bridge's internal ~100ms hardware interpolation produce
+                // smooth gradients.
                 let enrich_preview = preview.as_ref().is_some_and(|ctx| ctx.should_enrich());
 
-                if let Some(context) = hue_output.as_ref() {
-                    if !context.channels.is_empty() {
-                        if room_geometry.generation() != room_generation {
-                            let (seen, geometry) = room_geometry.snapshot();
-                            room_generation = seen;
-                            hue_table = hue_sample_table(&context.channels, geometry.as_ref());
-                        }
-                        hue_scene_scratch.clear();
-                        hue_scene_scratch.extend(hue_table.sample_points.iter().map(
-                            |&(sample_x, sample_y)| {
-                                let (r, g, b) = sample_screen_position_avg(
-                                    &raw_frame,
-                                    sample_x,
-                                    sample_y,
-                                    border_cache.insets(),
-                                );
-                                [r, g, b]
-                            },
-                        ));
-                        if scene_enabled {
-                            scene.process(
-                                &mut hue_scene_scratch,
-                                &hue_table.topology,
-                                &hue_table.affinity,
-                                &mut hue_scene_state,
-                            );
-                        }
-                        let raw_colors: Vec<(u8, u8, u8)> = hue_scene_scratch
-                            .iter()
-                            .map(|&[r, g, b]| {
-                                apply_color_correction_rgb_with_luts(
-                                    (r, g, b),
-                                    &color_correction,
-                                    &frame_luts,
-                                )
-                            })
-                            .collect();
-
-                        let smoothed = hue_channel_smoother.smooth(&raw_colors, frame_alpha);
-
-                        hue_send_count += 1;
-                        if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {
-                            info!(
-                                "[ambilight-worker] hue update #{hue_send_count} — colors: {:?}",
-                                &smoothed[..smoothed.len().min(3)]
-                            );
-                        }
-                        // Only the enriched edge-signal reads this; allocating it
-                        // unconditionally burned a Vec per frame at up to 60 Hz.
-                        if enrich_preview {
-                            last_hue_colors =
-                                Some(smoothed.iter().map(|&(r, g, b)| [r, g, b]).collect());
-                        }
-                        let _ =
-                            apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
-                        telemetry_window.record_send();
+                if let (Some(context), Some(smoothed)) = (hue_output.as_ref(), step.hue_colors) {
+                    hue_send_count += 1;
+                    if hue_send_count <= 3 || hue_send_count.is_multiple_of(200) {
+                        info!(
+                            "[ambilight-worker] hue update #{hue_send_count} — colors: {:?}",
+                            &smoothed[..smoothed.len().min(3)]
+                        );
                     }
+                    // Only the enriched edge-signal reads this; allocating it
+                    // unconditionally burned a Vec per frame at up to 60 Hz.
+                    if enrich_preview {
+                        last_hue_colors =
+                            Some(smoothed.iter().map(|&(r, g, b)| [r, g, b]).collect());
+                    }
+                    let _ = apply_hue_channels_with_context(context, smoothed.to_vec(), brightness);
+                    telemetry_window.record_send();
                 }
 
                 quality_state.observe_capture_and_send_cost(capture_ms, send_ms);
@@ -1892,11 +1820,7 @@ fn start_ambilight_worker(
                             .last_smoothed()
                             .iter()
                             .map(|&[r, g, b]| {
-                                let (cr, cg, cb) = apply_color_correction_rgb_with_luts(
-                                    (r, g, b),
-                                    &color_correction,
-                                    &frame_luts,
-                                );
+                                let (cr, cg, cb) = pipeline.correct_rgb((r, g, b));
                                 [
                                     (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
                                     (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,

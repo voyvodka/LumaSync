@@ -64,6 +64,8 @@ const CONTRAST_REF: f32 = 1.5;
 // ---------------------------------------------------------------------------
 
 fn srgb_to_linear_lut() -> [f32; 256] {
+    #[cfg(test)]
+    SRGB_LUT_BUILDS.with(|n| n.set(n.get() + 1));
     let mut lut = [0f32; 256];
     for (i, v) in lut.iter_mut().enumerate() {
         let c = i as f32 / 255.0;
@@ -74,6 +76,18 @@ fn srgb_to_linear_lut() -> [f32; 256] {
         };
     }
     lut
+}
+
+// Per-thread, like `GAMMA_LUT_BUILDS`, so concurrent tests do not disturb the
+// frame-budget guard that reads it.
+#[cfg(test)]
+thread_local! {
+    static SRGB_LUT_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn srgb_lut_builds_on_this_thread() -> usize {
+    SRGB_LUT_BUILDS.with(|n| n.get())
 }
 
 fn linear_to_srgb_u8(c: f32) -> u8 {

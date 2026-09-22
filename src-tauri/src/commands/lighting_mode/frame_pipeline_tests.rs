@@ -7,12 +7,16 @@ use std::time::{Duration, Instant};
 
 use super::*;
 use crate::commands::ambilight_capture::AmbilightCaptureError;
+use crate::commands::ambilight_scene::{LightSetState, SceneAnalyzer};
 use crate::commands::hue::frame::{
     HueAreaChannel, HueColorSender, HueColorUpdate, HueScreenRegion,
 };
 use crate::commands::hue::state_store::HueChannelPlacementOverride;
 use crate::commands::led_calibration::{LedSegmentCounts, LedSequenceItem};
-use crate::commands::led_output::{LedOutputError, LedPacketSender};
+use crate::commands::led_output::{
+    apply_color_correction_rgb_with_luts, gamma_luts_for, GammaLuts, LedOutputError,
+    LedPacketSender,
+};
 use crate::commands::runtime_telemetry::RuntimeTelemetrySnapshot;
 use crate::models::room_map::{RoomDimensions, TvAnchorPlacement};
 
@@ -46,6 +50,17 @@ fn calibration(top: u16, right: u16, bottom: u16, left: u16) -> LedCalibrationCo
 fn strip_164() -> LedCalibrationConfig {
     calibration(50, 32, 50, 32)
 }
+
+fn strip_300() -> LedCalibrationConfig {
+    calibration(90, 60, 90, 60)
+}
+
+const WIRE_COMBOS: [(FirmwareProfile, LedChipType); 4] = [
+    (FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb),
+    (FirmwareProfile::LumaSyncV1, LedChipType::Sk6812Rgbw),
+    (FirmwareProfile::Adalight, LedChipType::Ws2812bGrb),
+    (FirmwareProfile::Adalight, LedChipType::Sk6812Rgbw),
+];
 
 /// Non-default on every axis, so a per-frame LUT or Kelvin rebuild would do
 /// real work instead of hitting the shared 2.2 table.
@@ -219,6 +234,8 @@ type HueSend = (Vec<(u8, u8, u8)>, f32);
 
 struct ReferenceFrame {
     packet: Vec<u8>,
+    /// Smoothed strip, before encoding.
+    strip: Vec<[u8; 3]>,
     hue: Option<HueSend>,
 }
 
@@ -425,7 +442,11 @@ impl ReferenceLoop {
             Some((smoothed.to_vec(), brightness))
         };
 
-        ReferenceFrame { packet, hue }
+        ReferenceFrame {
+            packet,
+            strip: self.quality_state.last_smoothed().to_vec(),
+            hue,
+        }
     }
 }
 
@@ -571,4 +592,519 @@ fn worker_output_matches_reference_v1_sk6812() {
 #[test]
 fn worker_output_matches_reference_adalight_ws2812b() {
     assert_worker_matches_reference(FirmwareProfile::Adalight, LedChipType::Ws2812bGrb);
+}
+
+// ---------------------------------------------------------------------------
+// The extracted step, driven the way the worker drives it
+// ---------------------------------------------------------------------------
+
+/// `start_ambilight_worker` without the thread, the capture or the telemetry:
+/// the same constructors, then per frame `sample_strip` → `process` → the
+/// serial sink, in the worker's order.
+struct PipelineRun {
+    pipeline: AmbilightFramePipeline,
+    quality_state: AmbilightWorkerQualityState,
+    frame_slot: RuntimeFrameSlot,
+    sink: SerialSink,
+}
+
+impl PipelineRun {
+    fn new(
+        led_calibration: &LedCalibrationConfig,
+        live_settings: &AmbilightLiveSettings,
+        room_geometry: Arc<RoomGeometryLive>,
+        profile: FirmwareProfile,
+        chip_type: LedChipType,
+        bridge: LedOutputBridge,
+    ) -> Self {
+        let usb_plan = Some(UsbOutputPlan::Serial(PORT.to_string()));
+        let (quality_config, _) = resolve_quality_config(
+            &usb_plan,
+            led_calibration.total_leds,
+            profile,
+            chip_type,
+            live_settings.read_smoothing_alpha(),
+        );
+        let sink = SerialSink::with_chip_type(
+            bridge,
+            Some(PORT.to_string()),
+            live_settings.read_brightness(),
+            profile,
+            color_correction(),
+            chip_type,
+        );
+        let pipeline = AmbilightFramePipeline::new(FramePipelineConfig {
+            led_sequence: build_led_sequence(led_calibration),
+            led_counts: led_calibration.counts.clone(),
+            sample_window: LIVE_SAMPLE_WINDOW,
+            scene_enabled: true,
+            strip_topology: strip_topology_for(Some(led_calibration)),
+            hue_channels: Some(hue_channels()),
+            room_geometry,
+            black_border_detection: live_settings.read_black_border_detection(),
+            color_correction: color_correction(),
+        });
+        Self {
+            pipeline,
+            quality_state: AmbilightWorkerQualityState::new(quality_config),
+            frame_slot: RuntimeFrameSlot::new(),
+            sink,
+        }
+    }
+
+    fn send_latest(&mut self, brightness: f32, color_order: LedColorOrder) {
+        self.sink.set_brightness(brightness);
+        self.sink.set_color_order(color_order);
+        if let Some(latest) = self.frame_slot.take_latest() {
+            self.sink.send_frame(&latest).expect("send");
+        }
+    }
+
+    fn warmup(&mut self, frame: &CapturedFrame, live_settings: &AmbilightLiveSettings) {
+        let sampled = self.pipeline.sample_strip(frame);
+        self.quality_state
+            .queue_processed_frame(&mut self.frame_slot, sampled.as_slice());
+        self.send_latest(
+            live_settings.read_brightness(),
+            live_settings.read_color_order(),
+        );
+    }
+
+    fn frame(
+        &mut self,
+        raw_frame: &CapturedFrame,
+        live_settings: &AmbilightLiveSettings,
+    ) -> Option<&[(u8, u8, u8)]> {
+        let sampled = self.pipeline.sample_strip(raw_frame);
+        let brightness = live_settings.read_brightness();
+        let color_order = live_settings.read_color_order();
+        let settings = FrameSettings {
+            black_border_detection: live_settings.read_black_border_detection(),
+            alpha_ceiling: live_settings.read_smoothing_alpha(),
+            saturation: live_settings.read_saturation(),
+        };
+        let step = self.pipeline.process(
+            raw_frame,
+            sampled,
+            settings,
+            &mut self.quality_state,
+            &mut self.frame_slot,
+        );
+        self.sink.set_brightness(brightness);
+        self.sink.set_color_order(color_order);
+        if let Some(latest) = self.frame_slot.take_latest() {
+            self.sink.send_frame(&latest).expect("send");
+        }
+        step.hue_colors
+    }
+}
+
+fn assert_step_matches_reference(
+    led_calibration: &LedCalibrationConfig,
+    frames: &[Arc<CapturedFrame>],
+    profile: FirmwareProfile,
+    chip_type: LedChipType,
+) {
+    const BORDER_OFF_AT: usize = 28;
+    let (reference_warmup, reference) = reference_run(
+        frames,
+        led_calibration,
+        profile,
+        chip_type,
+        Some(BORDER_OFF_AT),
+    );
+
+    let live = live_settings();
+    let room = RoomGeometryLive::new(None);
+    apply_script(0, &live, &room, Some(BORDER_OFF_AT));
+    let sent = Arc::new(RecordingSender::default());
+    let mut run = PipelineRun::new(
+        led_calibration,
+        &live,
+        Arc::clone(&room),
+        profile,
+        chip_type,
+        LedOutputBridge::from_sender(sent.clone()),
+    );
+    let pop = || sent.packets.lock().expect("packets lock").pop();
+    run.warmup(&frames[0], &live);
+    assert_eq!(pop(), Some(reference_warmup), "warm-up packet");
+    for (i, (frame, expected)) in frames[1..].iter().zip(&reference).enumerate() {
+        let n = i + 1;
+        apply_script(n, &live, &room, Some(BORDER_OFF_AT));
+        let hue = run
+            .frame(frame, &live)
+            .map(|colors| (colors.to_vec(), live.read_brightness()));
+        assert_eq!(
+            hue, expected.hue,
+            "Hue colours, frame {n} ({profile:?}/{chip_type:?})"
+        );
+        assert_eq!(
+            run.quality_state.last_smoothed(),
+            expected.strip.as_slice(),
+            "smoothed strip, frame {n} ({profile:?}/{chip_type:?})"
+        );
+        assert_eq!(
+            pop().as_ref(),
+            Some(&expected.packet),
+            "serial packet, frame {n} ({profile:?}/{chip_type:?})"
+        );
+    }
+}
+
+#[test]
+fn extracted_step_matches_reference_164_leds_640x360() {
+    let frames = scene_frames(FRAME_W, FRAME_H, LOOP_FRAMES + 1);
+    for (profile, chip_type) in WIRE_COMBOS {
+        assert_step_matches_reference(&strip_164(), &frames, profile, chip_type);
+    }
+}
+
+#[test]
+fn extracted_step_matches_reference_300_leds_640x400() {
+    let frames = scene_frames(640, 400, LOOP_FRAMES + 1);
+    for (profile, chip_type) in WIRE_COMBOS {
+        assert_step_matches_reference(&strip_300(), &frames, profile, chip_type);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Frame-budget guard. Wall-clock time on a shared CI runner is noise, so this
+// counts what a regression adds instead: heap allocations, the bytes they ask
+// for, and LUT tabulations. All three are deterministic.
+// ---------------------------------------------------------------------------
+
+mod alloc_count {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::cell::Cell;
+
+    /// Counts only on a thread inside `measure`; every other test in the
+    /// binary pays one thread-local read per allocation and nothing else.
+    pub struct CountingAllocator;
+
+    thread_local! {
+        static ACTIVE: Cell<bool> = const { Cell::new(false) };
+        static COUNT: Cell<usize> = const { Cell::new(0) };
+        static BYTES: Cell<usize> = const { Cell::new(0) };
+    }
+
+    fn record(bytes: usize) {
+        let _ = ACTIVE.try_with(|active| {
+            if active.get() {
+                COUNT.with(|count| count.set(count.get() + 1));
+                BYTES.with(|total| total.set(total.get() + bytes));
+            }
+        });
+    }
+
+    unsafe impl GlobalAlloc for CountingAllocator {
+        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+            record(layout.size());
+            unsafe { System.alloc(layout) }
+        }
+
+        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+            record(layout.size());
+            unsafe { System.alloc_zeroed(layout) }
+        }
+
+        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+            record(new_size);
+            unsafe { System.realloc(ptr, layout, new_size) }
+        }
+
+        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+            unsafe { System.dealloc(ptr, layout) }
+        }
+    }
+
+    /// (allocations, bytes requested) made by `f` on this thread.
+    pub fn measure(f: impl FnOnce()) -> (usize, usize) {
+        COUNT.with(|count| count.set(0));
+        BYTES.with(|total| total.set(0));
+        ACTIVE.with(|active| active.set(true));
+        f();
+        ACTIVE.with(|active| active.set(false));
+        (COUNT.with(Cell::get), BYTES.with(Cell::get))
+    }
+}
+
+#[global_allocator]
+static COUNTING_ALLOCATOR: alloc_count::CountingAllocator = alloc_count::CountingAllocator;
+
+/// What one steady-state frame may allocate: the sampled strip, the smoothed
+/// strip queued for the sink, and the encoded packet. The Hue path, the scene
+/// stage and the border cache reuse their buffers and add nothing.
+const ALLOCS_PER_FRAME: usize = 3;
+
+/// Accepts the packet without keeping it, so the sink costs only its encode.
+struct NullSender;
+
+impl LedPacketSender for NullSender {
+    fn send(&self, _port_name: &str, packet: &[u8]) -> Result<(), LedOutputError> {
+        std::hint::black_box(packet);
+        Ok(())
+    }
+
+    fn disconnect_session(&self, _port_name: &str) {}
+}
+
+fn lut_builds() -> (usize, usize) {
+    (
+        crate::commands::led_output::gamma_lut_builds_on_this_thread(),
+        crate::commands::ambilight_scene::srgb_lut_builds_on_this_thread(),
+    )
+}
+
+fn assert_steady_frames_within_budget(
+    led_calibration: &LedCalibrationConfig,
+    (width, height): (u32, u32),
+    profile: FirmwareProfile,
+    chip_type: LedChipType,
+) {
+    const WARM_FRAMES: usize = 8;
+    let frames = scene_frames(width, height, 40);
+    let live = live_settings();
+    let room = RoomGeometryLive::new(Some(room_geometry(vec![placement(
+        0,
+        -0.2,
+        0.5,
+        Some(0.8),
+    )])));
+
+    let before_construction = lut_builds();
+    let mut run = PipelineRun::new(
+        led_calibration,
+        &live,
+        room,
+        profile,
+        chip_type,
+        LedOutputBridge::from_sender(Arc::new(NullSender)),
+    );
+    let after_construction = lut_builds();
+    assert!(
+        after_construction.0 > before_construction.0
+            && after_construction.1 > before_construction.1,
+        "construction must register its own LUT builds, or the zero below proves nothing"
+    );
+
+    // Past the first border detection, the first two (logged) scene frames and
+    // the growth of every scratch buffer.
+    run.warmup(&frames[0], &live);
+    for frame in &frames[1..WARM_FRAMES] {
+        run.frame(frame, &live);
+    }
+
+    let leds = usize::from(led_calibration.total_leds);
+    let packet_bytes = leds * WirePixelLayout::for_output(profile, chip_type).bytes_per_pixel() + 6;
+    let max_bytes = 2 * leds * 3 + packet_bytes;
+    let before_steady = lut_builds();
+    for (n, frame) in frames[WARM_FRAMES..].iter().enumerate() {
+        let (allocs, bytes) = alloc_count::measure(|| {
+            std::hint::black_box(run.frame(frame, &live));
+        });
+        assert!(
+            allocs <= ALLOCS_PER_FRAME && bytes <= max_bytes,
+            "steady frame {n} ({leds} LEDs, {profile:?}/{chip_type:?}) made {allocs} \
+             allocations / {bytes} bytes; the budget is {ALLOCS_PER_FRAME} / {max_bytes}"
+        );
+    }
+    assert_eq!(
+        lut_builds(),
+        before_steady,
+        "a steady frame tabulated a gamma or sRGB LUT; build it once per worker"
+    );
+}
+
+#[test]
+fn steady_frame_allocations_and_lut_builds_stay_within_budget() {
+    assert_steady_frames_within_budget(
+        &strip_164(),
+        (FRAME_W, FRAME_H),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+    );
+    assert_steady_frames_within_budget(
+        &strip_300(),
+        (640, 400),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Sk6812Rgbw,
+    );
+    assert_steady_frames_within_budget(
+        &strip_300(),
+        (640, 400),
+        FirmwareProfile::Adalight,
+        LedChipType::Ws2812bGrb,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Timing report — local only. Run it in release for numbers worth quoting:
+//   cargo test --release --lib frame_budget_report -- --ignored --nocapture
+// ---------------------------------------------------------------------------
+
+struct Timing {
+    median_us: f64,
+    p95_us: f64,
+    mean_us: f64,
+}
+
+fn time_calls(iterations: usize, mut call: impl FnMut(usize)) -> Timing {
+    for i in 0..iterations / 10 {
+        call(i);
+    }
+    let mut samples: Vec<f64> = (0..iterations)
+        .map(|i| {
+            let started = Instant::now();
+            call(i);
+            started.elapsed().as_secs_f64() * 1e6
+        })
+        .collect();
+    samples.sort_by(f64::total_cmp);
+    Timing {
+        median_us: samples[samples.len() / 2],
+        p95_us: samples[samples.len() * 95 / 100],
+        mean_us: samples.iter().sum::<f64>() / samples.len() as f64,
+    }
+}
+
+fn print_timing(label: &str, timing: &Timing) {
+    println!(
+        "  {label:<44} {:>9.1} {:>9.1} {:>9.1}",
+        timing.median_us, timing.p95_us, timing.mean_us
+    );
+}
+
+fn report_scenario(
+    led_calibration: &LedCalibrationConfig,
+    (width, height): (u32, u32),
+    profile: FirmwareProfile,
+    chip_type: LedChipType,
+) {
+    const ITERATIONS: usize = 2000;
+    let frames = scene_frames(width, height, 48);
+    let frame_at = |i: usize| frames[i % frames.len()].as_ref();
+    let live = live_settings();
+    let geometry = room_geometry(vec![placement(0, -0.2, 0.5, Some(0.8))]);
+    let room = RoomGeometryLive::new(Some(geometry.clone()));
+    let leds = led_calibration.total_leds;
+    println!(
+        "\n{leds} LEDs + 2 Hue channels (room-aware), {width}x{height}, {profile:?}/{chip_type:?} [{}]",
+        if cfg!(debug_assertions) { "debug" } else { "release" }
+    );
+    println!(
+        "  {:<44} {:>9} {:>9} {:>9}",
+        "stage (µs per frame)", "median", "p95", "mean"
+    );
+
+    let mut run = PipelineRun::new(
+        led_calibration,
+        &live,
+        room,
+        profile,
+        chip_type,
+        LedOutputBridge::from_sender(Arc::new(NullSender)),
+    );
+    run.warmup(frame_at(0), &live);
+    let full = time_calls(ITERATIONS, |i| {
+        std::hint::black_box(run.frame(frame_at(i + 1), &live));
+    });
+    print_timing("whole step (sample, process, encode)", &full);
+
+    let sequence = build_led_sequence(led_calibration);
+    print_timing(
+        "  strip sampling",
+        &time_calls(ITERATIONS, |i| {
+            std::hint::black_box(sample_frame_for_sequence(
+                frame_at(i),
+                &sequence,
+                &led_calibration.counts,
+                LIVE_SAMPLE_WINDOW,
+            ));
+        }),
+    );
+    print_timing(
+        "  black-border detection (every 2.5 s)",
+        &time_calls(ITERATIONS, |i| {
+            std::hint::black_box(detect_black_borders(frame_at(i), BLACK_BORDER_THRESHOLD));
+        }),
+    );
+    let insets = detect_black_borders(frame_at(0), BLACK_BORDER_THRESHOLD);
+    let mut scene = SceneAnalyzer::new();
+    print_timing(
+        "  scene: frame histogram + mean",
+        &time_calls(ITERATIONS, |i| {
+            scene.observe_frame(frame_at(i), &insets, 0.35);
+        }),
+    );
+    let sampled = sample_frame_for_sequence(
+        frame_at(0),
+        &sequence,
+        &led_calibration.counts,
+        LIVE_SAMPLE_WINDOW,
+    );
+    let topology = strip_topology_for(Some(led_calibration));
+    let mut strip_state = LightSetState::default();
+    let mut colors = sampled.clone();
+    print_timing(
+        "  scene: strip coherence + ambience",
+        &time_calls(ITERATIONS, |_| {
+            colors.copy_from_slice(&sampled);
+            scene.process(&mut colors, &topology, &[], &mut strip_state);
+        }),
+    );
+    let table = hue_sample_table(&hue_channels(), Some(&geometry));
+    print_timing(
+        "  Hue sampling (room-aware sample points)",
+        &time_calls(ITERATIONS, |i| {
+            for &(x, y) in &table.sample_points {
+                std::hint::black_box(sample_screen_position_avg(frame_at(i), x, y, &insets));
+            }
+        }),
+    );
+    let mut quality = AmbilightWorkerQualityState::new(RuntimeQualityConfig::default());
+    let mut slot = RuntimeFrameSlot::new();
+    print_timing(
+        "  strip smoothing",
+        &time_calls(ITERATIONS, |_| {
+            quality.queue_processed_frame(&mut slot, &sampled);
+        }),
+    );
+    let plan = EncoderPlan::new(&color_correction());
+    for (combo_profile, combo_chip) in WIRE_COMBOS {
+        print_timing(
+            &format!("  encode {combo_profile:?}/{combo_chip:?}"),
+            &time_calls(ITERATIONS, |_| {
+                std::hint::black_box(encode_packet_for_output(
+                    combo_profile,
+                    combo_chip,
+                    0.8,
+                    &sampled,
+                    &plan,
+                ));
+            }),
+        );
+    }
+    println!(
+        "  whole step, median: {:.3}% of a 16.7 ms (60 Hz) frame, {:.3}% of 50 ms (20 Hz capture)",
+        full.median_us / 16_667.0 * 100.0,
+        full.median_us / 50_000.0 * 100.0
+    );
+}
+
+#[test]
+#[ignore = "timing report, not a check; see docs/architecture/capture-and-pipeline.md"]
+fn frame_budget_report() {
+    report_scenario(
+        &strip_164(),
+        (FRAME_W, FRAME_H),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Ws2812bGrb,
+    );
+    report_scenario(
+        &strip_300(),
+        (640, 400),
+        FirmwareProfile::LumaSyncV1,
+        LedChipType::Sk6812Rgbw,
+    );
 }

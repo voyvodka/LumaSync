@@ -282,6 +282,13 @@ https://keepachangelog.com/en/1.1.0/
   major versions, including Tauri 2.11.6 (a security fix keeping one app window from reading data
   sent to another) and the Tauri plugins kept on matching npm and crate versions.
 
+### Internal
+
+- Ambilight's per-frame work can now be measured without a display or LEDs: a local timing report,
+  and a CI check that fails when a change makes every frame allocate more memory or rebuild a
+  colour table. Two small per-frame allocations went away on the way, one on the Hue path and one
+  on every USB send.
+
 
 ## [1.5.5]
 
