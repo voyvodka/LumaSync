@@ -2,7 +2,7 @@
 //! the ambilight capture→sample→correct→send worker thread, and the LED
 //! test-pattern preview path that reuses the same worker plumbing.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -39,6 +39,7 @@ use super::led_preview::{
     PreviewModeSnapshot,
 };
 use super::led_sink::LedSink;
+use super::room_affinity::{room_aware_hue_samples, room_geometry_rejection};
 use super::runtime_quality::{RuntimeFrameSlot, RuntimeQualityConfig, RuntimeQualityController};
 use super::runtime_telemetry::{
     RuntimeTelemetrySnapshot, RuntimeTelemetryState, RuntimeTelemetryWindow, SharedRuntimeTelemetry,
@@ -48,6 +49,7 @@ use super::test_pattern::{
     TestPatternLiveSlot, TestPatternSpeed, DEFAULT_DISPLAY_ASPECT,
 };
 use super::wled_sink::{CorrectedWledSink, WledSinkConfig};
+use crate::models::room_map::RoomGeometry;
 
 static ACTIVE_AMBILIGHT_WORKERS: AtomicUsize = AtomicUsize::new(0);
 static SOLID_OUTPUT_ATTEMPTS: AtomicUsize = AtomicUsize::new(0);
@@ -183,6 +185,11 @@ pub struct LightingModeConfig {
     /// budget — see `derive_base_interval_ms_for` / `frame_wire_time_ms`.
     #[serde(default)]
     pub chip_type: Option<LedChipType>,
+    /// Room-aware Hue sampling input (P3). Absent ⇒ no TV anchor, and the worker
+    /// samples exactly as before. Skipped when absent so the echoed mode stays
+    /// byte-identical for a user without a TV anchor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room_geometry: Option<RoomGeometry>,
 }
 
 impl Default for LightingModeConfig {
@@ -197,6 +204,7 @@ impl Default for LightingModeConfig {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 }
@@ -330,6 +338,43 @@ impl AmbilightLiveSettings {
     }
 }
 
+/// Room geometry shared with the running ambilight worker, so a room-map drag
+/// retunes Hue sampling in place — same role as `TestPatternLive`. The worker
+/// reads `generation` once per frame and takes the lock only when it moved.
+/// The generation is also stored under the lock, and that copy is the one the
+/// worker records as seen: a relaxed load can run ahead of the data, and a
+/// stale read then retries next frame instead of being marked current.
+struct RoomGeometryLive {
+    generation: AtomicU64,
+    slot: Mutex<(u64, Option<RoomGeometry>)>,
+}
+
+impl RoomGeometryLive {
+    fn new(geometry: Option<RoomGeometry>) -> Arc<Self> {
+        Arc::new(Self {
+            generation: AtomicU64::new(0),
+            slot: Mutex::new((0, geometry)),
+        })
+    }
+
+    fn publish(&self, geometry: Option<RoomGeometry>) {
+        let mut slot = self.slot.lock().unwrap_or_else(|err| err.into_inner());
+        let next = slot.0.wrapping_add(1);
+        slot.0 = next;
+        slot.1 = geometry;
+        self.generation.store(next, Ordering::Relaxed);
+    }
+
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::Relaxed)
+    }
+
+    fn snapshot(&self) -> (u64, Option<RoomGeometry>) {
+        let slot = self.slot.lock().unwrap_or_else(|err| err.into_inner());
+        (slot.0, slot.1.clone())
+    }
+}
+
 struct LightingRuntimeOwner {
     active_mode: LightingModeConfig,
     /// Port name for the currently active LED session. Cleared in
@@ -340,6 +385,8 @@ struct LightingRuntimeOwner {
     /// Shared settings for the currently running ambilight worker.
     /// Updated in-place when only ambilight settings change, avoiding worker restart.
     ambilight_live: Option<Arc<AmbilightLiveSettings>>,
+    /// Room geometry cell of the running ambilight worker; fresh per worker.
+    room_geometry_live: Option<Arc<RoomGeometryLive>>,
     output_bridge: LedOutputBridge,
     frame_source_factory: Arc<AmbilightFrameSourceFactory>,
     /// v1.6 LED Preview — synthetic test request + shared enrichment gate.
@@ -406,6 +453,7 @@ impl Default for LightingRuntimeOwner {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::default(),
             preview: Default::default(),
             frame_source_factory: Arc::new(|req: AmbilightCaptureRequest| {
@@ -779,6 +827,8 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 color_correction,
                 firmware_profile,
                 chip_type,
+                // Only the ambilight worker samples by room; Off and Solid drop it.
+                room_geometry: config.room_geometry,
             }
         }
         LightingModeKind::Solid => {
@@ -803,6 +853,7 @@ fn normalize_mode_config(config: LightingModeConfig) -> LightingModeConfig {
                 color_correction,
                 firmware_profile,
                 chip_type,
+                room_geometry: None,
             }
         }
     }
@@ -835,6 +886,7 @@ fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&
     push_trace(trace, "stop_previous");
     let t0 = std::time::Instant::now();
     owner.ambilight_live = None;
+    owner.room_geometry_live = None;
     let had_worker = owner.worker.is_some();
     if let Some(worker) = owner.worker.take() {
         worker.stop();
@@ -1435,6 +1487,7 @@ fn start_ambilight_worker(
     firmware_profile: FirmwareProfile,
     chip_type: LedChipType,
     preview: Option<PreviewEmitContext>,
+    room_geometry: Arc<RoomGeometryLive>,
 ) -> Result<LightingWorkerRuntime, String> {
     let mut frame_source = frame_source;
     // macOS SCStream (and Windows WGC) deliver the first frame asynchronously.
@@ -1632,10 +1685,12 @@ fn start_ambilight_worker(
             }),
         };
         let mut strip_scene_state = LightSetState::default();
-        let (hue_topology, hue_affinity) = hue_output.as_ref().map_or_else(
-            || (LightTopology::Points(Vec::new()), Vec::new()),
-            |ctx| hue_topology_and_affinity(&ctx.channels),
-        );
+        let (mut room_generation, initial_geometry) = room_geometry.snapshot();
+        let mut hue_table = hue_output
+            .as_ref()
+            .map_or_else(HueSampleTable::empty, |ctx| {
+                hue_sample_table(&ctx.channels, initial_geometry.as_ref())
+            });
         let mut hue_scene_state = LightSetState::default();
         let mut hue_scene_scratch: Vec<[u8; 3]> = Vec::new();
         let mut scene_frame_count: u32 = 0;
@@ -1781,21 +1836,28 @@ fn start_ambilight_worker(
 
                 if let Some(context) = hue_output.as_ref() {
                     if !context.channels.is_empty() {
+                        if room_geometry.generation() != room_generation {
+                            let (seen, geometry) = room_geometry.snapshot();
+                            room_generation = seen;
+                            hue_table = hue_sample_table(&context.channels, geometry.as_ref());
+                        }
                         hue_scene_scratch.clear();
-                        hue_scene_scratch.extend(context.channels.iter().map(|ch| {
-                            let (r, g, b) = sample_screen_position_avg(
-                                &raw_frame,
-                                ch.position_x,
-                                ch.position_y,
-                                border_cache.insets(),
-                            );
-                            [r, g, b]
-                        }));
+                        hue_scene_scratch.extend(hue_table.sample_points.iter().map(
+                            |&(sample_x, sample_y)| {
+                                let (r, g, b) = sample_screen_position_avg(
+                                    &raw_frame,
+                                    sample_x,
+                                    sample_y,
+                                    border_cache.insets(),
+                                );
+                                [r, g, b]
+                            },
+                        ));
                         if scene_enabled {
                             scene.process(
                                 &mut hue_scene_scratch,
-                                &hue_topology,
-                                &hue_affinity,
+                                &hue_table.topology,
+                                &hue_table.affinity,
                                 &mut hue_scene_state,
                             );
                         }
@@ -2072,6 +2134,8 @@ fn apply_mode_change_inner(
     // without stopping the worker or recreating SCStream.
     // NOTE: led_calibration, color_correction, firmware_profile and chip_type all force a worker
     // restart — each is read only when the encoder is built, so retuning atomics ignores them.
+    // room_geometry deliberately does NOT: the worker re-reads it from `room_geometry_live`, so
+    // it is written into that cell below instead — adding it here would restart per drag commit.
     if normalized_next.kind == LightingModeKind::Ambilight
         && owner.active_mode.kind == LightingModeKind::Ambilight
         && owner.worker.is_some()
@@ -2113,6 +2177,19 @@ fn apply_mode_change_inner(
                 next_saturation,
                 cfg.lighting_smoothing_preset.or(cfg.hue_intensity_preset),
             );
+            if normalized_next.room_geometry != owner.active_mode.room_geometry {
+                if let Some(cell) = &owner.room_geometry_live {
+                    log::info!(
+                        "[ambilight-live-update] room geometry {}",
+                        if normalized_next.room_geometry.is_some() {
+                            "updated"
+                        } else {
+                            "cleared"
+                        }
+                    );
+                    cell.publish(normalized_next.room_geometry.clone());
+                }
+            }
             owner.active_mode = normalized_next;
             if let Some(next) = owner.preview.pending_test_pattern.take() {
                 if let Some(slot) = owner.preview.pattern_live.as_ref() {
@@ -2405,6 +2482,7 @@ fn apply_mode_change_inner(
                 owner.preview.preview_gate.clone(),
                 normalized_next.display_id.clone(),
             );
+            let room_geometry_live = RoomGeometryLive::new(normalized_next.room_geometry.clone());
 
             match start_ambilight_worker(
                 owner.output_bridge.clone(),
@@ -2420,10 +2498,12 @@ fn apply_mode_change_inner(
                 profile,
                 chip,
                 preview_ctx,
+                Arc::clone(&room_geometry_live),
             ) {
                 Ok(worker) => {
                     owner.worker = Some(worker);
                     owner.ambilight_live = Some(live_settings);
+                    owner.room_geometry_live = Some(room_geometry_live);
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
@@ -2926,6 +3006,7 @@ pub fn start_led_test_pattern<R: Runtime>(
         color_correction: None,
         firmware_profile: None,
         chip_type: None,
+        room_geometry: None,
     };
 
     // A synthetic test needs a real strip layout to size its frame. Resolve
@@ -3091,8 +3172,71 @@ pub fn get_led_preview_status(
     Ok(build_preview_status(snapshot, led_twin_state.inner()))
 }
 
-/// Scene-stage inputs for the Hue set. Reads `x`/`y` only: a channel's height
-/// is carried end to end but deliberately does not yet change what it samples.
+/// Per-channel Hue inputs the worker holds between frames: where each channel
+/// samples the screen, and what the scene stage relates it by. Rebuilt only when
+/// the room geometry generation moves, never per frame.
+struct HueSampleTable {
+    topology: LightTopology,
+    affinity: Vec<f32>,
+    sample_points: Vec<(f32, f32)>,
+}
+
+impl HueSampleTable {
+    fn empty() -> Self {
+        Self {
+            topology: LightTopology::Points(Vec::new()),
+            affinity: Vec::new(),
+            sample_points: Vec::new(),
+        }
+    }
+}
+
+/// `None` geometry, or geometry that fails validation, is exactly the legacy
+/// table. With geometry, the room map's placements are overlaid onto the
+/// stream's channels by `channel_id` first, because the stream's copy is fixed
+/// at stream start and the room map's is the one a drag moves.
+fn hue_sample_table(
+    channels: &[crate::commands::hue::frame::HueAreaChannel],
+    geometry: Option<&RoomGeometry>,
+) -> HueSampleTable {
+    if let Some(geometry) = geometry {
+        let mut placed = channels.to_vec();
+        crate::commands::hue::sender::apply_channel_placements(
+            &mut placed,
+            &geometry.hue_placements,
+        );
+        if let Some(samples) = room_aware_hue_samples(geometry, &placed) {
+            info!(
+                "[room-geometry] applied — channels={} placements={}",
+                placed.len(),
+                geometry.hue_placements.len()
+            );
+            let (topology, _) = hue_topology_and_affinity(&placed);
+            return HueSampleTable {
+                topology,
+                affinity: samples.iter().map(|s| s.affinity).collect(),
+                sample_points: samples.iter().map(|s| (s.sample_x, s.sample_y)).collect(),
+            };
+        }
+        warn!(
+            "[room-geometry] rejected — {}; sampling by the bridge positions instead",
+            room_geometry_rejection(geometry).unwrap_or("invalid geometry")
+        );
+    }
+    let (topology, affinity) = hue_topology_and_affinity(channels);
+    HueSampleTable {
+        topology,
+        affinity,
+        sample_points: channels
+            .iter()
+            .map(|ch| (ch.position_x, ch.position_y))
+            .collect(),
+    }
+}
+
+/// Legacy scene-stage inputs for the Hue set, from `x`/`y` alone: depth stands
+/// in for screen vertical and a channel's height is not read. The room-aware
+/// path (`hue_sample_table` with geometry) is the only reader of height.
 fn hue_topology_and_affinity(
     channels: &[crate::commands::hue::frame::HueAreaChannel],
 ) -> (LightTopology, Vec<f32>) {
@@ -3283,6 +3427,7 @@ mod tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -3304,6 +3449,7 @@ mod tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -3333,6 +3479,7 @@ mod tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -3352,6 +3499,7 @@ mod tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -3388,6 +3536,7 @@ mod tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -3651,10 +3800,12 @@ mod tests {
                     super::FirmwareProfile::default(),
                     super::LedChipType::default(),
                     None,
+                    super::RoomGeometryLive::new(None),
                 )
                 .expect("worker start should succeed"),
             ),
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: owner.output_bridge,
             frame_source_factory: owner.frame_source_factory,
             preview: Default::default(),
@@ -4074,6 +4225,7 @@ mod tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -4087,6 +4239,7 @@ mod tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -4193,6 +4346,7 @@ mod lighting_mode_tests {
     };
     use crate::commands::hue::state_store::HueActiveOutputContext;
     use crate::commands::led_output::{ColorCorrectionConfig, FirmwareProfile};
+    use crate::models::room_map::{RoomDimensions, RoomGeometry, TvAnchorPlacement};
 
     #[derive(Default)]
     struct FakeLedSender {
@@ -4227,6 +4381,7 @@ mod lighting_mode_tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -4270,6 +4425,7 @@ mod lighting_mode_tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(Arc::new(FakeLedSender::default())),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -4321,6 +4477,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -4340,6 +4497,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -4448,6 +4606,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -4506,8 +4665,345 @@ mod lighting_mode_tests {
             let (topology, affinity) = super::hue_topology_and_affinity(&at_height(z));
             assert_eq!(points(topology), points(flat_topology.clone()));
             assert_eq!(affinity, flat_affinity);
+            // What the worker actually calls: without geometry it is the legacy
+            // table, sampling at the bridge's (x, y) whatever the height.
+            let table = super::hue_sample_table(&at_height(z), None);
+            assert_eq!(points(table.topology), points(flat_topology.clone()));
+            assert_eq!(table.affinity, flat_affinity);
+            assert_eq!(table.sample_points, vec![(-0.7, 0.4), (0.1, -0.9)]);
         }
         assert_eq!(points(flat_topology), vec![(-0.7, 0.4), (0.1, -0.9)]);
+    }
+
+    /// 4 × 5 × 2.5 m room, 1.2 m TV centred on the TV wall, default mount (1.0 m).
+    fn room_geometry(
+        placements: Vec<crate::commands::hue::state_store::HueChannelPlacementOverride>,
+    ) -> RoomGeometry {
+        RoomGeometry {
+            dimensions: RoomDimensions {
+                width_meters: 4.0,
+                depth_meters: 5.0,
+                height_meters: 2.5,
+            },
+            tv: TvAnchorPlacement {
+                x: 1.4,
+                y: 0.0,
+                width: 1.2,
+                height: 0.1,
+                locked: None,
+                mount_height_meters: None,
+            },
+            hue_placements: placements,
+        }
+    }
+
+    fn placement(
+        channel_id: u8,
+        x: f32,
+        y: f32,
+        z: Option<f32>,
+    ) -> crate::commands::hue::state_store::HueChannelPlacementOverride {
+        crate::commands::hue::state_store::HueChannelPlacementOverride {
+            channel_id,
+            position_x: x,
+            position_y: y,
+            position_z: z,
+        }
+    }
+
+    fn channel(channel_id: u8, x: f32, y: f32, z: Option<f32>) -> HueAreaChannel {
+        HueAreaChannel {
+            channel_id,
+            light_ids: vec![format!("light-{channel_id}")],
+            screen_region: HueScreenRegion::Center,
+            position_x: x,
+            position_y: y,
+            position_z: z,
+        }
+    }
+
+    #[test]
+    fn a_channel_height_reaches_the_scene_stage_with_room_geometry() {
+        let geometry = room_geometry(Vec::new());
+        let at_height =
+            |z: Option<f32>| super::hue_sample_table(&[channel(0, 0.0, 1.0, z)], Some(&geometry));
+        let floor = at_height(Some(-1.0));
+        let ceiling = at_height(Some(1.0));
+        let unknown = at_height(None);
+        assert!((floor.sample_points[0].1 + 1.0).abs() < 1e-5);
+        assert!((ceiling.sample_points[0].1 - 1.0).abs() < 1e-5);
+        assert_eq!(
+            unknown.sample_points[0].1, 0.0,
+            "unknown height samples at mount"
+        );
+        assert_ne!(floor.affinity, ceiling.affinity);
+        assert!(
+            (unknown.affinity[0] - 1.0).abs() < 1e-5,
+            "at the screen centre"
+        );
+
+        // Depth no longer drives vertical: the legacy table put a TV-wall light
+        // at the top row whatever its height.
+        let legacy = super::hue_sample_table(&[channel(0, 0.0, 1.0, Some(-1.0))], None);
+        assert_eq!(legacy.sample_points[0], (0.0, 1.0));
+    }
+
+    #[test]
+    fn room_geometry_placements_overlay_the_stream_channels_by_channel_id() {
+        // Ordinal 1 is channel 3: matching by position in the list would move
+        // the wrong light.
+        let channels = [channel(0, -0.5, 1.0, None), channel(3, 0.0, 1.0, None)];
+        let unmoved = super::hue_sample_table(&channels, Some(&room_geometry(Vec::new())));
+        let moved = super::hue_sample_table(
+            &channels,
+            Some(&room_geometry(vec![
+                placement(3, 0.3, 1.0, Some(1.0)),
+                placement(9, 0.9, 0.0, None),
+            ])),
+        );
+        assert_eq!(moved.sample_points[0], unmoved.sample_points[0]);
+        assert!((moved.sample_points[1].0 - 1.0).abs() < 1e-5);
+        assert!((moved.sample_points[1].1 - 1.0).abs() < 1e-5);
+        assert_eq!(
+            moved.sample_points.len(),
+            2,
+            "an unknown channel_id is skipped"
+        );
+    }
+
+    #[test]
+    fn invalid_room_geometry_falls_back_to_the_legacy_table() {
+        let channels = [channel(0, -0.7, 0.4, Some(1.0))];
+        let mut broken = room_geometry(vec![placement(0, 0.5, 0.5, None)]);
+        broken.dimensions.width_meters = 0.0;
+        let table = super::hue_sample_table(&channels, Some(&broken));
+        let legacy = super::hue_sample_table(&channels, None);
+        assert_eq!(table.sample_points, legacy.sample_points);
+        assert_eq!(table.affinity, legacy.affinity);
+    }
+
+    #[test]
+    fn normalize_mode_config_carries_room_geometry_only_for_ambilight() {
+        let geometry = room_geometry(vec![placement(0, 0.1, 0.2, Some(0.3))]);
+        let with_geometry = |kind: LightingModeKind| LightingModeConfig {
+            kind,
+            room_geometry: Some(geometry.clone()),
+            ..LightingModeConfig::default()
+        };
+        assert_eq!(
+            normalize_mode_config(with_geometry(LightingModeKind::Ambilight)).room_geometry,
+            Some(geometry.clone())
+        );
+        assert_eq!(
+            normalize_mode_config(with_geometry(LightingModeKind::Solid)).room_geometry,
+            None
+        );
+        assert_eq!(
+            normalize_mode_config(with_geometry(LightingModeKind::Off)).room_geometry,
+            None
+        );
+    }
+
+    #[test]
+    fn absent_room_geometry_serializes_without_the_key() {
+        let without = serde_json::to_value(ambilight_with_payload(AmbilightPayload {
+            brightness: 1.0,
+            ..Default::default()
+        }))
+        .expect("serialize");
+        assert!(without.get("roomGeometry").is_none(), "{without}");
+
+        let wire = serde_json::json!({
+            "kind": "ambilight",
+            "ambilight": { "brightness": 1.0 },
+            "roomGeometry": {
+                "dimensions": { "widthMeters": 4.0, "depthMeters": 5.0, "heightMeters": 2.5 },
+                "tv": { "x": 1.4, "y": 0.0, "width": 1.2, "height": 0.1 },
+                "huePlacements": [{ "channelId": 3, "positionX": 0.25, "positionY": 1.0 }]
+            }
+        });
+        let parsed: LightingModeConfig = serde_json::from_value(wire.clone()).expect("parse");
+        assert_eq!(
+            parsed.room_geometry,
+            Some(room_geometry(vec![placement(3, 0.25, 1.0, None)]))
+        );
+        let echoed = serde_json::to_value(&parsed).expect("serialize");
+        assert_eq!(
+            echoed["roomGeometry"], wire["roomGeometry"],
+            "echo is byte-identical"
+        );
+    }
+
+    #[test]
+    fn a_room_geometry_change_retunes_the_running_worker_in_place() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = owner_with_fake_sender();
+        let base = ambilight_with_payload(AmbilightPayload {
+            brightness: 0.8,
+            ..Default::default()
+        });
+        let apply = |owner: &mut LightingRuntimeOwner, mode: LightingModeConfig| {
+            apply_mode_change(
+                owner,
+                mode,
+                true,
+                Some("COM-RG"),
+                None,
+                None,
+                Some(shared_telemetry()),
+                None,
+                None,
+            )
+        };
+
+        assert_eq!(
+            apply(&mut owner, base.clone()).status.code,
+            "AMBILIGHT_MODE_STARTED"
+        );
+        let cell = Arc::clone(owner.room_geometry_live.as_ref().expect("cell after start"));
+        let live = Arc::clone(owner.ambilight_live.as_ref().expect("live after start"));
+        assert_eq!(cell.generation(), 0);
+
+        let geometry = room_geometry(vec![placement(0, 0.2, 0.9, Some(0.5))]);
+        let placed = LightingModeConfig {
+            room_geometry: Some(geometry.clone()),
+            ..base.clone()
+        };
+        let result = apply(&mut owner, placed.clone());
+        assert_eq!(
+            result.status.code, "AMBILIGHT_MODE_UPDATED",
+            "a room-map drag must not restart the worker"
+        );
+        assert!(Arc::ptr_eq(
+            &cell,
+            owner.room_geometry_live.as_ref().unwrap()
+        ));
+        assert!(Arc::ptr_eq(&live, owner.ambilight_live.as_ref().unwrap()));
+        assert_eq!(cell.generation(), 1);
+        assert_eq!(cell.snapshot(), (1, Some(geometry.clone())));
+        assert_eq!(result.mode.room_geometry, Some(geometry));
+
+        assert_eq!(
+            apply(&mut owner, placed).status.code,
+            "AMBILIGHT_MODE_UPDATED"
+        );
+        assert_eq!(cell.generation(), 1, "an unchanged geometry does not bump");
+
+        assert_eq!(
+            apply(&mut owner, base).status.code,
+            "AMBILIGHT_MODE_UPDATED"
+        );
+        assert_eq!(
+            cell.snapshot(),
+            (2, None),
+            "removing the TV anchor clears the cell"
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        assert!(owner.room_geometry_live.is_none());
+        wait_for_workers_drained();
+    }
+
+    /// Top half red, bottom half blue — which half a Hue channel samples is
+    /// visible in the colour it sends.
+    fn split_frame_owner() -> LightingRuntimeOwner {
+        let mut owner = owner_with_fake_sender();
+        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
+            let (w, h) = (64u32, 64u32);
+            let pixels_rgb = (0..h)
+                .flat_map(|row| {
+                    let px = if row < h / 2 {
+                        [220, 0, 0]
+                    } else {
+                        [0, 0, 220]
+                    };
+                    std::iter::repeat_n(px, w as usize)
+                })
+                .collect();
+            Ok(Box::new(FakeFrameSource {
+                frame: CapturedFrame {
+                    width: w,
+                    height: h,
+                    pixels_rgb,
+                },
+            }))
+        });
+        owner
+    }
+
+    #[test]
+    fn a_live_room_geometry_update_reaches_hue_sampling() {
+        let _guard = acquire_worker_test_guard();
+        let mut owner = split_frame_owner();
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(64);
+        let context = HueActiveOutputContext {
+            channels: vec![channel(0, 0.0, 1.0, None)],
+            color_sender: HueColorSender {
+                tx: Arc::new(tx),
+                channel_count: 1,
+            },
+        };
+        let mode_at = |z: f32| LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            ambilight: Some(AmbilightPayload {
+                brightness: 1.0,
+                smoothing_alpha: Some(1.0),
+                ..Default::default()
+            }),
+            targets: Some(vec!["hue".to_string()]),
+            room_geometry: Some(room_geometry(vec![placement(0, 0.0, 1.0, Some(z))])),
+            ..LightingModeConfig::default()
+        };
+        let apply = |owner: &mut LightingRuntimeOwner, mode: LightingModeConfig| {
+            apply_mode_change(
+                owner,
+                mode,
+                false,
+                None,
+                None,
+                Some(context.clone()),
+                Some(shared_telemetry()),
+                None,
+                None,
+            )
+        };
+        // Blue-dominant vs red-dominant: the scene stage mixes in some ambience,
+        // so the test asserts which half wins, not an exact colour.
+        let wait_for = |want_red: bool| {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+            while std::time::Instant::now() < deadline {
+                if let Ok(update) = rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                    let (r, _, b) = update.channel_colors[0];
+                    if (r > b) == want_red && r != b {
+                        return true;
+                    }
+                }
+            }
+            false
+        };
+
+        assert_eq!(
+            apply(&mut owner, mode_at(-1.0)).status.code,
+            "AMBILIGHT_MODE_STARTED"
+        );
+        assert!(
+            wait_for(false),
+            "a floor-level light must sample the bottom (blue) half"
+        );
+
+        assert_eq!(
+            apply(&mut owner, mode_at(1.0)).status.code,
+            "AMBILIGHT_MODE_UPDATED"
+        );
+        assert!(
+            wait_for(true),
+            "the live update must move it to the top (red) half"
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 
     #[test]
@@ -4582,6 +5078,7 @@ mod lighting_mode_tests {
             color_correction: Some(corrections.clone()),
             firmware_profile: Some(profile),
             chip_type: None,
+            room_geometry: None,
         };
 
         let normalized = normalize_mode_config(input);
@@ -4613,6 +5110,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         };
 
         let normalized = normalize_mode_config(input);
@@ -4644,6 +5142,7 @@ mod lighting_mode_tests {
             color_correction: Some(ColorCorrectionConfig::default()),
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         };
 
         let changed = LightingModeConfig {
@@ -4765,6 +5264,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 
@@ -5280,6 +5780,7 @@ mod lighting_mode_tests {
             active_port: None,
             worker: None,
             ambilight_live: None,
+            room_geometry_live: None,
             output_bridge: LedOutputBridge::from_sender(recorder.clone()),
             preview: Default::default(),
             frame_source_factory: Arc::new(|_req: super::AmbilightCaptureRequest| {
@@ -5338,6 +5839,7 @@ mod lighting_mode_tests {
             color_correction: None,
             firmware_profile: None,
             chip_type: None,
+            room_geometry: None,
         }
     }
 

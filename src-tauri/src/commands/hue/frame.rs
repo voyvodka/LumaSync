@@ -71,7 +71,8 @@ pub struct HueAreaChannel {
     pub position_y: f32,
     /// Height (-1 floor ... +1 ceiling). `None` when the bridge sent no `z` —
     /// never defaulted to 0, which would read as a real height of mid-room.
-    /// Carried only: no region, topology or affinity reads it yet.
+    /// Read only by room-aware sampling (`commands::room_affinity`), which runs
+    /// while a TV anchor exists; region, topology and the legacy path ignore it.
     pub position_z: Option<f32>,
 }
 

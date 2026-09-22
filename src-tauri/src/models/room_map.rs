@@ -1,6 +1,7 @@
 //! Room-map shapes that actually cross the IPC boundary: Hue channel
-//! placements and the zones they belong to. Rust mirror of the matching
-//! half of `src/shared/contracts/roomMap.ts`; the two must move together.
+//! placements, the zones they belong to, and the `RoomGeometry` projection the
+//! ambilight worker samples by. Rust mirror of the matching half of
+//! `src/shared/contracts/roomMap.ts`; the two must move together.
 //!
 //! The room-map *document* is not mirrored here. It is persisted frontend-side
 //! through the shellStore and no Rust command receives it, so a `RoomMapConfig`
@@ -8,6 +9,50 @@
 //! happened to the one that shipped with the `save_room_map` stub.
 
 use serde::{Deserialize, Serialize};
+
+use crate::commands::hue::state_store::HueChannelPlacementOverride;
+
+/// Physical room size in metres.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomDimensions {
+    pub width_meters: f64,
+    pub depth_meters: f64,
+    pub height_meters: f64,
+}
+
+/// The TV footprint in the room-metre frame: origin where the TV wall meets the
+/// left wall, +x right, +y away from the TV wall, +z up. `x`/`y` are the
+/// footprint's top-left corner, and `height` is its depth along y — not the
+/// screen's height.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TvAnchorPlacement {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked: Option<bool>,
+    /// Absent ⇒ `DEFAULT_TV_MOUNT_HEIGHT_FRACTION` of the room height, resolved
+    /// at runtime so it follows a room-height edit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mount_height_meters: Option<f64>,
+}
+
+/// What the ambilight worker samples Hue channels by. A wire projection of the
+/// room map, present only while a TV anchor exists — that presence is the
+/// room-aware gate. `hue_placements` repeats the stream-start projection
+/// because the stream's copy is fixed at start and a drag must reach the
+/// running worker without restarting the stream.
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomGeometry {
+    pub dimensions: RoomDimensions,
+    pub tv: TvAnchorPlacement,
+    #[serde(default)]
+    pub hue_placements: Vec<HueChannelPlacementOverride>,
+}
 
 /// Zone-relative position used by `HueChannelPlacement.zone_relative_position`.
 /// Same `[-1, 1]` coordinate space as Hue native, but scoped to the parent
