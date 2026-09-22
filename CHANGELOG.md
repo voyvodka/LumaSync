@@ -17,6 +17,12 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Turning Hue on while a mode was already running on USB showed Hue as on even when the bridge
+  could not take the stream, so nothing was driving the lights. Hue now shows as on only once the
+  app is actually sending to it. Otherwise USB keeps running, the Hue toggle goes back off, a
+  notice says why (bridge unreachable, re-pair needed, or not set up), and any Hue reconnect the
+  attempt left running is stopped. Your choice to use Hue is still saved, so the next launch
+  tries it again.
 - SK6812 RGBW strips: picking Ambilight from the LED test popup restarted a running strip in the
   WS2812B format, and Solid colour was always sent that way from any window. Both now use the
   four-byte RGBW format. The popup also stopped sending colour correction, firmware profile and
