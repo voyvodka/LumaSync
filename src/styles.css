@@ -3460,6 +3460,11 @@
   box-shadow: 0 0 8px #4ade80;
   flex-shrink: 0;
 }
+/* Amber while retrying; the green default would read as a live stream. */
+.lm-out-row.is-reconnecting .st {
+  background: var(--lm-amber);
+  box-shadow: 0 0 8px var(--lm-amber);
+}
 .lm-out-row.is-off .st {
   background: #4d5564;
   box-shadow: none;

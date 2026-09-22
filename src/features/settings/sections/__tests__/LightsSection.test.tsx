@@ -136,7 +136,8 @@ describe("LightsSection", () => {
       />,
     );
 
-    expect(screen.getByText("lights:dock.rows.hueSubReconnecting")).toBeInTheDocument();
+    const retrying = screen.getByText("lights:dock.rows.hueSubReconnecting");
+    expect(retrying.closest("button")).toHaveClass("is-reconnecting");
     expect(screen.queryByText("lights:dock.rows.hueSubStreaming")).not.toBeInTheDocument();
   });
 

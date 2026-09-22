@@ -813,21 +813,19 @@ export function LightsSection({
             <button
               type="button"
               className={`lm-out-row ${
-                !hueAvailable ? "is-unavailable" : hueSelected ? "" : "is-off"
+                !hueAvailable
+                  ? "is-unavailable"
+                  : !hueSelected
+                    ? "is-off"
+                    : hueReconnecting
+                      ? "is-reconnecting"
+                      : ""
               }`}
               disabled={modeSelectorDisabled || !hueAvailable || (hueSelected && outputTargets.length === 1)}
               onClick={() => toggleTarget("hue", hueSelected)}
               aria-pressed={hueSelected}
             >
-              <span
-                className="st"
-                // Amber while retrying; the green default would read as a live stream.
-                style={
-                  hueAvailable && hueSelected && hueReconnecting
-                    ? { background: "var(--lm-amber)", boxShadow: "0 0 8px var(--lm-amber)" }
-                    : undefined
-                }
-              />
+              <span className="st" />
               <div className="tx">
                 <div className="n">
                   {t("lights:dock.rows.hueName")}{" "}
