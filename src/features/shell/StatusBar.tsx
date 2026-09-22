@@ -34,7 +34,6 @@ import { useTranslation } from "react-i18next";
 import { APP_VERSION } from "@/shared/constants/app";
 import {
   KEYBIND_ACTIONS,
-  type KeybindAction,
   getKeybindDefinition,
   resolveKeybindPlatform,
 } from "@/shared/contracts/shell";
@@ -303,12 +302,4 @@ function KbdHint({ keys, label, ariaLabel }: KbdHintProps) {
       <span aria-hidden>{label}</span>
     </div>
   );
-}
-
-/**
- * Platform-aware helper for consumers (LightsSection mode strip, compact
- * mode strip) that render a single keybind badge next to a mode button.
- */
-export function getKeybindBadgeForAction(action: KeybindAction): string[] {
-  return getKeybindDefinition(action).badge;
 }

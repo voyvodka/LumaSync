@@ -140,7 +140,7 @@ export interface LightingModeConfig {
    * (Solid + Ambilight encoders both consume it). Absent ⇒ backend
    * falls back to a single-zone 1-LED frame so legacy / pre-calibration
    * setups keep emitting *something* on the strip. Stamped onto outgoing
-   * payloads in `App.tsx::withLedCalibration` from the persisted shell
+   * payloads by `withLedCalibration` (modePayloadHydration.ts) from the persisted shell
    * `ledCalibration` key — never persisted *inside* `LightingModeConfig`
    * itself, which is why `normalizeLightingModeConfig` deliberately does
    * not round-trip this field.

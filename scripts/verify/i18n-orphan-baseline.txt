@@ -188,8 +188,6 @@ hue:runtime.faults.HUE-STR-03.description
 hue:runtime.faults.HUE-STR-03.hint
 hue:runtime.faults.HUE-STR-04.description
 hue:runtime.faults.HUE-STR-04.hint
-hue:runtime.partialStop.body
-hue:runtime.partialStop.title
 hue:runtime.reconnectingBody
 hue:runtime.retryStatus
 hue:runtime.retryStreamAction
@@ -199,8 +197,6 @@ hue:runtime.targets.hue.title
 hue:runtime.targets.usb.retry
 hue:runtime.targets.usb.title
 hue:runtime.timeout.body
-hue:runtime.writeback.codes.CHAN_WB_NETWORK_ERROR
-hue:runtime.writeback.codes.CHAN_WB_SCHEMA_REJECTED
 hue:successSummary
 hue:summary.error
 hue:summary.idle
@@ -254,9 +250,4 @@ settings:startupTray.title
 settings:startupTray.trayInfo
 shell:fpsHud.latencyUnit
 shell:statusBar.reconnect.tooltip
-telemetry:hue.errorAgo
-telemetry:hue.noError
-telemetry:hue.packetRateFormat
-telemetry:hue.reconnectsFormat
-telemetry:hue.uptimeFormat
 updater:actions.showLogs

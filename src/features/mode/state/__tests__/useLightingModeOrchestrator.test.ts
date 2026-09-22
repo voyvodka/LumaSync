@@ -497,4 +497,35 @@ describe("useLightingModeOrchestrator", () => {
     // The lock must be released, or every later toggle is dead.
     expect(result.current.isModeTransitioning).toBe(false);
   });
+
+  // The merge a partial mode change goes through. A retired helper that did the
+  // same merge for persistence dropped `targets`; this is the one that ships.
+  it("fills omitted payloads from the current mode and carries the selected targets", async () => {
+    const solid = { r: 10, g: 20, b: 30, brightness: 0.5 };
+    const ambilight = { brightness: 0.7 };
+    setHueSolidColorMock.mockResolvedValue({
+      status: { code: "HUE_SOLID_COLOR_APPLIED", message: "", details: null },
+    });
+    const { result } = harness();
+    act(() => {
+      result.current.setLightingMode({ kind: LIGHTING_MODE_KIND.SOLID, solid, ambilight });
+      result.current.setSelectedOutputTargets(["usb", "hue"]);
+      result.current.setActiveOutputTargets(["usb"]);
+    });
+
+    await act(async () => {
+      await result.current.handleLightingModeChange({ kind: LIGHTING_MODE_KIND.SOLID });
+    });
+
+    const dispatched = setLightingModeMock.mock.lastCall?.[0] as LightingModeConfig;
+    expect(dispatched.solid).toEqual(solid);
+    expect(dispatched.ambilight?.brightness).toBe(0.7);
+    expect(dispatched.targets).toEqual(["usb", "hue"]);
+
+    await waitFor(() =>
+      expect(saveShellStateMock).toHaveBeenCalledWith({
+        lightingMode: expect.objectContaining({ solid, targets: ["usb", "hue"] }),
+      }),
+    );
+  });
 });

@@ -57,6 +57,15 @@ describe("scenarios put the app in the state they claim", () => {
     }
   });
 
+  // `capture-denied` inherited a live stream from `furnished` while its mode
+  // was off, so the status bar said STREAMING over a stopped app.
+  it.each(SCENARIO_IDS)("%s reports no Hue stream while lighting is off", (id) => {
+    const world = SCENARIOS[id].build();
+    if (world.lighting.mode.kind !== "off") return;
+    expect(world.hue.streaming, `${id} is off but streams to Hue`).toBe(false);
+    expect(world.hue.everActive, `${id} is off but claims a stream ran`).toBe(false);
+  });
+
   it("the furnished calibration agrees with its own edge counts", () => {
     // `totalLeds` is what the frame generator and the dock both read; an edge
     // sum that disagrees with it is the kind of fixture that sends someone

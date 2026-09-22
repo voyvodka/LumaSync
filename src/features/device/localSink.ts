@@ -12,7 +12,13 @@
  */
 
 export type LocalSink =
-  | { transport: "serial"; /** OS port name, e.g. `/dev/cu.usbserial-1420`. */ id: string }
+  | {
+      transport: "serial";
+      /** OS port name, e.g. `/dev/cu.usbserial-1420`. */
+      id: string;
+      /** USB product string the OS reported for the port, when it reported one. */
+      product?: string;
+    }
   | { transport: "wled"; /** LAN address — the only identity the persisted sink config keeps. */ id: string };
 
 /**
@@ -29,9 +35,12 @@ export function deriveLocalSink(
   /** Port name, used only to identify the strip; absent is not "disconnected". */
   serialPort: string | null,
   activeWledIp: string | null,
+  serialProduct?: string | null,
 ): LocalSink | null {
   if (serialConnected) {
-    return { transport: "serial", id: serialPort ?? "" };
+    return serialProduct
+      ? { transport: "serial", id: serialPort ?? "", product: serialProduct }
+      : { transport: "serial", id: serialPort ?? "" };
   }
   if (activeWledIp !== null && activeWledIp.length > 0) {
     return { transport: "wled", id: activeWledIp };

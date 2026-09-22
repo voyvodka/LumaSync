@@ -3,6 +3,7 @@ import type enRoomMap from "@/locales/en/roomMap";
 
 const roomMap: Catalogue<typeof enRoomMap> = {
   comingSoon: "Oda haritası editörü ilerleyen bir güncellemede gelecek.",
+  loading: "Oda haritası yükleniyor…",
   toolbar: {
     addTv: "TV Ekle",
     addFurniture: "Mobilya Ekle",
@@ -50,7 +51,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   usbStrip: {
     ledCount: "LED sayısı",
     online: "BAĞLI",
-    offline: "OFFLINE",
+    offline: "ÇEVRİMDIŞI",
   },
   hueChannel: {
     defaultLabel: "Kanal {{id}}",
@@ -199,6 +200,16 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     aspectLocked: "En boy oranı kilitli",
     aspectUnlocked: "En boy oranı serbest",
     resetScale: "En boy oranını sıfırla",
+    fields: {
+      x: "X konumu",
+      y: "Y konumu",
+      width: "Genişlik",
+      height: "Yükseklik",
+      rotation: "Dönüş (derece)",
+      scale: "Ölçek",
+      scaleX: "Yatay ölçek",
+      scaleY: "Dikey ölçek",
+    },
   },
   edges: {
     top: "Üst",

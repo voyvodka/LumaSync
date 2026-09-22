@@ -1,15 +1,8 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react";
 
-type SectionLabelTone = "heading" | "muted" | "dim";
+type SectionLabelTone = "dim";
 
-/**
- * Exact legacy classNames from each call site, kept verbatim per tone so
- * centralizing the markup does not change any rendered output.
- */
 const TONE_CLASSNAME: Record<SectionLabelTone, string> = {
-  heading:
-    "flex items-center gap-1.5 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--lm-ink-faint)]",
-  muted: "text-[10px] font-semibold uppercase tracking-wide text-zinc-500",
   dim: "text-[10px] uppercase tracking-wide text-[color:var(--lm-ink-dim)]",
 };
 

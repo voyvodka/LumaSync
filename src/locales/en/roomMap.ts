@@ -1,5 +1,6 @@
 export default {
   comingSoon: "Room map editor is coming in a future update.",
+  loading: "Loading room map…",
   toolbar: {
     addTv: "Add TV",
     addFurniture: "Add Furniture",
@@ -196,6 +197,16 @@ export default {
     aspectLocked: "Aspect ratio locked",
     aspectUnlocked: "Aspect ratio unlocked",
     resetScale: "Reset aspect ratio",
+    fields: {
+      x: "X position",
+      y: "Y position",
+      width: "Width",
+      height: "Height",
+      rotation: "Rotation (degrees)",
+      scale: "Scale",
+      scaleX: "Horizontal scale",
+      scaleY: "Vertical scale",
+    },
   },
   edges: {
     top: "Top",

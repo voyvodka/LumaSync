@@ -40,17 +40,6 @@ export function resolveInitialSelection(
   return null;
 }
 
-export function shouldPersistLastSuccessfulPort(
-  selectedPort: string | null,
-  connectionSucceeded: boolean,
-): boolean {
-  return Boolean(selectedPort) && connectionSucceeded;
-}
-
-export function shouldTriggerConnectOnSelectionChange(): false {
-  return false;
-}
-
 export function canConnectSelectedPort(
   selectedPort: string | null,
   isScanning: boolean,

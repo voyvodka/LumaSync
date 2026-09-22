@@ -149,9 +149,10 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         try {
           const connectionStatus = await getSerialConnectionStatus();
           bootstrapUsbAvailable = connectionStatus.connected;
-        } catch {
+        } catch (err) {
           // Status check failed — leave bootstrapUsbAvailable=false; we
           // still keep restoredTargets as-is below.
+          console.error("[LumaSync] bootstrap serial status check failed:", err);
         }
         sink.setSelectedOutputTargets(restoredTargets);
 

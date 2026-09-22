@@ -28,6 +28,9 @@ export default {
     titleHue: "Capture → Hue",
     delta: "Δ",
     fps: "Σ",
+    latencyFormat: "{{ms}}ms",
+    fpsFormat: "{{fps}} fps",
+    packetRateFormat: "{{rate}} pkt/s",
     edgesAria: "Live edge preview",
     linkBudget: {
       constrained: "USB link limit — at 115,200 baud this strip carries about {{fps}} fps.",
@@ -73,7 +76,7 @@ export default {
       wledSub: "{{count}} LEDs · <b>UDP</b>",
       hueName: "HUE",
       hueType: "ENTERTAINMENT",
-      hueSubStreaming: "Bridge · <b>DTLS 50hz</b>",
+      hueSubStreaming: "Bridge · <b>DTLS {{hz}} Hz</b>",
       hueSubIdle: "Bridge · <b>standby</b>",
       hueSubUnavailable: "Not configured",
     },

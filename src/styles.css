@@ -2600,28 +2600,6 @@
 }
 .lm-hue-stale-act:hover { background: rgba(255, 176, 32, 0.12); }
 
-/* ── Fault chip (States P, Q) ───────────────────────────────────────── */
-.lm-hue-fault {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--lm-mono);
-  font-size: 9px;
-  padding: 3px 7px;
-  border-radius: 4px;
-  border: 1px solid rgba(239, 91, 91, 0.25);
-  background: rgba(239, 91, 91, 0.07);
-  color: var(--lm-red, #ef5b5b);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-.lm-hue-fault.is-warn {
-  border-color: rgba(255, 176, 32, 0.25);
-  background: rgba(255, 176, 32, 0.07);
-  color: var(--lm-amber, #ffb020);
-}
-
 /* ── Config checklist (State P) ─────────────────────────────────────── */
 .lm-hue-checklist {
   display: flex;
@@ -3927,38 +3905,6 @@ body {
   min-width: 0;
 }
 
-/* Position canvas — primary spatial control */
-.lm-chmap-canvas {
-  position: relative;
-  width: 100%;
-  height: 152px;
-  border: 1px solid var(--lm-line-2, #252b34);
-  border-radius: 8px;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(255, 176, 32, 0.04), transparent 60%),
-    var(--lm-panel-2, #14171d);
-  overflow: hidden;
-  touch-action: none;
-}
-.lm-chmap-canvas-axis {
-  position: absolute;
-  background: var(--lm-line, #1a1e25);
-  pointer-events: none;
-}
-.lm-chmap-canvas-axis.is-v {
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  transform: translateX(-50%);
-}
-.lm-chmap-canvas-axis.is-h {
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 1px;
-  transform: translateY(-50%);
-}
 /* Row state — three different facts arrive as an empty list, so they get
    three different messages. Dimmed via ink tokens, never opacity. */
 .lm-chmap-state {
@@ -4264,13 +4210,6 @@ body {
    colors so users on Windows high-contrast skins still get an
    unambiguous selection signal. */
 @media (forced-colors: active) {
-  .lm-chmap-canvas {
-    border-color: CanvasText;
-    background: Canvas;
-  }
-  .lm-chmap-canvas-axis {
-    background: CanvasText;
-  }
   .lm-chmap-row-dot {
     background: CanvasText;
     forced-color-adjust: none;

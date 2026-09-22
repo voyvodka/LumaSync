@@ -4,6 +4,7 @@ import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { deriveHueBridgeCardState } from "@/features/hue/model/hueBridgeCardState";
+import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
 import type { UseHueOnboardingResult } from "@/features/hue/useHueOnboarding";
 import { stopHue } from "@/features/mode/modeApi";
@@ -248,8 +249,8 @@ export function HueBridgesCategory({
             <div className={`lm-dcard${
               hueBridgeState === "streaming" ? " is-on" :
               hueBridgeState === "offline" ? " is-offline" :
-              hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" || hueBridgeState === "reconnecting" ? " is-warn-state" :
-              hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" ? " is-warn-state" :
+              hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error-state" :
+              hueBridgeState === "reconnecting" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" ? " is-warn-state" :
               hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" || hueBridgeState === "areaSelect" ? " is-ghost" :
               ""
             }`}>
@@ -292,7 +293,7 @@ export function HueBridgesCategory({
                   </div>
                   <div className="lm-hue-traffic-label">
                     <span>{t("hue:card.trafficLabel")}</span>
-                    <b>DTLS · 20 Hz</b>
+                    <b>DTLS · {t("hue:card.rateHz", { hz: HUE_STREAM_MAX_HZ })}</b>
                   </div>
                 </div>
               ) : null}
@@ -335,7 +336,7 @@ export function HueBridgesCategory({
                   ) : null}
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">{t("hue:card.cellRate")}</div>
-                    <div className="lm-dcard-cell-v is-am">20 Hz</div>
+                    <div className="lm-dcard-cell-v is-am">{t("hue:card.rateHz", { hz: HUE_STREAM_MAX_HZ })}</div>
                   </div>
                 </div>
               ) : hueBridgeState === "idle" ? (
@@ -415,7 +416,7 @@ export function HueBridgesCategory({
                   ) : null}
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
-                    <div className="lm-dcard-cell-v is-am" style={{ fontSize: "9px" }}>HUE_STOP_PARTIAL</div>
+                    <div className="lm-dcard-cell-v is-am" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
                   </div>
                 </div>
               ) : hueBridgeState === "gateBlocked" ? (
@@ -432,7 +433,7 @@ export function HueBridgesCategory({
                   </div>
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">{t("hue:card.cellConfig")}</div>
-                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>NOT_READY</div>
+                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
                   </div>
                 </div>
               ) : hueBridgeState === "authError" ? (
@@ -649,8 +650,12 @@ export function HueBridgesCategory({
 
               {/* State Q: Stop timeout fault */}
               {hueBridgeState === "stopPartial" ? (
-                <div className="lm-hue-fault">
-                  {t("hue:runtime.timeout.title")}
+                <div className="lm-hue-repair is-error" role="status" aria-live="polite">
+                  <IconInfo />
+                  <div className="lm-hue-repair-tx">
+                    <div className="lm-hue-repair-title">{t("hue:runtime.partialStop.title")}</div>
+                    <div className="lm-hue-repair-sub">{t("hue:runtime.partialStop.body")}</div>
+                  </div>
                 </div>
               ) : null}
 

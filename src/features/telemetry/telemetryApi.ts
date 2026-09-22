@@ -121,13 +121,3 @@ export async function getFullTelemetrySnapshot(
   const snapshot = await invoker<FullTelemetrySnapshotDto>(DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY);
   return mapFullTelemetrySnapshot(snapshot);
 }
-
-/**
- * @deprecated Use getFullTelemetrySnapshot instead which includes Hue telemetry.
- */
-export async function getRuntimeTelemetrySnapshot(
-  invoker: TelemetryInvoker = defaultInvoke,
-): Promise<RuntimeTelemetrySnapshot> {
-  const snapshot = await invoker<FullTelemetrySnapshotDto>(DEVICE_COMMANDS.GET_RUNTIME_TELEMETRY);
-  return mapRuntimeTelemetrySnapshot(snapshot.usb);
-}

@@ -63,27 +63,6 @@ interface Props {
 
 const NO_ZONES: readonly HueZone[] = [];
 
-/** Convert Hue position (x: -1..+1, y: -1..+1) to CSS % inside the grid box.
- *  Hue x: -1=left, +1=right → left%
- *  Hue y: -1=bottom, +1=top → we flip so top of box = top of screen
- */
-export function posToPercent(x: number, y: number): { left: string; top: string } {
-  const left = `${((x + 1) / 2) * 100}%`;
-  const top = `${((1 - y) / 2) * 100}%`; // flip Y axis
-  return { left, top };
-}
-
-/** Region → token-backed CSS color, for `MiniSpatialPreview`'s dots. */
-const REGION_COLOR_VAR: Record<string, string> = {
-  left: "var(--lm-zone-1)",
-  right: "var(--lm-zone-3)",
-  top: "var(--lm-zone-2)",
-  bottom: "var(--lm-amber)",
-  center: "var(--lm-ink-faint)",
-};
-
-const NEUTRAL_DOT = "var(--lm-ink-faint)";
-
 const EMPTY_STATE_KEYS = {
   empty: {
     heading: "hue:channelMap.state.emptyHeading",
@@ -393,7 +372,13 @@ export function HueChannelMapPanel({
               </div>
             ) : (
               <div className="lm-chmap-feedback is-err" role="alert">
-                <span>{t("hue:channelMap.saveToBridgeError", { code: saveResult.code ?? "" })}</span>
+                <span>
+                  {t("hue:channelMap.saveToBridgeError", {
+                    reason: saveResult.code
+                      ? t(`hue:runtime.writeback.codes.${saveResult.code}`, { defaultValue: saveResult.code })
+                      : "",
+                  })}
+                </span>
                 <button
                   type="button"
                   className="lm-chmap-feedback-retry"
@@ -408,76 +393,5 @@ export function HueChannelMapPanel({
         </div>
       )}
     </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// MiniSpatialPreview — kept token-aligned with the row dots so the room list
-// reads as part of the same family.
-// ---------------------------------------------------------------------------
-
-/** Minimal channel shape required for MiniSpatialPreview dot rendering. */
-interface MiniChannelShape {
-  positionX: number;
-  positionY: number;
-  autoRegion?: string;
-  index?: number;
-}
-
-export function MiniSpatialPreview({
-  channels,
-  channelCount,
-}: {
-  channels?: MiniChannelShape[];
-  channelCount?: number;
-}) {
-  const placeholderCount = channelCount ?? 0;
-
-  return (
-    <div className="lm-chmap-canvas" style={{ height: 48, borderRadius: 6 }} aria-hidden="true">
-      <div className="lm-chmap-canvas-axis is-v" />
-      <div className="lm-chmap-canvas-axis is-h" />
-      {channels
-        ? channels.map((ch, i) => {
-            const { left, top } = posToPercent(ch.positionX, ch.positionY);
-            const dotColor = REGION_COLOR_VAR[ch.autoRegion ?? "center"] ?? NEUTRAL_DOT;
-            return (
-              <span
-                key={ch.index ?? i}
-                style={{
-                  position: "absolute",
-                  left,
-                  top,
-                  width: 8,
-                  height: 8,
-                  marginLeft: -4,
-                  marginTop: -4,
-                  borderRadius: "50%",
-                  background: dotColor,
-                }}
-              />
-            );
-          })
-        : Array.from({ length: placeholderCount }, (_, i) => {
-            const x = placeholderCount > 1 ? (i / (placeholderCount - 1)) * 2 - 1 : 0;
-            const { left, top } = posToPercent(x, 0);
-            return (
-              <span
-                key={i}
-                style={{
-                  position: "absolute",
-                  left,
-                  top,
-                  width: 8,
-                  height: 8,
-                  marginLeft: -4,
-                  marginTop: -4,
-                  borderRadius: "50%",
-                  background: "var(--lm-ink-faint, #4d5564)",
-                }}
-              />
-            );
-          })}
-    </div>
   );
 }

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 import { HUE_AREA_CHANNELS_STATUS } from "@/shared/contracts/hue";
-import { HueChannelMapPanel, posToPercent } from "../HueChannelMapPanel";
+import { HueChannelMapPanel } from "../HueChannelMapPanel";
 
 // Mock i18n — return key as value (with interpolation support)
 vi.mock("react-i18next", () => ({
@@ -132,19 +132,6 @@ describe("channel identity", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Canvas coordinate helper — still used by MiniSpatialPreview
-// ---------------------------------------------------------------------------
-
-describe("posToPercent", () => {
-  it("puts the far wall at the top of the box and the near wall at the bottom", () => {
-    expect(posToPercent(0, 1).top).toBe("0%");
-    expect(posToPercent(0, -1).top).toBe("100%");
-    expect(posToPercent(-1, 0).left).toBe("0%");
-    expect(posToPercent(1, 0).left).toBe("100%");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Empty-list states — three different facts, three different messages
 // ---------------------------------------------------------------------------
 
@@ -252,6 +239,7 @@ describe("CHAN-05: save to bridge write-back", () => {
 
     const errorEls = await screen.findAllByText(/channelMap\.saveToBridgeError/);
     expect(errorEls.length).toBeGreaterThan(0);
+    expect(errorEls[0].textContent).toContain("hue:runtime.writeback.codes.CHAN_WB_SCHEMA_REJECTED");
     const retryBtns = screen.getAllByRole("button", { name: /saveToBridgeErrorRetry/ });
     expect(retryBtns.length).toBeGreaterThan(0);
   });

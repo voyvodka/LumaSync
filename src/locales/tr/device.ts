@@ -160,7 +160,7 @@ const device: Catalogue<typeof enDevice> = {
         empty: "Henüz şerit eşleşmedi — oda haritasını oluşturmak için bir tane ekle.",
         stripName: "{{count}} LED'lik şerit",
         noPort: "Port bağlı değil",
-        offline: "OFFLINE",
+        offline: "ÇEVRİMDIŞI",
         ledCountLabel: "LED",
         portLabel: "Port",
         addFirst: "+ LED şerit ekle",

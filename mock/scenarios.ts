@@ -289,6 +289,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       const w = furnished();
       w.capture = { permissionGranted: false };
       w.lighting = { mode: { kind: "off" } };
+      w.hue.streaming = false;
+      w.hue.everActive = false;
       return { ...w, scenario: "capture-denied" };
     },
   },
