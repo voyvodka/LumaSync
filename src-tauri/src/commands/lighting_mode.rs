@@ -74,10 +74,9 @@ static WORKER_TEST_GUARD: std::sync::Mutex<()> = std::sync::Mutex::new(());
 #[derive(Clone, Debug)]
 pub struct AmbilightCaptureRequest {
     pub display_id: Option<String>,
-    /// Per-LED strip calibration. When `None` the worker falls back to
-    /// single-zone sampling (v1.3 compat). Populated by `set_lighting_mode`
-    /// from `LightingModeConfig.led_calibration`.
-    #[allow(dead_code)]
+    /// Per-LED strip calibration, read only by the synthetic test-pattern
+    /// source; the live worker takes its calibration from
+    /// `LightingModeConfig` directly.
     pub led_calibration: Option<LedCalibrationConfig>,
     /// v1.6 LED Preview — when `Some`, the frame-source factory builds a
     /// `SyntheticFrameSource` (test mode) instead of live screen capture.
@@ -333,9 +332,9 @@ impl AmbilightLiveSettings {
 
 struct LightingRuntimeOwner {
     active_mode: LightingModeConfig,
-    /// Port name for the currently active LED session.
-    /// Cleared in stop_previous so the cached serial handle is released
-    /// via disconnect_session, preventing stale handle reuse on reconnect.
+    /// Port name for the currently active LED session. Cleared in
+    /// `stop_previous`, which deliberately leaves the cached serial handle
+    /// open — reopening the port toggles DTR and resets the MCU.
     active_port: Option<String>,
     worker: Option<LightingWorkerRuntime>,
     /// Shared settings for the currently running ambilight worker.
@@ -5512,9 +5511,8 @@ mod lighting_mode_tests {
 
     #[test]
     fn parse_ambilight_extracts_payload_from_canonical_shape() {
-        // Regression for v1.5 H1 — `apply_mode_change_with_disk_ambilight_fallback`
-        // at the parser level: a canonical shell-state file with a
-        // `lightingMode.ambilight` block must round-trip into a
+        // Regression for v1.5 H1 at the parser level: a canonical shell-state
+        // file with a `lightingMode.ambilight` block must round-trip into a
         // populated `AmbilightPayload`. This is what
         // `maybe_hydrate_ambilight_settings` consumes when the frontend
         // payload arrives without an ambilight field.

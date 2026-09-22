@@ -352,7 +352,7 @@ pub(crate) fn xy_to_rgb(x: f64, y: f64, target_y: f64) -> (u8, u8, u8) {
 
 // CIE xy vertices per Hue gamut (A/B/C, `Other` pass-through); see
 // docs/architecture/hue.md for why we clip host-side.
-pub use super::sender::HueGamutType;
+use super::sender::HueGamutType;
 
 /// CIE xy gamut triangle as `[red, green, blue]` vertices.
 pub(super) const GAMUT_A: [(f64, f64); 3] = [(0.704, 0.296), (0.2151, 0.7106), (0.138, 0.080)];
@@ -471,108 +471,9 @@ pub(crate) fn channel_position_to_screen_region(x: f32, y: f32) -> HueScreenRegi
     }
 }
 
-// ---------------------------------------------------------------------------
-// Zone-relative → world coordinate transform (v1.5 W1-A4)
-// ---------------------------------------------------------------------------
-//
-// `HueChannelPlacement` may carry a `zone_id` + `zone_relative_position`
-// pair (see `models::room_map`). At frame-build / channel-resolution time
-// we resolve those into world space using the parent zone's
-// `center{X,Y,Z}` + `scale{X,Y,Z}` transform:
-//
-//   world.x = center.x + scale.x * relative.x   (and analogously y, z)
-//
-// The transform helpers live next to `build_huestream_frame` so callers
-// that already have a `HueAreaChannel` slice can refresh `position_x/y`
-// + `screen_region` in-place without pulling in the zone authoring
-// surface.
-
-/// Resolve a zone-relative position into world space and clamp the
-/// result into the `[-1, 1]` cube. Returns `Err("out_of_bounds")` when
-/// the unclamped world position lies outside the cube on at least one
-/// axis — callers can map that to `HUE_ZONE_CHANNEL_OUT_OF_BOUNDS` if
-/// they want strict validation, or fall back to the clamped tuple via
-/// [`resolve_zone_relative_clamped`] for best-effort streaming.
-// Genuinely unused in production, unlike its `_clamped` sibling: the strict
-// variant is kept for callers that want a validation failure rather than a
-// silently clamped point, and nothing wants that yet. Exercised by
-// `frame::tests`. Grep will tell you this is used — that is the `_clamped`
-// name matching as a substring. The compiler is the authority here.
-#[allow(dead_code)]
-pub fn resolve_zone_relative(
-    center: (f64, f64, f64),
-    scale: (f64, f64, f64),
-    relative: (f64, f64, f64),
-) -> Result<(f64, f64, f64), &'static str> {
-    let world = (
-        center.0 + scale.0 * relative.0,
-        center.1 + scale.1 * relative.1,
-        center.2 + scale.2 * relative.2,
-    );
-    if !(-1.0..=1.0).contains(&world.0)
-        || !(-1.0..=1.0).contains(&world.1)
-        || !(-1.0..=1.0).contains(&world.2)
-    {
-        return Err("out_of_bounds");
-    }
-    Ok(world)
-}
-
-/// Best-effort variant of [`resolve_zone_relative`] that always returns
-/// a tuple inside `[-1, 1]` and signals whether any axis was clamped.
-/// Suitable for the streaming hot path where dropping a frame because a
-/// single light briefly drifted out of the cube would be worse than
-/// clamping it.
-pub fn resolve_zone_relative_clamped(
-    center: (f64, f64, f64),
-    scale: (f64, f64, f64),
-    relative: (f64, f64, f64),
-) -> ((f64, f64, f64), bool) {
-    let world = (
-        center.0 + scale.0 * relative.0,
-        center.1 + scale.1 * relative.1,
-        center.2 + scale.2 * relative.2,
-    );
-    let cx = world.0.clamp(-1.0, 1.0);
-    let cy = world.1.clamp(-1.0, 1.0);
-    let cz = world.2.clamp(-1.0, 1.0);
-    let clamped = (cx - world.0).abs() > f64::EPSILON
-        || (cy - world.1).abs() > f64::EPSILON
-        || (cz - world.2).abs() > f64::EPSILON;
-    ((cx, cy, cz), clamped)
-}
-
-/// Refresh the world-space `position_x/y` + `screen_region` of a Hue
-/// area channel using the parent zone's transform. The channel is
-/// matched by its `channel_id`. Out-of-cube positions are clamped (best
-/// effort) and the function returns `true` if any clamp actually fired —
-/// callers can surface that to telemetry without aborting the frame.
-///
-/// `z` is intentionally not stored on `HueAreaChannel` (the bridge frame
-/// only carries 2D screen-region routing); it is resolved purely so the
-/// clamp signal accounts for ceiling/floor placements.
-// Unwired. Written for the W1-A4 sender follow-up, which has since shipped
-// without needing it — the clamp signal it was meant to feed is computed from
-// `resolve_zone_relative_clamped` instead. Kept because zone-aware placement
-// is still on the roadmap and this is the non-obvious half of it; delete it
-// if that stops being true rather than letting the note age further.
-#[allow(dead_code)]
-pub fn apply_zone_world_position(
-    channels: &mut [HueAreaChannel],
-    channel_id: u8,
-    center: (f64, f64, f64),
-    scale: (f64, f64, f64),
-    relative: (f64, f64, f64),
-) -> bool {
-    let Some(channel) = channels.iter_mut().find(|c| c.channel_id == channel_id) else {
-        return false;
-    };
-    let ((wx, wy, _wz), clamped) = resolve_zone_relative_clamped(center, scale, relative);
-    channel.position_x = wx as f32;
-    channel.position_y = wy as f32;
-    channel.screen_region = channel_position_to_screen_region(wx as f32, wy as f32);
-    clamped
-}
+// Zone-relative positions are an authoring concept resolved in
+// `room_map::hue_zone` (`world_pos_from_zone_relative`); the frame path reads
+// only the world coordinates stored on a placement.
 
 pub(crate) fn channels_to_info(channels: &[HueAreaChannel]) -> Vec<HueAreaChannelInfo> {
     channels
@@ -700,105 +601,6 @@ mod tests {
         assert!(r > 32000 && r < 33000, "R={r} should be ~32767");
         assert!(g > 32000 && g < 33000, "G={g} should be ~32767");
         assert!(b > 32000 && b < 33000, "B={b} should be ~32767");
-    }
-
-    // -----------------------------------------------------------------------
-    // Zone-relative → world transform (v1.5 W1-A4)
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn resolve_zone_relative_returns_world_inside_unit_cube() {
-        // Zone center (0.5, 0.5, 0) + scale (0.3, 0.3, 1) + relative (1, 1, 0)
-        // = world (0.8, 0.8, 0).
-        let world = resolve_zone_relative((0.5, 0.5, 0.0), (0.3, 0.3, 1.0), (1.0, 1.0, 0.0))
-            .expect("expected in-cube world position");
-        assert!(
-            (world.0 - 0.8).abs() < 1e-9,
-            "expected x≈0.8, got {}",
-            world.0
-        );
-        assert!(
-            (world.1 - 0.8).abs() < 1e-9,
-            "expected y≈0.8, got {}",
-            world.1
-        );
-        assert!(world.2.abs() < 1e-9, "expected z≈0, got {}", world.2);
-    }
-
-    #[test]
-    fn resolve_zone_relative_rejects_out_of_cube_position() {
-        // (0.9, 0, 0) + (0.5, 0, 0) * (1, 0, 0) = 1.4 → out of bounds.
-        let result = resolve_zone_relative((0.9, 0.0, 0.0), (0.5, 0.0, 0.0), (1.0, 0.0, 0.0));
-        assert!(
-            result.is_err(),
-            "expected out-of-bounds Err, got {result:?}"
-        );
-    }
-
-    #[test]
-    fn resolve_zone_relative_clamped_clamps_and_signals() {
-        let ((x, _, _), clamped) =
-            resolve_zone_relative_clamped((0.9, 0.0, 0.0), (0.5, 0.0, 0.0), (1.0, 0.0, 0.0));
-        assert!(clamped, "expected clamp signal");
-        assert!((x - 1.0).abs() < 1e-9, "expected clamped x=1.0, got {x}");
-    }
-
-    #[test]
-    fn apply_zone_world_position_refreshes_channel_position_and_region() {
-        let mut channels = vec![HueAreaChannel {
-            channel_id: 3,
-            light_ids: vec!["l1".to_string()],
-            screen_region: HueScreenRegion::Center,
-            position_x: 0.0,
-            position_y: 0.0,
-        }];
-        // Zone (0.5, 0.5, 0) + scale (0.3, 0.3, 1) + relative (1, 1, 0)
-        // → world (0.8, 0.8, _) → screen_region "right" (|x|>=|y| && x>0.3).
-        let clamped = apply_zone_world_position(
-            &mut channels,
-            3,
-            (0.5, 0.5, 0.0),
-            (0.3, 0.3, 1.0),
-            (1.0, 1.0, 0.0),
-        );
-        assert!(!clamped, "in-cube position must not clamp");
-        assert!((channels[0].position_x - 0.8).abs() < 1e-6);
-        assert!((channels[0].position_y - 0.8).abs() < 1e-6);
-        assert_eq!(channels[0].screen_region, HueScreenRegion::Right);
-    }
-
-    #[test]
-    fn apply_zone_world_position_leaves_unrelated_channels_alone() {
-        let mut channels = vec![
-            HueAreaChannel {
-                channel_id: 0,
-                light_ids: vec!["l0".to_string()],
-                screen_region: HueScreenRegion::Left,
-                position_x: -0.8,
-                position_y: 0.0,
-            },
-            HueAreaChannel {
-                channel_id: 1,
-                light_ids: vec!["l1".to_string()],
-                screen_region: HueScreenRegion::Right,
-                position_x: 0.8,
-                position_y: 0.0,
-            },
-        ];
-        let clamped = apply_zone_world_position(
-            &mut channels,
-            1,
-            (0.0, 0.0, 0.0),
-            (0.5, 0.5, 1.0),
-            (-1.0, 0.0, 0.0),
-        );
-        assert!(!clamped);
-        // Channel 0 untouched
-        assert!((channels[0].position_x + 0.8).abs() < 1e-6);
-        assert_eq!(channels[0].screen_region, HueScreenRegion::Left);
-        // Channel 1 moved to (-0.5, 0.0) → screen_region "left"
-        assert!((channels[1].position_x + 0.5).abs() < 1e-6);
-        assert_eq!(channels[1].screen_region, HueScreenRegion::Left);
     }
 
     // -----------------------------------------------------------------------

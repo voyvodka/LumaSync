@@ -30,7 +30,6 @@
 //!
 //! ## Status codes (frontend contract additive)
 //!
-//! - `HUE_CREDENTIAL_STORE_OK` — last call (set/get/delete) succeeded.
 //! - `HUE_CREDENTIAL_STORE_UNAVAILABLE` — backend cannot be reached
 //!   (no D-Bus, no Keychain, locked CredMan, etc). Caller should fall
 //!   back to plaintext shellStore.
@@ -72,15 +71,7 @@ pub(crate) const KEY_HUE_CLIENT_KEY: &str = "hue-client-key";
 pub(crate) const KEY_HUE_BRIDGE_ID: &str = "hue-bridge-id";
 
 /// Frontend-visible status codes (mirrors `HUE_STATUS` additions in `hue.ts`).
-///
-/// `STORE_OK` / `MIGRATION_OK` etc. are part of the published wire
-/// contract; they are intentionally unused inside the crate today
-/// (consumers go through `MigrationOutcome::status_code` instead) but
-/// must stay defined so a future telemetry surface can reference the
-/// canonical strings without re-stringifying.
-#[allow(dead_code)]
 pub mod status {
-    pub const STORE_OK: &str = "HUE_CREDENTIAL_STORE_OK";
     pub const STORE_UNAVAILABLE: &str = "HUE_CREDENTIAL_STORE_UNAVAILABLE";
     pub const MIGRATION_OK: &str = "HUE_CREDENTIAL_MIGRATION_OK";
     pub const MIGRATION_SKIPPED: &str = "HUE_CREDENTIAL_MIGRATION_SKIPPED";
@@ -98,13 +89,11 @@ pub enum CredentialBackend {
     /// Constructed by `default_store()` when the platform has no keychain;
     /// callers handle it transparently via `resolve_hue_credentials`'s
     /// fallback path so they never need to match on this variant directly.
-    #[allow(dead_code)]
     Noop,
     /// Plaintext JSON file in the app data dir, seeded by debug builds only.
     /// Reaches the frontend so a dev session never clears its plaintext copy
     /// on the strength of a file a release build cannot read — see
     /// `DevFileStore`.
-    #[allow(dead_code)]
     DevFile,
 }
 
@@ -130,10 +119,7 @@ pub trait SecretStore: Send + Sync {
     fn get(&self, account: &str) -> Result<Option<String>, String>;
     /// Delete the entry at `account`. Idempotent: deleting a missing entry is `Ok(())`.
     fn delete(&self, account: &str) -> Result<(), String>;
-    /// Backend label for telemetry / `credentialStorageBackend` surface.
-    /// Reserved for the runtime-telemetry surface; tests verify
-    /// per-impl values today.
-    #[allow(dead_code)]
+    /// Backend label for the `credentialStorageBackend` surface.
     fn backend(&self) -> CredentialBackend;
 }
 
@@ -897,7 +883,6 @@ pub(crate) mod tests {
 
     #[test]
     fn status_codes_are_stable() {
-        assert_eq!(status::STORE_OK, "HUE_CREDENTIAL_STORE_OK");
         assert_eq!(
             status::STORE_UNAVAILABLE,
             "HUE_CREDENTIAL_STORE_UNAVAILABLE"

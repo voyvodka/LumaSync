@@ -11,7 +11,7 @@ export const PLATFORM_COMMANDS = {
    * Request permission to show OS notifications. On macOS this triggers
    * the system prompt on first call and resolves silently on subsequent
    * calls. On Linux / Windows the plugin typically resolves immediately
-   * with `NOTIF_PERMISSION_GRANTED`.
+   * with `{ status: "shown" }`.
    */
   REQUEST_NOTIFICATION_PERMISSION: "request_notification_permission",
   /**
@@ -66,8 +66,6 @@ export interface NotificationPayload {
  * handler can grow new codes without breaking existing discriminators.
  */
 export const NOTIFICATION_RESULT_CODES = {
-  /** User granted the permission (or OS never requires one). */
-  PERMISSION_GRANTED: "NOTIF_PERMISSION_GRANTED",
   /** User (or OS policy) explicitly denied the permission. */
   PERMISSION_DENIED: "NOTIF_PERMISSION_DENIED",
   /** OS does not expose a notification surface we can use. */

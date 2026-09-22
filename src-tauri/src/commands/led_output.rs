@@ -885,7 +885,7 @@ impl SerialSink {
     /// and default chip type (WS2812B GRB).
     ///
     /// Used by tests only — `#[cfg(test)]` keeps it out of the production binary.
-    /// Production code uses `with_profile_and_corrections` to pass explicit settings.
+    /// Production code uses `with_chip_type` to pass explicit settings.
     #[cfg(test)]
     pub fn new(bridge: LedOutputBridge, port_name: Option<String>, brightness: f32) -> Self {
         Self {
@@ -899,12 +899,7 @@ impl SerialSink {
     }
 
     /// Create a sink with an explicit firmware profile, colour correction config,
-    /// and chip type. (v1.5 G3)
-    ///
-    /// Forward-looking API: production hot path currently calls
-    /// `with_profile_and_corrections` (default chip = WS2812B). UI wiring of
-    /// the user-selectable chip type will graduate this constructor in the
-    /// next Wave 2 polish commit; covered by unit tests in the meantime.
+    /// and chip type.
     pub fn with_chip_type(
         bridge: LedOutputBridge,
         port_name: Option<String>,
@@ -930,41 +925,9 @@ impl SerialSink {
     pub fn set_brightness(&mut self, brightness: f32) {
         self.brightness = brightness.clamp(0.0, 1.0);
     }
-
-    /// Switch the firmware profile at runtime (e.g. user changed the setting).
-    ///
-    /// Not yet wired to the UI settings toggle (v1.4 G11); kept for the
-    /// profile-switching path that will land in the same milestone.
-    #[allow(dead_code)]
-    pub fn set_profile(&mut self, profile: FirmwareProfile) {
-        self.profile = profile;
-    }
-
-    /// Replace the colour correction config at runtime.
-    ///
-    /// Will be called from the settings save path once the per-channel
-    /// correction UI lands (v1.4 G4).
-    #[allow(dead_code)]
-    pub fn set_corrections(&mut self, corrections: ColorCorrectionConfig) {
-        self.corrections = corrections;
-    }
-
-    /// Switch the chip type at runtime (e.g. user changed the LED chip setting).
-    ///
-    /// Changing chip type while streaming is safe: the next frame will use the
-    /// new encoding. The caller is responsible for ensuring the firmware expects
-    /// the new byte layout before switching.
-    #[allow(dead_code)]
-    pub fn set_chip_type(&mut self, chip_type: LedChipType) {
-        self.chip_type = chip_type;
-    }
 }
 
 impl super::led_sink::LedSink for SerialSink {
-    fn name(&self) -> &'static str {
-        "serial"
-    }
-
     fn start(&mut self) -> Result<(), String> {
         Ok(())
     }
@@ -1576,7 +1539,6 @@ mod tests {
         let mut sink: Box<dyn LedSink> =
             Box::new(SerialSink::new(bridge, Some("COM1".to_string()), 1.0));
 
-        assert_eq!(sink.name(), "serial");
         sink.start().unwrap();
         sink.send_frame(&[[50, 100, 150]]).unwrap();
         sink.stop().unwrap();

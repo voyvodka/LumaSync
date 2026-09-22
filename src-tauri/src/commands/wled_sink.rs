@@ -133,10 +133,6 @@ impl WledUdpSink {
 }
 
 impl LedSink for WledUdpSink {
-    fn name(&self) -> &'static str {
-        "wled-udp"
-    }
-
     fn start(&mut self) -> Result<(), String> {
         if self.socket.is_some() {
             return Ok(());
@@ -257,10 +253,6 @@ impl CorrectedWledSink {
 }
 
 impl LedSink for CorrectedWledSink {
-    fn name(&self) -> &'static str {
-        "wled-udp"
-    }
-
     fn start(&mut self) -> Result<(), String> {
         self.inner.start()
     }
@@ -562,12 +554,6 @@ mod tests {
     }
 
     #[test]
-    fn wled_sink_name_is_wled_udp() {
-        let sink = WledUdpSink::new("127.0.0.1".parse().unwrap(), 4048, 60, WledProtocol::Ddp);
-        assert_eq!(sink.name(), "wled-udp");
-    }
-
-    #[test]
     fn wled_sink_stop_before_start_is_idempotent() {
         let mut sink = WledUdpSink::new("127.0.0.1".parse().unwrap(), 4048, 30, WledProtocol::Ddp);
         sink.stop().expect("stop before start must not error");
@@ -595,13 +581,12 @@ mod tests {
 
     #[test]
     fn wled_sink_implements_led_sink_trait_object() {
-        let sink: Box<dyn LedSink> = Box::new(WledUdpSink::new(
+        let _sink: Box<dyn LedSink> = Box::new(WledUdpSink::new(
             "127.0.0.1".parse().unwrap(),
             4048,
             30,
             WledProtocol::Ddp,
         ));
-        assert_eq!(sink.name(), "wled-udp");
     }
 
     #[test]

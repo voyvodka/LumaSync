@@ -48,7 +48,6 @@ pub(crate) enum HueHttpFault {
     /// 5xx server error. Kept distinct so callers can apply the
     /// `HueRetryPolicy` exponential backoff policy specifically to this
     /// class.
-    #[allow(dead_code)]
     ServerError { status: u16 },
 }
 
