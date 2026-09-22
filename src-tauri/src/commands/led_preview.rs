@@ -1,10 +1,11 @@
 //! LED Preview surfaces (v1.6 — Phase 1).
 //!
-//! Two webviews mirror the live edge-signal stream:
+//! Two webviews make up the preview:
 //!
 //! - **Digital-twin overlay** — a per-display, click-through, transparent,
 //!   always-on-top window (label `led-twin-overlay-<counter>`) that renders the
-//!   enriched `ambilight://edge-signal` per-LED buffer over the screen.
+//!   `ambilight://edge-signal` per-LED buffer over the screen. It is the
+//!   event's only listener.
 //! - **Control popup** — a single interactive, opaque amber-dark window (label
 //!   `led-control-popup`) that drives the preview/test surface.
 //!
@@ -81,7 +82,7 @@ struct LedTwinRuntime {
 }
 
 /// Tauri-managed preview state. `preview_active` lives OUTSIDE the mutex as a
-/// lock-free atomic so the ~10 Hz worker tick can read the enrichment gate
+/// lock-free atomic so the per-frame worker tick can read the twin-feed gate
 /// without contending on the (rarely-held) runtime lock.
 pub struct LedTwinState {
     inner: Mutex<LedTwinRuntime>,
@@ -134,14 +135,16 @@ impl LedTwinState {
             .unwrap_or_default()
     }
 
-    /// Recompute the enrichment gate from the current surface set.
+    /// Recompute the twin-feed gate from the current surface set. With the
+    /// gate off the worker neither builds nor emits `ambilight://edge-signal`.
     ///
-    /// ONLY twin overlays consume the enriched per-LED buffer. The control
-    /// popup renders from `preview://state-changed` and never subscribes to
+    /// ONLY twin overlays consume the per-LED buffer. The control popup renders
+    /// from `preview://state-changed` and never subscribes to
     /// `ambilight://edge-signal`, so including `control_visible` here would
     /// have the popup alone pay for an N-element Vec plus an N×3 JSON payload
-    /// at 10 Hz that nothing reads. If the popup ever starts subscribing, this
-    /// gate must be widened again.
+    /// every tick that nothing reads. If the popup (or the main window) ever
+    /// starts subscribing, this gate and `build_edge_emitter`'s targets must be
+    /// widened again.
     fn recompute_preview_active(&self) {
         if let Ok(g) = self.inner.lock() {
             self.preview_active
@@ -184,6 +187,16 @@ impl LedTwinState {
     pub fn forget_twin_label(&self, label: &str) {
         if let Ok(mut g) = self.inner.lock() {
             g.twin_labels.retain(|_, value| value != label);
+        }
+        self.recompute_preview_active();
+    }
+
+    /// `open_led_twin_overlay` needs real monitors, which `MockRuntime` does
+    /// not implement; this records a twin the same way it does.
+    #[cfg(test)]
+    pub(crate) fn record_twin_for_test(&self, display_id: &str, label: &str) {
+        if let Ok(mut g) = self.inner.lock() {
+            g.twin_labels.insert(display_id.into(), label.into());
         }
         self.recompute_preview_active();
     }

@@ -27,6 +27,10 @@ https://keepachangelog.com/en/1.1.0/
   status bar already shows capture and output health. The card is now called "Mode settings" and
   keeps its controls: lighting responsiveness, brightness, saturation and black border. The USB
   link-limit note still appears there when a strip is too long for the serial link.
+- Ambilight does less work per frame. It used to sample the screen edges and send them to the app
+  window about ten times a second for the Lights preview removed above, whether or not anything
+  showed them. That stopped. The LED preview overlay still gets its per-LED feed, and only while
+  it is open.
 
 ### Fixed
 

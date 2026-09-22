@@ -432,8 +432,8 @@ struct PreviewRuntime {
     pattern_live: Option<TestPatternLiveSlot>,
 }
 
-/// Per-worker enrichment context — decides whether and how the ~10 Hz
-/// edge-signal emit is enriched with the full per-LED buffer.
+/// Per-worker twin-feed context — decides whether the worker builds and emits
+/// the edge-signal this tick, and what it stamps on it.
 #[derive(Clone)]
 pub struct PreviewEmitContext {
     pub gate: PreviewGate,
@@ -445,7 +445,7 @@ pub struct PreviewEmitContext {
     pub display_id: Option<String>,
 }
 
-/// Gate deciding whether the worker enriches the edge-signal each tick.
+/// Gate deciding whether the worker emits the edge-signal each tick.
 #[derive(Clone)]
 pub enum PreviewGate {
     /// Always enrich — the synthetic test pattern is itself the preview.
@@ -1071,22 +1071,16 @@ fn sample_screen_position_avg(
 }
 
 // ---------------------------------------------------------------------------
-// Edge signal preview — live capture feed for LightsSection
+// Edge signal — per-LED feed for the LED twin overlay
 // ---------------------------------------------------------------------------
 //
-// Emitted at ~10 Hz while the ambilight worker is running so the frontend
-// can render the four edges of the screen the way they're being sampled.
-// Decoupled from the LED-driving pipeline: uses its own lightweight edge
-// sampling so a rework of the LED mapping logic doesn't break the preview.
+// The twin overlay is the only listener, so the worker builds and emits this
+// only while a twin is open (`LedTwinState::preview_active`).
 
 pub const EDGE_SIGNAL_EVENT: &str = "ambilight://edge-signal";
-pub const EDGE_SIGNAL_MIN_INTERVAL_MS: u64 = 100;
-/// Cadence while a twin overlay is mirroring the strip. 10 Hz is plenty for the
-/// 4-edge settings grid but not for a moving comet: at the top speed the head
-/// travels further per frame than its own tail, leaving visible gaps. ~30 Hz
-/// brings one frame's travel back under the tail at every speed.
+/// ~30 Hz: at the top pattern speed a slower cadence lets the comet head travel
+/// further per frame than its own tail, leaving visible gaps in the twin.
 pub const EDGE_SIGNAL_PREVIEW_INTERVAL_MS: u64 = 33;
-pub const EDGE_SIGNAL_SAMPLES_PER_EDGE: usize = 16;
 
 /// Sampling box for live capture — deliberately wide so screen noise averages out.
 pub const LIVE_SAMPLE_WINDOW: f32 = 0.05;
@@ -1094,44 +1088,26 @@ pub const LIVE_SAMPLE_WINDOW: f32 = 0.05;
 /// pitch or neighbouring LEDs blend into each other and no LED can reach the
 /// intensity the pattern asked for.
 pub const SYNTHETIC_SAMPLE_WINDOW: f32 = 0.0125;
-/// How far inside the screen edges the preview samples. 0.92 picks up the
-/// dominant fringe color without dipping too deep into the center.
-const EDGE_SIGNAL_AXIS_OFFSET: f32 = 0.92;
 
-/// Payload for the `ambilight://edge-signal` event — one sample strip per
-/// screen edge for the settings preview, plus optional v1.6 LED Preview
-/// fields (`leds`, `hue_channels`, etc.) that ride along without breaking
-/// the original 4-edge consumer.
-#[derive(Clone, Debug, Default, Serialize)]
+/// Payload for the `ambilight://edge-signal` event — the per-LED strip buffer
+/// the twin overlay mirrors, plus the sparse Hue channel colours.
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EdgeSignalPayload {
-    pub top: Vec<[u8; 3]>,
-    pub bottom: Vec<[u8; 3]>,
-    pub left: Vec<[u8; 3]>,
-    pub right: Vec<[u8; 3]>,
-    // v1.6 LED Preview — additive enrichment. Every field is omitted from the
-    // wire when `None`, so the existing 4-edge consumer (LightsSection) is
-    // byte-unaffected; they are populated only while a preview surface wants
-    // them (see the worker enrich block).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub leds: Option<Vec<[u8; 3]>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub led_count: Option<usize>,
+    pub leds: Vec<[u8; 3]>,
+    pub led_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hue_channels: Option<Vec<[u8; 3]>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source: Option<&'static str>,
+    pub source: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pattern: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub seq: Option<u64>,
+    pub seq: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_id: Option<String>,
 }
 
-/// Thread-safe emitter the worker calls to surface edge previews. Thin
-/// wrapper over `AppHandle::emit` so the worker doesn't depend on the
-/// Tauri runtime type parameter.
+/// Thread-safe emitter the worker hands each twin frame to, so the worker
+/// doesn't depend on the Tauri runtime type parameter.
 pub type EdgeSignalEmitter = Arc<dyn Fn(EdgeSignalPayload) + Send + Sync>;
 
 /// Apply luminance-preserving saturation to an RGB triple.
@@ -1172,51 +1148,6 @@ fn apply_saturation_inplace(colors: &mut [[u8; 3]], factor: f32) {
         c[0] = r;
         c[1] = g;
         c[2] = b;
-    }
-}
-
-/// Sample `frame` along its four edges (inset by `insets` to skip detected
-/// black borders) to build the lightweight preview payload for
-/// `EDGE_SIGNAL_EVENT`. Independent of the LED-driving sampling path so
-/// changes to per-LED mapping never affect this preview.
-pub fn compute_edge_signal(frame: &CapturedFrame, insets: &BlackBorderInsets) -> EdgeSignalPayload {
-    let samples = EDGE_SIGNAL_SAMPLES_PER_EDGE;
-    let mut top = Vec::with_capacity(samples);
-    let mut bottom = Vec::with_capacity(samples);
-    let mut left = Vec::with_capacity(samples);
-    let mut right = Vec::with_capacity(samples);
-
-    let denom = if samples > 1 {
-        (samples - 1) as f32
-    } else {
-        1.0
-    };
-    let span = 2.0 * EDGE_SIGNAL_AXIS_OFFSET;
-
-    for i in 0..samples {
-        let t = i as f32 / denom;
-        // Horizontal traversal for top/bottom, vertical for left/right.
-        let x = -EDGE_SIGNAL_AXIS_OFFSET + t * span;
-        // y: +1 at top → -1 at bottom (sample_screen_position_avg convention).
-        let y = EDGE_SIGNAL_AXIS_OFFSET - t * span;
-
-        let t_color = sample_screen_position_avg(frame, x, EDGE_SIGNAL_AXIS_OFFSET, insets);
-        let b_color = sample_screen_position_avg(frame, x, -EDGE_SIGNAL_AXIS_OFFSET, insets);
-        let l_color = sample_screen_position_avg(frame, -EDGE_SIGNAL_AXIS_OFFSET, y, insets);
-        let r_color = sample_screen_position_avg(frame, EDGE_SIGNAL_AXIS_OFFSET, y, insets);
-
-        top.push([t_color.0, t_color.1, t_color.2]);
-        bottom.push([b_color.0, b_color.1, b_color.2]);
-        left.push([l_color.0, l_color.1, l_color.2]);
-        right.push([r_color.0, r_color.1, r_color.2]);
-    }
-
-    EdgeSignalPayload {
-        top,
-        bottom,
-        left,
-        right,
-        ..Default::default()
     }
 }
 
@@ -1943,55 +1874,46 @@ fn start_ambilight_worker(
                 telemetry_window.record_latency(quality_state.observed_cost_ms());
                 let _ = telemetry_window.flush_if_due(Instant::now(), &telemetry_snapshot);
 
-                // Edge signal preview — throttled to ~10 Hz.
-                if let Some(emitter) = edge_signal_emitter.as_ref() {
+                // Twin-overlay feed. With no twin open this is skipped whole —
+                // no buffer, no serialisation, no IPC.
+                let twin_feed = edge_signal_emitter
+                    .as_ref()
+                    .zip(preview.as_ref().filter(|_| enrich_preview));
+                if let Some((emitter, ctx)) = twin_feed {
                     let now = Instant::now();
-                    let interval_ms = if enrich_preview {
-                        EDGE_SIGNAL_PREVIEW_INTERVAL_MS
-                    } else {
-                        EDGE_SIGNAL_MIN_INTERVAL_MS
-                    };
                     let due = last_edge_emit_at
-                        .map(|prev| now.duration_since(prev) >= Duration::from_millis(interval_ms))
+                        .map(|prev| {
+                            now.duration_since(prev)
+                                >= Duration::from_millis(EDGE_SIGNAL_PREVIEW_INTERVAL_MS)
+                        })
                         .unwrap_or(true);
                     if due {
-                        let mut payload = compute_edge_signal(&raw_frame, border_cache.insets());
-                        apply_saturation_inplace(&mut payload.top, saturation);
-                        apply_saturation_inplace(&mut payload.bottom, saturation);
-                        apply_saturation_inplace(&mut payload.left, saturation);
-                        apply_saturation_inplace(&mut payload.right, saturation);
-
-                        // v1.6 LED Preview — enrich with the full per-LED strip
-                        // buffer ONLY while a preview surface wants it; otherwise
-                        // emit the lean 4-edge payload exactly as before.
-                        if let Some(ctx) = preview.as_ref().filter(|_| enrich_preview) {
-                            let leds: Vec<[u8; 3]> = quality_state
-                                .last_smoothed()
-                                .iter()
-                                .map(|&[r, g, b]| {
-                                    let (cr, cg, cb) = apply_color_correction_rgb_with_luts(
-                                        (r, g, b),
-                                        &color_correction,
-                                        &frame_luts,
-                                    );
-                                    [
-                                        (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                                        (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                                        (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
-                                    ]
-                                })
-                                .collect();
-                            edge_seq = edge_seq.wrapping_add(1);
-                            payload.led_count = Some(leds.len());
-                            payload.leds = Some(leds);
-                            payload.hue_channels = last_hue_colors.clone();
-                            payload.source = Some(ctx.source);
-                            payload.pattern = ctx.pattern;
-                            payload.seq = Some(edge_seq);
-                            payload.display_id = ctx.display_id.clone();
-                        }
-
-                        emitter(payload);
+                        let leds: Vec<[u8; 3]> = quality_state
+                            .last_smoothed()
+                            .iter()
+                            .map(|&[r, g, b]| {
+                                let (cr, cg, cb) = apply_color_correction_rgb_with_luts(
+                                    (r, g, b),
+                                    &color_correction,
+                                    &frame_luts,
+                                );
+                                [
+                                    (cr as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                    (cg as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                    (cb as f32 * brightness).round().clamp(0.0, 255.0) as u8,
+                                ]
+                            })
+                            .collect();
+                        edge_seq = edge_seq.wrapping_add(1);
+                        emitter(EdgeSignalPayload {
+                            led_count: leds.len(),
+                            leds,
+                            hue_channels: last_hue_colors.clone(),
+                            source: ctx.source,
+                            pattern: ctx.pattern,
+                            seq: edge_seq,
+                            display_id: ctx.display_id.clone(),
+                        });
                         last_edge_emit_at = Some(now);
                     }
                 }
@@ -2664,9 +2586,8 @@ pub fn set_lighting_mode<R: Runtime>(
     let hue_output = snapshot_hue_output_context(&hue_runtime_state)?;
 
     // v1.6 LED Preview — clear any stale synthetic-test request, wire the
-    // shared enrichment gate so a twin opened mid-run starts enriching without
-    // a worker restart, and fan the edge-signal out to every active twin
-    // overlay (not just the main shell).
+    // shared gate so a twin opened mid-run starts receiving without a worker
+    // restart, and send the edge-signal to every active twin overlay.
     owner.preview.pending_test_pattern = None;
     owner.preview.preview_gate = Some(led_twin_state.preview_active());
     // v1.6 LED Preview — record whether a synthetic test was running
@@ -2811,31 +2732,26 @@ const LED_TEST_PATTERN_INVALID_PARAMS: &str = "LED_TEST_PATTERN_INVALID_PARAMS";
 const LED_TEST_PATTERN_NO_CALIBRATION: &str = "LED_TEST_PATTERN_NO_CALIBRATION";
 const LED_TEST_PATTERN_RUNTIME_ERROR: &str = "LED_TEST_PATTERN_RUNTIME_ERROR";
 
-/// Build the ~10 Hz edge-signal emitter. Fans the payload out to the main
-/// shell webview AND every active twin-overlay window (read from
-/// `LedTwinState` each tick) so newly-opened twins start receiving frames
-/// without a worker restart.
+/// Build the edge-signal emitter. Sends to the open twin-overlay windows only
+/// (read from `LedTwinState` each tick, so a twin opened mid-run starts
+/// receiving without a worker restart); the main window has no listener.
 fn build_edge_emitter<R: Runtime>(app: &AppHandle<R>) -> EdgeSignalEmitter {
     let app_handle = app.clone();
     Arc::new(move |payload: EdgeSignalPayload| {
-        let _ = app_handle.emit_to(
-            EventTarget::webview_window(crate::MAIN_WINDOW_LABEL),
-            EDGE_SIGNAL_EVENT,
-            payload.clone(),
-        );
-        if let Some(twin_state) = app_handle.try_state::<LedTwinState>() {
-            for label in twin_state.twin_labels_snapshot() {
-                let _ = app_handle.emit_to(
-                    EventTarget::webview_window(label.as_str()),
-                    EDGE_SIGNAL_EVENT,
-                    payload.clone(),
-                );
-            }
+        let Some(twin_state) = app_handle.try_state::<LedTwinState>() else {
+            return;
+        };
+        for label in twin_state.twin_labels_snapshot() {
+            let _ = app_handle.emit_to(
+                EventTarget::webview_window(label.as_str()),
+                EDGE_SIGNAL_EVENT,
+                payload.clone(),
+            );
         }
     })
 }
 
-/// Decide whether — and how — the worker enriches the edge-signal.
+/// Decide whether — and how — the worker feeds the twin overlay.
 fn build_preview_emit_context(
     is_test: bool,
     test_pattern: Option<&TestPatternConfig>,
@@ -2844,8 +2760,8 @@ fn build_preview_emit_context(
 ) -> Option<PreviewEmitContext> {
     if is_test {
         Some(PreviewEmitContext {
-            // Only twin overlays read the enriched buffer, so a test with no
-            // twin open must not pay for an N-LED Vec + JSON at 10 Hz.
+            // Only twin overlays read the buffer, so a test with no twin open
+            // must not pay for an N-LED Vec + JSON every tick.
             gate: match preview_gate {
                 Some(flag) => PreviewGate::Shared(flag),
                 None => PreviewGate::Always,
@@ -7060,5 +6976,136 @@ mod lighting_mode_tests {
             restored.color_order, None,
             "an order cleared on disk mid-test is not revived from the snapshot"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Edge-signal — only the twin overlay listens
+    // -----------------------------------------------------------------------
+
+    /// Drives the real worker, twin gate and emitter. With no twin open the
+    /// worker must not hand the emitter anything — the payload is only ever
+    /// built as its argument — and no window may receive the event. Once a twin
+    /// opens, that twin alone receives frames carrying the strip buffer and the
+    /// Hue channel colours; the main window never does.
+    #[test]
+    fn the_edge_signal_is_built_and_sent_only_while_a_twin_is_open() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::time::{Duration, Instant};
+        use tauri::{Listener, Manager, WebviewWindowBuilder};
+
+        use crate::commands::led_preview::LedTwinState;
+
+        let _guard = acquire_worker_test_guard();
+        let app = tauri::test::mock_app();
+        app.manage(LedTwinState::default());
+        let main = WebviewWindowBuilder::new(&app, crate::MAIN_WINDOW_LABEL, Default::default())
+            .build()
+            .expect("main webview");
+        let twin_label = "led-twin-overlay-test";
+        let twin = WebviewWindowBuilder::new(&app, twin_label, Default::default())
+            .build()
+            .expect("twin webview");
+
+        let main_events = Arc::new(AtomicUsize::new(0));
+        let main_counter = Arc::clone(&main_events);
+        main.listen(super::EDGE_SIGNAL_EVENT, move |_| {
+            main_counter.fetch_add(1, Ordering::SeqCst);
+        });
+        let twin_frames: Arc<Mutex<Vec<serde_json::Value>>> = Arc::default();
+        let twin_sink = Arc::clone(&twin_frames);
+        twin.listen(super::EDGE_SIGNAL_EVENT, move |event| {
+            let frame = serde_json::from_str(event.payload()).expect("payload is JSON");
+            twin_sink.lock().expect("frames lock").push(frame);
+        });
+
+        let built = Arc::new(AtomicUsize::new(0));
+        let built_counter = Arc::clone(&built);
+        let real_emitter = super::build_edge_emitter(app.handle());
+        let emitter: super::EdgeSignalEmitter = Arc::new(move |payload| {
+            built_counter.fetch_add(1, Ordering::SeqCst);
+            real_emitter(payload);
+        });
+
+        let twin_state = app.state::<LedTwinState>();
+        let mut owner = owner_with_fake_sender();
+        owner.preview.preview_gate = Some(twin_state.preview_active());
+        let mode = LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            ambilight: Some(AmbilightPayload {
+                brightness: 1.0,
+                ..Default::default()
+            }),
+            targets: Some(vec!["usb".to_string(), "hue".to_string()]),
+            led_calibration: Some(calibration_with_total_leds(12)),
+            ..LightingModeConfig::default()
+        };
+        let started = apply_mode_change(
+            &mut owner,
+            mode,
+            true,
+            Some("COM-TWIN"),
+            None,
+            Some(hue_context_with_channels(2)),
+            Some(shared_telemetry()),
+            Some(emitter),
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            built.load(Ordering::SeqCst),
+            0,
+            "no twin open: the worker must not build an edge-signal payload"
+        );
+        assert_eq!(main_events.load(Ordering::SeqCst), 0);
+        assert!(twin_frames.lock().expect("frames lock").is_empty());
+
+        twin_state.record_twin_for_test("display-1", twin_label);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let frame = loop {
+            let with_hue = twin_frames
+                .lock()
+                .expect("frames lock")
+                .iter()
+                .rev()
+                .find(|frame| frame.get("hueChannels").is_some())
+                .cloned();
+            if let Some(frame) = with_hue {
+                break frame;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "an open twin must receive frames carrying hueChannels"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(frame["leds"].as_array().map(Vec::len), Some(12));
+        assert_eq!(frame["ledCount"], 12);
+        assert_eq!(frame["hueChannels"].as_array().map(Vec::len), Some(2));
+        assert_eq!(frame["source"], "live");
+        for dropped in ["top", "bottom", "left", "right"] {
+            assert!(frame.get(dropped).is_none(), "`{dropped}` has no reader");
+        }
+        assert_eq!(
+            main_events.load(Ordering::SeqCst),
+            0,
+            "the main window has no edge-signal listener and must receive nothing"
+        );
+
+        twin_state.forget_twin_label(twin_label);
+        // One tick may already be past the gate when the twin closes.
+        std::thread::sleep(Duration::from_millis(100));
+        let after_close = built.load(Ordering::SeqCst);
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            built.load(Ordering::SeqCst),
+            after_close,
+            "closing the last twin must stop the feed"
+        );
+
+        let mut cleanup_trace = None;
+        super::stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_workers_drained();
     }
 }
