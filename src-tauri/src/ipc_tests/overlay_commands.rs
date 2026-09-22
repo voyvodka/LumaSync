@@ -9,7 +9,8 @@
 //! There is no "a valid input gets through" counterpart: past those guards the
 //! command builds a real blocking HTTP request and falls back to the OS keychain
 //! for the app key, so the result would depend on the developer's machine and
-//! could reach the network. Proving acceptance needs the predicates extracted.
+//! could reach the network. The accepted path is covered below the guards, in
+//! `save_load`'s own tests, against a local stand-in for the bridge.
 
 use serde_json::json;
 use tauri::test::MockRuntime;
