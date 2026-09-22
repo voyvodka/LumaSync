@@ -225,7 +225,8 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             const ranTargets = bootTargets.filter((target) => target !== "hue");
             sink.setSelectedOutputTargets(restoredTargets.filter((target) => target !== "hue"));
             sink.setLightingMode({ ...restoredMode, targets: ranTargets });
-            sink.reportHueLeftOut(restore.hueLeftOut);          }
+            sink.reportHueLeftOut(restore.hueLeftOut);
+          }
         } else {
           sink.setActiveOutputTargets([]);
         }

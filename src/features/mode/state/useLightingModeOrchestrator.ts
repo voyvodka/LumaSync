@@ -678,7 +678,8 @@ export function useLightingModeOrchestrator({
             // re-dispatch would hit the Hue gate again. The persisted mode and
             // `lastOutputTargets` keep Hue, so the next launch tries it again.
             setLightingModeState({ ...normalizedNextMode, targets: usbOnlyTargets });
-            setSelectedOutputTargets((prev) => prev.filter((t) => t !== "hue"));            setHueLeftOutNotice(hueLeftOutReason(runtimeHueStartConfig !== null, hueStartCode));
+            setSelectedOutputTargets((prev) => prev.filter((t) => t !== "hue"));
+            setHueLeftOutNotice(hueLeftOutReason(runtimeHueStartConfig !== null, hueStartCode));
           } else {
             setLightingModeState(normalizedNextMode);
           }
