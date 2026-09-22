@@ -860,6 +860,150 @@ describe("useLightingModeOrchestrator", () => {
     });
   });
 
+  // The same rule as a [usb, hue] start, reached by adding Hue to a running
+  // USB mode: "hue" goes active only once the backend runs it.
+  describe("Hue added to a running USB mode", () => {
+    const hueStartConfig = {
+      bridgeIp: "192.168.1.50",
+      username: "app-key",
+      clientKey: "client-key",
+      areaId: "area-1",
+    };
+    const running: LightingModeConfig = { kind: LIGHTING_MODE_KIND.AMBILIGHT, targets: ["usb"] };
+
+    function hueStart(code: string, state = "Idle") {
+      return { active: false, status: { code, message: "hue", details: null, state } };
+    }
+
+    function gateOnHue() {
+      setLightingModeMock.mockImplementation((payload: LightingModeConfig) =>
+        Promise.resolve(
+          (payload.targets ?? []).includes("hue")
+            ? {
+                active: true,
+                mode: running,
+                status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+              }
+            : appliedResult(payload),
+        ),
+      );
+    }
+
+    async function addHue(config: typeof hueStartConfig | null = hueStartConfig) {
+      const view = harness({ hueStartConfig: config });
+      act(() => {
+        view.result.current.setLightingMode(running);
+        view.result.current.setSelectedOutputTargets(["usb"]);
+        view.result.current.setActiveOutputTargets(["usb"]);
+      });
+      await act(async () => {
+        await view.result.current.handleOutputTargetsChange(["usb", "hue"]);
+      });
+      return view;
+    }
+
+    it("keeps Hue out of the active set when the gate refuses the re-apply", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      startHueMock.mockResolvedValue(hueStart("HUE_STREAM_RUNNING_DTLS", "Running"));
+      gateOnHue();
+
+      const view = await addHue();
+
+      expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+      expect(setLightingModeMock.mock.calls[0][0].targets).toEqual(["usb", "hue"]);
+      expect(view.result.current.activeOutputTargets).toEqual(["usb"]);
+      expect(view.result.current.hueLeftOutNotice).toBe("unreachable");
+      // The gate returns before teardown: USB is neither stopped nor restarted.
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
+      // The stream this add opened feeds nothing, so it is given back.
+      expect(stopHueMock).toHaveBeenCalledWith("system");
+      expect(view.result.current.selectedOutputTargets).toEqual(["usb"]);
+      // The explicit add stays persisted; nothing rewrites it without Hue.
+      const targetWrites = saveShellStateMock.mock.calls
+        .map(([patch]) => patch as Record<string, unknown>)
+        .filter((patch) => "lastOutputTargets" in patch);
+      expect(targetWrites).toEqual([{ lastOutputTargets: ["usb", "hue"] }]);
+      errorSpy.mockRestore();
+    });
+
+    it("cancels a start that left Hue retrying and does not re-apply", async () => {
+      startHueMock.mockResolvedValue(hueStart("TRANSIENT_RETRY_SCHEDULED", "Reconnecting"));
+      gateOnHue();
+
+      const view = await addHue();
+
+      expect(stopHueMock).toHaveBeenCalledTimes(1);
+      expect(stopHueMock).toHaveBeenCalledWith("system");
+      expect(setLightingModeMock).not.toHaveBeenCalled();
+      expect(view.result.current.activeOutputTargets).toEqual(["usb"]);
+      expect(view.result.current.hueLeftOutNotice).toBe("unreachable");
+    });
+
+    it("keeps hue listed and raises the stop notice when the cancel does not confirm", async () => {
+      startHueMock.mockResolvedValue(hueStart("TRANSIENT_RETRY_SCHEDULED", "Reconnecting"));
+      stopHueMock.mockResolvedValue({ active: true, status: { code: "HUE_STOP_TIMEOUT_PARTIAL" } });
+
+      const view = await addHue();
+
+      expect(view.result.current.activeOutputTargets).toEqual(["usb", "hue"]);
+      expect(view.result.current.stopFailedNotice).toEqual(["hue"]);
+    });
+
+    it("names a re-pair for an auth-invalid start", async () => {
+      startHueMock.mockResolvedValue(hueStart("AUTH_INVALID_CREDENTIALS", "Failed"));
+
+      const view = await addHue();
+
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(view.result.current.hueLeftOutNotice).toBe("auth");
+      expect(view.result.current.activeOutputTargets).toEqual(["usb"]);
+    });
+
+    it("says Hue is not set up when there is no start config", async () => {
+      const view = await addHue(null);
+
+      expect(startHueMock).not.toHaveBeenCalled();
+      expect(view.result.current.hueLeftOutNotice).toBe("config");
+      expect(view.result.current.selectedOutputTargets).toEqual(["usb"]);
+    });
+
+    it("shows Off, not USB, when the re-apply tore the running mode down", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      startHueMock.mockResolvedValue(hueStart("HUE_STREAM_RUNNING_DTLS", "Running"));
+      setLightingModeMock.mockResolvedValue({
+        active: false,
+        mode: { kind: LIGHTING_MODE_KIND.OFF },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "failed",
+          details: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+        },
+      });
+
+      const view = await addHue();
+
+      expect(view.result.current.activeOutputTargets).toEqual([]);
+      expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.OFF);
+      expect(view.result.current.hueLeftOutNotice).toBeNull();
+      expect(view.result.current.startFailedNotice?.bucket).toBe("permission");
+      expect(stopHueMock).toHaveBeenCalledWith("system");
+      errorSpy.mockRestore();
+    });
+
+    it("adds Hue when the backend runs it", async () => {
+      startHueMock.mockResolvedValue(hueStart("HUE_STREAM_RUNNING_DTLS", "Running"));
+
+      const view = await addHue();
+
+      expect(setLightingModeMock).toHaveBeenCalledTimes(1);
+      expect(view.result.current.activeOutputTargets).toEqual(["usb", "hue"]);
+      expect(view.result.current.selectedOutputTargets).toEqual(["usb", "hue"]);
+      expect(view.result.current.hueLeftOutNotice).toBeNull();
+      expect(stopHueMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe("start notice precedence", () => {
     const savedCalibration = {
       totalLeds: 60,

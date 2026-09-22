@@ -15,7 +15,7 @@ import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/cont
 import { LIGHTING_MODE_GATE_STATUS, type HueLeftOutReason } from "@/shared/contracts/lighting";
 
 import { getScreenCapturePermission } from "../captureApi";
-import { setHueSolidColor, startHue, stopHue, stopLighting } from "../modeApi";
+import { setHueSolidColor, startHue, stopHue, stopLighting, type ModeCommandResult } from "../modeApi";
 import {
   DEFAULT_OUTPUT_TARGETS,
   LIGHTING_MODE_KIND,
@@ -216,7 +216,14 @@ export function useLightingModeOrchestrator({
       setStopFailedNotice(failedToStop);
     }
 
-    // Delta-start: for each added target, start the current mode on it
+    // What outputs once the stops above settle. The left-out notice says
+    // "running on USB only", which is only true while USB is live.
+    let liveTargets = successfullyStopped.length > 0
+      ? currentActive.filter((t) => !successfullyStopped.includes(t))
+      : currentActive;
+
+    // Delta-start: for each added target, start the current mode on it.
+    // D-06: a target that fails to start never disturbs the ones already running.
     for (const target of addedTargets) {
       // Re-checked per target, not once: each iteration awaits, so a newer
       // change can supersede this run partway through the list.
@@ -233,54 +240,129 @@ export function useLightingModeOrchestrator({
           }, { force: true });
           if (!isLatest()) return;
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
-        } catch {
-          // D-06: silently skip failed target, existing targets continue
-          console.warn("[seamless-switch] USB delta-start failed, skipping");
+          liveTargets = [...new Set([...liveTargets, "usb" as HueRuntimeTarget])];
+        } catch (err) {
+          console.error("[LumaSync] USB delta-start failed; the running targets continue:", err);
         }
       }
       if (target === "hue") {
+        let runtimeHueConfig = hueStartConfig;
         try {
-          const latestShellState = await loadShellState();
-          const runtimeHueConfig = toHueStartConfig(latestShellState) ?? hueStartConfig;
-          if (!runtimeHueConfig) {
-            console.warn("[seamless-switch] Hue delta-start skipped — no bridge config");
-            continue;
+          runtimeHueConfig = toHueStartConfig(await loadShellState()) ?? hueStartConfig;
+        } catch (err) {
+          console.error("[LumaSync] Hue delta-start could not read the shell state; using the cached config:", err);
+        }
+        if (!isLatest()) return;
+
+        let hueStartCode: string | undefined;
+        if (runtimeHueConfig) {
+          try {
+            hueStartCode = (await startHue(runtimeHueConfig)).status.code;
+          } catch (err) {
+            console.error("[LumaSync] Hue delta-start failed:", err);
           }
-          const hueResult = await startHue(runtimeHueConfig);
           if (!isLatest()) return;
-          if (isHueStartCodeOk(hueResult.status.code)) {
-            setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
-            // Re-apply lighting mode so the ambilight worker picks up the now-live
-            // Hue stream context. Without this, the running worker has hue_output=None
-            // and never sends colors to Hue (solid color push handles SOLID mode too).
+        }
+
+        // Re-apply so the running worker picks up the now-live Hue stream
+        // context; without it the worker has hue_output=None and never sends
+        // colours to Hue. A failed start is not dispatched: with no stream
+        // context the Rust Hue gate would refuse it anyway.
+        let applyResult: ModeCommandResult | null = null;
+        if (hueStartCode !== undefined && isHueStartCodeOk(hueStartCode)) {
+          try {
+            applyResult = await dispatchSetLightingMode({
+              kind: lightingMode.kind,
+              solid: lightingMode.solid,
+              ambilight: lightingMode.ambilight,
+              targets: normalizedTargets,
+            }, { force: true });
+          } catch (err) {
+            console.error("[LumaSync] Hue delta-start mode dispatch failed:", err);
+          }
+          if (!isLatest()) return;
+        }
+
+        // `mode` reports what the backend runs, so Hue counts as added only once
+        // it is in the running targets. A gate refusal reports the previous mode,
+        // which has the same kind — `refused` alone would read it as accepted.
+        const outcome = readModeApplyOutcome(applyResult, lightingMode.kind);
+        const hueDriven =
+          applyResult !== null && !outcome.refused && (applyResult.mode.targets ?? []).includes("hue");
+
+        if (hueDriven) {
+          setActiveOutputTargets((prev) => [...new Set([...prev, "hue" as HueRuntimeTarget])]);
+          liveTargets = [...new Set([...liveTargets, "hue" as HueRuntimeTarget])];
+          if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
             try {
-              await dispatchSetLightingMode({
-                kind: lightingMode.kind,
-                solid: lightingMode.solid,
-                ambilight: lightingMode.ambilight,
-                targets: normalizedTargets,
-              }, { force: true });
+              const colorResult = await setHueSolidColor({
+                r: lightingMode.solid.r,
+                g: lightingMode.solid.g,
+                b: lightingMode.solid.b,
+                brightness: lightingMode.solid.brightness,
+              });
+              reportHueSolidColorStatus(colorResult.status.code);
             } catch (err) {
-              // Non-fatal for ambilight worker restart; fall through to solid push
-              console.error("[LumaSync] Hue delta-start mode dispatch failed; continuing to solid push:", err);
-            }
-            if (lightingMode.kind === LIGHTING_MODE_KIND.SOLID && lightingMode.solid) {
-              try {
-                const colorResult = await setHueSolidColor({
-                  r: lightingMode.solid.r,
-                  g: lightingMode.solid.g,
-                  b: lightingMode.solid.b,
-                  brightness: lightingMode.solid.brightness,
-                });
-                reportHueSolidColorStatus(colorResult.status.code);
-              } catch (err) {
-                console.error("[LumaSync] Hue solid push on delta-start non-fatal failure:", err);
-              }
+              console.error("[LumaSync] Hue solid push on delta-start non-fatal failure:", err);
             }
           }
-        } catch {
-          // D-06: silently skip failed target, existing targets continue
-          console.warn("[seamless-switch] Hue delta-start failed, skipping");
+          continue;
+        }
+
+        // Left out — settled as the slow path settles a [usb, hue] start the gate
+        // refuses. A stream or retry this session owns is cancelled, or the
+        // health poll re-adds "hue" behind the notice's back.
+        const hueActiveBefore = currentActive.includes("hue");
+        const cancelHue = shouldCancelHueAfterLeavingOut({ hueStartCode, hueActiveBefore });
+        let hueStillHeld = false;
+        if (cancelHue) {
+          try {
+            const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+            hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
+          } catch (err) {
+            hueStillHeld = true;
+            console.error("[LumaSync] Hue cancel after leaving it out of the delta-start failed:", err);
+          }
+          if (hueStillHeld) setStopFailedNotice(["hue"]);
+        }
+        if (!isLatest()) return;
+
+        if (applyResult !== null && outcome.refused && applyResult.mode.kind === LIGHTING_MODE_KIND.OFF) {
+          // The backend tore the running mode down before the restart failed, so
+          // nothing outputs and "running on USB only" would be false. UI only, as
+          // in the slow path: the persisted mode stays for the next launch.
+          console.error(
+            `[LumaSync] Hue delta-start re-apply stopped the running mode (${applyResult.status.code}).`,
+          );
+          setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
+          setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
+          if (outcome.startFailure) setStartFailedNotice(outcome.startFailure);
+          return;
+        }
+
+        if (cancelHue) {
+          // A stream that would not stop stays listed, as in the slow path.
+          setActiveOutputTargets((prev) =>
+            hueStillHeld
+              ? [...new Set([...prev, "hue" as HueRuntimeTarget])]
+              : prev.filter((t) => t !== "hue"),
+          );
+        }
+        // Session-only, as in the slow path. `lastOutputTargets` was saved above
+        // with the user's explicit add and keeps it, so the next launch retries Hue.
+        setSelectedOutputTargets((prev) => prev.filter((t) => t !== "hue"));
+
+        // The Hue gate returns before teardown, so the previous targets keep running.
+        const hueWasTheReason =
+          hueStartCode === undefined ||
+          !isHueStartCodeOk(hueStartCode) ||
+          hueLeftOutRetryTargets(applyResult, normalizedTargets) !== null;
+        if (hueWasTheReason && liveTargets.includes("usb")) {
+          setHueLeftOutNotice(hueLeftOutReason(runtimeHueConfig !== null, hueStartCode));
+        } else {
+          console.error(
+            `[LumaSync] Hue delta-start left Hue out (start ${hueStartCode ?? "none"}, apply ${applyResult?.status.code ?? "none"}).`,
+          );
         }
       }
     }
