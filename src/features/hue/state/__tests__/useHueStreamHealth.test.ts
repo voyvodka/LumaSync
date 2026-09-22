@@ -5,7 +5,7 @@ import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/mod
 import type { LightingModeDispatcher } from "@/features/mode/state/useLightingModeDispatch";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
-import { useHueStreamHealth } from "../useHueStreamHealth";
+import { isHueSessionReconnecting, useHueStreamHealth } from "../useHueStreamHealth";
 
 const readHueStreamStatusMock = vi.fn();
 
@@ -18,6 +18,9 @@ const failedStatus = (message = "bridge dropped the stream") => ({
 });
 const runningStatus = () => ({
   status: { state: "Running", code: "X", message: "ok", details: null },
+});
+const reconnectingStatus = () => ({
+  status: { state: "Reconnecting", code: "X", message: "bridge unreachable", details: null },
 });
 
 const ambilightMode: LightingModeConfig = {
@@ -109,6 +112,36 @@ describe("useHueStreamHealth", () => {
       { ...ambilightMode, targets: selectedOutputTargetsRef.current },
       { force: true },
     );
+  });
+
+  // A bridge unreachable for hours stays RECONNECTING with "hue" still in the
+  // active targets, so the shell read membership as STREAMING the whole time.
+  it("reports RECONNECTING so the shell can stop calling the session live", async () => {
+    readHueStreamStatusMock.mockResolvedValue(reconnectingStatus());
+    const { view, activeOutputTargetsRef } = mount({ activeOutputTargets: ["hue"], mode: ambilightMode });
+
+    await flush(0);
+
+    // The backend is still retrying, so the target is kept…
+    expect(activeOutputTargetsRef.current).toEqual(["hue"]);
+    // …but the state it reports is what the UI must show.
+    expect(view.result.current.runtimeState).toBe("Reconnecting");
+    expect(
+      isHueSessionReconnecting(
+        activeOutputTargetsRef.current.includes("hue"),
+        view.result.current.runtimeState,
+      ),
+    ).toBe(true);
+
+    readHueStreamStatusMock.mockResolvedValue(runningStatus());
+    await flush(5_000);
+    expect(view.result.current.runtimeState).toBe("Running");
+  });
+
+  it("only calls an owned session reconnecting", () => {
+    expect(isHueSessionReconnecting(false, "Reconnecting")).toBe(false);
+    expect(isHueSessionReconnecting(true, "Running")).toBe(false);
+    expect(isHueSessionReconnecting(true, null)).toBe(false);
   });
 
   it("does not restore hue while the lighting mode is off", async () => {

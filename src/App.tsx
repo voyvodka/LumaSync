@@ -18,7 +18,10 @@ import { useHueSolidColorNotice } from "./features/mode/state/useHueSolidColorNo
 import { useModeHotReload } from "./features/mode/state/useModeHotReload";
 import { useLightingModeOrchestrator } from "./features/mode/state/useLightingModeOrchestrator";
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
-import { useHueStreamHealth } from "./features/hue/state/useHueStreamHealth";
+import {
+  isHueSessionReconnecting,
+  useHueStreamHealth,
+} from "./features/hue/state/useHueStreamHealth";
 import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
 import { buildStatusItems } from "./features/shell/statusItems";
 import { ShellNotices } from "./features/shell/ShellNotices";
@@ -140,7 +143,7 @@ function App() {
     void checkForUpdates();
   }, [checkForUpdates]);
 
-  useHueStreamHealth({
+  const { runtimeState: hueRuntimeState } = useHueStreamHealth({
     hueTargetSelected: selectedOutputTargets.includes("hue"),
     activeOutputTargetsRef: mode.activeOutputTargetsRef,
     lightingModeRef: mode.lightingModeRef,
@@ -149,8 +152,13 @@ function App() {
     setActiveOutputTargets: mode.setActiveOutputTargets,
   });
 
-  const hueStreaming = activeOutputTargets.includes("hue");
-  const hueProbe = useHueBridgeReachability(hueStartConfig, hueStreaming);
+  // Membership means the app owns a Hue session, not that frames reach the
+  // bridge: RECONNECTING keeps the target. Only the shown state is split; the
+  // probe and the reachability fallbacks still key on the session.
+  const hueSessionActive = activeOutputTargets.includes("hue");
+  const hueReconnecting = isHueSessionReconnecting(hueSessionActive, hueRuntimeState);
+  const hueStreaming = hueSessionActive && !hueReconnecting;
+  const hueProbe = useHueBridgeReachability(hueStartConfig, hueSessionActive);
   const hueReachable = hueProbe.reachable;
 
   useHueSolidBootstrapSync({
@@ -177,6 +185,7 @@ function App() {
     armUsbConnected: (connected) => armUsbConnectedRef.current?.(connected),
     runtimeConfig,
     reportHueSolidColorStatus,
+    reportStartFailure: mode.reportStartFailure,
   });
 
   const { usbDisconnectNotice, usbUnsupportedNotice, armUsbConnected } =
@@ -302,11 +311,12 @@ function App() {
     outputTargets: selectedOutputTargets,
     localSink,
     hueConfigured: hueStartConfig !== null,
-    hueReachable: hueReachable || hueStreaming,
+    hueReachable: hueReachable || hueSessionActive,
     hueProbeGaveUp: hueProbe.gaveUp,
     hueProbeChecking: hueProbe.probing,
     onRetryHueProbe: hueProbe.retry,
     hueStreaming,
+    hueReconnecting,
     modeLockReason:
       modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED
         ? modeGuard.reason
@@ -353,6 +363,7 @@ function App() {
       ambilightActive: lightingMode.kind === LIGHTING_MODE_KIND.AMBILIGHT,
       localSink,
       hueStreaming,
+      hueReconnecting,
       hueReachable,
       hueConfigured: hueStartConfig !== null,
       onOpenDevices: openDevicesSection,
@@ -421,7 +432,7 @@ function App() {
             hasCompleted={hasCompletedOnboarding}
             guards={{
               hasInteractedWithMode,
-              hasReachableOutput: isConnected || hueReachable || hueStreaming,
+              hasReachableOutput: isConnected || hueReachable || hueSessionActive,
               hasSavedCalibration: savedCalibration !== undefined,
             }}
             onOpenLights={() => void handleSectionChange(SECTION_IDS.LIGHTS)}

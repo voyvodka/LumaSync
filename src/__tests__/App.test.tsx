@@ -154,11 +154,16 @@ vi.mock("../features/settings/SettingsLayout", () => ({
     outputTargets: Array<"usb" | "hue">;
     localSink: LocalSink | null;
     calibration?: { totalLeds: number };
+    hueStreaming: boolean;
+    hueReconnecting?: boolean;
     onLightingModeChange: (mode: LightingModeConfig) => void;
     onOutputTargetsChange: (targets: Array<"usb" | "hue">) => void;
   }) => (
     <div>
       <p data-testid="active-mode">{props.lightingMode.kind}</p>
+      <p data-testid="hue-shown-state">
+        {props.hueReconnecting ? "reconnecting" : props.hueStreaming ? "streaming" : "none"}
+      </p>
       <p data-testid="output-targets">{props.outputTargets.join(",")}</p>
       <p data-testid="local-sink">
         {props.localSink ? `${props.localSink.transport}:${props.localSink.id}` : "none"}
@@ -1427,6 +1432,112 @@ describe("App mode orchestration", () => {
         infoSpy.mockRestore();
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe("boot restore honours what the backend actually started", () => {
+    const hueAmbilightShellState = {
+      lastSection: "general",
+      ledCalibration: null,
+      lightingMode: {
+        kind: "ambilight",
+        ambilight: { brightness: 0.8, saturation: 1, blackBorderDetection: false },
+      },
+      lastOutputTargets: ["hue"],
+      lastHueBridge: { id: "bridge-1", ip: "192.168.1.10", name: "Bridge" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    };
+    const hueStatus = (state: string) => ({
+      active: state !== "Idle",
+      lastSolidColor: null,
+      status: { state, code: "X", message: state, details: null },
+    });
+
+    // Screen recording refused: the lights screen read CAP OK / HUE STREAMING
+    // with nothing running and no warning, and the bridge stayed claimed.
+    it("shows Off, releases the bridge and warns when capture is refused at launch", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      loadShellStateMock.mockResolvedValue(hueAmbilightShellState);
+      getHueStreamStatusMock.mockResolvedValue(hueStatus("Running"));
+      setLightingModeMock.mockResolvedValue({
+        active: false,
+        mode: { kind: "off" },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "Ambilight runtime could not start.",
+          details: "AMBILIGHT_CAPTURE_PERMISSION_DENIED",
+        },
+      });
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+      });
+      expect(startHueMock).toHaveBeenCalled();
+      // Hue before the mode: the worker needs the live stream context.
+      expect(startHueMock.mock.invocationCallOrder[0]).toBeLessThan(
+        setLightingModeMock.mock.invocationCallOrder[0],
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+      expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("none");
+      expect(screen.getByTestId("capture-start-failed-notice")).toBeInTheDocument();
+      // The persisted mode is left alone so the next launch retries it.
+      expect(saveShellStateMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ lightingMode: expect.anything() }),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it("shows Off without a toast when the saved display is simply not plugged in", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      loadShellStateMock.mockResolvedValue(hueAmbilightShellState);
+      setLightingModeMock.mockResolvedValue({
+        active: false,
+        mode: { kind: "off" },
+        status: {
+          code: "AMBILIGHT_MODE_START_FAILED",
+          message: "Ambilight runtime could not start.",
+          details: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+        },
+      });
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+      });
+      expect(screen.queryByTestId("capture-start-failed-notice")).not.toBeInTheDocument();
+      warnSpy.mockRestore();
+    });
+
+    it("keeps the restored mode and the stream when the backend runs it", async () => {
+      loadShellStateMock.mockResolvedValue(hueAmbilightShellState);
+      getHueStreamStatusMock.mockResolvedValue(hueStatus("Running"));
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("streaming");
+      });
+      expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+      expect(stopHueMock).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("capture-start-failed-notice")).not.toBeInTheDocument();
+    });
+
+    it("reads a retrying bridge as reconnecting, not streaming", async () => {
+      loadShellStateMock.mockResolvedValue(hueAmbilightShellState);
+      getHueStreamStatusMock.mockResolvedValue(hueStatus("Reconnecting"));
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("hue-shown-state")).toHaveTextContent("reconnecting");
+      });
     });
   });
 

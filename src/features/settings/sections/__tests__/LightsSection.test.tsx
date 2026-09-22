@@ -116,6 +116,30 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("LightsSection", () => {
+  // The dock row read "DTLS 20 Hz" beside a green dot for as long as the
+  // bridge stayed unreachable, because it only knew the target was active.
+  it("names a retrying Hue session instead of quoting the stream rate", () => {
+    render(
+      <LightsSection
+        mode={{ kind: "ambilight" }}
+        outputTargets={["hue"]}
+        localOutputConnected={false}
+        localSink={null}
+        hueConfigured={true}
+        hueReachable={true}
+        hueStreaming={false}
+        hueReconnecting={true}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("lights:dock.rows.hueSubReconnecting")).toBeInTheDocument();
+    expect(screen.queryByText("lights:dock.rows.hueSubStreaming")).not.toBeInTheDocument();
+  });
+
   it("calls onModeChange with ambilight payload when Ambilight is selected", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();

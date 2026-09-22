@@ -12,7 +12,6 @@ import {
   type CaptureFailureNotice,
 } from "@/shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
-import { LIGHTING_MODE_STATUS } from "@/shared/contracts/lighting";
 
 import { getScreenCapturePermission } from "../captureApi";
 import { setHueSolidColor, startHue, stopHue, stopLighting } from "../modeApi";
@@ -29,6 +28,7 @@ import {
   resolveHueRuntimePlan,
   type HueTargetCommandResult,
 } from "./hueModeRuntimeFlow";
+import { readModeApplyOutcome } from "./modeApplyOutcome";
 import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
 import { useLightingModePersistence } from "./useLightingModePersistence";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
@@ -56,6 +56,8 @@ export interface LightingModeOrchestrator {
   isModeTransitioning: boolean;
   stopFailedNotice: HueRuntimeTarget[] | null;
   startFailedNotice: CaptureFailureNotice | null;
+  /** Lets the boot restore raise the same toast the interactive start does. */
+  reportStartFailure: (notice: CaptureFailureNotice) => void;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
@@ -95,9 +97,9 @@ export function useLightingModeOrchestrator({
   // failed during a delta-stop, so the chip stays active instead of silently
   // lying about state. Banner auto-dismisses; user can retry by toggling.
   const [stopFailedNotice, setStopFailedNotice] = useState<HueRuntimeTarget[] | null>(null);
-  // Raised only from the slow path below, which nothing but a user gesture
-  // reaches — bootstrap restore calls `modeApi.setLightingMode` directly, so a
-  // launch against an unplugged display must not toast.
+  // Raised by the slow path below and, through `reportStartFailure`, by the boot
+  // restore — which filters the display bucket out, so a launch against an
+  // unplugged display must not toast.
   const [startFailedNotice, setStartFailedNotice] = useState<CaptureFailureNotice | null>(null);
 
   const modeTransitionLockRef = useRef(false);
@@ -511,16 +513,11 @@ export function useLightingModeOrchestrator({
           }
           try {
             const applyResult = await dispatchSetLightingMode(normalizedNextMode, { force: true });
-            // A failed capture start resolves as `Ok` carrying a status, so it
-            // lands here rather than in the catch below. The reason is free text
-            // in `details`; `describeCaptureFailure` is the only thing that reads it.
-            if (applyResult?.status?.code === LIGHTING_MODE_STATUS.AMBILIGHT_MODE_START_FAILED) {
-              setStartFailedNotice(describeCaptureFailure(applyResult.status.details));
+            const outcome = readModeApplyOutcome(applyResult, normalizedNextMode.kind);
+            if (outcome.startFailure) {
+              setStartFailedNotice(outcome.startFailure);
             }
-            // `mode` reports the RUNNING mode, so a gate refusal while another
-            // kind is live reads as refused too — `active` alone would not.
-            // `!== null` is load-bearing: a deduped dispatch means never asked.
-            if (applyResult !== null && applyResult.mode.kind !== normalizedNextMode.kind) {
+            if (applyResult !== null && outcome.refused) {
               applyRefused = true;
               if (runtimePlan.startTargets.includes("usb")) {
                 targetResults.usb = {
@@ -611,6 +608,7 @@ export function useLightingModeOrchestrator({
     isModeTransitioning,
     stopFailedNotice,
     startFailedNotice,
+    reportStartFailure: setStartFailedNotice,
     handleLightingModeChange,
     handleOutputTargetsChange,
     dispatch: dispatchSetLightingMode,

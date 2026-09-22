@@ -16,7 +16,8 @@
  * Lifecycle:
  *   - Mounts when `hasCompletedOnboarding !== true`.
  *   - The active step advances when the parent reports a guard change
- *     (mode click, output reachable, calibration saved). When the step
+ *     (mode click, output reachable, calibration saved), as far as the
+ *     guards allow in one go. When the step
  *     transitions to `COMPLETE`, `onComplete` fires and App.tsx flips
  *     the persisted flag to `true`; the next render unmounts this
  *     component for good.
@@ -38,7 +39,7 @@ import {
   ONBOARDING_TOTAL_STEPS,
   type OnboardingGuardSnapshot,
   type OnboardingStep,
-  nextStep,
+  settleStep,
   stepIndex,
 } from "../state/onboardingState";
 
@@ -75,12 +76,14 @@ export function OnboardingFlow({
   // state machine only ever advances forwards, so a flip-flop in (e.g.)
   // `hasReachableOutput` does not bounce the user back to step 2 once
   // they have moved past it — that would be a poor UX.
+  // Keyed on the three booleans, not the object: App passes a fresh literal
+  // every render, and settling to a fixpoint is what makes one run enough.
+  const { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration } = guards;
   useEffect(() => {
-    setStep((current) => {
-      const next = nextStep(current, guards);
-      return next;
-    });
-  }, [guards]);
+    setStep((current) =>
+      settleStep(current, { hasInteractedWithMode, hasReachableOutput, hasSavedCalibration }),
+    );
+  }, [hasInteractedWithMode, hasReachableOutput, hasSavedCalibration]);
 
   // Drive the `onComplete` side effect when the step machine reaches
   // COMPLETE, including the explicit dismiss path below.
