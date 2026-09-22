@@ -11,9 +11,11 @@ Lowering it reintroduces the v1.5.2 launch crash — see *Resolved* below.
 classify the bump from the diff. A genuinely breaking change still ships under a patch number, so
 it has to be called out in the release notes in as many words.
 
-**Three version locations move in lockstep:** `src-tauri/Cargo.toml`, `package.json`,
-`SECURITY.md`. Then `cargo check` to refresh `Cargo.lock`. `tauri.conf.json` has no version field
-— it inherits from `Cargo.toml`.
+**Four version locations move in lockstep:** `src-tauri/Cargo.toml`, `package.json`,
+`SECURITY.md`, and `bundle.windows.wix.version` in `tauri.conf.json`. Then `cargo check` to refresh
+`Cargo.lock`. The first three carry the full version including any prerelease suffix; the wix one
+carries the bare `X.Y.Z`, because MSI rejects a non-numeric prerelease identifier. The app version
+itself is inherited from `Cargo.toml` — `tauri.conf.json` has no top-level version field.
 
 **Publication is two-stage.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the
 updater feed never sees a platform-incomplete `latest.json`; a `publish` job then asserts all four

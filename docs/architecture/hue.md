@@ -31,10 +31,9 @@ of the bridge answers with its own 403, and treating that as a dead credential t
 pairing that was fine.
 
 **The HTTP fallback must never run on a request whose response carries a secret.** The pairing POST
-returns the DTLS `clientkey`: if that call fell back on a TLS failure the way IP verification and
-credential validation do, an attacker who blackholes TCP/443 could force the downgrade and read the
-pre-shared key off plain HTTP. `send_clip_v1`'s `allow_http_fallback` flag is `false` for that one
-call, and the fallback itself only triggers on a connect-level failure — a TLS handshake failure
+returns the DTLS `clientkey`: if that call fell back on a TLS failure the way IP verification does, an attacker who blackholes TCP/443 could force the downgrade and read the
+pre-shared key off plain HTTP. `send_clip_v1`'s `allow_http_fallback` flag is `true` only for IP
+verification (`/api/config`) and `false` for pairing and credential validation, and the fallback itself only triggers on a connect-level failure — a TLS handshake failure
 stays fatal, because that handshake failure is exactly the signal such an attacker manufactures.
 
 **Credentials live in the OS keychain, not in the state file.** macOS Keychain, Windows CredMan,

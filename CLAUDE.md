@@ -89,7 +89,7 @@ alone — UI hangs, crashes, mode transitions misbehaving, capture failures,
 Hue/USB anomalies, shutdown deadlocks — invoke the `debug-runtime` skill
 first via the Skill tool (or run `/debug-runtime "<problem>"` if the user
 typed it). The skill restarts a clean dev session, captures both frontend
-(via `tauri-plugin-log` `attachConsole` bridge) and backend logs into a
+(via the console bridge in `src/main.tsx`, which forwards into `tauri-plugin-log`) and backend logs into a
 single file, runs the validation suite, and either applies a small inline
 fix or hands the captured `/tmp/lumasync-debug-window.log` excerpt to the
 right specialist with file:line citations. Skipping this step and
@@ -125,7 +125,7 @@ the real `shell-state.json` — warn before driving a machine in use.
 
 `bun run tauri dev` is the primary development command; `bun run dev` runs the Vite server alone with no
 Tauri runtime. Everything else is in `package.json` — read it there. The verification sequence is
-below under **Verification Flow**; `cargo audit` ignores live in `.cargo/audit.toml`.
+below under **Verification Flow**; `cargo audit` ignores live in `src-tauri/.cargo/audit.toml`.
 
 Three traps live in the build and test setup, including one where `cargo build` and
 `bun run tauri build --debug` write the same path and produce different binaries — read
