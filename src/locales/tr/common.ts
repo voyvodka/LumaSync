@@ -119,6 +119,11 @@ const common: Catalogue<typeof enCommon> = {
   captureAction: {
     openSettings: "Sistem Ayarları'nı aç",
   },
+  hueLeftOut: {
+    unreachable: "Hue köprüsüne ulaşılamıyor — şimdilik yalnızca USB ile çalışıyor. Köprü geri geldiğinde Hue'yu yeniden açın.",
+    auth: "Hue yeniden eşleştirilmeli — şimdilik yalnızca USB ile çalışıyor. Cihazlar'dan tekrar eşleştirin.",
+    config: "Hue kurulmamış — şimdilik yalnızca USB ile çalışıyor.",
+  },
 };
 
 export default common;

@@ -22,9 +22,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { describeCaptureFailure } from "../../src/shared/contracts/capture";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
-import { HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
+import { HUE_COMMANDS, HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
-import type { ModeCommandResult } from "../../src/features/mode/modeApi";
+import type { HueRuntimeCommandResult, ModeCommandResult } from "../../src/features/mode/modeApi";
+import {
+  hueLeftOutReason,
+  hueLeftOutRetryTargets,
+  shouldCancelHueAfterLeavingOut,
+} from "../../src/features/mode/state/modeApplyOutcome";
 import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
 import { SCENARIOS } from "../scenarios";
@@ -222,6 +227,60 @@ describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mod
 
     expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
     expect(result.status.code).not.toBe("HUE_NOT_READY");
+  });
+});
+
+/**
+ * The frontend's USB-only fallback, replayed against the mock in the order the
+ * orchestrator issues it: start Hue, apply on [usb, hue], read the refusal with
+ * the same helper the app uses, cancel Hue if it is retrying, re-apply on USB.
+ */
+describe("a [usb, hue] start with the bridge unreachable falls back to USB", () => {
+  async function runFallback(world: ReturnType<typeof SCENARIOS.furnished.build>) {
+    world.hue.reachable = false;
+    world.hue.streaming = false;
+    world.lighting.mode = { kind: "off" };
+    setWorld(world);
+
+    const start = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
+    const first = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "solid", targets: ["usb", "hue"] },
+    })) as ModeCommandResult;
+    const usbOnly = hueLeftOutRetryTargets(first, ["usb", "hue"]);
+    const cancel = shouldCancelHueAfterLeavingOut({ hueStartCode: start.status.code, hueActiveBefore: true });
+    if (cancel) await dispatch(HUE_COMMANDS.STOP_STREAM);
+    const retry = usbOnly
+      ? ((await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+          payload: { kind: "solid", targets: usbOnly },
+        })) as ModeCommandResult)
+      : null;
+    return { start, first, usbOnly, cancel, retry };
+  }
+
+  it("never-started runtime: gated start, HUE_NOT_READY, then USB runs with nothing to cancel", async () => {
+    const world = SCENARIOS.furnished.build();
+    world.hue.everActive = false;
+
+    const run = await runFallback(world);
+
+    expect(run.start.status.code).toBe(HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED);
+    expect(run.first.status.code).toBe("HUE_NOT_READY");
+    expect(run.first.mode.kind).toBe("off");
+    expect(run.usbOnly).toEqual(["usb"]);
+    expect(run.cancel).toBe(false);
+    expect(run.retry?.status.code).toBe("SOLID_MODE_APPLIED");
+    expect(getWorld().lighting.mode.kind).toBe("solid");
+    expect(hueLeftOutReason(true, run.start.status.code)).toBe("unreachable");
+  });
+
+  it("a runtime that was live reports a scheduled retry, which the fallback cancels", async () => {
+    const run = await runFallback(SCENARIOS["hue-unreachable"].build());
+
+    expect(run.start.status.code).toBe(HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED);
+    expect(run.first.status.code).toBe("HUE_NOT_READY");
+    expect(run.cancel).toBe(true);
+    expect(run.retry?.status.code).toBe("SOLID_MODE_APPLIED");
+    expect(getWorld().hue.streaming).toBe(false);
   });
 });
 

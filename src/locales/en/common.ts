@@ -117,4 +117,9 @@ export default {
   captureAction: {
     openSettings: "Open System Settings",
   },
+  hueLeftOut: {
+    unreachable: "Can't reach the Hue bridge — running on USB only for now. Turn Hue back on once the bridge is back.",
+    auth: "Hue needs to be paired again — running on USB only for now. Re-pair it in Devices.",
+    config: "Hue isn't set up — running on USB only for now.",
+  },
 };
