@@ -180,7 +180,8 @@ https://keepachangelog.com/en/1.1.0/
   screen that matches where it stands: its height picks the band — a floor lamp takes the bottom
   of the picture, a ceiling light the top — and its position left or right of the TV picks the
   side. Its distance from the TV sets how much it follows the screen and how much it keeps a
-  softer room-wide colour; no light is ever switched off for being far away. Every room template
+  softer room-wide colour; no light is ever switched off for being far away, and even the
+  farthest light keeps part of its own side of the picture. Every room template
   except Empty places a TV, so if you set up your room map from one of those templates this turns
   on by itself when you update. Lights whose height LumaSync does not know yet sample the middle
   of the screen. Moving a light or the TV applies to running Ambilight within about half a second,
