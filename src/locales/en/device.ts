@@ -53,7 +53,6 @@ export default {
     errorBody: "Connection was not completed. Refresh, pick another port, and try again.",
     nextSteps: "Tip: if your remembered port appears again, it will be selected automatically.",
   },
-  usbDisconnected: "No device connected",
   healthCheck: {
     runAction: "Run Health Check",
     runningAction: "Running Health Check...",

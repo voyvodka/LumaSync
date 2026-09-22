@@ -234,6 +234,9 @@ export const LED_COLOR_ORDER = {
 
 export type LedColorOrder = (typeof LED_COLOR_ORDER)[keyof typeof LED_COLOR_ORDER];
 
+/** The identity order — what the output was before the setting existed. */
+export const DEFAULT_LED_COLOR_ORDER: LedColorOrder = LED_COLOR_ORDER.RGB;
+
 // ---------------------------------------------------------------------------
 // Color correction (v1.4 G4 — per-channel gamma, Kelvin, saturation)
 // ---------------------------------------------------------------------------

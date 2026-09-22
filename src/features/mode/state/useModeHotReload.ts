@@ -1,4 +1,9 @@
-import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
+import type {
+  ColorCorrectionConfig,
+  FirmwareProfile,
+  LedChipType,
+  LedColorOrder,
+} from "@/shared/contracts/device";
 import type { HueIntensityPreset } from "@/shared/contracts/hue";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 
@@ -12,6 +17,7 @@ export interface ModeHotReloadHandlers {
   onColorCorrectionChange: (next: ColorCorrectionConfig) => void;
   onFirmwareProfileChange: (next: FirmwareProfile) => void;
   onChipTypeChange: (next: LedChipType) => void;
+  onColorOrderChange: (next: LedColorOrder) => void;
   onSelectedDisplayIdChange: (next: string) => void;
   onRoomGeometryChange: RoomGeometryChangeHandler;
 }
@@ -62,6 +68,14 @@ export function useModeHotReload(
       runtimeConfig.setChipType(next);
       void dispatch(lightingMode, { force: true }).catch((error) => {
         console.error("[LumaSync] Failed to hot-reload chip type:", error);
+      });
+    },
+    onColorOrderChange: (next: LedColorOrder) => {
+      // No `force`: the order is in the signature, and Rust retunes it in the
+      // running worker — a byte shuffle is not worth reopening screen capture.
+      runtimeConfig.setColorOrder(next);
+      void dispatch(lightingMode).catch((error) => {
+        console.error("[LumaSync] Failed to hot-reload colour order:", error);
       });
     },
     onSelectedDisplayIdChange: (next: string) => {

@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
-import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
+import {
+  DEFAULT_LED_COLOR_ORDER,
+  type ColorCorrectionConfig,
+  type FirmwareProfile,
+  type LedChipType,
+  type LedColorOrder,
+} from "@/shared/contracts/device";
 import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "@/shared/contracts/hue";
 import type { RoomGeometry, RoomMapConfig } from "@/shared/contracts/roomMap";
 import { toRoomGeometry } from "@/features/room-map/model/roomGeometry";
 
-import type { AmbilightPayload, LightingModeConfig } from "../model/contracts";
+import { normalizeColorOrder, type AmbilightPayload, type LightingModeConfig } from "../model/contracts";
 import {
   hydrateModePayload,
   type ModeRuntimeConfigSnapshot,
@@ -19,6 +25,7 @@ export interface ModeRuntimeConfigPrimeInput {
   colorCorrection?: ColorCorrectionConfig;
   firmwareProfile?: FirmwareProfile;
   selectedChipType?: LedChipType;
+  ledColorOrder?: LedColorOrder;
   roomMap?: RoomMapConfig;
   lastHueAreaId?: string;
 }
@@ -35,6 +42,7 @@ export interface ModeRuntimeConfig {
   setFirmwareProfile: (profile: FirmwareProfile) => void;
   setSelectedDisplayId: (displayId: string | undefined) => void;
   setChipType: (chipType: LedChipType) => void;
+  setColorOrder: (order: LedColorOrder) => void;
   setRoomGeometry: (geometry: RoomGeometry | undefined) => void;
   getSelectedDisplayId: () => string | undefined;
 }
@@ -62,6 +70,9 @@ export function useModeRuntimeConfig(input: {
   // The worker sizes its wire packets from the chip type, so it must ride
   // along on every outgoing config.
   const chipTypeRef = useRef<LedChipType | undefined>(undefined);
+  // Always a value once primed, so Rust never has to fall back to reading
+  // `ledColorOrder` off disk on a mode change.
+  const colorOrderRef = useRef<LedColorOrder | undefined>(undefined);
   // Without this stamp the backend's `total_leds` falls back to 1 and only
   // LED #0 reflects screen content.
   const savedCalibrationRef = useRef<LedCalibrationConfig | undefined>(undefined);
@@ -96,6 +107,10 @@ export function useModeRuntimeConfig(input: {
     chipTypeRef.current = chipType;
   }, []);
 
+  const setColorOrder = useCallback((order: LedColorOrder) => {
+    colorOrderRef.current = order;
+  }, []);
+
   const setRoomGeometry = useCallback((geometry: RoomGeometry | undefined) => {
     roomGeometryRef.current = geometry;
   }, []);
@@ -110,6 +125,7 @@ export function useModeRuntimeConfig(input: {
     colorCorrectionRef.current = state.colorCorrection;
     firmwareProfileRef.current = state.firmwareProfile;
     chipTypeRef.current = state.selectedChipType;
+    colorOrderRef.current = normalizeColorOrder(state.ledColorOrder) ?? DEFAULT_LED_COLOR_ORDER;
     roomGeometryRef.current = toRoomGeometry(state);
   }, []);
 
@@ -121,6 +137,7 @@ export function useModeRuntimeConfig(input: {
         colorCorrection: colorCorrectionRef.current,
         firmwareProfile: firmwareProfileRef.current,
         chipType: chipTypeRef.current,
+        colorOrder: colorOrderRef.current,
         savedCalibration: savedCalibrationRef.current,
         savedAmbilight: savedAmbilightRef.current,
         roomGeometry: roomGeometryRef.current,
@@ -150,6 +167,7 @@ export function useModeRuntimeConfig(input: {
       setFirmwareProfile,
       setSelectedDisplayId,
       setChipType,
+      setColorOrder,
       setRoomGeometry,
       getSelectedDisplayId,
     }),
@@ -163,6 +181,7 @@ export function useModeRuntimeConfig(input: {
       setFirmwareProfile,
       setSelectedDisplayId,
       setChipType,
+      setColorOrder,
       setRoomGeometry,
       getSelectedDisplayId,
     ],

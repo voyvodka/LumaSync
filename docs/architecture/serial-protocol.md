@@ -108,7 +108,7 @@ chip type falls back to the three-byte Adalight frame rather than dropping outpu
 
 ### 1.4 Adalight frame, for comparison
 
-Opt-in via `FirmwareProfile::Adalight`, encoded by `encode_adalight_packet` (`led_output.rs:678`).
+Opt-in via `FirmwareProfile::Adalight`, encoded by `encode_adalight_packet` (`led_output.rs:847`).
 It exists so LumaSync can drive firmware that already speaks Adalight; it is not LumaSync's own
 format, and the two are not interchangeable.
 
@@ -117,7 +117,7 @@ Offset  Width   Field
 0       3       magic      = 41 64 61   ("Ada")
 3       2       count − 1  u16 big-endian
 5       1       header_chk = HIGH ^ LOW ^ 0x55   (header only)
-6       N × 3   pixels     R G B, corrected as in 1.3
+6       N × 3   pixels     R G B, corrected as in 1.3, then scaled by brightness
 ```
 
 | | LumaSync v1 | Adalight |
@@ -129,10 +129,12 @@ Offset  Width   Field
 | RGBW | yes | no |
 | Handshake | PING / PONG | none |
 
-Adalight has no brightness field and the host does not pre-scale pixels under it, so the host
-brightness setting does not reach an Adalight device; the firmware's own brightness applies. Pinned
-by `adalight_header_is_byte_exact` (`led_output.rs:1121`) and `adalight_has_no_brightness_byte`
-(`led_output.rs:1149`).
+Adalight has no brightness field, so the host scales the corrected pixels by brightness before
+packing them, the same way `CorrectedWledSink` does; brightness 1.0 leaves every byte unchanged.
+Before that the brightness setting never reached an Adalight device. Pinned by
+`adalight_header_is_byte_exact` (`led_output.rs:1261`), `adalight_has_no_brightness_byte`
+(`led_output.rs:1289`) and `adalight_scales_brightness_into_the_corrected_pixels`
+(`led_output.rs:2188`).
 
 ### 1.5 Handshake
 
