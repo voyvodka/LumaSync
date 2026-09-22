@@ -64,8 +64,6 @@ export default {
     addTooltip: "Coming soon — multi Hue zone",
     addHueZoneTooltip: "Add a new Hue zone",
     addDisabledTooltip: "Pair a Hue bridge to add zones",
-    hintTitle: "Room space",
-    hintBody: "Placeholder for\ntelemetry / mini room\npreview / shortcuts",
     rows: {
       usbName: "USB",
       usbType: "CH340",

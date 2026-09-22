@@ -3565,25 +3565,6 @@
   background: #3a3f48;
   box-shadow: none;
 }
-.lm-hint-box {
-  border: 1px dashed #252b34;
-  border-radius: 8px;
-  padding: 12px;
-  color: #4d5564;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
-  font-size: 9.5px;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
-  text-align: center;
-}
-.lm-hint-box b {
-  color: #8a94a3;
-  display: block;
-  margin-bottom: 3px;
-  font-weight: 500;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
 
 /* v1.5 W2-B3 — generic OnboardingBanner. Generalised from the
    `.lm-lights-cal-banner` pattern so every progressive hint (calibration

@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The Lights screen no longer shows a dashed box reading "Room space — placeholder for
+  telemetry / mini room preview / shortcuts". It was scaffolding that reached the product,
+  and it had been translated into Turkish along the way, so nothing marked it as unfinished
+  except the word itself. Nothing took its place: the column simply ends after the outputs,
+  which is what it should have done until there was something to put there.
 - The room map now shows when it has keyboard focus. Arrow keys pan the view, but the editor
   gave no sign it was the thing listening, so there was no way to tell whether a keypress
   would do anything. The panel edge now lights up when you reach it by keyboard — and only
