@@ -89,16 +89,41 @@ export const shellHandlers = {
     code: "TWIN_OVERLAY_CLOSED" as const,
     message: "Closed",
   }),
-  [PREVIEW_COMMANDS.START_TEST_PATTERN]: () => ({
-    active: true,
-    // Nothing downstream of here is real: no strip receives the pattern, and
-    // the twin overlay is a window the browser does not have.
-    previewOnly: true,
-    status: { code: "LED_TEST_PATTERN_STARTED" as const, message: "Started" },
-  }),
+  // `previewOnly` derivation mirrors `start_led_test_pattern`'s target
+  // resolution (`src-tauri/src/commands/lighting_mode.rs:3040-3046`):
+  // empty/absent `targets` defaults to wanting USB, "hue" opts a target in.
+  // A registered WLED sink satisfies the USB channel exactly like a
+  // connected serial port does (`UsbOutputPlan::Wled`), and Hue only counts
+  // once a stream is actually running with mapped channels —
+  // `snapshot_hue_output_context` (`hue/state_store.rs:451-463`) reads
+  // `owner.active_stream`, which is `Some` only while genuinely `Running`.
+  // `w.hue.streaming` is the mock's proxy for that same fact — see
+  // `hueRuntimeFault` in `./hue.ts` and the identical reasoning in
+  // `device.ts`'s `SET_LIGHTING_MODE` handler.
+  [PREVIEW_COMMANDS.START_TEST_PATTERN]: (args) => {
+    const w = getWorld();
+    const requested = args.payload.targets ?? [];
+    const wantUsb = requested.length === 0 || requested.includes("usb");
+    const wantHue = requested.includes("hue");
+    const useUsb = (w.serial.connectedPort !== null || w.wled.connectedHost !== null) && wantUsb;
+    const useHue = w.hue.streaming && w.hue.channels.length > 0 && wantHue;
+    const previewOnly = !useUsb && !useHue;
+    return {
+      active: true,
+      previewOnly,
+      // `LedTestPatternResult.status.details` is `string | undefined`, not
+      // `string | null` like `CommandStatus` — omit rather than use `status()`.
+      status: previewOnly
+        ? { code: "LED_TEST_PATTERN_PREVIEW_ONLY" as const, message: "Preview only — no connected output sink" }
+        : { code: "LED_TEST_PATTERN_STARTED" as const, message: "Started" },
+    };
+  },
   [PREVIEW_COMMANDS.STOP_TEST_PATTERN]: () => ({
     active: false,
-    previewOnly: true,
+    // Rust hardcodes `preview_only: false` on stop regardless of sink state
+    // (`lighting_mode.rs:3260`) — the field describes the test that just
+    // ended, not whatever mode gets restored in its place.
+    previewOnly: false,
     status: { code: "LED_TEST_PATTERN_STOPPED" as const, message: "Stopped" },
   }),
 

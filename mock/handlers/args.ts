@@ -22,10 +22,13 @@
  * not listed, which today is every zero-arg command in device/mode/hue
  * (`list_serial_ports`, `get_serial_connection_status`, `discover_hue_bridges`,
  * `get_hue_stream_status`, `stop_lighting`, `get_lighting_mode_status`,
- * `get_runtime_telemetry`, …) plus the whole `shell.ts` / `windowless.ts`
- * surface (window/tray/notification/preview commands, `list_displays`,
- * updater, plugin passthroughs) and the room-map / capture / platform /
- * updater command families — none of those are in scope here.
+ * `get_runtime_telemetry`, …) plus most of the `shell.ts` / `windowless.ts`
+ * surface (window/tray/notification commands, `list_displays`, updater,
+ * plugin passthroughs) and the room-map / capture / platform / updater
+ * command families — none of those are in scope here. `start_led_test_pattern`
+ * is the one preview command that is: its `targets` field decides
+ * `previewOnly` (`shell.ts`'s `START_TEST_PATTERN` handler), and that
+ * derivation needs the real payload shape, not an untyped guess.
  *
  * `import type` throughout — nothing here reaches the app at runtime.
  */
@@ -37,6 +40,7 @@ import type {
 } from "../../src/shared/contracts/hue";
 import type { HueChannelPlacement } from "../../src/shared/contracts/roomMap";
 import type { LightingModeConfig } from "../../src/features/mode/model/contracts";
+import type { StartLedTestPatternPayload } from "../../src/shared/contracts/preview";
 
 /**
  * Shared by `start_hue_stream` / `restart_hue_stream` — `startHue` and
@@ -68,6 +72,10 @@ export interface CommandArgs {
   // --- device: lighting mode -----------------------------------------------
   /** `setLightingMode` in `modeApi.ts` sends `{ payload }`, never `{ mode }`. */
   set_lighting_mode: { payload: LightingModeConfig };
+
+  // --- preview: test patterns ------------------------------------------------
+  /** `startLedTestPattern` in `previewApi.ts` sends `{ payload }`. */
+  start_led_test_pattern: { payload: StartLedTestPatternPayload };
 
   // --- hue: onboarding ------------------------------------------------------
   verify_hue_bridge_ip: { bridgeIp: string };
