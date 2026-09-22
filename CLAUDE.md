@@ -63,12 +63,15 @@ If in doubt, spawn the agent. The token cost of a redundant spawn is trivial com
 |---|---|
 | Planning a phase / milestone / multi-domain feature | Spawn the relevant domain agents in parallel, then synthesize |
 | Tauri command / status-code / contract change (FIRST, before any implementation) | `contract-architect` |
+| Persisted-state shape change / `migrations.ts` / new `ShellState` field | `contract-architect` |
 | Hue CLIP v2 / DTLS / entertainment streaming / bridge / 403 re-pair | `hue-expert` |
 | USB serial / WS2812B / Adalight / WLED / OpenRGB / firmware / `LedSink` | `device-serial-expert` |
 | Rust backend / Tauri config / capture pipeline / tray / platform / CI | `tauri-expert` |
 | React components / Tailwind / amber Rev 07 design language / compact mode / a11y / i18n | `ui-ux-expert` |
 | New tests / test strategy / coverage gaps / Vitest / cargo test | `test-expert` |
+| Dev IPC mock (`mock/`) / WDIO e2e (`e2e/`) | `test-expert` |
 | PR review / release readiness / CHANGELOG / Conventional Commits / license / secrets audit | `opensource-guardian` |
+| New or bumped dependency / Dependabot / CI workflow or branch-protection change | `opensource-guardian` (with `tauri-expert` for workflow edits) |
 | "X.Y.Z atıyorum" / "release hazırla" / "new version" | `release-manager` |
 
 ### Standing maintenance duties
