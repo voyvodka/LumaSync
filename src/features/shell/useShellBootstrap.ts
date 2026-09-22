@@ -11,17 +11,19 @@ import {
   toHueStartConfig,
   type HueStartConfig,
 } from "@/features/hue/model/hueStartConfig";
-import { setHueSolidColor, setLightingMode, startHue } from "@/features/mode/modeApi";
+import { setHueSolidColor, setLightingMode, startHue, stopHue } from "@/features/mode/modeApi";
 import {
   LIGHTING_MODE_KIND,
   normalizeLightingModeConfig,
   normalizeOutputTargets,
   type LightingModeConfig,
 } from "@/features/mode/model/contracts";
+import { readModeApplyOutcome, type ModeApplyOutcome } from "@/features/mode/state/modeApplyOutcome";
 import type { ModeRuntimeConfig } from "@/features/mode/state/useModeRuntimeConfig";
 import { showNotification } from "@/features/platform/platformApi";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
-import type { HueRuntimeTarget } from "@/shared/contracts/hue";
+import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
+import { HUE_RUNTIME_TRIGGER_SOURCE, type HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { pushTrayLabels } from "./useTrayIntegration";
 import { initWindowLifecycle, loadShellState } from "./windowLifecycle";
@@ -44,6 +46,8 @@ export interface ShellBootstrapSink {
   armUsbConnected: (connected: boolean) => void;
   runtimeConfig: ModeRuntimeConfig;
   reportHueSolidColorStatus: (code: string) => void;
+  /** The interactive start's toast, raised when a restored mode fails to start. */
+  reportStartFailure: (notice: CaptureFailureNotice) => void;
 }
 
 /** Runs the shell boot sequence exactly once and reports when it has settled. */
@@ -161,7 +165,6 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         sink.armUsbConnected(bootstrapUsbAvailable);
 
         const isActive = restoredMode.kind !== LIGHTING_MODE_KIND.OFF;
-        sink.setActiveOutputTargets(isActive ? restoredTargets : []);
         // Any persisted lightingMode — even `off` — means the user already picked
         // one, so the onboarding flow must not gate them at step 1.
         if (state.lightingMode !== undefined) {
@@ -173,8 +176,6 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // Deliberately no `validateHueCredentials` here — setting `hueStartConfig`
         // re-arms the reachability poll, and doing both probed the bridge twice.
 
-        // Bug #39 — the restore is split so a USB-only Ambilight session also
-        // re-applies its persisted knobs, not just a Hue-targeted one.
         if (isActive) {
           // Filter targets against live USB availability so the Rust USB gate
           // doesn't reject the bootstrap apply on a Hue-only session that
@@ -182,62 +183,32 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
           const bootTargets = restoredTargets.filter(
             (target) => target !== "usb" || bootstrapUsbAvailable,
           );
-
-          if (restoredTargets.includes("hue") && hueBootstrapConfig) {
-            try {
-              const startResult = await startHue(hueBootstrapConfig);
-              if (isHueStartCodeOk(startResult.status.code)) {
-                if (
-                  restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
-                  restoredMode.solid
-                ) {
-                  const colorResult = await setHueSolidColor({
-                    r: restoredMode.solid.r,
-                    g: restoredMode.solid.g,
-                    b: restoredMode.solid.b,
-                    brightness: restoredMode.solid.brightness,
-                  });
-                  sink.reportHueSolidColorStatus(colorResult.status.code);
-                } else if (restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT) {
-                  await setLightingMode(runtimeConfig.hydrate({
-                    ...restoredMode,
-                    targets: bootTargets,
-                  }));
-                }
-              }
-            } catch (err) {
-              console.error("[LumaSync] Bootstrap Hue start/restore failed:", err);
-            }
-          } else if (
-            restoredMode.kind === LIGHTING_MODE_KIND.AMBILIGHT &&
-            bootTargets.length > 0
-          ) {
-            // Without this branch the worker runs on backend defaults until the
-            // next manual mode toggle.
-            try {
-              await setLightingMode(runtimeConfig.hydrate({
-                ...restoredMode,
-                targets: bootTargets,
-              }));
-            } catch (err) {
-              console.error("[LumaSync] Bootstrap USB-only Ambilight restore failed:", err);
-            }
-          } else if (
-            restoredMode.kind === LIGHTING_MODE_KIND.SOLID &&
-            restoredMode.solid &&
-            bootTargets.includes("usb")
-          ) {
-            // Routed through setLightingMode, small as the payload is, to keep the
-            // backend mode machine aligned with what the UI paints first.
-            try {
-              await setLightingMode(runtimeConfig.hydrate({
-                ...restoredMode,
-                targets: bootTargets,
-              }));
-            } catch (err) {
-              console.error("[LumaSync] Bootstrap USB-only Solid restore failed:", err);
-            }
+          const restore = await restoreLightingSession({
+            mode: restoredMode,
+            bootTargets,
+            hueConfig: hueBootstrapConfig,
+            runtimeConfig,
+            reportHueSolidColorStatus: sink.reportHueSolidColorStatus,
+          });
+          // Active targets are written from the outcome, never optimistically:
+          // a target set before anything ran is what painted HUE STREAMING and
+          // CAP OK over a session the backend had refused.
+          sink.setActiveOutputTargets(restore.activeTargets);
+          if (!restore.running) {
+            // UI only — the persisted mode stays, so the next launch retries it
+            // once the cause (a permission, an unplugged strip) is fixed.
+            sink.setLightingMode({ ...restoredMode, kind: LIGHTING_MODE_KIND.OFF });
           }
+          // A launch against an unplugged display must not toast; every other
+          // failure needs the user, and without the toast they only see Off.
+          if (
+            restore.startFailure &&
+            restore.startFailure.bucket !== CAPTURE_FAILURE_BUCKET.DISPLAY
+          ) {
+            sink.reportStartFailure(restore.startFailure);
+          }
+        } else {
+          sink.setActiveOutputTargets([]);
         }
 
         // Push localized tray labels to Rust
@@ -259,4 +230,109 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
   }, []);
 
   return { bootstrapDone };
+}
+
+interface LightingSessionRestoreInput {
+  mode: LightingModeConfig;
+  bootTargets: HueRuntimeTarget[];
+  hueConfig: HueStartConfig | null;
+  runtimeConfig: ModeRuntimeConfig;
+  reportHueSolidColorStatus: (code: string) => void;
+}
+
+interface LightingSessionRestore {
+  /** The backend is running the restored mode. */
+  running: boolean;
+  activeTargets: HueRuntimeTarget[];
+  startFailure: CaptureFailureNotice | null;
+}
+
+/**
+ * The boot half of the interactive slow path in `useLightingModeOrchestrator`,
+ * with the same phase order and the same reading of the reply. The one thing it
+ * adds is the rollback: at boot nothing else can be using the stream it started.
+ */
+export async function restoreLightingSession({
+  mode,
+  bootTargets,
+  hueConfig,
+  runtimeConfig,
+  reportHueSolidColorStatus,
+}: LightingSessionRestoreInput): Promise<LightingSessionRestore> {
+  const hueWanted = bootTargets.includes("hue");
+  let hueStarted = false;
+
+  // Hue first: `snapshot_hue_output_context()` needs a live stream to hand the
+  // worker, or it comes up with `hue_output=None` and never drives the bulbs.
+  if (hueWanted && hueConfig) {
+    try {
+      const startResult = await startHue(hueConfig);
+      hueStarted = isHueStartCodeOk(startResult.status.code);
+      if (!hueStarted) {
+        console.warn("[LumaSync] Bootstrap Hue start refused:", startResult.status.code);
+      }
+    } catch (err) {
+      console.error("[LumaSync] Bootstrap Hue start failed:", err);
+    }
+  }
+
+  // Same rule as the interactive path: Ambilight still starts after a failed
+  // Hue start, because the worker can run without Hue context and the health
+  // reconciler hands it the stream once the bridge answers.
+  const hueTransientFail = !hueStarted && hueWanted && mode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
+  const usbWanted = bootTargets.includes("usb");
+  if (!usbWanted && !hueStarted && !hueTransientFail) {
+    return { running: false, activeTargets: [], startFailure: null };
+  }
+
+  let outcome: ModeApplyOutcome;
+  try {
+    // Routed through setLightingMode even for Solid, to keep the backend mode
+    // machine aligned with what the UI paints first — and, since Bug #39, so a
+    // USB-only session re-applies its persisted knobs rather than backend defaults.
+    const applyResult = await setLightingMode(
+      runtimeConfig.hydrate({ ...mode, targets: bootTargets }),
+    );
+    outcome = readModeApplyOutcome(applyResult, mode.kind);
+  } catch (err) {
+    console.error("[LumaSync] Bootstrap lighting mode restore failed:", err);
+    outcome = { refused: true, startFailure: null };
+  }
+
+  if (outcome.refused) {
+    console.warn(
+      `[LumaSync] Bootstrap restore of ${mode.kind} refused by the backend; showing Off.`,
+    );
+    // The bridge allows one entertainment streamer. Holding it for a mode that
+    // is not running sends nothing and locks out every other client.
+    if (hueStarted) {
+      try {
+        await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+      } catch (err) {
+        console.error("[LumaSync] Bootstrap Hue rollback after refused restore failed:", err);
+      }
+    }
+    return { running: false, activeTargets: [], startFailure: outcome.startFailure };
+  }
+
+  // The backend already pushes the colour through apply_hue_color_with_context;
+  // the explicit push guarantees the bridge has the colour the UI shows.
+  if (hueStarted && mode.kind === LIGHTING_MODE_KIND.SOLID && mode.solid) {
+    try {
+      const colorResult = await setHueSolidColor({
+        r: mode.solid.r,
+        g: mode.solid.g,
+        b: mode.solid.b,
+        brightness: mode.solid.brightness,
+      });
+      reportHueSolidColorStatus(colorResult.status.code);
+    } catch (err) {
+      console.error("[LumaSync] Bootstrap Hue solid push failed:", err);
+    }
+  }
+
+  const activeTargets: HueRuntimeTarget[] = [];
+  if (usbWanted) activeTargets.push("usb");
+  if (hueStarted) activeTargets.push("hue");
+  return { running: true, activeTargets, startFailure: outcome.startFailure };
 }

@@ -78,6 +78,7 @@ export default {
       hueType: "ENTERTAINMENT",
       hueSubStreaming: "Bridge · <b>DTLS {{hz}} Hz</b>",
       hueSubIdle: "Bridge · <b>standby</b>",
+      hueSubReconnecting: "Bridge · <b>reconnecting</b>",
       hueSubUnavailable: "Not configured",
     },
   },
