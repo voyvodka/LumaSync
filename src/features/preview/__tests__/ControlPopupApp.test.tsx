@@ -363,6 +363,37 @@ describe("ControlPopupApp mode payload stamps", () => {
       ambilight: { brightness: 0.9 },
     });
   });
+
+  // Rust does not hydrate the geometry, and an Ambilight payload without it
+  // puts a running worker back on legacy sampling.
+  it("stamps the room geometry projected from the freshly re-read room map", async () => {
+    const user = userEvent.setup();
+    const roomMap = (tvX: number) => ({
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      hueChannels: [
+        { channelIndex: 0, channelId: 3, x: 0.2, y: 0.8, z: 0.5, zOrigin: "user", entertainmentAreaId: "area-1" },
+      ],
+      usbStrips: [],
+      furniture: [],
+      zones: [],
+      imageLayers: [],
+      tvAnchor: { x: tvX, y: 0, width: 2, height: 0.3, locked: true },
+    });
+    storeState = { ...storeState, lastHueAreaId: "area-1", roomMap: roomMap(1) };
+    render(<ControlPopupApp />);
+    await waitFor(() => expect(startLedTestPattern).toHaveBeenCalled());
+
+    storeState = { ...storeState, roomMap: roomMap(1.5) };
+    await user.click(screen.getByRole("radio", { name: /common:mode\.options\.ambilight/ }));
+    await waitFor(() => expect(setLightingMode).toHaveBeenCalledTimes(1));
+
+    const payload = setLightingMode.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.roomGeometry).toEqual({
+      dimensions: { widthMeters: 5, depthMeters: 4, heightMeters: 2.5 },
+      tv: { x: 1.5, y: 0, width: 2, height: 0.3 },
+      huePlacements: [{ channelId: 3, positionX: 0.2, positionY: 0.8, positionZ: 0.5 }],
+    });
+  });
 });
 
 /** Every `shellStore.save` call that carried a persisted popup centre. */

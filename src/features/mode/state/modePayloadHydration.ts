@@ -9,6 +9,7 @@
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
 import type { HueIntensityPreset } from "@/shared/contracts/hue";
+import type { RoomGeometry } from "@/shared/contracts/roomMap";
 
 import {
   LIGHTING_MODE_KIND,
@@ -25,6 +26,7 @@ export interface ModeRuntimeConfigSnapshot {
   chipType: LedChipType | undefined;
   savedCalibration: LedCalibrationConfig | undefined;
   savedAmbilight: AmbilightPayload | undefined;
+  roomGeometry: RoomGeometry | undefined;
 }
 
 /**
@@ -164,9 +166,23 @@ export function withLedCalibration(
   return { ...mode, ledCalibration: calibration };
 }
 
+/** Stamp the room geometry onto an Ambilight payload, caller-wins like
+ * `withLedCalibration`. Only Ambilight samples the screen, and absent means "no
+ * TV anchor", which is exactly the legacy path — see docs/architecture/room-map.md. */
+export function withRoomGeometry(
+  mode: LightingModeConfig,
+  snapshot: ModeRuntimeConfigSnapshot,
+): LightingModeConfig {
+  if (mode.kind !== LIGHTING_MODE_KIND.AMBILIGHT) return mode;
+  if (mode.roomGeometry) return mode;
+  const geometry = snapshot.roomGeometry;
+  if (!geometry) return mode;
+  return { ...mode, roomGeometry: geometry };
+}
+
 /**
  * Compose display id + Hue intensity preset + color correction + firmware profile
- * + LED calibration in a single helper so every call site stays short. Ordering
+ * + LED calibration + room geometry in a single helper so every call site stays short. Ordering
  * is load-bearing: `withAmbilightSettings` and
  * `withAmbilightLightingSmoothingPreset` both write `mode.ambilight`, so the
  * settings stamp must run first or the preset is overwritten.
@@ -177,8 +193,11 @@ export function hydrateModePayload(
 ): LightingModeConfig {
   return withColorCorrectionAndFirmwareProfile(
     withAmbilightLightingSmoothingPreset(
-      withLedCalibration(
-        withAmbilightSettings(withSelectedDisplayId(mode, snapshot), snapshot),
+      withRoomGeometry(
+        withLedCalibration(
+          withAmbilightSettings(withSelectedDisplayId(mode, snapshot), snapshot),
+          snapshot,
+        ),
         snapshot,
       ),
       snapshot,

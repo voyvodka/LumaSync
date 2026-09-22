@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import type { ColorCorrectionConfig, FirmwareProfile, LedChipType } from "@/shared/contracts/device";
 import { DEFAULT_HUE_INTENSITY_PRESET, type HueIntensityPreset } from "@/shared/contracts/hue";
+import type { RoomGeometry, RoomMapConfig } from "@/shared/contracts/roomMap";
+import { toRoomGeometry } from "@/features/room-map/model/roomGeometry";
 
 import type { AmbilightPayload, LightingModeConfig } from "../model/contracts";
 import {
@@ -17,6 +19,8 @@ export interface ModeRuntimeConfigPrimeInput {
   colorCorrection?: ColorCorrectionConfig;
   firmwareProfile?: FirmwareProfile;
   selectedChipType?: LedChipType;
+  roomMap?: RoomMapConfig;
+  lastHueAreaId?: string;
 }
 
 export interface ModeRuntimeConfig {
@@ -31,6 +35,7 @@ export interface ModeRuntimeConfig {
   setFirmwareProfile: (profile: FirmwareProfile) => void;
   setSelectedDisplayId: (displayId: string | undefined) => void;
   setChipType: (chipType: LedChipType) => void;
+  setRoomGeometry: (geometry: RoomGeometry | undefined) => void;
   getSelectedDisplayId: () => string | undefined;
 }
 
@@ -61,6 +66,7 @@ export function useModeRuntimeConfig(input: {
   // LED #0 reflects screen content.
   const savedCalibrationRef = useRef<LedCalibrationConfig | undefined>(undefined);
   const savedAmbilightRef = useRef<AmbilightPayload | undefined>(undefined);
+  const roomGeometryRef = useRef<RoomGeometry | undefined>(undefined);
 
   const setCalibration = useCallback((calibration: LedCalibrationConfig | undefined) => {
     savedCalibrationRef.current = calibration;
@@ -90,6 +96,10 @@ export function useModeRuntimeConfig(input: {
     chipTypeRef.current = chipType;
   }, []);
 
+  const setRoomGeometry = useCallback((geometry: RoomGeometry | undefined) => {
+    roomGeometryRef.current = geometry;
+  }, []);
+
   const prime = useCallback((state: ModeRuntimeConfigPrimeInput) => {
     selectedDisplayIdRef.current = normalizeDisplayId(state.selectedDisplayId);
     // Absent ⇒ DEFAULT_HUE_INTENSITY_PRESET so the ambilight worker always
@@ -100,6 +110,7 @@ export function useModeRuntimeConfig(input: {
     colorCorrectionRef.current = state.colorCorrection;
     firmwareProfileRef.current = state.firmwareProfile;
     chipTypeRef.current = state.selectedChipType;
+    roomGeometryRef.current = toRoomGeometry(state);
   }, []);
 
   const hydrate = useCallback(
@@ -112,6 +123,7 @@ export function useModeRuntimeConfig(input: {
         chipType: chipTypeRef.current,
         savedCalibration: savedCalibrationRef.current,
         savedAmbilight: savedAmbilightRef.current,
+        roomGeometry: roomGeometryRef.current,
       } satisfies ModeRuntimeConfigSnapshot),
     [],
   );
@@ -138,6 +150,7 @@ export function useModeRuntimeConfig(input: {
       setFirmwareProfile,
       setSelectedDisplayId,
       setChipType,
+      setRoomGeometry,
       getSelectedDisplayId,
     }),
     [
@@ -150,6 +163,7 @@ export function useModeRuntimeConfig(input: {
       setFirmwareProfile,
       setSelectedDisplayId,
       setChipType,
+      setRoomGeometry,
       getSelectedDisplayId,
     ],
   );

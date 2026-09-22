@@ -86,6 +86,30 @@ export async function loadShellState(): Promise<ShellState> {
 /** Tail of the serialised write chain — see {@link saveShellState}. */
 let shellWriteQueue: Promise<void> = Promise.resolve();
 
+export type ShellStateSavedListener = (saved: Partial<ShellState>) => void;
+
+const shellStateSavedListeners = new Set<ShellStateSavedListener>();
+
+/** Called with each partial once it is on disk. In-window only: another webview
+ * writing the same store is not seen. Returns the unsubscribe. */
+export function onShellStateSaved(listener: ShellStateSavedListener): () => void {
+  shellStateSavedListeners.add(listener);
+  return () => {
+    shellStateSavedListeners.delete(listener);
+  };
+}
+
+function notifyShellStateSaved(saved: Partial<ShellState>): void {
+  for (const listener of shellStateSavedListeners) {
+    try {
+      listener(saved);
+    } catch (error) {
+      // A listener's fault must not read as a failed write to the caller.
+      console.error("[LumaSync] shell-state saved listener failed:", error);
+    }
+  }
+}
+
 /** Persist a partial update, queued behind every other write: this is a
  * read-modify-write over one blob, so two concurrent callers read the same
  * snapshot and the later one silently reverts the earlier one's fields. */
@@ -94,6 +118,7 @@ export async function saveShellState(state: Partial<ShellState>): Promise<void> 
     const store = await getStore();
     const current = await loadShellState();
     await store.set(SHELL_STORE_KEY, { ...current, ...state });
+    notifyShellStateSaved(state);
   });
 
   // The queue continues past a rejection; the caller still sees it via `write`.

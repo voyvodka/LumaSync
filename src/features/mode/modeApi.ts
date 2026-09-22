@@ -112,9 +112,16 @@ export async function setLightingMode(
   payload: LightingModeConfig,
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<ModeCommandResult> {
+  // `normalizeLightingModeConfig` drops `roomGeometry` so a persisted mode can
+  // never carry it, and unlike the output stamps Rust does not hydrate it — so
+  // it is re-attached here, or no dispatch would ever reach room-aware sampling.
+  const normalized = normalizeLightingModeConfig(payload);
+  const wire = payload.roomGeometry
+    ? { ...normalized, roomGeometry: payload.roomGeometry }
+    : normalized;
   try {
     return await invoker<ModeCommandResult>(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
-      payload: normalizeLightingModeConfig(payload),
+      payload: wire,
     });
   } catch (error) {
     throw mapModeApiError(error);
