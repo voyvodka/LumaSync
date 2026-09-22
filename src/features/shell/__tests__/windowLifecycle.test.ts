@@ -129,6 +129,7 @@ import {
   resizeToMode,
   saveShellState,
   fitSizeToWorkArea,
+  firstRunFullSize,
 } from "../windowLifecycle";
 
 // ---------------------------------------------------------------------------
@@ -803,7 +804,9 @@ describe("Scenario 12 — the target size is clamped to the work area", () => {
     availableMonitorsMock.mockResolvedValue([
       monitorWithWorkArea({ width: 1920, height: 1080 }, { width: 1920, height: 1040 }),
     ]);
-    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+    setupPersistedState(
+      makePersistedState({ uiMode: "compact", lastFullSize: { width: 900, height: 620 } }),
+    );
 
     await resizeToMode("full", { animate: false });
 
@@ -926,5 +929,113 @@ describe("Scenario 15 — the animator drops the floor to compact", () => {
     const floors = setMinSizeMock.mock.calls.map((c) => c[0] as { width: number; height: number });
     expect(floors[0]).toMatchObject({ width: 300, height: 420 });
     expect(floors[floors.length - 1]).toMatchObject({ width: 800, height: 560 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Scenario 16 — first run sizes full mode to the screen
+// ---------------------------------------------------------------------------
+
+describe("Scenario 16 — first-run full size follows the display", () => {
+  function monitorAt(
+    x: number,
+    size: { width: number; height: number },
+    work: { width: number; height: number },
+  ): MonitorInfo {
+    return {
+      position: { x, y: 0 },
+      size,
+      workArea: { position: { x, y: 0 }, size: work },
+    };
+  }
+
+  function lastSetSize(): { width: number; height: number } {
+    const calls = setSizeMock.mock.calls;
+    return calls[calls.length - 1][0] as { width: number; height: number };
+  }
+
+  it("scales up on a 1440p-logical Retina panel, converting physical px first", async () => {
+    // 5120×2800 physical at 2× is 2560×1400 logical; 62% of 1400 is 868,
+    // so the design size scales by 1.4 — height is the binding side.
+    scaleFactorMock.mockResolvedValue(2);
+    innerSizeMock.mockResolvedValue({ width: 640, height: 904 });
+    outerPositionMock.mockResolvedValue({ x: 2000, y: 1000 });
+    availableMonitorsMock.mockResolvedValue([
+      monitorAt(0, { width: 5120, height: 2880 }, { width: 5120, height: 2800 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    expect(lastSetSize()).toMatchObject({ width: 1260, height: 868 });
+  });
+
+  it("caps the scale on a 4K display at 1×, keeping the full-mode aspect", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorAt(0, { width: 3840, height: 2160 }, { width: 3840, height: 2120 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    expect(lastSetSize()).toMatchObject({ width: 1440, height: 992 });
+  });
+
+  it("never goes below the 900×620 design size on a modest screen", () => {
+    // 62% of a 1280×775 work area is smaller than the design size.
+    expect(firstRunFullSize({ width: 1280, height: 775 })).toEqual({ width: 900, height: 620 });
+  });
+
+  it("lets a persisted full size win, even on a display that would grow it", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorAt(0, { width: 3840, height: 2160 }, { width: 3840, height: 2120 }),
+    ]);
+    setupPersistedState(
+      makePersistedState({ uiMode: "compact", lastFullSize: { width: 1000, height: 700 } }),
+    );
+
+    await resizeToMode("full", { animate: false });
+
+    expect(lastSetSize()).toMatchObject({ width: 1000, height: 700 });
+  });
+
+  it("still shrink-clamps on a HiDPI screen smaller than the design size", async () => {
+    // 2048×1120 physical at 2× is 1024×560 logical: the floor is not allowed
+    // to push the window past the work area.
+    scaleFactorMock.mockResolvedValue(2);
+    innerSizeMock.mockResolvedValue({ width: 640, height: 904 });
+    outerPositionMock.mockResolvedValue({ x: 600, y: 100 });
+    availableMonitorsMock.mockResolvedValue([
+      monitorAt(0, { width: 2048, height: 1200 }, { width: 2048, height: 1120 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    expect(lastSetSize()).toMatchObject({ width: 900, height: 560 });
+  });
+
+  it("sizes against the monitor the window is on, not the first one listed", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorAt(0, { width: 1920, height: 1080 }, { width: 1920, height: 1040 }),
+      monitorAt(1920, { width: 3840, height: 2160 }, { width: 3840, height: 2120 }),
+    ]);
+    outerPositionMock.mockResolvedValue({ x: 3500, y: 900 });
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    await resizeToMode("full", { animate: false });
+
+    expect(lastSetSize()).toMatchObject({ width: 1440, height: 992 });
+  });
+
+  it("leaves compact at its fixed size on a large display", async () => {
+    availableMonitorsMock.mockResolvedValue([
+      monitorAt(0, { width: 3840, height: 2160 }, { width: 3840, height: 2120 }),
+    ]);
+    setupPersistedState(makePersistedState({ uiMode: "full" }));
+
+    await resizeToMode("compact", { animate: false });
+
+    expect(lastSetSize()).toMatchObject({ width: 320, height: 480 });
   });
 });
