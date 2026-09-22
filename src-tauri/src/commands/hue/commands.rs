@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use super::super::hue_onboarding::{
-    check_hue_stream_readiness, check_hue_stream_readiness_with_freshness, AreaListError,
-    CommandStatus,
+    check_hue_stream_readiness_with_freshness, ActiveStreamerView, AreaListError, CommandStatus,
+    HueStreamReadinessResponse, ACTIVE_STREAMER_REASON,
 };
 use super::area_cache::HueReadFreshness;
 use super::credential_store::effective_hue_app_key;
@@ -166,6 +166,45 @@ fn ok_or_empty(channels: Vec<HueAreaChannelInfo>) -> HueAreaChannelListResponse 
     }
 }
 
+/// Readiness answered with a refusal of our key — the re-pair evidence.
+fn is_auth_rejection(readiness_code: &str) -> bool {
+    readiness_code.starts_with("AUTH_INVALID_") || readiness_code == "HUE_CREDENTIAL_INVALID"
+}
+
+/// Wire tokens for why readiness said no; see `readiness_blockers` on the evidence.
+fn readiness_blockers(readiness: &HueStreamReadinessResponse) -> Vec<String> {
+    if readiness.readiness.ready {
+        return Vec::new();
+    }
+    let mut blockers = vec![readiness.status.code.clone()];
+    if readiness
+        .readiness
+        .reasons
+        .iter()
+        .any(|reason| reason == ACTIVE_STREAMER_REASON)
+    {
+        blockers.push(ACTIVE_STREAMER_REASON.to_string());
+    }
+    blockers
+}
+
+/// Gate evidence for `start_hue_stream` and `restart_hue_stream`, shared so
+/// the two cannot drift apart.
+fn start_gate_evidence(
+    request: &StartHueStreamRequest,
+    readiness: &HueStreamReadinessResponse,
+) -> HueRuntimeGateEvidence {
+    HueRuntimeGateEvidence {
+        bridge_configured: !request.bridge_ip.trim().is_empty(),
+        credentials_valid: !request.username.trim().is_empty(),
+        area_selected: !request.area_id.trim().is_empty(),
+        readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
+        ready: readiness.readiness.ready,
+        auth_invalid_evidence: is_auth_rejection(&readiness.status.code),
+        readiness_blockers: readiness_blockers(readiness),
+    }
+}
+
 /// Start the Hue entertainment stream for the given bridge/area — checks
 /// readiness, spawns the DTLS or HTTP sender, and stores the resulting
 /// stream context.
@@ -192,18 +231,11 @@ pub async fn start_hue_stream(
         request.username.clone(),
         request.area_id.clone(),
         HueReadFreshness::Force,
+        ActiveStreamerView::Foreign,
     )
     .await;
 
-    let gate = HueRuntimeGateEvidence {
-        bridge_configured: !request.bridge_ip.trim().is_empty(),
-        credentials_valid: !request.username.trim().is_empty(),
-        area_selected: !request.area_id.trim().is_empty(),
-        readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
-        ready: readiness.readiness.ready,
-        auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
-            || readiness.status.code == "HUE_CREDENTIAL_INVALID",
-    };
+    let gate = start_gate_evidence(&request, &readiness);
 
     // 2. Lock briefly for state decision only.
     let result = {
@@ -478,18 +510,11 @@ pub async fn restart_hue_stream(
         request.username.clone(),
         request.area_id.clone(),
         HueReadFreshness::Force,
+        ActiveStreamerView::Foreign,
     )
     .await;
 
-    let gate = HueRuntimeGateEvidence {
-        bridge_configured: !request.bridge_ip.trim().is_empty(),
-        credentials_valid: !request.username.trim().is_empty(),
-        area_selected: !request.area_id.trim().is_empty(),
-        readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
-        ready: readiness.readiness.ready,
-        auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
-            || readiness.status.code == "HUE_CREDENTIAL_INVALID",
-    };
+    let gate = start_gate_evidence(&request, &readiness);
 
     // 3. Lock briefly for state decision.
     let result = {
@@ -767,32 +792,30 @@ pub async fn get_hue_stream_status(
 
     // 2. If stream is active, check readiness async -- no lock held.
     if let Some((bridge_ip, username, area_id, _)) = active_stream_params {
-        let readiness = check_hue_stream_readiness(bridge_ip, username, area_id).await;
-        // During a health poll the area will have active_streamer=true (we are
-        // the active streamer).  The readiness check treats active_streamer as
-        // "not ready" to prevent hijacking a foreign stream, but for an ongoing
-        // health check that flag means everything is working.  Override ready=true
-        // when the only blocking reason is active_streamer.
-        let only_blocked_by_us = !readiness.readiness.ready
-            && readiness
-                .readiness
-                .reasons
-                .iter()
-                .all(|r| r.contains("ACTIVE_STREAMER"));
-        let ready_for_health = readiness.readiness.ready || only_blocked_by_us;
+        // During a health poll the area's active_streamer is us. The readiness
+        // check treats a streamer as "not ready" to prevent hijacking a foreign
+        // stream; `Ours` tells it this one is our own session, so it neither
+        // blocks nor logs. The reconnect path deliberately does not do this.
+        let readiness = check_hue_stream_readiness_with_freshness(
+            bridge_ip,
+            username,
+            area_id,
+            HueReadFreshness::Cached,
+            ActiveStreamerView::Ours,
+        )
+        .await;
         let gate = HueRuntimeGateEvidence {
             bridge_configured: true,
             credentials_valid: true,
             area_selected: true,
             readiness_current: readiness.status.code != "HUE_STREAM_READINESS_FAILED",
-            ready: ready_for_health,
-            auth_invalid_evidence: readiness.status.code.starts_with("AUTH_INVALID_")
-                || readiness.status.code == "HUE_CREDENTIAL_INVALID",
+            ready: readiness.readiness.ready,
+            auth_invalid_evidence: is_auth_rejection(&readiness.status.code),
+            readiness_blockers: readiness_blockers(&readiness),
         };
-        // Suppress the "not ready" details when we are the active streamer — the
-        // area is healthy from our perspective and leaking those details into the
-        // Running status creates misleading "Adjust Entertainment Area" messages.
-        let details = if only_blocked_by_us {
+        // No "not ready" details on a healthy poll: leaking them into the
+        // Running status reads as a misleading "Adjust Entertainment Area".
+        let details = if readiness.readiness.ready {
             None
         } else {
             readiness
@@ -878,6 +901,68 @@ mod tests {
             light_count: 1,
             auto_region: "left".to_string(),
         }
+    }
+
+    fn request() -> StartHueStreamRequest {
+        StartHueStreamRequest {
+            bridge_ip: "192.168.1.180".to_string(),
+            username: "app-key".to_string(),
+            client_key: String::new(),
+            area_id: "area-1".to_string(),
+            trigger_source: None,
+            channel_placements: None,
+        }
+    }
+
+    fn readiness(code: &str, ready: bool, reasons: &[&str]) -> HueStreamReadinessResponse {
+        use super::super::super::hue_onboarding::HueStreamReadiness;
+        HueStreamReadinessResponse {
+            status: CommandStatus {
+                code: code.to_string(),
+                message: String::new(),
+                details: None,
+            },
+            readiness: HueStreamReadiness {
+                ready,
+                reasons: reasons.iter().map(|r| r.to_string()).collect(),
+            },
+        }
+    }
+
+    /// The three reasons a start can be refused must reach the state machine
+    /// as three different pieces of evidence.
+    #[test]
+    fn a_start_gate_keeps_auth_busy_and_unreachable_apart() {
+        let auth = start_gate_evidence(
+            &request(),
+            &readiness("AUTH_INVALID_RE_PAIR_REQUIRED", false, &["key refused"]),
+        );
+        assert!(auth.auth_invalid_evidence);
+
+        let busy = start_gate_evidence(
+            &request(),
+            &readiness("HUE_STREAM_NOT_READY", false, &[ACTIVE_STREAMER_REASON]),
+        );
+        assert!(!busy.auth_invalid_evidence);
+        assert!(busy.readiness_current);
+        assert_eq!(
+            busy.readiness_blockers,
+            vec!["HUE_STREAM_NOT_READY", ACTIVE_STREAMER_REASON]
+        );
+
+        let unreachable = start_gate_evidence(
+            &request(),
+            &readiness("HUE_STREAM_READINESS_FAILED", false, &["no answer"]),
+        );
+        assert!(!unreachable.auth_invalid_evidence);
+        assert!(!unreachable.readiness_current);
+        assert_eq!(
+            unreachable.readiness_blockers,
+            vec!["HUE_STREAM_READINESS_FAILED"]
+        );
+
+        let ready = start_gate_evidence(&request(), &readiness("HUE_STREAM_READY", true, &[]));
+        assert!(ready.readiness_blockers.is_empty());
     }
 
     #[test]

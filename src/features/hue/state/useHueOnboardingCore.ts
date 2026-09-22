@@ -4,6 +4,7 @@ import {
   HUE_CREDENTIAL_BACKENDS,
   HUE_CREDENTIAL_STATUS,
   HUE_ONBOARDING_STEP,
+  HUE_RUNTIME_STATUS,
   HUE_STATUS,
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
@@ -202,6 +203,12 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         return {
           ...prev,
           areaGroups,
+          // The bridge refused the key mid-session: without this the card kept
+          // reading "paired" until the next boot validation.
+          credentialState:
+            response.status.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED
+              ? HUE_CREDENTIAL_STATUS.NEEDS_REPAIR
+              : prev.credentialState,
           status: options?.publishStatus === false ? prev.status : response.status,
         };
       });

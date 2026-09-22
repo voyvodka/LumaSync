@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 
 use super::hue::area_cache::{invalidate_hue_area_cache, read_area_snapshot, HueReadFreshness};
 use super::hue::credential_store::effective_hue_app_key;
+use super::hue::state_store::{streams_area, HueRuntimeStateStore};
 
 /// `details` for the "nothing resolved" arms. The reused
 /// `AUTH_INVALID_RE_PAIR_REQUIRED` message asserts the bridge returned a 403,
@@ -569,11 +570,26 @@ pub async fn validate_hue_credentials(
         }
     };
 
-    let path = format!("/api/{username}/config");
-    let outcome = match send_clip_v1(&client, &bridge_ip, &path, false, |client, url| {
-        client.get(url)
-    })
-    .await
+    // Not `/api/<key>/config`: the bridge answers that for ANY key with its
+    // public config, `bridgeid` included, so a revoked key validated. This
+    // resource needs the key, and a refusal comes back through the classifier.
+    let endpoint = format!("https://{bridge_ip}/clip/v2/resource/bridge");
+    validate_app_key_at(&client, &endpoint, &bridge_ip, &username).await
+}
+
+/// The network half of `validate_hue_credentials`, split so a test can point
+/// it at a local stand-in for the bridge.
+async fn validate_app_key_at(
+    client: &Client,
+    endpoint: &str,
+    bridge_ip: &str,
+    username: &str,
+) -> HueValidateCredentialsResponse {
+    let outcome = match client
+        .get(endpoint)
+        .header("hue-application-key", username)
+        .send()
+        .await
     {
         Ok(response) => match classify_hue_response(response).await {
             Ok(ok) => ok.text().await.map_err(|e| e.to_string()),
@@ -597,7 +613,7 @@ pub async fn validate_hue_credentials(
     };
     match outcome {
         Ok(payload) => {
-            let result = parse_credentials_validation_payload(&payload);
+            let result = parse_bridge_resource_payload(&payload);
             if result.valid {
                 info!("Hue credentials validated for bridge {bridge_ip}");
             } else if result.status.code == "HUE_CREDENTIAL_INVALID" {
@@ -697,23 +713,51 @@ pub async fn list_hue_entertainment_areas(
     }
 }
 
+/// Sentinel in `HueStreamReadiness.reasons` (`HUE_READINESS_REASON` in
+/// `hue.ts`): the area's `active_streamer` is set and is not known to be us.
+pub(crate) const ACTIVE_STREAMER_REASON: &str = "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
+
+/// Whose session an area's `active_streamer` is, as far as the caller knows.
+///
+/// The bridge names the streamer only by an `auth_v1` id, and ours would take
+/// an extra `GET /auth/v1` to learn, so ownership is read from our own runtime
+/// instead: if our live stream holds this bridge and area, the streamer is us.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ActiveStreamerView {
+    /// Any active streamer blocks. Every gate that is about to start a session
+    /// passes this — ours has been stopped by then, so a holder is foreign.
+    Foreign,
+    /// Our running session holds this area; its `active_streamer` is us and
+    /// is not a reason the area is unready.
+    Ours,
+}
+
 /// Frontend-facing readiness poll. Runs off the shared area-snapshot cache:
 /// the Devices-tab loop and the App health reconciler (via
 /// `get_hue_stream_status`) ask the same question seconds apart, and only one
 /// of them needs to reach the bridge.
+///
+/// The `Result` is structural (a `State` argument requires it); every path is `Ok`.
 #[tauri::command]
 pub async fn check_hue_stream_readiness(
     bridge_ip: String,
     username: String,
     area_id: String,
-) -> HueStreamReadinessResponse {
-    check_hue_stream_readiness_with_freshness(
+    runtime_state: tauri::State<'_, HueRuntimeStateStore>,
+) -> Result<HueStreamReadinessResponse, String> {
+    let streamer = if streams_area(&runtime_state, &bridge_ip, &area_id) {
+        ActiveStreamerView::Ours
+    } else {
+        ActiveStreamerView::Foreign
+    };
+    Ok(check_hue_stream_readiness_with_freshness(
         bridge_ip,
         username,
         area_id,
         HueReadFreshness::Cached,
+        streamer,
     )
-    .await
+    .await)
 }
 
 /// Readiness with an explicit freshness policy. Anything that is about to
@@ -724,6 +768,7 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
     username: String,
     area_id: String,
     freshness: HueReadFreshness,
+    streamer: ActiveStreamerView,
 ) -> HueStreamReadinessResponse {
     if !is_valid_ipv4(&bridge_ip) {
         return HueStreamReadinessResponse {
@@ -755,68 +800,9 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
     }
 
     match load_hue_entertainment_areas(&bridge_ip, &username, freshness).await {
-        Ok(areas) => {
-            let selected = areas.iter().find(|area| area.id == area_id);
-            let Some(area) = selected else {
-                return HueStreamReadinessResponse {
-                    status: command_status(
-                        "HUE_STREAM_NOT_READY",
-                        "Selected Hue area was not found. Re-select an area and retry.",
-                        Some(format!("Missing areaId={area_id}")),
-                    ),
-                    readiness: HueStreamReadiness {
-                        ready: false,
-                        reasons: vec![
-                            "Selected area is unavailable on current bridge state.".to_string()
-                        ],
-                    },
-                };
-            };
-
-            let mut reasons = Vec::new();
-            if area.channel_count == 0 {
-                reasons.push("Selected area has no entertainment channels configured.".to_string());
-            }
-            if area.active_streamer {
-                reasons.push("HUE_STREAM_NOT_READY_ACTIVE_STREAMER".to_string());
-            }
-
-            let ready = reasons.is_empty();
-            let only_active_streamer =
-                reasons.len() == 1 && reasons[0] == "HUE_STREAM_NOT_READY_ACTIVE_STREAMER";
-            if ready {
-                info!("Hue stream readiness gate passed for area {area_id}");
-            } else if only_active_streamer {
-                // Expected every ~5 s on the health poll: the active streamer is
-                // usually us. `get_hue_stream_status` relaxes the gate for that
-                // case, so logging it at info level was pure noise.
-                debug!(
-                    "Hue stream readiness gate blocked by an active streamer for area {area_id}"
-                );
-            } else {
-                info!("Hue stream readiness gate failed for area {area_id}: {reasons:?}");
-            }
-            let status = if ready {
-                command_status(
-                    "HUE_STREAM_READY",
-                    "Selected Hue area is ready for streaming.",
-                    None,
-                )
-            } else {
-                command_status(
-                    "HUE_STREAM_NOT_READY",
-                    "Selected Hue area is not stream-ready yet.",
-                    Some("Adjust Hue Entertainment Area configuration and revalidate.".to_string()),
-                )
-            };
-
-            HueStreamReadinessResponse {
-                status,
-                readiness: HueStreamReadiness { ready, reasons },
-            }
-        }
+        Ok(areas) => evaluate_area_readiness(&areas, &area_id, streamer),
         Err(AreaListError::AuthInvalid) => {
-            warn!("Hue readiness rejected with 403 type=1 — re-pair required");
+            warn!("Hue readiness: the bridge refused the application key — re-pair required");
             HueStreamReadinessResponse {
                 status: command_status(
                     "AUTH_INVALID_RE_PAIR_REQUIRED",
@@ -846,6 +832,67 @@ pub(crate) async fn check_hue_stream_readiness_with_freshness(
                 },
             }
         }
+    }
+}
+
+/// The readiness verdict for `area_id` on an area list the bridge returned.
+fn evaluate_area_readiness(
+    areas: &[HueEntertainmentArea],
+    area_id: &str,
+    streamer: ActiveStreamerView,
+) -> HueStreamReadinessResponse {
+    let Some(area) = areas.iter().find(|area| area.id == area_id) else {
+        return HueStreamReadinessResponse {
+            status: command_status(
+                "HUE_STREAM_NOT_READY",
+                "Selected Hue area was not found. Re-select an area and retry.",
+                Some(format!("Missing areaId={area_id}")),
+            ),
+            readiness: HueStreamReadiness {
+                ready: false,
+                reasons: vec!["Selected area is unavailable on current bridge state.".to_string()],
+            },
+        };
+    };
+
+    let mut reasons = Vec::new();
+    if area.channel_count == 0 {
+        reasons.push("Selected area has no entertainment channels configured.".to_string());
+    }
+    if area.active_streamer && streamer == ActiveStreamerView::Foreign {
+        reasons.push(ACTIVE_STREAMER_REASON.to_string());
+    }
+
+    let ready = reasons.is_empty();
+    let only_active_streamer = reasons.len() == 1 && reasons[0] == ACTIVE_STREAMER_REASON;
+    if ready && streamer == ActiveStreamerView::Ours {
+        // Our own session answering the ~5 s health poll: nothing worth a line.
+    } else if ready {
+        info!("Hue stream readiness gate passed for area {area_id}");
+    } else if only_active_streamer {
+        // Another client holds the area; the frontend re-asks every 3 s until
+        // it lets go, so this stays at debug.
+        debug!("Hue stream readiness gate blocked by an active streamer for area {area_id}");
+    } else {
+        info!("Hue stream readiness gate failed for area {area_id}: {reasons:?}");
+    }
+    let status = if ready {
+        command_status(
+            "HUE_STREAM_READY",
+            "Selected Hue area is ready for streaming.",
+            None,
+        )
+    } else {
+        command_status(
+            "HUE_STREAM_NOT_READY",
+            "Selected Hue area is not stream-ready yet.",
+            Some("Adjust Hue Entertainment Area configuration and revalidate.".to_string()),
+        )
+    };
+
+    HueStreamReadinessResponse {
+        status,
+        readiness: HueStreamReadiness { ready, reasons },
     }
 }
 
@@ -1045,9 +1092,10 @@ fn pairing_error_status(error_type: Option<i64>, description: &str) -> CommandSt
     }
 }
 
-/// Interpret a `/api/<username>/config` response as valid, invalid, or an
-/// unparseable/unexpected payload.
-pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredentialsResponse {
+/// Interpret a 2xx `GET /clip/v2/resource/bridge` body as valid, invalid, or
+/// unexpected. Only a `data[]` entry carrying `bridge_id` proves the key: that
+/// resource is never served without one, unlike v1's public `/config`.
+pub fn parse_bridge_resource_payload(payload: &str) -> HueValidateCredentialsResponse {
     let parsed = serde_json::from_str::<Value>(payload);
     let Ok(value) = parsed else {
         return HueValidateCredentialsResponse {
@@ -1060,10 +1108,15 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
         };
     };
 
-    if let Some(bridge_id) = value
-        .get("bridgeid")
-        .and_then(|bridge_id| bridge_id.as_str())
-    {
+    let bridge_id = value
+        .get("data")
+        .and_then(|data| data.as_array())
+        .and_then(|items| {
+            items
+                .iter()
+                .find_map(|item| item.get("bridge_id").and_then(|id| id.as_str()))
+        });
+    if let Some(bridge_id) = bridge_id {
         return HueValidateCredentialsResponse {
             status: command_status(
                 "HUE_CREDENTIAL_VALID",
@@ -1074,16 +1127,9 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
         };
     }
 
-    let unauthorized = value
-        .as_array()
-        .and_then(|items| items.first())
-        .and_then(|entry| entry.get("error"))
-        .and_then(|error| error.get("type"))
-        .and_then(|kind| kind.as_i64())
-        .map(|kind| kind == 1)
-        .unwrap_or(false);
-
-    if unauthorized {
+    // A 200 can still carry a refusal: v1 answers every call with HTTP 200 and
+    // an `error.type == 1` envelope, and v2 may put one in `errors[]`.
+    if super::hue_http::is_hue_unauthorized_body(payload) {
         return HueValidateCredentialsResponse {
             status: command_status(
                 "HUE_CREDENTIAL_INVALID",
@@ -1098,7 +1144,7 @@ pub fn parse_credentials_validation_payload(payload: &str) -> HueValidateCredent
         status: command_status(
             "HUE_CREDENTIAL_CHECK_FAILED",
             "Credential validation returned an unexpected payload.",
-            Some("Response did not include bridgeid or authorization error.".to_string()),
+            Some("Response did not include a bridge_id or an authorization error.".to_string()),
         ),
         valid: false,
     }
@@ -1366,7 +1412,7 @@ fn command_status(code: &str, message: &str, details: Option<String>) -> Command
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_area_list_payload, parse_credentials_validation_payload, parse_discovery_payload,
+        parse_area_list_payload, parse_bridge_resource_payload, parse_discovery_payload,
         parse_pairing_payload,
     };
 
@@ -1480,37 +1526,187 @@ mod tests {
 
     // ── credential validation ────────────────────────────────────────────
 
+    const BRIDGE_RESOURCE: &str =
+        r#"{"errors":[],"data":[{"id":"b1","bridge_id":"ecb5fafffe123456","type":"bridge"}]}"#;
+
     #[test]
-    fn a_config_payload_with_a_bridge_id_proves_the_credentials_work() {
-        let response =
-            parse_credentials_validation_payload(r#"{"bridgeid":"001788FFFE123456","name":"Hue"}"#);
+    fn a_bridge_resource_with_a_bridge_id_proves_the_credentials_work() {
+        let response = parse_bridge_resource_payload(BRIDGE_RESOURCE);
 
         assert_eq!(response.status.code, "HUE_CREDENTIAL_VALID");
+        assert_eq!(
+            response.status.details.as_deref(),
+            Some("bridgeId=ecb5fafffe123456")
+        );
         assert!(response.valid);
     }
 
-    /// Error type 1 is "unauthorized user" — the signal that a re-pair is
-    /// genuinely required, and the only error that should ever say so.
+    /// The v1 public config — which the bridge serves for ANY key — must never
+    /// validate. Accepting its `bridgeid` is how a bogus key passed.
     #[test]
-    fn an_unauthorized_error_asks_for_a_re_pair() {
-        let response = parse_credentials_validation_payload(
-            r#"[{"error":{"type":1,"description":"unauthorized user"}}]"#,
+    fn the_public_v1_config_does_not_prove_a_key() {
+        let response = parse_bridge_resource_payload(
+            r#"{"name":"Hue Bridge","bridgeid":"ECB5FAFFFE123456","apiversion":"1.78.0"}"#,
         );
 
-        assert_eq!(response.status.code, "HUE_CREDENTIAL_INVALID");
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_CHECK_FAILED");
         assert!(!response.valid);
+    }
+
+    /// A refusal can arrive on a 200: v1's `error.type 1` envelope or a v2
+    /// `errors[]` auth description.
+    #[test]
+    fn an_unauthorized_error_on_a_200_asks_for_a_re_pair() {
+        for body in [
+            r#"[{"error":{"type":1,"address":"/lights","description":"unauthorized user"}}]"#,
+            r#"{"errors":[{"description":"unauthorized user"}],"data":[]}"#,
+        ] {
+            let response = parse_bridge_resource_payload(body);
+            assert_eq!(response.status.code, "HUE_CREDENTIAL_INVALID", "{body}");
+            assert!(!response.valid);
+        }
     }
 
     /// A different error must NOT read as invalid credentials: that would send
     /// the user through a re-pair they do not need.
     #[test]
     fn another_error_type_is_inconclusive_rather_than_invalid() {
-        let response = parse_credentials_validation_payload(
+        let response = parse_bridge_resource_payload(
             r#"[{"error":{"type":3,"description":"resource not available"}}]"#,
         );
 
         assert_eq!(response.status.code, "HUE_CREDENTIAL_CHECK_FAILED");
         assert!(!response.valid);
+    }
+
+    // ── readiness ownership ──────────────────────────────────────────────
+
+    fn held_area() -> super::HueEntertainmentArea {
+        super::HueEntertainmentArea {
+            id: "area-1".to_string(),
+            name: "TV".to_string(),
+            room_name: None,
+            channel_count: 3,
+            active_streamer: true,
+        }
+    }
+
+    /// While our own session streams, the bridge reports us as the area's
+    /// active streamer. That must not read as a foreign session holding it.
+    #[test]
+    fn our_own_session_is_not_a_foreign_active_streamer() {
+        let response = super::evaluate_area_readiness(
+            &[held_area()],
+            "area-1",
+            super::ActiveStreamerView::Ours,
+        );
+        assert_eq!(response.status.code, "HUE_STREAM_READY");
+        assert!(response.readiness.ready);
+        assert!(response.readiness.reasons.is_empty());
+    }
+
+    #[test]
+    fn a_streamer_that_is_not_ours_blocks_with_the_sentinel() {
+        let response = super::evaluate_area_readiness(
+            &[held_area()],
+            "area-1",
+            super::ActiveStreamerView::Foreign,
+        );
+        assert_eq!(response.status.code, "HUE_STREAM_NOT_READY");
+        assert_eq!(
+            response.readiness.reasons,
+            vec![super::ACTIVE_STREAMER_REASON.to_string()]
+        );
+    }
+
+    /// Ownership only relaxes the streamer check, never the others.
+    #[test]
+    fn our_session_does_not_excuse_an_area_with_no_channels() {
+        let mut area = held_area();
+        area.channel_count = 0;
+        let response =
+            super::evaluate_area_readiness(&[area], "area-1", super::ActiveStreamerView::Ours);
+        assert!(!response.readiness.ready);
+        assert!(!response
+            .readiness
+            .reasons
+            .contains(&super::ACTIVE_STREAMER_REASON.to_string()));
+    }
+
+    // ── credential validation against a local stand-in for the bridge ────
+
+    fn serve_once(
+        status: &str,
+        content_type: &str,
+        body: &str,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{BufRead, BufReader, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!(
+            "http://{}/clip/v2/resource/bridge",
+            listener.local_addr().unwrap()
+        );
+        let reply = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                    break;
+                }
+            }
+            stream.write_all(reply.as_bytes()).unwrap();
+        });
+        (endpoint, handle)
+    }
+
+    async fn validate_against(
+        status: &str,
+        content_type: &str,
+        body: &str,
+    ) -> super::HueValidateCredentialsResponse {
+        let (endpoint, server) = serve_once(status, content_type, body);
+        let client = reqwest::Client::new();
+        let response =
+            super::validate_app_key_at(&client, &endpoint, "192.168.1.180", "bogus").await;
+        server.join().unwrap();
+        response
+    }
+
+    /// The hardware case: a bogus key on a BSB002 gets the bridge's HTML 403.
+    #[tokio::test]
+    async fn a_bogus_key_answered_with_the_bridges_html_403_is_invalid() {
+        let response = validate_against(
+            "403 Forbidden",
+            "text/html",
+            super::super::hue_http::tests::BRIDGE_403_PAGE,
+        )
+        .await;
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_INVALID");
+        assert!(!response.valid);
+    }
+
+    #[tokio::test]
+    async fn a_key_the_bridge_serves_its_resource_to_is_valid() {
+        let response = validate_against("200 OK", "application/json", BRIDGE_RESOURCE).await;
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_VALID");
+        assert!(response.valid);
+    }
+
+    /// A proxy's 403 is a reachability problem, never a dead key.
+    #[tokio::test]
+    async fn a_proxy_403_is_a_failed_check_not_an_invalid_key() {
+        let response = validate_against(
+            "403 Forbidden",
+            "text/html",
+            "<html><head><title>Forbidden</title></head></html>",
+        )
+        .await;
+        assert_eq!(response.status.code, "HUE_CREDENTIAL_CHECK_FAILED");
     }
 
     // ── area list ────────────────────────────────────────────────────────

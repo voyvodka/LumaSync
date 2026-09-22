@@ -30,7 +30,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::frame::{HueAreaChannel, HueColorSender};
-use super::sender::{DeactivateToken, ShutdownSignal};
+use super::sender::{is_shutdown_signaled, DeactivateToken, ShutdownSignal};
 
 // ---------------------------------------------------------------------------
 // Retry policy tunables (consumed by retry.rs)
@@ -164,6 +164,11 @@ pub struct HueRuntimeGateEvidence {
     pub readiness_current: bool,
     pub ready: bool,
     pub auth_invalid_evidence: bool,
+    /// Why readiness said no, as wire tokens: the readiness `status.code` and,
+    /// when a foreign session holds the area, `HUE_STREAM_NOT_READY_ACTIVE_STREAMER`.
+    /// Appended to a gate-blocked status's `details` so the frontend can tell
+    /// a busy area from an unreachable bridge without a new code.
+    pub readiness_blockers: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +505,28 @@ pub fn apply_hue_channels_with_context(
 /// data for the requested area; the caller falls back to `fetch_area_channels`
 /// only when this returns `None`. Centralised here so the Tauri command stays
 /// free of `runtime.lock()` boilerplate.
+/// Does a live stream of THIS process hold this bridge's area? Read by the
+/// readiness poll so the bridge's `active_streamer` for our own running stream
+/// is not reported as a foreign client holding the area.
+///
+/// Deliberately narrow: `Running` with a sender that has not exited. A session
+/// left on the bridge by an earlier process (an unclean exit) holds the area
+/// under the same application key, and must keep reading as busy — nobody has
+/// shown the bridge accepts a fresh start over it.
+pub(crate) fn streams_area(
+    runtime_state: &HueRuntimeStateStore,
+    bridge_ip: &str,
+    area_id: &str,
+) -> bool {
+    let owner = acquire_hue_runtime(&runtime_state.runtime);
+    owner.state == HueRuntimeState::Running
+        && owner.active_stream.as_ref().is_some_and(|stream| {
+            stream.bridge_ip == bridge_ip
+                && stream.area_id == area_id
+                && !is_shutdown_signaled(&stream.shutdown_signal)
+        })
+}
+
 pub(crate) fn channels_to_info_via_owner(
     runtime_state: &HueRuntimeStateStore,
     area_id: &str,
@@ -542,6 +569,7 @@ pub(crate) mod test_helpers {
             readiness_current: true,
             ready: true,
             auth_invalid_evidence: false,
+            readiness_blockers: Vec::new(),
         }
     }
 
@@ -553,6 +581,7 @@ pub(crate) mod test_helpers {
             readiness_current: false,
             ready: false,
             auth_invalid_evidence: false,
+            readiness_blockers: vec!["HUE_STREAM_READINESS_FAILED".to_string()],
         }
     }
 
@@ -758,6 +787,62 @@ mod tests {
         HueRuntimeStateStore {
             runtime: Arc::new(Mutex::new(owner)),
         }
+    }
+
+    #[test]
+    fn a_running_stream_owns_only_its_own_bridge_and_area() {
+        let store = store_with(HueRuntimeOwner {
+            state: HueRuntimeState::Running,
+            active_stream: Some(dummy_active_stream_context()),
+            ..Default::default()
+        });
+
+        assert!(streams_area(&store, "192.168.1.2", "area"));
+        assert!(!streams_area(&store, "192.168.1.2", "another-area"));
+        assert!(!streams_area(&store, "192.168.1.3", "area"));
+    }
+
+    /// Only a live stream of this process counts. A context in any other
+    /// state — including mid-start and mid-reconnect — is not proof that the
+    /// area's streamer is us.
+    #[test]
+    fn a_runtime_that_is_not_running_owns_nothing() {
+        for state in [
+            HueRuntimeState::Idle,
+            HueRuntimeState::Starting,
+            HueRuntimeState::Reconnecting,
+            HueRuntimeState::Stopping,
+            HueRuntimeState::Failed,
+        ] {
+            let store = store_with(HueRuntimeOwner {
+                state: state.clone(),
+                active_stream: Some(dummy_active_stream_context()),
+                ..Default::default()
+            });
+            assert!(!streams_area(&store, "192.168.1.2", "area"), "{state:?}");
+        }
+    }
+
+    /// A `Running` label over a sender that already exited is a stream this
+    /// process no longer has; the bridge's streamer must read as foreign.
+    #[test]
+    fn a_running_label_over_an_exited_sender_owns_nothing() {
+        let context = dummy_active_stream_context();
+        super::super::sender::signal_shutdown_complete(&context.shutdown_signal);
+        let store = store_with(HueRuntimeOwner {
+            state: HueRuntimeState::Running,
+            active_stream: Some(context),
+            ..Default::default()
+        });
+        assert!(!streams_area(&store, "192.168.1.2", "area"));
+    }
+
+    /// A fresh process has no stream, so a session an earlier process left on
+    /// the bridge keeps reading as busy (the boot retry relies on this).
+    #[test]
+    fn a_fresh_runtime_owns_nothing() {
+        let store = HueRuntimeStateStore::default();
+        assert!(!streams_area(&store, "192.168.1.2", "area"));
     }
 
     #[test]
