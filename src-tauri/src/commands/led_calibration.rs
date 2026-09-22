@@ -246,8 +246,8 @@ fn rotate_sequence(mut sequence: Vec<LedSequenceItem>, start_index: usize) -> Ve
 /// Map a `LedSequenceItem` to a normalised screen position `(norm_x, norm_y)`
 /// where `(0.0, 0.0)` is top-left and `(1.0, 1.0)` is bottom-right.
 ///
-/// Used by `build_led_sequence_colors` to derive the pixel-averaging window
-/// centre for each LED.
+/// Used by `sample_frame_for_sequence` and the synthetic test-pattern source
+/// to derive the pixel-averaging window centre for each LED.
 pub fn led_to_screen_pos(item: &LedSequenceItem, counts: &LedSegmentCounts) -> (f32, f32) {
     // Fractional position along the segment [0, 1].
     let frac = if item.local_index == 0 || segment_count(item.segment, counts) <= 1 {

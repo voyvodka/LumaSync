@@ -60,12 +60,6 @@ impl NotificationKind {
 /// `NOTIFICATION_RESULT_CODES` in the platform contract. Additive
 /// string union: never rename existing codes; append new ones only.
 pub mod codes {
-    /// Permission (or implicit OS grant) is active. Informative only —
-    /// the frontend branches on `NotificationResult::Shown`, not on
-    /// this constant — but kept public so future status payloads can
-    /// reference it without a magic string.
-    #[allow(dead_code)]
-    pub const PERMISSION_GRANTED: &str = "NOTIF_PERMISSION_GRANTED";
     pub const PERMISSION_DENIED: &str = "NOTIF_PERMISSION_DENIED";
     pub const UNSUPPORTED_OS: &str = "NOTIF_UNSUPPORTED_OS";
 }
@@ -76,8 +70,8 @@ pub mod codes {
 #[derive(Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum NotificationResult {
-    /// The OS accepted the notification (permission granted, toast
-    /// scheduled). `code` is informative only.
+    /// The OS accepted the notification, or granted the permission
+    /// request. Carries no code.
     Shown,
     /// The user (or OS policy) rejected the permission or the plugin
     /// reported a denial on `show()`.

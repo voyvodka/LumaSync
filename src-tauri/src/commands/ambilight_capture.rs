@@ -70,20 +70,6 @@ pub struct CapturedFrame {
     pub pixels_rgb: Vec<[u8; 3]>,
 }
 
-// v1.3 single-zone sampling structs — kept for backward compat and existing tests.
-// v1.4 per-LED path uses `led_calibration::sample_frame_for_sequence` instead.
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SamplingCalibration {
-    pub led_count: usize,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SampledLedFrame {
-    pub colors: Vec<[u8; 3]>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AmbilightCaptureError {
     /// Surfaced when a platform's capture pipeline reports a missing frame
@@ -904,24 +890,14 @@ mod platform {
 /// Detected black border insets, expressed as fractions of the frame dimensions.
 ///
 /// Each field is in [0.0, 0.5]. A zero value means no border was found on
-/// that edge. Used by both the USB sampling path (frame crop) and the Hue
-/// sampling path (region bounds adjustment).
+/// that edge. Both the USB and Hue sampling paths shrink their sampling
+/// bounds by these insets.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BlackBorderInsets {
     pub top: f32,
     pub bottom: f32,
     pub left: f32,
     pub right: f32,
-}
-
-impl BlackBorderInsets {
-    /// Returns `true` when all insets are effectively zero (no border detected).
-    pub fn is_zero(&self) -> bool {
-        self.top < f32::EPSILON
-            && self.bottom < f32::EPSILON
-            && self.left < f32::EPSILON
-            && self.right < f32::EPSILON
-    }
 }
 
 const BORDER_SCAN_STEP: usize = 8;
@@ -1023,151 +999,14 @@ pub fn detect_black_borders(frame: &CapturedFrame, threshold: u8) -> BlackBorder
     }
 }
 
-/// Return a new `CapturedFrame` that contains only the non-black-border region.
-///
-/// When `insets.is_zero()` this clones the original frame unchanged.
-/// Kept for potential future use; the hot path now uses bounds-based sampling instead.
-#[allow(dead_code)]
-pub fn crop_frame_to_content(frame: &CapturedFrame, insets: &BlackBorderInsets) -> CapturedFrame {
-    if insets.is_zero() {
-        return frame.clone();
-    }
-    let w = frame.width as usize;
-    let h = frame.height as usize;
-    let top = (h as f32 * insets.top) as usize;
-    let bottom = h.saturating_sub((h as f32 * insets.bottom) as usize);
-    let left = (w as f32 * insets.left) as usize;
-    let right = w.saturating_sub((w as f32 * insets.right) as usize);
-    if top >= bottom || left >= right {
-        return frame.clone();
-    }
-    let new_h = bottom - top;
-    let new_w = right - left;
-    let mut pixels_rgb = Vec::with_capacity(new_h * new_w);
-    for row in top..bottom {
-        for col in left..right {
-            if let Some(pixel) = frame.pixels_rgb.get(row * w + col) {
-                pixels_rgb.push(*pixel);
-            }
-        }
-    }
-    CapturedFrame {
-        width: new_w as u32,
-        height: new_h as u32,
-        pixels_rgb,
-    }
-}
-
-// v1.3 single-zone sampler — retained for tests; v1.4 path uses build_led_sequence.
-#[allow(dead_code)]
-pub fn sample_led_frame(
-    frame: &CapturedFrame,
-    calibration: &SamplingCalibration,
-) -> Result<SampledLedFrame, AmbilightCaptureError> {
-    if frame.width == 0 || frame.height == 0 {
-        return Err(AmbilightCaptureError::InvalidFrame(
-            "FRAME_DIMENSIONS_INVALID",
-        ));
-    }
-
-    let expected_pixels = (frame.width as usize).saturating_mul(frame.height as usize);
-    if frame.pixels_rgb.len() != expected_pixels {
-        return Err(AmbilightCaptureError::InvalidFrame(
-            "FRAME_PIXEL_COUNT_MISMATCH",
-        ));
-    }
-
-    if calibration.led_count == 0 {
-        return Err(AmbilightCaptureError::InvalidFrame("LED_COUNT_INVALID"));
-    }
-
-    let mut colors = Vec::with_capacity(calibration.led_count);
-    for led_index in 0..calibration.led_count {
-        let source_index = led_index % frame.pixels_rgb.len();
-        colors.push(frame.pixels_rgb[source_index]);
-    }
-
-    Ok(SampledLedFrame { colors })
-}
-
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    use super::create_live_frame_source;
+    use super::{create_live_frame_source, AmbilightCaptureError};
     use super::{
-        downscale_stride, downscaled_dimensions, sample_led_frame, select_display_index,
-        subsample_rgb, AmbilightCaptureError, AmbilightFrameSource, CapturedFrame,
-        DisplayCandidate, SamplingCalibration, MAX_CAPTURE_DIM,
+        downscale_stride, downscaled_dimensions, select_display_index, subsample_rgb,
+        DisplayCandidate, MAX_CAPTURE_DIM,
     };
-
-    struct SingleFrameSource {
-        frame: Option<CapturedFrame>,
-    }
-
-    impl AmbilightFrameSource for SingleFrameSource {
-        fn capture_frame(&mut self) -> Result<Arc<CapturedFrame>, AmbilightCaptureError> {
-            self.frame
-                .take()
-                .map(Arc::new)
-                .ok_or(AmbilightCaptureError::FrameUnavailable)
-        }
-    }
-
-    #[test]
-    fn capture_and_sampler_produce_deterministic_led_rgb_list() {
-        let mut source = SingleFrameSource {
-            frame: Some(CapturedFrame {
-                width: 2,
-                height: 2,
-                pixels_rgb: vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [15, 25, 35]],
-            }),
-        };
-
-        let frame = source.capture_frame().expect("frame should be available");
-        let sampled = sample_led_frame(&frame, &SamplingCalibration { led_count: 4 })
-            .expect("sampling should succeed");
-
-        assert_eq!(
-            sampled.colors,
-            vec![[10, 20, 30], [40, 50, 60], [70, 80, 90], [15, 25, 35]]
-        );
-    }
-
-    #[test]
-    fn invalid_or_missing_frame_returns_coded_error() {
-        let mut source = SingleFrameSource { frame: None };
-        let capture_error = source.capture_frame().expect_err("capture should fail");
-        assert_eq!(capture_error, AmbilightCaptureError::FrameUnavailable);
-
-        let invalid_frame = CapturedFrame {
-            width: 0,
-            height: 2,
-            pixels_rgb: vec![[1, 2, 3]],
-        };
-        let sample_error = sample_led_frame(&invalid_frame, &SamplingCalibration { led_count: 2 })
-            .expect_err("sampling should reject invalid frame");
-
-        assert_eq!(
-            sample_error,
-            AmbilightCaptureError::InvalidFrame("FRAME_DIMENSIONS_INVALID")
-        );
-    }
-
-    #[test]
-    fn sampler_uses_calibration_led_count_without_magic_fallback() {
-        let frame = CapturedFrame {
-            width: 4,
-            height: 1,
-            pixels_rgb: vec![[5, 5, 5], [10, 10, 10], [15, 15, 15], [20, 20, 20]],
-        };
-
-        let sampled = sample_led_frame(&frame, &SamplingCalibration { led_count: 6 })
-            .expect("sampling should succeed");
-
-        assert_eq!(sampled.colors.len(), 6);
-    }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     #[test]
