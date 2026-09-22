@@ -4,6 +4,7 @@ import type { TranslationKey } from "@/features/i18n/catalogue";
 import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
+import type { BootHueRetryNotice } from "@/features/mode/state/bootHueRetry";
 
 export interface ShellNoticesProps {
   usbDisconnected: boolean;
@@ -12,6 +13,8 @@ export interface ShellNoticesProps {
   startFailure: CaptureFailureNotice | null;
   /** A `[usb, hue]` start ran on USB alone this session. */
   hueLeftOut: HueLeftOutReason | null;
+  /** The boot restore is waiting for a busy Hue bridge, or gave up waiting. */
+  hueBootRetry?: BootHueRetryNotice | null;
   /** Capture died *after* a successful start — a live condition, not an event. */
   captureStalled: CaptureFailureNotice | null;
   hueColorNotice: HueSolidColorStatusCode | null;
@@ -29,6 +32,11 @@ const HUE_LEFT_OUT_COPY: Record<HueLeftOutReason, TranslationKey> = {
   [HUE_LEFT_OUT_REASON.CONFIG]: "common:hueLeftOut.config",
 };
 
+const HUE_BOOT_RETRY_COPY: Record<BootHueRetryNotice, TranslationKey> = {
+  waiting: "common:hueBootRetry.waiting",
+  gaveUp: "common:hueBootRetry.gaveUp",
+};
+
 /**
  * The shell's transient toast stack. Purely presentational — every notice is
  * owned and auto-dismissed by the hook that raises it.
@@ -39,6 +47,7 @@ export function ShellNotices({
   stopFailedTargets,
   startFailure,
   hueLeftOut,
+  hueBootRetry = null,
   captureStalled,
   hueColorNotice,
   onOpenCaptureSettings,
@@ -195,6 +204,30 @@ export function ShellNotices({
             style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }}
           />
           <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t(HUE_LEFT_OUT_COPY[hueLeftOut])}</span>
+        </div>
+      )}
+      {/* Never co-fires with the left-out notice: that one means a mode is running. */}
+      {hueBootRetry && (
+        <div
+          data-testid="hue-boot-retry-notice"
+          data-state={hueBootRetry}
+          className="fixed left-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2 sm:left-auto sm:max-w-sm"
+          role="status"
+          aria-live="polite"
+          style={{
+            bottom,
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-amber)",
+            color: "var(--lm-ink)",
+            transform: hueLeftOutSlots > 0 ? `translateY(-${hueLeftOutSlots * 3.5}rem)` : undefined,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="shrink-0"
+            style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }}
+          />
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t(HUE_BOOT_RETRY_COPY[hueBootRetry])}</span>
         </div>
       )}
       {hueColorNotice && (

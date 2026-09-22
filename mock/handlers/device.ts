@@ -274,7 +274,9 @@ export const deviceHandlers = {
       };
     }
     mutate((draft) => {
-      draft.lighting.mode = { ...draft.lighting.mode, kind };
+      // `targets` too: the reply's `mode` is what the backend runs, and the
+      // delta-start paths read Hue and USB membership off it.
+      draft.lighting.mode = { ...draft.lighting.mode, kind, targets };
     });
     return {
       active: kind !== "off",

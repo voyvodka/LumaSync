@@ -66,11 +66,6 @@ const CALIBRATION: LedCalibrationConfig = {
   totalLeds: 30,
 };
 
-const EDGE_16: Array<[number, number, number]> = Array.from(
-  { length: 16 },
-  () => [0, 0, 0] as [number, number, number],
-);
-
 /** Fresh array instances every call — mirrors event deserialisation. */
 function makeLeds(mutate?: (leds: Array<[number, number, number]>) => void) {
   const leds = Array.from(
@@ -83,10 +78,6 @@ function makeLeds(mutate?: (leds: Array<[number, number, number]>) => void) {
 
 function makeFrame(leds: Array<[number, number, number]>, seq: number): EdgeSignalPayload {
   return {
-    top: EDGE_16,
-    bottom: EDGE_16,
-    left: EDGE_16,
-    right: EDGE_16,
     leds,
     ledCount: leds.length,
     hueChannels: [],

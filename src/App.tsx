@@ -188,6 +188,7 @@ function App() {
     reportHueSolidColorStatus,
     reportStartFailure: mode.reportStartFailure,
     reportHueLeftOut: mode.reportHueLeftOut,
+    scheduleHueBusyRetry: mode.scheduleBootHueRetry,
   });
 
   const { usbDisconnectNotice, usbUnsupportedNotice, armUsbConnected } =
@@ -439,6 +440,8 @@ function App() {
               hasReachableOutput: isConnected || hueReachable || hueSessionActive,
               hasSavedCalibration: savedCalibration !== undefined,
             }}
+            guardsLoaded={bootstrapDone}
+            reachabilityPending={hueStartConfig !== null && hueProbe.verdict === null && !hueSessionActive}
             onOpenLights={() => void handleSectionChange(SECTION_IDS.LIGHTS)}
             onOpenDevices={() => void handleSectionChange(SECTION_IDS.DEVICES)}
             onOpenCalibration={() => void handleSectionChange(SECTION_IDS.LED_SETUP)}
@@ -468,6 +471,7 @@ function App() {
         stopFailedTargets={mode.stopFailedNotice}
         startFailure={mode.startFailedNotice}
         hueLeftOut={mode.hueLeftOutNotice}
+        hueBootRetry={mode.bootHueRetryNotice}
         captureStalled={captureStalledNotice}
         hueColorNotice={hueColorNotice}
         onOpenCaptureSettings={() => void openScreenCaptureSettings()}

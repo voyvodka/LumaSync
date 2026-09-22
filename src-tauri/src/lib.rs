@@ -528,10 +528,10 @@ pub fn run() {
     {
         builder = builder.plugin(
             tauri_plugin_log::Builder::new()
-                // Plugin-log appends the JS caller as `webview:<location>`.
-                // fern only inherits target levels across `::`, so a
-                // `.level_for("webview", Info)` does not match those records.
-                // Keep Info global and suppress noisy dependency targets below.
+                // Frontend records arrive as `webview::<location>`. Before
+                // plugin-log 2.9.2 the separator was a single `:`, which fern's
+                // `::` level inheritance never matched; the global Info floor
+                // covers both. Suppress noisy dependency targets below.
                 .level(log::LevelFilter::Info)
                 .level_for("lumasync_lib", log::LevelFilter::Debug)
                 .level_for("reqwest", log::LevelFilter::Warn)

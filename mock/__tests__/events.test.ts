@@ -12,7 +12,6 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EDGE_SIGNAL_SAMPLES_PER_EDGE } from "../../src/features/mode/model/contracts";
 import {
   buildEdgeSignalFrame,
   currentPreviewStatus,
@@ -36,10 +35,10 @@ beforeEach(() => {
 });
 
 describe("buildEdgeSignalFrame", () => {
-  it("emits exactly the sample count per edge the contract declares", () => {
+  it("carries no per-edge arrays, which the real worker no longer sends", () => {
     const frame = buildEdgeSignalFrame("rainbow", 1, "live");
-    for (const edge of [frame.top, frame.right, frame.bottom, frame.left]) {
-      expect(edge).toHaveLength(EDGE_SIGNAL_SAMPLES_PER_EDGE);
+    for (const edge of ["top", "right", "bottom", "left"]) {
+      expect(frame).not.toHaveProperty(edge);
     }
   });
 

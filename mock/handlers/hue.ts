@@ -73,6 +73,12 @@ export function hueRuntimeFault(
   return null;
 }
 
+/** Whether another session still holds the area, honouring a scheduled release. */
+export function activeStreamerHeld(hue: MockWorld["hue"], now: number = Date.now()): boolean {
+  if (!hue.activeStreamerElsewhere) return false;
+  return hue.activeStreamerReleasesAt === null || now < hue.activeStreamerReleasesAt;
+}
+
 /** The runtime envelope, which is a status *plus* a state machine position. */
 function runtimeStatus(
   code: HueRuntimeStatus["code"],
@@ -262,7 +268,7 @@ export const hueHandlers = {
     const reasons: string[] = [];
     // The sentinel is compared against, never displayed — it is how the UI
     // tells "someone else owns the stream" from a generic refusal.
-    if (hue.activeStreamerElsewhere) reasons.push(HUE_READINESS_REASON.ACTIVE_STREAMER);
+    if (activeStreamerHeld(hue)) reasons.push(HUE_READINESS_REASON.ACTIVE_STREAMER);
     return {
       status: status(
         reasons.length === 0 ? HUE_STATUS.STREAM_READY : HUE_STATUS.STREAM_NOT_READY,
@@ -286,6 +292,22 @@ export const hueHandlers = {
     }
     if (!hue.reachable || !hue.credentialValid) {
       return { active: false, status: currentRuntime() };
+    }
+    // `start_with_evidence` fails its strict gate on a held area with the same
+    // `details` shape Rust builds (see `CONFIG_NOT_READY_GATE_BLOCKED` in
+    // hue.ts), so a consumer reads the mock exactly as it reads Rust.
+    if (activeStreamerHeld(hue)) {
+      return {
+        active: false,
+        status: {
+          ...runtimeStatus(
+            HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
+            HUE_RUNTIME_STATES.IDLE,
+            "Hue stream start blocked by strict backend readiness gate.",
+          ),
+          details: `Missing prerequisites: ready; readiness: ${HUE_STATUS.STREAM_NOT_READY}, ${HUE_READINESS_REASON.ACTIVE_STREAMER}`,
+        },
+      };
     }
     mutate((w) => {
       w.hue.streaming = true;

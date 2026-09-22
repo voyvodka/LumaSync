@@ -183,13 +183,22 @@ pub(crate) fn start_with_evidence(
             missing.push("ready");
         }
 
+        // The blocker tokens are a wire contract (documented on
+        // `CONFIG_NOT_READY_GATE_BLOCKED` in hue.ts): the frontend tells a
+        // busy area from an unreachable bridge by them. Keep them verbatim.
+        let mut details = format!("Missing prerequisites: {}", missing.join(", "));
+        if !evidence.readiness_blockers.is_empty() {
+            details.push_str("; readiness: ");
+            details.push_str(&evidence.readiness_blockers.join(", "));
+        }
+
         owner.state = HueRuntimeState::Idle;
         owner.active_stream = None;
         owner.last_status = status_with(
             HueRuntimeState::Idle,
             "CONFIG_NOT_READY_GATE_BLOCKED",
             "Hue stream start blocked by strict backend readiness gate.",
-            Some(format!("Missing prerequisites: {}", missing.join(", "))),
+            Some(details),
             trigger_source,
         );
         owner.last_status.action_hint = Some(if !evidence.area_selected {
@@ -347,6 +356,64 @@ mod tests {
         assert_eq!(result.status.code, "CONFIG_NOT_READY_GATE_BLOCKED");
         assert_eq!(result.status.state, HueRuntimeState::Idle);
         assert!(!result.active);
+    }
+
+    /// The gate details are what the frontend reads to tell a busy area from
+    /// an unreachable bridge; the tokens must arrive verbatim.
+    #[test]
+    fn a_gate_blocked_by_a_foreign_streamer_names_it_in_details() {
+        let mut owner = HueRuntimeOwner::default();
+        let mut busy = strict_gate_ready();
+        busy.ready = false;
+        busy.readiness_blockers = vec![
+            "HUE_STREAM_NOT_READY".to_string(),
+            "HUE_STREAM_NOT_READY_ACTIVE_STREAMER".to_string(),
+        ];
+
+        let result = start_with_evidence(&mut owner, &busy, HueRuntimeTriggerSource::ModeControl);
+
+        assert_eq!(result.status.code, "CONFIG_NOT_READY_GATE_BLOCKED");
+        assert_eq!(
+            result.status.details.as_deref(),
+            Some(
+                "Missing prerequisites: ready; readiness: HUE_STREAM_NOT_READY, \
+                 HUE_STREAM_NOT_READY_ACTIVE_STREAMER"
+            )
+        );
+    }
+
+    #[test]
+    fn a_gate_blocked_by_an_unreachable_bridge_names_it_in_details() {
+        let mut owner = HueRuntimeOwner::default();
+        let result = start_with_evidence(
+            &mut owner,
+            &strict_gate_missing_readiness(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+
+        let details = result.status.details.unwrap();
+        assert!(details.contains("HUE_STREAM_READINESS_FAILED"), "{details}");
+        assert!(!details.contains("ACTIVE_STREAMER"), "{details}");
+    }
+
+    /// Auth evidence wins over every other gate term: a revoked key must read
+    /// as re-pair, never as a gate the user could clear by waiting.
+    #[test]
+    fn auth_evidence_on_the_gate_is_a_re_pair_not_a_block() {
+        let mut owner = HueRuntimeOwner::default();
+        let mut gate = strict_gate_ready();
+        gate.ready = false;
+        gate.auth_invalid_evidence = true;
+        gate.readiness_blockers = vec!["AUTH_INVALID_RE_PAIR_REQUIRED".to_string()];
+
+        let result = start_with_evidence(&mut owner, &gate, HueRuntimeTriggerSource::ModeControl);
+
+        assert_eq!(result.status.code, "AUTH_INVALID_CREDENTIALS");
+        assert_eq!(result.status.state, HueRuntimeState::Failed);
+        assert_eq!(
+            result.status.action_hint,
+            Some(HueRuntimeActionHint::Repair)
+        );
     }
 
     #[test]

@@ -24,35 +24,19 @@ export const LIGHTING_MODE_KIND = {
   SOLID: "solid",
 } as const;
 
-/** Tauri event channel name for live edge-signal previews emitted by the ambilight worker. */
+/** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
 export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal";
 
-/**
- * Number of RGB samples the Rust worker emits per edge in every `EdgeSignalPayload`.
- * Mirrors the `EDGE_SIGNAL_SAMPLES_PER_EDGE` constant in `lighting_mode.rs` and lets
- * consumers validate the invariant (`payload.top.length === EDGE_SIGNAL_SAMPLES_PER_EDGE`).
- */
-export const EDGE_SIGNAL_SAMPLES_PER_EDGE = 16;
-
-/** Live edge-preview payload emitted by the Rust ambilight worker.
- * Each edge array contains `EDGE_SIGNAL_SAMPLES_PER_EDGE` RGB triplets.
+/** Per-LED frame the Rust ambilight worker sends to open twin-overlay windows.
  *
- * v1.6 (LED Preview & Test Experience) enriches this payload ADDITIVELY: the
- * worker keeps emitting the same ~10 Hz event on the same `EDGE_SIGNAL_EVENT`
- * channel, but when a preview surface (twin overlay / control popup) is
- * subscribed it also stamps the full per-LED buffer below. Every new field is
- * OPTIONAL so the existing 16-sample-per-edge consumer (`LightsSection`) — which
- * reads only `top` / `bottom` / `left` / `right` — is unaffected and needs no
- * change. */
+ * Sent only while a twin overlay is open, and only to twin windows — the main
+ * window receives nothing. The worker sets `leds`, `ledCount`, `source` and
+ * `seq` on every frame; they stay optional here so the twin keeps ignoring a
+ * frame without a `leds` buffer rather than trusting the wire. */
 export interface EdgeSignalPayload {
-  top: Array<[number, number, number]>;
-  bottom: Array<[number, number, number]>;
-  left: Array<[number, number, number]>;
-  right: Array<[number, number, number]>;
   /**
    * v1.6 — full per-LED RGB buffer for the digital-twin overlay, ordered along
-   * the calibrated strip path. Present only when a preview surface is
-   * subscribed; absent (and ignored) on the existing edge-only consumer path.
+   * the calibrated strip path.
    */
   leds?: Array<[number, number, number]>;
   /** v1.6 — length of `leds` (the calibrated total LED count for this frame). */

@@ -314,6 +314,7 @@ const hue: Catalogue<typeof enHue> = {
         AUTH_INVALID_RE_PAIR_REQUIRED: "Köprü bu uygulamanın anahtarını artık kabul etmiyor. Köprüyü yeniden eşleştir.",
         HUE_AREA_INVALID: "Eğlence alanı kimliği geçerli değil.",
         HUE_IP_INVALID: "Köprü adresi geçerli değil.",
+        CHAN_WB_AREA_NOT_FOUND: "Bu eğlence alanı artık köprüde yok. Alanı yeniden seçin.",
       },
     },
   },

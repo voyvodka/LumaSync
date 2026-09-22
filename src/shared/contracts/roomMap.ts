@@ -628,6 +628,10 @@ export const CHANNEL_WRITEBACK_STATUS = {
   NETWORK_ERROR: "CHAN_WB_NETWORK_ERROR",
   /** Area id failed the path-traversal guard before any request was built. */
   AREA_INVALID: "HUE_AREA_INVALID",
+  /** The bridge answered 404 for the area: deleted in the Hue app, or an id
+   * from another bridge. Nothing was written; re-selecting an area fixes it,
+   * retrying does not. */
+  AREA_NOT_FOUND: "CHAN_WB_AREA_NOT_FOUND",
   /** Nothing could be written: no placement had a `channelId`, or none mapped
    * onto a single bridge position (a gradient segment, a grouped channel). A
    * skipped placement is never addressed by its ordinal or approximated. When

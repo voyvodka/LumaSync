@@ -236,6 +236,15 @@ export const HUE_RUNTIME_STATUS = {
    * or malformed, no 403 contacted the bridge).
    */
   AUTH_INVALID_RE_PAIR_REQUIRED: "AUTH_INVALID_RE_PAIR_REQUIRED",
+  /**
+   * The start gate refused. On `start_hue_stream` / `restart_hue_stream`,
+   * `details` ends with `"; readiness: <readiness code>[, <sentinel>]"` when
+   * readiness said no. Match tokens, never the prose around them:
+   * `HUE_READINESS_REASON.ACTIVE_STREAMER` ⇒ another session holds the area
+   * (clears when it lets go); `HUE_STATUS.STREAM_READINESS_FAILED` ⇒ the
+   * bridge did not answer. A key the bridge refused never lands here — that
+   * is `AUTH_INVALID_CREDENTIALS` with `actionHint: "repair"`.
+   */
   CONFIG_NOT_READY_GATE_BLOCKED: "CONFIG_NOT_READY_GATE_BLOCKED",
   STOP_TIMEOUT_PARTIAL: "HUE_STOP_TIMEOUT_PARTIAL",
   CHANNEL_POSITIONS_UPDATED: "HUE_CHANNEL_POSITIONS_UPDATED",
@@ -279,7 +288,6 @@ export const HUE_READINESS_REASON = {
 
 export type HueReadinessReason =
   (typeof HUE_READINESS_REASON)[keyof typeof HUE_READINESS_REASON];
-
 /**
  * `set_hue_solid_color` codes. Only `APPLIED` reached a sender; the rest are
  * queued for replay by `flush_pending_solid_color` and must be surfaced.

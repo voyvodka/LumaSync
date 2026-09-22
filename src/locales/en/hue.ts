@@ -311,6 +311,7 @@ export default {
         AUTH_INVALID_RE_PAIR_REQUIRED: "The bridge no longer accepts this app's key. Re-pair the bridge.",
         HUE_AREA_INVALID: "The entertainment area id is not valid.",
         HUE_IP_INVALID: "The bridge address is not valid.",
+        CHAN_WB_AREA_NOT_FOUND: "This entertainment area no longer exists on the bridge. Select an area again.",
       },
     },
   },

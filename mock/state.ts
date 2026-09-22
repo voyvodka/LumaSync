@@ -118,6 +118,12 @@ export interface MockWorld {
     totalReconnects: number;
     /** Drives the `HUE_STREAM_NOT_READY_ACTIVE_STREAMER` readiness sentinel. */
     activeStreamerElsewhere: boolean;
+    /**
+     * Epoch ms at which that streamer lets go by itself, the way the bridge
+     * drops a session an unclean exit left behind; `null` holds it until the
+     * toggle clears. Read lazily, so a reload does not restart the clock.
+     */
+    activeStreamerReleasesAt: number | null;
   };
   displays: MockDisplay[];
   capture: { permissionGranted: boolean };

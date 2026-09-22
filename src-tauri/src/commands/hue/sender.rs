@@ -18,7 +18,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use reqwest::blocking::Client as BlockingClient;
 use serde_json::{json, Value};
 
@@ -115,8 +115,8 @@ impl DeactivateToken {
         self.in_flight.store(false, AtomicOrdering::Release);
     }
 
-    /// Test/diagnostic-only probe: was the token already acquired?
-    #[cfg(test)]
+    /// Is a deactivate PUT in flight, or did one land? The sender reads it to
+    /// tell its own teardown apart from a real write failure.
     pub(crate) fn was_acquired(&self) -> bool {
         self.in_flight.load(AtomicOrdering::Acquire)
     }
@@ -551,6 +551,21 @@ pub(super) fn run_http_fallback_loop<S: LightPutSink>(
 // Background DTLS sender thread
 // ---------------------------------------------------------------------------
 
+/// Is a failed DTLS write the stop we are in the middle of, rather than a
+/// fault? Either somebody holds the deactivate token (a stop, restart or
+/// reconnect cleanup already PUT `action: stop`), or every sender handle is
+/// gone. Only the write-failure log level depends on this.
+fn dtls_write_failed_during_stop(
+    deactivate_token: &DeactivateToken,
+    rx: &std::sync::mpsc::Receiver<HueColorUpdate>,
+) -> bool {
+    deactivate_token.was_acquired()
+        || matches!(
+            rx.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Disconnected)
+        )
+}
+
 /// Spawns a background thread that:
 /// 1. Activates the entertainment configuration via HTTPS
 /// 2. Connects via DTLS 1.2 PSK to bridge:2100
@@ -684,7 +699,13 @@ pub(crate) fn spawn_hue_dtls_sender(
                 &light_metadata,
             );
             if dtls_stream.write_all(&frame).is_err() {
-                error!("DTLS write failed, stopping entertainment stream.");
+                if dtls_write_failed_during_stop(&deactivate_token, &rx) {
+                    // A stop's deactivate PUT ends the bridge session under a
+                    // frame already in flight. Expected, not a fault.
+                    debug!("DTLS write failed while the stream was being stopped.");
+                } else {
+                    error!("DTLS write failed, stopping entertainment stream.");
+                }
                 break;
             }
 
@@ -2061,6 +2082,32 @@ mod tests {
     // DeactivateToken (v1.5.2 A1.3) — dedupe primitive for entertainment-config
     // deactivation across the sender thread, foreground stop, and reconnect monitor.
     // -----------------------------------------------------------------------
+
+    /// A write failing under a live session is a fault and must stay ERROR.
+    #[test]
+    fn a_write_failure_on_a_live_session_is_not_a_stop() {
+        let token = DeactivateToken::new();
+        let (_tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        assert!(!dtls_write_failed_during_stop(&token, &rx));
+    }
+
+    /// The Off race: the foreground stop won the token and its PUT ended the
+    /// bridge session while a frame was in flight.
+    #[test]
+    fn a_write_failure_after_the_stop_took_the_token_is_the_stop() {
+        let token = DeactivateToken::new();
+        let (_tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        assert!(token.try_acquire());
+        assert!(dtls_write_failed_during_stop(&token, &rx));
+    }
+
+    #[test]
+    fn a_write_failure_after_every_sender_handle_dropped_is_the_stop() {
+        let token = DeactivateToken::new();
+        let (tx, rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
+        drop(tx);
+        assert!(dtls_write_failed_during_stop(&token, &rx));
+    }
 
     #[test]
     fn a_failed_put_hands_the_token_back_so_a_later_caller_retries() {

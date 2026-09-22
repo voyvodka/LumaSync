@@ -38,12 +38,6 @@ import { useLedPreviewFrame } from "../state/useLedPreviewFrame";
 /** Minimal callback shape captured from the `listen` call. */
 type ListenCallback = (event: { payload: EdgeSignalPayload }) => void;
 
-/** Sixteen samples per edge — matches EDGE_SIGNAL_SAMPLES_PER_EDGE. */
-const EDGE_16: Array<[number, number, number]> = Array.from(
-  { length: 16 },
-  () => [100, 100, 100] as [number, number, number],
-);
-
 /** Build a fully enriched EdgeSignalPayload with optional overrides. */
 function makeEnrichedPayload(
   overrides: Partial<EdgeSignalPayload> = {},
@@ -54,10 +48,6 @@ function makeEnrichedPayload(
     [0, 0, 255],
   ];
   return {
-    top: EDGE_16,
-    bottom: EDGE_16,
-    left: EDGE_16,
-    right: EDGE_16,
     leds,
     ledCount: leds.length,
     hueChannels: [[200, 200, 200]],
@@ -95,16 +85,14 @@ describe("useLedPreviewFrame", () => {
   });
 
   // -------------------------------------------------------------------------
-  // Scenario 1 — lean frame (no leds) is ignored
+  // Scenario 1 — a frame without a leds buffer is ignored
   // -------------------------------------------------------------------------
   it("ignores frames that carry no leds buffer", async () => {
     const { result } = renderHook(() => useLedPreviewFrame());
     await act(async () => {});
 
     act(() => {
-      capturedCallback?.({
-        payload: { top: EDGE_16, bottom: EDGE_16, left: EDGE_16, right: EDGE_16 },
-      });
+      capturedCallback?.({ payload: { seq: 1 } });
     });
 
     expect(result.current).toBeNull();
