@@ -29,6 +29,7 @@ import type {
   HueChannelWritebackStatus,
   HueCredentialMigrationResponse,
   HueOnboardingWireStatusCode,
+  HueStatusCode,
 } from "../../src/shared/contracts/hue";
 import type { CommandStatusOf } from "../../src/shared/contracts/status";
 import type {
@@ -87,6 +88,91 @@ type ValidateHueCredentialsMockResponse = {
 };
 
 /**
+ * The remaining five onboarding commands' own status codes, narrowed the same
+ * way `ValidateHueCredentialsCode` above narrows `validate_hue_credentials`'s
+ * — each `Extract` is read off the real Rust handler in
+ * `src-tauri/src/commands/hue_onboarding.rs`, not off what the fixture
+ * happened to return. Narrowing these caught three drifted codes: `pair`
+ * answered with the frontend-minted `HUE_PAIRING_PENDING_LINK_BUTTON`
+ * instead of the wire's `HUE_PAIRING_LINK_BUTTON_NOT_PRESSED`; `list-areas`
+ * answered unreachable with `HUE_IP_UNREACHABLE` (`verify_hue_bridge_ip`'s
+ * own code) instead of `HUE_AREA_LIST_FAILED`, and success with
+ * `HUE_DISCOVERY_OK` instead of `HUE_AREA_LIST_OK`; `check-readiness`
+ * answered entirely in `verify_hue_bridge_ip`'s `HUE_IP_VALID` /
+ * `HUE_IP_UNREACHABLE` terms instead of its own
+ * `HUE_STREAM_READY` / `HUE_STREAM_NOT_READY` / `HUE_STREAM_READINESS_FAILED`.
+ */
+type DiscoverHueBridgesCode = Extract<
+  HueOnboardingWireStatusCode,
+  "HUE_DISCOVERY_OK" | "HUE_DISCOVERY_EMPTY" | "HUE_DISCOVERY_FAILED"
+>;
+
+type DiscoverHueBridgesMockResponse = {
+  status: CommandStatusOf<DiscoverHueBridgesCode>;
+  bridges: HueDiscoveryResponse["bridges"];
+};
+
+type VerifyHueBridgeIpCode = Extract<
+  HueOnboardingWireStatusCode,
+  "HUE_IP_INVALID" | "HUE_IP_UNREACHABLE" | "HUE_IP_VALID"
+>;
+
+type VerifyHueBridgeIpMockResponse = {
+  status: CommandStatusOf<VerifyHueBridgeIpCode>;
+  bridge: HueVerifyBridgeIpResponse["bridge"];
+};
+
+// `pair_hue_bridge`'s declared status type (`HuePairBridgeResponse.status`)
+// is `HueCommandStatus = CommandStatusOf<HueStatusCode>`, not the
+// `HueOnboardingWireStatusCode` the other four share — pairing never emits
+// `AUTH_INVALID_RE_PAIR_REQUIRED` (there are no credentials yet to reject),
+// so it narrows off the plain `HueStatusCode` union instead.
+type PairHueBridgeCode = Extract<
+  HueStatusCode,
+  | "HUE_IP_INVALID"
+  | "HUE_PAIRING_OK"
+  | "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED"
+  | "HUE_PAIRING_DEVICETYPE_INVALID"
+  | "HUE_PAIRING_BRIDGE_BUSY"
+  | "HUE_PAIRING_RATE_LIMITED"
+  | "HUE_PAIRING_FAILED"
+>;
+
+type PairHueBridgeMockResponse = {
+  status: CommandStatusOf<PairHueBridgeCode>;
+  credentials: HuePairBridgeResponse["credentials"];
+  credentialStorageBackend?: HuePairBridgeResponse["credentialStorageBackend"];
+};
+
+type ListHueEntertainmentAreasCode = Extract<
+  HueOnboardingWireStatusCode,
+  | "HUE_IP_INVALID"
+  | "AUTH_INVALID_RE_PAIR_REQUIRED"
+  | "HUE_AREA_LIST_OK"
+  | "HUE_AREA_LIST_EMPTY"
+  | "HUE_AREA_LIST_FAILED"
+>;
+
+type ListHueEntertainmentAreasMockResponse = {
+  status: CommandStatusOf<ListHueEntertainmentAreasCode>;
+  areas: HueEntertainmentAreaListResponse["areas"];
+};
+
+type CheckHueStreamReadinessCode = Extract<
+  HueOnboardingWireStatusCode,
+  | "HUE_IP_INVALID"
+  | "AUTH_INVALID_RE_PAIR_REQUIRED"
+  | "HUE_STREAM_READY"
+  | "HUE_STREAM_NOT_READY"
+  | "HUE_STREAM_READINESS_FAILED"
+>;
+
+type CheckHueStreamReadinessMockResponse = {
+  status: CommandStatusOf<CheckHueStreamReadinessCode>;
+  readiness: HueStreamReadinessResponse["readiness"];
+};
+
+/**
  * The response each mocked command must produce.
  *
  * Keys are the command names as literals rather than computed from the
@@ -121,17 +207,17 @@ export interface CommandResponse {
   get_runtime_telemetry: FullTelemetrySnapshot;
 
   // --- hue ------------------------------------------------------------------
-  discover_hue_bridges: HueDiscoveryResponse;
-  verify_hue_bridge_ip: HueVerifyBridgeIpResponse;
-  pair_hue_bridge: HuePairBridgeResponse;
+  discover_hue_bridges: DiscoverHueBridgesMockResponse;
+  verify_hue_bridge_ip: VerifyHueBridgeIpMockResponse;
+  pair_hue_bridge: PairHueBridgeMockResponse;
   start_hue_stream: HueRuntimeCommandResult;
   stop_hue_stream: HueRuntimeCommandResult;
   restart_hue_stream: HueRuntimeCommandResult;
   get_hue_stream_status: HueRuntimeCommandResult;
   set_hue_solid_color: HueRuntimeCommandResult;
   validate_hue_credentials: ValidateHueCredentialsMockResponse;
-  list_hue_entertainment_areas: HueEntertainmentAreaListResponse;
-  check_hue_stream_readiness: HueStreamReadinessResponse;
+  list_hue_entertainment_areas: ListHueEntertainmentAreasMockResponse;
+  check_hue_stream_readiness: CheckHueStreamReadinessMockResponse;
   update_hue_channel_positions: HueChannelWritebackStatus;
   get_hue_area_channels: HueAreaChannelListResponse;
   migrate_hue_credentials: HueCredentialMigrationResponse;

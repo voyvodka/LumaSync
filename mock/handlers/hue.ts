@@ -17,6 +17,7 @@
 import {
   HUE_AREA_CHANNELS_STATUS,
   HUE_COMMANDS,
+  HUE_READINESS_REASON,
   HUE_RUNTIME_STATES,
   HUE_RUNTIME_STATUS,
   HUE_RUNTIME_TRIGGER_SOURCE,
@@ -36,9 +37,21 @@ const MOCK_BRIDGE_HEIGHTS: readonly number[] = [0.1, 0.1, 0.9];
 /**
  * Bridge-fault verdict for the current world — reachability wins over an
  * invalid key, matching `register_transient_fault` / `register_auth_invalid`
- * in `src-tauri/src/commands/hue/{reconnect,retry}.rs`: an unreachable bridge
- * is an active retry ladder (`Reconnecting`), an expired key is terminal
- * (`Failed`). `null` means neither fault is active.
+ * in `src-tauri/src/commands/hue/{reconnect,retry}.rs`. `null` means neither
+ * fault is active.
+ *
+ * An unreachable bridge is `Reconnecting` only once a stream has actually
+ * gone live: `register_transient_fault` (`hue/retry.rs`) — the sole producer
+ * of `Reconnecting` — is reachable only from the reconnect monitor and
+ * `status_refresh_with_evidence`, both gated on
+ * `Starting | Running | Reconnecting`. A start attempt against a runtime that
+ * has never gone `Running` instead fails the strict gate in
+ * `start_with_evidence`, which reports `Idle`/`CONFIG_NOT_READY_GATE_BLOCKED`
+ * — never `Reconnecting`. `everActive` is the mock's proxy for "a stream was
+ * live at some point this session" (see `MockWorld["hue"]["everActive"]`).
+ * An expired key is terminal (`Failed`) regardless of `everActive`, matching
+ * `start_with_evidence`'s own `auth_invalid_evidence` branch, which fails the
+ * same way whether or not the runtime was ever running.
  *
  * Shared with `device.ts`'s `get_runtime_telemetry` fixture so the stream
  * status poll and the telemetry HUD cannot disagree about the same world —
@@ -49,7 +62,9 @@ export function hueRuntimeFault(
   hue: MockWorld["hue"],
 ): { code: HueRuntimeWireStatusCode; state: HueRuntimeState } | null {
   if (!hue.reachable) {
-    return { code: HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED, state: HUE_RUNTIME_STATES.RECONNECTING };
+    return hue.everActive
+      ? { code: HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED, state: HUE_RUNTIME_STATES.RECONNECTING }
+      : { code: HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED, state: HUE_RUNTIME_STATES.IDLE };
   }
   if (!hue.credentialValid) {
     return { code: HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS, state: HUE_RUNTIME_STATES.FAILED };
@@ -74,9 +89,12 @@ function currentRuntime(): HueRuntimeStatus {
   const { hue } = getWorld();
   const fault = hueRuntimeFault(hue);
   if (fault !== null) {
-    const message = fault.state === HUE_RUNTIME_STATES.RECONNECTING
-      ? "Bridge unreachable"
-      : "Application key rejected";
+    // Keyed off the code, not the state, now that an unreachable bridge can
+    // report either `Idle` (never started) or `Reconnecting` (was live) —
+    // both mean "bridge unreachable", only the invalid-key branch differs.
+    const message = fault.code === HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS
+      ? "Application key rejected"
+      : "Bridge unreachable";
     return runtimeStatus(fault.code, fault.state, message);
   }
   return hue.streaming
@@ -120,12 +138,19 @@ export const hueHandlers = {
     // The link-button wait is a countdown rather than a timer: the UI polls,
     // and the nth poll is the one that succeeds. A scheduler would add a
     // moving part with nothing to show for it.
+    //
+    // `HUE_PAIRING_LINK_BUTTON_NOT_PRESSED` is `pair_hue_bridge`'s real wire
+    // code (`pairing_error_status` in `hue_onboarding.rs`, error.type 101).
+    // `HUE_PAIRING_PENDING_LINK_BUTTON` is frontend-minted by
+    // `useHueOnboardingCore`'s own poll translation and never appears on the
+    // wire — returning it here shortcut that translation and left it
+    // untested against the mock.
     if (hue.linkButtonPressesRemaining > 0) {
       mutate((w) => {
         w.hue.linkButtonPressesRemaining -= 1;
       });
       return {
-        status: status(HUE_STATUS.PAIRING_PENDING_LINK_BUTTON, "Press the link button"),
+        status: status(HUE_STATUS.PAIRING_LINK_BUTTON_NOT_PRESSED, "Press the link button"),
         credentials: null,
       };
     }
@@ -176,10 +201,18 @@ export const hueHandlers = {
         };
   },
 
+  /**
+   * `list_hue_entertainment_areas` has no reachability branch of its own —
+   * an unreachable bridge surfaces through `load_hue_entertainment_areas`'s
+   * `AreaListError::Unreachable`, which collapses onto the same
+   * `HUE_AREA_LIST_FAILED` as any other transport fault. `HUE_IP_UNREACHABLE`
+   * is `verify_hue_bridge_ip`'s own code and this command never emits it; the
+   * success code is `HUE_AREA_LIST_OK`, not discovery's `HUE_DISCOVERY_OK`.
+   */
   [HUE_COMMANDS.LIST_ENTERTAINMENT_AREAS]: () => {
     const { hue } = getWorld();
     if (!hue.reachable) {
-      return { status: status(HUE_STATUS.IP_UNREACHABLE, "No answer"), areas: [] };
+      return { status: status(HUE_STATUS.AREA_LIST_FAILED, "Could not reach bridge"), areas: [] };
     }
     if (!hue.credentialValid) {
       return {
@@ -187,8 +220,11 @@ export const hueHandlers = {
         areas: [],
       };
     }
+    if (hue.areas.length === 0) {
+      return { status: status(HUE_STATUS.AREA_LIST_EMPTY, "No entertainment areas"), areas: [] };
+    }
     return {
-      status: status(HUE_STATUS.DISCOVERY_OK, `${hue.areas.length} area(s)`),
+      status: status(HUE_STATUS.AREA_LIST_OK, `${hue.areas.length} area(s)`),
       areas: hue.areas.map((a) => ({
         id: a.id,
         name: a.name,
@@ -199,17 +235,36 @@ export const hueHandlers = {
     };
   },
 
+  /**
+   * `check_hue_stream_readiness` reads through the same
+   * `load_hue_entertainment_areas` call as the area list, so it shares that
+   * command's transport-failure code (`HUE_STREAM_READINESS_FAILED`, its own
+   * family — not `HUE_IP_VALID`/`HUE_IP_UNREACHABLE`, which belong to
+   * `verify_hue_bridge_ip`) and its auth-invalid code
+   * (`AUTH_INVALID_RE_PAIR_REQUIRED`). Only a successfully-read area reaches
+   * `HUE_STREAM_READY` / `HUE_STREAM_NOT_READY`.
+   */
   [HUE_COMMANDS.CHECK_STREAM_READINESS]: () => {
     const { hue } = getWorld();
+    if (!hue.reachable) {
+      return {
+        status: status(HUE_STATUS.STREAM_READINESS_FAILED, "Could not reach bridge"),
+        readiness: { ready: false, reasons: ["Bridge unreachable"] },
+      };
+    }
+    if (!hue.credentialValid) {
+      return {
+        status: status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Key rejected"),
+        readiness: { ready: false, reasons: ["Application key rejected"] },
+      };
+    }
     const reasons: string[] = [];
-    if (!hue.reachable) reasons.push("Bridge unreachable");
-    if (!hue.credentialValid) reasons.push("Application key rejected");
     // The sentinel is compared against, never displayed — it is how the UI
     // tells "someone else owns the stream" from a generic refusal.
-    if (hue.activeStreamerElsewhere) reasons.push("HUE_STREAM_NOT_READY_ACTIVE_STREAMER");
+    if (hue.activeStreamerElsewhere) reasons.push(HUE_READINESS_REASON.ACTIVE_STREAMER);
     return {
       status: status(
-        reasons.length === 0 ? HUE_STATUS.IP_VALID : HUE_STATUS.IP_UNREACHABLE,
+        reasons.length === 0 ? HUE_STATUS.STREAM_READY : HUE_STATUS.STREAM_NOT_READY,
         "Readiness",
       ),
       readiness: { ready: reasons.length === 0, reasons },

@@ -25,9 +25,10 @@ import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
 import type { ModeCommandResult } from "../../src/features/mode/modeApi";
+import { dispatch } from "../dispatch";
 import { handlerFor } from "../handlers";
 import { SCENARIOS } from "../scenarios";
-import { setWorld } from "../state";
+import { getWorld, setWorld } from "../state";
 
 const call = (command: string, args?: Record<string, unknown>) => {
   const handler = handlerFor(command);
@@ -81,6 +82,146 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
     expect(result.mode.kind).toBe("solid");
     expect(result.active).toBe(true);
     expect(result.status.code).toBe("SOLID_MODE_APPLIED");
+  });
+});
+
+/**
+ * `set_lighting_mode` used to ignore `targets` entirely — every mode applied
+ * regardless of whether USB or Hue was actually available, so the two gates
+ * `apply_mode_change_inner` runs before ever touching the worker
+ * (`src-tauri/src/commands/lighting_mode.rs:2023-2036` USB,
+ * `lighting_mode.rs:2039-2052` Hue) were both unreachable through the mock.
+ *
+ * `hue_output` (the thing the Hue gate actually tests) is `Some` only once
+ * `start_hue_stream` has spawned a sender — `snapshot_hue_output_context`
+ * (`src-tauri/src/commands/hue/state_store.rs:451-463`) reads
+ * `owner.active_stream`, set only at start's step 4c and cleared by every
+ * stop/gate-block/abort/reconnect path. `hue.streaming` is the mock's proxy
+ * for that fact, not `hue.everActive` or `hue.reachable` — a bridge that is
+ * reachable and paired but never started still leaves `hue_output` `None`.
+ *
+ * These drive the mock through `dispatch()`, not `handlerFor`, matching the
+ * hueRuntimeFault regression guard in `mock/__tests__/hue.test.ts`.
+ */
+describe("set_lighting_mode's USB and Hue gates fire in the same order apply_mode_change_inner does", () => {
+  it("refuses a hue-target mode with DEVICE_NOT_CONNECTED before ever checking hue_output — USB gate runs first", async () => {
+    // Both targets requested, neither available: real Rust's USB gate
+    // (2023-2036) precedes its Hue gate (2039-2052), so DEVICE_NOT_CONNECTED
+    // must win even though the Hue side would also refuse.
+    const world = SCENARIOS.empty.build();
+    setWorld(world);
+    expect(world.serial.connectedPort).toBeNull();
+    expect(world.wled.connectedHost).toBeNull();
+    expect(world.hue.streaming).toBe(false);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight", targets: ["usb", "hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("DEVICE_NOT_CONNECTED");
+    expect(result.active).toBe(false);
+  });
+
+  it("refuses a hue-only target with HUE_NOT_READY when no Hue stream has ever gone live", async () => {
+    const world = SCENARIOS.empty.build();
+    setWorld(world);
+    expect(world.hue.streaming).toBe(false);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight", targets: ["hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("HUE_NOT_READY");
+    expect(result.status.details).toBe("HUE_RUNTIME_GATE_FAILED");
+    expect(result.active).toBe(false);
+    // Gate refusals report the mode actually running, never an echo of the
+    // request (`lighting_mode.rs`'s own invariant, restated in
+    // `LIGHTING_MODE_GATE_STATUS`'s doc comment).
+    expect(result.mode).toEqual(world.lighting.mode);
+  });
+
+  it("HUE_NOT_READY also fires while the bridge is reachable and paired but the stream was simply never started", async () => {
+    // Reachable + valid credentials but `streaming: false` is exactly
+    // "never-started" — not a fault at all — and must still gate, the same
+    // as `hue_output.is_none()` does for an untouched runtime in Rust.
+    const world = SCENARIOS.furnished.build();
+    world.hue.streaming = false;
+    setWorld(world);
+    expect(world.hue.reachable).toBe(true);
+    expect(world.hue.credentialValid).toBe(true);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "solid", targets: ["hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("HUE_NOT_READY");
+  });
+
+  it("a gate refusal while a mode is running reports that mode as still active", async () => {
+    // `make_result` derives `active` from the running mode, not the request.
+    const world = SCENARIOS.furnished.build();
+    world.hue.streaming = false;
+    world.lighting.mode = { ...world.lighting.mode, kind: "solid" };
+    setWorld(world);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight", targets: ["usb", "hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("HUE_NOT_READY");
+    expect(result.mode.kind).toBe("solid");
+    expect(result.active).toBe(true);
+  });
+
+  it("a hue-target mode succeeds once the Hue stream is actually running", async () => {
+    setWorld(SCENARIOS.furnished.build());
+    expect(getWorld().hue.streaming).toBe(true);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "solid", targets: ["hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("SOLID_MODE_APPLIED");
+    expect(result.active).toBe(true);
+  });
+
+  it("a usb-only target mode is unaffected by an unready Hue bridge", async () => {
+    const world = SCENARIOS.furnished.build();
+    world.hue.streaming = false;
+    world.hue.reachable = false;
+    setWorld(world);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight", targets: ["usb"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).toBe("AMBILIGHT_MODE_STARTED");
+  });
+
+  it("a WLED sink alone satisfies the USB gate, the same as UsbOutputPlan::Wled does in Rust", async () => {
+    const world = SCENARIOS.empty.build();
+    world.wled.devices = [{ host: "192.168.1.42", name: "WLED Panel", ledCount: 60, port: 4048, protocol: "ddp" }];
+    world.wled.connectedHost = "192.168.1.42";
+    setWorld(world);
+    expect(world.serial.connectedPort).toBeNull();
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight", targets: ["usb"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
+  });
+
+  it("Off never gates — targets are irrelevant when the mode is being turned off", async () => {
+    const world = SCENARIOS.empty.build();
+    setWorld(world);
+
+    const result = (await dispatch(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "off", targets: ["usb", "hue"] },
+    })) as ModeCommandResult;
+
+    expect(result.status.code).not.toBe("DEVICE_NOT_CONNECTED");
+    expect(result.status.code).not.toBe("HUE_NOT_READY");
   });
 });
 

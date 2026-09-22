@@ -61,7 +61,7 @@ export const OFFERED_CODES = {
     "WLED_TEST_SEND_FAILED",
   ],
   discover_hue_bridges: ["HUE_DISCOVERY_OK", "HUE_DISCOVERY_EMPTY", "HUE_DISCOVERY_FAILED"],
-  pair_hue_bridge: ["HUE_PAIRING_OK", "HUE_PAIRING_PENDING_LINK_BUTTON", "HUE_PAIRING_FAILED"],
+  pair_hue_bridge: ["HUE_PAIRING_OK", "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED", "HUE_PAIRING_FAILED"],
   get_hue_area_channels: [
     "HUE_AREA_CHANNELS_OK",
     "HUE_AREA_CHANNELS_EMPTY",
@@ -81,6 +81,8 @@ export const OFFERED_CODES = {
     "AMBILIGHT_MODE_START_FAILED",
     "SOLID_MODE_APPLIED",
     "SOLID_MODE_HUE_OUTPUT_SKIPPED",
+    "DEVICE_NOT_CONNECTED",
+    "HUE_NOT_READY",
   ],
 } satisfies { [K in keyof CommandResponse]?: InjectableCode<K>[] };
 
