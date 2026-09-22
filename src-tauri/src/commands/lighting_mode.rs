@@ -3272,6 +3272,9 @@ fn hue_topology_and_affinity(
 }
 
 #[cfg(test)]
+mod frame_pipeline_tests;
+
+#[cfg(test)]
 mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
