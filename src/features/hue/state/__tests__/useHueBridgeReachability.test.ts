@@ -55,6 +55,26 @@ describe("useHueBridgeReachability (INV-30)", () => {
     expect(result.current.reachable).toBe(false);
   });
 
+  // The Lights dock read "Not configured" for a paired bridge whose key was
+  // rejected; the verdict is what lets it say "re-pair" instead.
+  it("tells a rejected key apart from a bridge that never answered", async () => {
+    const { result } = renderHook(() => useHueBridgeReachability(config, false));
+    expect(result.current.verdict).toBeNull();
+    await waitFor(() => expect(result.current.verdict).toBe("reachable"));
+
+    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_INVALID" } });
+    const rejected = renderHook(() => useHueBridgeReachability(config, false));
+    await waitFor(() => expect(rejected.result.current.verdict).toBe("credentialRejected"));
+
+    validateHueCredentialsMock.mockResolvedValue({ status: { code: "HUE_CREDENTIAL_CHECK_FAILED" } });
+    const silent = renderHook(() => useHueBridgeReachability(config, false));
+    await waitFor(() => expect(silent.result.current.verdict).toBe("unreachable"));
+
+    validateHueCredentialsMock.mockRejectedValue(new Error("network down"));
+    const thrown = renderHook(() => useHueBridgeReachability(config, false));
+    await waitFor(() => expect(thrown.result.current.verdict).toBe("unreachable"));
+  });
+
   it("reports unreachable when the probe rejects", async () => {
     validateHueCredentialsMock.mockRejectedValue(new Error("network down"));
     const { result } = renderHook(() => useHueBridgeReachability(config, false));

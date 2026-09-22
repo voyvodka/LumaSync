@@ -8,9 +8,14 @@ import { createPollBudget } from "../model/pollBudget";
 import { HUE_BRIDGE_REACHABILITY_POLL_MS } from "../model/pollingCadence";
 import { requestHuePollRestart, useHuePollRestartToken } from "./huePollRestart";
 
+/** Why the bridge is or is not usable, so copy can tell a rejected key from a
+ * bridge that never answered. `null` until a probe has completed. */
+export type HueProbeVerdict = "reachable" | "credentialRejected" | "unreachable";
+
 export interface HueBridgeReachability {
   /** What the last completed probe found. Stays `false` once `gaveUp` is set. */
   reachable: boolean;
+  verdict: HueProbeVerdict | null;
   /** The probe stopped after a sustained outage; only `retry` re-arms it. */
   gaveUp: boolean;
   /** A probe is in flight. Without this the retry control has nothing to
@@ -27,11 +32,13 @@ export function useHueBridgeReachability(
   hueStreaming: boolean,
 ): HueBridgeReachability {
   const [hueReachable, setHueReachable] = useState(false);
+  const [probeVerdict, setProbeVerdict] = useState<HueProbeVerdict | null>(null);
   const [gaveUp, setGaveUp] = useState(false);
   const [probing, setProbing] = useState(false);
   const restartToken = useHuePollRestartToken();
 
   useEffect(() => {
+    if (!hueStartConfig) setProbeVerdict(null);
     if (!hueStartConfig || hueStreaming) {
       // An unpaired or streaming bridge has nothing to retry, so the banner
       // must not keep offering it one.
@@ -79,6 +86,13 @@ export function useHueBridgeReachability(
         if (!mounted) return;
         const code = validation.status.code;
         setHueReachable(code === HUE_STATUS.CREDENTIAL_VALID);
+        setProbeVerdict(
+          code === HUE_STATUS.CREDENTIAL_VALID
+            ? "reachable"
+            : code === HUE_STATUS.CREDENTIAL_INVALID
+              ? "credentialRejected"
+              : "unreachable",
+        );
         // Only a bridge that never answered counts against the budget. A
         // bridge that answers CREDENTIAL_INVALID is on the network and needs
         // a re-pair, which the Devices card already offers.
@@ -91,6 +105,7 @@ export function useHueBridgeReachability(
       } catch (error) {
         if (!mounted) return;
         setHueReachable(false);
+        setProbeVerdict("unreachable");
         noteFailure(String(error));
       } finally {
         inFlight = false;
@@ -130,7 +145,7 @@ export function useHueBridgeReachability(
   }, [hueStartConfig, hueStreaming, restartToken]);
 
   return useMemo(
-    () => ({ reachable: hueReachable, gaveUp, probing, retry: requestHuePollRestart }),
-    [gaveUp, hueReachable, probing],
+    () => ({ reachable: hueReachable, verdict: probeVerdict, gaveUp, probing, retry: requestHuePollRestart }),
+    [gaveUp, hueReachable, probeVerdict, probing],
   );
 }

@@ -13,7 +13,11 @@ export interface ShellNoticesProps {
   hueColorNotice: HueSolidColorStatusCode | null;
   /** Deep-links the OS permission pane; only the `permission` bucket offers it. */
   onOpenCaptureSettings: () => void;
+  /** Height of the StatusBar the stack must clear, so a toast never covers its hints. */
+  statusBarHeightPx?: number;
 }
+
+const TOAST_GAP_PX = 8;
 
 /**
  * The shell's transient toast stack. Purely presentational — every notice is
@@ -27,32 +31,35 @@ export function ShellNotices({
   captureStalled,
   hueColorNotice,
   onOpenCaptureSettings,
+  statusBarHeightPx = 0,
 }: ShellNoticesProps) {
   const { t } = useTranslation();
   const stopFailed = stopFailedTargets !== null && stopFailedTargets.length > 0;
   // A start failure means no worker exists, so the two can never co-fire; the
   // start toast wins to keep that invariant obvious if one ever does.
   const stalled = startFailure === null ? captureStalled : null;
+  const bottom = `${statusBarHeightPx + TOAST_GAP_PX}px`;
 
   return (
     <>
       {usbDisconnected && (
         <div
           data-testid="usb-disconnect-notice"
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
+          className="fixed right-4 z-50 rounded-lg px-4 py-3 shadow-lg"
           role="status"
           aria-live="polite"
-          style={{ background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
+          style={{ bottom, background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
           <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t("common:hotplug.usbDisconnected")}</span>
         </div>
       )}
       {usbUnsupported && (
         <div
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          className="fixed right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"
           style={{
+            bottom,
             background: "var(--lm-panel-2)",
             border: "1px solid var(--lm-line-2)",
             color: "var(--lm-ink)",
@@ -69,10 +76,11 @@ export function ShellNotices({
       )}
       {stopFailed && stopFailedTargets && (
         <div
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          className="fixed right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"
           style={{
+            bottom,
             background: "var(--lm-panel-2)",
             border: "1px solid var(--lm-red, #f87171)",
             color: "var(--lm-ink)",
@@ -93,10 +101,11 @@ export function ShellNotices({
       {startFailure && (
         <div
           data-testid="capture-start-failed-notice"
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          className="fixed right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"
           style={{
+            bottom,
             background: "var(--lm-panel-2)",
             border: "1px solid var(--lm-red, #f87171)",
             color: "var(--lm-ink)",
@@ -105,7 +114,9 @@ export function ShellNotices({
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
-            {t(`common:captureFailed.${startFailure.bucket}` as const, { reason: startFailure.reason })}
+            {startFailure.bucket === CAPTURE_FAILURE_BUCKET.INTERNAL && !startFailure.reason
+              ? t("common:captureFailed.internalNoReason")
+              : t(`common:captureFailed.${startFailure.bucket}` as const, { reason: startFailure.reason })}
           </span>
           {startFailure.bucket === CAPTURE_FAILURE_BUCKET.PERMISSION && (
             <button
@@ -128,10 +139,11 @@ export function ShellNotices({
       {stalled && (
         <div
           data-testid="capture-stalled-notice"
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          className="fixed right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"
           style={{
+            bottom,
             background: "var(--lm-panel-2)",
             border: "1px solid var(--lm-red, #f87171)",
             color: "var(--lm-ink)",
@@ -142,16 +154,19 @@ export function ShellNotices({
           <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
             {stalled.bucket === CAPTURE_FAILURE_BUCKET.DISPLAY
               ? t("common:captureStalled.display")
-              : t("common:captureStalled.generic", { reason: stalled.reason })}
+              : stalled.reason
+                ? t("common:captureStalled.generic", { reason: stalled.reason })
+                : t("common:captureStalled.genericNoReason")}
           </span>
         </div>
       )}
       {hueColorNotice && (
         <div
-          className="fixed bottom-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
+          className="fixed right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2"
           role="status"
           aria-live="polite"
           style={{
+            bottom,
             background: "var(--lm-panel-2)",
             border: "1px solid var(--lm-amber)",
             color: "var(--lm-ink)",

@@ -11,6 +11,7 @@ import type { ModeGuardReason } from "../mode/state/modeGuard";
 import type { LightingModeConfig } from "../mode/model/contracts";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
 import type { UpdaterState } from "../updater/useAutoUpdater";
+import type { HueProbeVerdict } from "../hue/state/useHueBridgeReachability";
 import { RoomMapEditor } from "@/features/room-map/ui/RoomMapEditor";
 import { resetToManual } from "../calibration/model/templates";
 import { CompactLayout } from "./sections/compact/CompactLayout";
@@ -30,6 +31,7 @@ interface SettingsLayoutProps {
   /** The Hue bridge probe stopped after a sustained outage; surfaces a retry in the offline banner. */
   hueProbeGaveUp?: boolean;
   hueProbeChecking?: boolean;
+  hueProbeVerdict?: HueProbeVerdict | null;
   onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
@@ -87,6 +89,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   hueReachable = true,
   hueProbeGaveUp = false,
   hueProbeChecking = false,
+  hueProbeVerdict = null,
   onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
@@ -145,6 +148,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               hueReachable={hueReachable}
               hueProbeGaveUp={hueProbeGaveUp}
               hueProbeChecking={hueProbeChecking}
+              hueProbeVerdict={hueProbeVerdict}
               onRetryHueProbe={onRetryHueProbe}
               hueStreaming={hueStreaming}
               hueReconnecting={hueReconnecting}

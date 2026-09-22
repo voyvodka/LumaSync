@@ -14,6 +14,17 @@ function formatDuration(t: TFunction, secs: number | null): string {
   return t("telemetry:hue.uptimeFormat", { minutes, seconds });
 }
 
+function formatLastError(t: TFunction, code: string, ageSecs: number | null): string {
+  const sentence = t(`hue:runtime.codes.${code}`, { defaultValue: code });
+  if (ageSecs === null) return sentence;
+  // The code table is written as sentences; "gerekli. — az önce" reads as a typo.
+  const message = sentence.replace(/\.$/, "");
+  const minutes = Math.floor(ageSecs / 60);
+  return minutes < 1
+    ? t("telemetry:hue.errorJustNow", { message })
+    : t("telemetry:hue.errorAgo", { message, minutes });
+}
+
 /** Rev 07 status tint for a stream state. */
 function stateTint(state: string): string {
   if (state === "Running") return "is-ok";
@@ -48,15 +59,14 @@ export function HueTelemetryGrid({ hue }: HueTelemetryGridProps) {
 
         <div className="lm-tele-row">
           <span className="k">{t("telemetry:hue.lastError")}</span>
-          <span className={`v ${hue.lastErrorCode ? "is-crit" : ""}`}>
+          {/* The raw code stays on hover: it is what a log search or bug report needs. */}
+          <span
+            className={`v ${hue.lastErrorCode ? "is-crit" : ""}`}
+            title={hue.lastErrorCode ?? undefined}
+          >
             {!hue.lastErrorCode
               ? t("telemetry:hue.noError")
-              : hue.lastErrorAtSecs === null
-                ? hue.lastErrorCode
-                : t("telemetry:hue.errorAgo", {
-                    code: hue.lastErrorCode,
-                    minutes: Math.floor(hue.lastErrorAtSecs / 60),
-                  })}
+              : formatLastError(t, hue.lastErrorCode, hue.lastErrorAtSecs)}
           </span>
         </div>
 

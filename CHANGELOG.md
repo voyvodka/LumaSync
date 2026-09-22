@@ -9,6 +9,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Screens now say what is wrong. The Lights outputs list said "Not configured" for a paired Hue
+  bridge whose key had been rejected or that was not answering; it now says "re-pair required"
+  or "unreachable". The runtime telemetry shows the Hue error as a sentence instead of a raw code,
+  and "just now" instead of "0 min ago". A screen-capture failure with no details no longer reads
+  "Screen capture failed ()."
+- Layout: notices no longer cover the status bar's shortcut hints and version label, the Turkish
+  Off-mode subtitle is no longer cut off, and the Solid colour panel's labels match the other
+  section headers.
 - A round of visual fixes. The Hue bridge card coloured its fault code against its own state —
   red on a card that was only reconnecting, amber on one whose key had been rejected — and now
   matches the card; a reconnecting card also no longer shows two identical Stop buttons. In

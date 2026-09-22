@@ -80,6 +80,9 @@ export default {
       hueSubIdle: "Bridge · <b>standby</b>",
       hueSubReconnecting: "Bridge · <b>reconnecting</b>",
       hueSubUnavailable: "Not configured",
+      hueSubKeyRejected: "Bridge · <b>re-pair required</b>",
+      hueSubUnreachable: "Bridge · <b>unreachable</b>",
+      hueSubChecking: "Bridge · <b>checking…</b>",
     },
   },
   calibrationBanner: {

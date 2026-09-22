@@ -8,7 +8,7 @@ import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { LocalSink } from "@/features/device/localSink";
-import { LightsSection } from "../LightsSection";
+import { LightsSection, hueUnavailableSubKey } from "../LightsSection";
 
 const { shellStateRef, saveMock, createHueZoneMock, telemetryMock } = vi.hoisted(() => ({
   shellStateRef: { current: {} as Partial<ShellState> },
@@ -115,7 +115,39 @@ vi.mock("react-i18next", () => ({
   Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
 }));
 
+describe("hueUnavailableSubKey", () => {
+  it("only says not configured when no bridge is paired", () => {
+    expect(hueUnavailableSubKey(false, null)).toBe("lights:dock.rows.hueSubUnavailable");
+    expect(hueUnavailableSubKey(false, "credentialRejected")).toBe("lights:dock.rows.hueSubUnavailable");
+    expect(hueUnavailableSubKey(true, "credentialRejected")).toBe("lights:dock.rows.hueSubKeyRejected");
+    expect(hueUnavailableSubKey(true, "unreachable")).toBe("lights:dock.rows.hueSubUnreachable");
+    expect(hueUnavailableSubKey(true, null)).toBe("lights:dock.rows.hueSubChecking");
+  });
+});
+
 describe("LightsSection", () => {
+  it("asks for a re-pair when a paired bridge rejects the key", () => {
+    render(
+      <LightsSection
+        mode={{ kind: "off" }}
+        outputTargets={["usb"]}
+        localOutputConnected={true}
+        localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
+        hueConfigured={true}
+        hueReachable={false}
+        hueProbeVerdict="credentialRejected"
+        hueStreaming={false}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("lights:dock.rows.hueSubKeyRejected")).toBeInTheDocument();
+    expect(screen.queryByText("lights:dock.rows.hueSubUnavailable")).not.toBeInTheDocument();
+  });
+
   // The dock row read "DTLS 20 Hz" beside a green dot for as long as the
   // bridge stayed unreachable, because it only knew the target was active.
   it("names a retrying Hue session instead of quoting the stream rate", () => {

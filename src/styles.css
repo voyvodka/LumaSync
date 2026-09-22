@@ -2883,15 +2883,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Wraps instead of truncating: TR subtitles run longer than EN and the
+   ellipsis cut them mid-word ("Çıkışlar bekleme…"). */
 .lm-mbtn .ts {
   display: block;
   min-width: 0;
   max-width: 100%;
   font-size: 10.5px;
+  line-height: 1.3;
   color: #4d5564;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .lm-mbtn .kb {
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
@@ -3497,11 +3498,12 @@
 .lm-out-row .tx .s {
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
   font-size: 9.5px;
+  line-height: 1.35;
   color: #4d5564;
   margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* Wraps: a fault line ("yeniden eşleştirme gerekli") is the one the user
+     most needs to read whole. */
+  overflow-wrap: anywhere;
 }
 .lm-out-row .tx .s b {
   color: #8a94a3;

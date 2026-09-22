@@ -28,6 +28,37 @@ function renderNotices(overrides: Partial<ShellNoticesProps> = {}) {
 }
 
 describe("ShellNotices", () => {
+  // "Screen capture failed ()." shipped when the backend sent no details.
+  it("never renders empty parentheses for a reasonless failure", () => {
+    renderNotices({ startFailure: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "" } });
+    expect(screen.getByTestId("capture-start-failed-notice")).toHaveTextContent(
+      "common:captureFailed.internalNoReason",
+    );
+  });
+
+  it("keeps the reason when the backend sent one", () => {
+    renderNotices({ startFailure: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "BOOM" } });
+    expect(screen.getByTestId("capture-start-failed-notice")).toHaveTextContent(
+      /^common:captureFailed\.internal$/,
+    );
+  });
+
+  it("uses the reasonless stall copy when the stall carries no reason", () => {
+    renderNotices({ captureStalled: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "" } });
+    expect(screen.getByTestId("capture-stalled-notice")).toHaveTextContent(
+      "common:captureStalled.genericNoReason",
+    );
+  });
+
+  // The stack sat on top of the StatusBar's shortcut hints and version label.
+  it("clears the status bar", () => {
+    renderNotices({
+      startFailure: { bucket: CAPTURE_FAILURE_BUCKET.INTERNAL, reason: "" },
+      statusBarHeightPx: 24,
+    });
+    expect(screen.getByTestId("capture-start-failed-notice").style.bottom).toBe("32px");
+  });
+
   it("offers the settings deep link on a permission failure", async () => {
     const { onOpenCaptureSettings } = renderNotices({
       startFailure: {
