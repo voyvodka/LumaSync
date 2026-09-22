@@ -21,6 +21,15 @@ pub struct ZoneRelativePosition {
     pub z: f64,
 }
 
+/// Where a placement's `z` came from. Absent means unknown: a legacy record
+/// whose `0` may be a placeholder rather than a height anyone chose.
+#[derive(Clone, Copy, Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum HueChannelHeightOrigin {
+    Bridge,
+    User,
+}
+
 /// Placement of one Hue entertainment channel — absolute `x/y/z`, or
 /// zone-relative when `zone_id` is set.
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -30,6 +39,10 @@ pub struct HueChannelPlacement {
     pub x: f64,
     pub y: f64,
     pub z: f64,
+    /// Mirrored for the same reason as `locked`: the zone commands echo the
+    /// list back, so an unmirrored field is erased on every zone assignment.
+    #[serde(default)]
+    pub z_origin: Option<HueChannelHeightOrigin>,
     #[serde(default)]
     pub label: Option<String>,
     /// Mirrored so the zone commands stop dropping it: they echo the channel

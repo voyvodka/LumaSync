@@ -37,6 +37,7 @@ function makeChannels(): HueAreaChannelInfo[] {
     lightIds: [`light-${channelId}`],
     positionX: i - 1, // -1, 0, +1 ⇒ left, center, right presets
     positionY: 0,
+    positionZ: null,
     lightCount: 2,
     autoRegion: "center",
   }));

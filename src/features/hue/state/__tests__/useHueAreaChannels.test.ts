@@ -20,6 +20,7 @@ const CHANNEL: HueAreaChannelInfo = {
   lightIds: ["light-0"],
   positionX: 0,
   positionY: 0,
+  positionZ: null,
   lightCount: 1,
   autoRegion: "left",
 };

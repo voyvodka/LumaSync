@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
+import { HUE_CHANNEL_HEIGHT_ORIGIN } from "@/shared/contracts/roomMap";
 
 import {
   liveChannelIdSet,
@@ -17,6 +18,7 @@ const CHANNELS: HueAreaChannelInfo[] = [0, 2, 5].map((channelId, i) => ({
   lightIds: [`light-${channelId}`],
   positionX: i - 1,
   positionY: 0,
+  positionZ: null,
   lightCount: 2,
   autoRegion: "center",
 }));
@@ -37,7 +39,13 @@ const ZONE: HueZone = {
 describe("resolveChannelPlacement", () => {
   it("seeds an unseen channel from the bridge, stamped with the bridge's id", () => {
     const p = resolveChannelPlacement(CHANNELS[2]!, [], []);
-    expect(p).toEqual({ channelIndex: 2, channelId: 5, x: 1, y: 0, z: 0 });
+    expect(p).toEqual({ channelIndex: 2, channelId: 5, x: 1, y: 0, z: 0, zOrigin: null });
+  });
+
+  it("seeds an unseen channel's height from the bridge when it reports one", () => {
+    const p = resolveChannelPlacement({ ...CHANNELS[2]!, positionZ: 0.4 }, [], []);
+    expect(p.z).toBe(0.4);
+    expect(p.zOrigin).toBe(HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE);
   });
 
   it("keeps everything the stored record carries instead of rebuilding it", () => {
@@ -101,6 +109,58 @@ describe("seedChannelPlacements", () => {
   it("returns one record per live channel, in the bridge's order", () => {
     const { resolved } = seedChannelPlacements(CHANNELS, [], []);
     expect(resolved.map((p) => p.channelId)).toEqual([0, 2, 5]);
+  });
+});
+
+describe("legacy height adoption", () => {
+  const withBridgeZ = (i: number, positionZ: number | null) => ({ ...CHANNELS[i]!, positionZ });
+  const legacy = (overrides: Partial<HueChannelPlacement> = {}): HueChannelPlacement => ({
+    channelIndex: 0,
+    channelId: 0,
+    x: 0,
+    y: 0,
+    z: 0,
+    ...overrides,
+  });
+
+  it("replaces a legacy placeholder 0 with the bridge's height and asks for a write", () => {
+    const channels = [withBridgeZ(0, 0.7)];
+    const { resolved, needsWrite } = seedChannelPlacements(channels, [legacy()], []);
+    expect(resolved[0]!.z).toBe(0.7);
+    expect(resolved[0]!.zOrigin).toBe(HUE_CHANNEL_HEIGHT_ORIGIN.BRIDGE);
+    expect(needsWrite).toBe(true);
+  });
+
+  it("treats a legacy non-zero height as the user's, whatever the bridge says", () => {
+    const channels = [withBridgeZ(0, 0.7)];
+    const { resolved, needsWrite } = seedChannelPlacements(channels, [legacy({ z: -0.3 })], []);
+    expect(resolved[0]!.z).toBe(-0.3);
+    expect(resolved[0]!.zOrigin).toBe(HUE_CHANNEL_HEIGHT_ORIGIN.USER);
+    expect(needsWrite).toBe(true);
+  });
+
+  it("leaves a legacy 0 unknown when the bridge reports no height either", () => {
+    const { resolved, needsWrite } = seedChannelPlacements([withBridgeZ(0, null)], [legacy()], []);
+    expect(resolved[0]!.z).toBe(0);
+    expect(resolved[0]!.zOrigin ?? null).toBeNull();
+    expect(needsWrite).toBe(false);
+  });
+
+  it("does not touch a zone-bound legacy record", () => {
+    // Its height is the zone's; adopting the bridge's would detach it silently.
+    const bound = legacy({ zoneId: "zone-1", zoneRelativePosition: { x: 0, y: 0, z: 0 } });
+    const { resolved, needsWrite } = seedChannelPlacements([withBridgeZ(0, 0.7)], [bound], [ZONE]);
+    expect(resolved[0]!.z).toBe(0);
+    expect(resolved[0]!.zOrigin).toBeUndefined();
+    expect(needsWrite).toBe(false);
+  });
+
+  it("never revisits a height whose origin is already known", () => {
+    const stored = legacy({ z: 0, zOrigin: HUE_CHANNEL_HEIGHT_ORIGIN.USER });
+    const { resolved, needsWrite } = seedChannelPlacements([withBridgeZ(0, 0.7)], [stored], []);
+    expect(resolved[0]!.z).toBe(0);
+    expect(resolved[0]!.zOrigin).toBe(HUE_CHANNEL_HEIGHT_ORIGIN.USER);
+    expect(needsWrite).toBe(false);
   });
 });
 

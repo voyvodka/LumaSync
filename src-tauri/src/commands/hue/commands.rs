@@ -874,6 +874,7 @@ mod tests {
             light_ids: vec![format!("light-{index}")],
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
             light_count: 1,
             auto_region: "left".to_string(),
         }

@@ -198,6 +198,47 @@ describe("toChannelPlacements", () => {
     ]);
   });
 
+  it("carries a height only when its origin is known", () => {
+    // An unknown origin means the stored `0` may be a seeding placeholder;
+    // omitting it keeps the bridge's own height on the stream.
+    const roomMap = {
+      hueChannels: [
+        { channelIndex: 0, channelId: 1, x: 0, y: 0, z: 0, zOrigin: null, entertainmentAreaId: "area-1" },
+        { channelIndex: 1, channelId: 2, x: 0, y: 0, z: 0.4, entertainmentAreaId: "area-1" },
+        { channelIndex: 2, channelId: 3, x: 0, y: 0, z: -0.6, zOrigin: "user", entertainmentAreaId: "area-1" },
+        { channelIndex: 3, channelId: 4, x: 0, y: 0, z: 0.2, zOrigin: "bridge", entertainmentAreaId: "area-1" },
+      ],
+      zones: [],
+    } as unknown as RoomMapConfig;
+
+    const placements = toChannelPlacements(roomMap, "area-1")!;
+
+    expect(placements[0]).not.toHaveProperty("positionZ");
+    expect(placements[1]).not.toHaveProperty("positionZ");
+    expect(placements[2]).toEqual({ channelId: 3, positionX: 0, positionY: 0, positionZ: -0.6 });
+    expect(placements[3]).toEqual({ channelId: 4, positionX: 0, positionY: 0, positionZ: 0.2 });
+  });
+
+  it("resolves a zone-bound height through its zone", () => {
+    const roomMap = {
+      hueChannels: [
+        {
+          channelIndex: 1,
+          channelId: 7,
+          x: 0, y: 0, z: 0,
+          zOrigin: "user",
+          entertainmentAreaId: "area-1",
+          zoneId: "z1",
+          zoneRelativePosition: { x: 0, y: 0, z: 1 },
+        },
+      ],
+      zones,
+    } as unknown as RoomMapConfig;
+
+    // centreZ 0 + scaleZ 0.25 * relative 1 = 0.25
+    expect(toChannelPlacements(roomMap, "area-1")?.[0]?.positionZ).toBeCloseTo(0.25, 6);
+  });
+
   it("is undefined rather than empty when the area has nothing placed", () => {
     expect(toChannelPlacements({ hueChannels: [], zones: [] } as unknown as RoomMapConfig, "area-1"))
       .toBeUndefined();

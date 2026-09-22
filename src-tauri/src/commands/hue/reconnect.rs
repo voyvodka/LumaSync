@@ -563,6 +563,7 @@ mod tests {
             screen_region: HueScreenRegion::Center,
             position_x: 0.0,
             position_y: 0.0,
+            position_z: None,
         }]
     }
 

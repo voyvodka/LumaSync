@@ -11,6 +11,7 @@ import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { hueChannelsForArea } from "@/shared/contracts/roomMap";
 import {
   resolveHueChannelWorld,
+  resolveHueChannelWorldZ,
 } from "@/features/room-map/model/hueChannelPosition";
 
 /** Bridge, credential and area selection required to open an entertainment stream. */
@@ -28,7 +29,8 @@ export interface HueStartConfig {
 /** The area's placements as the wire shape: resolved to world space (a
  * zone-bound channel's authoritative position is zone-relative) and keyed by
  * the bridge's id. A record with no `channelId` is omitted, the same refusal
- * the write-back makes — never address the bridge by our ordinal. */
+ * the write-back makes — never address the bridge by our ordinal. A height of
+ * unknown origin is left off so the stream keeps the bridge's own. */
 export function toChannelPlacements(
   roomMap: Pick<RoomMapConfig, "hueChannels" | "zones"> | undefined,
   areaId: string,
@@ -37,8 +39,15 @@ export function toChannelPlacements(
   const placements = hueChannelsForArea(roomMap.hueChannels ?? [], areaId)
     .filter((p) => p.channelId !== null && p.channelId !== undefined)
     .map((p) => {
-      const world = resolveHueChannelWorld(p, roomMap.zones ?? []);
-      return { channelId: p.channelId!, positionX: world.x, positionY: world.y };
+      const zones = roomMap.zones ?? [];
+      const world = resolveHueChannelWorld(p, zones);
+      const placement: HueChannelPlacementOverride = {
+        channelId: p.channelId!,
+        positionX: world.x,
+        positionY: world.y,
+      };
+      if (p.zOrigin) placement.positionZ = resolveHueChannelWorldZ(p, zones);
+      return placement;
     });
   return placements.length > 0 ? placements : undefined;
 }

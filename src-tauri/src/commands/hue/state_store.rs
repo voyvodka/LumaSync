@@ -125,6 +125,11 @@ pub struct HueChannelPlacementOverride {
     pub channel_id: u8,
     pub position_x: f32,
     pub position_y: f32,
+    /// Absent on snapshots and requests written before height was carried, and
+    /// whenever the local height is not known to be real — the bridge's own
+    /// `z` is kept then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_z: Option<f32>,
 }
 
 /// Requested solid color + optional brightness to push to every light in
@@ -565,6 +570,7 @@ pub(crate) mod test_helpers {
                 screen_region: HueScreenRegion::Center,
                 position_x: 0.0,
                 position_y: 0.0,
+                position_z: None,
             }],
             color_sender: HueColorSender {
                 tx: Arc::new(tx),
@@ -602,6 +608,7 @@ pub(crate) mod test_helpers {
                 screen_region: HueScreenRegion::Center,
                 position_x: 0.0,
                 position_y: 0.0,
+                position_z: None,
             }],
             sender: HueColorSender {
                 tx: Arc::new(tx),
