@@ -66,18 +66,12 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "@/shared/lib/math";
+import { parseHex, rgbToHex, type Rgb } from "@/shared/lib/color";
 import { SectionLabel } from "@/shared/ui/SectionLabel";
 
 // ---------------------------------------------------------------------------
 // Color math
 // ---------------------------------------------------------------------------
-
-/** RGB triplet (0..255 ints). */
-export interface Rgb {
-  r: number;
-  g: number;
-  b: number;
-}
 
 /** HSV triplet — hue 0..360, saturation/value 0..1. */
 interface Hsv {
@@ -86,32 +80,12 @@ interface Hsv {
   v: number;
 }
 
-function hexPair(value: number): string {
-  return clamp(Math.round(value), 0, 255).toString(16).padStart(2, "0");
-}
-
-/** Formats an RGB triplet as a `#`-prefixed lowercase hex string. */
-export function rgbToHex({ r, g, b }: Rgb): string {
-  return `#${hexPair(r)}${hexPair(g)}${hexPair(b)}`;
-}
-
 /** Digits the hex field accepts — `#` lives outside the input. */
 export const HEX_DIGITS = 6;
 
 /** Filter before capping, so `#1A2B3C` keeps six digits instead of losing one to the `#`. */
 export function sanitizeHexInput(raw: string): string {
   return raw.replace(/[^0-9a-fA-F]/g, "").slice(0, HEX_DIGITS).toUpperCase();
-}
-
-/** Parses a hex string (with or without a leading `#`) into an RGB triplet, or `null` if invalid. */
-export function parseHex(value: string): Rgb | null {
-  const trimmed = value.trim().replace(/^#/, "");
-  if (!/^[0-9a-fA-F]{6}$/.test(trimmed)) return null;
-  return {
-    r: parseInt(trimmed.slice(0, 2), 16),
-    g: parseInt(trimmed.slice(2, 4), 16),
-    b: parseInt(trimmed.slice(4, 6), 16),
-  };
 }
 
 function rgbToHsv({ r, g, b }: Rgb): Hsv {
@@ -257,9 +231,9 @@ export function HsvColorPicker({
   const [hsv, setHsv] = useState<Hsv>(parsedHsv);
   // Re-sync only when the parsed hex actually differs from our internal state
   // so a small pointer drag does not get clobbered by parent-passed value.
-  const lastParsedHex = useRef(rgbToHex(hsvToRgb(parsedHsv)).toLowerCase());
+  const lastParsedHex = useRef(rgbToHex(hsvToRgb(parsedHsv)));
   useEffect(() => {
-    const incomingHex = rgbToHex(hsvToRgb(parsedHsv)).toLowerCase();
+    const incomingHex = rgbToHex(hsvToRgb(parsedHsv));
     if (incomingHex !== lastParsedHex.current) {
       lastParsedHex.current = incomingHex;
       setHsv(parsedHsv);
@@ -322,7 +296,7 @@ export function HsvColorPicker({
   const commitDrag = useCallback((next: Hsv) => {
     const rgb = hsvToRgb(next);
     const hex = rgbToHex(rgb);
-    lastParsedHex.current = hex.toLowerCase();
+    lastParsedHex.current = hex;
     setHsv(next);
     setHexDraft(sanitizeHexInput(hex));
     pendingCommitRef.current = { hex, hsv: next };
@@ -347,7 +321,7 @@ export function HsvColorPicker({
   const commitImmediate = useCallback((next: Hsv) => {
     const rgb = hsvToRgb(next);
     const hex = rgbToHex(rgb);
-    lastParsedHex.current = hex.toLowerCase();
+    lastParsedHex.current = hex;
     setHsv(next);
     setHexDraft(sanitizeHexInput(hex));
 
@@ -508,7 +482,7 @@ export function HsvColorPicker({
       return;
     }
     const hex = rgbToHex(rgb);
-    lastParsedHex.current = hex.toLowerCase();
+    lastParsedHex.current = hex;
     setHsv(rgbToHsv(rgb));
     setHexDraft(sanitizeHexInput(hex));
     pushRecent(hex);

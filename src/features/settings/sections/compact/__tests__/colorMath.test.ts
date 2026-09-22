@@ -1,16 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HERO_LIGHT_TILE_THRESHOLD, perceivedLuminance, rgbToHex } from "../colorMath";
-
-describe("rgbToHex", () => {
-  it("formats a triplet as a six-digit `#` string", () => {
-    expect(rgbToHex({ r: 255, g: 176, b: 32 })).toBe("#ffb020");
-  });
-
-  it("zero-pads single-digit channels", () => {
-    expect(rgbToHex({ r: 0, g: 0, b: 0 })).toBe("#000000");
-    expect(rgbToHex({ r: 1, g: 2, b: 3 })).toBe("#010203");
-  });
-});
+import { HERO_LIGHT_TILE_THRESHOLD, perceivedLuminance } from "../colorMath";
 
 describe("perceivedLuminance", () => {
   it("returns 0 for black and 1 for white", () => {

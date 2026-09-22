@@ -18,6 +18,7 @@ import {
   type ScenePreset,
 } from "@/features/mode/model/scenePresets";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import { rgbToHex } from "@/shared/lib/color";
 import { createHueZone } from "@/features/room-map/roomMapApi";
 import { roomAwareStatus } from "@/features/room-map/model/roomAware";
 import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
@@ -139,10 +140,6 @@ interface LightsSectionProps {
   onFirmwareProfileChange?: (next: FirmwareProfile) => void;
 }
 
-function toHexPair(value: number): string {
-  return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
-}
-
 /**
  * Render a keybind badge (modifier + key) for a mode button. Badge labels
  * come from the shared KEYBIND_REGISTRY so StatusBar + LightsSection stay
@@ -196,7 +193,7 @@ export function LightsSection({
   const incomingSolid = normalizedMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 };
   const incomingAmbilight = normalizeAmbilightPayload(normalizedMode.ambilight);
 
-  const solidHex = `#${toHexPair(incomingSolid.r)}${toHexPair(incomingSolid.g)}${toHexPair(incomingSolid.b)}`;
+  const solidHex = rgbToHex(incomingSolid);
   const solidBrightnessPct = Math.round(incomingSolid.brightness * 100);
 
   // Scene selection is derived from the active SOLID color, not stored
