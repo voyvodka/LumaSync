@@ -104,6 +104,11 @@ https://keepachangelog.com/en/1.1.0/
   so there was no way to tell from audio alone which one you were looking at — while the main
   section tabs above have always announced it. The small number beside a category now says what it
   counts, rather than being read as a bare digit after the name.
+- Switching the LED strip to a different USB port left the previous port held by LumaSync until
+  the app quit, so another program — the Arduino IDE, for example — could not open it in the
+  meantime. The port is now released the moment you switch away from it. Reconnecting the same
+  port, or restarting a lighting mode on it, is untouched: that case is still kept open on
+  purpose, to avoid resetting the board every time.
 
 ### Added
 

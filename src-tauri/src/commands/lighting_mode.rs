@@ -815,6 +815,23 @@ fn push_trace(trace: &mut Option<&mut Vec<&'static str>>, step: &'static str) {
     }
 }
 
+/// Records the newly active serial port, releasing the previous port's
+/// cached session first if it differs. Same-port overwrites (a mode
+/// restart on the port already in use) are left untouched — that is the
+/// DTR invariant `stop_previous` also protects, see
+/// docs/architecture/device-output.md (DTR reset). Only a genuine port
+/// *switch* should release a handle, so an abandoned port can be opened by
+/// another app (e.g. the Arduino IDE) instead of staying locked until
+/// LumaSync quits.
+fn set_active_port(owner: &mut LightingRuntimeOwner, new_port: String) {
+    if owner.active_port.as_deref() != Some(new_port.as_str()) {
+        if let Some(old_port) = owner.active_port.take() {
+            owner.output_bridge.disconnect_session(&old_port);
+        }
+    }
+    owner.active_port = Some(new_port);
+}
+
 fn stop_previous(owner: &mut LightingRuntimeOwner, trace: &mut Option<&mut Vec<&'static str>>) {
     push_trace(trace, "stop_previous");
     let t0 = std::time::Instant::now();
@@ -2248,7 +2265,7 @@ fn apply_mode_change_inner(
                 );
 
                 if let UsbOutputPlan::Serial(port_name) = &plan {
-                    owner.active_port = Some(port_name.clone());
+                    set_active_port(owner, port_name.clone());
                 }
             }
 
@@ -2421,7 +2438,7 @@ fn apply_mode_change_inner(
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
                     if let Some(p) = connected_port {
-                        owner.active_port = Some(p.to_string());
+                        set_active_port(owner, p.to_string());
                     }
                     make_result(
                         owner.active_mode.clone(),
@@ -3100,9 +3117,9 @@ mod tests {
     use crate::commands::wled_sink::{WledProtocol, WledSinkConfig};
 
     use super::{
-        apply_mode_change, resolve_quality_config, start_ambilight_worker, stop_previous,
-        AmbilightLiveSettings, AmbilightPayload, AmbilightWorkerQualityState, LedChipType,
-        LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SerialSendBudget,
+        apply_mode_change, resolve_quality_config, set_active_port, start_ambilight_worker,
+        stop_previous, AmbilightLiveSettings, AmbilightPayload, AmbilightWorkerQualityState,
+        LedChipType, LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SerialSendBudget,
         SolidColorPayload, UsbOutputPlan, ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS,
         AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
@@ -3207,6 +3224,16 @@ mod tests {
     #[derive(Default)]
     struct FakeLedSender {
         writes: Mutex<Vec<(String, Vec<u8>)>>,
+        disconnected: Mutex<Vec<String>>,
+    }
+
+    impl FakeLedSender {
+        fn disconnected_ports(&self) -> Vec<String> {
+            self.disconnected
+                .lock()
+                .expect("disconnected lock poisoned")
+                .clone()
+        }
     }
 
     impl LedPacketSender for FakeLedSender {
@@ -3218,8 +3245,11 @@ mod tests {
             Ok(())
         }
 
-        fn disconnect_session(&self, _port_name: &str) {
-            // no-op in tests — session tracking is not exercised here
+        fn disconnect_session(&self, port_name: &str) {
+            self.disconnected
+                .lock()
+                .expect("disconnected lock poisoned")
+                .push(port_name.to_string());
         }
     }
 
@@ -3362,6 +3392,41 @@ mod tests {
             }),
         };
         (owner, recorder)
+    }
+
+    // -----------------------------------------------------------------------
+    // set_active_port — release the old port's cached session only on switch
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn set_active_port_preserves_same_port_but_releases_a_different_one() {
+        let (mut owner, recorder) = owner_with_recording_sender();
+
+        set_active_port(&mut owner, "COM_A".to_string());
+        assert_eq!(owner.active_port.as_deref(), Some("COM_A"));
+        assert!(
+            recorder.disconnected_ports().is_empty(),
+            "first-ever port assignment has nothing to release"
+        );
+
+        // Same port again — a mode restart on the port already in use. The
+        // cached session must be left alone (DTR invariant).
+        set_active_port(&mut owner, "COM_A".to_string());
+        assert!(
+            recorder.disconnected_ports().is_empty(),
+            "re-assigning the SAME port must not release its cached session"
+        );
+
+        // A genuine switch — COM_A's cached session must be released so
+        // another app (e.g. the Arduino IDE) can open it, and COM_B becomes
+        // the new active port without being touched itself.
+        set_active_port(&mut owner, "COM_B".to_string());
+        assert_eq!(owner.active_port.as_deref(), Some("COM_B"));
+        assert_eq!(
+            recorder.disconnected_ports(),
+            vec!["COM_A".to_string()],
+            "switching ports must release exactly the abandoned one"
+        );
     }
 
     /// Loopback would fail `connect_wled_sink`'s SSRF guard, but these tests
