@@ -11,6 +11,7 @@
  * the DTOs and every one of these was wrong in a way nothing caught.
  */
 
+import { AMBILIGHT_CAPTURE_REASON } from "../../src/shared/contracts/capture";
 import {
   DEVICE_HEALTH_STEPS,
   DEVICE_COMMANDS,
@@ -212,7 +213,13 @@ export const deviceHandlers = {
       return {
         active: false,
         mode: w.lighting.mode,
-        status: status("AMBILIGHT_MODE_START_FAILED", "Screen recording permission denied"),
+        // `details` carries the bare capture reason, read by `describeCaptureFailure`
+        // — Rust never leaves it `null` on this status (`lighting_mode.rs`).
+        status: status(
+          "AMBILIGHT_MODE_START_FAILED",
+          "Ambilight runtime could not start.",
+          AMBILIGHT_CAPTURE_REASON.PERMISSION_DENIED,
+        ),
       };
     }
     mutate((draft) => {

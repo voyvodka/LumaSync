@@ -1,5 +1,5 @@
 /**
- * Contract tests for two arg/response-shape bugs found by visual inspection.
+ * Contract tests for arg/response-shape bugs found by visual inspection.
  *
  * 1. `set_lighting_mode` read `args.mode`, but `setLightingMode` in
  *    `src/features/mode/modeApi.ts` has only ever sent `{ payload }`. Every
@@ -11,9 +11,16 @@
  *    reported "Idle" for both an unreachable bridge and an expired key —
  *    collapsing exactly the distinction `get_hue_stream_status` already
  *    got right. See `hueRuntimeFault` in `mock/handlers/hue.ts`.
+ * 3. The capture-permission refusal of `set_lighting_mode` sent `details:
+ *    null` on `AMBILIGHT_MODE_START_FAILED`. Rust always puts the capture
+ *    reason there (`lighting_mode.rs`), and `describeCaptureFailure` in
+ *    `src/shared/contracts/capture.ts` reads it to pick the failure bucket
+ *    the UI copy keys off — with `null` every mock-driven permission refusal
+ *    rendered as an unclassified `internal` failure instead of `permission`.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { describeCaptureFailure } from "../../src/shared/contracts/capture";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { HUE_RUNTIME_STATES, HUE_RUNTIME_STATUS } from "../../src/shared/contracts/hue";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
@@ -51,6 +58,19 @@ describe("set_lighting_mode reads the real invoke payload shape", () => {
 
     expect(result.active).toBe(false);
     expect(result.status.code).toBe("AMBILIGHT_MODE_START_FAILED");
+  });
+
+  it("carries the real capture reason in `details`, not null, on a permission refusal", () => {
+    setWorld(SCENARIOS["capture-denied"].build());
+    const result = call(DEVICE_COMMANDS.SET_LIGHTING_MODE, {
+      payload: { kind: "ambilight" },
+    }) as ModeCommandResult;
+
+    expect(result.status.details).toBe("AMBILIGHT_CAPTURE_PERMISSION_DENIED");
+    // The read the UI actually performs — `describeCaptureFailure` — must
+    // land in the `permission` bucket, not fall through to `internal` the
+    // way a `null` details always did.
+    expect(describeCaptureFailure(result.status.details).bucket).toBe("permission");
   });
 
   it("applies solid mode — unreachable under the old `args.mode` read, which always fell back to 'off'", () => {

@@ -21,6 +21,7 @@ import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 
 import { dispatch, hasFixture } from "./dispatch";
 import { handleEventPluginCommand, isEventPluginCommand } from "./eventBridge";
+import { reloadWithScenario } from "./reload";
 import { DEFAULT_SCENARIO, SCENARIOS, SCENARIO_IDS, type ScenarioId } from "./scenarios";
 import { MOCK_HAS_REAL_IPC } from "./runtime";
 import { restoreWorld, setWorld } from "./state";
@@ -104,11 +105,7 @@ async function mountPanel(): Promise<void> {
   document.body.appendChild(host);
   createRoot(host).render(
     React.createElement(DevPanel, {
-      onReloadApp: (id: string) => {
-        const url = new URL(window.location.href);
-        url.searchParams.set("scenario", id);
-        window.location.href = url.toString();
-      },
+      onReloadApp: (id: string) => reloadWithScenario(id),
     }),
   );
 }

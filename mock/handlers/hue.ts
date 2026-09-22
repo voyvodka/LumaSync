@@ -141,21 +141,37 @@ export const hueHandlers = {
     };
   },
 
+  // Its own three codes, distinct from the `HUE_IP_*` / `AUTH_INVALID_RE_PAIR_REQUIRED`
+  // families other handlers use — `useHueBridgeReachability` keys off exactly
+  // `HUE_CREDENTIAL_VALID` for reachability and `HUE_CREDENTIAL_CHECK_FAILED` for
+  // the retry budget, matching `validate_hue_credentials` in `hue_onboarding.rs`.
   [HUE_COMMANDS.VALIDATE_CREDENTIALS]: () => {
     const { hue } = getWorld();
     if (hue.appKey === null) {
       return {
-        status: status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Never paired"),
+        status: status(
+          HUE_STATUS.CREDENTIAL_INVALID,
+          "No stored Hue application key. Re-pair the bridge to continue.",
+        ),
         valid: false,
       };
     }
     if (!hue.reachable) {
-      return { status: status(HUE_STATUS.IP_UNREACHABLE, "No answer"), valid: false };
+      return {
+        status: status(
+          HUE_STATUS.CREDENTIAL_CHECK_FAILED,
+          "Could not validate Hue credentials. Check bridge reachability and retry.",
+        ),
+        valid: false,
+      };
     }
     return hue.credentialValid
-      ? { status: status(HUE_STATUS.IP_VALID, "Key accepted"), valid: true }
+      ? { status: status(HUE_STATUS.CREDENTIAL_VALID, "Hue credentials are valid."), valid: true }
       : {
-          status: status(HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED, "Key rejected"),
+          status: status(
+            HUE_STATUS.CREDENTIAL_INVALID,
+            "Bridge rejected the stored application key. Re-pair required.",
+          ),
           valid: false,
         };
   },
