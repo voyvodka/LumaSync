@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- SK6812 RGBW strips: picking Ambilight from the LED test popup restarted a running strip in the
+  WS2812B format, and Solid colour was always sent that way from any window. Both now use the
+  four-byte RGBW format. The popup also stopped sending colour correction, firmware profile and
+  calibration it had read when it first opened, so changes made in the main window since then
+  now apply.
 - The Hue channel map now notices a changed light height, not just a moved light, when it says
   whether the bridge still has your arrangement. Areas saved before this update are compared on
   position alone, so updating does not mark them as unsaved.
