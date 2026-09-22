@@ -60,14 +60,24 @@ restoring the persisted mode; on a machine last left in full, the first three sp
 then the suite *repaired itself*, because the section-routing spec ends by switching back to
 compact, so a second run passed and the failure read as a flake.
 
-A locked screen (or a minimized/occluded window) produces its own believable-looking failure: the
-run just times out on `switchUiMode` with "UI mode did not settle on compact". `useUIMode.ts`'s
-fade/resize chain needs real paint cycles — a native window-resize animation, and a fade-in gated on
-a double `requestAnimationFrame` with no safety timeout — so it cannot finish while the window is
-not actually painting. This is not a spec bug and a spec cannot make the window paint; what a spec
-*can* do is say so. `e2e/support/shell.ts`'s `switchUiMode`/`waitForAppReady` check
-`document.visibilityState` on a timeout and rethrow with that diagnosis instead of the bare WDIO
-message. Unlock the screen (or bring the window to the front) and re-run.
+A locked screen (or a minimized/occluded window) used to produce a believable-looking hang: the run
+would time out on `switchUiMode` with "UI mode did not settle on compact", because `useUIMode.ts`'s
+fade/resize chain awaited `requestAnimationFrame` with no bound in two places, and the webview stops
+firing rAF while unpainted. #423 fixed the product side of that — every such wait now falls back to
+a 250 ms timer, so `transitionLockRef` is always eventually released, screen locked or not.
+
+That fix moved the remaining race entirely onto this layer. `transitionLockRef` is released *after*
+the final paint wait, which can trail the DOM's mode-testid swap (what `currentUiMode()` reads) by
+up to that same 250 ms while occluded. A toggle click landing inside that window is dropped by
+design, not queued, which is exactly what turned a *successful* switch to compact into "UI mode did
+not settle on full" on the very next call — the previous switch's lock was still draining when the
+next click fired. `switchUiMode` now retries the click a few times (`MAX_TOGGLE_ATTEMPTS`,
+`e2e/support/shell.ts`), re-checking `currentUiMode() === target` first each time so a click that
+did land makes every further attempt a no-op. If the window is still unpaintable
+(`document.visibilityState`) after exhausting those retries — a screen locked for the whole retry
+window, not a transient dip — `switchUiMode`/`waitForAppReady` say so explicitly instead of
+surfacing the bare WDIO timeout. That case is not a spec bug and a spec cannot fix it: unlock the
+screen (or bring the window to the front) and re-run.
 
 ## Seeing the screen
 

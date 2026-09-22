@@ -64,21 +64,54 @@ export async function clickTestId(testId: string): Promise<void> {
   }
 }
 
-/** `useUIMode` drops a switch requested mid-transition (`transitionLockRef`),
- * so every switch settles before it returns. */
+/** How long one toggle click gets to land before this retries it. Short on
+ *  purpose — #423 bounded every animation-frame wait in the transition chain
+ *  at 250 ms, so a click that actually lands settles well inside this. */
+const TOGGLE_SETTLE_TIMEOUT_MS = 1_500;
+/** A few, not many: each retry is a fresh click, and `currentUiMode() ===
+ *  target` is checked first, so a click that already landed costs nothing. */
+const MAX_TOGGLE_ATTEMPTS = 4;
+
+/**
+ * `useUIMode` drops a switch requested mid-transition (`transitionLockRef`),
+ * so every switch settles before it returns.
+ *
+ * Since #423, `transitionLockRef` is always eventually released — but
+ * strictly *after* the final paint wait, which (while the window is hidden
+ * or occluded) can trail the DOM's mode-testid swap, and this helper's own
+ * opacity read, by up to that same ~250 ms. A toggle click that lands inside
+ * that window is dropped by design (`useUIMode.ts`'s re-entrancy guard), not
+ * queued. Treating one dropped click as a hang is what produced "UI mode did
+ * not settle on full" immediately after a *successful* switch to compact:
+ * the lock from the compact switch was still draining when the next click
+ * fired. So this retries the click a few times instead of failing on the
+ * first miss, each attempt re-checking `currentUiMode()` first so a click
+ * that did land makes every further attempt a no-op.
+ */
 export async function switchUiMode(target: UIMode): Promise<void> {
   if ((await currentUiMode()) === target) {
     return;
   }
 
-  await clickTestId("ui-mode-toggle");
-
   await withPaintDiagnostic(`switchUiMode(${target})`, async () => {
-    await browser.waitUntil(async () => (await currentUiMode()) === target, {
-      timeout: 30_000,
-      interval: 100,
-      timeoutMsg: `UI mode did not settle on ${target}`,
-    });
+    for (let attempt = 1; attempt <= MAX_TOGGLE_ATTEMPTS; attempt++) {
+      if ((await currentUiMode()) === target) break;
+
+      await clickTestId("ui-mode-toggle");
+
+      try {
+        await browser.waitUntil(async () => (await currentUiMode()) === target, {
+          timeout: TOGGLE_SETTLE_TIMEOUT_MS,
+          interval: 100,
+          timeoutMsg: `UI mode did not settle on ${target} (attempt ${attempt}/${MAX_TOGGLE_ATTEMPTS})`,
+        });
+        break;
+      } catch (error) {
+        // Most likely a dropped click (`transitionLockRef` still held from
+        // the previous switch) — retry rather than give up on one miss.
+        if (attempt === MAX_TOGGLE_ATTEMPTS) throw error;
+      }
+    }
     await settleTransition();
   });
 }
@@ -86,13 +119,13 @@ export async function switchUiMode(target: UIMode): Promise<void> {
 /**
  * True when the OS believes this window cannot currently paint — occluded,
  * minimized, or (observed against a real machine) the screen is locked.
- * `useUIMode.ts`'s fade/resize chain depends on that: `resizeToMode` drives a
- * native window-resize animation, and the fade-in step is gated on an
- * un-timed-out double `requestAnimationFrame` (`nextDoublePaint`) — the one
- * step in that chain with no safety timeout. Neither can ever complete while
- * the window is not actually painting, so `switchUiMode` hangs to its own
- * 30s timeout and reports a generic "did not settle" — true, but not the
- * reason.
+ * Before #423 this was fatal to every transition (`useUIMode.ts`'s fade/
+ * resize chain awaited `requestAnimationFrame` with no bound, so it never
+ * completed while unpainted); #423 put a 250 ms ceiling on every such wait,
+ * so a transient lock is now normally absorbed by `switchUiMode`'s own
+ * retries above. Seeing this diagnostic fire means the window was *still*
+ * unpaintable after exhausting those retries — e.g. the screen has been
+ * locked for the whole retry window, not just a transient occlusion.
  *
  * Read via `document.visibilityState`, the cheap synchronous signal: a
  * `requestAnimationFrame`-based probe would observe the actual symptom more
@@ -114,11 +147,12 @@ async function withPaintDiagnostic<T>(context: string, fn: () => Promise<T>): Pr
     if (await windowLikelyUnpaintable()) {
       const original = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `${context}: the window is not paintable right now ` +
-          `(document.visibilityState !== "visible") — most likely a locked screen, or the window ` +
-          "is occluded/minimized. useUIMode's fade/resize chain cannot finish without real paint " +
-          "cycles. This is not a spec bug: unlock the screen (or bring the window to the front) " +
-          `and re-run. Original error: ${original}`,
+        `${context}: the window is still not paintable ` +
+          `(document.visibilityState !== "visible") after retrying — most likely the screen has ` +
+          "been locked (or the window occluded/minimized) for the whole retry window, not just a " +
+          "transient dip that #423's 250ms frame-wait ceiling would normally absorb. This is not a " +
+          `spec bug: unlock the screen (or bring the window to the front) and re-run. Original ` +
+          `error: ${original}`,
       );
     }
     throw error;
