@@ -94,4 +94,37 @@ describe("RoomMapToolbar", () => {
     expect(badge).not.toBeNull();
     expect(badge?.textContent).toBe("3");
   });
+
+  it("renders no room-aware chip unless room-aware is on", () => {
+    render(<RoomMapToolbar {...BASE_PROPS} />);
+    expect(
+      screen.queryByRole("button", { name: "roomMap:roomAware.ariaLabel" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // A disclosure rather than a hover tooltip, so the explanation is reachable
+  // from the keyboard; Escape must close it without reaching the editor's own
+  // Escape (deselect).
+  it("room-aware chip discloses its explanation and closes on Escape", () => {
+    const onEditorKey = vi.fn();
+    render(
+      <div onKeyDown={onEditorKey}>
+        <RoomMapToolbar {...BASE_PROPS} roomAware />
+      </div>,
+    );
+    const chip = screen.getByRole("button", { name: "roomMap:roomAware.ariaLabel" });
+    expect(chip).toHaveTextContent("roomMap:roomAware.label");
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("roomMap:roomAware.body")).not.toBeVisible();
+
+    fireEvent.click(chip);
+    expect(chip).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(chip.getAttribute("aria-controls") ?? "");
+    expect(panel).toBeVisible();
+    expect(panel).toHaveTextContent("roomMap:roomAware.body");
+
+    fireEvent.keyDown(chip, { key: "Escape" });
+    expect(chip).toHaveAttribute("aria-expanded", "false");
+    expect(onEditorKey).not.toHaveBeenCalled();
+  });
 });

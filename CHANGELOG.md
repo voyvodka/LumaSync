@@ -7,6 +7,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+
+- Room map: the TV has an optional mount height. Left empty it follows 40% of the room height, so
+  changing the ceiling moves it too. The TV's footprint field is now labelled Depth, since it never
+  meant the screen's height. A small "Room-aware" chip in the room map toolbar and under the Hue
+  output on the Lights page shows when Hue lights are sampled by where they stand around the TV,
+  and opens a short explanation.
+
 ### Fixed
 
 - SK6812 RGBW strips: picking Ambilight from the LED test popup restarted a running strip in the

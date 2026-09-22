@@ -212,6 +212,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               onZoneCountsConfirmed={setPendingZoneCounts}
               onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
               hueReachable={hueReachable}
+              outputTargets={outputTargets}
             />
           </div>
         )}

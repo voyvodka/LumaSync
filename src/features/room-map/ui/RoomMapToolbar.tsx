@@ -2,12 +2,14 @@ import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { IconGear, IconGrid, IconUndo, IconRedo, IconInfoAlt } from "@/shared/ui/icons";
+import { RoomAwareIndicator } from "./RoomAwareIndicator";
 
 interface RoomMapToolbarProps {
   settingsOpen: boolean;
   onToggleSettings: () => void;
   hasTv?: boolean;
   hasUsb?: boolean;
+  roomAware?: boolean;
   derivePreviewActive?: boolean;
   zoneCount?: number;
   onDeriveZones?: () => void;
@@ -27,6 +29,7 @@ export function RoomMapToolbar({
   onToggleSettings,
   hasTv = false,
   hasUsb = false,
+  roomAware = false,
   derivePreviewActive = false,
   zoneCount = 0,
   onDeriveZones = () => {},
@@ -86,6 +89,8 @@ export function RoomMapToolbar({
       </button>
 
       <div className="flex-1" />
+
+      {roomAware && <RoomAwareIndicator variant="popover" />}
 
       <ShortcutsHelpButton />
 

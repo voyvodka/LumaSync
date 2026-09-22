@@ -166,6 +166,10 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     furnitureNameLabel: "Ad",
     furnitureTypeLabel: "Tür",
     furnitureRotationLabel: "Dönüş",
+    tvDepthLabel: "Derinlik",
+    tvMountHeightLabel: "Montaj yüksekliği",
+    tvMountHeightHint: "Ekran merkezinin yerden yüksekliği. Boş bırakılırsa oda yüksekliğinin %40'ı ({{metres}} m) kullanılır.",
+    tvMountHeightAboveCeiling: "Tavanın üstünde. Bu değer oda yüksekliğine inene kadar odaya duyarlı örnekleme kapalı kalır.",
     tvHint: "TV'yi konumlandırmak için tuvalde sürükleyin; sabitlemek için kilidi kullanın.",
     usbHint: "LED sayısı bir sonraki bağlantıda şeride iletilir. Başlangıç ve bitiş noktalarını tuvalden ayarlayın.",
     usbLedCountLabel: "LED",
@@ -194,6 +198,12 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     hueChannelHint: "Konumu hassaslaştırmak için tuvaldeki noktayı sürükleyin. Hue Bölgeleri sekmesinden bölgeye atayın.",
     imageOpacityLabel: "Opaklık",
     imageHint: "Görseli ölçeklemek ve konumlandırmak için tuval tutamaçlarını kullanın. Oda hatlarının görünür kalması için opaklığı düşürün.",
+  },
+  roomAware: {
+    label: "Odaya duyarlı",
+    ariaLabel: "Odaya duyarlı: nasıl çalışır",
+    body: "Her Hue ışığı rengini ekranın, bulunduğu yere en yakın bölümünden alır. Yüksekliği ekranın hangi kısmının örnekleneceğini seçer: zemine yakınsa alt kenar, tavana yakınsa üst kenar. TV'ye uzaklığı ise o noktayı mı yoksa genel ortam rengini mi ne ölçüde izleyeceğini belirler.",
+    why: "Oda haritasında bir TV olduğu için açık. Kapatmak için TV'yi kaldırın.",
   },
   propertyBar: {
     empty: "Özelliklerini düzenlemek için bir nesne seçin",

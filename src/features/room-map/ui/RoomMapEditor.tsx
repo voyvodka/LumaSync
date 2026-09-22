@@ -43,6 +43,8 @@ import { hueChannelsForArea, replaceHueChannel } from "@/shared/contracts/roomMa
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
+import type { HueRuntimeTarget } from "@/shared/contracts/hue";
+import { isRoomAwareActive } from "../model/roomAware";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
@@ -61,6 +63,8 @@ interface RoomMapEditorProps {
    * embeds that do not own a reachability source render no chip.
    */
   hueReachable?: boolean;
+  /** Selected outputs; with a TV anchor, a Hue target turns the room-aware chip on. */
+  outputTargets?: HueRuntimeTarget[];
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -77,7 +81,7 @@ const HUE_ZONE_REJECTION_KEYS = {
   HUE_ZONE_OVERSIZED: "roomMap:hueZones.rejected.oversized",
 } as const satisfies Record<HueZoneStatusCode, string>;
 
-export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable }: RoomMapEditorProps = {}) {
+export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable, outputTargets = [] }: RoomMapEditorProps = {}) {
   const { t } = useTranslation();
   const { config, updateConfig, adoptConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -418,6 +422,7 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       <RoomMapToolbar
         hasTv={hasTv}
         hasUsb={hasUsb}
+        roomAware={isRoomAwareActive(config.tvAnchor, outputTargets)}
         derivePreviewActive={derivePreviewActive}
         zoneCount={config.zones.length}
         onDeriveZones={handleDeriveZones}

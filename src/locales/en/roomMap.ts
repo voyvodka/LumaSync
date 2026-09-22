@@ -163,6 +163,10 @@ export default {
     furnitureNameLabel: "Name",
     furnitureTypeLabel: "Type",
     furnitureRotationLabel: "Rotation",
+    tvDepthLabel: "Depth",
+    tvMountHeightLabel: "Mount height",
+    tvMountHeightHint: "Screen centre above the floor. Leave empty to use 40% of the room height ({{metres}} m).",
+    tvMountHeightAboveCeiling: "Above the ceiling. Room-aware sampling is off until this is at or below the room height.",
     tvHint: "Drag the TV anchor on the canvas to position it; use the lock to keep it in place.",
     usbHint: "LED count is sent to the strip on the next pair handshake. Use the canvas handles to set start and end points.",
     usbLedCountLabel: "LEDs",
@@ -191,6 +195,12 @@ export default {
     hueChannelHint: "Drag the dot on the canvas to fine-tune position. Assign to a zone in the Hue Zones tab.",
     imageOpacityLabel: "Opacity",
     imageHint: "Use the canvas handles to scale and position the image. Lower opacity to keep the room outline visible.",
+  },
+  roomAware: {
+    label: "Room-aware",
+    ariaLabel: "Room-aware: how it works",
+    body: "Each Hue light takes its colour from the part of the screen nearest to where it stands. Its height picks how high on the screen, from the bottom edge near the floor to the top edge near the ceiling, and its distance from the TV sets how much it follows that spot rather than the overall ambience.",
+    why: "On because the room map has a TV. Remove the TV to turn it off.",
   },
   propertyBar: {
     empty: "Select an object to edit its properties",

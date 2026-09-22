@@ -86,6 +86,103 @@ export function InspectorNumberField({
 }
 
 /**
+ * `InspectorNumberField` for a value that may be absent. Empty means "use the
+ * default", which the placeholder shows; clearing commits `undefined`. A blur
+ * that changed nothing does not commit, so focusing an empty field never
+ * writes the default into storage.
+ */
+export function InspectorOptionalNumberField({
+  id,
+  label,
+  value,
+  placeholder,
+  step = 0.05,
+  min,
+  max,
+  unit,
+  disabled,
+  describedBy,
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  value: number | undefined;
+  placeholder: string;
+  step?: number;
+  min: number;
+  max: number;
+  unit?: string;
+  disabled?: boolean;
+  describedBy?: string;
+  onCommit: (next: number | undefined) => void;
+}) {
+  const format = (v: number | undefined) => (v === undefined ? "" : v.toFixed(2));
+  const [local, setLocal] = useState(format(value));
+  const [editing, setEditing] = useState(false);
+
+  if (!editing && local !== format(value)) {
+    setLocal(format(value));
+  }
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = local.trim();
+    if (trimmed === "") {
+      if (value !== undefined) onCommit(undefined);
+      return;
+    }
+    const num = parseFloat(trimmed);
+    if (Number.isNaN(num)) {
+      setLocal(format(value));
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, num));
+    if (clamped === value) {
+      setLocal(format(value));
+      return;
+    }
+    onCommit(clamped);
+  };
+
+  return (
+    <div className="lm-room-dock-field">
+      <label className="lm-room-dock-field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="number"
+        step={step}
+        min={min}
+        max={max}
+        disabled={disabled}
+        className="lm-room-dock-input"
+        value={local}
+        placeholder={placeholder}
+        aria-describedby={describedBy}
+        onFocus={() => setEditing(true)}
+        onChange={(e) => {
+          setEditing(true);
+          setLocal(e.target.value);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Escape") {
+            setLocal(format(value));
+            setEditing(false);
+          }
+        }}
+      />
+      {unit ? <span className="lm-room-dock-field-unit">{unit}</span> : null}
+    </div>
+  );
+}
+
+/**
  * `Header` is shared by every inspector so the visual rhythm matches
  * `HueZoneInspector` (the W4-C reference). The chip label is the
  * machine-readable type (translated) and `name` is the user-facing

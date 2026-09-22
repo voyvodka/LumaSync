@@ -4740,6 +4740,17 @@ body {
   width: 52px;
   text-transform: uppercase;
 }
+/* The TV inspector's "MONTAJ YÜKSEKLİĞİ" is one word too long for 52 px and
+   ran under its input; the whole group widens so the inputs still align. */
+.lm-room-dock-fields-wide {
+  display: contents;
+}
+.lm-room-dock-fields-wide .lm-room-dock-field-label {
+  width: 76px;
+}
+.lm-room-dock-fields-wide .lm-room-dock-field-hint {
+  margin-left: 84px;
+}
 .lm-room-dock-field-hint {
   margin: 2px 0 0 60px;
   font-size: 9.5px;
@@ -5281,9 +5292,105 @@ body {
   white-space: nowrap;
 }
 
+/* Room-aware indicator — a quiet state chip, deliberately not amber-filled:
+   it reports a fact, it is not a control the user is expected to act on. The
+   32 px hit area is the button; the pill inside stays small. */
+.lm-room-aware {
+  position: relative;
+}
+.lm-room-aware-chip {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  cursor: pointer;
+  border-radius: 999px;
+}
+.lm-room-aware-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--lm-line-2);
+  background: var(--lm-panel);
+  font-family: var(--lm-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lm-ink-dim);
+  white-space: nowrap;
+  transition: color 100ms ease, border-color 100ms ease;
+}
+.lm-room-aware-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  flex-shrink: 0;
+}
+.lm-room-aware-chip:hover .lm-room-aware-pill,
+.lm-room-aware-chip[aria-expanded="true"] .lm-room-aware-pill {
+  color: var(--lm-ink);
+  border-color: rgba(255, 176, 32, 0.4);
+}
+.lm-room-aware-chip:focus-visible {
+  outline: none;
+}
+.lm-room-aware-chip:focus-visible .lm-room-aware-pill {
+  box-shadow: var(--lm-focus-ring);
+  color: var(--lm-ink);
+}
+.lm-room-aware-panel {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--lm-ink-dim);
+}
+.lm-room-aware-panel[hidden] {
+  display: none;
+}
+.lm-room-aware-panel p {
+  margin: 0;
+}
+.lm-room-aware-panel .lm-room-aware-why {
+  margin-top: 6px;
+  color: var(--lm-ink-faint);
+}
+.lm-room-aware.is-popover .lm-room-aware-panel {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 2px;
+  width: 248px;
+  border-radius: 8px;
+  border: 1px solid var(--lm-line);
+  background: var(--lm-panel);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.45);
+  padding: 10px 12px;
+  z-index: 50;
+}
+.lm-room-aware.is-inline .lm-room-aware-panel {
+  padding: 2px 2px 4px;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lm-room-toolbar-btn {
+  .lm-room-toolbar-btn,
+  .lm-room-aware-pill {
     transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-room-aware-pill {
+    border-color: CanvasText;
+  }
+  .lm-room-aware-dot {
+    background: CanvasText;
+  }
+  .lm-room-aware-chip:focus-visible .lm-room-aware-pill {
+    outline: 2px solid Highlight;
+  }
+  .lm-room-aware.is-popover .lm-room-aware-panel {
+    border-color: CanvasText;
   }
 }
 @media (forced-colors: active) {
