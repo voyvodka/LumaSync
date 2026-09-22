@@ -14,6 +14,10 @@ https://keepachangelog.com/en/1.1.0/
   and it had been translated into Turkish along the way, so nothing marked it as unfinished
   except the word itself. Nothing took its place: the column simply ends after the outputs,
   which is what it should have done until there was something to put there.
+- The Devices rail counted every serial port the system enumerates as a USB strip, so a
+  machine with a debug console or a Bluetooth serial port showed "2" beside a heading that
+  read "1 connected". It now counts only ports LumaSync can actually drive. The WLED row
+  had no count at all, even with a panel bound; it shows one now, like the Hue row does.
 - The room map now shows when it has keyboard focus. Arrow keys pan the view, but the editor
   gave no sign it was the thing listening, so there was no way to tell whether a keypress
   would do anything. The panel edge now lights up when you reach it by keyboard — and only

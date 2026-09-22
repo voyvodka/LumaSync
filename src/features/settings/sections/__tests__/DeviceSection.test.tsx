@@ -9,6 +9,7 @@ const stopHueMock = vi.fn();
 const useHueOnboardingMock = vi.fn();
 // Mutable so individual tests can override port list without re-declaring the mock.
 const useDeviceConnectionMock = vi.fn();
+let activeWledIpMock: string | null = null;
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -22,6 +23,19 @@ vi.mock("@/features/mode/modeApi", () => ({
 
 vi.mock("@/features/device/useDeviceConnection", () => ({
   useDeviceConnection: () => useDeviceConnectionMock(),
+}));
+
+// Stubbed rather than left real: `useActiveWledSink` reads shell state through
+// the same mocked `shellStore.load`, so a live one races the scenario's own
+// `mockResolvedValueOnce` and the loser silently gets the default.
+vi.mock("@/features/device/useWledSink", () => ({
+  useActiveWledSink: () => ({
+    activeWledIp: activeWledIpMock,
+    savedSink: null,
+    restoreOutcome: null,
+    ready: true,
+    markConnected: async () => undefined,
+  }),
 }));
 
 vi.mock("@/features/hue/useHueOnboarding", () => ({
@@ -154,6 +168,7 @@ async function renderHueTab(state: ReturnType<typeof createHueHookState>) {
 describe("HueReadySummaryCard", () => {
   beforeEach(() => {
     stopHueMock.mockReset();
+    activeWledIpMock = null;
     useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
     useHueOnboardingMock.mockReturnValue(createHueHookState());
   });
@@ -609,5 +624,59 @@ describe("DeviceSection — category scroll position", () => {
     await user.click(screen.getByText("device:page.rail.wled").closest("button")!);
 
     await waitFor(() => expect(main.scrollTop).toBe(0));
+  });
+});
+
+describe("the category rail counts what its labels say", () => {
+  const badgeFor = (labelKey: string) =>
+    screen.getByText(labelKey).closest("button")!.querySelector(".lm-device-cat-cnt");
+
+  beforeEach(() => {
+    activeWledIpMock = null;
+    useDeviceConnectionMock.mockReturnValue(defaultDeviceConnectionState());
+    useHueOnboardingMock.mockReturnValue(createHueHookState());
+  });
+
+  it("counts strips, not every port that enumerates", () => {
+    // The badge sits on a button labelled "USB Strips". Counting the
+    // allowlist-rejected `/dev/cu.debug-console` alongside a real strip put a
+    // "2" next to a header reading "1 connected" on the same screen.
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [
+        { name: "/dev/cu.usbserial-1420", isSupported: true },
+        { name: "/dev/cu.debug-console", isSupported: false },
+      ],
+    });
+
+    render(<DeviceSection />);
+
+    expect(badgeFor("device:page.rail.usbStrips")).toHaveTextContent("1");
+  });
+
+  it("shows no strip badge when every port is unsupported", () => {
+    useDeviceConnectionMock.mockReturnValue({
+      ...defaultDeviceConnectionState(),
+      ports: [{ name: "/dev/cu.Bluetooth-Incoming-Port", isSupported: false }],
+    });
+
+    render(<DeviceSection />);
+
+    // Zero renders no badge at all, rather than a "0" chip.
+    expect(badgeFor("device:page.rail.usbStrips")).toBeNull();
+  });
+
+  it("counts a bound WLED panel, which was hardcoded to zero", () => {
+    activeWledIpMock = "192.168.1.42";
+
+    render(<DeviceSection />);
+
+    expect(badgeFor("device:page.rail.wled")).toHaveTextContent("1");
+  });
+
+  it("shows no WLED badge when nothing is bound", () => {
+    render(<DeviceSection />);
+
+    expect(badgeFor("device:page.rail.wled")).toBeNull();
   });
 });

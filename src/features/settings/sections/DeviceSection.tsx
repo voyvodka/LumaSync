@@ -19,6 +19,7 @@ import { DisplaysCategory } from "./device/DisplaysCategory";
 import { HueBridgesCategory } from "./device/HueBridgesCategory";
 import { ManualEntryCategory } from "./device/ManualEntryCategory";
 import { UsbStripsCategory } from "./device/UsbStripsCategory";
+import { useActiveWledSink } from "@/features/device/useWledSink";
 import { WledCategory } from "./device/WledCategory";
 import { useTransientFlag } from "./device/useTransientFlag";
 import {
@@ -99,6 +100,12 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
 
   const { selectedBridge, selectedAreaId } = hue;
   const { ports, connectedPort } = device;
+  // The badge sits on a button labelled "USB Strips", so it counts strips —
+  // not every enumerated port. `/dev/cu.debug-console` and its kind enumerate,
+  // fail the VID/PID allowlist, and can never be one; counting them said "2"
+  // beside a header reading "1 connected" on the same screen.
+  const supportedPortCount = ports.filter((port) => port.isSupported).length;
+  const { activeWledIp } = useActiveWledSink();
 
   // -------------------------------------------------------------------------
   // Channel placement persistence (D-05a)
@@ -226,8 +233,8 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
         <RailButton
           icon={<IconUsb />}
           label={t("device:page.rail.usbStrips")}
-          count={ports.length}
-          countLabel={t("device:page.rail.countLabel", { count: ports.length })}
+          count={supportedPortCount}
+          countLabel={t("device:page.rail.countLabel", { count: supportedPortCount })}
           active={activeCategory === "usb"}
           onClick={() => setActiveCategory("usb")}
         />
@@ -242,7 +249,8 @@ export function DeviceSection({ onNavigateToRoomMap, onChipTypeChange }: DeviceS
         <RailButton
           icon={<IconWledGlyph />}
           label={t("device:page.rail.wled")}
-          count={0}
+          count={activeWledIp === null ? 0 : 1}
+          countLabel={t("device:page.rail.countLabel", { count: 1 })}
           active={activeCategory === "wled"}
           onClick={() => setActiveCategory("wled")}
         />
