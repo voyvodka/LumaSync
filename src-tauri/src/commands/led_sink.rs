@@ -1,8 +1,7 @@
 /// `LedSink` trait — the single output abstraction for all LED destinations.
 ///
-/// v1.4: `SerialSink` is the only implementation.
-/// v1.5: `WledUdpSink` will implement this trait over DDP/WARLS UDP.
-/// v2.0: `OpenRgbClientSink` will implement this over TCP port 6742.
+/// Implemented by `SerialSink` (USB serial) and by `WledUdpSink` /
+/// `CorrectedWledSink` (WLED over DDP/WARLS UDP).
 ///
 /// Design rule (from `ls-led-protocols`):
 ///   - One active sink per output channel.
@@ -15,15 +14,6 @@
 /// `std::sync::mpsc` if a sink needs to offload I/O; the trait itself stays
 /// sync to avoid pulling in `tokio` into the serialport layer.
 pub trait LedSink: Send + Sync {
-    /// Human-readable sink name, e.g. `"serial"`, `"wled-udp"`.
-    ///
-    /// Used for logging and diagnostics. Future sinks (WLED, OpenRGB) will
-    /// surface this in the UI. `#[allow(dead_code)]` because `SerialSink` is
-    /// the only impl today and its `name()` is only exercised by tests; the
-    /// trait method must remain in the surface for v1.5+ impls.
-    #[allow(dead_code)]
-    fn name(&self) -> &'static str;
-
     /// Prepare the sink for streaming. Called once before the first
     /// `send_frame`. May open a port, resolve a UDP endpoint, etc.
     /// A second call after a successful `start` is a no-op (idempotent).
@@ -78,10 +68,6 @@ mod tests {
     }
 
     impl LedSink for MockSink {
-        fn name(&self) -> &'static str {
-            "mock"
-        }
-
         fn start(&mut self) -> Result<(), String> {
             self.started = true;
             Ok(())
@@ -140,7 +126,6 @@ mod tests {
         sink.start().unwrap();
         sink.send_frame(&[[1, 2, 3]]).unwrap();
         sink.stop().unwrap();
-        assert_eq!(sink.name(), "mock");
     }
 
     #[test]

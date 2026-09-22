@@ -623,7 +623,6 @@ for (const kind of REQUIRED_NOTIFICATION_KINDS) {
 
 console.log("\n[ Notification result codes ]");
 const REQUIRED_NOTIFICATION_RESULT_CODES = [
-  "NOTIF_PERMISSION_GRANTED",
   "NOTIF_PERMISSION_DENIED",
   "NOTIF_UNSUPPORTED_OS",
 ];
@@ -1140,7 +1139,7 @@ const emittedLightingCodes = [
   ),
 ].sort();
 // Pinned, not `> 0`: the harvest sees string literals only, so hoisting a code
-// to a `const` (the shape preview.rs already uses) would silently drop it while
+// to a `const` (the shape led_preview.rs already uses) would silently drop it while
 // the other nine still matched. Bump this deliberately when a code is added.
 const EXPECTED_LIGHTING_CODE_COUNT = 10;
 check(
@@ -1512,8 +1511,8 @@ function harvestCodes(files) {
 }
 
 const tsSourceFiles = walkSourceFiles(resolve(ROOT, "src"), /\.tsx?$/);
-// Whole crate, not just `commands/`: `network/mdns.rs` emits the HUE_MDNS_*
-// codes, and a narrower root reports them as phantoms.
+// Whole crate, not just `commands/`: a producer outside it would otherwise
+// report as a phantom.
 const rustEmitted = harvestCodes(
   walkRustSourceFiles(resolve(ROOT, "src-tauri/src"))
 );

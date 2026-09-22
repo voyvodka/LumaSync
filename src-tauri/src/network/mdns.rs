@@ -29,21 +29,6 @@ use std::time::{Duration, Instant};
 use log::{debug, info, warn};
 use mdns_sd::{ResolvedService, ServiceDaemon, ServiceEvent};
 
-/// Status codes mirrored on the frontend `HUE_STATUS` map.
-///
-/// These are the canonical wire codes for mDNS-related telemetry.
-/// `discover_hue_bridges` currently degrades mDNS errors silently (the
-/// cloud path is the primary source of truth), so the constants are
-/// referenced only by `MdnsBrowserError::status_code` and the tests.
-/// Kept as published surface so a future telemetry panel can light up
-/// without reaching back into private string literals.
-#[allow(dead_code)]
-pub mod status {
-    pub const MDNS_DISCOVERY_OK: &str = "HUE_MDNS_DISCOVERY_OK";
-    pub const MDNS_DISCOVERY_TIMEOUT: &str = "HUE_MDNS_DISCOVERY_TIMEOUT";
-    pub const MDNS_UNSUPPORTED: &str = "HUE_MDNS_UNSUPPORTED";
-}
-
 /// Lightweight DTO returned by Hue mDNS browsing. Mirrors the cloud
 /// discovery output enough that `discover_hue_bridges` can dedupe by
 /// bridge id without translating between two different shapes.
@@ -140,21 +125,6 @@ pub enum MdnsBrowserError {
     BrowseFailed(String),
     /// Internal mutex poisoned by a previous panic — extremely rare.
     Poisoned,
-}
-
-impl MdnsBrowserError {
-    /// Map the error variant to its canonical wire code. Unused in
-    /// production today (silent degradation) but referenced by tests
-    /// + the future telemetry panel.
-    #[allow(dead_code)]
-    pub fn status_code(&self) -> &'static str {
-        match self {
-            MdnsBrowserError::Unsupported => status::MDNS_UNSUPPORTED,
-            MdnsBrowserError::BrowseFailed(_) | MdnsBrowserError::Poisoned => {
-                status::MDNS_DISCOVERY_TIMEOUT
-            }
-        }
-    }
 }
 
 impl std::fmt::Display for MdnsBrowserError {
@@ -363,31 +333,8 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn status_codes_match_frontend_contract() {
-        assert_eq!(status::MDNS_DISCOVERY_OK, "HUE_MDNS_DISCOVERY_OK");
-        assert_eq!(status::MDNS_DISCOVERY_TIMEOUT, "HUE_MDNS_DISCOVERY_TIMEOUT");
-        assert_eq!(status::MDNS_UNSUPPORTED, "HUE_MDNS_UNSUPPORTED");
-    }
-
-    #[test]
     fn hue_service_type_matches_dnssd_spec() {
         assert_eq!(HUE_SERVICE_TYPE, "_hue._tcp.local.");
-    }
-
-    #[test]
-    fn browser_error_routes_to_correct_status_code() {
-        assert_eq!(
-            MdnsBrowserError::Unsupported.status_code(),
-            "HUE_MDNS_UNSUPPORTED"
-        );
-        assert_eq!(
-            MdnsBrowserError::BrowseFailed("x".into()).status_code(),
-            "HUE_MDNS_DISCOVERY_TIMEOUT"
-        );
-        assert_eq!(
-            MdnsBrowserError::Poisoned.status_code(),
-            "HUE_MDNS_DISCOVERY_TIMEOUT"
-        );
     }
 
     #[test]

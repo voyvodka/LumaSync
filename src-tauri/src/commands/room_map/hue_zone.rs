@@ -6,10 +6,10 @@
 //!   multi-stream mux, no DTLS surface change.
 //! - Hue channels keep their bridge-assigned `channel_index`. The zone
 //!   provides a `center` + `scale` frame that the room-map editor uses to
-//!   manipulate a subset of bulbs as a unit. World-space resolution at
-//!   frame-build time is `world = center + scale * zone_relative_position`.
-//!   The transform helper lives here so callers (`commands::hue::frame`)
-//!   can opt into zone awareness without re-deriving the math.
+//!   manipulate a subset of bulbs as a unit. World space is
+//!   `world = center + scale * zone_relative_position`, resolved here at
+//!   authoring time; the frame builder reads only the placement's world
+//!   coordinates.
 //! - Zones are Hue-only — see docs/architecture/hue.md. Future zone kinds
 //!   (`ScreenZone`, `LedZone`) will be separate types with no shared shape.
 //!
@@ -243,12 +243,7 @@ pub fn world_pos_from_zone_relative(
 
 /// Same as [`world_pos_from_zone_relative`] but clamps the resolved world
 /// position into the `[-1, 1]` cube. Returns the clamped tuple plus
-/// whether any axis was actually clamped — production callers should
-/// prefer the `(center, scale, relative)`-based helpers in
-/// `super::super::hue::frame::resolve_zone_relative` /
-/// `super::super::hue::frame::resolve_zone_relative_clamped` which avoid
-/// coupling to the `HueZone` struct. Kept here as a thin authoring-side
-/// wrapper + a self-test of the formula equivalence.
+/// whether any axis was actually clamped.
 #[cfg(test)]
 pub fn world_pos_clamped(
     zone: &HueZone,

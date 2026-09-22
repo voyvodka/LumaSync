@@ -17,13 +17,6 @@
 # Remove if the harvest ever learns to skip predicate arguments.
 ACTIVE_STREAMER
 
-# `AmbilightCaptureError::as_reason()` reasons that capture.ts deliberately
-# omits: these three come from `sample_led_frame`, a pure helper no command
-# calls, so they cannot reach a frontend. Declare them only if it gains a caller.
-FRAME_DIMENSIONS_INVALID
-FRAME_PIXEL_COUNT_MISMATCH
-LED_COUNT_INVALID
-
 # `LedOutputError::as_reason()` — reaches the frontend only inside
 # `status.details` of AMBILIGHT_MODE_START_FAILED / SOLID_MODE_APPLY_FAILED.
 # Its one addressable sibling, LED_OUTPUT_PORT_UNAVAILABLE, is in capture.ts.
