@@ -34,6 +34,10 @@ https://keepachangelog.com/en/1.1.0/
   four-byte RGBW format. The popup also stopped sending colour correction, firmware profile and
   calibration it had read when it first opened, so changes made in the main window since then
   now apply.
+- Stopping an LED test pattern put back the chip type, firmware profile, colour correction and LED
+  layout from when the test started, so a change made while it ran (such as switching SK6812 and
+  WS2812B, or saving a new layout in LED Setup) was undone on stop. The restored mode now uses the
+  saved settings.
 - The Hue channel map now notices a changed light height, not just a moved light, when it says
   whether the bridge still has your arrangement. Areas saved before this update are compared on
   position alone, so updating does not mark them as unsaved.
