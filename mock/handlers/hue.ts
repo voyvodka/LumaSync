@@ -22,10 +22,38 @@ import {
   HUE_RUNTIME_TRIGGER_SOURCE,
   HUE_STATUS,
 } from "../../src/shared/contracts/hue";
-import type { HueRuntimeStatus } from "../../src/shared/contracts/hue";
-import { getWorld, mutate } from "../state";
+import type {
+  HueRuntimeState,
+  HueRuntimeStatus,
+  HueRuntimeWireStatusCode,
+} from "../../src/shared/contracts/hue";
+import { getWorld, mutate, type MockWorld } from "../state";
 import { status } from "./status";
 import type { TypedHandlers } from "./types";
+
+/**
+ * Bridge-fault verdict for the current world — reachability wins over an
+ * invalid key, matching `register_transient_fault` / `register_auth_invalid`
+ * in `src-tauri/src/commands/hue/{reconnect,retry}.rs`: an unreachable bridge
+ * is an active retry ladder (`Reconnecting`), an expired key is terminal
+ * (`Failed`). `null` means neither fault is active.
+ *
+ * Shared with `device.ts`'s `get_runtime_telemetry` fixture so the stream
+ * status poll and the telemetry HUD cannot disagree about the same world —
+ * they used to: telemetry read only the `streaming` boolean and reported
+ * "Idle" under both faults.
+ */
+export function hueRuntimeFault(
+  hue: MockWorld["hue"],
+): { code: HueRuntimeWireStatusCode; state: HueRuntimeState } | null {
+  if (!hue.reachable) {
+    return { code: HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED, state: HUE_RUNTIME_STATES.RECONNECTING };
+  }
+  if (!hue.credentialValid) {
+    return { code: HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS, state: HUE_RUNTIME_STATES.FAILED };
+  }
+  return null;
+}
 
 /** The runtime envelope, which is a status *plus* a state machine position. */
 function runtimeStatus(
@@ -42,19 +70,12 @@ function runtimeStatus(
 
 function currentRuntime(): HueRuntimeStatus {
   const { hue } = getWorld();
-  if (!hue.reachable) {
-    return runtimeStatus(
-      HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED,
-      HUE_RUNTIME_STATES.RECONNECTING,
-      "Bridge unreachable",
-    );
-  }
-  if (!hue.credentialValid) {
-    return runtimeStatus(
-      HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS,
-      HUE_RUNTIME_STATES.FAILED,
-      "Application key rejected",
-    );
+  const fault = hueRuntimeFault(hue);
+  if (fault !== null) {
+    const message = fault.state === HUE_RUNTIME_STATES.RECONNECTING
+      ? "Bridge unreachable"
+      : "Application key rejected";
+    return runtimeStatus(fault.code, fault.state, message);
   }
   return hue.streaming
     ? runtimeStatus(

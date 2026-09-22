@@ -254,6 +254,10 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       const w = furnished();
       w.hue.reachable = false;
       w.hue.streaming = false;
+      // Nonzero so the telemetry HUD has an active retry ladder to show —
+      // none of these have succeeded yet, which is why the bridge is still
+      // unreachable. See `hueRuntimeFault` in `handlers/hue.ts`.
+      w.hue.totalReconnects = 2;
       return { ...w, scenario: "hue-unreachable" };
     },
   },
