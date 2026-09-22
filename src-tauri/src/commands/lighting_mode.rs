@@ -31,8 +31,8 @@ use super::led_calibration::{
 };
 use super::led_output::{
     apply_color_correction_rgb, apply_color_correction_rgb_with_luts, encode_packet_for_output,
-    gamma_luts_for, ColorCorrectionConfig, FirmwareProfile, GammaLuts, LedChipType,
-    LedOutputBridge, SerialSink,
+    gamma_luts_for, ColorCorrectionConfig, EncoderPlan, FirmwareProfile, GammaLuts, LedChipType,
+    LedOutputBridge, SerialSink, WirePixelLayout,
 };
 use super::led_preview::{
     build_preview_status, emit_preview_state_changed, LedPreviewStatus, LedTwinState,
@@ -1328,8 +1328,8 @@ struct SerialSendBudget {
 }
 
 impl SerialSendBudget {
-    fn for_strip(total_leds: u16, chip_type: LedChipType) -> Self {
-        let bytes_per_pixel = chip_type.bytes_per_pixel();
+    fn for_strip(total_leds: u16, profile: FirmwareProfile, chip_type: LedChipType) -> Self {
+        let bytes_per_pixel = WirePixelLayout::for_output(profile, chip_type).bytes_per_pixel();
         Self {
             bytes_per_frame: frame_wire_bytes(total_leds, bytes_per_pixel),
             requested_ms: derive_base_interval_ms_for(total_leds, bytes_per_pixel) as u64,
@@ -1420,16 +1420,17 @@ impl ActiveUsbSink {
 fn resolve_quality_config(
     usb_plan: &Option<UsbOutputPlan>,
     total_leds: u16,
+    profile: FirmwareProfile,
     chip_type: LedChipType,
     smoothing_alpha: f32,
 ) -> (RuntimeQualityConfig, Option<SerialSendBudget>) {
     match usb_plan {
         Some(UsbOutputPlan::Serial(_)) => {
-            let budget = SerialSendBudget::for_strip(total_leds, chip_type);
+            let budget = SerialSendBudget::for_strip(total_leds, profile, chip_type);
             if budget.is_link_constrained() {
                 warn!(
                     "[ambilight-worker] strip exceeds the 115 200-baud budget — \
-                     leds={total_leds} chip={chip_type:?} bytes_per_frame={} \
+                     leds={total_leds} profile={profile:?} chip={chip_type:?} bytes_per_frame={} \
                      link_max_fps={:.1} (below {LINK_CONSTRAINED_FPS:.0}); \
                      send interval clamped to {}ms. Shorten the strip or split it \
                      across controllers for a smoother effect.",
@@ -1437,7 +1438,7 @@ fn resolve_quality_config(
                 );
             } else {
                 info!(
-                    "[ambilight-worker] serial budget — leds={total_leds} chip={chip_type:?} \
+                    "[ambilight-worker] serial budget — leds={total_leds} profile={profile:?} chip={chip_type:?} \
                      bytes_per_frame={} link_max_fps={:.1} send_interval={}ms clamped={}",
                     budget.bytes_per_frame,
                     budget.link_max_fps,
@@ -1552,8 +1553,13 @@ fn start_ambilight_worker(
 
     let hue_only = usb_plan.is_none() && hue_output.is_some();
     let initial_smoothing_alpha = live_settings.read_smoothing_alpha();
-    let (quality_config, serial_budget) =
-        resolve_quality_config(&usb_plan, total_leds, chip_type, initial_smoothing_alpha);
+    let (quality_config, serial_budget) = resolve_quality_config(
+        &usb_plan,
+        total_leds,
+        firmware_profile,
+        chip_type,
+        initial_smoothing_alpha,
+    );
     let mut quality_state = AmbilightWorkerQualityState::new(quality_config);
     let mut frame_slot = RuntimeFrameSlot::new();
     let mut telemetry_window = RuntimeTelemetryWindow::new(Instant::now());
@@ -2293,7 +2299,7 @@ fn apply_mode_change_inner(
                             solid_chip,
                             payload.brightness,
                             &solid_triplets,
-                            &solid_corrections,
+                            &EncoderPlan::new(&solid_corrections),
                         );
                         owner
                             .output_bridge
@@ -3297,9 +3303,9 @@ mod tests {
     use super::{
         apply_mode_change, resolve_quality_config, set_active_port, start_ambilight_worker,
         stop_previous, AmbilightLiveSettings, AmbilightPayload, AmbilightWorkerQualityState,
-        LedChipType, LightingModeConfig, LightingModeKind, LightingRuntimeOwner, SerialSendBudget,
-        SolidColorPayload, UsbOutputPlan, ACTIVE_AMBILIGHT_WORKERS, AMBILIGHT_CAPTURE_ATTEMPTS,
-        AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
+        FirmwareProfile, LedChipType, LightingModeConfig, LightingModeKind, LightingRuntimeOwner,
+        SerialSendBudget, SolidColorPayload, UsbOutputPlan, ACTIVE_AMBILIGHT_WORKERS,
+        AMBILIGHT_CAPTURE_ATTEMPTS, AMBILIGHT_FRAME_ATTEMPTS, SOLID_OUTPUT_ATTEMPTS,
     };
 
     // -----------------------------------------------------------------------
@@ -3310,8 +3316,10 @@ mod tests {
     fn send_budget_never_sends_faster_than_the_wire() {
         for leds in [1u16, 30, 60, 100, 200, 320, 1000, 4000] {
             for chip in [LedChipType::Ws2812bGrb, LedChipType::Sk6812Rgbw] {
-                let config = SerialSendBudget::for_strip(leds, chip).into_quality_config(0.35);
-                let wire_ms = SerialSendBudget::for_strip(leds, chip).wire_ms;
+                let config = SerialSendBudget::for_strip(leds, FirmwareProfile::LumaSyncV1, chip)
+                    .into_quality_config(0.35);
+                let wire_ms =
+                    SerialSendBudget::for_strip(leds, FirmwareProfile::LumaSyncV1, chip).wire_ms;
                 let controller = AmbilightWorkerQualityState::new(config.clone());
                 let interval = controller.current_send_interval().as_millis() as u64;
                 assert!(
@@ -3330,14 +3338,26 @@ mod tests {
     fn send_budget_flags_every_overrun_however_small() {
         // 60 GRB LEDs: 186 B/frame, 16 ms requested vs 17 ms wire — the 16 ms
         // hard floor in the derive helper already overruns here.
-        assert!(SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb).exceeds_link_budget());
+        assert!(SerialSendBudget::for_strip(
+            60,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb
+        )
+        .exceeds_link_budget());
         // 100 GRB LEDs: 27 ms requested vs 27 ms wire — exactly at budget.
-        assert!(!SerialSendBudget::for_strip(100, LedChipType::Ws2812bGrb).exceeds_link_budget());
-        let rgbw = SerialSendBudget::for_strip(100, LedChipType::Sk6812Rgbw);
+        assert!(!SerialSendBudget::for_strip(
+            100,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb
+        )
+        .exceeds_link_budget());
+        let rgbw =
+            SerialSendBudget::for_strip(100, FirmwareProfile::LumaSyncV1, LedChipType::Sk6812Rgbw);
         assert_eq!(rgbw.bytes_per_frame, 406);
         assert_eq!(rgbw.wire_ms, 36);
         // 4000 LEDs: the 10 fps floor asks for 100 ms, the wire needs ~1.04 s.
-        let long = SerialSendBudget::for_strip(4000, LedChipType::Ws2812bGrb);
+        let long =
+            SerialSendBudget::for_strip(4000, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
         assert!(long.exceeds_link_budget());
         assert_eq!(long.requested_ms, 100);
         assert_eq!(long.wire_ms, 1043);
@@ -3347,16 +3367,32 @@ mod tests {
     fn link_constrained_reports_degradation_not_rounding() {
         // A 60-LED strip is clamped by 1 ms (16 → 17) but still runs ~59 fps —
         // reporting that as a problem would cry wolf on the commonest setup.
-        let common = SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb);
+        let common =
+            SerialSendBudget::for_strip(60, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
         assert!(common.exceeds_link_budget());
         assert!(!common.is_link_constrained());
 
         // 200 LEDs runs at ~19 fps — genuinely degraded, worth telling the user.
-        assert!(SerialSendBudget::for_strip(200, LedChipType::Ws2812bGrb).is_link_constrained());
+        assert!(SerialSendBudget::for_strip(
+            200,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb
+        )
+        .is_link_constrained());
         // Same LED count, opposite verdict: RGBW's extra byte per pixel drops
         // 100 LEDs from ~37.6 fps to ~28.4 fps.
-        assert!(!SerialSendBudget::for_strip(100, LedChipType::Ws2812bGrb).is_link_constrained());
-        assert!(SerialSendBudget::for_strip(100, LedChipType::Sk6812Rgbw).is_link_constrained());
+        assert!(!SerialSendBudget::for_strip(
+            100,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb
+        )
+        .is_link_constrained());
+        assert!(SerialSendBudget::for_strip(
+            100,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Sk6812Rgbw
+        )
+        .is_link_constrained());
     }
 
     #[test]
@@ -3367,19 +3403,23 @@ mod tests {
         let default_cap = RuntimeQualityConfig::default().max_interval_ms;
         assert_eq!(default_cap, 80);
 
-        let long = SerialSendBudget::for_strip(4000, LedChipType::Ws2812bGrb);
+        let long =
+            SerialSendBudget::for_strip(4000, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
         let config = long.into_quality_config(0.35);
         assert_eq!(config.min_interval_ms, 1043);
         assert_eq!(config.max_interval_ms, 1043);
 
-        let short = SerialSendBudget::for_strip(60, LedChipType::Ws2812bGrb);
+        let short =
+            SerialSendBudget::for_strip(60, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
         assert_eq!(short.into_quality_config(0.35).max_interval_ms, default_cap);
     }
 
     #[test]
     fn send_budget_widens_for_rgbw_at_the_same_led_count() {
-        let grb = SerialSendBudget::for_strip(150, LedChipType::Ws2812bGrb);
-        let rgbw = SerialSendBudget::for_strip(150, LedChipType::Sk6812Rgbw);
+        let grb =
+            SerialSendBudget::for_strip(150, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
+        let rgbw =
+            SerialSendBudget::for_strip(150, FirmwareProfile::LumaSyncV1, LedChipType::Sk6812Rgbw);
         assert!(rgbw.wire_ms > grb.wire_ms);
         assert!(rgbw.link_max_fps < grb.link_max_fps);
         assert!(
@@ -3388,12 +3428,26 @@ mod tests {
         );
     }
 
+    /// Adalight has no RGBW frame, so an SK6812 strip under it ships three
+    /// bytes a pixel; budgeting four capped it a quarter below the link.
+    #[test]
+    fn send_budget_sizes_adalight_sk6812_by_the_three_byte_frame_it_sends() {
+        let ada_rgbw =
+            SerialSendBudget::for_strip(164, FirmwareProfile::Adalight, LedChipType::Sk6812Rgbw);
+        let grb =
+            SerialSendBudget::for_strip(164, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb);
+        assert_eq!(ada_rgbw, grb);
+        assert_eq!(ada_rgbw.bytes_per_frame, 164 * 3 + 6);
+        assert!(ada_rgbw.link_max_fps > 23.0);
+    }
+
     #[test]
     fn send_budget_floor_holds_when_observed_cost_is_negligible() {
         // Pressure adaptation only ever widens the interval; the floor is what
         // stops a cheap capture from driving the link past its budget.
         let mut controller = AmbilightWorkerQualityState::new(
-            SerialSendBudget::for_strip(200, LedChipType::Ws2812bGrb).into_quality_config(0.35),
+            SerialSendBudget::for_strip(200, FirmwareProfile::LumaSyncV1, LedChipType::Ws2812bGrb)
+                .into_quality_config(0.35),
         );
         controller.observe_capture_and_send_cost(0.1, 0.1);
         assert_eq!(controller.current_send_interval().as_millis() as u64, 53);
@@ -3631,7 +3685,13 @@ mod tests {
     #[test]
     fn resolve_quality_config_serial_link_gets_a_baud_budget() {
         let plan = Some(UsbOutputPlan::Serial("COM1".to_string()));
-        let (_, budget) = resolve_quality_config(&plan, 60, LedChipType::Ws2812bGrb, 0.35);
+        let (_, budget) = resolve_quality_config(
+            &plan,
+            60,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            0.35,
+        );
         assert!(budget.is_some(), "a serial link must report a baud budget");
     }
 
@@ -3640,7 +3700,13 @@ mod tests {
         // 300 LEDs at GRB would be link_constrained on a real serial link;
         // WLED must stay unconstrained regardless of LED count.
         let plan = Some(UsbOutputPlan::Wled(wled_config_fixture(300)));
-        let (config, budget) = resolve_quality_config(&plan, 300, LedChipType::Ws2812bGrb, 0.35);
+        let (config, budget) = resolve_quality_config(
+            &plan,
+            300,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            0.35,
+        );
         assert!(
             budget.is_none(),
             "WLED must never report a serial send budget"
@@ -3657,7 +3723,13 @@ mod tests {
 
     #[test]
     fn resolve_quality_config_hue_only_reports_no_serial_budget() {
-        let (config, budget) = resolve_quality_config(&None, 0, LedChipType::Ws2812bGrb, 0.35);
+        let (config, budget) = resolve_quality_config(
+            &None,
+            0,
+            FirmwareProfile::LumaSyncV1,
+            LedChipType::Ws2812bGrb,
+            0.35,
+        );
         assert!(budget.is_none());
         assert_eq!(config.base_interval_ms, 40);
         assert_eq!(config.min_interval_ms, 30);
@@ -6417,6 +6489,48 @@ mod lighting_mode_tests {
             .iter()
             .fold(0_u8, |acc, byte| acc ^ byte);
         assert_eq!(packet[packet.len() - 1], checksum);
+    }
+
+    /// The default setup (LumaSync v1 + WS2812B) used to ignore the gamma
+    /// sliders on Solid too, because it shared the hardcoded-2.2 encoder.
+    #[test]
+    fn solid_on_the_default_setup_applies_the_user_gamma() {
+        let solid_grey = |gamma: f32| {
+            let (mut owner, recorder) = owner_with_recording_sender();
+            let mut solid = solid_with_calibration(3);
+            solid.solid = Some(SolidColorPayload {
+                r: 128,
+                g: 128,
+                b: 128,
+                brightness: 1.0,
+            });
+            solid.color_correction = Some(ColorCorrectionConfig {
+                gamma_r: gamma,
+                gamma_g: gamma,
+                gamma_b: gamma,
+                ..ColorCorrectionConfig::default()
+            });
+            let result = apply_mode_change(
+                &mut owner,
+                solid,
+                true,
+                Some("COM-GAMMA"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+            assert_eq!(result.status.code, "SOLID_MODE_APPLIED");
+            let writes = recorder.writes.lock().expect("writes lock poisoned");
+            writes[0].1.clone()
+        };
+
+        let linear = solid_grey(1.0);
+        let default = solid_grey(2.2);
+        assert_eq!(&linear[0..2], &[0xAA, 0x55], "still the LumaSync v1 frame");
+        assert_eq!(&linear[5..14], &[128; 9], "gamma 1.0 leaves mid-grey alone");
+        assert_eq!(&default[5..14], &[56; 9], "gamma 2.2 maps 128 to 56");
     }
 
     /// Adalight has no four-byte pixel, so SK6812 under it must still write the

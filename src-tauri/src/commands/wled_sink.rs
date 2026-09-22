@@ -218,8 +218,9 @@ impl WledSinkConfig {
 /// to a `WledUdpSink`.
 ///
 /// `WledUdpSink` stays a pure DDP/DRGB transport with no correction concept,
-/// unlike `SerialSink`, which folds correction AND a brightness byte into its
-/// own `send_frame` (`encode_packet_for_profile`). WLED has no on-wire
+/// unlike `SerialSink`, which folds correction AND brightness (a header byte,
+/// or scaled pixels under Adalight) into its own `send_frame`
+/// (`encode_packet_for_output`). WLED has no on-wire
 /// brightness field — DDP/DRGB ship raw RGB and the firmware does not scale
 /// it — so this adapter scales brightness into the RGB values host-side
 /// before sending, mirroring the scaling the ambilight worker already

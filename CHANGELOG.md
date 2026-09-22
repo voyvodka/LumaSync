@@ -17,6 +17,18 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- USB strips: the per-channel gamma sliders did nothing on the default setup (LumaSync firmware
+  with WS2812B LEDs), which always used gamma 2.2; they only worked with the Adalight profile or
+  SK6812 strips. They now apply there too, in Ambilight, Solid colour and the LED test. If you
+  moved a gamma slider away from 2.2 earlier, your strip's colours change after updating. With
+  the Adalight profile or SK6812, a gamma other than 2.2 is also no longer recalculated on every
+  frame.
+- Adalight profile: the brightness slider did nothing, because Adalight firmware cannot receive a
+  brightness value from the app. The app now dims the colours itself before sending them. At full
+  brightness the output is unchanged.
+- SK6812 strips using the Adalight profile are sent three bytes per LED, since Adalight has no
+  RGBW format. The frame-rate limit counted four, which held these strips about a quarter below
+  the frame rate the USB link can carry. The limit now counts what is actually sent.
 - USB health check: the firmware handshake always waited its full 2 s timeout even when the
   strip answered at once, so the reported round-trip read about 2000 ms. It now finishes as soon
   as the reply arrives and reports the real round-trip time. Stray bytes before the reply, or a
