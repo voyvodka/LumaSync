@@ -14,6 +14,10 @@ https://keepachangelog.com/en/1.1.0/
   and it had been translated into Turkish along the way, so nothing marked it as unfinished
   except the word itself. Nothing took its place: the column simply ends after the outputs,
   which is what it should have done until there was something to put there.
+- The Devices rail counted every serial port the system enumerates as a USB strip, so a
+  machine with a debug console or a Bluetooth serial port showed "2" beside a heading that
+  read "1 connected". It now counts only ports LumaSync can actually drive. The WLED row
+  had no count at all, even with a panel bound; it shows one now, like the Hue row does.
 - The window could not be moved or closed while the room-map rename box or the firmware
   override warning was open. Both covered the whole window, including the title bar that
   carries the drag region and the window controls, so the window stayed pinned until the
