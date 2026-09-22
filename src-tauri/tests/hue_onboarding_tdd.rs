@@ -55,6 +55,17 @@ mod hue {
         }
     }
 
+    /// Presence-only stub for `commands::hue::state_store`: this harness never
+    /// runs a stream, so nothing here ever holds an area.
+    pub mod state_store {
+        #[allow(dead_code)]
+        pub struct HueRuntimeStateStore;
+        #[allow(dead_code)]
+        pub fn streams_area(_: &HueRuntimeStateStore, _: &str, _: &str) -> bool {
+            false
+        }
+    }
+
     pub mod credential_store {
         #[allow(dead_code)]
         pub struct StubStore;
@@ -126,7 +137,7 @@ mod hue_onboarding;
 
 use hue_http::{is_hue_unauthorized_body, HueHttpFault};
 use hue_onboarding::{
-    parse_area_list_payload, parse_credentials_validation_payload, parse_discovery_payload,
+    parse_area_list_payload, parse_bridge_resource_payload, parse_discovery_payload,
     parse_pairing_payload, verify_hue_bridge_ip_input,
 };
 
@@ -242,14 +253,19 @@ fn parse_area_list_payload_maps_core_area_fields() {
 #[test]
 fn validate_hue_credentials_returns_coded_outcomes() {
     let invalid_payload = r#"[{"error":{"type":1,"description":"unauthorized user"}}]"#;
-    let invalid = parse_credentials_validation_payload(invalid_payload);
+    let invalid = parse_bridge_resource_payload(invalid_payload);
     assert_eq!(invalid.status.code, "HUE_CREDENTIAL_INVALID");
     assert!(!invalid.valid);
 
-    let valid_payload = r#"{"name":"Hue Bridge","bridgeid":"001788FFFE09ABCD"}"#;
-    let valid = parse_credentials_validation_payload(valid_payload);
+    let valid_payload =
+        r#"{"errors":[],"data":[{"id":"b1","bridge_id":"001788fffe09abcd","type":"bridge"}]}"#;
+    let valid = parse_bridge_resource_payload(valid_payload);
     assert_eq!(valid.status.code, "HUE_CREDENTIAL_VALID");
     assert!(valid.valid);
+
+    // The v1 public config is served for any key and proves nothing.
+    let public_config = r#"{"name":"Hue Bridge","bridgeid":"001788FFFE09ABCD"}"#;
+    assert!(!parse_bridge_resource_payload(public_config).valid);
 }
 
 // ---------------------------------------------------------------------------

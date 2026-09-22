@@ -21,6 +21,7 @@ import {
 } from "@/shared/contracts/shell";
 import { migrateShellState } from "../persistence/migrations";
 import { clamp } from "@/shared/lib/math";
+import { waitForFrames } from "./frameWait";
 
 // CI's definition of "the build launches": `scripts/verify/launch-smoke.mjs`
 // greps the app's stdout for this literal, which it reads back out of this file
@@ -628,10 +629,6 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - clamped, 3);
 }
 
-function nextFrame(): Promise<number> {
-  return new Promise((resolve) => requestAnimationFrame(resolve));
-}
-
 /**
  * Animate window size + position from a start rect to a target rect over
  * `durationMs`. Each frame awaits the IPC round-trip so calls don't pile up.
@@ -671,7 +668,9 @@ async function animateWindowRect(
       win.setPosition(new LogicalPosition(x, y)).catch(() => {});
     }
 
-    await nextFrame();
+    // Bounded: while hidden the frames never come, and `t` is wall-clock, so
+    // the loop still reaches its final rect.
+    await waitForFrames(1);
   }
 }
 

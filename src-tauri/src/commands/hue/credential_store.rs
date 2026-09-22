@@ -107,6 +107,18 @@ impl CredentialBackend {
             CredentialBackend::DevFile => "dev-file",
         }
     }
+
+    /// Where a resolved credential was read from, for the `[hue-cred]` log.
+    /// The `Keychain` label on a resolved pair means "from the store" — in a
+    /// debug build that store is the dev file, and the log must say so.
+    pub fn source_label(&self) -> &'static str {
+        match self {
+            CredentialBackend::Keychain => "the OS keychain",
+            CredentialBackend::PlaintextLegacy => "the plaintext fallback",
+            CredentialBackend::Noop => "the no-op store",
+            CredentialBackend::DevFile => "dev-credentials.json (debug DevFileStore)",
+        }
+    }
 }
 
 /// Abstract credential store. Tested against `KeychainStore`, `NoopStore`,
@@ -696,7 +708,10 @@ pub fn resolve_hue_credentials(
                     debug!("[hue-cred] keychain pair belongs to another bridge — not using it");
                 }
                 _ => {
-                    debug!("[hue-cred] resolved from keychain");
+                    debug!(
+                        "[hue-cred] resolved from {}",
+                        store.backend().source_label()
+                    );
                     return Some(ResolvedHueCredentials {
                         username: u.clone(),
                         client_key: k.clone(),
@@ -751,7 +766,10 @@ pub fn resolve_hue_app_key(
 ) -> Option<ResolvedHueAppKey> {
     if let Some(username) = store.get(KEY_HUE_APP_KEY).ok().flatten() {
         if !username.is_empty() {
-            debug!("[hue-cred] app key resolved from keychain");
+            debug!(
+                "[hue-cred] app key resolved from {}",
+                store.backend().source_label()
+            );
             return Some(ResolvedHueAppKey {
                 username,
                 backend: CredentialBackend::Keychain,
@@ -973,6 +991,23 @@ pub(crate) mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// The `[hue-cred] … resolved from …` line reads the store's own label, so
+    /// a debug build seeded with the dev file must not claim the keychain —
+    /// including through the process-wide `CachedStore` wrapper.
+    #[test]
+    fn a_dev_file_credential_is_not_logged_as_from_the_keychain() {
+        let dir = TempDir::new();
+        let cached = CachedStore::new(Box::new(dir.store()));
+
+        let label = cached.backend().source_label();
+        assert!(label.contains("dev-credentials.json"), "{label}");
+        assert!(!label.contains("keychain"), "{label}");
+        assert_eq!(
+            CredentialBackend::Keychain.source_label(),
+            "the OS keychain"
+        );
     }
 
     #[test]
