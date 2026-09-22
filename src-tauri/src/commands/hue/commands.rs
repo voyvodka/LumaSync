@@ -11,8 +11,10 @@
 //!
 //! `lib.rs` registers these commands from `commands::hue::commands` directly.
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicU32;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use log::{error, warn};
 // Reachable only from the `#[cfg(debug_assertions)]` arm of `simulate_hue_fault`,
@@ -28,9 +30,13 @@ use super::super::hue_onboarding::{
 };
 use super::area_cache::HueReadFreshness;
 use super::credential_store::effective_hue_app_key;
-use super::frame::HueAreaChannelInfo;
+use super::frame::{HueAreaChannel, HueAreaChannelInfo};
+use super::light_restore::{
+    adopt_light_snapshot, restore_lights, take_light_restore_for_abandoned_start,
+    take_light_restore_for_other_area, HueLightRestore, HUE_LIGHT_RESTORE_BUDGET,
+};
 use super::reconnect::{
-    spawn_hue_sender, spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard,
+    spawn_hue_sender_with, spawn_reconnect_monitor, store_active_stream_context, StartAbortGuard,
 };
 use super::retry::{
     register_transient_fault, start_with_evidence, status_refresh_with_evidence, stop_with_timeout,
@@ -38,15 +44,15 @@ use super::retry::{
 #[cfg(debug_assertions)]
 use super::sender::signal_shutdown_complete;
 use super::sender::{
-    apply_channel_placements, deactivate_with_token, fetch_area_channels,
-    fetch_light_metadata_for_channels, hue_http_client, is_shutdown_signaled, wait_for_shutdown,
-    SpawnedHueSender,
+    apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
+    fetch_lights_for_channels, hue_http_client, hue_http_client_with_timeout, is_shutdown_signaled,
+    wait_for_shutdown, HueLightFetch, HueLightMetadata, SpawnedHueSender, HUE_HTTP_TIMEOUT_MS,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
     make_result, queue_solid_color, status_with, HueRuntimeActionHint, HueRuntimeCommandResult,
-    HueRuntimeGateEvidence, HueRuntimeState, HueRuntimeStateStore, HueRuntimeTriggerSource,
-    HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
+    HueRuntimeGateEvidence, HueRuntimeOwner, HueRuntimeState, HueRuntimeStateStore,
+    HueRuntimeTriggerSource, HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -250,8 +256,76 @@ pub async fn start_hue_stream(
         result
     }; // lock released before async I/O
 
+    let build = production_sender(&request);
+    Ok(bring_up_stream(
+        &runtime_state.runtime_arc(),
+        &request,
+        result,
+        BringUpKind::Start,
+        build,
+    )
+    .await)
+}
+
+/// Which command is bringing a stream up. Only the no-lights wording differs.
+#[derive(Clone, Copy)]
+enum BringUpKind {
+    Start,
+    Restart,
+}
+
+/// `build_hue_sender` for this request, in the shape `bring_up_stream` takes.
+fn production_sender(
+    request: &StartHueStreamRequest,
+) -> impl FnOnce(
+    Vec<HueAreaChannel>,
+    Arc<HashMap<String, HueLightMetadata>>,
+    Arc<AtomicU32>,
+) -> SpawnedHueSender
+       + Send
+       + 'static {
+    let request = request.clone();
+    move |channels, light_metadata, packet_counter| {
+        build_hue_sender(&request, channels, light_metadata, packet_counter)
+    }
+}
+
+/// Everything after the start gate, shared by `start_hue_stream` and
+/// `restart_hue_stream`. `build` spawns the sender; it is a parameter so a
+/// test can drive this whole path against a local bridge without a DTLS peer
+/// or the OS keychain.
+async fn bring_up_stream<B>(
+    runtime: &Arc<Mutex<HueRuntimeOwner>>,
+    request: &StartHueStreamRequest,
+    result: HueRuntimeCommandResult,
+    kind: BringUpKind,
+    build: B,
+) -> HueRuntimeCommandResult
+where
+    B: FnOnce(
+            Vec<HueAreaChannel>,
+            Arc<HashMap<String, HueLightMetadata>>,
+            Arc<AtomicU32>,
+        ) -> SpawnedHueSender
+        + Send
+        + 'static,
+{
     // Abort guard: if we exit before step 4c stores the context, roll back to Failed.
-    let mut abort_guard = StartAbortGuard::new(runtime_state.runtime_arc());
+    let mut abort_guard = StartAbortGuard::new(Arc::clone(runtime));
+
+    // A snapshot held for another bridge or area belongs to a session that
+    // ended without a stop. Its lights go back before this area is read, so a
+    // light in both areas is snapshotted in its real state.
+    if result.active {
+        let other = take_light_restore_for_other_area(
+            &mut acquire_hue_runtime(runtime),
+            &request.bridge_ip,
+            &request.area_id,
+        );
+        if let Some(other) = other {
+            restore_lights_off_thread(other, Instant::now() + HUE_LIGHT_RESTORE_BUDGET).await;
+        }
+    }
 
     // 3. Async channel fetch -- no lock held.
     let mut channels = if result.active {
@@ -268,35 +342,40 @@ pub async fn start_hue_stream(
     // 4a. Lock briefly for race-condition guard only.
     let has_no_lights = result.active && channels.is_empty();
     {
-        let owner = acquire_hue_runtime(&runtime_state.runtime);
+        let owner = acquire_hue_runtime(runtime);
         if matches!(
             owner.state,
             HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
         ) {
             abort_guard.disarm();
-            return Ok(make_result(&owner));
+            return make_result(&owner);
         }
     } // lock released before blocking I/O
 
-    // 4a-bis. Pre-fetch per-light archetype + gamut metadata (W1-C3a).
-    //         Graceful: failures fall back to `HueGamutType::Other` (no clip).
-    let light_metadata = if result.active {
-        Arc::new(
-            fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels)
-                .await,
-        )
+    // 4a-bis. Pre-fetch per-light archetype + gamut metadata (W1-C3a), and the
+    //         lights' state from the same GETs. The sender activates the area
+    //         next, so this is the last read before we touch the lights: the
+    //         restore's snapshot point. Graceful: failures fall back to
+    //         `HueGamutType::Other` (no clip) and to not restoring that light.
+    let lights = if result.active {
+        fetch_lights_for_channels(&request.bridge_ip, &request.username, &channels).await
     } else {
-        Arc::new(std::collections::HashMap::new())
+        HueLightFetch::default()
+    };
+    let light_metadata = Arc::new(lights.metadata);
+    let captured = HueLightRestore {
+        bridge_ip: request.bridge_ip.clone(),
+        username: request.username.clone(),
+        area_id: request.area_id.clone(),
+        lights: lights.states,
     };
 
     // 4b. Spawn the sender, wired to the owner's packet counter.
     let spawned = if result.active {
-        spawn_hue_sender(
-            &runtime_state.runtime_arc(),
-            &request,
-            channels.clone(),
-            light_metadata,
-        )
+        let sender_channels = channels.clone();
+        spawn_hue_sender_with(runtime, move |packet_counter| {
+            build(sender_channels, light_metadata, packet_counter)
+        })
         .await
         .unwrap_or_else(|_join_err| {
             error!("build_hue_sender task panicked, using no-op sender.");
@@ -307,8 +386,8 @@ pub async fn start_hue_stream(
     };
 
     // 4c. Re-acquire lock to store the spawned sender context.
-    let final_result = {
-        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+    let stored = {
+        let mut owner = acquire_hue_runtime(runtime);
 
         // Second race-condition guard: a stop may have arrived while we were
         // spawning the sender.
@@ -317,79 +396,162 @@ pub async fn start_hue_stream(
             HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
         ) {
             abort_guard.disarm();
-            return Ok(make_result(&owner));
-        }
+            // That stop found no context to deactivate and no snapshot to
+            // restore; the sender may already have taken the area. Settled
+            // below, once the lock is released.
+            let result = make_result(&owner);
+            let restore = take_light_restore_for_abandoned_start(&mut owner, captured);
+            Err((result, spawned, restore))
+        } else {
+            store_active_stream_context(&mut owner, request, channels, spawned);
+            adopt_light_snapshot(&mut owner, captured);
+            abort_guard.disarm();
 
-        store_active_stream_context(&mut owner, &request, channels, spawned);
-        abort_guard.disarm();
-
-        if has_no_lights {
-            owner.last_status = status_with(
-                HueRuntimeState::Running,
-                "HUE_STREAM_RUNNING_NO_LIGHTS",
-                "Hue runtime started but no color-addressable lights were resolved for the selected area.",
-                Some("Revalidate area members and restart Hue runtime.".to_string()),
-                HueRuntimeTriggerSource::System,
-            );
-            owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
-            return Ok(make_result(&owner));
-        }
-
-        // If DTLS was established, update the status to indicate entertainment streaming.
-        if let Some(stream) = owner.active_stream.as_ref() {
-            if stream.uses_dtls {
-                owner.last_status = status_with(
-                    HueRuntimeState::Running,
-                    "HUE_STREAM_RUNNING_DTLS",
-                    "Hue entertainment stream active via DTLS.",
-                    None,
-                    HueRuntimeTriggerSource::System,
-                );
+            if has_no_lights {
+                owner.last_status = match kind {
+                    BringUpKind::Start => status_with(
+                        HueRuntimeState::Running,
+                        "HUE_STREAM_RUNNING_NO_LIGHTS",
+                        "Hue runtime started but no color-addressable lights were resolved for the selected area.",
+                        Some("Revalidate area members and restart Hue runtime.".to_string()),
+                        HueRuntimeTriggerSource::System,
+                    ),
+                    BringUpKind::Restart => status_with(
+                        HueRuntimeState::Running,
+                        "HUE_STREAM_RUNNING_NO_LIGHTS",
+                        "Hue runtime restarted but no color-addressable lights were resolved for the selected area.",
+                        Some("Revalidate area members and retry.".to_string()),
+                        HueRuntimeTriggerSource::System,
+                    ),
+                };
+                owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
+                return make_result(&owner);
             }
+
+            // If DTLS was established, update the status to indicate entertainment streaming.
+            if let Some(stream) = owner.active_stream.as_ref() {
+                if stream.uses_dtls {
+                    owner.last_status = status_with(
+                        HueRuntimeState::Running,
+                        "HUE_STREAM_RUNNING_DTLS",
+                        "Hue entertainment stream active via DTLS.",
+                        None,
+                        HueRuntimeTriggerSource::System,
+                    );
+                }
+            }
+
+            // Flush any solid color that was queued while the stream context was not ready.
+            flush_pending_solid_color(&mut owner);
+
+            Ok(make_result(&owner))
         }
-
-        // Flush any solid color that was queued while the stream context was not ready.
-        flush_pending_solid_color(&mut owner);
-
-        make_result(&owner)
+    };
+    let final_result = match stored {
+        Ok(result) => result,
+        Err((result, spawned, restore)) => {
+            settle_abandoned_start(spawned, restore).await;
+            return result;
+        }
     };
 
     // Spawn reconnect monitor to detect sender thread exit and trigger bounded retry.
     {
-        let owner = acquire_hue_runtime(&runtime_state.runtime);
+        let owner = acquire_hue_runtime(runtime);
         if let Some(ref stream) = owner.active_stream {
             spawn_reconnect_monitor(
                 Arc::clone(&stream.shutdown_signal),
-                runtime_state.runtime_arc(),
+                Arc::clone(runtime),
                 request.clone(),
             );
         }
     }
 
-    Ok(final_result)
+    final_result
+}
+
+/// A start that a stop overtook: nothing will ever store or stop its sender,
+/// and it may have activated the area. Dropping the handle ends the sender,
+/// which deactivates the area itself before it signals; then the lights go back.
+async fn settle_abandoned_start(spawned: SpawnedHueSender, restore: HueLightRestore) {
+    let SpawnedHueSender {
+        color_sender,
+        shutdown_signal,
+        ..
+    } = spawned;
+    drop(color_sender);
+    let _ = tokio::task::spawn_blocking(move || {
+        wait_for_shutdown(&shutdown_signal, Duration::from_secs(HUE_STOP_TIMEOUT_SECS));
+        restore_lights(&restore, Instant::now() + HUE_LIGHT_RESTORE_BUDGET);
+    })
+    .await;
+}
+
+async fn restore_lights_off_thread(restore: HueLightRestore, deadline: Instant) {
+    let _ = tokio::task::spawn_blocking(move || restore_lights(&restore, deadline)).await;
 }
 
 /// Stop the Hue entertainment stream with a bounded wait for the background
-/// sender thread to exit. If the thread does not shut down within
+/// sender thread to exit, then put the area's lights back the way they were
+/// before the session first streamed. If the thread does not shut down within
 /// `HUE_STOP_TIMEOUT_SECS`, the command reports `HUE_STOP_TIMEOUT_PARTIAL`
 /// with an action hint to retry.
 ///
-/// This is a **synchronous** Tauri command. Tauri automatically dispatches
-/// sync commands onto a blocking thread pool, so the `Condvar` wait inside
-/// will never starve the async runtime.
+/// Every caller of this command ends Hue output (Off, Hue deselected, a mode
+/// without Hue, a refused start, a test lease giving back what it opened), so
+/// it always restores. Transient stops — reconnect, restart of the same area —
+/// never come through here. See docs/architecture/hue.md.
+///
+/// `async` so the blocking work runs on the blocking pool: a sync command runs
+/// on the main thread, and the deactivate, sender wait and restore would
+/// freeze the window.
 #[tauri::command]
-pub fn stop_hue_stream(
+pub async fn stop_hue_stream(
     trigger_source: Option<HueRuntimeTriggerSource>,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueRuntimeCommandResult, String> {
     let trigger = trigger_source.unwrap_or(HueRuntimeTriggerSource::System);
+    let runtime = runtime_state.runtime_arc();
+    let stopped =
+        tokio::task::spawn_blocking(move || stop_hue_runtime(&runtime, trigger, None)).await;
+    Ok(stopped.unwrap_or_else(|_join_err| {
+        error!("stop_hue_stream task panicked; reporting the runtime as it stands.");
+        make_result(&acquire_hue_runtime(&runtime_state.runtime))
+    }))
+}
+
+/// The quit path's stop (`lib.rs` `[shutdown]` step 2). Same stop and restore
+/// as the command, but the deactivate PUT, the sender wait and the restore all
+/// end by `deadline`, so a slow bridge cannot run into the shutdown watchdog.
+pub fn stop_hue_stream_before_exit(
+    runtime_state: &HueRuntimeStateStore,
+    deadline: Instant,
+) -> HueRuntimeCommandResult {
+    stop_hue_runtime(
+        &runtime_state.runtime,
+        HueRuntimeTriggerSource::System,
+        Some(deadline),
+    )
+}
+
+/// Blocking body of every stop. `deadline` bounds the whole call when given;
+/// without one each step keeps its own ceiling.
+fn stop_hue_runtime(
+    runtime: &Arc<Mutex<HueRuntimeOwner>>,
+    trigger: HueRuntimeTriggerSource,
+    deadline: Option<Instant>,
+) -> HueRuntimeCommandResult {
+    let remaining = |ceiling: Duration| match deadline {
+        Some(deadline) => ceiling.min(deadline.saturating_duration_since(Instant::now())),
+        None => ceiling,
+    };
 
     // 1. Brief lock: extract the shutdown signal and DTLS deactivation params,
     //    then initiate cleanup.  Dropping the active_stream (and thus the sender
     //    Arc) closes the mpsc channel, which unblocks the background thread's
     //    recv loop.  DTLS deactivation HTTP call happens AFTER the lock is released.
-    let (maybe_shutdown, dtls_deactivate) = {
-        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+    let (maybe_shutdown, dtls_deactivate, light_restore) = {
+        let mut owner = acquire_hue_runtime(runtime);
 
         // Grab the shutdown signal before stop_with_timeout drops active_stream.
         let signal = owner
@@ -414,32 +576,44 @@ pub fn stop_hue_stream(
                 )
             });
 
+        // Taken with or without a live stream: a `Failed` runtime has none,
+        // and its lights still show what the session left them.
+        let light_restore = owner.light_restore.take();
+
         // Perform synchronous cleanup (drop sender, reset state).
         // We pass `timed_out=false` initially; if the wait below times out
         // we will re-lock and update the status.
         let _ = stop_with_timeout(&mut owner, false, trigger.clone());
 
-        (signal, dtls_deactivate)
+        (signal, dtls_deactivate, light_restore)
     }; // lock released -- background thread can now observe the channel close.
 
     // Best-effort, dedupe-aware DTLS deactivation outside the lock to avoid
     // blocking the mutex. If the sender thread's close_notify cleanup path
     // already drained the token, this call is a fast in-process no-op.
     if let Some((ip, username, area_id, token)) = dtls_deactivate {
-        if let Ok(client) = hue_http_client() {
+        let request_timeout =
+            remaining(Duration::from_millis(HUE_HTTP_TIMEOUT_MS)).max(Duration::from_millis(100));
+        if let Ok(client) = hue_http_client_with_timeout(request_timeout) {
             let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
         }
     }
 
     // 2. If there was an active stream, wait for the sender thread to confirm
-    //    shutdown within HUE_STOP_TIMEOUT_SECS.
-    if let Some(shutdown_signal) = maybe_shutdown {
-        let shutdown_ok =
-            wait_for_shutdown(&shutdown_signal, Duration::from_secs(HUE_STOP_TIMEOUT_SECS));
+    //    shutdown within HUE_STOP_TIMEOUT_SECS. The sender signals only after
+    //    its own deactivate, so a confirmed shutdown also means the area has
+    //    left entertainment — the order the restore below depends on.
+    let shutdown_ok = maybe_shutdown.is_none_or(|shutdown_signal| {
+        wait_for_shutdown(
+            &shutdown_signal,
+            remaining(Duration::from_secs(HUE_STOP_TIMEOUT_SECS)),
+        )
+    });
 
+    let result = {
+        let mut owner = acquire_hue_runtime(runtime);
         if !shutdown_ok {
-            // 3. Re-lock and overwrite status to reflect the partial-stop timeout.
-            let mut owner = acquire_hue_runtime(&runtime_state.runtime);
+            // 3. Overwrite status to reflect the partial-stop timeout.
             owner.last_status = status_with(
                 HueRuntimeState::Idle,
                 "HUE_STOP_TIMEOUT_PARTIAL",
@@ -448,17 +622,28 @@ pub fn stop_hue_stream(
                 trigger,
             );
             owner.last_status.action_hint = Some(HueRuntimeActionHint::Retry);
-            return Ok(make_result(&owner));
         }
+        make_result(&owner)
+    };
+
+    // 4. Put the lights back. Logged, never fatal: a refusal or an unreachable
+    //    bridge leaves them as the bridge restored them (colour back, on).
+    if let Some(restore) = light_restore {
+        let restore_deadline =
+            deadline.unwrap_or_else(|| Instant::now() + HUE_LIGHT_RESTORE_BUDGET);
+        restore_lights(&restore, restore_deadline);
     }
 
-    // Either no active stream existed or the thread shut down in time.
-    let owner = acquire_hue_runtime(&runtime_state.runtime);
-    Ok(make_result(&owner))
+    result
 }
 
 /// Stop the current stream (if any) and start a fresh one for the given
 /// request — used when an area/channel change requires a full reconnect.
+///
+/// Not a stop as far as the lights are concerned: the session's snapshot
+/// stays held, so a restart of the same area keeps restoring the state from
+/// before its first start. A restart onto another area restores the old one
+/// in `bring_up_stream`.
 #[tauri::command]
 pub async fn restart_hue_stream(
     mut request: StartHueStreamRequest,
@@ -522,120 +707,15 @@ pub async fn restart_hue_stream(
         start_with_evidence(&mut owner, &gate, trigger)
     }; // lock released
 
-    // Abort guard: if we exit before step 5c stores the context, roll back to Failed.
-    let mut abort_guard = StartAbortGuard::new(runtime_state.runtime_arc());
-
-    // 4. Async channel fetch -- no lock held.
-    let mut channels = if result.active {
-        fetch_area_channels(&request.bridge_ip, &request.username, &request.area_id)
-            .await
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    if let Some(placements) = &request.channel_placements {
-        apply_channel_placements(&mut channels, placements);
-    }
-
-    // 5a. Lock briefly for race-condition guard only.
-    let has_no_lights = result.active && channels.is_empty();
-    {
-        let owner = acquire_hue_runtime(&runtime_state.runtime);
-        if matches!(
-            owner.state,
-            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
-        ) {
-            abort_guard.disarm();
-            return Ok(make_result(&owner));
-        }
-    } // lock released before blocking I/O
-
-    // 5a-bis. Pre-fetch per-light archetype + gamut metadata (W1-C3a).
-    let light_metadata = if result.active {
-        Arc::new(
-            fetch_light_metadata_for_channels(&request.bridge_ip, &request.username, &channels)
-                .await,
-        )
-    } else {
-        Arc::new(std::collections::HashMap::new())
-    };
-
-    // 5b. Spawn the sender, wired to the owner's packet counter.
-    let spawned = if result.active {
-        spawn_hue_sender(
-            &runtime_state.runtime_arc(),
-            &request,
-            channels.clone(),
-            light_metadata,
-        )
-        .await
-        .unwrap_or_else(|_join_err| {
-            error!("build_hue_sender task panicked, using no-op sender.");
-            SpawnedHueSender::inert()
-        })
-    } else {
-        SpawnedHueSender::inert()
-    };
-
-    // 5c. Re-acquire lock to store the spawned sender context.
-    let final_result = {
-        let mut owner = acquire_hue_runtime(&runtime_state.runtime);
-
-        if matches!(
-            owner.state,
-            HueRuntimeState::Idle | HueRuntimeState::Stopping | HueRuntimeState::Failed
-        ) {
-            abort_guard.disarm();
-            return Ok(make_result(&owner));
-        }
-
-        store_active_stream_context(&mut owner, &request, channels, spawned);
-        abort_guard.disarm();
-
-        if has_no_lights {
-            owner.last_status = status_with(
-                HueRuntimeState::Running,
-                "HUE_STREAM_RUNNING_NO_LIGHTS",
-                "Hue runtime restarted but no color-addressable lights were resolved for the selected area.",
-                Some("Revalidate area members and retry.".to_string()),
-                HueRuntimeTriggerSource::System,
-            );
-            owner.last_status.action_hint = Some(HueRuntimeActionHint::Revalidate);
-            return Ok(make_result(&owner));
-        }
-
-        // If DTLS was established, update the status to indicate entertainment streaming.
-        if let Some(stream) = owner.active_stream.as_ref() {
-            if stream.uses_dtls {
-                owner.last_status = status_with(
-                    HueRuntimeState::Running,
-                    "HUE_STREAM_RUNNING_DTLS",
-                    "Hue entertainment stream active via DTLS.",
-                    None,
-                    HueRuntimeTriggerSource::System,
-                );
-            }
-        }
-
-        // Flush any solid color that was queued while the stream context was not ready.
-        flush_pending_solid_color(&mut owner);
-
-        make_result(&owner)
-    };
-
-    // Spawn reconnect monitor to detect sender thread exit and trigger bounded retry.
-    {
-        let owner = acquire_hue_runtime(&runtime_state.runtime);
-        if let Some(ref stream) = owner.active_stream {
-            spawn_reconnect_monitor(
-                Arc::clone(&stream.shutdown_signal),
-                runtime_state.runtime_arc(),
-                request.clone(),
-            );
-        }
-    }
-
-    Ok(final_result)
+    let build = production_sender(&request);
+    Ok(bring_up_stream(
+        &runtime_state.runtime_arc(),
+        &request,
+        result,
+        BringUpKind::Restart,
+        build,
+    )
+    .await)
 }
 
 /// Push a single solid color to every light in the active area, queuing it
@@ -979,5 +1059,452 @@ mod tests {
         assert_eq!(response.status.code, "HUE_AREA_CHANNELS_OK");
         assert_eq!(response.channels.len(), 2);
         assert_eq!(response.status.details, None);
+    }
+}
+
+/// The light restore, driven through the real start pipeline and the real stop
+/// command against a local HTTPS bridge. Readiness and the keychain read are
+/// the only parts skipped: the gate result is fed in the way the commands feed
+/// it, because `is_valid_ipv4` refuses a loopback bridge and the test binary
+/// must not touch the OS keychain.
+#[cfg(test)]
+mod light_restore_flow {
+    use std::sync::mpsc::sync_channel;
+
+    use serde_json::{json, Value};
+    use tauri::Manager;
+
+    use super::super::frame::{HueColorSender, HueColorUpdate};
+    use super::super::retry::start_with_evidence;
+    use super::super::sender::{new_shutdown_signal, signal_shutdown_complete, DeactivateToken};
+    use super::super::state_store::test_helpers::strict_gate_ready;
+    use super::super::test_bridge::{light_json, FakeHue, Reply};
+    use super::*;
+
+    const AREA: &str = "area-1";
+    const STOP_PUT: &str = "/clip/v2/resource/entertainment_configuration/";
+    const LIGHT_PUT: &str = "/clip/v2/resource/light/";
+
+    fn request(hue: &FakeHue, area_id: &str) -> StartHueStreamRequest {
+        StartHueStreamRequest {
+            bridge_ip: hue.bridge.authority.clone(),
+            username: "app-key".to_string(),
+            client_key: String::new(),
+            area_id: area_id.to_string(),
+            trigger_source: None,
+            channel_placements: None,
+        }
+    }
+
+    /// Stands in for `build_hue_sender`: a thread that drains frames and
+    /// signals shutdown once every handle is gone, as the real sender does.
+    fn fake_sender(
+        uses_dtls: bool,
+    ) -> impl FnOnce(
+        Vec<HueAreaChannel>,
+        Arc<HashMap<String, HueLightMetadata>>,
+        Arc<AtomicU32>,
+    ) -> SpawnedHueSender
+           + Send
+           + 'static {
+        move |channels, _metadata, _counter| {
+            let (tx, rx) = sync_channel::<HueColorUpdate>(2);
+            let shutdown = new_shutdown_signal();
+            let signal = Arc::clone(&shutdown);
+            std::thread::spawn(move || {
+                while rx.recv().is_ok() {}
+                signal_shutdown_complete(&signal);
+            });
+            SpawnedHueSender {
+                color_sender: HueColorSender {
+                    tx: Arc::new(tx),
+                    channel_count: channels.len(),
+                },
+                uses_dtls,
+                shutdown_signal: shutdown,
+                cipher_name: None,
+                deactivate_token: DeactivateToken::new(),
+            }
+        }
+    }
+
+    fn app() -> tauri::App<tauri::test::MockRuntime> {
+        let app = tauri::test::mock_app();
+        app.manage(HueRuntimeStateStore::default());
+        app
+    }
+
+    fn runtime_of(app: &tauri::App<tauri::test::MockRuntime>) -> Arc<Mutex<HueRuntimeOwner>> {
+        app.state::<HueRuntimeStateStore>().runtime_arc()
+    }
+
+    /// What `start_hue_stream` does once readiness has passed.
+    async fn start(
+        runtime: &Arc<Mutex<HueRuntimeOwner>>,
+        request: &StartHueStreamRequest,
+        kind: BringUpKind,
+    ) -> HueRuntimeCommandResult {
+        let result = start_with_evidence(
+            &mut acquire_hue_runtime(runtime),
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        bring_up_stream(runtime, request, result, kind, fake_sender(true)).await
+    }
+
+    fn held_light_on(runtime: &Arc<Mutex<HueRuntimeOwner>>, light_id: &str) -> Option<bool> {
+        acquire_hue_runtime(runtime)
+            .light_restore
+            .as_ref()?
+            .lights
+            .iter()
+            .find(|l| l.light_id == light_id)
+            .map(|l| l.state.on)
+    }
+
+    fn one_area(lights: &[(&str, Value)]) -> FakeHue {
+        let ids: Vec<&str> = lights.iter().map(|(id, _)| *id).collect();
+        FakeHue::start(&[(AREA, &ids)], lights, |_| Reply::ok())
+    }
+
+    fn switch_off() -> Value {
+        json!({ "on": { "on": false } })
+    }
+
+    /// Off before the stream, the lights read "on" once the bridge has put the
+    /// colour back after `action: stop` — the restore must switch them off,
+    /// and only after the stop PUT.
+    #[tokio::test]
+    async fn a_light_that_was_off_is_off_again_after_stop() {
+        let hue = one_area(&[(
+            "light-1",
+            light_json(false, 30.83, Some(367), (0.4583, 0.4099)),
+        )]);
+        let app = app();
+        let runtime = runtime_of(&app);
+
+        let started = start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        assert_eq!(started.status.code, "HUE_STREAM_RUNNING_DTLS");
+        assert_eq!(held_light_on(&runtime, "light-1"), Some(false));
+        assert!(
+            hue.light_puts().is_empty(),
+            "nothing restores while streaming"
+        );
+
+        let stopped = stop_hue_stream(None, app.state()).await.unwrap();
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+
+        assert_eq!(
+            hue.light_puts(),
+            vec![("light-1".to_string(), switch_off())]
+        );
+        let stop_put = hue.bridge.puts_to(STOP_PUT);
+        let light_put = hue.bridge.puts_to(LIGHT_PUT);
+        assert_eq!(stop_put[0].json(), json!({ "action": "stop" }));
+        assert!(
+            stop_put[0].at <= light_put[0].at,
+            "restore ran before the area left entertainment"
+        );
+        assert!(acquire_hue_runtime(&runtime).light_restore.is_none());
+    }
+
+    #[tokio::test]
+    async fn a_light_in_ct_mode_gets_its_colour_temperature_back() {
+        let hue = one_area(&[(
+            "light-1",
+            light_json(true, 30.83, Some(367), (0.4583, 0.4099)),
+        )]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(
+            hue.light_puts(),
+            vec![(
+                "light-1".to_string(),
+                json!({
+                    "on": { "on": true },
+                    "dimming": { "brightness": 30.83 },
+                    "color_temperature": { "mirek": 367 }
+                })
+            )]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_light_in_xy_mode_gets_its_colour_point_back() {
+        let hue = one_area(&[("light-1", light_json(true, 64.0, None, (0.1532, 0.0475)))]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(
+            hue.light_puts(),
+            vec![(
+                "light-1".to_string(),
+                json!({
+                    "on": { "on": true },
+                    "dimming": { "brightness": 64.0 },
+                    "color": { "xy": { "x": 0.1532, "y": 0.0475 } }
+                })
+            )]
+        );
+    }
+
+    /// A restart of the same area reads the lights again, and by then they
+    /// show the bridge's post-stream state. The first snapshot must win.
+    #[tokio::test]
+    async fn a_restart_of_the_same_area_keeps_the_first_snapshot() {
+        let hue = one_area(&[("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41)))]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        let request = request(&hue, AREA);
+        start(&runtime, &request, BringUpKind::Start).await;
+
+        hue.set_light("light-1", light_json(true, 100.0, None, (0.6, 0.3)));
+        let _ = stop_with_timeout(
+            &mut acquire_hue_runtime(&runtime),
+            false,
+            HueRuntimeTriggerSource::DeviceSurface,
+        );
+        let restarted = start(&runtime, &request, BringUpKind::Restart).await;
+        assert!(restarted.active);
+        assert!(hue.light_puts().is_empty(), "a restart is not a stop");
+        assert_eq!(held_light_on(&runtime, "light-1"), Some(false));
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+        assert_eq!(
+            hue.light_puts(),
+            vec![("light-1".to_string(), switch_off())]
+        );
+    }
+
+    /// Moving to another area ends output on the old one: its lights go back
+    /// before the new area is read.
+    #[tokio::test]
+    async fn a_start_onto_another_area_restores_the_old_one_first() {
+        let hue = FakeHue::start(
+            &[("area-1", &["light-1"]), ("area-2", &["light-2"])],
+            &[
+                ("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41))),
+                ("light-2", light_json(true, 50.0, Some(250), (0.40, 0.39))),
+            ],
+            |_| Reply::ok(),
+        );
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, "area-1"), BringUpKind::Start).await;
+        let _ = stop_with_timeout(
+            &mut acquire_hue_runtime(&runtime),
+            false,
+            HueRuntimeTriggerSource::DeviceSurface,
+        );
+
+        start(&runtime, &request(&hue, "area-2"), BringUpKind::Restart).await;
+
+        assert_eq!(
+            hue.light_puts(),
+            vec![("light-1".to_string(), switch_off())]
+        );
+        let requests = hue.bridge.requests();
+        let restored_at = requests
+            .iter()
+            .position(|r| r.method == "PUT" && r.path.ends_with("/light/light-1"))
+            .unwrap();
+        let area_2_read_at = requests
+            .iter()
+            .position(|r| r.method == "GET" && r.path.ends_with("/light/light-2"))
+            .unwrap();
+        assert!(restored_at < area_2_read_at);
+        assert_eq!(held_light_on(&runtime, "light-2"), Some(true));
+        assert_eq!(held_light_on(&runtime, "light-1"), None);
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+    }
+
+    /// A mode change that keeps Hue reaches `start_hue_stream` on a running
+    /// runtime, which answers NOOP before anything is read or written.
+    #[tokio::test]
+    async fn a_mode_change_that_keeps_hue_neither_restores_nor_rereads() {
+        let hue = one_area(&[("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41)))]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        let requests_before = hue.bridge.requests().len();
+        hue.set_light("light-1", light_json(true, 100.0, None, (0.6, 0.3)));
+
+        let again = start_with_evidence(
+            &mut acquire_hue_runtime(&runtime),
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        assert_eq!(again.status.code, "HUE_START_NOOP_ALREADY_ACTIVE");
+        assert_eq!(hue.bridge.requests().len(), requests_before);
+        assert_eq!(held_light_on(&runtime, "light-1"), Some(false));
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+    }
+
+    /// A stop that lands while the sender is being built finds nothing to
+    /// deactivate or restore. The start that loses the race must restore.
+    #[tokio::test]
+    async fn a_stop_that_overtakes_a_start_still_restores_the_lights() {
+        let hue = one_area(&[("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41)))]);
+        let app = app();
+        let runtime = runtime_of(&app);
+        let result = start_with_evidence(
+            &mut acquire_hue_runtime(&runtime),
+            &strict_gate_ready(),
+            HueRuntimeTriggerSource::ModeControl,
+        );
+        let racing = Arc::clone(&runtime);
+        let build = move |channels, metadata, counter| {
+            let _ = stop_with_timeout(
+                &mut acquire_hue_runtime(&racing),
+                false,
+                HueRuntimeTriggerSource::ModeControl,
+            );
+            fake_sender(true)(channels, metadata, counter)
+        };
+
+        let result = bring_up_stream(
+            &runtime,
+            &request(&hue, AREA),
+            result,
+            BringUpKind::Start,
+            build,
+        )
+        .await;
+
+        assert!(!result.active);
+        assert!(acquire_hue_runtime(&runtime).active_stream.is_none());
+        assert_eq!(
+            hue.light_puts(),
+            vec![("light-1".to_string(), switch_off())]
+        );
+    }
+
+    fn three_lights() -> [(&'static str, Value); 3] {
+        [
+            ("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41))),
+            ("light-2", light_json(true, 40.0, Some(300), (0.44, 0.40))),
+            ("light-3", light_json(true, 50.0, None, (0.30, 0.30))),
+        ]
+    }
+
+    fn three_light_area<P>(put_light: P) -> FakeHue
+    where
+        P: Fn(&str) -> Reply + Send + Sync + 'static,
+    {
+        FakeHue::start(
+            &[(AREA, &["light-1", "light-2", "light-3"])],
+            &three_lights(),
+            put_light,
+        )
+    }
+
+    /// The quit path restores every light inside its deadline on a bridge
+    /// that answers, paced to the light budget.
+    #[tokio::test]
+    async fn the_quit_path_restores_inside_its_deadline() {
+        let hue = three_light_area(|_| Reply::ok());
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let started = Instant::now();
+        let deadline = started + Duration::from_millis(1_500);
+        let result = tokio::task::spawn_blocking(move || {
+            stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline)
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
+        assert!(Instant::now() <= deadline, "{:?}", started.elapsed());
+        let puts = hue.bridge.puts_to(LIGHT_PUT);
+        assert_eq!(puts.len(), 3);
+        // ~10 requests/s: three restores span two ~100 ms slots. Measured on
+        // the server side, so a TLS handshake's jitter is allowed for.
+        let span = puts[2].at.duration_since(puts[0].at);
+        assert!(span >= Duration::from_millis(150), "{span:?}");
+    }
+
+    /// A bridge that stops answering mid-quit cannot hold the exit: the stop
+    /// returns at its deadline with the lights it could not reach left alone.
+    #[tokio::test]
+    async fn the_quit_path_gives_up_on_a_silent_bridge_at_its_deadline() {
+        let hue = three_light_area(|_| Reply::ok().after(Duration::from_secs(3)));
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let started = Instant::now();
+        let deadline = started + Duration::from_millis(800);
+        let result = tokio::task::spawn_blocking(move || {
+            stop_hue_stream_before_exit(&app.state::<HueRuntimeStateStore>(), deadline)
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(result.status.code, "HUE_STREAM_STOPPED");
+        // Ignoring the deadline costs a full 1.5 s request timeout on top.
+        assert!(
+            started.elapsed() < Duration::from_millis(1_300),
+            "{:?}",
+            started.elapsed()
+        );
+        assert_eq!(
+            hue.light_puts().len(),
+            1,
+            "an unanswered request means the bridge is gone; the rest are not tried"
+        );
+    }
+
+    /// A refused key ends the restore at the first light and the stop still
+    /// reports a clean stop — logged, never fatal.
+    #[tokio::test]
+    async fn a_bridge_refusing_the_key_ends_the_restore_without_failing_the_stop() {
+        let hue = three_light_area(|_| {
+            Reply::json(
+                403,
+                json!({ "errors": [{ "description": "unauthorized user" }] }),
+            )
+        });
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        let started = Instant::now();
+        let stopped = stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(stopped.status.code, "HUE_STREAM_STOPPED");
+        assert_eq!(hue.light_puts().len(), 1);
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    /// A light the bridge rejects on its merits (deleted, say) is skipped; the
+    /// others are still restored.
+    #[tokio::test]
+    async fn a_light_the_bridge_rejects_does_not_stop_the_others() {
+        let hue = three_light_area(|id| {
+            if id == "light-1" {
+                Reply::json(404, json!({ "errors": [{ "description": "not found" }] }))
+            } else {
+                Reply::ok()
+            }
+        });
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        let ids: Vec<String> = hue.light_puts().into_iter().map(|(id, _)| id).collect();
+        assert_eq!(ids, vec!["light-1", "light-2", "light-3"]);
     }
 }

@@ -62,6 +62,14 @@ https://keepachangelog.com/en/1.1.0/
 - Hue: saving light positions to a bridge whose entertainment area has since been deleted now
   says the area no longer exists, instead of saying the bridge could not be reached. Saving no
   longer freezes the app window while it waits for the bridge.
+- Hue: lights go back to how they were before Ambilight or Solid colour started using them.
+  Lights that were off used to come back on in their usual colour when you switched lighting off,
+  took Hue out of the outputs, changed to a mode without Hue or quit the app, because the bridge
+  only puts the colour back. Lights that were off now turn off again, and lights that were on get
+  their earlier brightness and colour or white tone. Switching between Ambilight and Solid colour
+  or a short reconnect does not touch them. If the app crashes or is force-quit the lights stay on,
+  as before. Switching lighting off can take up to about a second longer on a large area while the
+  lights are put back; the app window no longer stalls while it waits for a slow bridge to stop.
 - Hue: switching lighting off no longer writes an error to the log when the bridge ends the
   stream as part of that stop. In development builds the log now says the Hue key came from the
   development credentials file rather than from the system keychain.

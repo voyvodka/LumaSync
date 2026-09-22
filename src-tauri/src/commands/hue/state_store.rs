@@ -30,6 +30,7 @@ use log::error;
 use serde::{Deserialize, Serialize};
 
 use super::frame::{HueAreaChannel, HueColorSender};
+use super::light_restore::HueLightRestore;
 use super::sender::{is_shutdown_signaled, DeactivateToken, ShutdownSignal};
 
 // ---------------------------------------------------------------------------
@@ -267,6 +268,10 @@ pub(crate) struct HueRuntimeOwner {
     /// Last time packet_send_count was sampled for rate calculation.
     pub(crate) packet_rate_sampled_at: Option<Instant>,
     pub(crate) packet_rate_last_count: u32,
+    /// The area's lights as they were before this session first streamed.
+    /// Survives reconnects, restarts of the same area and a `Failed` runtime;
+    /// only a stop (or a start onto another area) takes it. See `light_restore`.
+    pub(crate) light_restore: Option<HueLightRestore>,
 }
 
 #[derive(Clone, Debug)]
@@ -328,6 +333,7 @@ impl Default for HueRuntimeOwner {
             packet_send_count: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             packet_rate_sampled_at: None,
             packet_rate_last_count: 0,
+            light_restore: None,
         }
     }
 }
