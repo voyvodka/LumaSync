@@ -127,7 +127,7 @@ export function ObjectsTab(props: ObjectsTabProps) {
               }
             >
               <span className="lm-room-dock-h-dot" style={{ background: color }} aria-hidden />
-              <span className="lm-room-dock-h-name">{zone.name}</span>
+              <span className="lm-room-dock-h-name is-verbatim">{zone.name}</span>
               <span className="lm-room-dock-h-count">{bucket.length}</span>
             </div>
             {bucket.length === 0 ? (

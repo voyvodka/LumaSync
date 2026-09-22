@@ -105,6 +105,10 @@ export default {
         ws2812b: "WS2812B (3-byte RGB)",
         sk6812rgbw: "SK6812 RGBW (4-byte)",
       },
+      details: {
+        ws2812b: "WS2812B · GRB · 3 bytes/pixel",
+        sk6812rgbw: "SK6812 · RGBW · 4 bytes/pixel · W=min(R,G,B)",
+      },
       sk6812AdalightWarning: "SK6812 RGBW is not supported with the Adalight profile. Falling back to WS2812B encoding.",
     },
     firmwareProfile: {

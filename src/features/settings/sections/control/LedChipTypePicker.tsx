@@ -224,7 +224,7 @@ export function LedChipTypePicker({
         <ChipTile
           chipType={LED_CHIP_TYPE.WS2812B_GRB}
           label={t("lights:led.chipType.options.ws2812b")}
-          description="WS2812B · GRB · 3 bytes/pixel"
+          description={t("lights:led.chipType.details.ws2812b")}
           checked={chipType === LED_CHIP_TYPE.WS2812B_GRB}
           onSelect={handleSelect}
           onKeyNavigate={handleKeyNavigate}
@@ -233,7 +233,7 @@ export function LedChipTypePicker({
         <ChipTile
           chipType={LED_CHIP_TYPE.SK6812_RGBW}
           label={t("lights:led.chipType.options.sk6812rgbw")}
-          description="SK6812 · RGBW · 4 bytes/pixel · W=min(R,G,B)"
+          description={t("lights:led.chipType.details.sk6812rgbw")}
           warning={
             showAdalightWarning
               ? t("lights:led.chipType.sk6812AdalightWarning")

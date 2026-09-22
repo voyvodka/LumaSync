@@ -1,10 +1,11 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
-import { clamp } from "@/shared/lib/math";
+import { clamp, roundTo } from "@/shared/lib/math";
 
 /** Numeric input that holds local string state and commits a clamped number on blur/Enter */
 function NumericField({
+  id,
   value,
   min,
   max,
@@ -12,6 +13,7 @@ function NumericField({
   onChange,
   className,
 }: {
+  id: string;
   value: number;
   min: number;
   max: number;
@@ -19,19 +21,19 @@ function NumericField({
   onChange: (v: number) => void;
   className?: string;
 }) {
-  const [local, setLocal] = useState(String(value));
+  const [local, setLocal] = useState(String(roundTo(value, 3)));
 
   // Sync when external value changes (e.g. undo)
   const prevValue = useRef(value);
   if (prevValue.current !== value) {
     prevValue.current = value;
-    setLocal(String(value));
+    setLocal(String(roundTo(value, 3)));
   }
 
   const commit = useCallback(() => {
     const num = parseFloat(local);
     if (isNaN(num)) {
-      setLocal(String(value));
+      setLocal(String(roundTo(value, 3)));
       return;
     }
     const clamped = clamp(num, min, max);
@@ -41,6 +43,7 @@ function NumericField({
 
   return (
     <input
+      id={id}
       type="number"
       min={min}
       max={max}
@@ -88,6 +91,7 @@ export function RoomMapSettingsPopover({
   const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement>(null);
   const [resetConfirming, setResetConfirming] = useState(false);
+  const fieldId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -143,10 +147,11 @@ export function RoomMapSettingsPopover({
       <div className="flex flex-col gap-3">
         {/* Room Width */}
         <div>
-          <label className={labelClass}>
+          <label className={labelClass} htmlFor={`${fieldId}-width`}>
             {t("roomMap:settings.roomWidth")}
           </label>
           <NumericField
+            id={`${fieldId}-width`}
             value={dimensions.widthMeters}
             min={1}
             max={30}
@@ -158,10 +163,11 @@ export function RoomMapSettingsPopover({
 
         {/* Room Depth */}
         <div>
-          <label className={labelClass}>
+          <label className={labelClass} htmlFor={`${fieldId}-depth`}>
             {t("roomMap:settings.roomDepth")}
           </label>
           <NumericField
+            id={`${fieldId}-depth`}
             value={dimensions.depthMeters}
             min={1}
             max={30}
@@ -185,10 +191,11 @@ export function RoomMapSettingsPopover({
           {/* Grid stroke width slider */}
           {showGrid && (
             <div className="mt-2">
-              <label className={labelClass}>
+              <label className={labelClass} htmlFor={`${fieldId}-stroke`}>
                 {t("roomMap:settings.gridStrokeWidth")}: {gridStrokeWidth.toFixed(1)}px
               </label>
               <input
+                id={`${fieldId}-stroke`}
                 type="range"
                 min={0.5}
                 max={3}

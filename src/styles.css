@@ -494,11 +494,13 @@
   scrollbar-gutter: stable;
 }
 
-/* Keep flex children from claiming `min-content` space, which would
-   otherwise let intrinsic widths leak past the 320 px frame and starve
-   `lm-compact-body` of its scrollable region. */
+/* Keep flex children from claiming `min-content` width, which would
+   otherwise let intrinsic widths leak past the 320 px frame. They must not
+   shrink vertically, though: the body is the scroll container, and a child
+   that gives up height instead — the `overflow: hidden` mode card — clips its
+   own last row where the body would have scrolled to it. */
 .lm-compact-body > * {
-  min-height: 0;
+  flex-shrink: 0;
   min-width: 0;
 }
 
@@ -2552,23 +2554,6 @@
 }
 .lm-hue-retry-tx { flex: 1; font-family: var(--lm-mono); font-size: 9.5px; color: var(--lm-amber, #ffb020); letter-spacing: 0.04em; }
 .lm-hue-retry-tx b { color: #8a94a3; font-weight: 400; }
-.lm-hue-retry-cancel {
-  all: unset;
-  box-sizing: border-box;
-  font-family: var(--lm-mono);
-  font-size: 9px;
-  padding: 3px 8px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 176, 32, 0.3);
-  background: rgba(255, 176, 32, 0.06);
-  color: var(--lm-amber, #ffb020);
-  cursor: pointer;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  flex-shrink: 0;
-  transition: background 120ms ease;
-}
-.lm-hue-retry-cancel:hover { background: rgba(255, 176, 32, 0.12); }
 
 /* ── Stale readiness banner (State N) ───────────────────────────────── */
 .lm-hue-stale {
@@ -4091,8 +4076,10 @@ body {
 
 .lm-chmap-footer-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  justify-content: flex-end;
+  gap: 8px 10px;
 }
 .lm-chmap-beta {
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
@@ -4321,17 +4308,26 @@ body {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  min-width: 0;
   min-height: 32px;
-  padding: 0 8px;
+  padding: 0 6px;
   font-family: var(--lm-mono);
   font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--lm-ink-faint);
   cursor: pointer;
   position: relative;
   transition: color 120ms ease;
+}
+/* One line per tab: a wrapped label ("HUE BÖLGELERİ" in TR) doubles the tab
+   height and squeezes the count badge off the edge. */
+.lm-room-dock-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .lm-room-dock-tab:hover {
   color: var(--lm-ink-dim);
@@ -4355,6 +4351,7 @@ body {
   border-radius: 1px 1px 0 0;
 }
 .lm-room-dock-tab-count {
+  flex-shrink: 0;
   font-family: var(--lm-mono);
   font-size: 9px;
   letter-spacing: 0;
@@ -4452,6 +4449,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A user-given name, whose language the app cannot know: uppercasing it by
+   the UI locale's rules would print "Living room" as "LİVİNG ROOM" in TR. */
+.lm-room-dock-h-name.is-verbatim {
+  text-transform: none;
+  letter-spacing: 0.04em;
 }
 .lm-room-dock-h-count {
   font-size: 9px;
@@ -5860,13 +5863,31 @@ body {
    edge of the window, which is why it was suppressed in the first place; the
    inset token draws just inside its own border, so the panel edge lights up.
    `:focus-visible` keeps it off every mouse click on the canvas, where a ring
-   would be noise for someone who can already see their own cursor. */
+   would be noise for someone who can already see their own cursor.
+
+   The ring lives on a `::after` above the children: a box-shadow on the root
+   itself paints under the opaque toolbar, canvas and dock, which cover every
+   edge, so it was never visible. */
+.lm-room-editor {
+  position: relative;
+}
 .lm-room-editor:focus {
   outline: none;
 }
-.lm-room-editor:focus-visible {
-  outline: none;
+.lm-room-editor:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
   box-shadow: var(--lm-focus-ring-inset);
+}
+@media (forced-colors: active) {
+  .lm-room-editor:focus-visible::after {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
 }
 
 /* The third on-canvas surface, alongside the `.lm-room-overlay` pair. Its own

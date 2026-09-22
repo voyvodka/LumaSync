@@ -257,6 +257,7 @@ export function CompactLayout({
               active={isAmbilight}
               disabled={nonOffDisabled}
               label={t("common:mode.options.ambilight")}
+              labelLang="en"
               icon={<IconAmbilight />}
               onClick={handleModeClick}
             />
@@ -275,7 +276,7 @@ export function CompactLayout({
         {isAmbilight && (
           <div className="lm-compact-card">
             <div className="lm-compact-card-header">
-              <div className="l">{t("common:mode.options.ambilight")}</div>
+              <div className="l" lang="en">{t("common:mode.options.ambilight")}</div>
             </div>
             <SelfContainedBrightnessRow
               initialPercent={ambilightBrightnessPct}

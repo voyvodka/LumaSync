@@ -3,7 +3,7 @@ import type enTelemetry from "@/locales/en/telemetry";
 
 const telemetry: Catalogue<typeof enTelemetry> = {
   title: "Çalışma telemetrisi",
-  description: "Capture/send hızını ve kuyruk baskısını neredeyse gerçek zamanlı izle.",
+  description: "Yakalama ve gönderim hızını, kuyruk baskısını neredeyse gerçek zamanlı izle.",
   metrics: {
     captureFps: "Yakalama FPS",
     sendFps: "Gönderim FPS",

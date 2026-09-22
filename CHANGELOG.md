@@ -9,6 +9,18 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A round of visual fixes. The Hue bridge card coloured its fault code against its own state —
+  red on a card that was only reconnecting, amber on one whose key had been rejected — and now
+  matches the card; a reconnecting card also no longer shows two identical Stop buttons. In
+  compact mode, with the setup tip showing, the lighting card cut its response-speed buttons in
+  half; the window now scrolls to them. The room-map editor's keyboard focus ring is visible
+  again, and its size fields are named for screen readers.
+- Turkish screens: "Ambilight", the USB adapter name and your own room-map zone names are no
+  longer capitalised by Turkish rules into "AMBİLİGHT" or "LİVİNG ROOM"; the "Save positions to
+  bridge" button no longer spills out of its panel, and the "Hue Bölgeleri" tab stays on one line.
+  The Hue screens now say "köprü" and the room map "bölge" throughout instead of mixing in
+  "bridge" and "zone", the LED chip picker's byte counts are translated, and a few strings that
+  had lost their Turkish letters are corrected.
 - Turkish screens showed English in several places: the Hue stream figures in Telemetry
   (uptime, packet rate, reconnect counts, how long ago the last error was, and the stream
   state itself), the latency and frame-rate readout on the Lights screen, the "Loading..."

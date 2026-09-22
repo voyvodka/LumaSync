@@ -101,13 +101,17 @@ const lights: Catalogue<typeof enLights> = {
       kelvinHint: "Düşük = sıcak, yüksek = soğuk",
     },
     chipType: {
-      label: "LED Chip Tipi",
-      description: "SK6812 RGBW seritler daha temiz beyazlar icin ayri bir beyaz LED icerir.",
+      label: "LED Çip Tipi",
+      description: "SK6812 RGBW şeritler daha temiz beyazlar için ayrı bir beyaz LED içerir.",
       options: {
         ws2812b: "WS2812B (3 bayt RGB)",
         sk6812rgbw: "SK6812 RGBW (4 bayt)",
       },
-      sk6812AdalightWarning: "SK6812 RGBW, Adalight profili ile desteklenmez. WS2812B kodlamasina donuluyor.",
+      details: {
+        ws2812b: "WS2812B · GRB · piksel başına 3 bayt",
+        sk6812rgbw: "SK6812 · RGBW · piksel başına 4 bayt · W=min(R,G,B)",
+      },
+      sk6812AdalightWarning: "SK6812 RGBW, Adalight profili ile desteklenmez. WS2812B kodlamasına dönülüyor.",
     },
     firmwareProfile: {
       title: "Firmware Profili",
