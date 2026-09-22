@@ -6,9 +6,9 @@
  * subscribed it additionally stamps optional fields (leds, ledCount,
  * hueChannels, source, pattern, seq, displayId).
  *
- * The existing LightsSection consumer reads ONLY `top`, `bottom`, `left`,
- * `right` — 16 samples each. It must receive identical values whether the
- * event carries the lean payload or the fully-enriched preview payload.
+ * A reader of ONLY `top`, `bottom`, `left`, `right` — 16 samples each — must
+ * receive identical values whether the event carries the lean payload or the
+ * fully-enriched preview payload.
  *
  * Covers:
  *   - EDGE_SIGNAL_SAMPLES_PER_EDGE is exactly 16 (the contract constant).
@@ -16,7 +16,7 @@
  *     EdgeSignalPayload type at compile time and carries 16 samples per edge.
  *   - A fully enriched payload (all optional v1.6 fields present) also carries
  *     exactly 16 samples per required edge.
- *   - A LightsSection-style consumer reading only top/bottom/left/right gets
+ *   - An edge-only reader of top/bottom/left/right gets
  *     identical data from lean and enriched payloads (additive enrichment does
  *     not mutate the required edge arrays).
  *   - PREVIEW_COMMANDS constant values match the Rust handler snake_case names.
@@ -62,11 +62,11 @@ const enrichedPayload: EdgeSignalPayload = {
 };
 
 /**
- * Simulated LightsSection consumer — reads only the 4 required edges and
- * returns their lengths. This is the exact consumer contract that must
- * remain unchanged by the v1.6 additive enrichment.
+ * Simulated edge-only reader — reads only the 4 required edges and returns
+ * their lengths. This is the contract the v1.6 additive enrichment must not
+ * change.
  */
-function lightsSectionConsumer(payload: EdgeSignalPayload) {
+function edgeReader(payload: EdgeSignalPayload) {
   return {
     topLength: payload.top.length,
     bottomLength: payload.bottom.length,
@@ -132,10 +132,10 @@ describe("EdgeSignalPayload — enriched payload (all v1.6 optional fields prese
   });
 });
 
-describe("EdgeSignalPayload — LightsSection consumer contract regression", () => {
-  it("LightsSection consumer receives identical edge data from lean and enriched payloads", () => {
-    const leanView = lightsSectionConsumer(leanPayload);
-    const enrichedView = lightsSectionConsumer(enrichedPayload);
+describe("EdgeSignalPayload — edge-only reader contract regression", () => {
+  it("an edge-only reader receives identical edge data from lean and enriched payloads", () => {
+    const leanView = edgeReader(leanPayload);
+    const enrichedView = edgeReader(enrichedPayload);
 
     expect(enrichedView.topLength).toBe(leanView.topLength);
     expect(enrichedView.bottomLength).toBe(leanView.bottomLength);
@@ -144,8 +144,8 @@ describe("EdgeSignalPayload — LightsSection consumer contract regression", () 
   });
 
   it("the required edge arrays are not mutated by the presence of optional v1.6 fields", () => {
-    const leanView = lightsSectionConsumer(leanPayload);
-    const enrichedView = lightsSectionConsumer(enrichedPayload);
+    const leanView = edgeReader(leanPayload);
+    const enrichedView = edgeReader(enrichedPayload);
 
     // The first sample of each edge must be identical across both payloads
     // (leanPayload provides the source of truth; enrichedPayload spreads it).
@@ -163,7 +163,7 @@ describe("EdgeSignalPayload — LightsSection consumer contract regression", () 
       // Spread with an extra field using `as` — TypeScript would catch a wrong type,
       // but extra unknown fields at runtime must not crash edge readers.
     };
-    const view = lightsSectionConsumer(futurePayload);
+    const view = edgeReader(futurePayload);
     expect(view.topLength).toBe(EDGE_SIGNAL_SAMPLES_PER_EDGE);
   });
 });

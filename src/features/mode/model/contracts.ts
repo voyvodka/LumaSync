@@ -41,9 +41,8 @@ export const EDGE_SIGNAL_SAMPLES_PER_EDGE = 16;
  * worker keeps emitting the same ~10 Hz event on the same `EDGE_SIGNAL_EVENT`
  * channel, but when a preview surface (twin overlay / control popup) is
  * subscribed it also stamps the full per-LED buffer below. Every new field is
- * OPTIONAL so the existing 16-sample-per-edge consumer (`LightsSection`) — which
- * reads only `top` / `bottom` / `left` / `right` — is unaffected and needs no
- * change. */
+ * OPTIONAL. The four edge arrays have had no frontend reader since the Lights
+ * page edge preview was removed; the worker still emits them. */
 export interface EdgeSignalPayload {
   top: Array<[number, number, number]>;
   bottom: Array<[number, number, number]>;

@@ -20,6 +20,14 @@ https://keepachangelog.com/en/1.1.0/
   undo it if the colors still look wrong. The order can also be picked by hand. WLED devices set
   their color order in WLED itself, so the setting is hidden for them.
 
+### Changed
+
+- Lights: the Ambilight card no longer shows the live preview, which was a capture latency and
+  frame-rate readout, a box standing for the screen, and a colour estimate along each edge. The
+  status bar already shows capture and output health. The card is now called "Mode settings" and
+  keeps its controls: lighting responsiveness, brightness, saturation and black border. The USB
+  link-limit note still appears there when a strip is too long for the serial link.
+
 ### Fixed
 
 - Saving Hue light positions to the bridge now works. It never did: the bridge turned away every
