@@ -28,6 +28,7 @@ import {
 } from "@/features/mode/state/modeApplyOutcome";
 import type { ModeCommandResult } from "@/features/mode/modeApi";
 import type { ModeRuntimeConfig } from "@/features/mode/state/useModeRuntimeConfig";
+import { isHueBusyCandidate } from "@/features/mode/state/bootHueRetry";
 import { showNotification } from "@/features/platform/platformApi";
 import { SECTION_IDS, type SectionId, type UIMode } from "@/shared/contracts/shell";
 import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/contracts/capture";
@@ -59,6 +60,8 @@ export interface ShellBootstrapSink {
   reportStartFailure: (notice: CaptureFailureNotice) => void;
   /** The interactive "running on USB only" notice, raised when a restore left Hue out. */
   reportHueLeftOut: (reason: HueLeftOutReason) => void;
+  /** Waits for a busy bridge to free its area, then retries the restore once. */
+  scheduleHueBusyRetry: (mode: LightingModeConfig, config: HueStartConfig) => void;
 }
 
 /** Runs the shell boot sequence exactly once and reports when it has settled. */
@@ -210,6 +213,12 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
             // UI only — the persisted mode stays, so the next launch retries it
             // once the cause (a permission, an unplugged strip) is fixed.
             sink.setLightingMode({ ...restoredMode, kind: LIGHTING_MODE_KIND.OFF });
+            // After an unclean exit the bridge holds the old session for 10–20 s.
+            // Only the retry confirms the area is merely busy, so a refusal for
+            // auth or an unreachable bridge is never retried.
+            if (hueBootstrapConfig && isHueBusyCandidate(restore.hueStartCode)) {
+              sink.scheduleHueBusyRetry(restoredMode, hueBootstrapConfig);
+            }
           }
           // A launch against an unplugged display must not toast; every other
           // failure needs the user, and without the toast they only see Off.
@@ -268,6 +277,8 @@ interface LightingSessionRestore {
   startFailure: CaptureFailureNotice | null;
   /** Set when the Hue gate refused and the restore runs on USB alone. */
   hueLeftOut: HueLeftOutReason | null;
+  /** What `start_hue_stream` answered, when the restore asked it. */
+  hueStartCode: string | undefined;
 }
 
 /**
@@ -309,7 +320,7 @@ export async function restoreLightingSession({
   const hueTransientFail = !hueStarted && hueWanted && mode.kind === LIGHTING_MODE_KIND.AMBILIGHT;
   const usbWanted = bootTargets.includes("usb");
   if (!usbWanted && !hueStarted && !hueTransientFail) {
-    return { running: false, activeTargets: [], startFailure: null, hueLeftOut: null };
+    return { running: false, activeTargets: [], startFailure: null, hueLeftOut: null, hueStartCode };
   }
 
   let outcome: ModeApplyOutcome;
@@ -373,6 +384,7 @@ export async function restoreLightingSession({
       startFailure: outcome.startFailure,
       // Nothing runs, so "running on USB only" would be false.
       hueLeftOut: null,
+      hueStartCode,
     };
   }
 
@@ -400,5 +412,6 @@ export async function restoreLightingSession({
     activeTargets,
     startFailure: outcome.startFailure,
     hueLeftOut: hueLeftOut ? hueLeftOutReason(hueConfig !== null, hueStartCode) : null,
+    hueStartCode,
   };
 }

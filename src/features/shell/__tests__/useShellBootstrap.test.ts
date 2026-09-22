@@ -103,6 +103,7 @@ describe("restoreLightingSession", () => {
       activeTargets: ["usb", "hue"],
       startFailure: null,
       hueLeftOut: null,
+      hueStartCode: "HUE_STREAM_RUNNING",
     });
     expect(stopHueMock).not.toHaveBeenCalled();
   });
@@ -126,7 +127,7 @@ describe("restoreLightingSession", () => {
 
     const result = await restore(solid, ["hue"]);
 
-    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null, hueLeftOut: null });
+    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null, hueLeftOut: null, hueStartCode: "HUE_STREAM_RUNNING" });
     expect(stopHueMock).toHaveBeenCalledTimes(1);
     expect(setHueSolidColorMock).not.toHaveBeenCalled();
   });
@@ -137,7 +138,7 @@ describe("restoreLightingSession", () => {
     const result = await restore(ambilight, ["hue"]);
 
     expect(setLightingModeMock).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ running: true, activeTargets: [], startFailure: null, hueLeftOut: null });
+    expect(result).toEqual({ running: true, activeTargets: [], startFailure: null, hueLeftOut: null, hueStartCode: "HUE_STREAM_NOT_READY_ACTIVE_STREAMER" });
   });
 
   // What the real backend answers with the bridge unreachable: the start is
@@ -161,7 +162,7 @@ describe("restoreLightingSession", () => {
 
     const result = await restore(ambilight, ["hue"]);
 
-    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null, hueLeftOut: null });
+    expect(result).toEqual({ running: false, activeTargets: [], startFailure: null, hueLeftOut: null, hueStartCode: "CONFIG_NOT_READY_GATE_BLOCKED" });
     expect(stopHueMock).not.toHaveBeenCalled();
   });
 
@@ -187,7 +188,7 @@ describe("restoreLightingSession", () => {
   it("starts Hue before the mode and pushes the Solid colour after it", async () => {
     const result = await restore(solid, ["hue"]);
 
-    expect(result).toEqual({ running: true, activeTargets: ["hue"], startFailure: null, hueLeftOut: null });
+    expect(result).toEqual({ running: true, activeTargets: ["hue"], startFailure: null, hueLeftOut: null, hueStartCode: "HUE_STREAM_RUNNING" });
     expect(startHueMock.mock.invocationCallOrder[0]).toBeLessThan(
       setLightingModeMock.mock.invocationCallOrder[0],
     );
@@ -226,6 +227,7 @@ describe("restoreLightingSession", () => {
         activeTargets: ["usb"],
         startFailure: null,
         hueLeftOut: "unreachable",
+        hueStartCode: "CONFIG_NOT_READY_GATE_BLOCKED",
       });
       expect(stopHueMock).not.toHaveBeenCalled();
     });
@@ -291,6 +293,7 @@ describe("useShellBootstrap with Hue left out", () => {
       reportHueSolidColorStatus: vi.fn(),
       reportStartFailure: vi.fn(),
       reportHueLeftOut: vi.fn(),
+      scheduleHueBusyRetry: vi.fn(),
     };
   }
 
@@ -337,9 +340,95 @@ describe("useShellBootstrap with Hue left out", () => {
       expect.objectContaining({ kind: "ambilight", targets: ["usb"] }),
     );
     expect(bag.reportHueLeftOut).toHaveBeenCalledWith("unreachable");
+    // Something is running, so the boot busy-retry does not apply.
+    expect(bag.scheduleHueBusyRetry).not.toHaveBeenCalled();
     // The next launch must try Hue again: nothing rewrites the persisted set.
     const patches = saveShellStateMock.mock.calls.map(([patch]) => patch as Record<string, unknown>);
     expect(patches.some((patch) => "lastOutputTargets" in patch)).toBe(false);
+  });
+});
+
+describe("useShellBootstrap with the bridge refusing a Hue-only restore", () => {
+  function sink(): ShellBootstrapSink {
+    return {
+      t: ((key: string) => key) as unknown as ShellBootstrapSink["t"],
+      setUIMode: vi.fn(),
+      setActiveSection: vi.fn(),
+      setSavedCalibration: vi.fn(),
+      setHasCompletedOnboarding: vi.fn(),
+      setHasInteractedWithMode: vi.fn(),
+      setLightingMode: vi.fn(),
+      setSelectedOutputTargets: vi.fn(),
+      setActiveOutputTargets: vi.fn(),
+      setHueStartConfig: vi.fn(),
+      armUsbConnected: vi.fn(),
+      runtimeConfig: {
+        hydrate: (mode: LightingModeConfig) => mode,
+        setCalibration: vi.fn(),
+        prime: vi.fn(),
+        setAmbilight: vi.fn(),
+      } as unknown as ModeRuntimeConfig,
+      reportHueSolidColorStatus: vi.fn(),
+      reportStartFailure: vi.fn(),
+      reportHueLeftOut: vi.fn(),
+      scheduleHueBusyRetry: vi.fn(),
+    };
+  }
+
+  function hueStartAnswers(code: string, state: string) {
+    startHueMock.mockResolvedValue({
+      active: false,
+      status: { code, message: "refused", details: null, state },
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    loadShellStateMock.mockResolvedValue({
+      uiMode: "compact",
+      lightingMode: { kind: "ambilight" },
+      lastOutputTargets: ["hue"],
+      lastHueBridge: { ip: "192.168.1.10" },
+      hueAppKey: "app-user",
+      hueClientKey: "AABBCCDD11223344",
+      lastHueAreaId: "area-1",
+    });
+    getSerialConnectionStatusMock.mockResolvedValue({ connected: false });
+    setLightingModeMock.mockResolvedValue({
+      active: false,
+      mode: { kind: "off" },
+      status: { code: "HUE_NOT_READY", message: "not ready", details: "HUE_RUNTIME_GATE_FAILED" },
+    });
+  });
+
+  it("shows Off and hands a gate refusal to the busy retry", async () => {
+    hueStartAnswers("CONFIG_NOT_READY_GATE_BLOCKED", "Idle");
+    const bag = sink();
+    const { result } = renderHook(() => useShellBootstrap(bag));
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+
+    expect(bag.setLightingMode).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "off" }));
+    expect(bag.scheduleHueBusyRetry).toHaveBeenCalledTimes(1);
+    expect(bag.scheduleHueBusyRetry).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "ambilight" }),
+      expect.objectContaining({ bridgeIp: "192.168.1.10", areaId: "area-1" }),
+    );
+  });
+
+  it.each([
+    ["AUTH_INVALID_CREDENTIALS", "Failed"],
+    ["AUTH_INVALID_RE_PAIR_REQUIRED", "Failed"],
+    ["TRANSIENT_RETRY_EXHAUSTED", "Failed"],
+  ])("never retries a %s refusal", async (code, state) => {
+    hueStartAnswers(code, state);
+    const bag = sink();
+    const { result } = renderHook(() => useShellBootstrap(bag));
+    await waitFor(() => expect(result.current.bootstrapDone).toBe(true));
+
+    expect(bag.setLightingMode).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "off" }));
+    expect(bag.scheduleHueBusyRetry).not.toHaveBeenCalled();
   });
 });
 
@@ -388,6 +477,7 @@ describe("useShellBootstrap room geometry", () => {
         reportHueSolidColorStatus: vi.fn(),
         reportStartFailure: vi.fn(),
         reportHueLeftOut: vi.fn(),
+        scheduleHueBusyRetry: vi.fn(),
       });
     });
     await waitFor(() => expect(result.current.bootstrapDone).toBe(true));

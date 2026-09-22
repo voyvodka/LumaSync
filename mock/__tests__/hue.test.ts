@@ -226,3 +226,35 @@ describe("the five onboarding handlers answer with their own command's codes, no
     expect(result.readiness.reasons).toContain(HUE_READINESS_REASON.ACTIVE_STREAMER);
   });
 });
+
+// Relaunching straight after an unclean exit: the bridge still counts the old
+// session as its streamer for 10–20 s. The real start fails its strict gate
+// there, which is the refusal the boot restore's busy retry keys on.
+describe("a held entertainment area", () => {
+  it("gates start_hue_stream to Idle / CONFIG_NOT_READY_GATE_BLOCKED, as start_with_evidence does", () => {
+    const world = SCENARIOS["hue-busy-at-boot"].build();
+    world.hue.activeStreamerReleasesAt = null;
+    setWorld(world);
+
+    const result = call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult;
+
+    expect(result.active).toBe(false);
+    expect(result.status.code).toBe(HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED);
+    expect(result.status.state).toBe(HUE_RUNTIME_STATES.IDLE);
+  });
+
+  it("frees the area by itself once the scheduled release passes", () => {
+    setWorld(SCENARIOS["hue-busy-at-boot"].build());
+    const held = call(HUE_COMMANDS.CHECK_STREAM_READINESS) as HueStreamReadinessResponse;
+    expect(held.readiness.reasons).toEqual([HUE_READINESS_REASON.ACTIVE_STREAMER]);
+
+    mutate((w) => {
+      w.hue.activeStreamerReleasesAt = Date.now() - 1;
+    });
+
+    const free = call(HUE_COMMANDS.CHECK_STREAM_READINESS) as HueStreamReadinessResponse;
+    expect(free.status.code).toBe(HUE_STATUS.STREAM_READY);
+    const started = call(HUE_COMMANDS.START_STREAM) as HueRuntimeCommandResult;
+    expect(started.active).toBe(true);
+  });
+});

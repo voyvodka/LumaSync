@@ -122,4 +122,8 @@ export default {
     auth: "Hue needs to be paired again — running on USB only for now. Re-pair it in Devices.",
     config: "Hue isn't set up — running on USB only for now.",
   },
+  hueBootRetry: {
+    waiting: "The Hue bridge is still holding an earlier session. Lighting resumes by itself as soon as the bridge lets go.",
+    gaveUp: "The Hue bridge stayed busy with another session, so lighting is off. Turn it back on once the bridge is free.",
+  },
 };

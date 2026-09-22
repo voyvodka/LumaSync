@@ -118,14 +118,36 @@ export const shellHandlers = {
         : { code: "LED_TEST_PATTERN_STARTED" as const, message: "Started" },
     };
   },
-  [PREVIEW_COMMANDS.STOP_TEST_PATTERN]: () => ({
-    active: false,
-    // Rust hardcodes `preview_only: false` on stop regardless of sink state
-    // (`lighting_mode.rs:3260`) — the field describes the test that just
-    // ended, not whatever mode gets restored in its place.
-    previewOnly: false,
-    status: { code: "LED_TEST_PATTERN_STOPPED" as const, message: "Stopped" },
-  }),
+  // `stop_led_test_pattern` re-applies the mode that ran before the test and
+  // answers with *that* mode's `active`; a restore the USB or Hue gate refuses
+  // is forced to Off. The mock's pattern never replaces `lighting.mode`, so that
+  // is the prior mode. A seeded mode carries no `targets`, and every scenario
+  // seeds one it can run, so only recorded targets are gated.
+  [PREVIEW_COMMANDS.STOP_TEST_PATTERN]: () => {
+    const w = getWorld();
+    const prior = w.lighting.mode;
+    const targets = prior.targets;
+    const usbAvailable = w.serial.connectedPort !== null || w.wled.connectedHost !== null;
+    const gated =
+      prior.kind !== "off" &&
+      targets !== undefined &&
+      (((targets.length === 0 || targets.includes("usb")) && !usbAvailable) ||
+        (targets.includes("hue") && !w.hue.streaming));
+    if (gated) {
+      mutate((draft) => {
+        draft.lighting.mode = { ...draft.lighting.mode, kind: "off" };
+      });
+    }
+    const captureRefused = prior.kind === "ambilight" && !w.capture.permissionGranted;
+    return {
+      active: prior.kind !== "off" && !gated && !captureRefused,
+      // Rust hardcodes `preview_only: false` on stop regardless of sink state
+      // — the field describes the test that just ended, not whatever mode gets
+      // restored in its place.
+      previewOnly: false,
+      status: { code: "LED_TEST_PATTERN_STOPPED" as const, message: "Stopped" },
+    };
+  },
 
   [UPDATER_COMMANDS.CHECK_FOR_UPDATE]: () => ({
     status: status(UPDATER_STATUS.UP_TO_DATE, "Up to date"),
