@@ -111,6 +111,57 @@ the strip exactly as painted), and **`LUMASYNC_AMBILIGHT_LEGACY=1`** in the envi
 start bypasses it for a live session — a development A/B switch for bisecting a report, not a
 setting, and it is read once when the worker starts.
 
+### Measuring the frame budget
+
+Everything the worker computes per frame after capture is one type, `AmbilightFramePipeline` in
+`src-tauri/src/commands/lighting_mode/frame_pipeline.rs`: the black-border cache, strip sampling,
+the scene stage, strip smoothing, and the Hue path (room-aware sample points, colour correction,
+smoothing). The worker keeps only the I/O around it — capture, the sends, telemetry, the twin
+feed. That split is what lets the real code be measured with no display and no hardware, from
+`lighting_mode/frame_pipeline_tests.rs`.
+
+**Timing, locally.** An `#[ignore]`d report runs the pipeline plus the serial encoder over synthetic
+640×360 and 640×400 frames — what ScreenCaptureKit hands the worker after its GPU downscale — for
+164 LEDs and for 300, each with two room-aware Hue channels, and prints median / p95 / mean per
+stage:
+
+```bash
+cd src-tauri
+cargo test --release --lib frame_budget_report -- --ignored --nocapture
+```
+
+Quote release numbers: the whole step was ~40 µs (164 LEDs) and ~74 µs (300 LEDs) when this
+landed, under 0.5 % of a 60 Hz frame. Debug runs about 16× slower overall and up to 50× on the
+encoders, so it only compares two builds of the same profile. If a release test build fails with
+`can't find crate for ctor_proc_macro` (seen on macOS 27: dyld rejects the stripped proc-macro dylib
+as "mis-aligned LINKEDIT string pool"), prefix `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none`.
+It is a plain test, not `criterion`: the
+pipeline's types are crate-private, which a `benches/` target cannot reach without a public facade
+over the hot path, and criterion adds 16–19 crates to the lockfile for a report CI never runs.
+
+**The CI guard counts instead of timing**, because wall-clock time on a shared runner is noise.
+`steady_frame_allocations_and_lut_builds_stay_within_budget` runs in the ordinary `cargo test`. The
+test binary installs a counting global allocator — it counts only on a thread that asks — and for
+every steady-state frame through the pipeline and `SerialSink::send_frame` asserts:
+
+- **at most three heap allocations** — the sampled strip, the smoothed strip queued for the sink,
+  the encoded packet — and no more bytes than those three need. A copy of the frame, a rebuilt Hue
+  sample table, a `collect()` on the Hue path or a cloned port name each fails it.
+- **no gamma or sRGB LUT tabulation.** Both tables live on the stack, so the allocator cannot see a
+  rebuild; the thread-local build counters in `led_output.rs` and `ambilight_scene.rs` can.
+
+A change that genuinely needs another per-frame allocation raises `ALLOCS_PER_FRAME` in the same
+PR and says why. Outside the guard: the Hue send's `to_vec()` (the sender thread takes an owned
+`Vec`), the twin-overlay feed (`the_edge_signal_is_built_and_sent_only_while_a_twin_is_open`), and
+capture itself.
+
+**Equivalence.** `worker_output_matches_reference_*` drives the real threaded worker, and
+`extracted_step_matches_reference_*` the pipeline directly, against a reference copy of the loop
+body as it stood before the extraction — frame for frame, all four wire layouts, with settings,
+colour-order and room-map changes landing on fixed frames. Both sides call the same stage functions,
+so tuning the scene stage or an encoder leaves it green; changing the glue — what runs in which
+order, which setting is read where — means updating the reference in the same PR, on purpose.
+
 ## Gotchas
 
 - **`AMBILIGHT_CAPTURE_PERMISSION_DENIED` means the macOS Screen Recording permission is missing**, not that capture is broken. It needs a user trip to System Settings, and the app cannot grant it. It is now only produced after a real preflight; a ScreenCaptureKit failure *with* permission granted is `AMBILIGHT_CAPTURE_SHAREABLE_CONTENT_FAILED` instead, usually a wedged `replayd`.
