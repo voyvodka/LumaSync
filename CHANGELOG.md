@@ -30,6 +30,16 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Reopening the app within a few seconds of it closing unexpectedly left lighting off when the
+  last mode used Hue. The Hue bridge was still holding the old session for 10–20 seconds and
+  turned the new one away, and the app never asked again. At launch it now waits for the bridge to
+  let go, with a short notice saying so, and turns the mode back on by itself. It waits up to about
+  25 seconds, and stops waiting as soon as you pick a mode or turn Hue off yourself. It does not
+  wait when the bridge cannot be reached or needs to be paired again.
+- The first-run guide banner could flash up for a moment at launch and disappear again for people
+  who were already set up but had updated from a version without it. It now appears only once the
+  app knows which step you are on, so it no longer flashes; a new install still sees the first step
+  right away.
 - Saving Hue light positions to the bridge now works. It never did: the bridge turned away every
   save, because the app sent the positions in a form the bridge does not accept, so the Devices
   page showed an error and the bridge kept its old layout. Positions are now written the way the

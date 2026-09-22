@@ -38,6 +38,7 @@ import {
   shouldReleaseHueAfterRefusal,
   usbStartRefusalNotice,
 } from "./modeApplyOutcome";
+import { useBootHueRetry, type BootHueRetryNotice } from "./bootHueRetry";
 import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
 import { useLightingModePersistence } from "./useLightingModePersistence";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
@@ -74,6 +75,10 @@ export interface LightingModeOrchestrator {
   hueLeftOutNotice: HueLeftOutReason | null;
   /** The boot restore's route to the same notice. */
   reportHueLeftOut: (reason: HueLeftOutReason) => void;
+  /** A boot restore is waiting for the bridge to free its area, or gave up waiting. */
+  bootHueRetryNotice: BootHueRetryNotice | null;
+  /** Boot only: retry a restore the bridge refused because its area was still held. */
+  scheduleBootHueRetry: (mode: LightingModeConfig, config: HueStartConfig) => void;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
@@ -154,12 +159,26 @@ export function useLightingModeOrchestrator({
     }
   }, [lightingMode]);
 
+  const handleLightingModeChangeRef = useRef<((mode: LightingModeConfig) => Promise<void>) | null>(null);
+  const resumeAfterBootHueRetry = useCallback(async (mode: LightingModeConfig) => {
+    // Anything that started a mode meanwhile has already had its say.
+    if (lightingModeRef.current.kind !== LIGHTING_MODE_KIND.OFF) return;
+    await handleLightingModeChangeRef.current?.({
+      kind: mode.kind,
+      ambilight: mode.ambilight,
+      solid: mode.solid,
+    });
+  }, []);
+  const bootHueRetry = useBootHueRetry(resumeAfterBootHueRetry);
+  const cancelBootHueRetry = bootHueRetry.cancel;
+
   const handleOutputTargetsChange = useCallback(async (targets: HueRuntimeTarget[]) => {
     // The toggles stay live while this runs, so a user can remove Hue before
     // the add that started first has finished. Without the guard that add
     // lands afterwards and puts Hue back into the active set.
     const isLatest = outputTargetsGuardRef.current.begin();
     const normalizedTargets = normalizeOutputTargets(targets);
+    if (!normalizedTargets.includes("hue")) cancelBootHueRetry("Hue was deselected");
     const prevTargets = selectedOutputTargets;
     setSelectedOutputTargets(normalizedTargets);
     try {
@@ -422,7 +441,7 @@ export function useLightingModeOrchestrator({
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus, cancelBootHueRetry]);
 
 
   // Same shape as the notice above. The dismissal used to be an untracked
@@ -448,6 +467,8 @@ export function useLightingModeOrchestrator({
 
   const handleLightingModeChange = useCallback(
     async (nextMode: LightingModeConfig) => {
+      // Any mode choice, the retry's own included, supersedes a pending boot retry.
+      cancelBootHueRetry("the lighting mode changed");
       const normalizedNextMode = normalizeLightingModeConfig({
         kind: nextMode.kind,
         solid: nextMode.solid ?? lightingMode.solid,
@@ -836,6 +857,7 @@ export function useLightingModeOrchestrator({
     },
     [
       activeOutputTargets,
+      cancelBootHueRetry,
       dispatchSetLightingMode,
       handleOpenCalibration,
       hueStartConfig,
@@ -850,7 +872,9 @@ export function useLightingModeOrchestrator({
     ],
   );
 
-  // Keep handleLightingModeChangeRef in sync so tray listeners always use latest handler
+  useEffect(() => {
+    handleLightingModeChangeRef.current = handleLightingModeChange;
+  }, [handleLightingModeChange]);
 
   const adoptSolidColor = useCallback((solid: SolidColorPayload) => {
     setLightingModeState({ kind: LIGHTING_MODE_KIND.SOLID, solid });
@@ -866,6 +890,8 @@ export function useLightingModeOrchestrator({
     reportStartFailure: setStartFailedNotice,
     hueLeftOutNotice,
     reportHueLeftOut: setHueLeftOutNotice,
+    bootHueRetryNotice: bootHueRetry.notice,
+    scheduleBootHueRetry: bootHueRetry.schedule,
     handleLightingModeChange,
     handleOutputTargetsChange,
     dispatch: dispatchSetLightingMode,

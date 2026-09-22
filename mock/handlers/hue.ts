@@ -72,6 +72,12 @@ export function hueRuntimeFault(
   return null;
 }
 
+/** Whether another session still holds the area, honouring a scheduled release. */
+export function activeStreamerHeld(hue: MockWorld["hue"], now: number = Date.now()): boolean {
+  if (!hue.activeStreamerElsewhere) return false;
+  return hue.activeStreamerReleasesAt === null || now < hue.activeStreamerReleasesAt;
+}
+
 /** The runtime envelope, which is a status *plus* a state machine position. */
 function runtimeStatus(
   code: HueRuntimeStatus["code"],
@@ -261,7 +267,7 @@ export const hueHandlers = {
     const reasons: string[] = [];
     // The sentinel is compared against, never displayed — it is how the UI
     // tells "someone else owns the stream" from a generic refusal.
-    if (hue.activeStreamerElsewhere) reasons.push(HUE_READINESS_REASON.ACTIVE_STREAMER);
+    if (activeStreamerHeld(hue)) reasons.push(HUE_READINESS_REASON.ACTIVE_STREAMER);
     return {
       status: status(
         reasons.length === 0 ? HUE_STATUS.STREAM_READY : HUE_STATUS.STREAM_NOT_READY,
@@ -285,6 +291,18 @@ export const hueHandlers = {
     }
     if (!hue.reachable || !hue.credentialValid) {
       return { active: false, status: currentRuntime() };
+    }
+    // `start_with_evidence` fails its strict gate on a held area: readiness is
+    // current but not ready, so `Idle` / `CONFIG_NOT_READY_GATE_BLOCKED`.
+    if (activeStreamerHeld(hue)) {
+      return {
+        active: false,
+        status: runtimeStatus(
+          HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
+          HUE_RUNTIME_STATES.IDLE,
+          "Another session holds the area",
+        ),
+      };
     }
     mutate((w) => {
       w.hue.streaming = true;

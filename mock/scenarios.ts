@@ -22,6 +22,7 @@ export const SCENARIO_IDS = [
   "hue-unreachable",
   "hue-key-expired",
   "hue-link-button",
+  "hue-busy-at-boot",
   "capture-denied",
   "persist-failing",
 ] as const;
@@ -62,6 +63,7 @@ function base(): MockWorld {
       everActive: false,
       totalReconnects: 0,
       activeStreamerElsewhere: false,
+      activeStreamerReleasesAt: null,
     },
     displays: DISPLAYS,
     capture: { permissionGranted: true },
@@ -149,6 +151,7 @@ function furnished(): MockWorld {
     everActive: true,
     totalReconnects: 0,
     activeStreamerElsewhere: false,
+    activeStreamerReleasesAt: null,
   };
   w.lighting = { mode: { kind: "ambilight" } };
   w.telemetry = {
@@ -283,6 +286,25 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
       w.hue.selectedBridgeId = BRIDGE.id;
       w.hue.linkButtonPressesRemaining = 3;
       return { ...w, scenario: "hue-link-button" };
+    },
+  },
+  "hue-busy-at-boot": {
+    id: "hue-busy-at-boot",
+    label: "Hue busy at launch",
+    summary: "Relaunched right after a crash: the bridge holds the old session for 12 s, then lets go.",
+    build: () => {
+      const w = furnished();
+      w.serial = { ports: [], connectedPort: null, healthFailsAt: null };
+      w.wled = { devices: [], connectedHost: null, testOutcome: "WLED_TEST_LIVE_CONFIRMED" };
+      // A fresh process: nothing streams or runs yet, the persisted mode is
+      // what the launch tries to restore.
+      w.hue.streaming = false;
+      w.hue.everActive = false;
+      w.hue.activeStreamerElsewhere = true;
+      w.hue.activeStreamerReleasesAt = Date.now() + 12_000;
+      w.lighting = { mode: { kind: "off" } };
+      w.shellState = { ...w.shellState, lastOutputTargets: ["hue"] };
+      return { ...w, scenario: "hue-busy-at-boot" };
     },
   },
   "capture-denied": {

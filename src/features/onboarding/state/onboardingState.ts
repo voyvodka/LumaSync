@@ -124,6 +124,26 @@ export function settleStep(
 }
 
 /**
+ * How long after launch the devices step waits before showing. Its guard is
+ * live, not persisted: a remembered strip reconnects and a paired bridge
+ * answers its first probe only after bootstrap, and showing the step in the
+ * meantime is what flashed the banner at users who were already set up.
+ */
+export const ONBOARDING_REVEAL_SETTLE_MS = 3_000;
+
+/** The longer bound while a bridge probe is still out; a dead bridge takes a full HTTP timeout. */
+export const ONBOARDING_REVEAL_CAP_MS = 8_000;
+
+/**
+ * Milliseconds after the persisted guards load before `step` may show. The
+ * lights and LED-setup guards are persisted, so their steps are already final.
+ */
+export function onboardingRevealDelayMs(step: OnboardingStep, reachabilityPending: boolean): number {
+  if (step !== ONBOARDING_STEPS.DEVICES) return 0;
+  return reachabilityPending ? ONBOARDING_REVEAL_CAP_MS : ONBOARDING_REVEAL_SETTLE_MS;
+}
+
+/**
  * Initial step. Always `LIGHTS` for users who do not have
  * `hasCompletedOnboarding === true` set on disk; the banner mounts and
  * begins the walk-through.

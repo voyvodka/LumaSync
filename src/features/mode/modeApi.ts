@@ -18,6 +18,7 @@ import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
 // neither side calls across the cycle at module-eval time.
 import { invalidateHueStreamStatus } from "../hue/hueReadCache";
 import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
+import { cancelBootHueRetry } from "./state/bootHueRetry";
 
 /** Normalized shape every mode-command rejection is mapped to before being thrown. */
 export interface ModeApiError {
@@ -176,6 +177,9 @@ export async function stopHue(
   triggerSource: HueRuntimeTriggerSource = HUE_RUNTIME_TRIGGER_SOURCE.MODE_CONTROL,
   invoker: ModeInvoker = defaultInvoke,
 ): Promise<HueRuntimeCommandResult> {
+  // Attached to the command, as `stop_hue_stream` cancels the backend's
+  // reconnect: a stop from any surface also ends a pending boot retry.
+  cancelBootHueRetry("Hue was stopped");
   try {
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.STOP_STREAM, {
       triggerSource,
