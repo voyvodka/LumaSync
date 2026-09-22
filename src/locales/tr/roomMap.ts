@@ -204,6 +204,14 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     ariaLabel: "Odaya duyarlı: nasıl çalışır",
     body: "Her Hue ışığı rengini ekranın, bulunduğu yere en yakın bölümünden alır. Yüksekliği ekranın hangi kısmının örnekleneceğini seçer: zemine yakınsa alt kenar, tavana yakınsa üst kenar. TV'ye uzaklığı ise o noktayı mı yoksa genel ortam rengini mi ne ölçüde izleyeceğini belirler.",
     why: "Oda haritasında bir TV olduğu için açık. Kapatmak için TV'yi kaldırın.",
+    pausedLabel: "Odaya duyarlı · duraklatıldı",
+    pausedAriaLabel: "Odaya duyarlı duraklatıldı: neden",
+    paused: {
+      keyRejected: "Duraklatıldı: Hue köprüsünün yeniden eşleştirilmesi gerekiyor.",
+      unreachable: "Duraklatıldı: Hue köprüsüne ulaşılamıyor.",
+      checking: "Hue köprüsü kontrol edilirken duraklatıldı.",
+    },
+    pausedWhy: "Oda haritasında hâlâ bir TV olduğu için Hue geri geldiğinde kendiliğinden devam eder.",
   },
   propertyBar: {
     empty: "Özelliklerini düzenlemek için bir nesne seçin",

@@ -5329,6 +5329,16 @@ body {
   background: var(--lm-amber);
   flex-shrink: 0;
 }
+/* Paused: a hollow dot and faint ink, so it never reads as the live state. */
+.lm-room-aware.is-paused .lm-room-aware-pill {
+  color: var(--lm-ink-faint);
+  border-style: dashed;
+}
+.lm-room-aware.is-paused .lm-room-aware-dot {
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid var(--lm-ink-faint);
+}
 .lm-room-aware-chip:hover .lm-room-aware-pill,
 .lm-room-aware-chip[aria-expanded="true"] .lm-room-aware-pill {
   color: var(--lm-ink);
@@ -5385,6 +5395,10 @@ body {
   }
   .lm-room-aware-dot {
     background: CanvasText;
+  }
+  .lm-room-aware.is-paused .lm-room-aware-dot {
+    background: Canvas;
+    border-color: CanvasText;
   }
   .lm-room-aware-chip:focus-visible .lm-room-aware-pill {
     outline: 2px solid Highlight;

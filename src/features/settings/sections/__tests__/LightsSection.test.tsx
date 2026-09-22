@@ -806,14 +806,25 @@ describe("LightsSection — room-aware indicator", () => {
     shellStateRef.current = {};
   });
 
-  function renderWithTargets(outputTargets: Array<"usb" | "hue">) {
+  const pausedChipName = "roomMap:roomAware.pausedAriaLabel";
+
+  function renderWithTargets(
+    outputTargets: Array<"usb" | "hue">,
+    hue: {
+      configured?: boolean;
+      reachable?: boolean;
+      verdict?: "reachable" | "credentialRejected" | "unreachable" | null;
+    } = {},
+  ) {
     render(
       <LightsSection
         mode={{ kind: "ambilight" }}
         outputTargets={outputTargets}
         localOutputConnected={true}
         localSink={{ transport: "serial", id: "/dev/cu.usbserial-1420" }}
-        hueConfigured={true}
+        hueConfigured={hue.configured ?? true}
+        hueReachable={hue.reachable ?? true}
+        hueProbeVerdict={hue.verdict ?? "reachable"}
         hueStreaming={false}
         modeLockReason={null}
         onModeChange={vi.fn()}
@@ -841,5 +852,28 @@ describe("LightsSection — room-aware indicator", () => {
     renderWithTargets(["usb"]);
     await act(async () => {});
     expect(screen.queryByRole("button", { name: chipName })).not.toBeInTheDocument();
+  });
+
+  // The audit caught the chip claiming room-aware sampling under a Hue row
+  // that said re-pair was required and nothing was streaming.
+  it.each([
+    ["the key is rejected", "credentialRejected", "roomMap:roomAware.paused.keyRejected"],
+    ["the bridge is unreachable", "unreachable", "roomMap:roomAware.paused.unreachable"],
+  ] as const)("reads paused, not on, when %s", async (_label, verdict, reasonKey) => {
+    shellStateRef.current = { roomMap: { ...DEFAULT_ROOM_MAP, tvAnchor } };
+    renderWithTargets(["usb", "hue"], { reachable: false, verdict });
+    const chip = await screen.findByRole("button", { name: pausedChipName });
+    expect(chip).toHaveTextContent("roomMap:roomAware.pausedLabel");
+    expect(screen.queryByRole("button", { name: chipName })).not.toBeInTheDocument();
+    fireEvent.click(chip);
+    expect(screen.getByText(reasonKey)).toBeVisible();
+  });
+
+  it("stays hidden when no bridge is paired", async () => {
+    shellStateRef.current = { roomMap: { ...DEFAULT_ROOM_MAP, tvAnchor } };
+    renderWithTargets(["usb", "hue"], { configured: false, reachable: false, verdict: null });
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: chipName })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: pausedChipName })).not.toBeInTheDocument();
   });
 });

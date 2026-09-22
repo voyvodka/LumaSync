@@ -17,6 +17,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The "Room-aware" chip said room-aware sampling was on even when the Hue bridge needed re-pairing
+  or could not be reached, so nothing was being sampled. It now reads "Room-aware · paused" with a
+  hollow dot, and its explanation gives the same reason as the Hue output row. It picks up again by
+  itself once Hue is back. With no bridge paired, the chip is not shown at all.
 - USB strips: the per-channel gamma sliders did nothing on the default setup (LumaSync firmware
   with WS2812B LEDs), which always used gamma 2.2; they only worked with the Adalight profile or
   SK6812 strips. They now apply there too, in Ambilight, Solid colour and the LED test. If you

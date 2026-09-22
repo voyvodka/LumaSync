@@ -78,10 +78,20 @@ const structure = (panel: string) =>
             /\bis-on\b|\bis-active\b|\bis-selected\b/.test(el.className.toString()) &&
             el.getAttribute("aria-selected") === null &&
             el.getAttribute("aria-pressed") === null &&
+            el.getAttribute("aria-checked") === null &&
             el.getAttribute("aria-current") === null,
         )
         .map((el) => name(el).replace(/\s+/g, " ").slice(0, 40)),
-      keyboardUnreachable: controls.filter((el) => el.getAttribute("tabindex") === "-1").length,
+      // A radio group's unchecked members are tabindex -1 by design (roving
+      // tabindex); arrow keys reach them, so they are not counted here.
+      keyboardUnreachable: controls.filter(
+        (el) =>
+          el.getAttribute("tabindex") === "-1" &&
+          !(
+            el.getAttribute("role") === "radio" &&
+            el.closest('[role="radiogroup"]')?.querySelector('[role="radio"][tabindex="0"]')
+          ),
+      ).length,
       // Text painted outside a box that clips it.
       clipped: Array.from(root.querySelectorAll<HTMLElement>("*"))
         .filter((el) => el.scrollWidth > el.clientWidth + 2 && getComputedStyle(el).overflow === "hidden")

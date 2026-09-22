@@ -213,6 +213,8 @@ export const SettingsLayout = memo(function SettingsLayout({
               onNavigateToDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
               hueReachable={hueReachable}
               outputTargets={outputTargets}
+              hueConfigured={hueConfigured}
+              hueProbeVerdict={hueProbeVerdict}
             />
           </div>
         )}
