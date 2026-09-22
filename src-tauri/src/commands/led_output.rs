@@ -393,10 +393,12 @@ impl LedOutputError {
 /// its callers can be tested without opening a real serial port.
 pub trait LedPacketSender: Send + Sync {
     fn send(&self, port_name: &str, packet: &[u8]) -> Result<(), LedOutputError>;
-    /// Drop the cached writer for `port_name`. Kept for future explicit
-    /// "disconnect device" callers; production hot paths do NOT call this —
-    /// see docs/architecture/device-output.md (DTR reset).
-    #[allow(dead_code)]
+    /// Drop the cached writer for `port_name`. Called by `set_active_port`
+    /// (lighting_mode.rs) when the active port switches to a different one,
+    /// so the abandoned port's OS handle is released instead of staying open
+    /// until the app quits. Never called for a same-port overwrite — that
+    /// would reopen the port and toggle DTR — see
+    /// docs/architecture/device-output.md (DTR reset).
     fn disconnect_session(&self, port_name: &str);
 }
 
@@ -530,14 +532,12 @@ impl LedOutputBridge {
         Self { sender }
     }
 
-    /// Drop the cached port handle for `port_name`. Production-side
-    /// callers (Solid + Ambilight runtime, `SerialSink::stop`) no longer
-    /// invoke this on every transition — see the rationale comment in
-    /// `SerialSink::stop`. The API is preserved for explicit caller-driven
-    /// teardown (future "disconnect device" UI hook) and for the
-    /// per-write failure path inside `SerialLedPacketSender::send`,
-    /// which still drops dead handles automatically.
-    #[allow(dead_code)]
+    /// Drop the cached port handle for `port_name`. `SerialSink::stop` still
+    /// never calls this on a same-port transition — see the rationale
+    /// comment there — but `set_active_port` (lighting_mode.rs) calls it
+    /// when the active port switches to a different one, and the per-write
+    /// failure path inside `SerialLedPacketSender::send` still drops dead
+    /// handles automatically.
     pub fn disconnect_session(&self, port_name: &str) {
         self.sender.disconnect_session(port_name);
     }
