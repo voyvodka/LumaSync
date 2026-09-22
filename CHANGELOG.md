@@ -18,6 +18,10 @@ https://keepachangelog.com/en/1.1.0/
   machine with a debug console or a Bluetooth serial port showed "2" beside a heading that
   read "1 connected". It now counts only ports LumaSync can actually drive. The WLED row
   had no count at all, even with a panel bound; it shows one now, like the Hue row does.
+- The room map now shows when it has keyboard focus. Arrow keys pan the view, but the editor
+  gave no sign it was the thing listening, so there was no way to tell whether a keypress
+  would do anything. The panel edge now lights up when you reach it by keyboard — and only
+  by keyboard, since clicking it already tells you where you are.
 - The window could not be moved or closed while the room-map rename box or the firmware
   override warning was open. Both covered the whole window, including the title bar that
   carries the drag region and the window controls, so the window stayed pinned until the

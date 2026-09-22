@@ -5910,6 +5910,26 @@ body {
    makes the canvas look like it grew a stray chip. The backdrop is opaque
    enough to stay legible over the brightest zone fill, which is why it is
    not `--lm-panel` at full alpha. */
+/* The editor root is the focusable element — it routes every shortcut, and
+   since the arrow keys started panning the viewport it is also what a
+   keyboard user has to be *on* for panning to work. It carried
+   `outline: none` with nothing in its place, so there was no way to tell it
+   had focus.
+
+   Inset rather than an outline, and `:focus-visible` rather than `:focus`.
+   An outline draws outside the box and rings a full-bleed panel from the
+   edge of the window, which is why it was suppressed in the first place; the
+   inset token draws just inside its own border, so the panel edge lights up.
+   `:focus-visible` keeps it off every mouse click on the canvas, where a ring
+   would be noise for someone who can already see their own cursor. */
+.lm-room-editor:focus {
+  outline: none;
+}
+.lm-room-editor:focus-visible {
+  outline: none;
+  box-shadow: var(--lm-focus-ring-inset);
+}
+
 /* The third on-canvas surface, alongside the `.lm-room-overlay` pair. Its own
    class rather than that one because the overlays are corner-anchored and
    these are chips inside a toolbar — the shared part is the surface, not the
