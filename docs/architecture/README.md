@@ -17,6 +17,7 @@ in an area needs both.
 |---|---|
 | Working on Hue — pairing, streaming, zones, colour | [`hue.md`](hue.md) |
 | Working on USB serial, WLED, or any output sink | [`device-output.md`](device-output.md) |
+| Changing the serial wire format, the handshake, or writing firmware | [`serial-protocol.md`](serial-protocol.md) |
 | Touching screen capture, the worker, or anything per frame | [`capture-and-pipeline.md`](capture-and-pipeline.md) |
 | Adding or changing a Tauri command, a status code, or persisted state | [`contracts-and-state.md`](contracts-and-state.md) |
 | Building for the first time, changing CI, or cutting a release | [`build-and-release.md`](build-and-release.md) |

@@ -4,6 +4,10 @@ The output sinks other than Hue: USB LED controllers over serial, and WLED devic
 Implementation in `src-tauri/src/commands/` — `device_connection.rs`, `led_sink.rs`,
 `led_output.rs`, `wled_sink.rs`, `device_handshake.rs`.
 
+The serial wire format itself — data frames, pixel layouts, the handshake, and what the planned
+firmware adds — is specified in [`serial-protocol.md`](serial-protocol.md). This file holds the
+decisions around it.
+
 ## Decisions
 
 **USB serial is gated by a 9-entry VID/PID allowlist.** `SUPPORTED_USB_DEVICE_ALLOWLIST` in
@@ -20,7 +24,8 @@ stranger's device.
 in sync, and the failure is silent: a device works in one code path and is rejected in another.
 
 **Serial link is 115200 baud, 8N1 — and on a long strip that, not the software, is the frame-rate
-ceiling.** 11 520 bytes/s against a `6 + N × bpp` frame gives `link_max_fps` in
+ceiling.** 11 520 bytes/s against a `6 + N × bpp` frame
+([`serial-protocol.md`](serial-protocol.md) §1.2) gives `link_max_fps` in
 `led_calibration.rs`: 23 fps at 164 LEDs in GRB, 17 fps in RGBW. The pacer already clamps to it and
 telemetry already reports it through `linkConstrained` and `linkMaxFps`. Read that number as "the
 link is full", not as a pipeline shortfall — it has been misread as one, and the fixes that follow
@@ -37,8 +42,10 @@ pins the arithmetic so the next person meets the explanation instead of the numb
 **Every sink goes through the `LedSink` trait.** Serial and WLED differ in transport, not in what
 they are asked to do. New output types implement the trait rather than branching at the call site.
 
-**WLED is driven over UDP with DDP and WARLS.** These are WLED's own realtime protocols; there is
-no HTTP request per frame.
+**WLED is driven over UDP with DDP, or DRGB/DNRGB on the realtime port.** These are WLED's own
+realtime protocols; there is no HTTP request per frame. WLED is also the documented route for any
+strip the serial path cannot drive yet — APA102, SK9822, or a strip that needs its own colour
+order ([`serial-protocol.md`](serial-protocol.md) §4).
 
 **Nothing makes the frame length and the panel's length agree, so the sink says so once.** The
 frame is sized by the LED calibration and the panel by its own configuration, and the two are
