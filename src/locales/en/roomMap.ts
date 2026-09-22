@@ -201,6 +201,14 @@ export default {
     ariaLabel: "Room-aware: how it works",
     body: "Each Hue light takes its colour from the part of the screen nearest to where it stands. Its height picks how high on the screen, from the bottom edge near the floor to the top edge near the ceiling, and its distance from the TV sets how much it follows that spot rather than the overall ambience.",
     why: "On because the room map has a TV. Remove the TV to turn it off.",
+    pausedLabel: "Room-aware · paused",
+    pausedAriaLabel: "Room-aware is paused: why",
+    paused: {
+      keyRejected: "Paused: the Hue bridge needs re-pairing.",
+      unreachable: "Paused: the Hue bridge is unreachable.",
+      checking: "Paused while the Hue bridge is checked.",
+    },
+    pausedWhy: "It resumes by itself once Hue is back, because the room map still has a TV.",
   },
   propertyBar: {
     empty: "Select an object to edit its properties",

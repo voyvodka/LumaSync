@@ -102,6 +102,25 @@ describe("RoomMapToolbar", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("room-aware chip reads paused, with the Hue reason, when Hue cannot stream", () => {
+    render(
+      <RoomMapToolbar
+        {...BASE_PROPS}
+        roomAware={{ state: "paused", reason: "keyRejected" }}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "roomMap:roomAware.ariaLabel" }),
+    ).not.toBeInTheDocument();
+    const chip = screen.getByRole("button", { name: "roomMap:roomAware.pausedAriaLabel" });
+    expect(chip).toHaveTextContent("roomMap:roomAware.pausedLabel");
+    fireEvent.click(chip);
+    const panel = document.getElementById(chip.getAttribute("aria-controls") ?? "");
+    expect(panel).toHaveTextContent("roomMap:roomAware.paused.keyRejected");
+    expect(panel).toHaveTextContent("roomMap:roomAware.pausedWhy");
+    expect(panel).not.toHaveTextContent("roomMap:roomAware.why");
+  });
+
   // A disclosure rather than a hover tooltip, so the explanation is reachable
   // from the keyboard; Escape must close it without reaching the editor's own
   // Escape (deselect).
@@ -109,7 +128,7 @@ describe("RoomMapToolbar", () => {
     const onEditorKey = vi.fn();
     render(
       <div onKeyDown={onEditorKey}>
-        <RoomMapToolbar {...BASE_PROPS} roomAware />
+        <RoomMapToolbar {...BASE_PROPS} roomAware={{ state: "active" }} />
       </div>,
     );
     const chip = screen.getByRole("button", { name: "roomMap:roomAware.ariaLabel" });

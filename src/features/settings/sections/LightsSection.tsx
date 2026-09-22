@@ -19,7 +19,7 @@ import {
 } from "@/features/mode/model/scenePresets";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
 import { createHueZone } from "@/features/room-map/roomMapApi";
-import { isRoomAwareActive } from "@/features/room-map/model/roomAware";
+import { roomAwareStatus } from "@/features/room-map/model/roomAware";
 import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
 import type { HueZone, RoomMapConfig, TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
@@ -41,6 +41,10 @@ import { useFullTelemetryPoll } from "@/features/telemetry/hooks/useFullTelemetr
 import { hasSerialLinkBudget } from "@/shared/contracts/telemetry";
 import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+import {
+  hueUnavailableReason,
+  type HueUnavailableReason,
+} from "@/features/hue/model/hueAvailability";
 import { shellStore } from "@/features/persistence/shellStore";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
@@ -75,20 +79,19 @@ export function triggerCalibrationFromLock(
   if (lockState.showOpenCalibrationAction) openCalibration();
 }
 
-/** Why the Hue row is unavailable. A paired bridge is never "not configured":
- * a rejected key and a silent bridge need different next steps. */
+const HUE_UNAVAILABLE_SUB_KEYS = {
+  notConfigured: "lights:dock.rows.hueSubUnavailable",
+  keyRejected: "lights:dock.rows.hueSubKeyRejected",
+  unreachable: "lights:dock.rows.hueSubUnreachable",
+  checking: "lights:dock.rows.hueSubChecking",
+} as const satisfies Record<HueUnavailableReason, string>;
+
+/** Why the Hue row is unavailable; only called when it is. */
 export function hueUnavailableSubKey(
   hueConfigured: boolean,
   verdict: HueProbeVerdict | null,
-):
-  | "lights:dock.rows.hueSubUnavailable"
-  | "lights:dock.rows.hueSubKeyRejected"
-  | "lights:dock.rows.hueSubUnreachable"
-  | "lights:dock.rows.hueSubChecking" {
-  if (!hueConfigured) return "lights:dock.rows.hueSubUnavailable";
-  if (verdict === "credentialRejected") return "lights:dock.rows.hueSubKeyRejected";
-  if (verdict === null) return "lights:dock.rows.hueSubChecking";
-  return "lights:dock.rows.hueSubUnreachable";
+): (typeof HUE_UNAVAILABLE_SUB_KEYS)[HueUnavailableReason] {
+  return HUE_UNAVAILABLE_SUB_KEYS[hueUnavailableReason(hueConfigured, false, verdict) ?? "checking"];
 }
 
 interface LightsSectionProps {
@@ -322,6 +325,11 @@ export function LightsSection({
   const usbSelected = outputTargets.includes("usb");
   const hueSelected = outputTargets.includes("hue");
   const hueAvailable = hueConfigured && hueReachable;
+  const roomAware = roomAwareStatus(tvAnchor, outputTargets, {
+    configured: hueConfigured,
+    reachable: hueReachable,
+    verdict: hueProbeVerdict,
+  });
 
   const toggleTarget = (id: HueRuntimeTarget, currentlySelected: boolean) => {
     const next = currentlySelected
@@ -884,9 +892,7 @@ export function LightsSection({
               </div>
               <span className="tg" />
             </button>
-            {isRoomAwareActive(tvAnchor, outputTargets) && (
-              <RoomAwareIndicator variant="inline" />
-            )}
+            {roomAware && <RoomAwareIndicator variant="inline" status={roomAware} />}
           </div>
         </div>
       </aside>

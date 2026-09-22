@@ -229,3 +229,50 @@ describe("FirmwareProfilePicker — Bug H4 mismatch gating", () => {
     );
   });
 });
+
+// The ui-audit probe flagged the selected tile as "selection in CSS only". It is
+// a radio group; these pin the state a screen reader actually reads.
+describe("FirmwareProfilePicker — radio semantics", () => {
+  it("exposes the selection as aria-checked inside a named radiogroup", () => {
+    render(
+      <FirmwareProfilePicker
+        initialProfile={FIRMWARE_PROFILE.LUMASYNC_V1}
+        advertisedFirmwareProfile={undefined}
+        initialDontWarnFirmwareProfileMismatch={false}
+      />,
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "lights:led.firmwareProfile.title" });
+    const v1Tile = screen.getByRole("radio", { name: /lumasyncV1Label/ });
+    const adalightTile = screen.getByRole("radio", { name: /adalightLabel/ });
+    expect(group).toContainElement(v1Tile);
+    expect(v1Tile).toBeChecked();
+    expect(adalightTile).not.toBeChecked();
+    // Roving tabindex: only the checked radio is in the tab order.
+    expect(v1Tile).toHaveAttribute("tabindex", "0");
+    expect(adalightTile).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("moves and commits the selection with the arrow keys", () => {
+    const onProfileChange = vi.fn();
+    render(
+      <FirmwareProfilePicker
+        initialProfile={FIRMWARE_PROFILE.LUMASYNC_V1}
+        advertisedFirmwareProfile={undefined}
+        initialDontWarnFirmwareProfileMismatch={false}
+        onProfileChange={onProfileChange}
+      />,
+    );
+
+    const v1Tile = screen.getByRole("radio", { name: /lumasyncV1Label/ });
+    const adalightTile = screen.getByRole("radio", { name: /adalightLabel/ });
+    v1Tile.focus();
+    fireEvent.keyDown(v1Tile, { key: "ArrowRight" });
+
+    expect(adalightTile).toBeChecked();
+    expect(v1Tile).not.toBeChecked();
+    expect(adalightTile).toHaveFocus();
+    expect(adalightTile).toHaveAttribute("tabindex", "0");
+    expect(onProfileChange).toHaveBeenCalledWith(FIRMWARE_PROFILE.ADALIGHT);
+  });
+});

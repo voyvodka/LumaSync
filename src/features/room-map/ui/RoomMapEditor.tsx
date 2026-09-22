@@ -44,7 +44,8 @@ import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
-import { isRoomAwareActive } from "../model/roomAware";
+import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
+import { roomAwareStatus } from "../model/roomAware";
 
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
@@ -65,6 +66,10 @@ interface RoomMapEditorProps {
   hueReachable?: boolean;
   /** Selected outputs; with a TV anchor, a Hue target turns the room-aware chip on. */
   outputTargets?: HueRuntimeTarget[];
+  /** A bridge is paired. Without one the room-aware chip stays hidden. */
+  hueConfigured?: boolean;
+  /** Picks the paused room-aware chip's reason, as it does the Lights Hue row's. */
+  hueProbeVerdict?: HueProbeVerdict | null;
 }
 
 const IS_MAC = navigator.platform.includes("Mac");
@@ -81,7 +86,14 @@ const HUE_ZONE_REJECTION_KEYS = {
   HUE_ZONE_OVERSIZED: "roomMap:hueZones.rejected.oversized",
 } as const satisfies Record<HueZoneStatusCode, string>;
 
-export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueReachable, outputTargets = [] }: RoomMapEditorProps = {}) {
+export function RoomMapEditor({
+  onZoneCountsConfirmed,
+  onNavigateToDevices,
+  hueReachable,
+  outputTargets = [],
+  hueConfigured = false,
+  hueProbeVerdict = null,
+}: RoomMapEditorProps = {}) {
   const { t } = useTranslation();
   const { config, updateConfig, adoptConfig, replaceConfig, resetConfig, undo, redo, canUndo, canRedo, loading, error } = useRoomMapPersist();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -422,7 +434,11 @@ export function RoomMapEditor({ onZoneCountsConfirmed, onNavigateToDevices, hueR
       <RoomMapToolbar
         hasTv={hasTv}
         hasUsb={hasUsb}
-        roomAware={isRoomAwareActive(config.tvAnchor, outputTargets)}
+        roomAware={roomAwareStatus(config.tvAnchor, outputTargets, {
+          configured: hueConfigured,
+          reachable: hueReachable ?? false,
+          verdict: hueProbeVerdict,
+        })}
         derivePreviewActive={derivePreviewActive}
         zoneCount={config.zones.length}
         onDeriveZones={handleDeriveZones}
