@@ -50,7 +50,7 @@ import { useTranslation } from "react-i18next";
 
 import type { HueZone } from "@/shared/contracts/roomMap";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
-import { clamp } from "@/shared/lib/math";
+import { clamp, roundTo } from "@/shared/lib/math";
 
 interface HueZoneInspectorProps {
   zone: HueZone;
@@ -251,9 +251,9 @@ export function HueZoneInspector({
           onChange={(e) => setEdgeM(parseFloat(e.target.value))}
           disabled={maxEdgeM <= 0}
           className="lm-room-dock-slider"
-          aria-valuemin={minEdgeM}
-          aria-valuemax={maxEdgeM}
-          aria-valuenow={currentEdgeM}
+          aria-valuemin={roundTo(minEdgeM, 2)}
+          aria-valuemax={roundTo(maxEdgeM, 2)}
+          aria-valuenow={roundTo(currentEdgeM, 2)}
           aria-label={t("roomMap:inspector.zoneEdgeAriaLabel")}
           data-testid="hue-zone-size-slider"
         />

@@ -390,7 +390,7 @@ export function HueBridgesCategory({
                   {hueStatus?.code ? (
                     <div className="lm-dcard-cell">
                       <div className="lm-dcard-cell-k">{t("hue:card.cellError")}</div>
-                      <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
+                      <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                     </div>
                   ) : null}
                   {hueRuntimeModel.retry?.remainingAttempts !== undefined ? (
@@ -416,7 +416,7 @@ export function HueBridgesCategory({
                   ) : null}
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
-                    <div className="lm-dcard-cell-v is-am" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
+                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
                   </div>
                 </div>
               ) : hueBridgeState === "gateBlocked" ? (
@@ -451,7 +451,7 @@ export function HueBridgesCategory({
                   {hueStatus?.code ? (
                     <div className="lm-dcard-cell">
                       <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
-                      <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
+                      <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
                     </div>
                   ) : null}
                 </div>
@@ -598,14 +598,6 @@ export function HueBridgesCategory({
                         })
                       : t("hue:runtime.reconnectingTitle")}
                   </span>
-                  <button
-                    type="button"
-                    className="lm-hue-retry-cancel"
-                    onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }}
-                    disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}
-                  >
-                    {t("hue:page.stopRetrying")}
-                  </button>
                 </div>
               ) : null}
 

@@ -3,7 +3,7 @@ import type enHue from "@/locales/en/hue";
 
 const hue: Catalogue<typeof enHue> = {
   title: "Philips Hue",
-  description: "Bridge keşfi, eşleştirme ve entertainment alanı kurulumu.",
+  description: "Köprü keşfi, eşleştirme ve entertainment alanı kurulumu.",
   steps: {
     discover: "Keşfet",
     pair: "Eşleştir",
@@ -11,9 +11,9 @@ const hue: Catalogue<typeof enHue> = {
     ready: "Hazır",
   },
   actions: {
-    discover: "Bridge keşfet",
+    discover: "Köprü keşfet",
     discovering: "Keşfediliyor...",
-    pair: "Bridge eşleştir",
+    pair: "Köprüyü eşleştir",
     pairing: "Eşleştiriliyor...",
     refreshAreas: "Alanları yenile",
     loadingAreas: "Alanlar yükleniyor...",
@@ -22,24 +22,24 @@ const hue: Catalogue<typeof enHue> = {
     stop: "Hue'yu durdur",
   },
   bridge: {
-    placeholder: "Bir Hue bridge seç",
-    noBridges: "Henüz bridge bulunamadı. Keşfet'e bas veya IP gir.",
+    placeholder: "Bir Hue köprüsü seç",
+    noBridges: "Henüz köprü bulunamadı. Keşfet'e bas veya IP gir.",
     unreachable: "Ulaşılamıyor",
     online: "Çevrimiçi",
     checking: "Kontrol ediliyor…",
-    networkHint: "{{name}} bridge'ine {{ip}} üzerinden ulaşılamıyor. Hue bridge'inizle aynı ağda olduğunuzdan emin olun.",
+    networkHint: "{{name}} köprüsüne {{ip}} üzerinden ulaşılamıyor. Hue köprünüzle aynı ağda olduğunuzdan emin olun.",
   },
   manualIp: {
     title: "Manuel IP girişi",
-    description: "Otomatik keşif bridge'inizi bulamadıysa IP adresini elle girin.",
+    description: "Otomatik keşif köprünüzü bulamadıysa IP adresini elle girin.",
     placeholder: "örn. 192.168.1.50",
     submit: "IP doğrula",
     invalid: "Göndermeden önce geçerli bir IPv4 adresi gir.",
   },
   pair: {
-    linkButtonHint: "Hue bridge'inizin üstündeki butona basın. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklamanız gerekmiyor.",
+    linkButtonHint: "Hue köprünüzün üstündeki butona basın. LumaSync bunu kendisi kontrol ediyor, başka bir yere tıklamanız gerekmiyor.",
     timedOutTitle: "Buton basışı algılanmadı",
-    timedOutHint: "Tekrar dene'yi seçin, ardından bir dakika içinde Hue bridge'inizin üstündeki butona basın.",
+    timedOutHint: "Tekrar dene'yi seçin, ardından bir dakika içinde Hue köprünüzün üstündeki butona basın.",
     tryAgain: "Tekrar dene",
   },
   pairing: {
@@ -63,7 +63,7 @@ const hue: Catalogue<typeof enHue> = {
     needsRepair: "Yeniden eşleştirme gerekli",
     unreachable: "Ulaşılamıyor",
     line: "Kimlik durumu: {{state}}",
-    repairHint: "Kimlik bilgileriniz süresi dolmuş. Bridge butonuna basıp tekrar eşleştirin.",
+    repairHint: "Kimlik bilgileriniz süresi dolmuş. Köprü butonuna basıp tekrar eşleştirin.",
   },
   areas: {
     title: "Entertainment alanları",
@@ -125,21 +125,21 @@ const hue: Catalogue<typeof enHue> = {
     badgeInProgress: "Devam ediyor",
     badgeNotStarted: "Başlamadı",
     badgeSelected: "Seçildi",
-    pairInstruction: "Hue bridge'inizin üzerindeki fiziksel butona basın, ardından Bridge eşleştir'e tıklayın.",
+    pairInstruction: "Hue köprünüzün üzerindeki fiziksel butona basın, ardından Köprüyü eşleştir'e tıklayın.",
     areaInstruction: "Işıklarınızla senkronize etmek istediğiniz entertainment alanını seçin.",
     readySummary: "{{bridge}} / {{area}}",
-    emptyTitle: "Hue bridge yapılandırılmadı",
-    emptyBody: "Oda ışıklarınızı ekranınızla senkronize etmek için Philips Hue bridge'inizi bağlayın. Bridge'inizin açık ve aynı ağa bağlı olduğundan emin olun.",
-    emptyAction: "Bridge keşfet",
-    offlineTitle: "Bridge'e ulaşılamıyor",
+    emptyTitle: "Hue köprüsü yapılandırılmadı",
+    emptyBody: "Oda ışıklarınızı ekranınızla senkronize etmek için Philips Hue köprünüzü bağlayın. Köprünüzün açık ve aynı ağa bağlı olduğundan emin olun.",
+    emptyAction: "Köprü keşfet",
+    offlineTitle: "Köprüye ulaşılamıyor",
     offlineBody: "{{name}} ({{ip}}) şu an yanıt vermiyor. Bunun olası nedenleri:",
     offlineReasonsTitle: "Olası nedenler",
     offlineReason1: "Farklı bir Wi-Fi ağındasınız",
-    offlineReason2: "Bridge kapalı veya yeniden başlatılıyor",
-    offlineReason3: "Bridge'in IP adresi değişmiş olabilir",
+    offlineReason2: "Köprü kapalı veya yeniden başlatılıyor",
+    offlineReason3: "Köprünün IP adresi değişmiş olabilir",
     offlineRediscover: "Yeniden keşfet",
     offlineTryIp: "Farklı bir IP dene",
-    offlineReset: "Bu bridge'i kaldır ve baştan başla",
+    offlineReset: "Bu köprüyü kaldır ve baştan başla",
     pairingStep: "Eşleştirme devam ediyor",
     areaStep: "Eğlence alanı seçin",
     pairingFailed: "Eşleştirme başarısız",
@@ -147,7 +147,7 @@ const hue: Catalogue<typeof enHue> = {
   card: {
     cellArea: "Alan",
     cellProtocol: "Protokol",
-    cellCh: "Kn",
+    cellCh: "Kanal",
     cellRate: "Hız",
     rateHz: "{{hz}} Hz",
     cellStatus: "Durum",
@@ -187,7 +187,7 @@ const hue: Catalogue<typeof enHue> = {
       TRANSIENT_RETRY_SCHEDULED: "Geçici sorun algılandı. Otomatik deneme planlandı.",
       TRANSIENT_RETRY_EXHAUSTED: "Deneme bütçesi tükendi. Manuel yeniden bağlan gerekli.",
       AUTH_INVALID_CREDENTIALS: "Kimlik bilgileri geçersiz. Yeniden eşleştirme gerekli.",
-      AUTH_INVALID_RE_PAIR_REQUIRED: "Bridge isteği reddetti. Yeniden eşleştirme gerekli.",
+      AUTH_INVALID_RE_PAIR_REQUIRED: "Köprü isteği reddetti. Yeniden eşleştirme gerekli.",
       CONFIG_NOT_READY_GATE_BLOCKED: "Başlatma kapı kontrolden geçmedi; hazırlık stale veya eksik.",
       HUE_STOP_TIMEOUT_PARTIAL: "Durdurma zaman aşımına uğradı. Kısmi durdurma temizliği gerekli.",
       HUE_START_NOOP_ALREADY_ACTIVE: "Hue yayını zaten çalışıyor.",
@@ -239,7 +239,7 @@ const hue: Catalogue<typeof enHue> = {
       title: "Durdurma zaman aşımı",
       body: "Durdurma zaman aşımına ulaştı. Uygulamayı yeniden başlatmadan durdurmayı tekrar deneyebilirsin.",
     },
-    reconnectingTitle: "Hue bridge'e yeniden bağlanılıyor",
+    reconnectingTitle: "Hue köprüsüne yeniden bağlanılıyor",
     reconnectingBody: "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
     failedTitle: "Hue stream başarısız oldu",
     failedBody: "[{{code}}] {{description}} — {{actionHint}}",
@@ -247,7 +247,7 @@ const hue: Catalogue<typeof enHue> = {
     stopStreamAction: "Durdur",
     faults: {
       "HUE-NET-01": {
-        description: "Bridge ulaşılamıyor",
+        description: "Köprüye ulaşılamıyor",
         hint: "Ağ bağlantınızı kontrol edin",
       },
       "HUE-NET-02": {
@@ -256,7 +256,7 @@ const hue: Catalogue<typeof enHue> = {
       },
       "HUE-NET-03": {
         description: "DTLS gönderim zaman aşımı",
-        hint: "Ağ gecikmesini ve bridge yakınlığını kontrol edin",
+        hint: "Ağ gecikmesini ve köprü yakınlığını kontrol edin",
       },
       "HUE-NET-04": {
         description: "DTLS bağlantısı beklenmedik şekilde kapandı",
@@ -264,14 +264,14 @@ const hue: Catalogue<typeof enHue> = {
       },
       "HUE-AUTH-01": {
         description: "Kimlik bilgileri geçersiz",
-        hint: "Hue bridge'inizi yeniden eşleştirin",
+        hint: "Hue köprünüzü yeniden eşleştirin",
       },
       "HUE-AUTH-02": {
-        description: "Bridge eşleştirmesi bozulmuş",
-        hint: "Bridge düğmesine basın ve tekrar eşleştirin",
+        description: "Köprü eşleştirmesi bozulmuş",
+        hint: "Köprü düğmesine basın ve tekrar eşleştirin",
       },
       "HUE-AUTH-03": {
-        description: "Bridge isteği reddetti (403)",
+        description: "Köprü isteği reddetti (403)",
         hint: "Kimlik bilgilerini yenilemek için yeniden eşleştirin",
       },
       "HUE-STR-01": {
@@ -280,7 +280,7 @@ const hue: Catalogue<typeof enHue> = {
       },
       "HUE-STR-02": {
         description: "Stream kısıtlaması algılandı",
-        hint: "Stream frekansını azaltın veya bridge yükünü kontrol edin",
+        hint: "Yayın frekansını azaltın veya köprü yükünü kontrol edin",
       },
       "HUE-STR-03": {
         description: "Paket gönderimi başarısız",
@@ -295,14 +295,14 @@ const hue: Catalogue<typeof enHue> = {
         hint: "Cihaz ayarlarından bir alan seçin",
       },
       "HUE-CFG-02": {
-        description: "Bridge IP adresi değişmiş",
-        hint: "Cihaz ayarlarından bridge IP'sini güncelleyin",
+        description: "Köprü IP adresi değişmiş",
+        hint: "Cihaz ayarlarından köprü IP'sini güncelleyin",
       },
     },
     writeback: {
       codes: {
-        CHAN_WB_SCHEMA_REJECTED: "Bridge konum formatını reddetti.",
-        CHAN_WB_NETWORK_ERROR: "Bridge'e ulaşılamıyor.",
+        CHAN_WB_SCHEMA_REJECTED: "Köprü konum formatını reddetti.",
+        CHAN_WB_NETWORK_ERROR: "Köprüye ulaşılamıyor.",
       },
     },
   },

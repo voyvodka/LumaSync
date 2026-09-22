@@ -9,6 +9,18 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- A round of visual fixes. The Hue bridge card coloured its fault code against its own state —
+  red on a card that was only reconnecting, amber on one whose key had been rejected — and now
+  matches the card; a reconnecting card also no longer shows two identical Stop buttons. In
+  compact mode, with the setup tip showing, the lighting card cut its response-speed buttons in
+  half; the window now scrolls to them. The room-map editor's keyboard focus ring is visible
+  again, and its size fields are named for screen readers.
+- Turkish screens: "Ambilight", the USB adapter name and your own room-map zone names are no
+  longer capitalised by Turkish rules into "AMBİLİGHT" or "LİVİNG ROOM"; the "Save positions to
+  bridge" button no longer spills out of its panel, and the "Hue Bölgeleri" tab stays on one line.
+  The Hue screens now say "köprü" and the room map "bölge" throughout instead of mixing in
+  "bridge" and "zone", the LED chip picker's byte counts are translated, and a few strings that
+  had lost their Turkish letters are corrected.
 - When macOS screen recording was refused, LumaSync still opened showing Ambilight on, the
   capture as OK, Hue as streaming and a frame rate, while nothing was running and nothing said
   why. It also kept the Hue bridge's entertainment stream claimed for a mode that never

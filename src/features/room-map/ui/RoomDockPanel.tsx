@@ -307,7 +307,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
               className={`lm-room-dock-tab ${activeTab === tab.id ? "is-on" : ""}`}
               onClick={() => setActiveTab(tab.id)}
             >
-              <span>{tab.label}</span>
+              <span className="lm-room-dock-tab-label">{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
                 <span className="lm-room-dock-tab-count">{tab.count}</span>
               )}

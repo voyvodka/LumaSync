@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { hueChannelIdLabel, hueChannelName } from "../../model/hueChannelLabel";
 
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
+import { roundTo } from "@/shared/lib/math";
 import { Header } from "./InspectorPrimitives";
 import type { UsbStripConnectionStatus } from "./UsbStripInspector";
 import { TYPE_DOT_COLOR } from "../../model/zoneColor";
@@ -176,7 +177,7 @@ export function HueChannelInspector({
           aria-label={t("roomMap:inspector.hueHeightAriaLabel")}
           aria-valuemin={-1}
           aria-valuemax={1}
-          aria-valuenow={worldZ}
+          aria-valuenow={roundTo(worldZ, 2)}
           // The raw -1..1 is meaningless read aloud; this is the whole reason the
           // control moved off the Devices strip, so do not drop it.
           aria-valuetext={t("roomMap:inspector.hueHeightValueText", {

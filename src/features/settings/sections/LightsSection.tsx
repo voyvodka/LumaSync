@@ -488,7 +488,8 @@ export function LightsSection({
             >
               <span className="ico"><IconAmbilight /></span>
               <span className="tx">
-                <span className="tn">{t("lights:mode.ambilight.title")}</span>
+                {/* A brand name: English casing rules, or `lang="tr"` uppercases it to "AMBİLİGHT". */}
+                <span className="tn" lang="en">{t("lights:mode.ambilight.title")}</span>
                 <span className="ts">
                   {typeof totalLeds === "number" && totalLeds > 0
                     ? t("lights:mode.ambilight.subtitle", { count: totalLeds })
@@ -777,8 +778,14 @@ export function LightsSection({
                   {/* The identity of the thing actually bound. For WLED that is
                       its LAN address — the persisted sink config keeps no
                       friendly name — and for serial it is the USB product
-                      string the OS reported, when it reported one. */}
-                  <em>
+                      string the OS reported, when it reported one. Both are
+                      device-supplied, so they are uppercased by English rules
+                      — "CH340 USB SERİAL" under `lang="tr"` otherwise. */}
+                  <em
+                    lang={
+                      localSink?.transport === "wled" || localSink?.product ? "en" : undefined
+                    }
+                  >
                     {localSink?.transport === "wled"
                       ? localSink.id
                       : localSink?.product ?? t("lights:dock.rows.usbType")}

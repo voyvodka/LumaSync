@@ -344,9 +344,9 @@ describe("DeviceSection hue runtime controls", () => {
     }));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: "hue:page.stopRetrying" })[0]).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "hue:page.stopRetrying" })).toBeInTheDocument();
     });
-    await user.click(screen.getAllByRole("button", { name: "hue:page.stopRetrying" })[0]);
+    await user.click(screen.getByRole("button", { name: "hue:page.stopRetrying" }));
 
     expect(stopHueMock).toHaveBeenCalledWith(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE);
   });
