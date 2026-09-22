@@ -9,6 +9,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The Lights screen no longer shows a dashed box reading "Room space — placeholder for
+  telemetry / mini room preview / shortcuts". It was scaffolding that reached the product,
+  and it had been translated into Turkish along the way, so nothing marked it as unfinished
+  except the word itself. Nothing took its place: the column simply ends after the outputs,
+  which is what it should have done until there was something to put there.
 - The Devices rail counted every serial port the system enumerates as a USB strip, so a
   machine with a debug console or a Bluetooth serial port showed "2" beside a heading that
   read "1 connected". It now counts only ports LumaSync can actually drive. The WLED row
