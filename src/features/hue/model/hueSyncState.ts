@@ -22,13 +22,42 @@ const POSITION_EPSILON = 0.005;
 
 /** The wire shape of what a push sends, so the snapshot and the payload cannot
  *  drift. A placement with no bridge id is omitted — the write-back refuses it
- *  too, so recording it would make an unpushable channel look pushed. */
+ *  too, so recording it would make an unpushable channel look pushed. A height
+ *  of unknown origin is left off: its `0` may be a seeding placeholder. */
 export function toSyncSnapshot(
   placements: readonly HueChannelPlacement[],
 ): HueChannelPlacementOverride[] {
   return placements
     .filter((p) => p.channelId != null)
-    .map((p) => ({ channelId: p.channelId!, positionX: p.x, positionY: p.y }));
+    .map((p) => {
+      const entry: HueChannelPlacementOverride = {
+        channelId: p.channelId!,
+        positionX: p.x,
+        positionY: p.y,
+      };
+      if (p.zOrigin) entry.positionZ = p.z;
+      return entry;
+    });
+}
+
+/** Height counts only when both sides carry one. A snapshot from before height
+ *  was recorded, or a local height of unknown origin, falls back to x/y —
+ *  otherwise every upgraded install would read as local-ahead. */
+function differs(
+  current: HueChannelPlacementOverride,
+  pushed: HueChannelPlacementOverride,
+): boolean {
+  if (
+    Math.abs(current.positionX - pushed.positionX) > POSITION_EPSILON ||
+    Math.abs(current.positionY - pushed.positionY) > POSITION_EPSILON
+  ) {
+    return true;
+  }
+  return (
+    current.positionZ != null &&
+    pushed.positionZ != null &&
+    Math.abs(current.positionZ - pushed.positionZ) > POSITION_EPSILON
+  );
 }
 
 export function deriveHueSyncState(
@@ -45,12 +74,7 @@ export function deriveHueSyncState(
     const was = pushed.get(c.channelId);
     // A channel the snapshot never mentioned is a difference, not a match.
     if (!was) return HUE_SYNC_STATE.LOCAL_AHEAD;
-    if (
-      Math.abs(c.positionX - was.positionX) > POSITION_EPSILON ||
-      Math.abs(c.positionY - was.positionY) > POSITION_EPSILON
-    ) {
-      return HUE_SYNC_STATE.LOCAL_AHEAD;
-    }
+    if (differs(c, was)) return HUE_SYNC_STATE.LOCAL_AHEAD;
   }
   return HUE_SYNC_STATE.IN_SYNC;
 }

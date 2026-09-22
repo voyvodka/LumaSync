@@ -9,6 +9,9 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- The Hue channel map now notices a changed light height, not just a moved light, when it says
+  whether the bridge still has your arrangement. Areas saved before this update are compared on
+  position alone, so updating does not mark them as unsaved.
 - Screens now say what is wrong. The Lights outputs list said "Not configured" for a paired Hue
   bridge whose key had been rejected or that was not answering; it now says "re-pair required"
   or "unreachable". The runtime telemetry shows the Hue error as a sentence instead of a raw code,

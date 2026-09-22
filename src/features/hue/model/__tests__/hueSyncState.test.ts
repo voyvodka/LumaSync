@@ -30,6 +30,18 @@ describe("toSyncSnapshot", () => {
     expect(toSyncSnapshot(p).map((s) => s.channelId)).toEqual([0, 5]);
   });
 
+  it("records a height only when its origin is known", () => {
+    const p = placements();
+    p[0] = { ...p[0]!, z: 0.4, zOrigin: "bridge" };
+    p[1] = { ...p[1]!, z: -0.3, zOrigin: "user" };
+    p[2] = { ...p[2]!, z: 0, zOrigin: null };
+    expect(toSyncSnapshot(p)).toEqual([
+      { channelId: 0, positionX: -1, positionY: 0, positionZ: 0.4 },
+      { channelId: 2, positionX: 0, positionY: 0, positionZ: -0.3 },
+      { channelId: 5, positionX: 1, positionY: 0 },
+    ]);
+  });
+
   it("keeps channel #0 rather than dropping a falsy id", () => {
     expect(toSyncSnapshot(placements()).some((s) => s.channelId === 0)).toBe(true);
   });
@@ -97,5 +109,53 @@ describe("deriveHueSyncState", () => {
 
   it("says in-sync for an empty area that was pushed empty", () => {
     expect(deriveHueSyncState([], [])).toBe(HUE_SYNC_STATE.IN_SYNC);
+  });
+
+  describe("height", () => {
+    function withKnownHeights(): HueChannelPlacement[] {
+      return placements().map((p, i) => ({ ...p, z: i * 0.2, zOrigin: "bridge" as const }));
+    }
+
+    it("notices a changed height when both sides carry one", () => {
+      const p = withKnownHeights();
+      const snapshot = toSyncSnapshot(p);
+      p[1] = { ...p[1]!, z: 0.6, zOrigin: "user" };
+      expect(deriveHueSyncState(p, snapshot)).toBe(HUE_SYNC_STATE.LOCAL_AHEAD);
+    });
+
+    it("says in-sync when both heights match", () => {
+      const p = withKnownHeights();
+      expect(deriveHueSyncState(p, toSyncSnapshot(p))).toBe(HUE_SYNC_STATE.IN_SYNC);
+    });
+
+    it("ignores height float noise within the x/y tolerance", () => {
+      const p = withKnownHeights();
+      const snapshot = toSyncSnapshot(p);
+      p[1] = { ...p[1]!, z: p[1]!.z + 0.004 };
+      expect(deriveHueSyncState(p, snapshot)).toBe(HUE_SYNC_STATE.IN_SYNC);
+    });
+
+    it("compares x/y only against a snapshot written before height was recorded", () => {
+      const p = withKnownHeights();
+      // What an upgraded install has on disk: the same push, no positionZ.
+      const legacy = toSyncSnapshot(placements());
+      expect(legacy.every((s) => s.positionZ === undefined)).toBe(true);
+      expect(deriveHueSyncState(p, legacy)).toBe(HUE_SYNC_STATE.IN_SYNC);
+    });
+
+    it("compares x/y only when the local height's origin is unknown", () => {
+      const snapshot = toSyncSnapshot(withKnownHeights());
+      const p = withKnownHeights();
+      p[1] = { ...p[1]!, z: 0.9, zOrigin: undefined };
+      p[2] = { ...p[2]!, z: -0.9, zOrigin: null };
+      expect(deriveHueSyncState(p, snapshot)).toBe(HUE_SYNC_STATE.IN_SYNC);
+    });
+
+    it("still notices a moved channel when height is ignored", () => {
+      const p = withKnownHeights();
+      const legacy = toSyncSnapshot(placements());
+      p[1] = { ...p[1]!, x: 0.5 };
+      expect(deriveHueSyncState(p, legacy)).toBe(HUE_SYNC_STATE.LOCAL_AHEAD);
+    });
   });
 });
