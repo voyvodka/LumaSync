@@ -932,6 +932,34 @@ describe("Scenario 15 — the animator drops the floor to compact", () => {
   });
 });
 
+describe("Scenario 15b — the animator finishes when animation frames stop", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("reaches the target rect, floor and persisted mode with rAF never firing", async () => {
+    // A hidden, occluded or screen-locked window gets no frames. The loop used
+    // to await one unbounded and never return, holding `isAnimatingMode` and
+    // the UI-mode transition lock behind it.
+    const cancelSpy = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", () => 1);
+    vi.stubGlobal("cancelAnimationFrame", cancelSpy);
+    setupPersistedState(makePersistedState({ uiMode: "compact" }));
+
+    const outcome = await Promise.race([
+      resizeToMode("full").then(() => "done" as const),
+      new Promise<"stuck">((resolve) => setTimeout(() => resolve("stuck"), 2000)),
+    ]);
+
+    expect(outcome).toBe("done");
+    expect(cancelSpy).toHaveBeenCalled();
+    const floors = setMinSizeMock.mock.calls.map((c) => c[0] as { width: number; height: number });
+    expect(floors[floors.length - 1]).toMatchObject({ width: 800, height: 560 });
+    const saved = storeSetMock.mock.calls.map((c) => (c[1] as ShellState).uiMode);
+    expect(saved).toContain("full");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Scenario 16 — first run sizes full mode to the screen
 // ---------------------------------------------------------------------------

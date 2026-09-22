@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HUE_CREDENTIAL_STATUS } from "@/shared/contracts/hue";
+import { HUE_CREDENTIAL_STATUS, type HueOnboardingWireStatusCode } from "@/shared/contracts/hue";
 import { hueCredentialEvents } from "../../hueCredentialEvents";
 import { __resetHueReadCacheForTests } from "../../hueReadCache";
 import { useHueOnboardingCore } from "../useHueOnboardingCore";
@@ -119,6 +119,47 @@ describe("useHueOnboardingCore — credential invariants", () => {
       // would send the user to re-pair a bridge that is merely unreachable.
       expect(result.current.state.bridgeUnreachable).toBe(true);
       expect(result.current.state.status?.code).toBe("HUE_CREDENTIAL_CHECK_FAILED");
+    });
+  });
+
+  describe("a key refused mid-session", () => {
+    const readiness = (code: HueOnboardingWireStatusCode) => ({
+      status: { code, message: code, details: null },
+      readiness: { ready: false, reasons: [] as string[] },
+    });
+
+    async function validatedCore() {
+      shellLoadMock.mockResolvedValue({ lastHueBridge: BRIDGE, hueAppKey: "app-key" });
+      validateCredentialsMock.mockResolvedValue({
+        status: { code: "HUE_CREDENTIAL_VALID", message: "ok", details: null },
+        valid: true,
+      });
+      const { result } = renderHook(() => useHueOnboardingCore());
+      await waitFor(() =>
+        expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.VALID),
+      );
+      return result;
+    }
+
+    it("moves the card to re-pair when a readiness poll comes back AUTH_INVALID_RE_PAIR_REQUIRED", async () => {
+      const result = await validatedCore();
+
+      act(() => {
+        result.current.applyBackgroundReadiness("area-1", readiness("AUTH_INVALID_RE_PAIR_REQUIRED"));
+      });
+
+      expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.NEEDS_REPAIR);
+    });
+
+    it("leaves a valid key alone when readiness fails for any other reason", async () => {
+      const result = await validatedCore();
+
+      act(() => {
+        result.current.applyBackgroundReadiness("area-1", readiness("HUE_STREAM_READINESS_FAILED"));
+        result.current.applyBackgroundReadiness("area-1", readiness("HUE_STREAM_NOT_READY"));
+      });
+
+      expect(result.current.state.credentialState).toBe(HUE_CREDENTIAL_STATUS.VALID);
     });
   });
 
