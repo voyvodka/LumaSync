@@ -130,6 +130,7 @@ export function useLightingModeOrchestrator({
 
   const modeTransitionLockRef = useRef(false);
   const pendingModeChangeRef = useRef<LightingModeConfig | null>(null);
+  const [queuedModeReplay, setQueuedModeReplay] = useState(0);
   const activeOutputTargetsRef = useRef<HueRuntimeTarget[]>([]);
   // Tray quick-action refs — always hold latest values for use in stable listeners
   const lightingModeRef = useRef<LightingModeConfig>(lightingMode);
@@ -725,43 +726,30 @@ export function useLightingModeOrchestrator({
           });
 
           const targetResults: Partial<Record<HueRuntimeTarget, HueTargetCommandResult>> = {};
-          // `allSettled` for the same reason as the delta-stop path above: one
-          // rejection under `Promise.all` discards the other target's outcome and
-          // aborts before the results are applied.
-          await Promise.allSettled(
-            runtimePlan.stopTargets.map(async (target) => {
-              if (target === "usb") {
-                try {
-                  await stopLighting();
-                  targetResults.usb = { ok: true };
-                } catch (error) {
-                  const reason = error instanceof Error ? error.message : String(error);
-                  targetResults.usb = { ok: false, code: "USB_STOP_FAILED", message: reason };
-                }
-              }
-              if (target === "hue") {
-                try {
-                  const hueResult = await stopHue();
-                  targetResults.hue = {
-                    ok: isHueStopCodeOk(hueResult.status.code),
-                    code: hueResult.status.code,
-                    message: hueResult.status.message,
-                  };
-                } catch (error) {
-                  const reason = error instanceof Error ? error.message : String(error);
-                  targetResults.hue = { ok: false, code: "HUE_STOP_FAILED", message: reason };
-                }
-              }
-            })
-          );
+          // `stop_lighting` stops the worker whatever it drives, and it must finish
+          // before the Hue stop: the worker holds a handle on the Hue sender, which
+          // exits only once every handle is gone. A Hue-only mode has no "usb" in
+          // the plan, and its worker used to outlive the stop and the #425 restore.
+          // See docs/architecture/hue.md.
+          const stopsUsb = runtimePlan.stopTargets.includes("usb");
+          if (stopsUsb || lightingMode.kind !== LIGHTING_MODE_KIND.OFF) {
+            try {
+              await stopLighting();
+              if (stopsUsb) targetResults.usb = { ok: true };
+            } catch (error) {
+              const reason = error instanceof Error ? error.message : String(error);
+              if (stopsUsb) targetResults.usb = { ok: false, code: "USB_STOP_FAILED", message: reason };
+              // The stream is still released below; that stop waits for the sender.
+              console.error("[LumaSync] stop_lighting before the Hue stop failed:", error);
+            }
+          }
 
-          const shouldForceHueStop =
-            !targetResults.hue &&
-            (activeOutputTargets.includes("hue") ||
-              selectedOutputTargets.includes("hue") ||
-              Boolean(runtimeHueStartConfig));
+          const shouldStopHue =
+            activeOutputTargets.includes("hue") ||
+            selectedOutputTargets.includes("hue") ||
+            Boolean(runtimeHueStartConfig);
 
-          if (shouldForceHueStop) {
+          if (shouldStopHue) {
             try {
               const hueResult = await stopHue();
               targetResults.hue = {
@@ -996,12 +984,17 @@ export function useLightingModeOrchestrator({
       } catch (error) {
         console.error(`[LumaSync] Failed to switch lighting mode to ${normalizedNextMode.kind}:`, error);
       } finally {
-        modeTransitionLockRef.current = false;
-        setIsModeTransitioning(false);
-
-        const pendingModeChange = pendingModeChangeRef.current;
-        pendingModeChangeRef.current = null;
-        if (pendingModeChange) void handleLightingModeChange(pendingModeChange);
+        if (pendingModeChangeRef.current) {
+          // Replayed once this transition's state commits, not from this
+          // closure: it still reads the mode and targets from before the
+          // transition, so a queued Off saw nothing running and left the worker
+          // it had just started. The lock stays held until then, so a newer
+          // choice replaces the queued one as before.
+          setQueuedModeReplay((tick) => tick + 1);
+        } else {
+          modeTransitionLockRef.current = false;
+          setIsModeTransitioning(false);
+        }
       }
     },
     [
@@ -1024,6 +1017,16 @@ export function useLightingModeOrchestrator({
   useEffect(() => {
     handleLightingModeChangeRef.current = handleLightingModeChange;
   }, [handleLightingModeChange]);
+
+  // After the ref effect above, so the replay runs the handler of this commit.
+  useEffect(() => {
+    const queued = pendingModeChangeRef.current;
+    if (!queued) return;
+    pendingModeChangeRef.current = null;
+    modeTransitionLockRef.current = false;
+    setIsModeTransitioning(false);
+    void handleLightingModeChangeRef.current?.(queued);
+  }, [queuedModeReplay]);
 
   const adoptSolidColor = useCallback((solid: SolidColorPayload) => {
     setLightingModeState({ kind: LIGHTING_MODE_KIND.SOLID, solid });

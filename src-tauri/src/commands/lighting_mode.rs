@@ -5322,6 +5322,106 @@ mod lighting_mode_tests {
         wait_for_workers_drained();
     }
 
+    /// Off from a Hue-only mode. `stop_hue_stream` alone drops only the
+    /// runtime's sender handle; the worker keeps its own and goes on painting
+    /// the lights. Only stopping the worker lets the sender go, which is why
+    /// the frontend's Off calls `stop_lighting` before the Hue stop whatever
+    /// the targets.
+    #[test]
+    fn off_from_a_hue_only_mode_needs_the_worker_stopped_before_the_hue_sender_can_exit() {
+        use crate::commands::hue::sender::{
+            hue_http_client_arc, spawn_hue_http_sender, wait_for_shutdown,
+        };
+        use crate::commands::hue::test_bridge::{Reply, TestBridge};
+        use std::time::Duration;
+
+        let _guard = acquire_worker_test_guard();
+        let bridge = TestBridge::start(|_, _, _| Reply::ok());
+        let light_puts = || bridge.puts_to("/clip/v2/resource/light/").len();
+        let wait_for_puts = |at_least: usize, why: &str| {
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while light_puts() < at_least {
+                assert!(std::time::Instant::now() < deadline, "{why}");
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        };
+        let channels = vec![channel(0, 0.0, 1.0, None)];
+        let (color_sender, sender_exited) = spawn_hue_http_sender(
+            hue_http_client_arc().expect("client"),
+            bridge.authority.clone(),
+            "app-key".to_string(),
+            channels.clone(),
+        );
+        let runtime_handle = HueActiveOutputContext {
+            channels,
+            color_sender,
+        };
+
+        let mut owner = owner_with_fake_sender();
+        owner.frame_source_factory = Arc::new(|_req: super::AmbilightCaptureRequest| {
+            Ok(Box::new(CyclingFrameSource { tick: 0 }))
+        });
+        let hue_only = LightingModeConfig {
+            kind: LightingModeKind::Ambilight,
+            ambilight: Some(AmbilightPayload {
+                brightness: 1.0,
+                smoothing_alpha: Some(1.0),
+                ..Default::default()
+            }),
+            targets: Some(vec!["hue".to_string()]),
+            ..LightingModeConfig::default()
+        };
+        let started = apply_mode_change(
+            &mut owner,
+            hue_only,
+            false,
+            None,
+            None,
+            Some(runtime_handle.clone()),
+            Some(shared_telemetry()),
+            None,
+            None,
+        );
+        assert_eq!(started.status.code, "AMBILIGHT_MODE_STARTED");
+        wait_for_puts(2, "the Hue-only worker never drove the Hue sender");
+
+        // `stop_hue_stream` alone: the stream's handle goes, the worker's stays.
+        drop(runtime_handle);
+        assert!(
+            !wait_for_shutdown(&sender_exited, Duration::from_millis(300)),
+            "the sender exited while the worker still held it"
+        );
+        let after_stream_stop = light_puts();
+        wait_for_puts(
+            after_stream_stop + 1,
+            "the worker stopped painting the lights on its own",
+        );
+
+        // What `stop_lighting` does.
+        let stopped = apply_mode_change(
+            &mut owner,
+            LightingModeConfig::default(),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(stopped.status.code, "LIGHTING_MODE_STOPPED");
+        assert!(owner.worker.is_none());
+        assert!(
+            wait_for_shutdown(&sender_exited, Duration::from_secs(2)),
+            "the Hue sender outlived the lighting stop"
+        );
+        // The restore would start here; nothing may reach a light after it.
+        let at_restore = light_puts();
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(light_puts(), at_restore);
+        wait_for_workers_drained();
+    }
+
     #[test]
     fn a_live_room_geometry_update_reaches_hue_sampling() {
         let _guard = acquire_worker_test_guard();
