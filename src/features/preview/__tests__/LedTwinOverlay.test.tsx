@@ -122,6 +122,16 @@ describe("LedTwinOverlay dot memoization", () => {
     return view;
   }
 
+  it("opts its window out of the app's dark color-scheme so it stays clear", async () => {
+    document.documentElement.style.colorScheme = "";
+    await mountWithFirstFrame();
+
+    expect(document.documentElement.style.background).toBe("transparent");
+    expect(document.documentElement.style.colorScheme).toBe("normal");
+    document.documentElement.style.cssText = "";
+    document.body.style.cssText = "";
+  });
+
   it("re-renders zero dots when the next frame carries identical colours", async () => {
     await mountWithFirstFrame();
     const baseline = dotRenderCount;

@@ -5,13 +5,13 @@ import {
   type HueRuntimeTarget,
 } from "@/shared/contracts/hue";
 import { shellStore } from "@/features/persistence/shellStore";
+import { parseCommandError } from "@/shared/contracts/status";
 import { restartHue, startHue } from "../../mode/modeApi";
 import { toChannelPlacements } from "../model/hueStartConfig";
 import { readHueStreamStatus, subscribeHueStreamStatusInvalidation } from "../hueReadCache";
 import type { HueBridgeSummary, HuePairingCredentials } from "../hueOnboardingApi";
 import {
   HUE_ONBOARDING_TRANSPORT_CODES as CODE,
-  toErrorDetails,
   type HueOnboardingStatus,
   type HueRuntimeStatusReadFailure,
   type HueRuntimeStatusView,
@@ -83,7 +83,7 @@ export function useHueRuntimeStatus({
       setRuntimeStatusReadFailure({
         code: CODE.STREAM_STATUS_UNAVAILABLE,
         message: "Could not fetch Hue runtime status.",
-        details: toErrorDetails(error),
+        details: parseCommandError(error).message,
       });
     }
   }, []);
@@ -209,7 +209,7 @@ export function useHueRuntimeStatus({
       onError({
         code: CODE.STREAM_START_FAILED,
         message: "Could not start Hue stream.",
-        details: toErrorDetails(error),
+        details: parseCommandError(error).message,
       });
     } finally {
       await pollRuntimeStatus({ force: true });
@@ -241,7 +241,7 @@ export function useHueRuntimeStatus({
         onError({
           code: CODE.STREAM_RECOVERY_FAILED,
           message: "Could not recover Hue stream.",
-          details: toErrorDetails(error),
+          details: parseCommandError(error).message,
         });
       } finally {
         await pollRuntimeStatus({ force: true });

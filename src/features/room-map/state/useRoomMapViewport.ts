@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefCallback } from "react";
 import type { RoomDimensions } from "@/shared/contracts/roomMap";
+import { isEditableTarget } from "@/shared/lib/editableTarget";
 
 /** Fixed physical scale — objects always render at this size regardless of canvas. */
 export const ROOM_MAP_PX_PER_METER = 80;
@@ -40,9 +41,15 @@ export function useRoomMapViewport(dimensions: RoomDimensions): UseRoomMapViewpo
     setCanvasEl(el);
   }, []);
 
-  // Track space key for pan mode — prevents object drag during space+click
+  // Space held is pan mode, for the editor and its canvas alike. A space typed
+  // into a field is text, not a pan.
   useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.key === " " && !e.repeat) setSpaceHeld(true); };
+    const down = (e: KeyboardEvent) => {
+      if (e.key !== " " || isEditableTarget(e.target)) return;
+      // Keeps the page from scrolling under a pan.
+      e.preventDefault();
+      if (!e.repeat) setSpaceHeld(true);
+    };
     const up = (e: KeyboardEvent) => { if (e.key === " ") setSpaceHeld(false); };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);

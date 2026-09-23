@@ -15,6 +15,7 @@ import {
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 import { acquireHueForTest, releaseHueAfterTest } from "@/features/hue/state/hueTestLease";
 import { startLedTestPattern, stopLedTestPattern } from "../previewApi";
+import { parseCommandError } from "@/shared/contracts/status";
 
 /** Floor between two starts from a continuous input. Was 250 ms when each one
  * rebuilt the worker; a colour or speed change now retunes it in place, and
@@ -134,7 +135,7 @@ export function useTestPatternRunner({
           previewOnly: false,
           status: {
             code: LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
-            message: error instanceof Error ? error.message : String(error),
+            message: parseCommandError(error).message,
             details: null,
           },
         };

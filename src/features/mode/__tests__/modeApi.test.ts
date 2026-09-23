@@ -97,6 +97,36 @@ describe("modeApi wrappers", () => {
     });
   });
 
+  // Every mode/Hue command is `Result<_, String>`: the rejection is a bare
+  // string, which used to become UNKNOWN with a placeholder message and no log.
+  it("keeps and logs the text of a bare-string Rust rejection", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const invokeMock = vi
+      .fn()
+      .mockRejectedValue("LIGHTING_RUNTIME_STATE_LOCK_FAILED: poisoned lock");
+
+    await expect(stopLighting(invokeMock)).rejects.toEqual({
+      code: "UNKNOWN",
+      message: "LIGHTING_RUNTIME_STATE_LOCK_FAILED: poisoned lock",
+      details: "poisoned lock",
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[LumaSync] stop_lighting rejected:",
+      "LIGHTING_RUNTIME_STATE_LOCK_FAILED: poisoned lock",
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("relays a declared device code carried in a string rejection", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const invokeMock = vi.fn().mockRejectedValue("PORT_NOT_FOUND: COM9");
+
+    await expect(setLightingMode(SOLID_MODE, invokeMock)).rejects.toMatchObject({
+      code: "PORT_NOT_FOUND",
+    });
+    errorSpy.mockRestore();
+  });
+
   it("invokes get_hue_stream_status and returns full command result", async () => {
     const runtimeStatus = {
       state: "Running",

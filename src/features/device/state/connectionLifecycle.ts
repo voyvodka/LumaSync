@@ -5,6 +5,7 @@ import { applySuccessfulConnection } from "./connectionOutcomes";
 import type { ConnectionStore } from "./connectionStore";
 import { nextStatusForReadyState, toConnectionCard } from "./connectionStateHelpers";
 import type { DeviceConnectionControllerDeps, DeviceStatusCard } from "./connectionTypes";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface ConnectionLifecycle {
   selectPort(portName: string | null): void;
@@ -80,7 +81,7 @@ export function createConnectionLifecycle(
           variant: "error",
           code: SERIAL_CONNECT_STATUS.FAILED,
           message: "Could not connect to the selected port.",
-          details: error instanceof Error ? error.message : String(error),
+          details: parseCommandError(error).message,
         },
       }));
       return;

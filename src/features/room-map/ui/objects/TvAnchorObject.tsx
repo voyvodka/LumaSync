@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
 import type { SnapResult } from "../../state/useSnapGuides";
@@ -32,6 +33,7 @@ export function TvAnchorObject({
   zoom = 1,
   panMode = false,
 }: TvAnchorObjectProps) {
+  const { t } = useTranslation();
   const [localX, setLocalX] = useState(placement.x);
   const [localY, setLocalY] = useState(placement.y);
   const [localW, setLocalW] = useState(placement.width);
@@ -188,7 +190,7 @@ export function TvAnchorObject({
     <div
       className={`absolute border-2 bg-violet-500/40 ${
         selected
-          ? placement.locked ? "border-white/40 dark:border-white/40" : "border-white dark:border-white"
+          ? placement.locked ? "border-white/40" : "border-white"
           : "border-violet-500"
       } ${placement.locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"} flex items-center justify-center`}
       style={{
@@ -204,8 +206,8 @@ export function TvAnchorObject({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
     >
-      <span className="pointer-events-none select-none text-[11px] font-semibold text-violet-700 dark:text-violet-300">
-        TV
+      <span className="pointer-events-none select-none text-[11px] font-semibold text-violet-300">
+        {t("roomMap:objectPanel.tvLabel")}
       </span>
 
       {selected && !placement.locked && (

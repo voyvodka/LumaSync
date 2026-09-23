@@ -88,6 +88,9 @@ function neutralizeTwinBackgroundEarly() {
   if (!label.startsWith(LED_TWIN_OVERLAY_LABEL_PREFIX)) return;
 
   document.documentElement.style.background = "transparent";
+  // A dark `color-scheme` can hand an unpainted root a dark canvas instead of
+  // leaving it clear; the twin has no native controls to theme.
+  document.documentElement.style.colorScheme = "normal";
   if (document.body) document.body.style.background = "transparent";
   const root = document.getElementById("root");
   if (root) root.style.background = "transparent";

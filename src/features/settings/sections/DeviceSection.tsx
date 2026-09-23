@@ -29,6 +29,7 @@ import {
   IconWledGlyph,
   IconPencil,
 } from "@/shared/ui/icons";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export type DeviceCategory = "usb" | "hue" | "wled" | "displays" | "manual";
 
@@ -196,7 +197,7 @@ export function DeviceSection({
       })
       .catch((error) => {
         if (cancelled) return;
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = parseCommandError(error).message;
         console.warn(`[LumaSync] Display list unavailable: ${reason}`);
         setDisplays([]);
       });

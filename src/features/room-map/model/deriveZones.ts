@@ -81,12 +81,27 @@ interface EdgeSegment {
   by: number;
 }
 
+export interface TvFootprintBounds {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/** The TV footprint in room metres. `x`/`y` is the top-left corner (the
+ *  contract, and what the canvas and the Rust sampler read), not the centre. */
+export function tvFootprintBounds(tv: TvAnchorPlacement): TvFootprintBounds {
+  return {
+    left: tv.x,
+    right: tv.x + tv.width,
+    top: tv.y,
+    bottom: tv.y + tv.height,
+  };
+}
+
 /** Build the four TV edge segments from a TvAnchorPlacement. */
 function buildTvEdges(tv: TvAnchorPlacement): Record<EdgeKey, EdgeSegment> {
-  const left = tv.x - tv.width / 2;
-  const right = tv.x + tv.width / 2;
-  const top = tv.y - tv.height / 2;
-  const bottom = tv.y + tv.height / 2;
+  const { left, right, top, bottom } = tvFootprintBounds(tv);
 
   return {
     top: { ax: left, ay: top, bx: right, by: top },
@@ -98,10 +113,7 @@ function buildTvEdges(tv: TvAnchorPlacement): Record<EdgeKey, EdgeSegment> {
 
 /** Returns true if (x, y) lies inside the TV bounding box. */
 function insideTvBox(x: number, y: number, tv: TvAnchorPlacement): boolean {
-  const left = tv.x - tv.width / 2;
-  const right = tv.x + tv.width / 2;
-  const top = tv.y - tv.height / 2;
-  const bottom = tv.y + tv.height / 2;
+  const { left, right, top, bottom } = tvFootprintBounds(tv);
   return x >= left && x <= right && y >= top && y <= bottom;
 }
 

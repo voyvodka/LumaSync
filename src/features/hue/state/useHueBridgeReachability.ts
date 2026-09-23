@@ -7,6 +7,7 @@ import type { HueStartConfig } from "../model/hueStartConfig";
 import { createPollBudget } from "../model/pollBudget";
 import { HUE_BRIDGE_REACHABILITY_POLL_MS } from "../model/pollingCadence";
 import { requestHuePollRestart, useHuePollRestartToken } from "./huePollRestart";
+import { parseCommandError } from "@/shared/contracts/status";
 
 /** Why the bridge is or is not usable, so copy can tell a rejected key from a
  * bridge that never answered. `null` until a probe has completed. */
@@ -106,7 +107,7 @@ export function useHueBridgeReachability(
         if (!mounted) return;
         setHueReachable(false);
         setProbeVerdict("unreachable");
-        noteFailure(String(error));
+        noteFailure(parseCommandError(error).message);
       } finally {
         inFlight = false;
         if (mounted) setProbing(false);

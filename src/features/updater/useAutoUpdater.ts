@@ -12,6 +12,7 @@ import {
 } from "@/shared/contracts/updater";
 import { checkForUpdate, downloadAndInstallUpdate } from "./updaterApi";
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export type UpdaterState =
   | { status: "idle" }
@@ -88,7 +89,7 @@ export function useAutoUpdater() {
       if (!isLatest()) return;
       // The command never rejects; this is the invoke layer itself failing —
       // an unregistered command, or a window torn down mid-check.
-      const message = err instanceof Error ? err.message : String(err);
+      const message = parseCommandError(err).message;
       setState({ status: "error", message });
     }
   }, []);
@@ -143,7 +144,7 @@ export function useAutoUpdater() {
       }
       // On success the app is replaced and relaunched, so no state change here.
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = parseCommandError(err).message;
       setState({ status: "error", message });
     } finally {
       unlisten?.();
