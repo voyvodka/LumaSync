@@ -132,7 +132,7 @@ the harness does not fail, it just quietly agrees with you.
 |---|---|
 | Hover, focus-within, real pointer behaviour | the dev mock in a browser — below |
 | A state that needs hardware you do not have | the dev mock |
-| What the backend actually did | the Rust log — `docs/debugging.md`, and the patterns in `CLAUDE.md` |
+| What the backend actually did | the Rust log — `docs/debugging.md`, and the patterns in `AGENTS.md` |
 | A second window | a manual run, or the dev mock with `?window=<label>` |
 | Window geometry, tray, native chrome | a manual run |
 
