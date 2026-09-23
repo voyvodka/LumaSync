@@ -38,6 +38,9 @@ https://keepachangelog.com/en/1.1.0/
   bridge while an already paired bridge is still being checked, which happened for a second or so
   after opening the window. They now show "Checking outputs…" until the bridge answers; Ambilight
   and Solid stay unavailable until then, and the no-output message appears only if it does not.
+  The same message could also flash at launch before the app had read which bridge you paired,
+  and the Hue output on the Lights page briefly read as not paired; both now say they are
+  checking until launch has finished.
 - The USB health check now describes each step in the app's language. It used to show the
   backend's English text for every step, even with the app set to Turkish. Raw diagnostics such
   as an adapter's VID/PID or an operating-system error still appear as they are, and a stopped

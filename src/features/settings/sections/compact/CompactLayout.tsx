@@ -47,6 +47,8 @@ interface CompactLayoutProps {
   outputTargets: HueRuntimeTarget[];
   localOutputConnected: boolean;
   hueConfigured: boolean;
+  /** The shell boot has settled; until then `hueConfigured: false` is not yet known. */
+  bootstrapDone?: boolean;
   hueReachable: boolean;
   /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
   hueProbeGaveUp?: boolean;
@@ -87,6 +89,7 @@ export function CompactLayout({
   outputTargets,
   localOutputConnected,
   hueConfigured,
+  bootstrapDone = true,
   hueReachable,
   hueProbeGaveUp = false,
   hueProbeChecking = false,
@@ -138,6 +141,7 @@ export function CompactLayout({
     hueConfigured,
     hueReachable,
     hueProbeVerdict,
+    bootstrapDone,
   });
   const activationBlocked = availability !== "ready";
   const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;

@@ -21,11 +21,14 @@ vi.mock("@/features/persistence/shellStore", () => ({
   },
 }));
 
-async function renderCompact(hue: {
-  configured: boolean;
-  reachable: boolean;
-  verdict: HueProbeVerdict | null;
-}) {
+async function renderCompact(
+  hue: {
+    configured: boolean;
+    reachable: boolean;
+    verdict: HueProbeVerdict | null;
+  },
+  bootstrapDone = true,
+) {
   await act(async () => {
     render(
       <SettingsLayout
@@ -36,6 +39,7 @@ async function renderCompact(hue: {
         outputTargets={["hue"]}
         localSink={null}
         hueConfigured={hue.configured}
+        bootstrapDone={bootstrapDone}
         hueReachable={hue.reachable}
         hueProbeVerdict={hue.verdict}
         hueStreaming={false}
@@ -85,6 +89,14 @@ describe("CompactLayout output gate", () => {
 
     expect(offlineTitle()).toBeInTheDocument();
     expect(screen.queryByTestId("output-checking")).not.toBeInTheDocument();
+  });
+
+  it("reads an unset pairing as checking, not missing, until boot has loaded it", async () => {
+    await renderCompact({ configured: false, reachable: false, verdict: null }, false);
+
+    expect(screen.getByTestId("output-checking")).toBeInTheDocument();
+    expect(offlineTitle()).not.toBeInTheDocument();
+    expect(screen.getByTestId("mode-button-ambilight")).toBeDisabled();
   });
 
   it("enables the modes and shows neither state once the bridge answers", async () => {

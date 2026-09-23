@@ -4,6 +4,7 @@ import { SECTION_IDS, SECTION_ORDER } from "../../src/shared/contracts/shell";
 import type { SectionId, UIMode } from "../../src/shared/contracts/shell";
 import {
   activeSectionTab,
+  attribute,
   clickTestId,
   currentUiMode,
   exists,
@@ -75,7 +76,7 @@ describe("ui mode toggle from every section", () => {
     });
   }
 
-  it("toggles compact <-> full from the Devices section's Hue sub-view, when reachable", async () => {
+  it("toggles compact <-> full from the Devices section's Hue sub-view", async () => {
     await switchUiMode("full");
     await clickTestId(`section-tab-${SECTION_IDS.DEVICES}`);
     await browser.waitUntil(
@@ -87,22 +88,16 @@ describe("ui mode toggle from every section", () => {
       },
     );
 
-    // `DeviceSection.tsx`'s category rail (usb/hue/wled/displays/manual) has
-    // no `data-testid` on any of its buttons, and that file is under active
-    // edit for Hue work elsewhere in the repo — see the PR description for
-    // the exact testid this needs (`device-category-hue`) rather than adding
-    // one here. Skip rather than guess at a class-based selector that could
-    // silently click the wrong rail button.
-    const hueRailTestId = "device-category-hue";
-    if (!(await exists(`[data-testid="${hueRailTestId}"]`))) {
-      console.log(
-        `[e2e] skip: no [data-testid="${hueRailTestId}"] on the Devices rail yet — ` +
-          "see the PR description for the testid this sub-test needs",
-      );
-      return;
-    }
+    // No skip for an unpaired machine: the rail renders every category
+    // unconditionally, and an unpaired Hue sub-view is the pairing flow.
+    const hueRail = '[data-testid="device-category-hue"]';
+    await clickTestId("device-category-hue");
+    await browser.waitUntil(async () => (await attribute(hueRail, "aria-current")) === "page", {
+      timeout: 5_000,
+      interval: 100,
+      timeoutMsg: "the Hue category never became the open one",
+    });
 
-    await clickTestId(hueRailTestId);
     await switchUiMode("compact");
     expect(await currentUiMode()).toBe("compact");
     await switchUiMode("full");

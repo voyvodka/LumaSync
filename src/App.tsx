@@ -318,6 +318,7 @@ function App() {
     outputTargets: selectedOutputTargets,
     localSink,
     hueConfigured: hueStartConfig !== null,
+    bootstrapDone,
     hueReachable: hueReachable || hueSessionActive,
     hueProbeGaveUp: hueProbe.gaveUp,
     hueProbeVerdict: hueProbe.verdict,
