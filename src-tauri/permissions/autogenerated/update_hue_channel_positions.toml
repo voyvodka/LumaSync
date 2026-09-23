@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-hue-channel-positions"
+description = "Enables the update_hue_channel_positions command without any pre-configured scope."
+commands.allow = ["update_hue_channel_positions"]
+
+[[permission]]
+identifier = "deny-update-hue-channel-positions"
+description = "Denies the update_hue_channel_positions command without any pre-configured scope."
+commands.deny = ["update_hue_channel_positions"]

@@ -3,7 +3,8 @@
 From a captured frame to bytes on a wire. This is the only hot path in the application: everything
 here runs per frame, and a regression in it is a defect rather than a tuning matter.
 
-Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mode.rs`.
+Implementation in `src-tauri/src/commands/ambilight_capture.rs` and `lighting_mode.rs`; the worker
+thread itself is `lighting_mode/worker.rs`.
 
 ## Decisions
 
@@ -160,7 +161,9 @@ serial writer with a counting port behind it, asserts:
 datagram list, the chunk list, one datagram), over a loopback socket nothing reads.
 
 A change that genuinely needs another per-frame allocation raises `ALLOCS_PER_FRAME` in the same
-PR and says why. Outside the guard: the Hue send's `to_vec()` (the sender thread takes an owned
+PR and says why. The worker's check of the Hue output slot (`hue.md`, "The worker follows the live
+stream") is one relaxed atomic load per frame; it locks and clones only on the frame after a Hue
+start, reconnect, restart or stop. Outside the guard: the Hue send's `to_vec()` (the sender thread takes an owned
 `Vec`), the twin-overlay feed (`the_edge_signal_is_built_and_sent_only_while_a_twin_is_open`), and
 capture itself.
 

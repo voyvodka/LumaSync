@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-led-preview-status"
+description = "Enables the get_led_preview_status command without any pre-configured scope."
+commands.allow = ["get_led_preview_status"]
+
+[[permission]]
+identifier = "deny-get-led-preview-status"
+description = "Denies the get_led_preview_status command without any pre-configured scope."
+commands.deny = ["get_led_preview_status"]

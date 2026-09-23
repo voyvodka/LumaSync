@@ -262,6 +262,12 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run verify:shell-contracts
 
+      # A command a window calls without a grant is refused only at runtime, in
+      # that window — the release must not be the first place that shows.
+      - name: Verify window command grants (Linux only)
+        if: matrix.os == 'ubuntu-24.04'
+        run: bun run verify:window-grants
+
       - name: Run frontend tests (Linux only)
         if: runner.os == 'Linux'
         run: bun run test

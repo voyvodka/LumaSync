@@ -560,7 +560,7 @@ pub fn stop_hue_stream_before_exit(
 
 /// Blocking body of every stop. `deadline` bounds the whole call when given;
 /// without one each step keeps its own ceiling.
-fn stop_hue_runtime(
+pub(crate) fn stop_hue_runtime(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     trigger: HueRuntimeTriggerSource,
     deadline: Option<Instant>,
@@ -885,7 +885,7 @@ pub async fn get_hue_stream_status(
                     | HueRuntimeState::Reconnecting
             ) {
                 // Clear dead stream/sender contexts so the next start can spawn fresh.
-                owner.active_stream = None;
+                owner.set_active_stream(None);
                 owner.persistent_sender = None;
                 return Ok(register_transient_fault(
                     &mut owner,
@@ -1096,12 +1096,11 @@ mod tests {
 /// binary must not touch the OS keychain.
 #[cfg(test)]
 mod light_restore_flow {
-    use std::sync::mpsc::sync_channel;
 
     use serde_json::{json, Value};
     use tauri::Manager;
 
-    use super::super::frame::{HueColorSender, HueColorUpdate};
+    use super::super::frame::HueColorSender;
     use super::super::retry::start_with_evidence;
     use super::super::sender::{new_shutdown_signal, signal_shutdown_complete, DeactivateToken};
     use super::super::state_store::test_helpers::strict_gate_ready;
@@ -1135,7 +1134,7 @@ mod light_restore_flow {
            + Send
            + 'static {
         move |channels, _metadata, _counter| {
-            let (tx, rx) = sync_channel::<HueColorUpdate>(2);
+            let (color_sender, rx) = HueColorSender::with_mailbox(channels.len());
             let shutdown = new_shutdown_signal();
             let signal = Arc::clone(&shutdown);
             std::thread::spawn(move || {
@@ -1143,10 +1142,7 @@ mod light_restore_flow {
                 signal_shutdown_complete(&signal);
             });
             SpawnedHueSender {
-                color_sender: HueColorSender {
-                    tx: Arc::new(tx),
-                    channel_count: channels.len(),
-                },
+                color_sender,
                 uses_dtls,
                 shutdown_signal: shutdown,
                 cipher_name: None,

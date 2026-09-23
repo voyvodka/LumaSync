@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-test-wled-bridge"
+description = "Enables the test_wled_bridge command without any pre-configured scope."
+commands.allow = ["test_wled_bridge"]
+
+[[permission]]
+identifier = "deny-test-wled-bridge"
+description = "Denies the test_wled_bridge command without any pre-configured scope."
+commands.deny = ["test_wled_bridge"]

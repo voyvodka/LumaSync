@@ -5,7 +5,7 @@
 //! - `StartAbortGuard` — RAII guard that flips the runtime to `Failed` if
 //!   `start_hue_stream`/`restart_hue_stream` exit before the active-stream
 //!   context is stored.
-//! - `spawn_hue_sender` — builds the sender wired to the owner's packet
+//! - `spawn_hue_sender_with` — builds the sender wired to the owner's packet
 //!   counter, so telemetry sees the packets it sends.
 //! - `store_active_stream_context` — the in-memory writer that hands a
 //!   freshly-spawned sender into `HueRuntimeOwner` and resets the
@@ -52,22 +52,56 @@ use super::transport::blocking_client_for_key;
 // Active-stream-context store
 // ---------------------------------------------------------------------------
 
+/// Builds a sender for a request; `build_hue_sender` outside tests.
+pub(crate) type HueSenderBuild = Arc<
+    dyn Fn(
+            &StartHueStreamRequest,
+            Vec<HueAreaChannel>,
+            Arc<HashMap<String, HueLightMetadata>>,
+            Arc<AtomicU32>,
+        ) -> SpawnedHueSender
+        + Send
+        + Sync,
+>;
+
+/// What a reconnect takes from outside the runtime: the readiness gate and
+/// the sender it builds. A test answers readiness itself, because a loopback
+/// test bridge cannot pass the address guard readiness runs first.
+#[derive(Clone)]
+pub(crate) struct ReconnectDeps {
+    readiness: ReconnectReadiness,
+    build: HueSenderBuild,
+}
+
+#[derive(Clone, Copy)]
+enum ReconnectReadiness {
+    Bridge,
+    #[cfg(test)]
+    AssumeReady,
+}
+
+impl ReconnectDeps {
+    pub(crate) fn production() -> Self {
+        Self {
+            readiness: ReconnectReadiness::Bridge,
+            build: Arc::new(|request, channels, light_metadata, packet_counter| {
+                build_hue_sender(request, channels, light_metadata, packet_counter)
+            }),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn assume_ready(build: HueSenderBuild) -> Self {
+        Self {
+            readiness: ReconnectReadiness::AssumeReady,
+            build,
+        }
+    }
+}
+
 /// Build the sender on a blocking thread — DTLS handshake / HTTP activate
 /// create and drop a `reqwest::blocking::Client`, which panics on a Tokio
 /// worker. `Err` means the build task panicked.
-pub(crate) async fn spawn_hue_sender(
-    runtime: &Arc<Mutex<HueRuntimeOwner>>,
-    request: &StartHueStreamRequest,
-    channels: Vec<HueAreaChannel>,
-    light_metadata: Arc<HashMap<String, HueLightMetadata>>,
-) -> Result<SpawnedHueSender, tokio::task::JoinError> {
-    let req = request.clone();
-    spawn_hue_sender_with(runtime, move |packet_counter| {
-        build_hue_sender(&req, channels, light_metadata, packet_counter)
-    })
-    .await
-}
-
 pub(crate) async fn spawn_hue_sender_with<F>(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     build: F,
@@ -104,7 +138,7 @@ pub(crate) fn store_active_stream_context(
         });
     }
 
-    owner.active_stream = Some(HueActiveStreamContext {
+    owner.set_active_stream(Some(HueActiveStreamContext {
         bridge_ip: request.bridge_ip.clone(),
         username: request.username.clone(),
         area_id: request.area_id.clone(),
@@ -113,7 +147,7 @@ pub(crate) fn store_active_stream_context(
         uses_dtls,
         shutdown_signal,
         deactivate_token,
-    });
+    }));
 
     // Update telemetry tracking fields.
     owner.stream_started_at = Some(Instant::now());
@@ -164,7 +198,7 @@ impl Drop for StartAbortGuard {
             HueRuntimeState::Starting | HueRuntimeState::Running
         ) {
             owner.state = HueRuntimeState::Failed;
-            owner.active_stream = None;
+            owner.set_active_stream(None);
             owner.last_status = status_with(
                 HueRuntimeState::Failed,
                 "HUE_STREAM_START_ABORTED",
@@ -292,6 +326,20 @@ pub(crate) fn spawn_reconnect_monitor(
     runtime: Arc<Mutex<HueRuntimeOwner>>,
     request: StartHueStreamRequest,
 ) {
+    spawn_reconnect_monitor_with(
+        shutdown_signal,
+        runtime,
+        request,
+        ReconnectDeps::production(),
+    );
+}
+
+pub(crate) fn spawn_reconnect_monitor_with(
+    shutdown_signal: ShutdownSignal,
+    runtime: Arc<Mutex<HueRuntimeOwner>>,
+    request: StartHueStreamRequest,
+    deps: ReconnectDeps,
+) {
     tokio::spawn(async move {
         // Block on the condvar the signal was built around instead of polling
         // it five times a second. Chunked so a signal that can never fire
@@ -367,7 +415,7 @@ pub(crate) fn spawn_reconnect_monitor(
 
             // Attempt restart using internal logic.
             info!("Reconnect monitor: attempting stream restart.");
-            match internal_restart_stream(&runtime, &request).await {
+            match internal_restart_stream(&runtime, &request, &deps).await {
                 RestartOutcome::Restarted => {
                     let mut owner = acquire_hue_runtime(&runtime);
                     owner.session_reconnect_success += 1;
@@ -397,6 +445,7 @@ pub(crate) fn spawn_reconnect_monitor(
 async fn internal_restart_stream(
     runtime: &Arc<Mutex<HueRuntimeOwner>>,
     request: &StartHueStreamRequest,
+    deps: &ReconnectDeps,
 ) -> RestartOutcome {
     // 1. Extract current stream info + dedupe token, then clear state.
     let dtls_deactivate = {
@@ -413,7 +462,7 @@ async fn internal_restart_stream(
                     Arc::clone(&s.deactivate_token),
                 )
             });
-        owner.active_stream = None;
+        owner.set_active_stream(None);
         owner.persistent_sender = None;
         deactivate
     };
@@ -438,23 +487,25 @@ async fn internal_restart_stream(
 
     // 2. Readiness check (async, no lock held). Forced: this is the
     // pre-restart gate and the deactivate above just mutated the area.
-    let readiness = check_hue_stream_readiness_with_freshness(
-        request.bridge_ip.clone(),
-        request.username.clone(),
-        request.area_id.clone(),
-        HueReadFreshness::Force,
-        ActiveStreamerView::Foreign,
-    )
-    .await;
+    if matches!(deps.readiness, ReconnectReadiness::Bridge) {
+        let readiness = check_hue_stream_readiness_with_freshness(
+            request.bridge_ip.clone(),
+            request.username.clone(),
+            request.area_id.clone(),
+            HueReadFreshness::Force,
+            ActiveStreamerView::Foreign,
+        )
+        .await;
 
-    if !readiness.readiness.ready {
-        // Deliberately NOT relaxed for `ACTIVE_STREAMER` the way the health
-        // poll is: our own stream is already deactivated by this point, so a
-        // busy area means a foreign client owns it and we must not hijack.
-        return RestartOutcome::Retryable(format!(
-            "Readiness check failed during reconnect: {}",
-            readiness.status.message
-        ));
+        if !readiness.readiness.ready {
+            // Deliberately NOT relaxed for `ACTIVE_STREAMER` the way the health
+            // poll is: our own stream is already deactivated by this point, so a
+            // busy area means a foreign client owns it and we must not hijack.
+            return RestartOutcome::Retryable(format!(
+                "Readiness check failed during reconnect: {}",
+                readiness.status.message
+            ));
+        }
     }
 
     // 3. Set state to Starting.
@@ -486,7 +537,12 @@ async fn internal_restart_stream(
     // 5. Spawn sender (blocking), wired to the owner's packet counter.
     // A panicked spawn must not be stored as a live context: its shutdown
     // signal would never fire and the next monitor would wait on it forever.
-    let Ok(spawned) = spawn_hue_sender(runtime, request, channels.clone(), light_metadata).await
+    let build = Arc::clone(&deps.build);
+    let (req, sender_channels) = (request.clone(), channels.clone());
+    let Ok(spawned) = spawn_hue_sender_with(runtime, move |packet_counter| {
+        build(&req, sender_channels, light_metadata, packet_counter)
+    })
+    .await
     else {
         return RestartOutcome::Retryable(
             "Sender spawn task panicked during reconnect".to_string(),
@@ -527,7 +583,12 @@ async fn internal_restart_stream(
     }
 
     // Spawn new monitor for the new connection.
-    spawn_reconnect_monitor(shutdown_signal, Arc::clone(runtime), request.clone());
+    spawn_reconnect_monitor_with(
+        shutdown_signal,
+        Arc::clone(runtime),
+        request.clone(),
+        deps.clone(),
+    );
 
     RestartOutcome::Restarted
 }
@@ -540,7 +601,7 @@ mod tests {
     use std::time::Duration;
 
     use super::super::super::runtime_telemetry::collect_hue_telemetry;
-    use super::super::frame::{HueColorSender, HueColorUpdate, HueScreenRegion};
+    use super::super::frame::{HueColorSender, HueScreenRegion};
     use super::super::retry::start_with_evidence;
     use super::super::sender::{new_shutdown_signal, DeactivateToken};
     use super::super::state_store::test_helpers::strict_gate_ready;
@@ -569,11 +630,7 @@ mod tests {
     }
 
     fn dummy_color_sender() -> HueColorSender {
-        let (tx, _rx) = std::sync::mpsc::sync_channel::<HueColorUpdate>(1);
-        HueColorSender {
-            tx: Arc::new(tx),
-            channel_count: 1,
-        }
+        HueColorSender::with_mailbox(1).0
     }
 
     #[test]
@@ -874,7 +931,8 @@ mod tests {
             });
         }
 
-        let outcome = internal_restart_stream(&runtime, &request).await;
+        let outcome =
+            internal_restart_stream(&runtime, &request, &ReconnectDeps::production()).await;
 
         assert!(
             matches!(outcome, RestartOutcome::Retryable(_)),

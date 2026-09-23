@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discover-hue-bridges"
+description = "Enables the discover_hue_bridges command without any pre-configured scope."
+commands.allow = ["discover_hue_bridges"]
+
+[[permission]]
+identifier = "deny-discover-hue-bridges"
+description = "Denies the discover_hue_bridges command without any pre-configured scope."
+commands.deny = ["discover_hue_bridges"]

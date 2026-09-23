@@ -83,6 +83,18 @@ https://keepachangelog.com/en/1.1.0/
   point the check at another address, including this computer.
 - Linux: the release build now starts on Ubuntu 22.04 and Debian 12. It was built against a newer
   C library (glibc 2.39) than those systems carry; the minimum is now glibc 2.35.
+- Hue: after the stream to the bridge dropped and reconnected on its own, the lamps stayed frozen
+  on their last colour while the app still said Hue was running. Ambilight now carries on to the
+  reconnected stream. Stopping Hue while Ambilight was still sending to it no longer waits out a
+  timeout and reports that the stop was only partial.
+- Hue: the lamps lagged the screen by up to a twentieth of a second more than they had to. The
+  colour sent to the bridge is now the newest one ready when it goes out.
+- Settings: the main window and the LED control popup could undo each other's changes when both
+  saved at about the same time. The settings file now has one owner in the app, which applies
+  every change in turn, and it is written so that a crash or power cut mid-save leaves either the
+  old file or the new one, never a broken one. The previous good copy is kept beside it as
+  `shell-state.json.bak`, and a damaged file is set aside and the backup loaded instead of
+  resetting every setting. The file format is unchanged, so an older release still reads it.
 - Updates: a failed update check at startup, for example with no internet connection, no longer
   opens a window-blocking prompt. It shows a small notice with a "Try again" button instead. A
   failed check was also described as a failed installation; it now says the update server could
@@ -529,6 +541,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Security
 
+- Each app window can now call only the LumaSync commands its own screens use. The LED preview
+  overlay can read the settings and nothing else, and the control popup can drive modes, test
+  patterns and its own position but cannot pair a Hue bridge, move its key, check for or install
+  an update, or rewrite the settings wholesale.
 - Each app window can now reach only the Tauri features it actually uses. The main window can no
   longer build menus or tray icons, drive the updater directly (update checks still go through the
   app as before), or write to the app's data folder, and it can read only the room-map background

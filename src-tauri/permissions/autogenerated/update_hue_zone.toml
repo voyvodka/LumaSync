@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-hue-zone"
+description = "Enables the update_hue_zone command without any pre-configured scope."
+commands.allow = ["update_hue_zone"]
+
+[[permission]]
+identifier = "deny-update-hue-zone"
+description = "Denies the update_hue_zone command without any pre-configured scope."
+commands.deny = ["update_hue_zone"]

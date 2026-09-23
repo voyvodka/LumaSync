@@ -83,13 +83,15 @@ authoritative registration list.
 
 ### State persistence
 
-Tauri `plugin-store` writes `shell-state.json` into the app data directory —
-on macOS `~/Library/Application Support/com.lumasync.app/shell-state.json`
+`shell-state.json` lives in the app data directory — on macOS
+`~/Library/Application Support/com.lumasync.app/shell-state.json`
 (Windows `%APPDATA%\com.lumasync.app\`, Linux `~/.local/share/com.lumasync.app/`).
-The store key is `SHELL_STORE_KEY` in `src/shared/contracts/shell.ts`; the Rust
-side reads the same file via `app.path().app_data_dir()`. The `shellStore.ts`
-facade wraps all frontend read/write operations, and `migrations.ts` handles
-shape changes. Stored keys follow `ShellState` in `shell.ts`.
+Rust owns it: `commands/shell_state.rs` is the only reader and writer, with atomic
+writes and a `.bak`, and every window goes through the `get_shell_state` /
+`patch_shell_state` commands. The `shellStore.ts` facade wraps all frontend
+read/write operations, and `migrations.ts` handles shape changes. Stored keys
+follow `ShellState` in `shell.ts`. See `docs/architecture/contracts-and-state.md`,
+"Shell-state ownership".
 
 Hue PSK credentials do **not** live here — they are in the OS keychain via
 `commands/hue/credential_store.rs` (macOS Keychain / Windows CredMan / Linux

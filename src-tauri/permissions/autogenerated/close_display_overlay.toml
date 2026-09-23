@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-close-display-overlay"
+description = "Enables the close_display_overlay command without any pre-configured scope."
+commands.allow = ["close_display_overlay"]
+
+[[permission]]
+identifier = "deny-close-display-overlay"
+description = "Denies the close_display_overlay command without any pre-configured scope."
+commands.deny = ["close_display_overlay"]

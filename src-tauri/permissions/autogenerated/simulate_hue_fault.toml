@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-simulate-hue-fault"
+description = "Enables the simulate_hue_fault command without any pre-configured scope."
+commands.allow = ["simulate_hue_fault"]
+
+[[permission]]
+identifier = "deny-simulate-hue-fault"
+description = "Denies the simulate_hue_fault command without any pre-configured scope."
+commands.deny = ["simulate_hue_fault"]

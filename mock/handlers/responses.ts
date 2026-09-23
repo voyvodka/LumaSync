@@ -43,7 +43,11 @@ import type {
   UpdateInstallResponse,
 } from "../../src/shared/contracts/updater";
 import type { FullTelemetrySnapshot } from "../../src/shared/contracts/telemetry";
-import type { LaunchContext } from "../../src/shared/contracts/shell";
+import type {
+  LaunchContext,
+  ShellStateSnapshot,
+  ShellStateWriteResult,
+} from "../../src/shared/contracts/shell";
 
 import type {
   HealthCheckResult,
@@ -239,6 +243,9 @@ export interface CommandResponse {
   check_for_update: UpdateCheckResponse;
   download_and_install_update: UpdateInstallResponse;
   get_launch_context: LaunchContext;
+  get_shell_state: ShellStateSnapshot;
+  patch_shell_state: ShellStateWriteResult;
+  replace_shell_state: ShellStateWriteResult;
 
   // --- windowless -----------------------------------------------------------
   // Answered even though the effect needs a second webview or an OS surface;

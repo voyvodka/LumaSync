@@ -28,7 +28,6 @@ tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
-tauri-plugin-store = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-dialog = "2"
@@ -53,7 +52,10 @@ openssl = { version = "0.10", features = ["vendored"] }
 #
 # `sync` backs the single-flight slot lock in `commands::hue::area_cache`
 # (an async mutex is required — the guard is held across the bridge fetch).
-tokio = { version = "1.52.3", features = ["rt", "signal", "sync"] }
+#
+# `macros` is `tokio::join!` in Hue discovery. tauri-plugin-store used to switch
+# it on for us; with the plugin gone, naming it here is what keeps it.
+tokio = { version = "1.52.3", features = ["rt", "signal", "sync", "macros"] }
 # v1.5 W2-A1 — OS keychain abstraction for Hue credentials.
 # Enabled backends: macOS Security.framework, Windows CredMan, Linux Secret Service (libsecret via D-Bus).
 #

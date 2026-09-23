@@ -1,25 +1,32 @@
 /**
  * Window Lifecycle
  *
- * Handles close-to-tray interception and one-time tray hint logic.
- * Uses plugin-store for persisting the `trayHintShown` flag.
+ * Handles close-to-tray interception and one-time tray hint logic, and holds
+ * this window's side of the shell-state facade: reads, the write queue and the
+ * saved listeners. Rust owns the file — see docs/architecture/contracts-and-state.md,
+ * "Shell-state ownership".
  *
  * Usage: call `initWindowLifecycle()` once during app bootstrap.
  */
 
 import { getCurrentWindow, availableMonitors, LogicalSize, LogicalPosition, PhysicalPosition } from "@tauri-apps/api/window";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { load } from "@tauri-apps/plugin-store";
 import {
-  SHELL_STORE_KEY,
-  SHELL_STATE_SCHEMA_VERSION,
   DEFAULT_SHELL_STATE,
   UI_MODE_SIZES,
   UI_MODE_MIN_SIZES,
   type ShellState,
+  type ShellStateChanged,
   type UIMode,
 } from "@/shared/contracts/shell";
 import { migrateShellState } from "../persistence/migrations";
+import {
+  getShellState,
+  onShellStateChanged,
+  patchShellState,
+  replaceShellState,
+  toShellStatePatch,
+} from "../persistence/shellStateApi";
 import { clamp } from "@/shared/lib/math";
 import { waitForFrames } from "./frameWait";
 import { readStartHidden } from "./launchApi";
@@ -33,56 +40,69 @@ export const STARTUP_READY_MARKER = "[LumaSync] [startup] shell ready";
 // Store helpers
 // ---------------------------------------------------------------------------
 
-async function getStore() {
-  // Opens (or creates) the shell state store at the default app data directory.
-  // `defaults` is required by the StoreOptions type — provide shell defaults.
-  return load(`${SHELL_STORE_KEY}.json`, {
-    defaults: { [SHELL_STORE_KEY]: DEFAULT_SHELL_STATE },
-    autoSave: true,
-  });
-}
+/** Tags this window's writes, so it can drop the echo of its own change events. */
+const WRITER_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+/** A conflict means another window wrote in between; its state is re-read and
+ * re-migrated, which normally settles on the second try. */
+const MIGRATION_WRITE_ATTEMPTS = 3;
 
 export async function loadShellState(): Promise<ShellState> {
-  const store = await getStore();
-  const saved = await store.get<Partial<ShellState>>(SHELL_STORE_KEY);
-  if (!saved) return { ...DEFAULT_SHELL_STATE };
+  for (let attempt = 1; ; attempt++) {
+    const { state: saved, revision } = await getShellState();
+    if (!saved) return { ...DEFAULT_SHELL_STATE };
 
-  // `schemaVersion` defaults to `1`, NOT the latest — an absent version is a
-  // legacy snapshot the shim below still has to upgrade.
-  const merged: ShellState = {
-    ...DEFAULT_SHELL_STATE,
-    ...saved,
-    schemaVersion: saved.schemaVersion ?? 1,
-  };
+    // `schemaVersion` defaults to `1`, NOT the latest — an absent version is a
+    // legacy snapshot the shim below still has to upgrade.
+    const merged: ShellState = {
+      ...DEFAULT_SHELL_STATE,
+      ...saved,
+      schemaVersion: saved.schemaVersion ?? 1,
+    };
 
-  // Caught so one corrupt persisted record cannot brick startup: we fall back
-  // to the unmigrated shape and the next launch retries.
-  let migrated: ShellState;
-  try {
-    migrated = migrateShellState(merged);
-  } catch (error) {
-    console.warn(
-      "[LumaSync] migration: schemaVersion upgrade failed; keeping legacy shape until next launch",
-      error,
-    );
-    migrated = merged;
+    // Caught so one corrupt persisted record cannot brick startup: we fall back
+    // to the unmigrated shape and the next launch retries.
+    let migrated: ShellState;
+    try {
+      migrated = migrateShellState(merged);
+    } catch (error) {
+      console.warn(
+        "[LumaSync] migration: schemaVersion upgrade failed; keeping legacy shape until next launch",
+        error,
+      );
+      migrated = merged;
+    }
+
+    if (saved.schemaVersion !== undefined && migrated.schemaVersion === saved.schemaVersion) {
+      return migrated;
+    }
+
+    // Persist the migrated shape back so subsequent reads skip this branch —
+    // but only over the state it was derived from, never over a newer write.
+    try {
+      const result = await replaceShellState({
+        state: migrated,
+        expectedRevision: revision,
+        writerId: WRITER_ID,
+      });
+      if (result.applied) return migrated;
+    } catch (error) {
+      // Not fatal: the twin has no grant for the write-back, and the migrated
+      // shape is correct in memory either way. The next load retries.
+      console.warn(
+        "[LumaSync] migration: write-back failed; using the migrated shape unsaved",
+        error,
+      );
+      return migrated;
+    }
+
+    if (attempt >= MIGRATION_WRITE_ATTEMPTS) {
+      console.warn(
+        `[LumaSync] migration: write-back lost ${attempt} races to other writes; using the migrated shape unsaved`,
+      );
+      return migrated;
+    }
   }
-
-  // Persist the migrated shape back so subsequent reads skip this branch.
-  if (
-    saved.schemaVersion === undefined ||
-    migrated.schemaVersion !== saved.schemaVersion
-  ) {
-    await store.set(SHELL_STORE_KEY, migrated);
-  }
-
-  // Explicit so the field is never handed out at an intermediate version: if a
-  // corruption path bypassed the shim, return the pre-migration shape instead.
-  if (migrated.schemaVersion < SHELL_STATE_SCHEMA_VERSION) {
-    return migrated;
-  }
-
-  return migrated;
 }
 
 /** Tail of the serialised write chain — see {@link saveShellState}. */
@@ -92,9 +112,39 @@ export type ShellStateSavedListener = (saved: Partial<ShellState>) => void;
 
 const shellStateSavedListeners = new Set<ShellStateSavedListener>();
 
-/** Called with each partial once it is on disk. In-window only: another webview
- * writing the same store is not seen. Returns the unsubscribe. */
+/** Settles once this window listens for other windows' writes. */
+let changeSubscription: Promise<void> | null = null;
+
+function subscribeToOtherWindowsWrites(): void {
+  if (changeSubscription !== null) return;
+  changeSubscription = onShellStateChanged((changed) => {
+    // This window's own writes were delivered when they resolved.
+    if (changed.writerId === WRITER_ID) return;
+    notifyShellStateSaved(toSavedPartial(changed));
+  }).then(
+    () => undefined,
+    (error: unknown) => {
+      console.error(
+        "[LumaSync] shell-state change subscription failed; other windows' saves will not reach this window's listeners:",
+        error,
+      );
+    },
+  );
+}
+
+/** The partial a listener would have been handed in the writing window: a
+ * removed key reads as `undefined`, which is how it was written. */
+function toSavedPartial(changed: ShellStateChanged): Partial<ShellState> {
+  const saved: Record<string, unknown> = { ...changed.set };
+  for (const key of changed.remove) saved[key] = undefined;
+  return saved as Partial<ShellState>;
+}
+
+/** Called with each partial once it is on disk: this window's writes as soon as
+ * they resolve, every other window's through the change event. Returns the
+ * unsubscribe. */
 export function onShellStateSaved(listener: ShellStateSavedListener): () => void {
+  subscribeToOtherWindowsWrites();
   shellStateSavedListeners.add(listener);
   return () => {
     shellStateSavedListeners.delete(listener);
@@ -112,14 +162,13 @@ function notifyShellStateSaved(saved: Partial<ShellState>): void {
   }
 }
 
-/** Persist a partial update, queued behind every other write: this is a
- * read-modify-write over one blob, so two concurrent callers read the same
- * snapshot and the later one silently reverts the earlier one's fields. */
+/** Persist a partial update. Rust merges it under its one lock, so writers in
+ * different windows cannot revert each other; the queue only keeps this
+ * window's writes in the order they were issued, since two invokes in flight
+ * are not ordered with each other. An `undefined` value deletes the key. */
 export async function saveShellState(state: Partial<ShellState>): Promise<void> {
   const write = shellWriteQueue.then(async () => {
-    const store = await getStore();
-    const current = await loadShellState();
-    await store.set(SHELL_STORE_KEY, { ...current, ...state });
+    await patchShellState(toShellStatePatch(state, WRITER_ID));
     notifyShellStateSaved(state);
   });
 

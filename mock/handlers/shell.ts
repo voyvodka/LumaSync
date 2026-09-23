@@ -1,41 +1,51 @@
 /**
- * Displays, capture permission, platform, preview, and the Tauri plugins.
+ * Displays, capture permission, platform, preview, shell state, and the Tauri
+ * plugins.
  *
- * The plugin block is what makes the browser path usable at all:
- * `plugin:store|load` gates startup, and `plugin:log|log` carries every line
- * `main.tsx`'s console bridge forwards. Without both the app never finishes
- * bootstrapping and the console fills with bridge failures.
+ * Two things here make the browser path usable at all: `get_shell_state` gates
+ * startup, and `plugin:log|log` carries every line `main.tsx`'s console bridge
+ * forwards. Without both the app never finishes bootstrapping and the console
+ * fills with bridge failures.
  */
 
 import { CAPTURE_COMMANDS } from "../../src/shared/contracts/capture";
 import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
 import { LED_TEST_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
 import { UPDATER_COMMANDS, UPDATER_STATUS } from "../../src/shared/contracts/updater";
-import { SHELL_COMMANDS, SHELL_STORE_KEY } from "../../src/shared/contracts/shell";
+import {
+  SHELL_COMMANDS,
+  SHELL_STATE_CHANGED_EVENT,
+  type ShellState,
+  type ShellStateChanged,
+} from "../../src/shared/contracts/shell";
+import { emitMockEvent } from "../events";
 import { getWorld, mutate } from "../state";
 import { status } from "./status";
 import type { Handler, TypedHandlers } from "./types";
 
 /**
- * Backs `plugin:store`. Seeded from the scenario at first read and then left
- * alone, so edits a developer makes by hand survive until the scenario changes.
+ * Backs the shell-state commands the way `commands/shell_state.rs` does: one
+ * object, a revision per accepted write, and a change event after each. Seeded
+ * from the scenario at first read and then left alone, so edits a developer
+ * makes by hand survive until the scenario changes.
  */
-const storeBacking = new Map<string, unknown>();
+let shellStateBacking: Record<string, unknown> | null = null;
+let shellStateRevision = 0;
 let seededGeneration = -1;
 
 /**
  * Writes a shell-state key so both halves agree. Without this a panel edit
  * lands in `world.shellState`, renders correctly in the panel, and is never
- * seen by `plugin:store|get` — `ensureSeeded` only re-reads the world when the
+ * seen by `get_shell_state` — `ensureSeeded` only re-reads the world when the
  * generation changes, and a hand edit deliberately does not bump it. A control
  * that looks alive and does nothing is worse than no control.
  */
 export function writeShellStateKey(key: string, value: unknown): void {
   ensureSeeded();
-  const state = { ...(storeBacking.get(SHELL_STORE_KEY) as Record<string, unknown>), [key]: value };
-  storeBacking.set(SHELL_STORE_KEY, state);
+  const state = { ...shellStateBacking, [key]: value };
+  shellStateBacking = state;
   mutate((w) => {
-    w.shellState = state;
+    w.shellState = state as Partial<ShellState>;
   });
 }
 
@@ -43,8 +53,20 @@ function ensureSeeded(): void {
   const w = getWorld();
   if (seededGeneration === w.generation) return;
   seededGeneration = w.generation;
-  storeBacking.clear();
-  storeBacking.set(SHELL_STORE_KEY, w.shellState);
+  shellStateBacking = w.shellState ? { ...w.shellState } : null;
+  shellStateRevision = 0;
+}
+
+function refuseWriteIfScenarioSaysSo(): void {
+  if (getWorld().persistFails) {
+    throw new Error(
+      "SHELL_STATE_WRITE_FAILED: [LumaSync][mock] shell-state write refused (scenario: saving fails)",
+    );
+  }
+}
+
+function announceShellStateChange(changed: ShellStateChanged): void {
+  void emitMockEvent(SHELL_STATE_CHANGED_EVENT, changed);
 }
 
 export const shellHandlers = {
@@ -159,6 +181,54 @@ export const shellHandlers = {
 
   // A browser tab has no autostart; the window it would hide is the page.
   [SHELL_COMMANDS.GET_LAUNCH_CONTEXT]: () => ({ startHidden: false, e2eBuild: false }),
+
+  [SHELL_COMMANDS.GET_SHELL_STATE]: () => {
+    ensureSeeded();
+    return {
+      state: shellStateBacking ? ({ ...shellStateBacking } as Partial<ShellState>) : null,
+      revision: shellStateRevision,
+    };
+  },
+  [SHELL_COMMANDS.PATCH_SHELL_STATE]: ({ patch }) => {
+    refuseWriteIfScenarioSaysSo();
+    ensureSeeded();
+    const next: Record<string, unknown> = { ...shellStateBacking, ...patch.set };
+    for (const key of patch.remove) delete next[key];
+    shellStateBacking = next;
+    shellStateRevision += 1;
+    announceShellStateChange({
+      set: patch.set,
+      remove: [...patch.remove],
+      revision: shellStateRevision,
+      writerId: patch.writerId ?? null,
+    });
+    return { applied: true, revision: shellStateRevision };
+  },
+  // The diff in the event mirrors Rust's: keys whose value changed, and keys gone.
+  [SHELL_COMMANDS.REPLACE_SHELL_STATE]: ({ request }) => {
+    ensureSeeded();
+    if (request.expectedRevision !== shellStateRevision) {
+      return { applied: false, revision: shellStateRevision };
+    }
+    refuseWriteIfScenarioSaysSo();
+    const previous: Record<string, unknown> = shellStateBacking ?? {};
+    const next = { ...request.state } as Record<string, unknown>;
+    const set = Object.fromEntries(
+      Object.entries(next).filter(
+        ([key, value]) => JSON.stringify(previous[key]) !== JSON.stringify(value),
+      ),
+    ) as Partial<ShellState>;
+    const remove = Object.keys(previous).filter((key) => !(key in next));
+    shellStateBacking = next;
+    shellStateRevision += 1;
+    announceShellStateChange({
+      set,
+      remove,
+      revision: shellStateRevision,
+      writerId: request.writerId ?? null,
+    });
+    return { applied: true, revision: shellStateRevision };
+  },
 } satisfies TypedHandlers;
 
 /**
@@ -222,54 +292,6 @@ export function windowPluginHandler(command: string): Handler | undefined {
 }
 
 export const pluginHandlers: Record<string, Handler> = {
-  // Shapes read from node_modules/@tauri-apps/plugin-store/dist-js/index.js:
-  // `load` resolves to a bare rid, and `get` to a `[value, exists]` tuple. Both
-  // are easy to guess wrong, and the failure surfaces far away as
-  // "(intermediate value) is not iterable" inside the app's bootstrap.
-  "plugin:store|load": () => 1,
-  "plugin:store|get_store": () => 1,
-  "plugin:store|get": (args) => {
-    ensureSeeded();
-    const key = typeof args?.key === "string" ? args.key : "";
-    return storeBacking.has(key) ? [storeBacking.get(key), true] : [null, false];
-  },
-  "plugin:store|set": (args) => {
-    if (getWorld().persistFails) {
-      throw new Error("[LumaSync][mock] store write refused (scenario: saving fails)");
-    }
-    const key = typeof args?.key === "string" ? args.key : "";
-    storeBacking.set(key, args?.value);
-    return null;
-  },
-  "plugin:store|save": () => {
-    if (getWorld().persistFails) {
-      throw new Error("[LumaSync][mock] store save refused (scenario: saving fails)");
-    }
-    return null;
-  },
-  "plugin:store|entries": () => {
-    ensureSeeded();
-    return Array.from(storeBacking.entries());
-  },
-  "plugin:store|keys": () => {
-    ensureSeeded();
-    return Array.from(storeBacking.keys());
-  },
-  "plugin:store|values": () => Array.from(storeBacking.values()),
-  "plugin:store|length": () => storeBacking.size,
-  "plugin:store|has": (args) => storeBacking.has(typeof args?.key === "string" ? args.key : ""),
-  "plugin:store|delete": (args) => storeBacking.delete(typeof args?.key === "string" ? args.key : ""),
-  "plugin:store|clear": () => {
-    storeBacking.clear();
-    return null;
-  },
-  "plugin:store|reset": () => {
-    storeBacking.clear();
-    return null;
-  },
-  "plugin:store|reload": () => null,
-  "plugin:store|close_resource": () => null,
-
   // The console bridge calls these for every forwarded line. Answering null
   // keeps them quiet; the browser console already shows the original call.
   "plugin:log|log": () => null,

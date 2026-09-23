@@ -8,9 +8,10 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, EventTarget, Runtime, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
+use super::shell_state;
 use super::status::CommandStatus;
 use crate::MAIN_WINDOW_LABEL;
 
@@ -102,17 +103,10 @@ fn emit_progress<R: Runtime>(app: &AppHandle<R>, progress: UpdateDownloadProgres
     );
 }
 
-/// Read `updateChannel` from the shell store, mirroring the other
-/// `hydrate_*`/`read_persisted_*` readers. Anything unrecognised is "stable" —
-/// an unreadable store must never silently move someone onto prereleases.
+/// Anything unrecognised is "stable" — an unreadable store must never
+/// silently move someone onto prereleases.
 pub fn read_update_channel<R: Runtime>(app: &AppHandle<R>) -> String {
-    let resolved = (|| {
-        let dir = app.path().app_data_dir().ok()?;
-        let raw = std::fs::read_to_string(dir.join("shell-state.json")).ok()?;
-        let root: serde_json::Value = serde_json::from_str(&raw).ok()?;
-        let channel = root.get("shell-state")?.get("updateChannel")?.as_str()?;
-        Some(channel.to_string())
-    })();
+    let resolved = shell_state::persisted(app).and_then(|state| state.update_channel());
     match resolved.as_deref() {
         Some("beta") => "beta".to_string(),
         _ => "stable".to_string(),

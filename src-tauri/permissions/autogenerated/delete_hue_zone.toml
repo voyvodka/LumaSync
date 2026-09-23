@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-hue-zone"
+description = "Enables the delete_hue_zone command without any pre-configured scope."
+commands.allow = ["delete_hue_zone"]
+
+[[permission]]
+identifier = "deny-delete-hue-zone"
+description = "Denies the delete_hue_zone command without any pre-configured scope."
+commands.deny = ["delete_hue_zone"]
