@@ -203,7 +203,7 @@ function App() {
       selectedOutputTargetsRef: mode.selectedOutputTargetsRef,
       hueStartConfigRef,
       onAutoAddUsbTarget: mode.setSelectedOutputTargets,
-      onDropUsbTarget: handleOutputTargetsChange,
+      onDropUsbTarget: mode.dropUnpluggedUsbTarget,
       onFallbackTargets: mode.setSelectedOutputTargets,
     });
   armUsbConnectedRef.current = armUsbConnected;

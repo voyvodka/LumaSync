@@ -20,7 +20,7 @@ export interface UsbTargetReconcilerInput {
   hueStartConfigRef: RefObject<unknown>;
   /** Direct target write — deliberately NOT the general target-change handler. */
   onAutoAddUsbTarget: (targets: HueRuntimeTarget[]) => void;
-  /** Full target-change handler, so the unplug runs the delta-stop pipeline. */
+  /** The delta-stop pipeline, session-only: an unplug never rewrites `lastOutputTargets`. */
   onDropUsbTarget: (targets: HueRuntimeTarget[]) => void;
   onFallbackTargets: (targets: HueRuntimeTarget[]) => void;
 }

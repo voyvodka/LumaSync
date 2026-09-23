@@ -112,7 +112,7 @@ describe("useUsbTargetReconciler", () => {
       expect(onAutoAddUsbTarget).not.toHaveBeenCalled();
     });
 
-    it("drops usb through the general handler on unplug and raises the toast", () => {
+    it("drops usb through the delta handler on unplug and raises the toast", () => {
       const { view, input, onDropUsbTarget } = harness({
         isConnected: true,
         selectedOutputTargets: ["usb", "hue"],

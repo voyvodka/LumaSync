@@ -81,6 +81,8 @@ export interface LightingModeOrchestrator {
   scheduleBootHueRetry: (plan: BootHueRetryPlan, config: HueStartConfig) => void;
   handleLightingModeChange: (mode: LightingModeConfig) => Promise<void>;
   handleOutputTargetsChange: (targets: HueRuntimeTarget[]) => Promise<void>;
+  /** The same delta pipeline for a USB unplug, without writing `lastOutputTargets`. */
+  dropUnpluggedUsbTarget: (targets: HueRuntimeTarget[]) => Promise<void>;
   /** Hot-reload props push a config nudge without going through a transition. */
   dispatch: LightingModeDispatcher;
   /** Bootstrap and the Hue solid sync write the mode without a transition. */
@@ -220,13 +222,46 @@ export function useLightingModeOrchestrator({
     // Per-target outcome, not `Promise.all`: only a target that actually stopped
     // leaves active membership. Dropping one from the UI while its backend stream
     // lived on is what produced HUE_STREAM_NOT_READY_ACTIVE_STREAMER next start.
-    type StopOutcome = { target: HueRuntimeTarget; ok: boolean };
+    // `tornDown`: a USB-removal re-apply that stopped the old mode, then failed to start.
+    type StopOutcome = { target: HueRuntimeTarget; ok: boolean; tornDown?: ModeCommandResult };
     const stopResults = await Promise.allSettled(
       removedTargets.map(async (target): Promise<StopOutcome> => {
         if (!currentActive.includes(target)) return { target, ok: true };
         if (target !== "usb" && target !== "hue") return { target, ok: true };
         try {
           if (target === "usb") {
+            // `stop_lighting` stops the whole worker, not just the strip: a Hue
+            // stream left running would hold the bridge's one streamer slot and
+            // keep-alive its last frame. Re-apply the mode on what stays live instead.
+            const stayLive = currentActive.filter((t) => t !== "usb" && normalizedTargets.includes(t));
+            if (stayLive.length > 0) {
+              let reapply: ModeCommandResult | null = null;
+              try {
+                reapply = await dispatchSetLightingMode({
+                  kind: lightingMode.kind,
+                  solid: lightingMode.solid,
+                  ambilight: lightingMode.ambilight,
+                  targets: stayLive,
+                }, { force: true });
+              } catch (err) {
+                console.error("[LumaSync] USB delta-remove re-apply failed; stopping the lighting runtime:", err);
+              }
+              if (reapply !== null) {
+                // A gate refusal echoes the old mode, same kind, so `refused` alone
+                // reads it as accepted; the running targets must have lost USB.
+                // Absent or empty targets mean USB-required to the backend (legacy D-10).
+                const running = reapply.mode.targets ?? [];
+                const usbDropped = running.length > 0 && !running.includes("usb");
+                if (!readModeApplyOutcome(reapply, lightingMode.kind).refused && usbDropped) {
+                  return { target, ok: true };
+                }
+                if (reapply.mode.kind === LIGHTING_MODE_KIND.OFF) return { target, ok: true, tornDown: reapply };
+                // A gate refusal leaves the old mode, USB included, running.
+                console.error(
+                  `[LumaSync] USB delta-remove re-apply was refused (${reapply.status.code}); stopping the lighting runtime.`,
+                );
+              }
+            }
             await stopLighting();
           } else {
             // System-attributed, not MODE_CONTROL default — this stop is a side
@@ -249,7 +284,34 @@ export function useLightingModeOrchestrator({
     const failedToStop = stopResults
       .filter((r): r is PromiseFulfilledResult<StopOutcome> => r.status === "fulfilled" && !r.value.ok)
       .map((r) => r.value.target);
+    const tornDown = stopResults
+      .map((r) => (r.status === "fulfilled" ? r.value.tornDown : undefined))
+      .find((result): result is ModeCommandResult => result !== undefined);
     if (!isLatest()) return;
+
+    if (tornDown) {
+      // The re-apply stopped the old worker and its start failed, so nothing
+      // outputs. Settled as the USB delta-start teardown below: give back the
+      // Hue stream nothing feeds, and show Off. UI only; the persisted mode stays.
+      console.error(`[LumaSync] USB delta-remove re-apply stopped the running mode (${tornDown.status.code}).`);
+      let hueStillHeld = false;
+      if (currentActive.includes("hue")) {
+        try {
+          const stopResult = await stopHue(HUE_RUNTIME_TRIGGER_SOURCE.SYSTEM);
+          hueStillHeld = !isHueStopCodeOk(stopResult.status.code);
+        } catch (err) {
+          hueStillHeld = true;
+          console.error("[LumaSync] Hue release after the USB delta-remove stopped the mode failed:", err);
+        }
+        if (hueStillHeld) setStopFailedNotice(["hue"]);
+      }
+      if (!isLatest()) return;
+      setActiveOutputTargets(hueStillHeld ? ["hue"] : []);
+      setLightingModeState({ ...lightingMode, kind: LIGHTING_MODE_KIND.OFF });
+      const startFailure = readModeApplyOutcome(tornDown, lightingMode.kind).startFailure;
+      if (startFailure) setStartFailedNotice(startFailure);
+      return;
+    }
 
     if (successfullyStopped.length > 0) {
       const nextActive = currentActive.filter((t) => !successfullyStopped.includes(t));
@@ -475,8 +537,8 @@ export function useLightingModeOrchestrator({
     applyOutputTargetsRef.current = applyOutputTargets;
   }, [applyOutputTargets]);
 
-  const handleOutputTargetsChange = useCallback(
-    (targets: HueRuntimeTarget[]) => {
+  const changeOutputTargets = useCallback(
+    (targets: HueRuntimeTarget[], persist: boolean) => {
       const normalizedTargets = normalizeOutputTargets(targets);
       if (!normalizedTargets.includes("hue")) {
         cancelBootHueRetry("Hue was deselected");
@@ -484,9 +546,18 @@ export function useLightingModeOrchestrator({
         // The user turned Hue on themselves; their add answers for itself.
         cancelBootHueRetry("the output targets changed");
       }
-      return applyOutputTargets(normalizedTargets, true);
+      return applyOutputTargets(normalizedTargets, persist);
     },
     [applyOutputTargets, cancelBootHueRetry, isBootHueRejoinPending],
+  );
+  const handleOutputTargetsChange = useCallback(
+    (targets: HueRuntimeTarget[]) => changeOutputTargets(targets, true),
+    [changeOutputTargets],
+  );
+  // Session-only: a cable falling out is not the user choosing to stop using the strip.
+  const dropUnpluggedUsbTarget = useCallback(
+    (targets: HueRuntimeTarget[]) => changeOutputTargets(targets, false),
+    [changeOutputTargets],
   );
 
 
@@ -942,6 +1013,7 @@ export function useLightingModeOrchestrator({
     scheduleBootHueRetry: bootHueRetry.schedule,
     handleLightingModeChange,
     handleOutputTargetsChange,
+    dropUnpluggedUsbTarget,
     dispatch: dispatchSetLightingMode,
     setLightingMode: setLightingModeState,
     adoptSolidColor,
