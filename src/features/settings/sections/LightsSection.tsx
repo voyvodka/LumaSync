@@ -46,38 +46,14 @@ import {
 } from "@/features/hue/model/hueAvailability";
 import { shellStore } from "@/features/persistence/shellStore";
 import { outputAvailability } from "@/features/mode/model/outputAvailability";
-import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
 
 import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
-import { OutputCheckingNote } from "./OutputCheckingNote";
 
 const TELEMETRY_POLL_INTERVAL_MS = 1000;
-
-export interface LightsModeLockState {
-  reason: ModeGuardReason | null;
-  showReason: boolean;
-  showOpenCalibrationAction: boolean;
-}
-
-export function getLightsModeLockState(reason: ModeGuardReason | null): LightsModeLockState {
-  const calibrationRequired = reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
-  return {
-    reason,
-    showReason: calibrationRequired,
-    showOpenCalibrationAction: calibrationRequired,
-  };
-}
-
-export function triggerCalibrationFromLock(
-  lockState: LightsModeLockState,
-  openCalibration: () => void,
-): void {
-  if (lockState.showOpenCalibrationAction) openCalibration();
-}
 
 const HUE_UNAVAILABLE_SUB_KEYS = {
   notConfigured: "lights:dock.rows.hueSubUnavailable",
@@ -108,13 +84,8 @@ interface LightsSectionProps {
   /** The shell boot has settled; until then `hueConfigured: false` is not yet known. */
   bootstrapDone?: boolean;
   hueReachable?: boolean;
-  /** The bridge probe stopped after a sustained outage; the banner offers a retry. */
-  hueProbeGaveUp?: boolean;
-  /** A bridge probe is in flight, so the retry control shows pending. */
-  hueProbeChecking?: boolean;
   /** What the last bridge probe found; picks the unavailable row's wording. */
   hueProbeVerdict?: HueProbeVerdict | null;
-  onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
   hueReconnecting?: boolean;
@@ -125,9 +96,6 @@ interface LightsSectionProps {
   isModeTransitioning?: boolean;
   onModeChange: (nextMode: LightingModeConfig) => void;
   onOutputTargetsChange: (targets: HueRuntimeTarget[]) => void;
-  onOpenCalibration: () => void;
-  /** Deep-link into DEVICES from the offline banner — full-mode twin of `CompactLayout.onOpenDevices`. */
-  onOpenDevices?: () => void;
   /**
    * Fired when the user picks a new Hue intensity preset. The parent
    * persists to shellStore AND hot-reloads the running worker so the new
@@ -171,10 +139,7 @@ export function LightsSection({
   hueConfigured,
   bootstrapDone = true,
   hueReachable = true,
-  hueProbeGaveUp = false,
-  hueProbeChecking = false,
   hueProbeVerdict = null,
-  onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
   hueStreamFailed = false,
@@ -183,15 +148,15 @@ export function LightsSection({
   isModeTransitioning = false,
   onModeChange,
   onOutputTargetsChange,
-  onOpenCalibration,
-  onOpenDevices,
   onHueIntensityPresetChange,
   onColorCorrectionChange,
   onFirmwareProfileChange,
 }: LightsSectionProps) {
   const { t } = useTranslation();
-  const lockState = getLightsModeLockState(modeLockReason);
-  const modeSelectorDisabled = lockState.showReason || isModeTransitioning;
+  // Why the mode buttons are dim — calibration, no output, still checking — is
+  // said by the shell notice queue, not here (docs/architecture/ui-and-shell.md).
+  const calibrationLocked = modeLockReason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED;
+  const modeSelectorDisabled = calibrationLocked || isModeTransitioning;
   // Without a reachable sink an activated mode spins up a worker with nowhere to
   // send frames; a configured-but-offline bridge is not one. One still being
   // checked is not one yet either, but it is not "missing" — see CompactLayout.
@@ -412,53 +377,6 @@ export function LightsSection({
     <div className="lm-lights-page">
       {/* ── Center column ─────────────────────────────────────────────── */}
       <div className="lm-lights-center">
-        {/* Kept separate from the calibration banner: a calibrated strip that is
-            merely unplugged must not be told to go and calibrate, and vice versa. */}
-        {availability === "checking" && <OutputCheckingNote />}
-        {availability === "none" && (
-          <OnboardingBanner
-            title={t("common:output.offline.title")}
-            body={
-              hueProbeGaveUp
-                ? t("common:output.offline.stoppedBody")
-                : t("common:output.offline.body")
-            }
-            primaryAction={
-              onOpenDevices
-                ? {
-                    label: t("common:output.offline.action"),
-                    onClick: onOpenDevices,
-                  }
-                : undefined
-            }
-            secondaryAction={
-              // Still gated on `hueProbeGaveUp` — offering retry during normal
-              // polling is noise. What changed is that `gaveUp` now survives a
-              // manual retry, so the button no longer deletes itself on click.
-              hueProbeGaveUp && onRetryHueProbe
-                ? {
-                    label: hueProbeChecking
-                      ? t("common:output.offline.retrying")
-                      : t("common:output.offline.retry"),
-                    onClick: onRetryHueProbe,
-                    pending: hueProbeChecking,
-                  }
-                : undefined
-            }
-          />
-        )}
-
-        {lockState.showReason && (
-          <OnboardingBanner
-            title={t("lights:calibrationBanner.title")}
-            body={t("lights:calibrationBanner.sub")}
-            primaryAction={{
-              label: t("lights:calibrationBanner.action"),
-              onClick: onOpenCalibration,
-            }}
-          />
-        )}
-
         {/* Mode strip */}
         <div>
           <div className="lm-lights-slab">
@@ -539,7 +457,7 @@ export function LightsSection({
           >
             <SolidColorPanel
               incoming={incomingSolid}
-              disabled={lockState.showReason}
+              disabled={calibrationLocked}
               brightnessDisabled={isAdalight}
               brightnessDisabledReason={
                 isAdalight

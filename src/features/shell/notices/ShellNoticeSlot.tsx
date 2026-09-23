@@ -5,23 +5,22 @@ import { NoticeCard } from "./NoticeCard";
 import { NOTICE_SEVERITY_LABEL } from "./noticeModel";
 import type { QueuedNotice, ShellNoticeQueue } from "./useShellNoticeQueue";
 
-/** Gap between the full-mode stack and the StatusBar it sits on. */
-const STACK_GAP_PX = 8;
-
 interface ShellNoticeSlotProps {
-  /** `compact`: in flow at the top of the body. `full`: a stack at the bottom right. */
+  /**
+   * Both sit in flow at the top of the content, so a notice pushes the page
+   * down and never covers it. `compact` shows a one-line headline; `full`
+   * shows the body, with the actions at the card's right edge.
+   */
   variant: "compact" | "full";
   queue: ShellNoticeQueue;
   /** A modal owns the screen: the slot stays where it is, beneath it and unreachable. */
   suppressed: boolean;
   /**
-   * Compact only. Keeps the slot's height while another notice is still due,
-   * so the one leaving does not pull the mode strip up just before the next
-   * pushes it back down.
+   * Keeps the slot's height while another notice is still due, so the one
+   * leaving does not pull the controls up just before the next pushes them
+   * back down.
    */
   holdSpace?: boolean;
-  /** Full only: the StatusBar the stack must clear. */
-  statusBarHeightPx?: number;
 }
 
 /**
@@ -33,7 +32,6 @@ export function ShellNoticeSlot({
   queue,
   suppressed,
   holdSpace = false,
-  statusBarHeightPx = 0,
 }: ShellNoticeSlotProps) {
   const { t } = useTranslation();
   const slotId = useId();
@@ -48,7 +46,7 @@ export function ShellNoticeSlot({
   useEffect(() => releaseHold, [releaseHold]);
 
   const compact = variant === "compact";
-  const reserve = compact && top === undefined && holdSpace && occupied;
+  const reserve = top === undefined && holdSpace && occupied;
   if (top === undefined && !reserve) return null;
 
   // Compact's headline hides the body, so even a lone notice can expand.
@@ -75,7 +73,7 @@ export function ShellNoticeSlot({
       ref={sectionRef}
       tabIndex={-1}
       id={slotId}
-      className={compact ? "lm-notice-slot" : "lm-notice-stack"}
+      className={compact ? "lm-notice-slot" : "lm-notice-slot is-wide"}
       aria-label={t("shell:notices.regionLabel")}
       data-testid="shell-notice-slot"
       data-variant={variant}
@@ -83,7 +81,6 @@ export function ShellNoticeSlot({
       data-queue={entries.map((entry) => entry.notice.id).join(" ")}
       data-suppressed={suppressed || undefined}
       inert={suppressed || undefined}
-      style={compact ? undefined : { bottom: `${statusBarHeightPx + STACK_GAP_PX}px` }}
       {...holdProps}
     >
       {top === undefined ? (

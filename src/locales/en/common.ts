@@ -48,9 +48,6 @@ export default {
       recentColors: "Recent",
       recentItemAriaLabel: "Use {{hex}}",
     },
-    onboardingBanner: {
-      dismissAriaLabel: "Dismiss hint",
-    },
     onboarding: {
       step1: {
         title: "Welcome to LumaSync",

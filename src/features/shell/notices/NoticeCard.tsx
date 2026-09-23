@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { IconChevronDown, IconClose, IconError, IconInfoAlt, IconWarning } from "@/shared/ui/icons";
 
-import { NOTICE_SEVERITY, NOTICE_SEVERITY_LABEL, type NoticeSeverity } from "./noticeModel";
+import { NOTICE_SEVERITY, NOTICE_SEVERITY_LABEL, type NoticeAction, type NoticeSeverity } from "./noticeModel";
 import type { QueuedNotice } from "./useShellNoticeQueue";
 
 function SeverityGlyph({ severity }: { severity: NoticeSeverity }) {
@@ -29,6 +29,21 @@ interface NoticeCardProps {
   toggle?: NoticeCardToggle;
 }
 
+function ActionButton({ action, secondary = false }: { action: NoticeAction; secondary?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={secondary ? "lm-notice-action is-secondary" : "lm-notice-action"}
+      onClick={action.onClick}
+      disabled={action.pending}
+      aria-busy={action.pending || undefined}
+      data-testid={action.testId}
+    >
+      {action.label}
+    </button>
+  );
+}
+
 /** One notice. Carries no live region — the shell has exactly one. */
 export function NoticeCard({ entry, layout, onDismiss, toggle }: NoticeCardProps) {
   const { t } = useTranslation();
@@ -42,18 +57,9 @@ export function NoticeCard({ entry, layout, onDismiss, toggle }: NoticeCardProps
         : t("shell:notices.showDetails")
     : "";
   const showMore = toggle?.variant === "text" && toggle.count > 0;
-  const actionButton = notice.action && (
-    <button
-      type="button"
-      className="lm-notice-action"
-      onClick={notice.action.onClick}
-      disabled={notice.action.pending}
-      aria-busy={notice.action.pending || undefined}
-      data-testid={notice.action.testId}
-    >
-      {notice.action.label}
-    </button>
-  );
+  const actionButton = notice.action && <ActionButton action={notice.action} />;
+  // Rendered with the body only: the headline has room for one button.
+  const secondaryButton = notice.secondaryAction && <ActionButton action={notice.secondaryAction} secondary />;
 
   return (
     <div
@@ -75,9 +81,10 @@ export function NoticeCard({ entry, layout, onDismiss, toggle }: NoticeCardProps
         {/* The headline hides the body from sight only; a screen reader still gets it. */}
         {notice.body && <p className={headline ? "sr-only" : "lm-notice-body"}>{notice.body}</p>}
         {/* Under the body in detail, so the body gets the card's full width. */}
-        {!headline && (actionButton || showMore) && (
+        {!headline && (actionButton || secondaryButton || showMore) && (
           <div className="lm-notice-actions">
             {actionButton}
+            {secondaryButton}
             {showMore && toggle && (
               <button
                 type="button"

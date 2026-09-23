@@ -12,10 +12,10 @@ import {
 } from "../support/shell";
 
 /**
- * Onboarding now speaks through the shell's notice slot
- * (`src/features/shell/notices/`), beside every other notice; the Lights page
- * keeps its in-page banners (no reachable output, calibration required).
- * Whether either shows depends on persisted flags this layer cannot seed or
+ * Onboarding, "no reachable output", "checking outputs" and "calibration
+ * required" all speak through the shell's notice slot
+ * (`src/features/shell/notices/`); no page draws its own banner any more.
+ * Whether one shows depends on persisted flags this layer cannot seed or
  * reset without risking someone else's real `shell-state.json` — there is no
  * isolated profile (testing-and-verification.md). A machine that has
  * already finished onboarding, which is most of them, may show neither, so a
@@ -28,7 +28,7 @@ import {
  * here ever clicks a dismiss or an action, so it never advances or completes
  * onboarding.
  */
-describe("notice slot and in-page banners (read-only, presence-conditional)", () => {
+describe("notice slot (read-only, presence-conditional)", () => {
   let startUiMode: UIMode;
   let startSection: SectionId | null;
 
@@ -46,7 +46,7 @@ describe("notice slot and in-page banners (read-only, presence-conditional)", ()
     await switchUiMode(startUiMode);
   });
 
-  // The slot follows every section; the in-page banners are Lights-only.
+  // The slot follows every section; the output and calibration notices are Lights-only.
   const SECTIONS_TO_CHECK: SectionId[] = [
     SECTION_IDS.LIGHTS,
     SECTION_IDS.DEVICES,
@@ -54,7 +54,7 @@ describe("notice slot and in-page banners (read-only, presence-conditional)", ()
   ];
 
   for (const section of SECTIONS_TO_CHECK) {
-    it(`on ${section}, any notice or banner shown is a named landmark with named buttons`, async () => {
+    it(`on ${section}, any notice shown is in a named landmark with named buttons`, async () => {
       await switchUiMode("full");
       await clickTestId(`section-tab-${section}`);
       await browser.waitUntil(() => exists(`[data-testid="section-panel-${section}"]`), {
@@ -66,7 +66,7 @@ describe("notice slot and in-page banners (read-only, presence-conditional)", ()
       // every run into an 8s wait when nothing is shown.
       await browser.pause(500);
 
-      const selector = '[data-testid="shell-notice-slot"], .lm-onboarding-banner';
+      const selector = '[data-testid="shell-notice-slot"]';
       if (!(await exists(selector))) {
         return;
       }

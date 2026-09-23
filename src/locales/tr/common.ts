@@ -50,9 +50,6 @@ const common: Catalogue<typeof enCommon> = {
       recentColors: "Son kullanılanlar",
       recentItemAriaLabel: "{{hex}} rengini kullan",
     },
-    onboardingBanner: {
-      dismissAriaLabel: "İpucunu kapat",
-    },
     onboarding: {
       step1: {
         title: "LumaSync'e hoş geldin",

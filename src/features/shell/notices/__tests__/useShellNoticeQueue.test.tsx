@@ -185,4 +185,19 @@ describe("useShellNoticeQueue", () => {
     rerender({ candidates: [notice("hue-color", { source: "again" })], suppressed: false });
     expect(result.current.expanded).toBe(false);
   });
+
+  // The queue keys on content; a second button that changed must not be
+  // shown as it was.
+  it("shows a notice's second action as the source last built it", () => {
+    const action = (label: string, pending = false) => ({ label, onClick: () => {}, pending });
+    const offline = (secondary: string, pending = false) =>
+      notice("output-none", { kind: "condition", dismissible: false, secondaryAction: action(secondary, pending) });
+    const { result, rerender } = setup([offline("Open devices")]);
+
+    rerender({ candidates: [offline("Open Hue")], suppressed: false });
+    expect(result.current.entries[0]?.notice.secondaryAction?.label).toBe("Open Hue");
+
+    rerender({ candidates: [offline("Open Hue", true)], suppressed: false });
+    expect(result.current.entries[0]?.notice.secondaryAction?.pending).toBe(true);
+  });
 });

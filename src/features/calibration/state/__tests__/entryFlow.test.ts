@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { LedCalibrationConfig } from "@/features/calibration/model/contracts";
 import {
@@ -15,10 +15,6 @@ import {
   MODE_GUARD_REASONS,
   resolveLedModeEnableAttempt,
 } from "@/features/mode/state/modeGuard";
-import {
-  getLightsModeLockState,
-  triggerCalibrationFromLock,
-} from "@/features/settings/sections/LightsSection";
 
 const EXISTING_CALIBRATION: LedCalibrationConfig = {
   templateId: "monitor-27-16-9",
@@ -121,16 +117,5 @@ describe("calibration entry flow", () => {
     expect(blocked.nextEnabled).toBe(false);
     expect(blocked.reason).toBe(MODE_GUARD_REASONS.CALIBRATION_REQUIRED);
     expect(blocked.shouldOpenCalibration).toBe(true);
-  });
-
-  it("open calibration CTA state is visible when mode is locked", () => {
-    const lockState = getLightsModeLockState(MODE_GUARD_REASONS.CALIBRATION_REQUIRED);
-    const openCalibrationOverlay = vi.fn();
-
-    triggerCalibrationFromLock(lockState, openCalibrationOverlay);
-
-    expect(lockState.showReason).toBe(true);
-    expect(lockState.showOpenCalibrationAction).toBe(true);
-    expect(openCalibrationOverlay).toHaveBeenCalledOnce();
   });
 });

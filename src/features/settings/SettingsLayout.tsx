@@ -36,11 +36,7 @@ interface SettingsLayoutProps {
    *  output gate reports checking rather than "no reachable output". */
   bootstrapDone: boolean;
   hueReachable?: boolean;
-  /** The Hue bridge probe stopped after a sustained outage; surfaces a retry in the offline banner. */
-  hueProbeGaveUp?: boolean;
-  hueProbeChecking?: boolean;
   hueProbeVerdict?: HueProbeVerdict | null;
-  onRetryHueProbe?: () => void;
   hueStreaming: boolean;
   /** Hue session owned but the backend is retrying the bridge; overrides `hueStreaming`. */
   hueReconnecting?: boolean;
@@ -97,10 +93,7 @@ export const SettingsLayout = memo(function SettingsLayout({
   hueConfigured,
   bootstrapDone,
   hueReachable = true,
-  hueProbeGaveUp = false,
-  hueProbeChecking = false,
   hueProbeVerdict = null,
-  onRetryHueProbe,
   hueStreaming,
   hueReconnecting = false,
   hueStreamFailed = false,
@@ -158,10 +151,7 @@ export const SettingsLayout = memo(function SettingsLayout({
               hueConfigured={hueConfigured}
               bootstrapDone={bootstrapDone}
               hueReachable={hueReachable}
-              hueProbeGaveUp={hueProbeGaveUp}
-              hueProbeChecking={hueProbeChecking}
               hueProbeVerdict={hueProbeVerdict}
-              onRetryHueProbe={onRetryHueProbe}
               hueStreaming={hueStreaming}
               hueReconnecting={hueReconnecting}
               hueStreamFailed={hueStreamFailed}
@@ -170,8 +160,6 @@ export const SettingsLayout = memo(function SettingsLayout({
               isModeTransitioning={isModeTransitioning}
               onModeChange={onLightingModeChange}
               onOutputTargetsChange={onOutputTargetsChange}
-              onOpenCalibration={() => void onSectionChange(SECTION_IDS.LED_SETUP)}
-              onOpenDevices={() => void onSectionChange(SECTION_IDS.DEVICES)}
               onHueIntensityPresetChange={onHueIntensityPresetChange}
               onColorCorrectionChange={onColorCorrectionChange}
               onFirmwareProfileChange={onFirmwareProfileChange}

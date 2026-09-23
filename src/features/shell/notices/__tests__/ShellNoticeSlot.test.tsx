@@ -41,7 +41,7 @@ function Harness({ input, variant, suppressed = false, holdSpace = false }: Harn
   const queue = useShellNoticeQueue(candidates, { suppressed });
   return (
     <>
-      <ShellNoticeSlot variant={variant} queue={queue} suppressed={suppressed} holdSpace={holdSpace} statusBarHeightPx={22} />
+      <ShellNoticeSlot variant={variant} queue={queue} suppressed={suppressed} holdSpace={holdSpace} />
       <ShellNoticeAnnouncer queue={queue} />
     </>
   );
@@ -80,18 +80,46 @@ describe("ShellNoticeSlot", () => {
 
   // The toasts were each `position: fixed` with a guessed 3.5rem offset per
   // slot; real heights were 74–90 px, so they overlapped.
-  it("stacks full-mode cards in one flex column, with no card positioned on its own", async () => {
+  // A floating bottom-right stack covered the page under a condition that
+  // could last all session; full now sits in flow above the content too.
+  it("puts the full slot in flow above the content, one card with its body and a '+N'", async () => {
     render(<Harness input={THREE} variant="full" />);
+
+    const slot = screen.getByTestId("shell-notice-slot");
+    expect(slot).toHaveClass("lm-notice-slot", "is-wide");
+    expect(slot.getAttribute("style")).toBeNull();
+    expect(cards()).toHaveLength(1);
+    expect(screen.getByTestId("capture-start-failed-notice")).toHaveClass("is-detail");
+    expect(screen.getByText("common:captureFailed.permission")).not.toHaveClass("sr-only");
+
     await userEvent.click(screen.getByRole("button", { name: "shell:notices.moreCount:2" }));
 
-    const stack = screen.getByTestId("shell-notice-slot");
-    expect(stack).toHaveClass("lm-notice-stack");
-    expect(stack.style.bottom).toBe("30px");
     expect(cards()).toHaveLength(3);
     for (const card of cards()) {
-      expect(card.parentElement).toBe(stack);
+      expect(card.parentElement).toBe(slot);
       expect(card.getAttribute("style")).toBeNull();
     }
+  });
+
+  // The full-mode banner had "Open devices" beside "Check again"; the queue
+  // keeps both where there is room, and the compact headline keeps one.
+  it("shows the second action with the body, never in the compact headline", async () => {
+    const gaveUp: Partial<ShellNoticeInput> = { availability: "none", hueProbeGaveUp: true };
+    const { unmount } = render(<Harness input={gaveUp} variant="full" />);
+    const card = screen.getByTestId("output-none-notice");
+    expect(within(card).getByRole("button", { name: "common:output.offline.retry" })).toBeInTheDocument();
+    expect(within(card).getByRole("button", { name: "common:output.offline.action" })).toHaveClass("is-secondary");
+    unmount();
+
+    render(<Harness input={gaveUp} variant="compact" />);
+    const headline = screen.getByTestId("output-none-notice");
+    expect(within(headline).getByRole("button", { name: "common:output.offline.retry" })).toBeInTheDocument();
+    expect(within(headline).queryByRole("button", { name: "common:output.offline.action" })).toBeNull();
+
+    await userEvent.click(screen.getByTestId("notice-toggle"));
+    expect(
+      within(screen.getByTestId("output-none-notice")).getByRole("button", { name: "common:output.offline.action" }),
+    ).toBeInTheDocument();
   });
 
   it("speaks through one persistent live region, and no card is a live region", () => {
@@ -124,16 +152,19 @@ describe("ShellNoticeSlot", () => {
     expect(screen.getByTestId("shell-notice-announcer")).toBeEmptyDOMElement();
   });
 
-  it("keeps its height while another notice is still due, instead of collapsing and re-opening", () => {
-    const { rerender } = render(<Harness input={{ availability: "checking" }} variant="compact" holdSpace />);
-    expect(screen.getByTestId("output-checking")).toBeInTheDocument();
+  it.each(["compact", "full"] as const)(
+    "keeps its height while another notice is still due, instead of collapsing and re-opening (%s)",
+    (variant) => {
+      const { rerender } = render(<Harness input={{ availability: "checking" }} variant={variant} holdSpace />);
+      expect(screen.getByTestId("output-checking")).toBeInTheDocument();
 
-    rerender(<Harness input={{ availability: "ready" }} variant="compact" holdSpace />);
-    expect(screen.getByTestId("notice-placeholder")).toBeInTheDocument();
+      rerender(<Harness input={{ availability: "ready" }} variant={variant} holdSpace />);
+      expect(screen.getByTestId("notice-placeholder")).toBeInTheDocument();
 
-    rerender(<Harness input={{ availability: "ready" }} variant="compact" holdSpace={false} />);
-    expect(screen.queryByTestId("shell-notice-slot")).toBeNull();
-  });
+      rerender(<Harness input={{ availability: "ready" }} variant={variant} holdSpace={false} />);
+      expect(screen.queryByTestId("shell-notice-slot")).toBeNull();
+    },
+  );
 
   it("renders nothing, and reserves nothing, for a user with nothing to be told", () => {
     render(<Harness input={{}} variant="compact" holdSpace />);

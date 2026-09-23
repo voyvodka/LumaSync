@@ -46,7 +46,7 @@ export const ONBOARDING_STEP_ORDER: ReadonlyArray<OnboardingStep> = [
 
 /**
  * 1-based step number for the active step (or 0 when complete). Used
- * by the OnboardingBanner step pill — the banner only renders on
+ * by the onboarding notice's "1/3" — the notice only exists for
  * non-complete steps so a 0 will never reach the UI.
  */
 export function stepIndex(step: OnboardingStep): number {
