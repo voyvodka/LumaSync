@@ -75,6 +75,8 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Lighting: the window, and the LED control popup, could freeze for a few seconds when they asked
+  which mode was running while a mode was switching. That answer no longer waits for the switch.
 - Hue: after the stream to the bridge dropped and reconnected on its own, the lamps stayed frozen
   on their last colour while the app still said Hue was running. Ambilight now carries on to the
   reconnected stream. Stopping Hue while Ambilight was still sending to it no longer waits out a
