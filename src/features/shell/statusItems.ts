@@ -1,7 +1,37 @@
 import type { TFunction } from "i18next";
 
 import type { LocalSink } from "@/features/device/localSink";
+import type { BootHueRetryNotice } from "@/features/mode/state/bootHueRetry";
+import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 import type { StatusItem } from "./StatusBar";
+
+/**
+ * Hue is out of what the backend runs: a boot retry is still waiting for the
+ * bridge to free its area, or a start left Hue out of a running mode.
+ */
+export type HueHeldOut = "waiting" | "leftOut";
+
+export interface HueHeldOutInput {
+  /** The orchestrator's latched reason, which outlives the left-out notice. */
+  leftOutReason: HueLeftOutReason | null;
+  bootHueRetry: BootHueRetryNotice | null;
+  lightingRunning: boolean;
+  hueSessionActive: boolean;
+}
+
+/** `null` whenever Hue is part of the running output, or nothing says otherwise. */
+export function resolveHueHeldOut({
+  leftOutReason,
+  bootHueRetry,
+  lightingRunning,
+  hueSessionActive,
+}: HueHeldOutInput): HueHeldOut | null {
+  if (hueSessionActive) return null;
+  // The resume wait runs with the mode Off, so it is not gated on a running mode.
+  if (bootHueRetry === "waiting") return "waiting";
+  if (!lightingRunning || leftOutReason === null) return null;
+  return leftOutReason === HUE_LEFT_OUT_REASON.BUSY ? "waiting" : "leftOut";
+}
 
 export interface StatusItemsInput {
   /** CAP is "ok" only while ambilight runs — it is the only frame-consuming mode. */
@@ -13,6 +43,8 @@ export interface StatusItemsInput {
   hueReconnecting: boolean;
   /** The backend reports the Hue stream Failed while Hue is a selected output. */
   hueFailed: boolean;
+  /** From {@link resolveHueHeldOut}. Wins over the bridge's own health, which a busy bridge passes. */
+  hueHeldOut?: HueHeldOut | null;
   hueReachable: boolean;
   hueConfigured: boolean;
   /** Deep-link offered by any chip that is not in a healthy state. */
@@ -28,16 +60,19 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
     hueStreaming,
     hueReconnecting,
     hueFailed,
+    hueHeldOut = null,
     hueReachable,
     hueConfigured,
     onOpenDevices,
   } = input;
   const localConnected = localSink !== null;
+  const hueWaiting = hueHeldOut === "waiting";
+  const hueLeftOut = hueHeldOut === "leftOut";
 
   return [
     {
       label: "CAP",
-      state: ambilightActive ? "OK" : "—",
+      state: ambilightActive ? t("shell:statusBar.state.ok") : "—",
       kind: ambilightActive ? "ok" : "idle",
     },
     {
@@ -45,7 +80,7 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       // label when nothing is, because the reconnect deep-link lands on the
       // same screen either way and USB is the path a first-run user takes.
       label: localSink?.transport === "wled" ? "WLED" : "USB",
-      state: localConnected ? "OK" : "OFF",
+      state: localConnected ? t("shell:statusBar.state.ok") : t("shell:statusBar.state.off"),
       kind: localConnected ? "ok" : "off",
       onReconnect: localConnected ? undefined : onOpenDevices,
       reconnectAriaLabel: t("shell:statusBar.reconnect.usbAriaLabel"),
@@ -55,30 +90,37 @@ export function buildStatusItems(input: StatusItemsInput, t: TFunction): StatusI
       // RETRYING rather than RECONNECTING: the compact bar has no room for a
       // value longer than STREAMING.
       state: hueReconnecting
-        ? "RETRYING"
+        ? t("shell:statusBar.state.retrying")
         : hueStreaming
-          ? "STREAMING"
-          : hueFailed
-            ? "FAILED"
-            : hueReachable
-              ? "OK"
-              : hueConfigured
-                ? "IDLE"
-                : "OFF",
-      // Amber, not green, while retrying; no reconnect button, because the
-      // backend is already doing exactly that.
-      kind: hueReconnecting || hueStreaming
+          ? t("shell:statusBar.state.streaming")
+          : hueWaiting
+            ? t("shell:statusBar.state.waiting")
+            : hueLeftOut
+              ? t("shell:statusBar.state.leftOut")
+              : hueFailed
+                ? t("shell:statusBar.state.failed")
+                : hueReachable
+                  ? t("shell:statusBar.state.ok")
+                  : hueConfigured
+                    ? t("shell:statusBar.state.idle")
+                    : t("shell:statusBar.state.off"),
+      // Amber, not green, while retrying or waiting; no reconnect button, because
+      // the app is already doing exactly that.
+      kind: hueReconnecting || hueStreaming || hueWaiting
         ? "active"
-        : hueFailed
+        : hueFailed || hueLeftOut
           ? "error"
           : hueReachable
             ? "ok"
             : hueConfigured
               ? "idle"
               : "off",
-      // A failed stream links to Devices even with the bridge reachable: the
-      // bridge card is where it is started again.
-      onReconnect: hueReconnecting || hueStreaming || (hueReachable && !hueFailed) ? undefined : onOpenDevices,
+      // A failed stream or a left-out Hue links to Devices even with the bridge
+      // reachable: the bridge card is where either is dealt with.
+      onReconnect:
+        hueReconnecting || hueStreaming || hueWaiting || (hueReachable && !hueFailed && !hueLeftOut)
+          ? undefined
+          : onOpenDevices,
       reconnectAriaLabel: t("shell:statusBar.reconnect.hueAriaLabel"),
     },
   ];

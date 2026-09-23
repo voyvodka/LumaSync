@@ -26,7 +26,7 @@ import {
   useHueStreamHealth,
 } from "./features/hue/state/useHueStreamHealth";
 import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
-import { buildStatusItems } from "./features/shell/statusItems";
+import { buildStatusItems, resolveHueHeldOut } from "./features/shell/statusItems";
 import { ShellNotices } from "./features/shell/ShellNotices";
 import { OnboardingFlow } from "./features/onboarding/ui/OnboardingFlow";
 import { useAutoUpdater } from "./features/updater/useAutoUpdater";
@@ -195,7 +195,13 @@ function App() {
     scheduleHueBusyRetry: mode.scheduleBootHueRetry,
   });
 
-  const { usbDisconnectNotice, usbUnsupportedNotice, armUsbConnected } =
+  const {
+    usbDisconnectNotice,
+    usbDisconnectLightingOffNotice,
+    usbUnsupportedNotice,
+    usbUnsupportedHueFallback,
+    armUsbConnected,
+  } =
     useUsbTargetReconciler({
       isConnected,
       bootstrapDone,
@@ -204,6 +210,7 @@ function App() {
       hueStartConfigRef,
       onAutoAddUsbTarget: mode.setSelectedOutputTargets,
       onDropUsbTarget: mode.dropUnpluggedUsbTarget,
+      onLastTargetUnplugged: mode.endLightingOnUsbUnplug,
       onFallbackTargets: mode.setSelectedOutputTargets,
     });
   armUsbConnectedRef.current = armUsbConnected;
@@ -378,6 +385,12 @@ function App() {
       hueStreaming,
       hueReconnecting,
       hueFailed: hueStreamFailed,
+      hueHeldOut: resolveHueHeldOut({
+        leftOutReason: mode.hueHeldOutReason,
+        bootHueRetry: mode.bootHueRetryNotice,
+        lightingRunning: lightingMode.kind !== LIGHTING_MODE_KIND.OFF,
+        hueSessionActive,
+      }),
       hueReachable,
       hueConfigured: hueStartConfig !== null,
       onOpenDevices: openDevicesSection,
@@ -476,7 +489,9 @@ function App() {
       )}
       <ShellNotices
         usbDisconnected={usbDisconnectNotice}
+        usbDisconnectedLightingOff={usbDisconnectLightingOffNotice}
         usbUnsupported={usbUnsupportedNotice}
+        usbUnsupportedHueFallback={usbUnsupportedHueFallback}
         stopFailedTargets={mode.stopFailedNotice}
         startFailure={mode.startFailedNotice}
         hueLeftOut={mode.hueLeftOutNotice}

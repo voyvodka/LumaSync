@@ -9,7 +9,11 @@ import { PREVIEW_OPEN_FAILURE_COPY, type PreviewOpenFailure } from "@/features/p
 
 export interface ShellNoticesProps {
   usbDisconnected: boolean;
+  /** Unplugged while it was the only target, so the running mode ended. Same slot. */
+  usbDisconnectedLightingOff?: boolean;
   usbUnsupported: boolean;
+  /** `false` when no Hue took over from the unrecognised port. */
+  usbUnsupportedHueFallback?: boolean;
   stopFailedTargets: HueRuntimeTarget[] | null;
   startFailure: CaptureFailureNotice | null;
   /** A `[usb, hue]` start ran on USB alone this session. */
@@ -47,8 +51,10 @@ const HUE_BOOT_RETRY_COPY: Record<BootHueRetryNotice, TranslationKey> = {
  * owned and auto-dismissed by the hook that raises it.
  */
 export function ShellNotices({
-  usbDisconnected,
+  usbDisconnected: usbDisconnectedContinuing,
+  usbDisconnectedLightingOff = false,
   usbUnsupported,
+  usbUnsupportedHueFallback = true,
   stopFailedTargets,
   startFailure,
   hueLeftOut,
@@ -60,6 +66,7 @@ export function ShellNotices({
   statusBarHeightPx = 0,
 }: ShellNoticesProps) {
   const { t } = useTranslation();
+  const usbDisconnected = usbDisconnectedContinuing || usbDisconnectedLightingOff;
   const stopFailed = stopFailedTargets !== null && stopFailedTargets.length > 0;
   // A start failure means no worker exists, so the two can never co-fire; the
   // start toast wins to keep that invariant obvious if one ever does.
@@ -78,7 +85,9 @@ export function ShellNotices({
           aria-live="polite"
           style={{ bottom, background: "var(--lm-panel-2)", border: "1px solid var(--lm-line-2)", color: "var(--lm-ink)" }}
         >
-          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>{t("common:hotplug.usbDisconnected")}</span>
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
+            {t(usbDisconnectedLightingOff ? "common:hotplug.usbDisconnectedLightingOff" : "common:hotplug.usbDisconnected")}
+          </span>
         </div>
       )}
       {usbUnsupported && (
@@ -98,7 +107,7 @@ export function ShellNotices({
         >
           <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-amber)" }} />
           <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
-            {t("common:hotplug.unsupportedFallback")}
+            {t(usbUnsupportedHueFallback ? "common:hotplug.unsupportedFallback" : "common:hotplug.unsupportedNoFallback")}
           </span>
         </div>
       )}

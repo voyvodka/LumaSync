@@ -73,7 +73,9 @@ const common: Catalogue<typeof enCommon> = {
   },
   hotplug: {
     usbDisconnected: "USB cihazı bağlantısı kesildi. Kalan hedeflerle devam ediliyor.",
+    usbDisconnectedLightingOff: "USB cihazının bağlantısı kesildi, aydınlatma kapandı. Devam etmek için şeridi yeniden bağlayıp bir mod seçin.",
     unsupportedFallback: "USB cihazı tanınmıyor — Hue-only moda alındı.",
+    unsupportedNoFallback: "USB cihazı tanınmıyor ve kurulu başka bir çıkış yok. Cihazlar'dan desteklenen bir denetleyici bağlayın.",
     stopFailed: "{{targets}} durdurulamadı. Çıkış etkin bırakıldı; yeniden deneyin.",
     targetLabel: {
       usb: "USB",

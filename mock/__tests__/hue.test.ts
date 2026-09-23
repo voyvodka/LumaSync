@@ -22,6 +22,7 @@ import type {
   HueStreamReadinessResponse,
   HueValidateCredentialsResponse,
 } from "../../src/features/hue/hueOnboardingApi";
+import { isHueStopCodeOk } from "../../src/features/hue/model/hueStartConfig";
 import type { HueRuntimeCommandResult, ModeCommandResult } from "../../src/features/mode/modeApi";
 import { DEVICE_COMMANDS } from "../../src/shared/contracts/device";
 import { dispatch } from "../dispatch";
@@ -144,6 +145,46 @@ describe("hueRuntimeFault distinguishes a start-time gate block from a live-stre
 
     expect(result.status.code).toBe(HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS);
     expect(result.status.state).toBe(HUE_RUNTIME_STATES.FAILED);
+  });
+});
+
+/**
+ * `stop_hue_stream` is local in Rust: `stop_with_timeout` (`hue/retry.rs`)
+ * leaves Idle / `HUE_STREAM_STOPPED` whatever the bridge is doing. The mock
+ * answered the stop with the unreachable bridge's retry code instead, which
+ * `isHueStopCodeOk` reads as a stop that failed — so a Hue left out of a
+ * `[usb, hue]` start stayed listed active and the HUE chip read STREAMING
+ * beside the left-out notice, a state the real backend cannot produce.
+ */
+describe("stop_hue_stream answers as Rust's local stop does", () => {
+  it("reports HUE_STREAM_STOPPED against an unreachable bridge, and Idle until the next start", async () => {
+    setWorld(SCENARIOS["hue-unreachable"].build());
+    const start = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
+    expect(start.active).toBe(false);
+
+    const stop = (await dispatch(HUE_COMMANDS.STOP_STREAM)) as HueRuntimeCommandResult;
+    expect(stop.status.code).toBe(HUE_RUNTIME_STATUS.STREAM_STOPPED);
+    expect(isHueStopCodeOk(stop.status.code)).toBe(true);
+
+    const status = (await dispatch(HUE_COMMANDS.GET_STREAM_STATUS)) as HueRuntimeCommandResult;
+    expect(status.status.state).toBe(HUE_RUNTIME_STATES.IDLE);
+
+    // Idle, so a new start meets the strict gate, not a retry the stop cancelled.
+    const restart = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
+    expect(restart.status.code).toBe(HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED);
+    expect(restart.status.state).toBe(HUE_RUNTIME_STATES.IDLE);
+  });
+
+  it("reports HUE_STREAM_STOPPED against a rejected key, which only the next start turns into Failed", async () => {
+    const world = SCENARIOS["hue-key-expired"].build();
+    setWorld(world);
+
+    const stop = (await dispatch(HUE_COMMANDS.STOP_STREAM)) as HueRuntimeCommandResult;
+    expect(stop.status.code).toBe(HUE_RUNTIME_STATUS.STREAM_STOPPED);
+
+    const start = (await dispatch(HUE_COMMANDS.START_STREAM)) as HueRuntimeCommandResult;
+    expect(start.status.code).toBe(HUE_RUNTIME_STATUS.AUTH_INVALID_CREDENTIALS);
+    expect(start.status.state).toBe(HUE_RUNTIME_STATES.FAILED);
   });
 });
 

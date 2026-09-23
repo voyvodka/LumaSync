@@ -27,6 +27,16 @@ const shell: Catalogue<typeof enShell> = {
   statusBar: {
     kbdMode: "mod",
     kbdSettings: "ayarlar",
+    state: {
+      ok: "TAMAM",
+      off: "KAPALI",
+      idle: "BOŞTA",
+      streaming: "YAYIN",
+      retrying: "DENİYOR",
+      failed: "BAŞARISIZ",
+      waiting: "BEKLİYOR",
+      leftOut: "DIŞARIDA",
+    },
     reconnect: {
       usbAriaLabel: "USB cihazını yeniden bağla",
       hueAriaLabel: "Hue köprüsünü yeniden bağla",

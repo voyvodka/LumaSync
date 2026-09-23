@@ -2,9 +2,22 @@ import { describe, expect, it, vi } from "vitest";
 import type { TFunction } from "i18next";
 
 import type { LocalSink } from "@/features/device/localSink";
-import { buildStatusItems, type StatusItemsInput } from "../statusItems";
+import { HUE_LEFT_OUT_REASON } from "@/shared/contracts/lighting";
+
+import { buildStatusItems, resolveHueHeldOut, type HueHeldOutInput, type StatusItemsInput } from "../statusItems";
 
 const t = ((key: string) => key) as unknown as TFunction;
+
+const S = {
+  ok: "shell:statusBar.state.ok",
+  off: "shell:statusBar.state.off",
+  idle: "shell:statusBar.state.idle",
+  streaming: "shell:statusBar.state.streaming",
+  retrying: "shell:statusBar.state.retrying",
+  failed: "shell:statusBar.state.failed",
+  waiting: "shell:statusBar.state.waiting",
+  leftOut: "shell:statusBar.state.leftOut",
+} as const;
 
 const healthy: StatusItemsInput = {
   ambilightActive: true,
@@ -46,7 +59,7 @@ describe("buildStatusItems", () => {
   });
 
   it("marks CAP ok only while ambilight is running", () => {
-    expect(byLabel(healthy, "CAP")).toMatchObject({ state: "OK", kind: "ok" });
+    expect(byLabel(healthy, "CAP")).toMatchObject({ state: S.ok, kind: "ok" });
     expect(byLabel({ ...healthy, ambilightActive: false }, "CAP")).toMatchObject({
       state: "—",
       kind: "idle",
@@ -54,20 +67,20 @@ describe("buildStatusItems", () => {
   });
 
   it("walks the Hue chip down streaming → reachable → configured → off", () => {
-    expect(byLabel(healthy, "HUE")).toMatchObject({ state: "STREAMING", kind: "active" });
+    expect(byLabel(healthy, "HUE")).toMatchObject({ state: S.streaming, kind: "active" });
     expect(byLabel({ ...healthy, hueStreaming: false }, "HUE")).toMatchObject({
-      state: "OK",
+      state: S.ok,
       kind: "ok",
     });
     expect(
       byLabel({ ...healthy, hueStreaming: false, hueReachable: false }, "HUE"),
-    ).toMatchObject({ state: "IDLE", kind: "idle" });
+    ).toMatchObject({ state: S.idle, kind: "idle" });
     expect(
       byLabel(
         { ...healthy, hueStreaming: false, hueReachable: false, hueConfigured: false },
         "HUE",
       ),
-    ).toMatchObject({ state: "OFF", kind: "off" });
+    ).toMatchObject({ state: S.off, kind: "off" });
   });
 
   // The health reconciler drops "hue" from the active targets on Failed, so
@@ -75,7 +88,7 @@ describe("buildStatusItems", () => {
   it("reads a failed Hue stream as failed and links to Devices, even with the bridge reachable", () => {
     const onOpenDevices = vi.fn();
     const item = byLabel({ ...healthy, hueStreaming: false, hueFailed: true, onOpenDevices }, "HUE");
-    expect(item).toMatchObject({ state: "FAILED", kind: "error" });
+    expect(item).toMatchObject({ state: S.failed, kind: "error" });
     expect(item.onReconnect).toBe(onOpenDevices);
   });
 
@@ -83,7 +96,7 @@ describe("buildStatusItems", () => {
   // chip read STREAMING while the Devices card said Reconnecting.
   it("reads a retrying Hue session as retrying, never as streaming", () => {
     const item = byLabel({ ...healthy, hueReconnecting: true, hueReachable: false }, "HUE");
-    expect(item).toMatchObject({ state: "RETRYING", kind: "active" });
+    expect(item).toMatchObject({ state: S.retrying, kind: "active" });
     // The backend is already retrying; a second retry affordance would lie.
     expect(item.onReconnect).toBeUndefined();
   });
@@ -118,11 +131,76 @@ describe("buildStatusItems", () => {
       ...healthy,
       localSink: { transport: "wled", id: "192.168.1.42" } satisfies LocalSink,
     };
-    expect(byLabel(wled, "WLED").state).toBe("OK");
+    expect(byLabel(wled, "WLED").state).toBe(S.ok);
     expect(buildStatusItems(wled, t).map((i) => i.label)).toEqual(["CAP", "WLED", "HUE"]);
   });
 
   it("falls back to the USB label when nothing local is bound", () => {
-    expect(byLabel({ ...healthy, localSink: null }, "USB").state).toBe("OFF");
+    expect(byLabel({ ...healthy, localSink: null }, "USB").state).toBe(S.off);
+  });
+
+  // A bridge the boot retry is waiting on answers the reachability probe, so
+  // the chip read OK beside the notice saying Hue was not running.
+  it("reads a Hue waiting on a busy bridge as waiting, never as OK", () => {
+    const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "waiting" }, "HUE");
+    expect(item).toMatchObject({ state: S.waiting, kind: "active" });
+    // The app is already waiting on the bridge; a reconnect affordance would lie.
+    expect(item.onReconnect).toBeUndefined();
+  });
+
+  it("reads a Hue left out of the running mode as left out and links to Devices, even with the bridge reachable", () => {
+    const onOpenDevices = vi.fn();
+    const item = byLabel({ ...healthy, hueStreaming: false, hueHeldOut: "leftOut", onOpenDevices }, "HUE");
+    expect(item).toMatchObject({ state: S.leftOut, kind: "error" });
+    expect(item.onReconnect).toBe(onOpenDevices);
+  });
+
+  it("routes every chip value through the catalogue", () => {
+    const permutations: StatusItemsInput[] = [
+      healthy,
+      { ...healthy, localSink: null, hueStreaming: false, hueReachable: false },
+      { ...healthy, hueStreaming: false, hueReachable: false, hueConfigured: false },
+      { ...healthy, hueReconnecting: true },
+      { ...healthy, hueStreaming: false, hueFailed: true },
+      { ...healthy, hueStreaming: false, hueHeldOut: "waiting" },
+      { ...healthy, hueStreaming: false, hueHeldOut: "leftOut" },
+    ];
+    for (const input of permutations) {
+      for (const item of buildStatusItems(input, t)) {
+        if (item.state !== "—") expect(item.state).toMatch(/^shell:statusBar\.state\./);
+      }
+    }
+  });
+});
+
+describe("resolveHueHeldOut", () => {
+  const running: HueHeldOutInput = {
+    leftOutReason: null,
+    bootHueRetry: null,
+    lightingRunning: true,
+    hueSessionActive: false,
+  };
+
+  it("is waiting while a [usb, hue] restore waits to add Hue back", () => {
+    expect(resolveHueHeldOut({ ...running, leftOutReason: HUE_LEFT_OUT_REASON.BUSY })).toBe("waiting");
+  });
+
+  it("is waiting while a restore that ended Off waits for the bridge", () => {
+    expect(resolveHueHeldOut({ ...running, lightingRunning: false, bootHueRetry: "waiting" })).toBe("waiting");
+  });
+
+  it.each([
+    HUE_LEFT_OUT_REASON.UNREACHABLE,
+    HUE_LEFT_OUT_REASON.AUTH,
+    HUE_LEFT_OUT_REASON.CONFIG,
+    HUE_LEFT_OUT_REASON.BUSY_GAVE_UP,
+  ])("is left out after a %s refusal while the mode runs", (reason) => {
+    expect(resolveHueHeldOut({ ...running, leftOutReason: reason })).toBe("leftOut");
+  });
+
+  it("is nothing once Hue is part of the running output, or nothing runs", () => {
+    expect(resolveHueHeldOut({ ...running, leftOutReason: HUE_LEFT_OUT_REASON.BUSY, hueSessionActive: true })).toBeNull();
+    expect(resolveHueHeldOut({ ...running, leftOutReason: HUE_LEFT_OUT_REASON.UNREACHABLE, lightingRunning: false })).toBeNull();
+    expect(resolveHueHeldOut(running)).toBeNull();
   });
 });

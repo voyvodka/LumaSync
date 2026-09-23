@@ -221,6 +221,8 @@ free, acts once. What it does depends on how the restore ended:
 - **The user always wins.** Any lighting-mode choice, any output-target change, or any `stopHue`
   call cancels the wait — the resume keeps running through a target change that still includes Hue,
   the rejoin does not. A slider tweak of the running mode is not a mode choice and cancels nothing.
+  Unplugging the strip a rejoin was waiting beside ends the mode and cancels the rejoin with it,
+  since there is no running mode left to add Hue to (`ui-and-shell.md`).
   The `stopHue` hook is attached to the command wrapper in `modeApi.ts`, the same way
   `stop_hue_stream` cancels the backend's own reconnect retry. The resume's notice says lighting
   will resume by itself and, if the window closes first, that it stayed off; the rejoin's says Hue

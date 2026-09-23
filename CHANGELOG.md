@@ -44,6 +44,18 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Unplugging the LED strip while it was the only output now turns lighting off and says the strip
+  was disconnected. Before, nothing was said, the mode still looked like it was running, and screen
+  capture carried on for a strip that was gone. This includes a launch that was running on the
+  strip alone while it waited for a busy Hue bridge: the wait for Hue ends too, so the notice no
+  longer claims lighting is "running on USB only". Your saved outputs are not changed, so the strip
+  is used again once it is back.
+- The HUE entry in the status bar no longer reads OK while Hue is left out of the running lighting.
+  It shows WAITING while the app waits for a busy bridge to let go, and LEFT OUT when Hue could not
+  join, and keeps saying so after the notice has gone, until Hue joins or you change the mode or
+  outputs. The status bar values are now translated, so they appear in Turkish too.
+- The "USB device not recognised" notice no longer says the app switched to Hue when no Hue bridge
+  is paired. It now says no other output is set up.
 - Opening the LED preview from the tray or from LED Setup no longer lights your Hue lamps. The
   test pattern that starts by itself when the popup opens now goes to the LED strip (USB or WLED)
   only. With no strip connected it shows in the overlay only, and the popup says so. Hue lights

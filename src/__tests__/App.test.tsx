@@ -143,9 +143,18 @@ vi.mock("../features/mode/modeApi", () => ({
 // floods the happy-dom event queue — causing ambilight `waitFor` assertions to
 // hit their 3 s timeout in the full suite even though each test passes in
 // isolation. Stubbing the entire StatusBar component is the cleanest
-// isolation boundary; it already contains no state being tested here.
+// isolation boundary. The stub still renders each chip's value, which App
+// derives and which is under test here; the telemetry-polling FPS pill is not.
 vi.mock("../features/shell/StatusBar", () => ({
-  StatusBar: () => null,
+  StatusBar: ({ items }: { items: Array<{ label: string; state: string }> }) => (
+    <ul>
+      {items.map((item) => (
+        <li key={item.label} data-testid={`status-chip-${item.label}`}>
+          {item.state}
+        </li>
+      ))}
+    </ul>
+  ),
   statusBarHeightPx: () => 24,
   STATUS_BAR_HEIGHT_FULL_PX: 24,
   STATUS_BAR_HEIGHT_COMPACT_PX: 22,
@@ -401,6 +410,8 @@ function installLightingBackend() {
 
 const lastModeSend = () =>
   setLightingModeMock.mock.calls[setLightingModeMock.mock.calls.length - 1][0] as LightingModeConfig;
+
+const hueChip = () => screen.getByTestId("status-chip-HUE");
 
 describe("App mode orchestration", () => {
   beforeEach(() => {
@@ -1452,6 +1463,69 @@ describe("App mode orchestration", () => {
       });
       expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
       expect(backend.running).toBeNull();
+    });
+
+    // With nothing else selected the unplug used to do nothing at all: no
+    // notice, the worker left capturing, and the mode still shown running.
+    it("ends a USB-only mode when the strip is unplugged, shows Off with the selection kept, and says so", async () => {
+      const backend = installLightingBackend();
+      loadShellStateMock.mockResolvedValue({ ...pairedShellState, lastOutputTargets: ["usb"] });
+      const view = render(<App />);
+      await waitFor(() => {
+        expect(backend.running?.targets).toEqual(["usb"]);
+      });
+      const modeSends = setLightingModeMock.mock.calls.length;
+
+      mockIsConnected = false;
+      await act(async () => {
+        view.rerender(<App />);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
+          "common:hotplug.usbDisconnectedLightingOff",
+        );
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+      expect(stopLightingMock).toHaveBeenCalledTimes(1);
+      expect(backend.running).toBeNull();
+      expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+      expect(stopHueMock).not.toHaveBeenCalled();
+      // Off keeps the selection; the strip is still the user's choice.
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+      expect(persistedTargets()).toEqual([]);
+      const persistedModes = saveShellStateMock.mock.calls
+        .map(([patch]) => patch as Record<string, unknown>)
+        .filter((patch) => "lightingMode" in patch);
+      expect(persistedModes).toEqual([]);
+    });
+
+    it("leaves an Off session alone when the only target is unplugged", async () => {
+      installLightingBackend();
+      loadShellStateMock.mockResolvedValue({
+        ...pairedShellState,
+        lightingMode: { kind: "off" },
+        lastOutputTargets: ["usb"],
+      });
+      const view = render(<App />);
+      await waitFor(() => {
+        expect(screen.getByTestId("calibration-leds")).toHaveTextContent("40");
+      });
+
+      mockIsConnected = false;
+      await act(async () => {
+        view.rerender(<App />);
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      });
+
+      expect(stopLightingMock).not.toHaveBeenCalled();
+      expect(screen.queryByTestId("usb-disconnect-notice")).not.toBeInTheDocument();
+      expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
     });
   });
 
@@ -2569,6 +2643,7 @@ describe("App mode orchestration", () => {
         });
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
         expect(screen.getByTestId("hue-boot-retry-notice")).toHaveTextContent("common:hueBootRetry.waiting");
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.waiting");
 
         bridgeAnswer = "free";
         await act(async () => {
@@ -2577,6 +2652,7 @@ describe("App mode orchestration", () => {
 
         await waitFor(() => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
+          expect(hueChip()).toHaveTextContent("shell:statusBar.state.streaming");
         });
         expect(screen.queryByTestId("hue-boot-retry-notice")).not.toBeInTheDocument();
         expect(startHueMock).toHaveBeenCalledTimes(2);
@@ -2672,11 +2748,12 @@ describe("App mode orchestration", () => {
           .filter((patch) => "lastOutputTargets" in patch);
 
       async function renderRunningOnUsb() {
-        render(<App />);
+        const view = render(<App />);
         await waitFor(() => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
           expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
         });
+        return view;
       }
 
       async function waitForBusyNotice() {
@@ -2797,6 +2874,101 @@ describe("App mode orchestration", () => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("ambilight");
         // Neither the drop nor the rejoin rewrites what the next launch restores.
         expect(persistedTargets()).toEqual([]);
+      });
+
+      // The bridge is reachable, just held, so the chip read OK beside a
+      // notice saying Hue was not running.
+      it("shows the HUE chip waiting while the rejoin waits, then streaming once Hue joins", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.waiting");
+
+        await freeTheAreaAndWait(3_000);
+        await waitFor(() => {
+          expect(hueChip()).toHaveTextContent("shell:statusBar.state.streaming");
+        });
+      });
+
+      it("keeps the HUE chip on left out after the gave-up notice clears, until the user makes a choice", async () => {
+        await renderRunningOnUsb();
+        await waitForBusyNotice();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "busyGaveUp");
+        });
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.leftOut");
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(8_000);
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        // The toast is gone; Hue is still not part of the running mode.
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.leftOut");
+
+        await act(async () => {
+          screen.getByRole("button", { name: "set-usb-target" }).click();
+        });
+        await waitFor(() => {
+          expect(hueChip()).toHaveTextContent("shell:statusBar.state.ok");
+        });
+      });
+
+      // The busy notice kept saying "running on USB only" with the strip gone,
+      // and the rejoin would have added Hue to a worker nothing fed.
+      it("ends the mode and drops the rejoin when the strip is unplugged while it waits", async () => {
+        const view = await renderRunningOnUsb();
+        await waitForBusyNotice();
+
+        mockIsConnected = false;
+        await act(async () => {
+          view.rerender(<App />);
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+          expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
+            "common:hotplug.usbDisconnectedLightingOff",
+          );
+        });
+        expect(stopLightingMock).toHaveBeenCalledTimes(1);
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.ok");
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        const modeSends = setLightingModeMock.mock.calls.length;
+        const probes = readinessProbes();
+
+        await freeTheAreaAndWait(30_000);
+        // Cancelled, not merely outlived: it stops asking the bridge.
+        expect(readinessProbes()).toBe(probes);
+        expect(startHueMock).toHaveBeenCalledTimes(1);
+        expect(setLightingModeMock.mock.calls.length).toBe(modeSends);
+        expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        expect(screen.getByTestId("output-targets")).toHaveTextContent(/^usb$/);
+        expect(persistedTargets()).toEqual([]);
+      });
+
+      it("takes down a gave-up notice's \"running on USB only\" with the strip", async () => {
+        const view = await renderRunningOnUsb();
+        await waitForBusyNotice();
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(30_000);
+        });
+        await waitFor(() => {
+          expect(leftOutNotice()).toHaveAttribute("data-reason", "busyGaveUp");
+        });
+
+        mockIsConnected = false;
+        await act(async () => {
+          view.rerender(<App />);
+        });
+
+        await waitFor(() => {
+          expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
+        });
+        expect(leftOutNotice()).not.toBeInTheDocument();
+        expect(hueChip()).toHaveTextContent("shell:statusBar.state.ok");
       });
 
       // The rejoin re-applies with both targets; a setting sent afterwards with

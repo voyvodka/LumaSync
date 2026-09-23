@@ -136,4 +136,17 @@ describe("ShellNotices", () => {
 
     expect(screen.getByTestId("hue-left-out-notice").style.transform).toBe("translateY(-3.5rem)");
   });
+
+  it("says lighting is off, not that it continues, when the unplugged strip was the only output", () => {
+    renderNotices({ usbDisconnectedLightingOff: true });
+    expect(screen.getByTestId("usb-disconnect-notice")).toHaveTextContent(
+      /^common:hotplug\.usbDisconnectedLightingOff$/,
+    );
+  });
+
+  it("never claims a switch to Hue when nothing took over from the unrecognised port", () => {
+    renderNotices({ usbUnsupported: true, usbUnsupportedHueFallback: false });
+    expect(screen.getByText("common:hotplug.unsupportedNoFallback")).toBeInTheDocument();
+    expect(screen.queryByText("common:hotplug.unsupportedFallback")).not.toBeInTheDocument();
+  });
 });

@@ -54,6 +54,11 @@ const MOCK_BRIDGE_HEIGHTS: readonly number[] = [0.1, 0.1, 0.9];
  * `start_with_evidence`'s own `auth_invalid_evidence` branch, which fails the
  * same way whether or not the runtime was ever running.
  *
+ * After a stop there is no fault at all (`stopped`): `stop_with_timeout`
+ * (`hue/retry.rs`) leaves the runtime Idle / `HUE_STREAM_STOPPED`, and a
+ * fault here made the stop itself answer with a retry code, which the app
+ * reads as a stop that failed.
+ *
  * Shared with `device.ts`'s `get_runtime_telemetry` fixture so the stream
  * status poll and the telemetry HUD cannot disagree about the same world —
  * they used to: telemetry read only the `streaming` boolean and reported
@@ -62,6 +67,7 @@ const MOCK_BRIDGE_HEIGHTS: readonly number[] = [0.1, 0.1, 0.9];
 export function hueRuntimeFault(
   hue: MockWorld["hue"],
 ): { code: HueRuntimeWireStatusCode; state: HueRuntimeState } | null {
+  if (hue.stopped && !hue.streaming) return null;
   if (!hue.reachable) {
     return hue.everActive
       ? { code: HUE_RUNTIME_STATUS.TRANSIENT_RETRY_SCHEDULED, state: HUE_RUNTIME_STATES.RECONNECTING }
@@ -290,6 +296,23 @@ export const hueHandlers = {
         ),
       };
     }
+    // A stopped runtime is Idle, so an unreachable bridge fails the strict
+    // gate, as on a fresh launch; only a key the bridge rejects moves it (to Failed).
+    if (hue.stopped && !hue.reachable) {
+      return {
+        active: false,
+        status: runtimeStatus(
+          HUE_RUNTIME_STATUS.CONFIG_NOT_READY_GATE_BLOCKED,
+          HUE_RUNTIME_STATES.IDLE,
+          "Hue stream start blocked by strict backend readiness gate.",
+        ),
+      };
+    }
+    if (!hue.credentialValid) {
+      mutate((w) => {
+        w.hue.stopped = false;
+      });
+    }
     if (!hue.reachable || !hue.credentialValid) {
       return { active: false, status: currentRuntime() };
     }
@@ -312,19 +335,24 @@ export const hueHandlers = {
     mutate((w) => {
       w.hue.streaming = true;
       w.hue.everActive = true;
+      w.hue.stopped = false;
     });
     return { active: true, status: currentRuntime() };
   },
 
+  // Local in Rust: the stop answers `HUE_STREAM_STOPPED` whatever the bridge
+  // is doing, so it never reads as a failed stop that leaves Hue listed active.
   [HUE_COMMANDS.STOP_STREAM]: () => {
     mutate((w) => {
       w.hue.streaming = false;
+      w.hue.stopped = true;
     });
     return { active: false, status: currentRuntime() };
   },
 
   [HUE_COMMANDS.RESTART_STREAM]: () => {
     mutate((w) => {
+      w.hue.stopped = false;
       w.hue.streaming = w.hue.reachable && w.hue.credentialValid;
       if (w.hue.streaming) {
         w.hue.everActive = true;

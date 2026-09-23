@@ -24,6 +24,17 @@ export default {
   statusBar: {
     kbdMode: "mode",
     kbdSettings: "settings",
+    // Chip values: short and uppercase, none longer than STREAMING.
+    state: {
+      ok: "OK",
+      off: "OFF",
+      idle: "IDLE",
+      streaming: "STREAMING",
+      retrying: "RETRYING",
+      failed: "FAILED",
+      waiting: "WAITING",
+      leftOut: "LEFT OUT",
+    },
     reconnect: {
       usbAriaLabel: "Reconnect USB device",
       hueAriaLabel: "Reconnect Hue bridge",

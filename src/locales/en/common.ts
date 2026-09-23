@@ -71,7 +71,9 @@ export default {
   },
   hotplug: {
     usbDisconnected: "USB device disconnected. Continuing with remaining targets.",
+    usbDisconnectedLightingOff: "USB device disconnected, so lighting is off. Reconnect the strip and pick a mode to resume.",
     unsupportedFallback: "USB device not recognised — switched to Hue-only mode.",
+    unsupportedNoFallback: "USB device not recognised, and no other output is set up. Connect a supported controller in Devices.",
     stopFailed: "Stop failed for {{targets}}. Output left active — try again.",
     targetLabel: {
       usb: "USB",

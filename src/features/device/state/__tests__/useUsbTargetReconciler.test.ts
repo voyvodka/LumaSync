@@ -20,6 +20,7 @@ vi.mock("@/features/shell/windowLifecycle", () => ({
 function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
   const onAutoAddUsbTarget = vi.fn();
   const onDropUsbTarget = vi.fn();
+  const onLastTargetUnplugged = vi.fn().mockResolvedValue(true);
   const onFallbackTargets = vi.fn();
   const selectedOutputTargetsRef = createRef<HueRuntimeTarget[]>() as {
     current: HueRuntimeTarget[];
@@ -35,6 +36,7 @@ function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
     hueStartConfigRef,
     onAutoAddUsbTarget,
     onDropUsbTarget,
+    onLastTargetUnplugged,
     onFallbackTargets,
     ...overrides,
   };
@@ -43,7 +45,16 @@ function harness(overrides: Partial<UsbTargetReconcilerInput> = {}) {
     initialProps: input,
   });
 
-  return { view, input, onAutoAddUsbTarget, onDropUsbTarget, onFallbackTargets, hueStartConfigRef, selectedOutputTargetsRef };
+  return {
+    view,
+    input,
+    onAutoAddUsbTarget,
+    onDropUsbTarget,
+    onLastTargetUnplugged: input.onLastTargetUnplugged as ReturnType<typeof vi.fn>,
+    onFallbackTargets,
+    hueStartConfigRef,
+    selectedOutputTargetsRef,
+  };
 }
 
 const unsupported = {
@@ -126,17 +137,40 @@ describe("useUsbTargetReconciler", () => {
       expect(view.result.current.usbDisconnectNotice).toBe(true);
     });
 
-    it("keeps the last remaining target on unplug rather than emptying the set", () => {
-      const { view, input, onDropUsbTarget } = harness({
+    it("ends the mode instead of emptying the set when USB was the only target, and says so", async () => {
+      const { view, input, onDropUsbTarget, onLastTargetUnplugged } = harness({
         isConnected: true,
         selectedOutputTargets: ["usb"],
       });
       act(() => {
         view.result.current.armUsbConnected(true);
       });
-      view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb"] });
+      await act(async () => {
+        view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb"] });
+      });
 
       expect(onDropUsbTarget).not.toHaveBeenCalled();
+      expect(onLastTargetUnplugged).toHaveBeenCalledTimes(1);
+      expect(view.result.current.usbDisconnectLightingOffNotice).toBe(true);
+      // "Continuing with remaining targets" would be false: there are none.
+      expect(view.result.current.usbDisconnectNotice).toBe(false);
+    });
+
+    it("stays quiet when the unplug of the only target ended nothing", async () => {
+      const { view, input, onLastTargetUnplugged } = harness({
+        isConnected: true,
+        selectedOutputTargets: ["usb"],
+        onLastTargetUnplugged: vi.fn().mockResolvedValue(false),
+      });
+      act(() => {
+        view.result.current.armUsbConnected(true);
+      });
+      await act(async () => {
+        view.rerender({ ...input, isConnected: false, selectedOutputTargets: ["usb"] });
+      });
+
+      expect(onLastTargetUnplugged).toHaveBeenCalledTimes(1);
+      expect(view.result.current.usbDisconnectLightingOffNotice).toBe(false);
       expect(view.result.current.usbDisconnectNotice).toBe(false);
     });
 
@@ -174,8 +208,30 @@ describe("useUsbTargetReconciler", () => {
       expect(saveShellStateMock).toHaveBeenCalledWith({ lastOutputTargets: [] });
     });
 
+    // No bridge is paired, so nothing took over: "switched to Hue-only" would be false.
+    it("reports no fallback when Hue did not take over", () => {
+      const { view, selectedOutputTargetsRef } = harness();
+      selectedOutputTargetsRef.current = ["usb"];
+
+      act(() => {
+        connectionEvents.emit(unsupported);
+      });
+      expect(view.result.current.usbUnsupportedNotice).toBe(true);
+      expect(view.result.current.usbUnsupportedHueFallback).toBe(false);
+    });
+
+    it("reports the Hue fallback when Hue is what is left", () => {
+      const { view, selectedOutputTargetsRef } = harness();
+      selectedOutputTargetsRef.current = ["usb", "hue"];
+
+      act(() => {
+        connectionEvents.emit(unsupported);
+      });
+      expect(view.result.current.usbUnsupportedHueFallback).toBe(true);
+    });
+
     it("auto-adds hue when a bridge is paired so the user keeps an output sink", () => {
-      const { onFallbackTargets, selectedOutputTargetsRef, hueStartConfigRef } = harness();
+      const { view, onFallbackTargets, selectedOutputTargetsRef, hueStartConfigRef } = harness();
       selectedOutputTargetsRef.current = ["usb"];
       hueStartConfigRef.current = { bridgeIp: "192.168.1.10" };
 
@@ -183,6 +239,7 @@ describe("useUsbTargetReconciler", () => {
         connectionEvents.emit(unsupported);
       });
       expect(onFallbackTargets).toHaveBeenCalledWith(["hue"]);
+      expect(view.result.current.usbUnsupportedHueFallback).toBe(true);
     });
 
     it("recovers a previously emptied target set when a bridge is paired", () => {
