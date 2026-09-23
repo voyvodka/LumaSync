@@ -1,4 +1,5 @@
-//! v1.5 G8 split of `hue_stream_lifecycle.rs` (3 200+ LOC → submodules).
+//! The Hue entertainment runtime, split out of the former 3 200-line
+//! `hue_stream_lifecycle.rs`.
 //!
 //! Submodule layout:
 //!
@@ -23,11 +24,11 @@
 //! - `bridge_identity` — bridge certificate check: Signify roots, CN =
 //!   bridge id, first-use pin for self-signed bridges
 //! - `pin_store` — the bridge certificate pins file in the app data dir
-//! - `credential_store` — v1.5 W2-A1 OS-keychain abstraction (macOS
-//!   Keychain / Windows CredMan / Linux Secret Service) used by W2-A2
-//!   to migrate Hue credentials off the plaintext shellStore fields.
+//! - `credential_store` — OS-keychain abstraction (macOS Keychain /
+//!   Windows CredMan / Linux Secret Service), also used to migrate Hue
+//!   credentials off the plaintext shellStore fields.
 //!
-//! v1.5 W4-F2: the previous `zone` submodule moved to
+//! The previous `zone` submodule moved to
 //! `commands::room_map::hue_zone` — zones are Hue-only, see
 //! docs/architecture/hue.md.
 

@@ -153,7 +153,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
   const [previewOpenFailure, setPreviewOpenFailure] = useState<PreviewOpenFailure | null>(null);
 
   // Load displays on mount. Honour any persisted selection so the
-  // capture source survives app restarts (v1.4 Platform GAP 2).
+  // capture source survives app restarts.
   useEffect(() => {
     let cancelled = false;
     Promise.all([listDisplays(), shellStore.load()])
@@ -294,7 +294,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
     const selected = displayTargetRef.current.selectDisplay(display.id);
     setDisplayTarget(selected);
     // Persist so the next set_lighting_mode call binds the ambilight
-    // worker to the user's chosen capture source (v1.4 Platform GAP 2).
+    // worker to the user's chosen capture source.
     void shellStore.save({ selectedDisplayId: display.id });
     // Synchronous, for the same reason `onSaved` is: shellStore only feeds the
     // next boot, so without this the live payload keeps the old monitor.
@@ -325,7 +325,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
     }
   }, [editorState, overlayPreviewPayload, testPattern.isEnabled, t, onDisplayChange]);
 
-  // A3.7 — accept the absolute next value, not a delta. Stepper buttons
+  // Accept the absolute next value, not a delta. Stepper buttons
   // pass `value + 1` / `value - 1` so the +/- affordance is preserved
   // while the new keyboard-input path can submit any integer directly.
   // Defensive cap at 1000 — the build still validates totalLeds downstream
@@ -350,7 +350,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
     setValidationErrors(null);
   }, [displayTarget]);
 
-  // A3.7 — accept the absolute next value, not a delta. Same shape as
+  // Accept the absolute next value, not a delta. Same shape as
   // handleCountChange so StandGapStepper can use the unified API.
   const handleBottomMissingChange = useCallback((nextValue: number) => {
     setEditorState((prev) => {
@@ -750,7 +750,7 @@ function EdgeSummary({ label, value }: { label: string; value: number }) {
   );
 }
 
-// A3.7 — number stepper with always-editable keyboard input.
+// Number stepper with always-editable keyboard input.
 // `value` is the committed integer; `draft` mirrors the user's
 // in-flight typing so the field can hold an empty / partial value
 // without bouncing back to `value` mid-keystroke. ENTER and blur
@@ -885,7 +885,7 @@ function DirectionButton({ direction, label, active, onClick }: { direction: Led
   );
 }
 
-// A3.7 — same keyboard-input pattern as CountStepper, with the
+// Same keyboard-input pattern as CountStepper, with the
 // `max` cap (counts.bottom) preserved on commit so an out-of-range
 // keystroke still clamps. The label slot keeps the small "LED"
 // header + the "/ {max}" sibling so the user always sees the

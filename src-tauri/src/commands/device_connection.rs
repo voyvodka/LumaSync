@@ -55,7 +55,7 @@ const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
     (0x10C4, 0xEA60), // CP2102 (Silicon Labs)
     (0x2341, 0x0043), // Arduino Uno R3+
     (0x2341, 0x0001), // Arduino Uno (earlier USB ID)
-    // --- v1.5 G5 additions ---
+    // --- added after the first five ---
     (0x067B, 0x2303), // PL2303 (Prolific Technology)
     (0x1A86, 0x5523), // CH341 (WinChipHead)
     (0x10C4, 0xEA70), // CP2104 (Silicon Labs)
@@ -229,8 +229,9 @@ impl Default for SerialConnectionState {
 /// `None` when no port is connected. Replaced on every successful
 /// `connect_serial_port` / `connect_wled_sink` call — connecting one family
 /// evicts the other, so at most one "usb"-channel sink is ever registered at
-/// a time (see `ls-led-protocols` — one active sink per output channel). The
-/// sink is stopped and cleared on disconnect or failed connect.
+/// a time (one active sink per output channel —
+/// docs/architecture/device-output.md). The sink is stopped and cleared on
+/// disconnect or failed connect.
 pub struct ActiveSinkRegistry {
     pub sink: Mutex<Option<Box<dyn LedSink>>>,
     /// Snapshot of the config needed to rebuild a fresh `WledUdpSink`,
@@ -1194,7 +1195,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------------
-    // v1.5 G5 new entries
+    // The four entries added after the first five
     // ---------------------------------------------------------------------------
 
     #[test]

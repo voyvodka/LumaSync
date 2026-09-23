@@ -224,7 +224,7 @@ export const deviceHandlers = {
 
     // Target derivation mirrors `apply_mode_change_inner`
     // (`src-tauri/src/commands/lighting_mode.rs:2004-2008`): empty/absent
-    // `targets` means USB-required for backward compat (D-10); "hue" opts a
+    // `targets` means USB-required for backward compat; "hue" opts a
     // mode into the Hue gate below. Order matters — the USB gate (2023-2036)
     // runs before the Hue gate (2039-2052) in Rust, so it must here too: a
     // request needing both with neither available reports DEVICE_NOT_CONNECTED,

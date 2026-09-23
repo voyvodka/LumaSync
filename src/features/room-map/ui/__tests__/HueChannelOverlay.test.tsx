@@ -1,7 +1,7 @@
 /**
  * HueChannelOverlay regression tests.
  *
- * Bug-driven coverage for v1.5 W1-A6 / W1-A8 zone authoring:
+ * Bug-driven coverage for zone authoring:
  *  - Bug #50: dragging the zone center moves the dashed bounds box AND
  *    every channel dot bound to the zone in lockstep (imperative DOM
  *    update during pointermove, single state commit on pointerup).
@@ -87,6 +87,46 @@ describe("HueChannelOverlay — bug #52(a) drag-time zone clamp", () => {
     // World x must also stay inside the zone half-width.
     expect(updated.x).toBeLessThanOrEqual(ZONE.centerX + Math.abs(ZONE.scaleX) + 1e-9);
     expect(updated.x).toBeGreaterThanOrEqual(ZONE.centerX - Math.abs(ZONE.scaleX) - 1e-9);
+  });
+});
+
+// A bound channel's `x`/`y` are leftovers — nothing updates them when the zone
+// moves or the channel is assigned. The drag started from them, so the dot
+// jumped there on the first move and the drop clamped it to the zone's edge.
+describe("HueChannelOverlay — a drag starts where the dot is drawn", () => {
+  it("moves a bound channel from its zone-resolved position, not its stale absolute one", () => {
+    const onChange = vi.fn();
+    const stale: HueChannelPlacement = {
+      ...CHANNEL_IN_ZONE,
+      x: -0.8,
+      y: 0.9,
+      zoneRelativePosition: { x: 0.5, y: 0, z: 0 },
+    };
+    const { container } = render(
+      <HueChannelOverlay
+        channels={[stale]}
+        pxPerMeter={80}
+        roomWidthM={5}
+        roomDepthM={4}
+        zoom={1}
+        selectedId={null}
+        onSelect={() => {}}
+        onChange={onChange}
+        allHueZones={[ZONE]}
+      />,
+    );
+    const dot = container.querySelector<HTMLDivElement>('[role="button"]');
+
+    // 8 px at 80 px/m is 0.1 m, which in a 5 m room is 0.04 of the Hue cube.
+    fireEvent.pointerDown(dot!, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(dot!, { clientX: 108, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(dot!, { clientX: 108, clientY: 100, pointerId: 1 });
+
+    const updated = onChange.mock.calls[0]?.[0] as HueChannelPlacement;
+    // Drawn at 0 + 0.3 * 0.5 = 0.15; one move later it is at 0.19.
+    expect(updated.x).toBeCloseTo(0.19, 10);
+    expect(updated.y).toBeCloseTo(0, 10);
+    expect(updated.zoneRelativePosition?.x).toBeCloseTo(0.19 / 0.3, 10);
   });
 });
 

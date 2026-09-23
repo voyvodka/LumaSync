@@ -1,8 +1,7 @@
 //! Tauri command surface for the Hue entertainment runtime.
 //!
-//! Carved out of the original `hue_stream_lifecycle.rs` during the v1.5 G8
-//! split. This module owns the seven `#[tauri::command]` entry points
-//! (`start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
+//! Carved out of the original `hue_stream_lifecycle.rs`. This module owns
+//! the seven `#[tauri::command]` entry points (`start_hue_stream`, `stop_hue_stream`, `restart_hue_stream`,
 //! `set_hue_solid_color`, `get_hue_stream_status`, `get_hue_area_channels`,
 //! `simulate_hue_fault`).
 //! All call sites use the data plane and runtime state machine that now
@@ -389,7 +388,7 @@ where
         }
     } // lock released before blocking I/O
 
-    // 4a-bis. Pre-fetch per-light archetype + gamut metadata (W1-C3a), and the
+    // 4a-bis. Pre-fetch per-light archetype + gamut metadata, and the
     //         lights' state from the same GETs. The sender activates the area
     //         next, so this is the last read before we touch the lights: the
     //         restore's snapshot point. Graceful: failures fall back to
@@ -610,7 +609,7 @@ pub(crate) fn stop_hue_runtime(
             .map(|s| Arc::clone(&s.shutdown_signal));
 
         // Extract DTLS deactivation params + dedupe token before active_stream
-        // is cleared. The token is the A1.3 coordination point: whichever of
+        // is cleared. The token is the coordination point: whichever of
         // {sender thread, foreground stop, reconnect monitor} acquires it
         // first performs the single PUT; later callers no-op.
         let dtls_deactivate = owner
@@ -899,7 +898,7 @@ pub async fn get_hue_stream_status(
         }
     }; // lock released before async I/O
 
-    // A3: Non-blocking probe — if the background sender thread has already exited,
+    // Non-blocking probe — if the background sender thread has already exited,
     // register a transient fault immediately without doing a network round-trip.
     if let Some((_, _, _, ref shutdown_signal)) = active_stream_params {
         if is_shutdown_signaled(shutdown_signal) {
@@ -974,7 +973,7 @@ pub async fn get_hue_stream_status(
 }
 
 // ---------------------------------------------------------------------------
-// simulate_hue_fault — debug-only command (D-10, D-11)
+// simulate_hue_fault — debug-only command
 // ---------------------------------------------------------------------------
 
 /// Debug-only: force the active DTLS stream's shutdown signal to fire,
@@ -990,7 +989,7 @@ pub fn simulate_hue_fault(runtime_state: State<'_, HueRuntimeStateStore>) -> Com
     let owner = acquire_hue_runtime(&runtime_state.runtime);
     if let Some(ref stream) = owner.active_stream {
         if stream.uses_dtls {
-            // D-11: Fire shutdown signal to trigger reconnect monitor.
+            // Fire shutdown signal to trigger reconnect monitor.
             signal_shutdown_complete(&stream.shutdown_signal);
             info!("simulate_hue_fault: shutdown signal fired for active DTLS stream.");
             return CommandStatus {

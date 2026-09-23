@@ -538,7 +538,7 @@ mod tests {
         assert_eq!(interval, 100); // 1000 / 10 = 100
     }
 
-    // Test 4b: baud-budget wire arithmetic (F5)
+    // Test 4b: baud-budget wire arithmetic
     #[test]
     fn frame_wire_bytes_counts_header_for_both_chip_widths() {
         // LumaSync v1: 2 magic + 1 brightness + 2 count LE + payload + 1 XOR.

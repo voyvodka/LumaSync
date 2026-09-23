@@ -1,5 +1,5 @@
 /**
- * RoomMapEditor — F8 regression tests
+ * RoomMapEditor — regression tests
  *
  * Covers the mousemove handler stability fix from commit fe351c2:
  * "fix(ui): prevent event listener thrashing in RoomMapEditor mousemove handler"
@@ -52,38 +52,51 @@ vi.mock("@/features/device/useUsbConnectionStatus", () => ({
 const persistState = vi.hoisted(() => ({
   loading: false,
   configOverride: {} as Record<string, unknown>,
-  updateConfig: vi.fn().mockResolvedValue(undefined),
-  undo: vi.fn().mockResolvedValue(undefined),
+  apply: vi.fn(),
+  undo: vi.fn(),
 }));
 
-vi.mock("../../state/useRoomMapPersist", () => ({
-  useRoomMapPersist: () => ({
-    config: {
-      dimensions: { widthMeters: 5, depthMeters: 4 },
-      furniture: [],
-      // tvAnchor non-null so isEmpty = false → main canvas div renders
-      tvAnchor: { x: 0, y: 0, widthMeters: 1, depthMeters: 0.1, label: "TV" },
-      usbStrips: [],
-      hueChannels: [],
-      hueZones: [],
-      // zones needed by hueZones = config.zones references
-      zones: [],
-      backgroundImagePath: null,
-      imageLayers: [],
-      ...persistState.configOverride,
+vi.mock("../../state/useRoomMapState", async () => {
+  const { useState } = await import("react");
+  return {
+    useRoomMapState: () => {
+      // Selection is real state, as it is in the reducer, so a click on the TV
+      // stub re-renders the editor with the TV selected.
+      const [selectedId, select] = useState<string | null>(null);
+      return {
+        config: {
+          dimensions: { widthMeters: 5, depthMeters: 4 },
+          furniture: [],
+          // tvAnchor non-null so isEmpty = false → main canvas div renders
+          tvAnchor: { x: 0, y: 0, widthMeters: 1, depthMeters: 0.1, label: "TV" },
+          usbStrips: [],
+          hueChannels: [],
+          hueZones: [],
+          // zones needed by hueZones = config.zones references
+          zones: [],
+          backgroundImagePath: null,
+          imageLayers: [],
+          ...persistState.configOverride,
+        },
+        selectedId,
+        activeHueZoneId: null,
+        apply: persistState.apply,
+        adopt: vi.fn(),
+        replace: vi.fn(),
+        reset: vi.fn(),
+        undo: persistState.undo,
+        redo: vi.fn(),
+        select,
+        selectHueZone: vi.fn(),
+        // canUndo: true bypasses the isEmpty && !canUndo early-return to TemplateSelector
+        canUndo: true,
+        canRedo: false,
+        loading: persistState.loading,
+        error: null,
+      };
     },
-    updateConfig: persistState.updateConfig,
-    replaceConfig: vi.fn().mockResolvedValue(undefined),
-    resetConfig: vi.fn().mockResolvedValue(undefined),
-    undo: persistState.undo,
-    redo: vi.fn().mockResolvedValue(undefined),
-    // canUndo: true bypasses the isEmpty && !canUndo early-return to TemplateSelector
-    canUndo: true,
-    canRedo: false,
-    loading: persistState.loading,
-    error: null,
-  }),
-}));
+  };
+});
 
 vi.mock("../RoomMapCanvas", () => ({
   RoomMapCanvas: ({
@@ -246,7 +259,7 @@ describe("RoomMapEditor — canvas container observation", () => {
 });
 
 // ---------------------------------------------------------------------------
-// F8 — MouseCoordinateDisplay event-listener stability tests
+// MouseCoordinateDisplay event-listener stability tests
 // ---------------------------------------------------------------------------
 
 describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)", () => {
@@ -325,7 +338,7 @@ describe("RoomMapEditor — MouseCoordinateDisplay event-listener stability (F8)
   });
 });
 
-// Wave 0 stubs resolved where the decisions are actually made: ROOM-01 by
+// Placeholder stubs resolved where the decisions are actually made: ROOM-01 by
 // `computeFit` (useRoomMapViewport.test.ts), ROOM-06 by `deriveZones`
 // (deriveZones.test.ts). ROOM-08 dropped with `backgroundImagePath` in v1.5.x.
 
@@ -428,7 +441,7 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
   beforeEach(() => {
     realResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
-    persistState.updateConfig.mockClear();
+    persistState.apply.mockClear();
     persistState.undo.mockClear();
   });
 
@@ -455,7 +468,7 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
       fireEvent.keyDown(field, { key: "Backspace" });
     });
 
-    expect(persistState.updateConfig).not.toHaveBeenCalledWith({ tvAnchor: undefined });
+    expect(persistState.apply).not.toHaveBeenCalledWith({ tvAnchor: undefined });
   });
 
   it("still deletes the selected object on Backspace outside a field", () => {
@@ -465,7 +478,7 @@ describe("RoomMapEditor — editor shortcuts stand aside for form fields", () =>
       fireEvent.keyDown(root, { key: "Backspace" });
     });
 
-    expect(persistState.updateConfig).toHaveBeenCalledWith({ tvAnchor: undefined });
+    expect(persistState.apply).toHaveBeenCalledWith({ tvAnchor: undefined });
   });
 
   it("leaves Cmd+Z inside a field to the field's own undo", () => {
@@ -516,7 +529,7 @@ describe("RoomMapEditor — resizing the room", () => {
   beforeEach(() => {
     realResizeObserver = globalThis.ResizeObserver;
     globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
-    persistState.updateConfig.mockClear();
+    persistState.apply.mockClear();
     persistState.configOverride = {
       furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.8 }],
       hueChannels: [{ channelIndex: 0, x: 0.5, y: -0.5, z: 0 }],
@@ -539,7 +552,7 @@ describe("RoomMapEditor — resizing the room", () => {
     });
 
     // 5 x 4 -> 7 x 6 shifts metre objects by half the growth, (1, 1).
-    const calls = persistState.updateConfig.mock.calls;
+    const calls = persistState.apply.mock.calls;
     const patch = calls[calls.length - 1]?.[0] as Record<string, unknown>;
     expect(patch.dimensions).toMatchObject({ widthMeters: 7, depthMeters: 6 });
     expect(patch.furniture).toEqual([expect.objectContaining({ x: 2, y: 3 })]);

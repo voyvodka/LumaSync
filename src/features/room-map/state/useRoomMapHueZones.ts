@@ -7,24 +7,29 @@ import type {
   HueZoneStatusCode,
   RoomMapConfig,
 } from "@/shared/contracts/roomMap";
-import { findHueChannel, isHueZoneApplied } from "@/shared/contracts/roomMap";
+import { isHueZoneApplied, replaceHueChannel } from "@/shared/contracts/roomMap";
+import { findScopedHueChannel } from "../model/hueChannelScope";
 import {
   assignChannelToHueZone,
   createHueZone,
   deleteHueZone,
   updateHueZone,
 } from "../roomMapApi";
+import type { RoomMapPatch } from "./roomMapReducer";
+import type { ApplyOptions } from "./useRoomMapState";
 
 export interface UseRoomMapHueZonesArgs {
   config: RoomMapConfig;
-  updateConfig: (partial: Partial<RoomMapConfig>) => Promise<void>;
-  setSelectedId: React.Dispatch<React.SetStateAction<string | null>>;
+  apply: (patch: RoomMapPatch, options?: ApplyOptions) => void;
+  /** Re-applying the pre-image of a refused mutation is not an edit the user made. */
+  adopt: (patch: RoomMapPatch) => void;
+  activeHueZoneId: string | null;
+  selectHueZone: (zoneId: string | null) => void;
   setObjectPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export interface UseRoomMapHueZonesReturn {
   hueZones: HueZone[];
-  activeHueZoneId: string | null;
   activeHueZone: HueZone | null;
   /** Cached active entertainment area id from shellStore — used when authoring Hue zones. */
   hueAreaId: string | null;
@@ -35,7 +40,6 @@ export interface UseRoomMapHueZonesReturn {
   handleAddHueZone: () => void;
   handleDeleteHueZone: (zoneId: string) => void;
   handleRenameHueZone: (zoneId: string, name: string) => void;
-  handleSelectHueZone: (zoneId: string | null) => void;
   handleAssignChannelToZone: (channelIndex: number, targetZoneId: string | null) => void;
   handleHueZoneCenterChange: (zoneId: string, centerX: number, centerY: number) => void;
   handleHueZoneUpdate: (zoneId: string, patch: Partial<HueZone>) => void;
@@ -46,12 +50,13 @@ export interface UseRoomMapHueZonesReturn {
 // it refused, which is re-applied. See docs/architecture/room-map.md.
 export function useRoomMapHueZones({
   config,
-  updateConfig,
-  setSelectedId,
+  apply,
+  adopt,
+  activeHueZoneId,
+  selectHueZone,
   setObjectPanelOpen,
 }: UseRoomMapHueZonesArgs): UseRoomMapHueZonesReturn {
   const { t } = useTranslation();
-  const [activeHueZoneId, setActiveHueZoneId] = useState<string | null>(null);
   const [hueAreaId, setHueAreaId] = useState<string | null>(null);
 
   // "Configured" is `hueAppKey` (legacy plaintext) OR a keychain backend. The
@@ -82,13 +87,11 @@ export function useRoomMapHueZones({
   // Settle one mutation against the backend's verdict. `withChannels` is only
   // set for the two commands that own `hueChannels`; the other two return an
   // empty `channels` list that would wipe every placement if written back.
+  // The pre-image is adopted rather than applied: as an undo step it would let
+  // Cmd+Z restore the very state the backend refused. Adopting it also drops
+  // the selection of a zone the refusal took away.
   const settle = useCallback(
-    (
-      label: string,
-      promise: Promise<HueZoneCommandResult>,
-      withChannels: boolean,
-      onRefused?: () => void,
-    ) => {
+    (label: string, promise: Promise<HueZoneCommandResult>, withChannels: boolean) => {
       void promise
         .then((result) => {
           if (isHueZoneApplied(result.status.code)) return;
@@ -96,18 +99,17 @@ export function useRoomMapHueZones({
             `[LumaSync] ${label} refused: ${result.status.code} — ${result.status.message}`,
           );
           setHueZoneRejection(result.status.code);
-          void updateConfig(
+          adopt(
             withChannels
               ? { zones: result.zones, hueChannels: result.channels }
               : { zones: result.zones },
           );
-          onRefused?.();
         })
         .catch((e) => {
           console.error(`[LumaSync] ${label} failed`, e);
         });
     },
-    [updateConfig],
+    [adopt],
   );
 
   const handleAddHueZone = useCallback(() => {
@@ -129,14 +131,12 @@ export function useRoomMapHueZones({
       channelIndices: [],
       borderColor: colorVar,
     };
-    void updateConfig({ zones: [...config.zones, newZone] });
-    setActiveHueZoneId(id);
+    apply({ zones: [...config.zones, newZone] });
+    selectHueZone(id);
     setObjectPanelOpen(true);
 
-    settle("create_hue_zone", createHueZone({ zone: newZone, existingZones: hueZones }), false, () => {
-      setActiveHueZoneId((current) => (current === id ? null : current));
-    });
-  }, [hueAreaId, hueZones, config.zones, updateConfig, t, setObjectPanelOpen, settle]);
+    settle("create_hue_zone", createHueZone({ zone: newZone, existingZones: hueZones }), false);
+  }, [hueAreaId, hueZones, config.zones, apply, t, selectHueZone, setObjectPanelOpen, settle]);
 
   const handleDeleteHueZone = useCallback(
     (zoneId: string) => {
@@ -147,8 +147,7 @@ export function useRoomMapHueZones({
           ? { ...ch, zoneId: undefined, zoneRelativePosition: undefined }
           : ch,
       );
-      void updateConfig({ zones: nextZones, hueChannels: nextChannels });
-      if (activeHueZoneId === zoneId) setActiveHueZoneId(null);
+      apply({ zones: nextZones, hueChannels: nextChannels });
 
       settle(
         "delete_hue_zone",
@@ -156,7 +155,7 @@ export function useRoomMapHueZones({
         true,
       );
     },
-    [hueZones, config.zones, config.hueChannels, activeHueZoneId, updateConfig, settle],
+    [hueZones, config.zones, config.hueChannels, apply, settle],
   );
 
   const handleRenameHueZone = useCallback(
@@ -169,7 +168,7 @@ export function useRoomMapHueZones({
         }
         return z;
       });
-      void updateConfig({ zones: next });
+      apply({ zones: next });
       if (renamed) {
         settle(
           "update_hue_zone (rename)",
@@ -178,22 +177,15 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, updateConfig, settle],
+    [config.zones, apply, settle],
   );
-
-  // Selection is exclusive between concrete objects and Hue zones, so the
-  // inspector and the side-list can never disagree about what is selected.
-  const handleSelectHueZone = useCallback((zoneId: string | null) => {
-    setActiveHueZoneId(zoneId);
-    if (zoneId !== null) setSelectedId(null);
-  }, [setSelectedId]);
 
   // One handler for all three channel→zone paths (both drops and the popover).
   // It writes three fields that must stay in sync — `zoneId`,
   // `zoneRelativePosition`, `channelIndices` — see docs/architecture/room-map.md.
   const handleAssignChannelToZone = useCallback(
     (channelIndex: number, targetZoneId: string | null) => {
-      const channel = findHueChannel(config.hueChannels, channelIndex);
+      const channel = findScopedHueChannel(config.hueChannels, hueAreaId, channelIndex);
       if (!channel) return;
       // No-op if already in the target bucket — avoids spurious invokes.
       const currentZoneId = channel.zoneId ?? null;
@@ -211,28 +203,26 @@ export function useRoomMapHueZones({
       // Default zone-relative position lands on the zone center so the
       // dot is visible inside the dashed bounds; the user can drag it
       // afterwards to refine the placement.
-      const nextChannels = config.hueChannels.map((c) =>
-        c.channelIndex === channelIndex
-          ? targetZoneId
-            ? {
-                ...c,
-                zoneId: targetZoneId,
-                zoneRelativePosition: { x: 0, y: 0, z: 0 },
-              }
-            : { ...c, zoneId: undefined, zoneRelativePosition: undefined }
-          : c,
+      const nextChannels = replaceHueChannel(
+        config.hueChannels,
+        targetZoneId
+          ? { ...channel, zoneId: targetZoneId, zoneRelativePosition: { x: 0, y: 0, z: 0 } }
+          : { ...channel, zoneId: undefined, zoneRelativePosition: undefined },
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
-      // add to new zone (idempotent). v1.5 W4-F2: only Hue zones live in
+      // add to new zone (idempotent). Only Hue zones live in
       // `config.zones`, so the previous `zoneType !== HUE` skip is gone.
+      // A zone of another area holding the same index names a different channel.
+      const channelAreaId = channel.entertainmentAreaId || entertainmentAreaId;
       const nextZones = config.zones.map((z) => {
+        if (channelAreaId && z.entertainmentAreaId !== channelAreaId) return z;
         const without = z.channelIndices.filter((i) => i !== channelIndex);
         if (z.id === targetZoneId) {
           return { ...z, channelIndices: [...without, channelIndex] };
         }
         return { ...z, channelIndices: without };
       });
-      void updateConfig({ hueChannels: nextChannels, zones: nextZones });
+      apply({ hueChannels: nextChannels, zones: nextZones });
 
       // Pre-mutation lists: the backend performs the same attach itself, and
       // sending `nextZones` made `already_in_zone` always true, which skipped
@@ -250,7 +240,7 @@ export function useRoomMapHueZones({
         true,
       );
     },
-    [config.hueChannels, config.zones, hueZones, hueAreaId, updateConfig, settle],
+    [config.hueChannels, config.zones, hueZones, hueAreaId, apply, settle],
   );
 
   const activeHueZone: HueZone | null = activeHueZoneId
@@ -267,7 +257,7 @@ export function useRoomMapHueZones({
         }
         return z;
       });
-      void updateConfig({ zones: next });
+      apply({ zones: next });
       if (updated) {
         settle(
           "update_hue_zone (center)",
@@ -276,7 +266,7 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, updateConfig, settle],
+    [config.zones, apply, settle],
   );
 
   // The patch passes through verbatim — do NOT mirror one axis onto the other.
@@ -292,7 +282,9 @@ export function useRoomMapHueZones({
         }
         return z;
       });
-      void updateConfig({ zones: next });
+      // The size slider and the colour picker land here once per input event;
+      // the gesture keeps a drag across either one undo step and one save.
+      apply({ zones: next }, { gesture: `hue-zone:${zoneId}:${Object.keys(patch).sort().join(",")}` });
       if (updated) {
         settle(
           "update_hue_zone (props)",
@@ -301,12 +293,11 @@ export function useRoomMapHueZones({
         );
       }
     },
-    [config.zones, updateConfig, settle],
+    [config.zones, apply, settle],
   );
 
   return {
     hueZones,
-    activeHueZoneId,
     activeHueZone,
     hueAreaId,
     hueBridgeConfigured,
@@ -315,7 +306,6 @@ export function useRoomMapHueZones({
     handleAddHueZone,
     handleDeleteHueZone,
     handleRenameHueZone,
-    handleSelectHueZone,
     handleAssignChannelToZone,
     handleHueZoneCenterChange,
     handleHueZoneUpdate,

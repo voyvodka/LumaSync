@@ -1,15 +1,16 @@
 //! WLED device discovery and sink connection commands.
 //!
-//! v1.5 W1-B3: manual IP path only. mDNS auto-discovery is Wave 2 (W2-A3).
+//! Manual IP path only; there is no mDNS auto-discovery for WLED yet.
 //! `WledDiscoveryResponse.devices` is a `Vec<WledDeviceInfo>` (not `Option<WledDeviceInfo>`)
 //! so the frontend always gets a stable array — empty on failure, `[device]` on success.
-//! This mirrors the Wave 2 mDNS path shape where multiple devices may appear.
+//! That is also the shape an mDNS path would need, where several devices may appear.
 //!
 //! Status codes:
 //!   WLED_DISCOVERY_OK          -- /json/info responded; device info parsed.
 //!   WLED_DISCOVERY_TIMEOUT     -- HTTP request timed out (2 s).
 //!   WLED_DISCOVERY_UNREACHABLE -- Connection refused / network error.
-//!   WLED_PROTOCOL_MISMATCH     -- Response body is not valid WLED JSON.
+//!   WLED_PROTOCOL_MISMATCH     -- Response is not valid WLED JSON, or is a
+//!                                 redirect (never followed).
 //!   WLED_LED_COUNT_MISMATCH    -- Requested ledCount != device-reported count.
 //!   WLED_BRIDGE_UNREACHABLE    -- connect/test: device not reachable.
 //!   WLED_CONNECT_OK            -- Sink built and registered.
@@ -20,6 +21,7 @@
 //!   WLED_INVALID_IP            -- IP failed SSRF guard (not IPv4, loopback,
 //!                                 unspecified, multicast, or broadcast).
 //!   WLED_INVALID_LED_COUNT     -- led_count == 0 supplied to connect_wled_sink.
+use std::io::Read;
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -32,6 +34,11 @@ use super::status::CommandStatus;
 use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The largest `/json/info` body read. A real one is a few KB even on a
+/// multi-segment install; anything past this is not WLED answering, and
+/// reading it unbounded would let any host on the LAN fill our memory.
+const WLED_MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 
 /// DDP's own port, fixed by the protocol and independent of the realtime UDP
 /// port the user can remap in WLED's settings.
@@ -63,8 +70,8 @@ pub struct WledDeviceInfo {
 /// Response from `discover_wled_devices`.
 ///
 /// `devices` is always a stable Vec — empty on failure, `[device]` on a
-/// successful single-IP probe. This shape already matches the Wave 2 mDNS
-/// path (W2-A3) where multiple devices can appear in one response, so the
+/// successful single-IP probe. This shape already matches a future mDNS
+/// path, where multiple devices can appear in one response, so the
 /// frontend array-rendering code needs no change at that migration point.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -251,10 +258,16 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
         ));
     }
 
-    let url = format!("http://{}/json/info", ip);
+    fetch_info_from(&format!("http://{}/json/info", ip))
+}
 
-    let client = reqwest::blocking::Client::builder()
+/// The one WLED HTTP client. Redirects are never followed: `parse_ipv4`
+/// vets only the address the user typed, so a device answering with a
+/// redirect could otherwise send the request to loopback or anywhere else.
+fn wled_http_client() -> Result<reqwest::blocking::Client, CommandStatus> {
+    reqwest::blocking::Client::builder()
         .timeout(WLED_HTTP_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| {
             CommandStatus::new(
@@ -262,9 +275,14 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
                 "Failed to build HTTP client.",
                 Some(e.to_string()),
             )
-        })?;
+        })
+}
 
-    let response = client.get(&url).send().map_err(|e| {
+/// `/json/info` from an already-vetted URL.
+fn fetch_info_from(url: &str) -> Result<WledInfoResponse, CommandStatus> {
+    let client = wled_http_client()?;
+
+    let response = client.get(url).send().map_err(|e| {
         if e.is_timeout() {
             CommandStatus::new(
                 "WLED_DISCOVERY_TIMEOUT",
@@ -280,6 +298,19 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
         }
     })?;
 
+    if response.status().is_redirection() {
+        let location = response
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("(no Location)");
+        return Err(CommandStatus::new(
+            "WLED_PROTOCOL_MISMATCH",
+            "WLED device answered with a redirect, which is not followed.",
+            Some(format!("HTTP {} to {location}", response.status().as_u16())),
+        ));
+    }
+
     if !response.status().is_success() {
         return Err(CommandStatus::new(
             "WLED_PROTOCOL_MISMATCH",
@@ -288,13 +319,7 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
         ));
     }
 
-    let info: WledInfoResponse = response.json().map_err(|e| {
-        CommandStatus::new(
-            "WLED_PROTOCOL_MISMATCH",
-            "Response from device is not valid WLED JSON.",
-            Some(e.to_string()),
-        )
-    })?;
+    let info = read_info_body(response)?;
 
     if info.leds.count == 0 {
         return Err(CommandStatus::new(
@@ -305,6 +330,37 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
     }
 
     Ok(info)
+}
+
+/// Parses `/json/info`, refusing a body past [`WLED_MAX_RESPONSE_BYTES`].
+fn read_info_body(
+    response: reqwest::blocking::Response,
+) -> Result<WledInfoResponse, CommandStatus> {
+    let mut body = Vec::new();
+    response
+        .take(WLED_MAX_RESPONSE_BYTES as u64 + 1)
+        .read_to_end(&mut body)
+        .map_err(|e| {
+            CommandStatus::new(
+                "WLED_PROTOCOL_MISMATCH",
+                "Response from device is not valid WLED JSON.",
+                Some(e.to_string()),
+            )
+        })?;
+    if body.len() > WLED_MAX_RESPONSE_BYTES {
+        return Err(CommandStatus::new(
+            "WLED_PROTOCOL_MISMATCH",
+            "Response from device is too large to be WLED.",
+            Some(format!("body exceeds {WLED_MAX_RESPONSE_BYTES} bytes")),
+        ));
+    }
+    serde_json::from_slice(&body).map_err(|e| {
+        CommandStatus::new(
+            "WLED_PROTOCOL_MISMATCH",
+            "Response from device is not valid WLED JSON.",
+            Some(e.to_string()),
+        )
+    })
 }
 
 fn info_to_device(ip: &str, info: WledInfoResponse) -> WledDeviceInfo {
@@ -727,5 +783,122 @@ mod tests {
         assert!(device.mac.is_none());
         assert!(device.version.is_none());
         assert!(device.name.is_none());
+    }
+
+    /// Answers one request on 127.0.0.1 with `body`, chunked so no
+    /// Content-Length announces the size up front.
+    fn serve_once(body: Vec<u8>) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n",
+            );
+            for chunk in body.chunks(64 * 1024) {
+                if stream
+                    .write_all(format!("{:x}\r\n", chunk.len()).as_bytes())
+                    .and_then(|()| stream.write_all(chunk))
+                    .and_then(|()| stream.write_all(b"\r\n"))
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            let _ = stream.write_all(b"0\r\n\r\n");
+        });
+        format!("http://{addr}/json/info")
+    }
+
+    fn fetch(url: &str) -> Result<super::WledInfoResponse, super::CommandStatus> {
+        let response = super::wled_http_client().unwrap().get(url).send().unwrap();
+        super::read_info_body(response)
+    }
+
+    /// A LAN device answering `/json/info` with a 302 to a loopback service
+    /// that looks like WLED. Following it would reach an address `parse_ipv4`
+    /// refuses, so the redirect must end the probe with a code, unfollowed.
+    #[test]
+    fn a_redirect_is_refused_not_followed() {
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let target_url = format!("http://{}/json/info", target.local_addr().unwrap());
+        let target_hit = Arc::new(AtomicBool::new(false));
+        let hit = Arc::clone(&target_hit);
+        std::thread::spawn(move || {
+            let (mut stream, _) = target.accept().unwrap();
+            hit.store(true, Ordering::SeqCst);
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            let body = br#"{"leds":{"count":60}}"#;
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                )
+                .as_bytes(),
+            );
+            let _ = stream.write_all(body);
+        });
+
+        let device = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let device_url = format!("http://{}/json/info", device.local_addr().unwrap());
+        let location = target_url.clone();
+        std::thread::spawn(move || {
+            let (mut stream, _) = device.accept().unwrap();
+            let mut request = [0u8; 1024];
+            let _ = stream.read(&mut request);
+            let _ = stream.write_all(
+                format!(
+                    "HTTP/1.1 302 Found\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .as_bytes(),
+            );
+        });
+
+        let status = super::fetch_info_from(&device_url).unwrap_err();
+
+        assert_eq!(status.code, "WLED_PROTOCOL_MISMATCH");
+        assert_eq!(
+            status.details.as_deref(),
+            Some(format!("HTTP 302 to {target_url}").as_str())
+        );
+        assert!(
+            !target_hit.load(Ordering::SeqCst),
+            "the redirect target must never be contacted"
+        );
+    }
+
+    #[test]
+    fn info_body_within_the_cap_parses() {
+        let info = fetch(&serve_once(
+            br#"{"leds":{"count":60},"udpport":21324}"#.to_vec(),
+        ))
+        .unwrap();
+        assert_eq!(info.leds.count, 60);
+        assert_eq!(info.udpport, 21324);
+    }
+
+    #[test]
+    fn info_body_past_the_cap_is_refused() {
+        use super::WLED_MAX_RESPONSE_BYTES;
+        // Valid JSON the whole way, so only the cap can reject it.
+        let mut body = br#"{"leds":{"count":60},"name":""#.to_vec();
+        body.resize(WLED_MAX_RESPONSE_BYTES, b'x');
+        body.extend_from_slice(br#""}"#);
+        assert!(body.len() > WLED_MAX_RESPONSE_BYTES);
+
+        let status = fetch(&serve_once(body)).unwrap_err();
+        assert_eq!(status.code, "WLED_PROTOCOL_MISMATCH");
+        assert_eq!(
+            status.details.as_deref(),
+            Some(format!("body exceeds {WLED_MAX_RESPONSE_BYTES} bytes").as_str())
+        );
     }
 }

@@ -56,7 +56,7 @@ export function HueZonesTab(props: HueZonesTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  // ── Wave 4-B (B1) — area-state header ─────────────────────────────
+  // ── Area-state header ─────────────────────────────────────────────
   const areaState = deriveHueAreaState(hueBridgeConfigured, hueAreaId);
   // EMPTY is a clean answer — the area really has no lights — so only the
   // genuinely unread codes may claim the screen is showing stale data.
@@ -64,7 +64,7 @@ export function HueZonesTab(props: HueZonesTabProps) {
   const channelsUnread =
     channelsStatus != null && channelsStatus !== HUE_AREA_CHANNELS_STATUS.OK && !channelsEmpty;
 
-  // ── Wave 4-B (B2/B3) — drag-and-drop + move popover state ─────────
+  // ── Drag-and-drop + move popover state ────────────────────────────
   const [dragChannelIndex, setDragChannelIndex] = useState<number | null>(null);
   const [dropTargetZoneId, setDropTargetZoneId] = useState<string | null | undefined>(undefined);
   const [movePopover, setMovePopover] = useState<{
@@ -160,7 +160,7 @@ export function HueZonesTab(props: HueZonesTabProps) {
 
   return (
     <>
-      {/* B1 — Hue area state strip; renders above the Title row so the
+      {/* Hue area state strip; renders above the Title row so the
           user always knows whether the dock is operational without
           cross-referencing the Devices section. */}
       <div

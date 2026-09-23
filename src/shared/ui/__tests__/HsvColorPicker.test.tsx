@@ -1,5 +1,5 @@
 /**
- * Regression test for v1.5 fix #45 — `HsvColorPicker` drag throttle.
+ * Regression test for the `HsvColorPicker` drag throttle.
  *
  * Before this fix, the picker fired `onChange` on every pointermove (≥ 60 Hz
  * on modern displays). Wiring it through `App.tsx` for compact Solid mode

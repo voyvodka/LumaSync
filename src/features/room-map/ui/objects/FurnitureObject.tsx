@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { memo, useRef, useState } from "react";
 import type { FurniturePlacement } from "@/shared/contracts/roomMap";
 import { ResizeHandle } from "./ResizeHandle";
 import { furnitureObjectId } from "../../model/objectId";
@@ -42,7 +42,7 @@ interface FurnitureObjectProps {
   onSnapDragEnd?: () => void;
 }
 
-export function FurnitureObject({
+export const FurnitureObject = memo(function FurnitureObject({
   placement,
   pxPerMeter,
   selected,
@@ -287,4 +287,4 @@ export function FurnitureObject({
       )}
     </div>
   );
-}
+});

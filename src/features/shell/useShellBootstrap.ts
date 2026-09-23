@@ -88,7 +88,7 @@ export function useShellBootstrap(sink: ShellBootstrapSink): { bootstrapDone: bo
         // Restore window geometry immediately — before any heavy async work —
         // so the window settles into its saved position without a visible jump.
         await initWindowLifecycle({
-          // A4.1 — tell the user the app is still running in the tray the first
+          // Tell the user the app is still running in the tray the first
           // time they close the window. `trayHintShown` in shellStore keeps it to
           // once per install; a denied permission is logged, never blocking.
           onFirstCloseToTray: () => {

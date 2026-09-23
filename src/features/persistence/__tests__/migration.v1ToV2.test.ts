@@ -68,7 +68,7 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
       channelIndices: [0, 1, 2],
       borderColor: "#ff0",
     });
-    // The W4-F-era discriminator must NOT survive — Hue zones are now
+    // The short-lived `zoneType` discriminator must NOT survive — Hue zones are now
     // simply `HueZone`, no `zoneType` field.
     expect(out.roomMap?.zones[0]).not.toHaveProperty("zoneType");
     // Deprecated field must be stripped.
@@ -96,7 +96,7 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
     const out = migrateShellState(input);
 
     expect(out.schemaVersion).toBe(SHELL_STATE_SCHEMA_VERSION);
-    // Logical zones are dropped entirely after W4-F2 — no migrated entries.
+    // Logical zones are dropped entirely — no migrated entries.
     expect(out.roomMap?.zones).toHaveLength(0);
     expect(out.roomMap).not.toHaveProperty("hueZones");
 
@@ -124,8 +124,8 @@ describe("migrateShellState — schemaVersion 1 → 2 (W4-F2)", () => {
         hueChannels: [],
         usbStrips: [],
         furniture: [],
-        // Logical leftover sits in the `zones` slot from a brief W4-F dev
-        // build; legacy hue array still holds the original W1-A1 records.
+        // Logical leftover sits in the `zones` slot from a brief dev build;
+        // legacy hue array still holds the original `hueZones` records.
         zones: asZonesSlot([logicalLeftover]),
         hueZones: [hueA, hueB],
         imageLayers: [],

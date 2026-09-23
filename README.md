@@ -82,7 +82,7 @@ Profile is selected per device in the Devices section.
 |----------|--------|-------|
 | macOS | Full support | Primary development target. `macos-private-api` enabled for fullscreen overlays. |
 | Windows | Full support | USB and Hue features work. Windows Graphics Capture powers the capture pipeline. |
-| Linux | Full support (v1.5+) | X11 capture via xcap. Requires GTK 3, WebKitGTK 4.1, `libudev`, and `libgbm`. |
+| Linux | Full support (v1.5+) | X11 capture via xcap. Requires glibc 2.35 or newer (Ubuntu 22.04, Debian 12, or later), GTK 3, WebKitGTK 4.1, `libudev`, and `libgbm`. |
 
 ## Getting Started
 

@@ -68,7 +68,7 @@ const REQUIRED_SECTION_IDS = [
 // ---------------------------------------------------------------------------
 const REQUIRED_STATE_FIELDS = [
   "schemaVersion",
-  // v1.5 (post-W4-F2) — corner+size geometry replaced by mode-invariant center.
+  // Corner+size geometry replaced by mode-invariant center.
   // Bumped `SHELL_STATE_SCHEMA_VERSION` to 3; the 2 → 3 migration shim in
   // `features/persistence/migrations.ts` derives the center from legacy fields
   // and strips them.
@@ -82,7 +82,7 @@ const REQUIRED_STATE_FIELDS = [
 ];
 
 /**
- * v1.4 Wave 1 ShellState additions. All optional / additive — strict
+ * The v1.4 ShellState additions. All optional / additive — strict
  * presence check but no default-value check because each has its own
  * backend-provided default.
  */
@@ -359,7 +359,7 @@ check(
 );
 
 console.log("\n[ Hue zone re-export surface (v1.5 W4-F2) ]");
-// After the W4-F2 reversal, hue.ts re-exports the canonical Hue zone
+// Zones are Hue-only, so hue.ts re-exports the canonical Hue zone
 // surface from `roomMap.ts`. The literal command strings must NOT appear
 // inline in `hue.ts` (they live in `roomMap.ts > HUE_ZONE_COMMANDS`); the
 // re-export pointer must.
@@ -644,7 +644,7 @@ const roomMapSource = readOrEmpty(ROOM_MAP_CONTRACT_FILE, "room map");
 
 console.log("\n[ Room map contract types ]");
 // `ZoneDefinition` and `LegacyHueZone` survive as @deprecated migration-shim
-// types (consumed by `migrateLegacyHueZone` and the W4-F2 logical-drop path);
+// types (consumed by `migrateLegacyHueZone` and the logical-zone drop path);
 // `HueZone` is the canonical authoring type and MUST be present alongside
 // them.
 const REQUIRED_ROOM_MAP_TYPES = [
@@ -667,10 +667,10 @@ for (const typeName of REQUIRED_ROOM_MAP_TYPES) {
 }
 
 // ---------------------------------------------------------------------------
-// Hue zone surface (v1.5 W4-F2 — Hue-only after the direction reversal)
+// Hue zone surface (Hue-only after the direction reversal)
 // ---------------------------------------------------------------------------
 console.log("\n[ Hue zone — canonical type shape (v1.5 W4-F2) ]");
-// `HueZone` is now Hue-only; the W4-F-era `zoneType` discriminator is gone,
+// `HueZone` is now Hue-only; the short-lived `zoneType` discriminator is gone,
 // so the Hue-required fields are non-optional on the canonical type.
 check(
   /export\s+interface\s+HueZone\b/.test(roomMapSource),
@@ -733,8 +733,8 @@ check(
   "migrateLegacyHueZone helper exported (Hue-only)",
   "MISSING migrateLegacyHueZone helper in roomMap.ts"
 );
-// The W4-F-era `toLogicalZone` and `toHueZone` helpers MUST be gone (the
-// brief logical-zone migration path was rolled back in W4-F2).
+// The `toLogicalZone` and `toHueZone` helpers MUST be gone (the brief
+// logical-zone migration path was rolled back).
 check(
   !/export\s+function\s+toLogicalZone\b/.test(roomMapSource),
   "toLogicalZone helper removed (W4-F2 direction reversal)",
@@ -752,7 +752,7 @@ check(
 );
 
 console.log("\n[ Hue zone — discriminator surface removed (v1.5 W4-F2) ]");
-// `ZONE_TYPES` / `ZoneType` were the W4-F unification's discriminator — both
+// `ZONE_TYPES` / `ZoneType` were the zone unification's discriminator — both
 // must be gone after the direction reversal.
 check(
   !/export\s+const\s+ZONE_TYPES\b/.test(roomMapSource),
@@ -765,7 +765,7 @@ check(
   "STILL PRESENT: ZoneType type — discriminator should be gone in W4-F2"
 );
 // The brief generic `ZONE_COMMANDS` / `ZONE_STATUS_CODES` maps were renamed
-// back to the Hue-only `HUE_ZONE_*` family in W4-F2.
+// back to the Hue-only `HUE_ZONE_*` family.
 check(
   !/export\s+const\s+ZONE_COMMANDS\b/.test(roomMapSource),
   "generic ZONE_COMMANDS map removed (W4-F2 reversal)",
@@ -776,7 +776,7 @@ check(
   "generic ZONE_STATUS_CODES map removed (W4-F2 reversal)",
   "STILL PRESENT: generic ZONE_STATUS_CODES map — should be HUE_ZONE_STATUS_CODES after W4-F2"
 );
-// Brief W4-F-only status codes that only made sense in a logical/Hue
+// Brief unification-only status codes that only made sense in a logical/Hue
 // discriminated world.
 check(
   !roomMapSource.includes(`"ZONE_TYPE_INVALID"`),
@@ -834,13 +834,13 @@ check(
 );
 
 // ---------------------------------------------------------------------------
-// Rust handler parity for the renamed Hue zone commands (v1.5 W4-F2).
+// Rust handler parity for the renamed Hue zone commands.
 //
 // `lib.rs` registers Tauri commands through `generate_handler!` — the
-// post-W4-F2 verbs (`create_hue_zone`, `update_hue_zone`, `delete_hue_zone`,
+// Hue-only verbs (`create_hue_zone`, `update_hue_zone`, `delete_hue_zone`,
 // `assign_channel_to_hue_zone`) MUST appear in that list, otherwise the
 // frontend's `invoke(HUE_ZONE_COMMANDS.X)` call resolves to nothing. The
-// brief W4-F-era generic `create_zone` / `update_zone` etc. handlers MUST
+// brief generic `create_zone` / `update_zone` etc. handlers MUST
 // be gone.
 // ---------------------------------------------------------------------------
 const RUST_LIB_FILE = resolve(ROOT, "src-tauri/src/lib.rs");
@@ -915,7 +915,7 @@ console.log("\n[ App ACL manifest — build.rs APP_COMMANDS ↔ generate_handler
   );
 }
 
-// Brief W4-F-era handler names MUST be gone.
+// The brief generic handler names MUST be gone.
 const LEGACY_W4F_HANDLERS = [
   "create_zone",
   "update_zone",
@@ -932,7 +932,7 @@ for (const fn of LEGACY_W4F_HANDLERS) {
 }
 
 // ---------------------------------------------------------------------------
-// Device WLED status codes (v1.5.2 patch — F4 + A2.2)
+// Device WLED status codes
 // ---------------------------------------------------------------------------
 const WLED_DISCOVERY_FILE = resolve(
   ROOT,
@@ -948,7 +948,6 @@ const REQUIRED_WLED_STATUS_CODES = [
   "WLED_PROTOCOL_MISMATCH",
   "WLED_LED_COUNT_MISMATCH",
   "WLED_INVALID_IP",
-  // A2.2: led_count=0 guard
   "WLED_INVALID_LED_COUNT",
 ];
 for (const code of REQUIRED_WLED_STATUS_CODES) {

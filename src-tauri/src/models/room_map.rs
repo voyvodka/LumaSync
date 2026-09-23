@@ -104,12 +104,12 @@ pub struct HueChannelPlacement {
     /// the ordinal as a `channel_id` is the defect this field exists to end.
     #[serde(default)]
     pub channel_id: Option<u8>,
-    /// v1.5 W1-A3 — when present, channel is logically grouped under
+    /// When present, channel is logically grouped under
     /// `HueZone.id`. `zone_relative_position` is then the authoritative
     /// source of truth and `x/y/z` above are derived at runtime.
     #[serde(default)]
     pub zone_id: Option<String>,
-    /// v1.5 W1-A3 — zone-relative position (authoritative when `zone_id`
+    /// Zone-relative position (authoritative when `zone_id`
     /// resolves to a Hue zone). Ignored on serialise when absent.
     #[serde(default)]
     pub zone_relative_position: Option<ZoneRelativePosition>,

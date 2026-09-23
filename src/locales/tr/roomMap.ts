@@ -44,6 +44,7 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   },
   persistError: "Harita kaydedilemedi. Değişiklikler yeniden başlatmada kaybolabilir.",
   imageImportError: "Görsel eklenemedi. Ayrıntılar için günlüğe bakın.",
+  imageTooLarge: "Görsel {{maxMb}} MB'tan büyük. Daha küçük bir dosya seçin.",
   usbStrip: {
     ledCount: "LED sayısı",
     online: "BAĞLI",

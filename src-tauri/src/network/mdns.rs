@@ -1,4 +1,4 @@
-//! Process-wide mDNS service browser (v1.5 W2-A3).
+//! Process-wide mDNS service browser.
 //!
 //! Why a shared registry? `mdns-sd` opens a UDP multicast socket on the
 //! mDNS port (`5353`) when constructed. On macOS spawning two
@@ -7,7 +7,7 @@
 //!
 //! The registry below holds one `ServiceDaemon` per process and hands
 //! out `Arc`-shared receivers per service type. Hue's `_hue._tcp.local.`
-//! browser is the v1.5 W2-A3 first consumer; v1.6 WLED discovery
+//! browser is the first consumer; a WLED browser
 //! (`_wled._tcp.local.`) will plug into the same registry without
 //! spawning a second daemon.
 //!
@@ -367,7 +367,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // F1 — parse_hue_service_info coverage (mdns-sd 0.19 migration blind spot)
+    // parse_hue_service_info coverage (mdns-sd 0.19 migration blind spot)
     // -----------------------------------------------------------------------
 
     /// Scenario 1: Full `bridgeid` present in TXT record.

@@ -3,7 +3,7 @@
  *
  * Covers:
  *   - Two readers inside the max-age window share ONE bridge round-trip
- *     (the F9 regression: the App health poll and the Devices runtime loop
+ *     (the regression: the App health poll and the Devices runtime loop
  *     each issued their own).
  *   - Concurrent readers share a single in-flight promise.
  *   - `maxAgeMs = 0` forces a fresh trip — the mandatory post-mutation mode.

@@ -2,8 +2,8 @@
  * useUsbConnectionStatus — lightweight read-only snapshot of the
  * currently bound USB serial port.
  *
- * Why this exists (Wave 4-E):
- * ---------------------------
+ * Why this exists:
+ * ----------------
  * The room-map editor needs to render a live "ONLINE / OFFLINE" badge
  * on every `UsbStripObject` and inside `UsbStripInspector`, but
  * mounting the full `useDeviceConnection` hook there would:
@@ -14,7 +14,7 @@
  *      not need.
  *
  * Instead we listen to the existing `connectionEvents` pub/sub bus
- * (Wave 3, commit `ee30ee2`) and seed the initial snapshot from a
+ * (introduced in commit `ee30ee2`) and seed the initial snapshot from a
  * single `getSerialConnectionStatus` call. Whenever any other
  * controller in the app emits a connection-changed event, this hook
  * re-syncs from Rust so the editor never reads stale data.

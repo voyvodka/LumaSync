@@ -2,9 +2,9 @@
  * HueZoneInspector — properties surface rendered inside `RoomDockPanel`
  * when a Hue zone is the active selection.
  *
- * v1.5 W4-K — single-row header refactor
- * --------------------------------------------------
- * The W4-I version stacked three field rows below the HSV picker (EDGE
+ * Single-row header layout
+ * ------------------------
+ * An earlier version stacked three field rows below the HSV picker (EDGE
  * slider, EDGE metre input, "{edge}m × {edge}m" metric reader) plus an
  * AR hint paragraph and the picker's own hex input + recent strip. On
  * a 320 px dock that stack overflowed: the EDGE-length value collided
@@ -29,7 +29,7 @@
  *   6. RECENT swatches (rendered by HsvColorPicker)
  *   7. Hint paragraph — single line, muted
  *
- * The size authoring contract is unchanged from W4-I: a single edge
+ * The size authoring contract: a single edge
  * length in metres → per-axis cube-space scales `scaleX = edge /
  * roomWidthM`, `scaleY = edge / roomDepthM`. The `metric reader`
  * locale keys (`zoneEdgeMetric*`) are dropped — they were the source
@@ -100,7 +100,8 @@ function clampScale(value: number): number {
  * Resolve the current physical edge length (metres) of the zone from
  * its persisted cube-space scales. The zone is authored as a physical
  * square, so `scaleX * roomWidthM` and `scaleY * roomDepthM` should be
- * approximately equal — but legacy zones (pre-W4-I, or any third-party
+ * approximately equal — but legacy zones (written before zones were
+ * physical squares, or by any third-party
  * write) may carry asymmetric values. We pick the *minimum* of the two
  * physical edges so the zone visually fits inside its persisted bounds
  * on first interaction, never spilling outside the room.

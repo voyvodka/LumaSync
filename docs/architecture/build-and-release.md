@@ -10,8 +10,8 @@ Lowering it reintroduces the v1.5.2 launch crash — see *Resolved* below.
 **The Rust toolchain is pinned to an exact version** in `rust-toolchain.toml`, not `stable`. A new
 stable release brings new clippy lints, and CI runs clippy at deny level, so a floating channel turns
 an unrelated PR red on the day a release ships. Both workflows still run
-`dtolnay/rust-toolchain@stable` for its environment defaults and then `rustup toolchain install`,
-which reads the file — the pinned toolchain has to exist before `release.yml` adds the macOS targets
+`dtolnay/rust-toolchain` (pinned to a commit of its `stable` branch) for its environment defaults and
+then `rustup toolchain install`, which reads the file — the pinned toolchain has to exist before `release.yml` adds the macOS targets
 to it. Bump the pin deliberately, in a PR that also fixes whatever the new clippy finds.
 
 **The release profile is thin LTO, one codegen unit, stripped — and `panic = "unwind"` on purpose.**
@@ -41,6 +41,44 @@ itself is inherited from `Cargo.toml` — `tauri.conf.json` has no top-level ver
 **Publication is two-stage.** The build matrix uploads into a *draft* (`releaseDraft: true`) so the
 updater feed never sees a platform-incomplete `latest.json`; a `publish` job then asserts all four
 platform keys before undrafting. A `-` in the tag marks it prerelease.
+
+**Every updater artefact is signature-checked before the release is undrafted.** After the
+four-platform assertion, `publish` runs `scripts/verify/updater-signatures.mjs`: it downloads each
+file `latest.json` names from the draft and verifies the entry's minisign signature against
+`plugins.updater.pubkey` in the tagged `tauri.conf.json` — the check every installed copy runs
+before applying an update. A signing secret rotated in CI but not in the tree (or the reverse), or a
+feed that pairs a signature with the wrong file, fails here instead of on users' machines. It also
+refuses a URL outside this repository's releases and a feed whose `version` is not the tag's.
+It is a small Node script rather than the `minisign` CLI because the runner carries no minisign and
+Node's `crypto` already has Ed25519 and BLAKE2b-512, so nothing is installed at publish time; and
+because it could be proven against the real `v1.5.5-rc.6` feed (13 entries, six artefacts) plus a
+swapped signature, an edited trusted comment, a foreign key and an outside URL, each of which it
+refused.
+
+**The Linux release is built on `ubuntu-22.04`, the oldest runner, and that is the glibc floor.** A
+binary takes its glibc symbol versions from the build host, so the `ubuntu-24.04` build (glibc 2.39)
+could not load on Ubuntu 22.04 or Debian 12. Building on 22.04 puts the floor at glibc 2.35, which
+the README states. Only `release.yml` moved: `ci.yml`'s matrix entries are required status
+contexts, and its 24.04 build is still what the launch smoke and the Secret Service bench run on.
+When GitHub retires the 22.04 image the floor rises with whatever replaces it — say so in the
+release notes that ship it.
+
+**Every action is pinned to a full commit SHA, with the release it came from as a comment.** A tag
+can be moved to new code by whoever controls the action's repository; a SHA cannot. Dependabot's
+`github-actions` ecosystem reads the `# vX.Y.Z` comment and bumps both together.
+`dtolnay/rust-toolchain` publishes no releases, so it is pinned to a commit of its `stable` branch
+and has to be bumped by hand. Every `actions/checkout` sets `persist-credentials: false`: no job
+pushes (releases go through `gh` and the REST API), so leaving the token in the checkout's config
+only exposes it to every later step.
+
+**The supply-chain gates, and which job owns each.** `cargo audit` (in `ci.yml`) owns Rust
+advisories. The weekly `license-scan` runs `cargo deny check licenses sources bans`: crates.io is the
+only allowed source, a dependency from a repository URL has to be listed in `deny.toml` with a
+reason, wildcard version requirements are denied, and duplicate versions only warn — the ~60 there
+today are almost all the `windows-sys` family pulled at different majors by tauri, tao, wry and the
+capture crates. CodeQL analyses `javascript-typescript`, `rust` and `actions`, all with
+`build-mode: none`; only `Analyze (javascript-typescript)` is a required context, so the matrix entry
+keeps that exact name.
 
 **Updates ship through GitHub Releases with minisign verification.** The updater checks on startup
 and surfaces `UpdateModal.tsx` when a version is available. A failed startup check is only logged

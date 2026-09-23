@@ -12,7 +12,7 @@ import { parseCommandError } from "@/shared/contracts/status";
 export interface UseRoomMapHueChannelsArgs {
   config: RoomMapConfig;
   /** History-free, because reconciling with the bridge is not a user edit. */
-  adoptConfig: (partial: Partial<RoomMapConfig>) => Promise<void>;
+  adopt: (patch: Partial<RoomMapConfig>) => void;
   hueAreaId: string | null;
   hueBridgeConfigured: boolean;
   /** False while the persisted map is still loading — seeding into the default
@@ -47,7 +47,7 @@ interface ChannelSnapshot {
  *  demand, never on a timer. */
 export function useRoomMapHueChannels({
   config,
-  adoptConfig,
+  adopt,
   hueAreaId,
   hueBridgeConfigured,
   ready,
@@ -117,8 +117,8 @@ export function useRoomMapHueChannels({
   // writes placements, and depending on them would make it feed itself.
   const configRef = useRef(config);
   configRef.current = config;
-  const adoptRef = useRef(adoptConfig);
-  adoptRef.current = adoptConfig;
+  const adoptRef = useRef(adopt);
+  adoptRef.current = adopt;
 
   useEffect(() => {
     if (!ready || !hueAreaId || current === null || current.channels.length === 0) return;
@@ -132,7 +132,7 @@ export function useRoomMapHueChannels({
     // Stamped and merged, never assigned: the editor sees one area's channels,
     // so writing the resolved list wholesale deletes every other area's.
     const scoped = resolved.map((p) => ({ ...p, entertainmentAreaId: hueAreaId }));
-    void adoptRef.current({ hueChannels: mergeHueChannels(stored, scoped) });
+    adoptRef.current({ hueChannels: mergeHueChannels(stored, scoped) });
   }, [current, hueAreaId, ready]);
 
   return {

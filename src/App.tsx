@@ -351,7 +351,7 @@ function App() {
         : null,
     isModeTransitioning,
     onLightingModeChange: (next: LightingModeConfig) => {
-      // v1.5 W2-B4 — first deliberate mode click satisfies the LIGHTS
+      // First deliberate mode click satisfies the LIGHTS
       // step guard. Subsequent clicks are no-ops on the flag.
       if (!hasInteractedWithMode) setHasInteractedWithMode(true);
       void handleLightingModeChange(next);
@@ -372,7 +372,7 @@ function App() {
     deviceCategoryRequest,
   } as const;
 
-  // v1.5 W2-B4 — onboarding completion handler. Persists the flag and
+  // Onboarding completion handler. Persists the flag and
   // unmounts the flow on the next render. Called on either a successful
   // step 3 (calibration saved) or a deliberate dismiss.
   const handleOnboardingComplete = useCallback(() => {

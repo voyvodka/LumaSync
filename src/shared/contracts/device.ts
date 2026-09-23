@@ -14,12 +14,12 @@ export const DEVICE_COMMANDS = {
   GET_LIGHTING_MODE_STATUS: "get_lighting_mode_status",
   GET_RUNTIME_TELEMETRY: "get_runtime_telemetry",
   /**
-   * v1.5 W1-B1 — probe a single user-supplied IP's `/json/info` endpoint.
+   * Probe a single user-supplied IP's `/json/info` endpoint.
    * Manual-IP only; not a LAN scan. Returns `WledDeviceInfo[]` (0 or 1).
    */
   DISCOVER_WLED_DEVICES: "discover_wled_devices",
   /**
-   * v1.5 W1-B1 — promote a discovered WLED instance to the active sink.
+   * Promote a discovered WLED instance to the active sink.
    * Mirrors `connect_serial_port` semantics: idempotent, replaces the
    * current sink, no implicit stream start.
    */
@@ -153,7 +153,7 @@ export const DEVICE_STORE_KEYS = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Firmware profile (v1.4 G11 — Adalight encoder toggle)
+// Firmware profile (Adalight encoder toggle)
 // ---------------------------------------------------------------------------
 
 /**
@@ -177,7 +177,7 @@ export const FIRMWARE_PROFILE = {
 export type FirmwareProfile = (typeof FIRMWARE_PROFILE)[keyof typeof FIRMWARE_PROFILE];
 
 // ---------------------------------------------------------------------------
-// LED chip type (v1.5 G3 — SK6812 RGBW host-side encoder)
+// LED chip type (SK6812 RGBW host-side encoder)
 // ---------------------------------------------------------------------------
 
 /**
@@ -276,7 +276,7 @@ export type LedColorOrder = (typeof LED_COLOR_ORDER)[keyof typeof LED_COLOR_ORDE
 export const DEFAULT_LED_COLOR_ORDER: LedColorOrder = LED_COLOR_ORDER.RGB;
 
 // ---------------------------------------------------------------------------
-// Color correction (v1.4 G4 — per-channel gamma, Kelvin, saturation)
+// Color correction (per-channel gamma, Kelvin, saturation)
 // ---------------------------------------------------------------------------
 
 /**
@@ -329,7 +329,7 @@ export const DEFAULT_COLOR_CORRECTION: ColorCorrectionConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// Serial health check report (v1.4 G12 — real handshake round-trip)
+// Serial health check report (real handshake round-trip)
 // ---------------------------------------------------------------------------
 
 /**
@@ -423,11 +423,11 @@ export interface SerialHealthReport {
 }
 
 // ---------------------------------------------------------------------------
-// Sink reference (v1.5 W1-B1 — TS mirror of the Rust `LedSink` trait)
+// Sink reference (TS mirror of the Rust `LedSink` trait)
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// WLED UDP sink (v1.5 G1)
+// WLED UDP sink
 // ---------------------------------------------------------------------------
 
 /** `ddp` (default) or realtime UDP with byte 0 = 2. Past DRGB's 490-LED
@@ -549,7 +549,7 @@ export const WLED_STATUS = {
    */
   LED_COUNT_MISMATCH: "WLED_LED_COUNT_MISMATCH",
   /**
-   * The supplied IP address failed SSRF hardening (PR #31 + A2.1 widening).
+   * The supplied IP address failed SSRF hardening (PR #31, since widened).
    * Triggered for non-parseable strings AND for parseable-but-rejected
    * ranges: loopback (127.x), unspecified (0.0.0.0), multicast (224.x/4),
    * broadcast (255.255.255.255). Distinct from `BRIDGE_UNREACHABLE` which

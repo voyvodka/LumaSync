@@ -1,0 +1,5 @@
+# React "not wrapped in act(...)" warnings across the full vitest run, counted
+# by act-warning-ratchet.mjs, which fails any run that exceeds this. Ratchet:
+# the number may only go down. On 2026-09-23 all of them came from three files:
+# RoomMapEditor.test.tsx (50), LightsSection.test.tsx (48), DeviceSection.test.tsx (24).
+122

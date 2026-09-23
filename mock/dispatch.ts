@@ -6,9 +6,8 @@
  * - **A fixture never resolves on a microtask.** An instantly-answering mock
  *   hides loading states and every ordering bug behind them. This repo has five
  *   confirmed instances of async work with no latest-operation guard, and
- *   `devdocs/lumasync-roadmap.md:236` records a concurrency test that passed
- *   against unfixed code precisely because a mocked write resolved on a
- *   microtask. The floor is a real macrotask delay.
+ *   a concurrency test once passed against unfixed code precisely because a
+ *   mocked write resolved on a microtask. The floor is a real macrotask delay.
  * - **An unmapped command fails loudly**, naming itself. Returning `undefined`
  *   is how a new Rust command gets built against garbage for a week.
  * - **A response that lands under a different generation than it was issued

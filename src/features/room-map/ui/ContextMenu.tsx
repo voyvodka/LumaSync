@@ -18,7 +18,7 @@ interface ContextMenuProps {
 /**
  * Right-click context menu for the room map editor.
  *
- * Wave 4-G #5 polish:
+ * Notes:
  *  - Migrated from the legacy zinc / red-400 palette to the amber
  *    Rev 07 dock tokens (`lm-context-menu*`) so it stops reading as a
  *    different app next to the rest of the editor chrome.
