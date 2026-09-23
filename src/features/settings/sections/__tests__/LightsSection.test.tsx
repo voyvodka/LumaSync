@@ -8,6 +8,7 @@ import type { LightingModeConfig } from "@/features/mode/model/contracts";
 import { DEFAULT_ROOM_MAP, type HueZone, type RoomMapConfig } from "@/shared/contracts/roomMap";
 import type { ShellState } from "@/shared/contracts/shell";
 import type { LocalSink } from "@/features/device/localSink";
+import type { HueProbeVerdict } from "@/features/hue/state/useHueBridgeReachability";
 import { LightsSection, hueUnavailableSubKey } from "../LightsSection";
 
 const { shellStateRef, saveMock, createHueZoneMock, telemetryMock } = vi.hoisted(() => ({
@@ -368,6 +369,7 @@ describe("LightsSection — output availability gate", () => {
       hueReachable: boolean;
       hueProbeGaveUp: boolean;
       hueProbeChecking: boolean;
+      hueProbeVerdict: HueProbeVerdict | null;
       onRetryHueProbe: () => void;
       onOpenDevices: () => void;
       onModeChange: (next: LightingModeConfig) => void;
@@ -389,6 +391,7 @@ describe("LightsSection — output availability gate", () => {
         hueReachable={props.hueReachable ?? false}
         hueProbeGaveUp={props.hueProbeGaveUp ?? false}
         hueProbeChecking={props.hueProbeChecking ?? false}
+        hueProbeVerdict={props.hueProbeVerdict ?? null}
         onRetryHueProbe={props.onRetryHueProbe}
         hueStreaming={false}
         modeLockReason={null}
@@ -432,7 +435,12 @@ describe("LightsSection — output availability gate", () => {
   it("offers a manual retry once the bridge probe has given up", async () => {
     const user = userEvent.setup();
     const onRetryHueProbe = vi.fn();
-    await renderWithOutputs({ hueConfigured: true, hueProbeGaveUp: true, onRetryHueProbe });
+    await renderWithOutputs({
+      hueConfigured: true,
+      hueProbeVerdict: "unreachable",
+      hueProbeGaveUp: true,
+      onRetryHueProbe,
+    });
 
     expect(
       screen.getByText(
@@ -447,6 +455,7 @@ describe("LightsSection — output availability gate", () => {
   it("keeps the retry on screen while the retry it triggered is in flight", async () => {
     await renderWithOutputs({
       hueConfigured: true,
+      hueProbeVerdict: "unreachable",
       hueProbeGaveUp: true,
       hueProbeChecking: true,
       onRetryHueProbe: vi.fn(),
@@ -461,7 +470,11 @@ describe("LightsSection — output availability gate", () => {
   });
 
   it("hides the retry while the probe is still trying", async () => {
-    await renderWithOutputs({ hueConfigured: true, onRetryHueProbe: vi.fn() });
+    await renderWithOutputs({
+      hueConfigured: true,
+      hueProbeVerdict: "unreachable",
+      onRetryHueProbe: vi.fn(),
+    });
 
     expect(screen.queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
     expect(
@@ -480,10 +493,27 @@ describe("LightsSection — output availability gate", () => {
   });
 
   it("treats a configured-but-unreachable bridge as no output", async () => {
-    await renderWithOutputs({ hueConfigured: true, hueReachable: false });
+    await renderWithOutputs({
+      hueConfigured: true,
+      hueReachable: false,
+      hueProbeVerdict: "unreachable",
+    });
 
     expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
     expect(screen.getByText("No reachable output")).toBeInTheDocument();
+  });
+
+  // Seen on launch: the Outputs card read "Bridge · checking…" while the banner
+  // above it asked the user to pair the bridge that was being checked.
+  it("says it is checking — not that nothing is paired — while the bridge's first probe runs", async () => {
+    await renderWithOutputs({ hueConfigured: true, hueReachable: false, hueProbeVerdict: null });
+
+    expect(screen.getByTestId("output-checking")).toHaveTextContent("common:output.checking");
+    expect(screen.queryByText("No reachable output")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open devices" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ambilight/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Solid/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Off/ })).toBeEnabled();
   });
 
   it("enables the non-Off modes once a reachable bridge is the only output", async () => {

@@ -66,9 +66,24 @@ export function readHueStreamStatus(maxAgeMs: number = HUE_STATUS_MAX_AGE_MS) {
   return read(STATUS_KEY, maxAgeMs, () => getHueStreamStatus());
 }
 
+const statusInvalidationListeners = new Set<() => void>();
+
 /** Drop the cached stream status. Call after any start/stop/restart. */
 export function invalidateHueStreamStatus(): void {
   entries.delete(STATUS_KEY);
+  // A loop that polls only while the stream is alive (the Devices-tab runtime
+  // loop goes silent in Idle) never sees a start made from another surface
+  // unless the mutation itself tells it.
+  for (const listener of statusInvalidationListeners) listener();
+}
+
+/** Called after every {@link invalidateHueStreamStatus}, i.e. after any Hue
+ * start/stop/restart from any surface. Returns the unsubscribe. */
+export function subscribeHueStreamStatusInvalidation(listener: () => void): () => void {
+  statusInvalidationListeners.add(listener);
+  return () => {
+    statusInvalidationListeners.delete(listener);
+  };
 }
 
 export function readHueStreamReadiness(

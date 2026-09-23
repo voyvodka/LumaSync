@@ -34,6 +34,14 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Lights and the compact window no longer say "No reachable output" and ask you to pair a Hue
+  bridge while an already paired bridge is still being checked, which happened for a second or so
+  after opening the window. They now show "Checking outputs…" until the bridge answers; Ambilight
+  and Solid stay unavailable until then, and the no-output message appears only if it does not.
+- Devices → Hue Bridges could show the bridge as Ready while it was streaming, when lighting
+  started with that page already open — from the tray, a keyboard shortcut or the session restored
+  at launch. The card now switches to Streaming as soon as the stream starts, and after its own Stop
+  button it no longer keeps showing Streaming for up to ten seconds.
 - Switching between the compact and full window could stop working after the window had been
   hidden, covered or left behind a locked screen: the switch made in that state never finished, the
   window content stayed blank, and later switches from the title bar, the settings shortcut or the
