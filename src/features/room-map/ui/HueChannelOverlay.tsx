@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "react";
+import { memo, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import { findHueChannel } from "@/shared/contracts/roomMap";
@@ -172,7 +172,7 @@ export function pinnedZoneEdges(
  * Positions are computed in pixels (pxPerMeter * room metres) so they stay
  * aligned with all other room objects regardless of panel open/close resizing.
  */
-export function HueChannelOverlay({
+export const HueChannelOverlay = memo(function HueChannelOverlay({
   channels,
   liveChannelIds,
   pxPerMeter,
@@ -232,15 +232,25 @@ export function HueChannelOverlay({
       const el = e.currentTarget;
       el.setPointerCapture(e.pointerId);
 
+      // From where the dot is drawn, not `ch.x/y`: for a bound channel those are
+      // leftovers a zone move or an assignment never updated, and the drag
+      // jumped the dot to them.
+      const active = activeHueZoneRef.current;
+      const zones =
+        active && !allHueZonesRef.current.some((z) => z.id === active.id)
+          ? [...allHueZonesRef.current, active]
+          : allHueZonesRef.current;
+      const start = resolveHueChannelWorld(ch, zones);
+
       dragRef.current = {
         active: true,
         channelIndex: ch.channelIndex,
         startClientX: e.clientX,
         startClientY: e.clientY,
-        startX: ch.x,
-        startY: ch.y,
-        currentX: ch.x,
-        currentY: ch.y,
+        startX: start.x,
+        startY: start.y,
+        currentX: start.x,
+        currentY: start.y,
         currentRelX: ch.zoneRelativePosition?.x ?? null,
         currentRelY: ch.zoneRelativePosition?.y ?? null,
         element: el,
@@ -310,7 +320,7 @@ export function HueChannelOverlay({
     e.currentTarget.releasePointerCapture(e.pointerId);
 
     const ch = findHueChannel(channelsRef.current, dr.channelIndex);
-    if (ch && (dr.currentX !== ch.x || dr.currentY !== ch.y)) {
+    if (ch && (dr.currentX !== dr.startX || dr.currentY !== dr.startY)) {
       // Write-back is zone-relative for ANY bound channel, not just the active
       // one — the third of the three paths that must agree on the parent zone.
       // `handlePointerMove` already clamped the values into `dragRef`.
@@ -668,4 +678,4 @@ export function HueChannelOverlay({
       })}
     </>
   );
-}
+});
