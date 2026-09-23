@@ -181,6 +181,13 @@ function Harness({ initialPlacements, initialSnapshot, zones = [ZONE], onRepair,
   const channels = useHueAreaChannels(BRIDGE, CREDENTIALS, "area-1");
   const [placements, setPlacements] = useState(initialPlacements);
   const [snapshot, setSnapshot] = useState(initialSnapshot);
+  // Snapshotted once, at mount, the way the real `DeviceSection` prop is a poll
+  // result rather than a live read: `world.runtimeState` flips mid-test to
+  // simulate a stream started elsewhere, and re-deriving `isStreaming` from it
+  // on every render would let an unrelated re-render (the bridgeRead sync
+  // effect settling `snapshot`) race the test's mutation and disable the
+  // button before the click that is supposed to still find it enabled.
+  const [isStreamingAtMount] = useState(() => world.runtimeState === "Running");
   latestPlacements = placements;
   refresh = channels.refreshChannels;
   echoedPlacements = placements;
@@ -202,7 +209,7 @@ function Harness({ initialPlacements, initialSnapshot, zones = [ZONE], onRepair,
       bridgeIp={BRIDGE.ip}
       username={CREDENTIALS.username}
       areaId="area-1"
-      isStreaming={world.runtimeState === "Running"}
+      isStreaming={isStreamingAtMount}
       zones={zones}
     />
   );
