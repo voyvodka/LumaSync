@@ -42,9 +42,3 @@ export type HueRuntimeStatusView = Omit<HueRuntimeStatus, "code"> & {
 export type HueRuntimeStatusReadFailure = CommandStatusOf<
   typeof HUE_ONBOARDING_TRANSPORT_CODES.STREAM_STATUS_UNAVAILABLE
 >;
-
-/** Transport failures carry `error.message` and nothing else — never an object
- * that holds credentials. */
-export function toErrorDetails(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

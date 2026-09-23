@@ -20,9 +20,9 @@ import {
 import type { UsbStripPlacement } from "@/shared/contracts/roomMap";
 import type { TvAnchorPlacement } from "@/shared/contracts/roomMap";
 
-// TV anchor used across many tests:
-// center (2.5, 0.5), size 2m x 0.1m → edges: top y=0.45, bottom y=0.55, left x=1.5, right x=3.5
-const TV: TvAnchorPlacement = { x: 2.5, y: 0.5, width: 2, height: 0.1 };
+// TV anchor used across many tests. `x`/`y` is the footprint's top-left corner
+// (the contract), size 2m x 0.1m → edges: top y=0.45, bottom y=0.55, left x=1.5, right x=3.5
+const TV: TvAnchorPlacement = { x: 1.5, y: 0.45, width: 2, height: 0.1 };
 
 function makeStrip(
   startX: number,
@@ -144,7 +144,7 @@ describe("deriveZones - degenerate inputs", () => {
   // Test 7: Degenerate — both endpoints inside TV bounding box
   // ---------------------------------------------------------------------------
   it("returns all-zero counts when both strip endpoints are inside TV bounding box", () => {
-    // TV: x=2.5, y=0.5, w=2, h=0.1 → bbox [1.5..3.5] x [0.45..0.55]
+    // TV: x=1.5, y=0.45, w=2, h=0.1 → bbox [1.5..3.5] x [0.45..0.55]
     const strip = makeStrip(2.0, 0.47, 3.0, 0.53, 30);
     const result = deriveZones(strip, TV);
     expect(result.counts.top).toBe(0);
@@ -152,6 +152,29 @@ describe("deriveZones - degenerate inputs", () => {
     expect(result.counts.bottom).toBe(0);
     expect(result.counts.left).toBe(0);
     expect(result.segments).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The anchor is the footprint's top-left corner, as the canvas draws it
+// ---------------------------------------------------------------------------
+describe("deriveZones - TV anchor is the top-left corner", () => {
+  // A TV in the room's top-left corner: footprint [0..2] x [0..0.5]. Read as a
+  // centre, the same numbers put the box at [-1..1] x [-0.25..0.25].
+  const CORNER_TV: TvAnchorPlacement = { x: 0, y: 0, width: 2, height: 0.5 };
+
+  it("sees a strip inside the drawn footprint as inside the TV", () => {
+    const strip = makeStrip(1.2, 0.3, 1.8, 0.3, 40);
+    expect(deriveZones(strip, CORNER_TV).segments).toEqual([]);
+  });
+
+  it("assigns a strip under the drawn footprint to the bottom edge alone", () => {
+    // 0.3 m below the drawn bottom edge and within its span; a centre reading
+    // would put the strip's right half past the box's right corner.
+    const strip = makeStrip(0.5, 0.8, 1.5, 0.8, 30);
+    const result = deriveZones(strip, CORNER_TV);
+    expect(result.counts.bottom).toBe(30);
+    expect(result.counts.top + result.counts.right + result.counts.left).toBe(0);
   });
 });
 

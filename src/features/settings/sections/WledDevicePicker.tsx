@@ -34,6 +34,7 @@ import {
   type WledCommandStatus,
 } from "@/features/device/wledApi";
 import type { WledRestoreOutcome } from "@/features/device/wledSinkRestore";
+import { parseCommandError } from "@/shared/contracts/status";
 
 interface WledDevicePickerProps {
   /** Currently active sink reference (used to highlight the connected card). */
@@ -102,7 +103,7 @@ export function WledDevicePicker({
       console.error("[LumaSync] discoverWledDevices failed", e);
       setDiscoveryStatus({
         code: WLED_STATUS.DISCOVERY_UNREACHABLE,
-        message: String(e),
+        message: parseCommandError(e).message,
         details: null,
       });
     } finally {
@@ -133,7 +134,7 @@ export function WledDevicePicker({
             kind: "result",
             status: {
               code: WLED_STATUS.BRIDGE_UNREACHABLE,
-              message: String(e),
+              message: parseCommandError(e).message,
               details: null,
             },
           },
@@ -162,7 +163,7 @@ export function WledDevicePicker({
           kind: "result",
           status: {
               code: WLED_STATUS.BRIDGE_UNREACHABLE,
-              message: String(e),
+              message: parseCommandError(e).message,
               details: null,
             },
         },

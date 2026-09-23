@@ -9,6 +9,7 @@
 
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { getFullTelemetrySnapshot } from "./telemetryApi";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface TelemetrySourceState {
   snapshot: FullTelemetrySnapshot | null;
@@ -72,7 +73,7 @@ async function tick(): Promise<void> {
     publish({ snapshot, error: null, isLoading: false });
   } catch (raw) {
     if (subscribers.size === 0) return;
-    const error = raw instanceof Error ? raw : new Error(String(raw));
+    const error = raw instanceof Error ? raw : new Error(parseCommandError(raw).message);
     console.error("[LumaSync] telemetry poll failed:", error);
     publish({ snapshot: state.snapshot, error, isLoading: false });
   } finally {

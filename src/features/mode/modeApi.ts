@@ -14,7 +14,7 @@ import {
   type HueRuntimeTriggerSource,
 } from "@/shared/contracts/hue";
 import type { LightingModeStatusCode } from "@/shared/contracts/lighting";
-import type { CommandStatusOf } from "@/shared/contracts/status";
+import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/status";
 // Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
 // neither side calls across the cycle at module-eval time.
 import { invalidateHueStreamStatus } from "../hue/hueReadCache";
@@ -82,26 +82,16 @@ export type ModeInvoker = <T>(command: string, payload?: Record<string, unknown>
 
 const defaultInvoke: ModeInvoker = (command, payload) => invoke(command, payload);
 
-function mapModeApiError(error: unknown): ModeApiError {
-  if (!error || typeof error !== "object") {
-    return {
-      code: "UNKNOWN",
-      message: "Lighting mode command failed",
-    };
-  }
-
-  const data = error as Record<string, unknown>;
-  // Relayed only when it names a declared code. Every mode/Hue command is
-  // `Result<_, String>`, so this branch is currently unreachable — a rejection
-  // arrives as a bare string and never carries `.code`.
-  const code = isDeviceErrorCode(data.code) ? data.code : DEVICE_ERROR_CODES.UNKNOWN;
-  const message = typeof data.message === "string" ? data.message : "Lighting mode command failed";
-  const details = typeof data.details === "string" ? data.details : undefined;
-
+function mapModeApiError(command: string, error: unknown): ModeApiError {
+  const parsed = parseCommandError(error);
+  // The code is usually a lighting/Hue one outside `DeviceErrorCode`, so it
+  // collapses to UNKNOWN here — the raw text in the log is what keeps it.
+  console.error(`[LumaSync] ${command} rejected:`, parsed.message);
   return {
-    code,
-    message,
-    details,
+    // Relayed only when it names a declared code.
+    code: isDeviceErrorCode(parsed.code) ? parsed.code : DEVICE_ERROR_CODES.UNKNOWN,
+    message: parsed.message,
+    details: parsed.details ?? undefined,
   };
 }
 
@@ -122,7 +112,7 @@ export async function setLightingMode(
       payload: wire,
     });
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(DEVICE_COMMANDS.SET_LIGHTING_MODE, error);
   }
 }
 
@@ -131,7 +121,7 @@ export async function stopLighting(invoker: ModeInvoker = defaultInvoke): Promis
   try {
     return await invoker<ModeCommandResult>(DEVICE_COMMANDS.STOP_LIGHTING);
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(DEVICE_COMMANDS.STOP_LIGHTING, error);
   }
 }
 
@@ -140,7 +130,7 @@ export async function getLightingModeStatus(invoker: ModeInvoker = defaultInvoke
   try {
     return await invoker<ModeCommandResult>(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS);
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(DEVICE_COMMANDS.GET_LIGHTING_MODE_STATUS, error);
   }
 }
 
@@ -161,7 +151,7 @@ export async function startHue(
       },
     });
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(HUE_COMMANDS.START_STREAM, error);
   } finally {
     // Attached to the command, not to a call site: a stale status lets the App
     // health reconciler act on a pre-mutation answer and undo what just happened.
@@ -182,7 +172,7 @@ export async function stopHue(
       triggerSource,
     });
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(HUE_COMMANDS.STOP_STREAM, error);
   } finally {
     invalidateHueStreamStatus();
   }
@@ -205,7 +195,7 @@ export async function restartHue(
       },
     });
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(HUE_COMMANDS.RESTART_STREAM, error);
   } finally {
     invalidateHueStreamStatus();
   }
@@ -216,7 +206,7 @@ export async function getHueStreamStatus(invoker: ModeInvoker = defaultInvoke): 
   try {
     return await invoker<HueRuntimeCommandResult>(HUE_COMMANDS.GET_STREAM_STATUS);
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(HUE_COMMANDS.GET_STREAM_STATUS, error);
   }
 }
 
@@ -236,6 +226,6 @@ export async function setHueSolidColor(
       },
     });
   } catch (error) {
-    throw mapModeApiError(error);
+    throw mapModeApiError(HUE_COMMANDS.SET_SOLID_COLOR, error);
   }
 }

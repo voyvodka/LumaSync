@@ -12,6 +12,7 @@ import type {
   WledDiscoveryResponse,
   WledTransportOverride,
 } from "./wledApi";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export type WledRestoreOutcome =
   | { kind: "idle" }
@@ -61,7 +62,7 @@ export async function restoreWledSink(
       sink: saved,
       status: {
         code: WLED_STATUS.DISCOVERY_UNREACHABLE,
-        message: String(err),
+        message: parseCommandError(err).message,
         details: null,
       },
     });
@@ -93,7 +94,7 @@ export async function restoreWledSink(
       sink: saved,
       status: {
         code: WLED_STATUS.BRIDGE_UNREACHABLE,
-        message: String(err),
+        message: parseCommandError(err).message,
         details: null,
       },
     });

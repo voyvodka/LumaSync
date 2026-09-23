@@ -8,6 +8,7 @@ import {
   type OverlayPreviewPayload,
 } from "@/shared/contracts/display";
 import { createLatestOperationGuard } from "@/shared/lib/latestOperation";
+import { parseCommandError } from "@/shared/contracts/status";
 
 interface CreateDisplayTargetStateDeps {
   openDisplayOverlay: (
@@ -184,7 +185,7 @@ export function createDisplayTargetState(deps: CreateDisplayTargetStateDeps): Di
           };
           return snapshot;
         } catch (error) {
-          snapshot = toBlockedSnapshot(snapshot, undefined, error instanceof Error ? error.message : String(error));
+          snapshot = toBlockedSnapshot(snapshot, undefined, parseCommandError(error).message);
           return snapshot;
         } finally {
           inFlightSwitch = null;

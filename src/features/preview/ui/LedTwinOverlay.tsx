@@ -134,6 +134,7 @@ export function LedTwinOverlay({ displayId, scope = "test" }: LedTwinOverlayProp
     // window only so the desktop / app behind stays fully visible — the twin
     // is just edge dots + ribbons, never a backdrop.
     document.documentElement.style.background = "transparent";
+    document.documentElement.style.colorScheme = "normal";
     document.body.style.background = "transparent";
     const root = document.getElementById("root");
     if (root) root.style.background = "transparent";

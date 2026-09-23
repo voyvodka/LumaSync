@@ -4,6 +4,7 @@ import type { ConnectionStore } from "./connectionStore";
 import { nextStatusForReadyState, toDevicePort } from "./connectionStateHelpers";
 import type { DeviceConnectionControllerDeps } from "./connectionTypes";
 import type { DevicePort } from "../types";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface PortDiscovery {
   runInitialScan(): Promise<void>;
@@ -106,7 +107,7 @@ export function createPortDiscovery(
           variant: "error",
           code: SERIAL_PORT_LIST_STATUS.FAILED,
           message: "Could not scan serial ports.",
-          details: error instanceof Error ? error.message : String(error),
+          details: parseCommandError(error).message,
         },
       }));
     }

@@ -59,10 +59,7 @@ import type { HueStartConfig } from "./features/hue/model/hueStartConfig";
 import { useStableHueStartConfig } from "./features/hue/state/useStableHueStartConfig";
 import { useHueStartConfigSync } from "./features/hue/state/useHueStartConfigSync";
 import type { LedCalibrationConfig } from "./features/calibration/model/contracts";
-import {
-  resizeToMode,
-  saveShellState,
-} from "./features/shell/windowLifecycle";
+import { saveShellState } from "./features/shell/windowLifecycle";
 import {
   useUIMode,
   UI_MODE_FADE_DURATION_MS,
@@ -240,24 +237,21 @@ function App() {
     setDeviceCategoryRequest(
       deviceCategory === undefined ? null : { category: deviceCategory, nonce: Date.now() },
     );
+    // Set before the switch so the full layout mounts on the target section;
+    // CompactLayout ignores it meanwhile.
+    setActiveSection(sectionId);
     // CompactLayout ignores `activeSection`, so a deep-link from the banner, a
     // CTA or the tray would set it silently and leave the user staring at the
     // LIGHTS panel. Switch to full first, or the click appears to do nothing.
-    if (currentMode === "compact" && sectionId !== SECTION_IDS.LIGHTS) {
-      try {
-        await resizeToMode("full");
-        setCurrentMode("full");
-      } catch (err) {
-        console.error("[LumaSync] resizeToMode(full) failed:", err);
-      }
+    if (sectionId !== SECTION_IDS.LIGHTS) {
+      await switchUIMode("full");
     }
-    setActiveSection(sectionId);
     try {
       await saveShellState({ lastSection: sectionId });
     } catch (err) {
       console.error("[LumaSync] saveShellState(lastSection) failed:", err);
     }
-  }, [currentMode, setCurrentMode]);
+  }, [switchUIMode]);
 
   // Auto-open calibration when device connects for the first time
   useEffect(() => {
@@ -302,18 +296,13 @@ function App() {
       },
       [KEYBIND_ACTIONS.OPEN_SETTINGS]: () => {
         // ⌘, / Ctrl+, is the canonical open-settings shortcut on all three
-        // platforms; compact has to switch to full or there is nothing to show.
-        if (currentMode === "compact") {
-          switchUIMode("full");
-        }
+        // platforms; the section change switches compact to full itself.
         void handleSectionChange(SECTION_IDS.SYSTEM);
       },
     }),
     [
       handleLightingModeChange,
       handleSectionChange,
-      switchUIMode,
-      currentMode,
       lightingMode.ambilight,
       lightingMode.solid,
     ],

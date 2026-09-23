@@ -49,7 +49,12 @@ vi.mock("@/features/device/useUsbConnectionStatus", () => ({
 }));
 
 // Mutable so a test can start the editor in its loading state and flip it.
-const persistState = vi.hoisted(() => ({ loading: false }));
+const persistState = vi.hoisted(() => ({
+  loading: false,
+  configOverride: {} as Record<string, unknown>,
+  updateConfig: vi.fn().mockResolvedValue(undefined),
+  undo: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("../../state/useRoomMapPersist", () => ({
   useRoomMapPersist: () => ({
@@ -64,11 +69,13 @@ vi.mock("../../state/useRoomMapPersist", () => ({
       // zones needed by hueZones = config.zones references
       zones: [],
       backgroundImagePath: null,
+      imageLayers: [],
+      ...persistState.configOverride,
     },
-    updateConfig: vi.fn().mockResolvedValue(undefined),
+    updateConfig: persistState.updateConfig,
     replaceConfig: vi.fn().mockResolvedValue(undefined),
     resetConfig: vi.fn().mockResolvedValue(undefined),
-    undo: vi.fn().mockResolvedValue(undefined),
+    undo: persistState.undo,
     redo: vi.fn().mockResolvedValue(undefined),
     // canUndo: true bypasses the isEmpty && !canUndo early-return to TemplateSelector
     canUndo: true,
@@ -82,22 +89,45 @@ vi.mock("../RoomMapCanvas", () => ({
   RoomMapCanvas: ({
     children,
     panOffset,
+    panMode,
   }: {
     children?: React.ReactNode;
     panOffset: { x: number; y: number };
+    panMode?: boolean;
   }) => (
-    <div data-testid="room-map-canvas" data-pan-x={panOffset.x} data-pan-y={panOffset.y}>
+    <div
+      data-testid="room-map-canvas"
+      data-pan-x={panOffset.x}
+      data-pan-y={panOffset.y}
+      data-pan-mode={String(Boolean(panMode))}
+    >
       {children}
     </div>
   ),
 }));
 
 vi.mock("../RoomMapToolbar", () => ({
-  RoomMapToolbar: () => <div data-testid="room-map-toolbar" />,
+  RoomMapToolbar: ({ onToggleSettings }: { onToggleSettings: () => void }) => (
+    <div data-testid="room-map-toolbar">
+      <button type="button" data-testid="toggle-settings" onClick={onToggleSettings} />
+    </div>
+  ),
 }));
 
 vi.mock("../RoomMapSettingsPopover", () => ({
-  RoomMapSettingsPopover: () => null,
+  RoomMapSettingsPopover: ({
+    dimensions,
+    onDimensionsChange,
+  }: {
+    dimensions: { widthMeters: number; depthMeters: number; heightMeters: number };
+    onDimensionsChange: (d: { widthMeters: number; depthMeters: number; heightMeters: number }) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="grow-room"
+      onClick={() => onDimensionsChange({ ...dimensions, widthMeters: 7, depthMeters: 6 })}
+    />
+  ),
 }));
 
 vi.mock("../RoomMapEmptyHint", () => ({
@@ -123,7 +153,12 @@ vi.mock("../HueChannelOverlay", () => ({
 }));
 
 vi.mock("../RoomDockPanel", () => ({
-  RoomDockPanel: () => <div data-testid="room-dock-panel" />,
+  // A real field inside the editor root, standing in for the dock inspector's.
+  RoomDockPanel: () => (
+    <div data-testid="room-dock-panel">
+      <input data-testid="dock-field" type="number" defaultValue={60} />
+    </div>
+  ),
 }));
 
 vi.mock("../../model/deriveZones", () => ({
@@ -373,5 +408,143 @@ describe("RoomMapEditor — arrow keys route to pan or nudge by selection", () =
     // The inline suppression is gone: it now lives in one rule beside the
     // replacement, so the next edit cannot reinstate a bare `none`.
     expect(root.style.outline).toBe("");
+  });
+});
+
+class StubResizeObserver {
+  constructor(_cb: ResizeObserverCallback) {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+// ---------------------------------------------------------------------------
+// Keys typed into a field stay in the field
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — editor shortcuts stand aside for form fields", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.updateConfig.mockClear();
+    persistState.undo.mockClear();
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+  });
+
+  function renderWithTvSelected() {
+    const { container, getByTestId } = render(<RoomMapEditor />);
+    act(() => {
+      getByTestId("select-tv").click();
+    });
+    return {
+      root: container.firstElementChild as HTMLElement,
+      field: getByTestId("dock-field"),
+      getByTestId,
+    };
+  }
+
+  it("does not delete the selected object on Backspace inside a field", () => {
+    const { field } = renderWithTvSelected();
+
+    act(() => {
+      fireEvent.keyDown(field, { key: "Backspace" });
+    });
+
+    expect(persistState.updateConfig).not.toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("still deletes the selected object on Backspace outside a field", () => {
+    const { root } = renderWithTvSelected();
+
+    act(() => {
+      fireEvent.keyDown(root, { key: "Backspace" });
+    });
+
+    expect(persistState.updateConfig).toHaveBeenCalledWith({ tvAnchor: undefined });
+  });
+
+  it("leaves Cmd+Z inside a field to the field's own undo", () => {
+    const { field } = renderWithTvSelected();
+
+    let notPrevented = true;
+    act(() => {
+      notPrevented = fireEvent.keyDown(field, { key: "z", metaKey: true });
+    });
+
+    expect(persistState.undo).not.toHaveBeenCalled();
+    expect(notPrevented).toBe(true);
+  });
+
+  it("does not enter pan mode for a space typed into a field", () => {
+    const { field, getByTestId } = renderWithTvSelected();
+
+    let notPrevented = true;
+    act(() => {
+      notPrevented = fireEvent.keyDown(field, { key: " " });
+    });
+
+    expect(getByTestId("room-map-canvas").dataset.panMode).toBe("false");
+    expect(notPrevented).toBe(true);
+  });
+
+  it("enters pan mode for a space outside a field", () => {
+    const { root, getByTestId } = renderWithTvSelected();
+
+    act(() => {
+      fireEvent.keyDown(root, { key: " " });
+    });
+
+    expect(getByTestId("room-map-canvas").dataset.panMode).toBe("true");
+    act(() => {
+      fireEvent.keyUp(root, { key: " " });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Room resize
+// ---------------------------------------------------------------------------
+
+describe("RoomMapEditor — resizing the room", () => {
+  let realResizeObserver: typeof globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    realResizeObserver = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = StubResizeObserver as unknown as typeof globalThis.ResizeObserver;
+    persistState.updateConfig.mockClear();
+    persistState.configOverride = {
+      furniture: [{ id: "sofa", type: "sofa", x: 1, y: 2, width: 2, height: 0.8 }],
+      hueChannels: [{ channelIndex: 0, x: 0.5, y: -0.5, z: 0 }],
+    };
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = realResizeObserver;
+    persistState.configOverride = {};
+  });
+
+  it("keeps Hue channels in the bridge's cube while metre objects shift with the centre", () => {
+    const { getByTestId } = render(<RoomMapEditor />);
+
+    act(() => {
+      getByTestId("toggle-settings").click();
+    });
+    act(() => {
+      getByTestId("grow-room").click();
+    });
+
+    // 5 x 4 -> 7 x 6 shifts metre objects by half the growth, (1, 1).
+    const calls = persistState.updateConfig.mock.calls;
+    const patch = calls[calls.length - 1]?.[0] as Record<string, unknown>;
+    expect(patch.dimensions).toMatchObject({ widthMeters: 7, depthMeters: 6 });
+    expect(patch.furniture).toEqual([expect.objectContaining({ x: 2, y: 3 })]);
+    // Channels are fractions of the room and follow it with no write; adding
+    // the metre shift once pushed x from 0.5 to 1.5, outside [-1, 1].
+    expect(patch).not.toHaveProperty("hueChannels");
   });
 });

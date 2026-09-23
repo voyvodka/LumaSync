@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { subscribeTelemetry } from "../telemetrySource";
@@ -21,7 +21,8 @@ export interface RuntimeTelemetrySnapshot {
   latencyMs: number | null;
   /** Non-negative integer, derived from capture/send delta; clamped to 0. */
   frameDrops: number;
-  /** `performance.now()` at the moment the snapshot was received. */
+  /** `performance.now()` when the values last changed — an identical tick keeps
+   *  the previous snapshot, so the status bar does not re-render each second. */
   timestamp: number;
 }
 
@@ -64,12 +65,14 @@ export function useRuntimeTelemetry(
   enabled: boolean = true,
 ): RuntimeTelemetrySnapshot {
   const [snapshot, setSnapshot] = useState<RuntimeTelemetrySnapshot>(INITIAL_SNAPSHOT);
+  const lastRef = useRef<RuntimeTelemetrySnapshot>(INITIAL_SNAPSHOT);
 
   useEffect(() => {
     if (!enabled) {
       // Reset to the inactive placeholder so consumers that read the
       // snapshot after a mode-off transition do not keep stale FPS values
       // on screen.
+      lastRef.current = INITIAL_SNAPSHOT;
       setSnapshot(INITIAL_SNAPSHOT);
       return;
     }
@@ -77,7 +80,18 @@ export function useRuntimeTelemetry(
     return subscribeTelemetry(pollIntervalMs, (next) => {
       // A failed tick keeps the previous snapshot on screen rather than
       // flickering the pill to zero.
-      if (next.snapshot) setSnapshot(projectSnapshot(next.snapshot));
+      if (!next.snapshot) return;
+      const projected = projectSnapshot(next.snapshot);
+      const prev = lastRef.current;
+      if (
+        prev.fps === projected.fps &&
+        prev.latencyMs === projected.latencyMs &&
+        prev.frameDrops === projected.frameDrops
+      ) {
+        return;
+      }
+      lastRef.current = projected;
+      setSnapshot(projected);
     });
   }, [pollIntervalMs, enabled]);
 

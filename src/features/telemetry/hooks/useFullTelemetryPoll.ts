@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { FullTelemetrySnapshot } from "@/shared/contracts/telemetry";
 import { subscribeTelemetry } from "../telemetrySource";
@@ -24,6 +24,15 @@ const INITIAL_RESULT: FullTelemetryPollResult = {
   isLoading: true,
 };
 
+function sameResult(a: FullTelemetryPollResult, b: FullTelemetryPollResult): boolean {
+  return (
+    a.isLoading === b.isLoading &&
+    a.error?.message === b.error?.message &&
+    // Small, flat, and serialised by one Rust struct, so key order is stable.
+    JSON.stringify(a.snapshot) === JSON.stringify(b.snapshot)
+  );
+}
+
 /**
  * Full telemetry payload (USB + Hue) from the shared loop in
  * `../telemetrySource`, which owns cadence, visibility gating and the
@@ -35,18 +44,27 @@ export function useFullTelemetryPoll(
   pollIntervalMs: number = DEFAULT_POLL_INTERVAL_MS,
 ): FullTelemetryPollResult {
   const [result, setResult] = useState<FullTelemetryPollResult>(INITIAL_RESULT);
+  const lastRef = useRef<FullTelemetryPollResult>(INITIAL_RESULT);
 
   useEffect(() => {
+    // An idle output reports the same numbers every tick; skipping the set
+    // spares the consumer a re-render per poll.
+    const publish = (candidate: FullTelemetryPollResult) => {
+      if (sameResult(lastRef.current, candidate)) return;
+      lastRef.current = candidate;
+      setResult(candidate);
+    };
+
     if (!enabled) {
       // Reset so re-enabling does not flash a stale value while the first
       // tick is still pending. `isLoading=false` because the consumer is
       // explicitly idle, not waiting on a fetch.
-      setResult({ snapshot: null, error: null, isLoading: false });
+      publish({ snapshot: null, error: null, isLoading: false });
       return;
     }
 
     return subscribeTelemetry(pollIntervalMs, (next) => {
-      setResult({
+      publish({
         snapshot: next.snapshot,
         error: next.error,
         isLoading: next.isLoading,

@@ -8,6 +8,7 @@ import {
   HUE_STATUS,
 } from "@/shared/contracts/hue";
 import type { ShellState } from "@/shared/contracts/shell";
+import { parseCommandError } from "@/shared/contracts/status";
 import { shellStore } from "../../persistence/shellStore";
 import { hueCredentialEvents } from "../hueCredentialEvents";
 import {
@@ -19,7 +20,6 @@ import { dedupeBridges, normalizeIpValue, resolveManualIpError } from "../model/
 import { deriveStep, toPersistedStep, toStepFromPersisted } from "../model/onboardingStep";
 import {
   HUE_ONBOARDING_TRANSPORT_CODES as CODE,
-  toErrorDetails,
   type HueOnboardingStatus,
 } from "../model/onboardingStatusCodes";
 import {
@@ -273,7 +273,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         status: {
           code: CODE.AREA_LIST_FAILED,
           message: "Could not list Hue entertainment areas.",
-          details: toErrorDetails(error),
+          details: parseCommandError(error).message,
         },
       }));
     }
@@ -310,7 +310,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         status: {
           code: CODE.DISCOVERY_FAILED,
           message: "Could not discover Hue bridges.",
-          details: toErrorDetails(error),
+          details: parseCommandError(error).message,
         },
       }));
     }
@@ -413,7 +413,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         status: {
           code: CODE.IP_UNREACHABLE,
           message: "Could not verify Hue bridge IP.",
-          details: toErrorDetails(error),
+          details: parseCommandError(error).message,
         },
       }));
     }
@@ -521,7 +521,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
           status: {
             code: CODE.PAIRING_FAILED,
             message: "Pairing request failed.",
-            details: toErrorDetails(error),
+            details: parseCommandError(error).message,
           },
         }));
       }
@@ -580,7 +580,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
         status: {
           code: CODE.STREAM_READINESS_FAILED,
           message: "Could not evaluate Hue stream readiness.",
-          details: toErrorDetails(error),
+          details: parseCommandError(error).message,
         },
       }));
     }
@@ -706,7 +706,7 @@ export function useHueOnboardingCore(): UseHueOnboardingCoreResult {
           status: {
             code: CODE.CREDENTIAL_CHECK_FAILED,
             message: "Could not validate saved Hue credentials.",
-            details: toErrorDetails(error),
+            details: parseCommandError(error).message,
           },
         }));
       }
