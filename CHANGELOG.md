@@ -82,6 +82,10 @@ https://keepachangelog.com/en/1.1.0/
   top and bottom LEDs dark. The strip had been sampling the black bars since 1.4.0, when LEDs
   started taking their colour one by one; Hue lights were already skipping them. The strip now
   takes the edge of the picture inside the bars, the same crop Hue uses.
+- LED preview: the on-screen twin now draws each LED where it takes its colour from. On a strip
+  with a gap along the bottom, the twin drew the bottom LEDs bunched either side of the gap while
+  they sample evenly across the whole bottom edge, and it drew an edge with a single LED in the
+  middle while that LED samples its corner.
 - WLED: a device that answers the connection check with a redirect is now reported as not a
   WLED device. Before, the app followed the redirect, which let anything on the local network
   point the check at another address, including this computer.

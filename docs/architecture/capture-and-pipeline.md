@@ -54,6 +54,17 @@ was cropped. Three edges are deliberate:
   only because `start_led_test_pattern` builds its payload from `AmbilightPayload::default()`,
   which leaves detection off.
 
+**Strip geometry is one answer, pinned on both sides.** Where each LED sits in strip order
+(`build_led_sequence` / `buildLedSequence`) and where it samples (`led_to_screen_pos` /
+`ledScreenPosition`) are held to one fixture,
+`src/features/preview/__tests__/ledScreenGeometry.golden.json`, read by `cargo test` through
+`include_str!` and by vitest. Rust is the authority — it decides what the LEDs show — and the
+fixture is regenerated from it by the ignored `write_led_screen_geometry_golden` test. The twin
+overlay draws each dot at its LED's sampling position, pulled in from the viewport edge. Two
+consequences are the sampler's, not the twin's: `bottomMissing` does not move bottom LEDs (they
+spread across the whole bottom edge, while the calibration editor draws the physical gap), and a
+one-LED edge samples its local-0 corner.
+
 **The macOS screen-recording permission is probed, never inferred.**
 `src-tauri/src/commands/screen_capture_permission.rs` owns two CoreGraphics calls with very
 different side effects, and the split between them is the whole design:
