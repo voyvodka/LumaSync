@@ -38,6 +38,7 @@ const shell: Catalogue<typeof enShell> = {
     maximize: "Ekranı kapla",
     restore: "Geri yükle",
     close: "Kapat",
+    sectionsAriaLabel: "Bölümler",
   },
 };
 

@@ -92,6 +92,25 @@ describe("deriveHueBridgeCardState", () => {
       ).toBe("pairingFailed");
     });
 
+    it.each(["HUE_PAIRING_BRIDGE_BUSY", "HUE_PAIRING_RATE_LIMITED"] as const)(
+      "maps %s to pairingDeferred, never authError",
+      (code) => {
+        expect(
+          deriveHueBridgeCardState({ ...BASE, credentialState: "needs_repair", hueStatus: status(code) }),
+        ).toBe("pairingDeferred");
+      },
+    );
+
+    it("maps a rejected devicetype to pairingFailed", () => {
+      expect(
+        deriveHueBridgeCardState({
+          ...BASE,
+          credentialState: "needs_repair",
+          hueStatus: status("HUE_PAIRING_DEVICETYPE_INVALID"),
+        }),
+      ).toBe("pairingFailed");
+    });
+
     it("falls through to authError for any other needs_repair reason", () => {
       expect(
         deriveHueBridgeCardState({

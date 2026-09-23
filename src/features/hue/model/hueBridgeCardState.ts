@@ -1,5 +1,18 @@
-import type { HueCredentialStatus } from "@/shared/contracts/hue";
+import type { TranslationKey } from "@/features/i18n/catalogue";
+import { HUE_STATUS, type HueCredentialStatus } from "@/shared/contracts/hue";
 import type { HueOnboardingStatus, HueRuntimeStatusView } from "./onboardingStatusCodes";
+
+const PAIRING_ERROR_DESCRIPTIONS: Partial<Record<string, TranslationKey>> = {
+  [HUE_STATUS.PAIRING_DEVICETYPE_INVALID]: "hue:pairing.errors.DEVICETYPE_INVALID.description",
+  [HUE_STATUS.PAIRING_BRIDGE_BUSY]: "hue:pairing.errors.BRIDGE_BUSY.description",
+  [HUE_STATUS.PAIRING_RATE_LIMITED]: "hue:pairing.errors.RATE_LIMITED.description",
+};
+
+/** The specific explanation for a pairing refusal the bridge named, if any. */
+export function huePairingErrorDescriptionKey(code: string | null | undefined): TranslationKey | null {
+  if (!code || !Object.prototype.hasOwnProperty.call(PAIRING_ERROR_DESCRIPTIONS, code)) return null;
+  return PAIRING_ERROR_DESCRIPTIONS[code] ?? null;
+}
 
 export type HueBridgeCardState =
   | "stopPartial"
@@ -9,6 +22,7 @@ export type HueBridgeCardState =
   | "offline"
   | "pairingLinkButton"
   | "pairingTimedOut"
+  | "pairingDeferred"
   | "pairingFailed"
   | "authError"
   | "pairing"
@@ -49,7 +63,14 @@ export function deriveHueBridgeCardState({
     // never surface it as "credentials expired" (#167). Outside a pairing run
     // it only survives once the polling window has run out (#337).
     if (hueStatus?.code === "HUE_PAIRING_LINK_BUTTON_NOT_PRESSED") return "pairingTimedOut";
-    return hueStatus?.code === "HUE_PAIRING_FAILED" ? "pairingFailed" : "authError";
+    // Busy and rate-limited are the bridge asking us to wait, not a rejected
+    // credential — same rule as the link button above.
+    if (hueStatus?.code === "HUE_PAIRING_BRIDGE_BUSY" || hueStatus?.code === "HUE_PAIRING_RATE_LIMITED") {
+      return "pairingDeferred";
+    }
+    return hueStatus?.code === "HUE_PAIRING_FAILED" || hueStatus?.code === "HUE_PAIRING_DEVICETYPE_INVALID"
+      ? "pairingFailed"
+      : "authError";
   }
   if (isPairing) {
     // Minted by useHueOnboardingCore between polls; Rust never sends it.

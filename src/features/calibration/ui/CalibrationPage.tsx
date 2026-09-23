@@ -8,6 +8,12 @@ import {
   openLedControlPopup,
   showLedControlPopup,
 } from "@/features/preview/previewApi";
+import {
+  PREVIEW_OPEN_FAILURE_COPY,
+  controlPopupOpenFailure,
+  twinOverlayOpenFailure,
+  type PreviewOpenFailure,
+} from "@/features/preview/previewOpenFailure";
 import type { LedCalibrationConfig, LedDirection, LedStartAnchor } from "../model/contracts";
 import { buildLedSequence } from "../model/indexMapping";
 import { deriveDefaultCounts, resetToManual } from "../model/templates";
@@ -143,6 +149,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
   );
   const [validationErrors, setValidationErrors] = useState<CalibrationValidationError[] | null>(null);
   const [testPatternError, setTestPatternError] = useState<string | null>(null);
+  const [previewOpenFailure, setPreviewOpenFailure] = useState<PreviewOpenFailure | null>(null);
 
   // Load displays on mount. Honour any persisted selection so the
   // capture source survives app restarts (v1.4 Platform GAP 2).
@@ -418,16 +425,24 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
   // overlay + interactive control popup) straight from LED Setup. The
   // preview API never throws; the try/catch guards the shellStore write.
   const handleOpenPreview = useCallback(async () => {
+    setPreviewOpenFailure(null);
     try {
       // Without an explicit id Rust falls back to the primary display, which
       // strands the overlay on the wrong monitor for a non-primary selection.
-      await openLedTwinOverlay({
-        scope: "test",
-        displayId: displayTargetRef.current.getSnapshot().selectedDisplayId ?? undefined,
+      const overlayFailure = twinOverlayOpenFailure(
+        await openLedTwinOverlay({
+          scope: "test",
+          displayId: displayTargetRef.current.getSnapshot().selectedDisplayId ?? undefined,
+        }),
+      );
+      const popupFailure =
+        controlPopupOpenFailure(await openLedControlPopup())
+        ?? controlPopupOpenFailure(await showLedControlPopup());
+      setPreviewOpenFailure(overlayFailure ?? popupFailure);
+      await shellStore.save({
+        ...(popupFailure === null ? { ledPreviewPopupVisible: true } : {}),
+        ledTwinEnabledTest: true,
       });
-      await openLedControlPopup();
-      await showLedControlPopup();
-      await shellStore.save({ ledPreviewPopupVisible: true, ledTwinEnabledTest: true });
     } catch (err) {
       console.error("[LumaSync] open LED preview from setup failed:", err);
     }
@@ -436,7 +451,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Error strip */}
-      {(testPatternError || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
+      {(testPatternError || previewOpenFailure || displayTarget.blocked || (validationErrors && validationErrors.length > 0)) && (
         <div
           role="alert"
           aria-live="polite"
@@ -449,6 +464,7 @@ export function CalibrationPage({ initialConfig, onNavigateBack, onSaved, onDisp
             })} />
           )}
           {testPatternError && <ErrorLine text={testPatternError} />}
+          {previewOpenFailure && <ErrorLine text={t(PREVIEW_OPEN_FAILURE_COPY[previewOpenFailure])} />}
           {validationErrors?.map((error) => (
             <ErrorLine
               key={`${error.code}:${error.field}`}

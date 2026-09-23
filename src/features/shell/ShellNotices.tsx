@@ -5,6 +5,7 @@ import { CAPTURE_FAILURE_BUCKET, type CaptureFailureNotice } from "@/shared/cont
 import { HUE_SOLID_COLOR_STATUS, type HueRuntimeTarget, type HueSolidColorStatusCode } from "@/shared/contracts/hue";
 import { HUE_LEFT_OUT_REASON, type HueLeftOutReason } from "@/shared/contracts/lighting";
 import type { BootHueRetryNotice } from "@/features/mode/state/bootHueRetry";
+import { PREVIEW_OPEN_FAILURE_COPY, type PreviewOpenFailure } from "@/features/preview/previewOpenFailure";
 
 export interface ShellNoticesProps {
   usbDisconnected: boolean;
@@ -18,6 +19,8 @@ export interface ShellNoticesProps {
   /** Capture died *after* a successful start — a live condition, not an event. */
   captureStalled: CaptureFailureNotice | null;
   hueColorNotice: HueSolidColorStatusCode | null;
+  /** The LED preview popup or twin overlay was asked for and did not appear. */
+  previewOpenFailure?: PreviewOpenFailure | null;
   /** Deep-links the OS permission pane; only the `permission` bucket offers it. */
   onOpenCaptureSettings: () => void;
   /** Height of the StatusBar the stack must clear, so a toast never covers its hints. */
@@ -50,6 +53,7 @@ export function ShellNotices({
   hueBootRetry = null,
   captureStalled,
   hueColorNotice,
+  previewOpenFailure = null,
   onOpenCaptureSettings,
   statusBarHeightPx = 0,
 }: ShellNoticesProps) {
@@ -248,6 +252,30 @@ export function ShellNotices({
             {hueColorNotice === HUE_SOLID_COLOR_STATUS.APPLY_SKIPPED_NO_LIGHTS
               ? t("hue:colorNotApplied.noLights")
               : t("hue:colorNotApplied.streamOffline")}
+          </span>
+        </div>
+      )}
+      {previewOpenFailure && (
+        <div
+          data-testid="preview-open-failed-notice"
+          className="fixed left-4 right-4 z-50 rounded-lg px-4 py-3 shadow-lg flex items-center gap-2 sm:left-auto sm:max-w-sm"
+          role="status"
+          aria-live="polite"
+          style={{
+            bottom,
+            background: "var(--lm-panel-2)",
+            border: "1px solid var(--lm-red, #f87171)",
+            color: "var(--lm-ink)",
+            transform: usbDisconnected || stopFailed ? "translateY(-3.5rem)" : undefined,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="shrink-0"
+            style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--lm-red, #f87171)" }}
+          />
+          <span style={{ fontSize: "12px", color: "var(--lm-ink-dim)" }}>
+            {t(PREVIEW_OPEN_FAILURE_COPY[previewOpenFailure])}
           </span>
         </div>
       )}

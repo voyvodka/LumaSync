@@ -38,6 +38,17 @@ https://keepachangelog.com/en/1.1.0/
   bridge while an already paired bridge is still being checked, which happened for a second or so
   after opening the window. They now show "Checking outputs…" until the bridge answers; Ambilight
   and Solid stay unavailable until then, and the no-output message appears only if it does not.
+- The USB health check now describes each step in the app's language. It used to show the
+  backend's English text for every step, even with the app set to Turkish. Raw diagnostics such
+  as an adapter's VID/PID or an operating-system error still appear as they are, and a stopped
+  check now says so instead of naming an internal worker.
+- Hue pairing no longer says your credentials have expired when the bridge is busy or has had too
+  many pairing attempts. It now asks you to wait and try again. A bridge that rejects the pairing
+  request says so, and no longer shows the generic sign-in error.
+- Opening the LED preview from the tray or from LED Setup now tells you when the control popup or
+  the twin overlay could not open, for example because the chosen display is gone. Before, the
+  click did nothing and said nothing. From the tray, the notice waits for the main window to be
+  shown before it disappears.
 - Devices → Hue Bridges could show the bridge as Ready while it was streaming, when lighting
   started with that page already open — from the tray, a keyboard shortcut or the session restored
   at launch. The card now switches to Streaming as soon as the stream starts, and after its own Stop

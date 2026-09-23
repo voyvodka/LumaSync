@@ -109,16 +109,6 @@ device:groups.otherDescription
 device:groups.otherTitle
 device:groups.supportedDescription
 device:groups.supportedTitle
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_FIRMWARE_MISMATCH.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_FIRMWARE_MISMATCH.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_HANDSHAKE_TIMEOUT.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_OK.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_OK.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_PROTOCOL_ERROR.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_PROTOCOL_ERROR.label
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_VERSION_MISMATCH.hint
-device:healthCheck.serialHealthCodes.SERIAL_HEALTH_VERSION_MISMATCH.label
 device:healthCheck.steps.title
 device:page.actions.addDevice
 device:page.usb.traffic
@@ -147,10 +137,7 @@ hue:manualIp.submit
 hue:page.confirmArea
 hue:page.pill.offline
 hue:page.retryPair
-hue:pairing.errors.BRIDGE_BUSY.description
-hue:pairing.errors.DEVICETYPE_INVALID.description
 hue:pairing.errors.LINK_BUTTON_NOT_PRESSED.description
-hue:pairing.errors.RATE_LIMITED.description
 hue:readiness.activeStreamer
 hue:readiness.pending
 hue:readiness.recoveryHint

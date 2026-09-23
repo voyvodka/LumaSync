@@ -83,7 +83,7 @@ export default {
       },
       SERIAL_HEALTH_HANDSHAKE_TIMEOUT: {
         label: "No handshake response",
-        hint: "No reply within 1 s. If using non-LumaSync firmware, switch to the Adalight profile in Device settings.",
+        hint: "No reply within 2 s. If using non-LumaSync firmware, switch to the Adalight profile in Device settings.",
       },
       SERIAL_HEALTH_VERSION_MISMATCH: {
         label: "Protocol version mismatch",
@@ -96,6 +96,54 @@ export default {
       SERIAL_HEALTH_PROTOCOL_ERROR: {
         label: "Protocol error",
         hint: "Unexpected bytes in handshake frame. Check cable integrity or try a different USB cable.",
+      },
+      SERIAL_HEALTH_WORKER_PANIC: {
+        label: "Health check stopped unexpectedly",
+        hint: "The check could not finish. Run it again; if it keeps stopping, restart LumaSync.",
+      },
+      LIST_PORTS_FAILED: {
+        label: "Could not read serial ports",
+        hint: "The system did not return a port list. Refresh, and check that no other app is holding the ports.",
+      },
+      PORT_VISIBLE: {
+        label: "Port found",
+        hint: "The selected port is listed by the system.",
+      },
+      PORT_NOT_FOUND: {
+        label: "Port not found",
+        hint: "The selected port is not listed. Check the cable, then refresh ports.",
+      },
+      PORT_SUPPORTED: {
+        label: "Supported adapter",
+        hint: "The USB adapter is on the supported controller list.",
+      },
+      PORT_UNSUPPORTED: {
+        label: "Unsupported adapter",
+        hint: "This port is not a supported USB controller. Choose another port.",
+      },
+      CONNECT_OK: {
+        label: "Port opened",
+        hint: "The port opened at 115200 baud.",
+      },
+      CONNECT_FAILED: {
+        label: "Could not open the port",
+        hint: "Refresh ports, reconnect the cable, and try again.",
+      },
+      CONNECT_INVALID_INPUT: {
+        label: "Port settings rejected",
+        hint: "The system rejected the port name or settings. Choose the port again.",
+      },
+      CONNECT_PERMISSION_DENIED: {
+        label: "No permission to open the port",
+        hint: "Your user account cannot open this port. On Linux, add yourself to the dialout group and sign in again.",
+      },
+      CONNECT_TIMEOUT: {
+        label: "Opening the port timed out",
+        hint: "The device did not answer in time. Reconnect the cable and try again.",
+      },
+      CONNECT_IO_ERROR: {
+        label: "Port read or write failed",
+        hint: "Another app may be using the port. Close it, reconnect the cable, and try again.",
       },
     },
   },
