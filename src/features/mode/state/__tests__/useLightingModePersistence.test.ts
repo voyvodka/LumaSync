@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import { useLightingModePersistence } from "../useLightingModePersistence";
 
 const saveShellStateMock = vi.fn();

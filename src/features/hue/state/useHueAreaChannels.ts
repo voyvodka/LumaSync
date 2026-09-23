@@ -91,6 +91,7 @@ export function useHueAreaChannels(
   onAuthInvalidRef.current = onAuthInvalid;
 
   // Load channels whenever the selected area or credentials change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is a re-run trigger; bumping it re-reads the channels
   useEffect(() => {
     if (!selectedBridge || !credentials || !selectedAreaId) {
       setAreaChannels([]);

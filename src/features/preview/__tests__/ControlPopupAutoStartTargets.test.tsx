@@ -14,7 +14,7 @@ import {
   type LedPreviewStatus,
   type StartLedTestPatternPayload,
 } from "@/shared/contracts/preview";
-import { LIGHTING_MODE_KIND } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND } from "@/shared/contracts/mode";
 import { __resetHueTestLease } from "@/features/hue/state/hueTestLease";
 
 vi.mock("react-i18next", () => ({

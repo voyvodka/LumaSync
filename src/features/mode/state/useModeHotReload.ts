@@ -7,7 +7,7 @@ import type {
 import type { HueIntensityPreset } from "@/shared/contracts/hue";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "../model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import type { LightingModeDispatcher } from "./useLightingModeDispatch";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
 import type { RoomGeometryChangeHandler } from "./useRoomGeometrySync";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
-import { normalizeOutputTargets } from "@/features/mode/model/contracts";
+import { normalizeOutputTargets } from "@/shared/contracts/mode";
 import { saveShellState } from "@/features/shell/windowLifecycle";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 

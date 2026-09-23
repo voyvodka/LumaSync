@@ -1,7 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 import { i18next } from "@/features/i18n/i18n";
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import {
   openLedControlPopup,
   openLedTwinOverlay,
@@ -125,7 +125,7 @@ export function useTrayIntegration({
       unlistenResume?.();
       unlistenSolid?.();
     };
-  }, [lightingModeChangeRef, lastNonOffModeRef, lightingModeRef, selectedOutputTargetsRef]);
+  }, [lastNonOffModeRef, lightingModeRef, selectedOutputTargetsRef]);
 
   // v1.6 — tray "Show LED Preview" opens (or focuses) the control popup
   // and, when enabled, the digital-twin overlay. Registered once.

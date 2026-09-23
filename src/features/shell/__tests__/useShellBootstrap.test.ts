@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { HueStartConfig } from "@/features/hue/model/hueStartConfig";
-import type { LightingModeConfig } from "@/features/mode/model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import type { ModeRuntimeConfig } from "@/features/mode/state/useModeRuntimeConfig";
 import { CAPTURE_FAILURE_BUCKET } from "@/shared/contracts/capture";
 import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";

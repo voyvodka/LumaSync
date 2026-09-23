@@ -28,7 +28,7 @@ import {
   normalizeOutputTargets,
   type LightingModeConfig,
   type SolidColorPayload,
-} from "../model/contracts";
+} from "@/shared/contracts/mode";
 import {
   applyRuntimeResultToTargets,
   resolveHueRuntimePlan,
@@ -495,7 +495,7 @@ export function useLightingModeOrchestrator({
         const usbDriven =
           applyResult !== null &&
           !outcome.refused &&
-          (runningTargets === undefined || runningTargets.length === 0 || runningTargets.includes("usb"));
+          (runningTargets === undefined || runningTargets === null || runningTargets.length === 0 || runningTargets.includes("usb"));
 
         if (usbDriven) {
           setActiveOutputTargets((prev) => [...new Set([...prev, "usb" as HueRuntimeTarget])]);
@@ -666,7 +666,7 @@ export function useLightingModeOrchestrator({
         }
       }
     }
-  }, [lightingMode, selectedOutputTargets, hueStartConfig, hydrateModePayload, dispatchSetLightingMode, reportHueSolidColorStatus, raiseHueLeftOut]);
+  }, [lightingMode, selectedOutputTargets, hueStartConfig, dispatchSetLightingMode, reportHueSolidColorStatus, raiseHueLeftOut]);
 
   useEffect(() => {
     applyOutputTargetsRef.current = applyOutputTargets;
@@ -719,7 +719,7 @@ export function useLightingModeOrchestrator({
   const hueReleaseRef = useRef<Promise<void> | null>(null);
   const stopHueOutput = useCallback(
     (triggerSource: HueRuntimeTriggerSource) => {
-      if (hueReleaseRef.current) return hueReleaseRef.current;
+      if (hueReleaseRef.current !== null) return hueReleaseRef.current;
       const release = (async () => {
         try {
           if (lightingModeRef.current.kind === LIGHTING_MODE_KIND.OFF) {
@@ -1167,15 +1167,16 @@ export function useLightingModeOrchestrator({
       dispatchSetLightingMode,
       handleOpenCalibration,
       hueStartConfig,
-      hydrateModePayload,
       lightingMode.ambilight,
       lightingMode.kind,
       lightingMode.solid,
       raiseHueLeftOut,
       reportHueSolidColorStatus,
+      resetLightingModeSignature,
       savedCalibration,
       scheduleLightingModePersist,
       selectedOutputTargets,
+      setHueStartConfig,
     ],
   );
 
@@ -1184,6 +1185,7 @@ export function useLightingModeOrchestrator({
   }, [handleLightingModeChange]);
 
   // After the ref effect above, so the replay runs the handler of this commit.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: queuedModeReplay is the replay tick; the queued mode itself lives in a ref
   useEffect(() => {
     const queued = pendingModeChangeRef.current;
     if (!queued) return;

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { readFile } from "@tauri-apps/plugin-fs";
 import type { RoomMapConfig, ImageLayer } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
+import { readRoomMapImage } from "../roomMapFilesApi";
 
 type ResizeCorner = "nw" | "ne" | "sw" | "se";
 
@@ -39,7 +39,7 @@ function ImageLayerView({
   useEffect(() => {
     let revoked = false;
     let url: string | null = null;
-    readFile(layer.path)
+    readRoomMapImage(layer.path)
       .then((data) => {
         if (revoked) return;
         const ext = layer.path.split(".").pop()?.toLowerCase() ?? "png";

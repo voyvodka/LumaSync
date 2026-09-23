@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/features/mode/model/contracts";
+import { LIGHTING_MODE_KIND, type LightingModeConfig } from "@/shared/contracts/mode";
 import type { HueRuntimeTarget } from "@/shared/contracts/hue";
 
 import { useTrayIntegration, type TrayIntegrationInput } from "../useTrayIntegration";

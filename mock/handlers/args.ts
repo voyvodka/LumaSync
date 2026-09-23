@@ -39,7 +39,7 @@ import type {
   HueRuntimeTriggerSource,
 } from "../../src/shared/contracts/hue";
 import type { HueChannelPlacement } from "../../src/shared/contracts/roomMap";
-import type { LightingModeConfig } from "../../src/features/mode/model/contracts";
+import type { LightingModeConfig } from "../../src/shared/contracts/mode";
 import type { StartLedTestPatternPayload } from "../../src/shared/contracts/preview";
 
 /**

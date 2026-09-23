@@ -2,7 +2,6 @@ import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hu
 import type { LightingSmoothingPreset } from "@/shared/contracts/lighting";
 import type { DisplayId } from "@/shared/contracts/display";
 import type { LedCalibrationConfig } from "@/shared/contracts/calibration";
-import type { LedTestPatternKind } from "@/shared/contracts/preview";
 import type { RoomGeometry } from "@/shared/contracts/roomMap";
 import {
   DEFAULT_COLOR_CORRECTION,
@@ -24,39 +23,6 @@ export const LIGHTING_MODE_KIND = {
   SOLID: "solid",
 } as const;
 
-/** Tauri event channel carrying the per-LED feed of the LED twin overlay. */
-export const EDGE_SIGNAL_EVENT = "ambilight://edge-signal";
-
-/** Per-LED frame the Rust ambilight worker sends to open twin-overlay windows.
- *
- * Sent only while a twin overlay is open, and only to twin windows — the main
- * window receives nothing. The worker sets `leds`, `ledCount`, `source` and
- * `seq` on every frame; they stay optional here so the twin keeps ignoring a
- * frame without a `leds` buffer rather than trusting the wire. */
-export interface EdgeSignalPayload {
-  /**
-   * v1.6 — full per-LED RGB buffer for the digital-twin overlay, ordered along
-   * the calibrated strip path.
-   */
-  leds?: Array<[number, number, number]>;
-  /** v1.6 — length of `leds` (the calibrated total LED count for this frame). */
-  ledCount?: number;
-  /**
-   * v1.6 — per-Hue-channel RGB the twin overlay renders for the Hue zone
-   * markers. Kept separate from `leds` because Hue channels are sparse
-   * positions in the room, not contiguous strip pixels.
-   */
-  hueChannels?: Array<[number, number, number]>;
-  /** v1.6 — whether this frame originates from a synthetic test pattern or live capture. */
-  source?: "test" | "live";
-  /** v1.6 — active synthetic pattern kind when `source === "test"`. */
-  pattern?: LedTestPatternKind;
-  /** v1.6 — monotonically increasing frame sequence number for drop detection in the twin. */
-  seq?: number;
-  /** v1.6 — display the frame was sampled from, threaded through from the capture path. */
-  displayId?: DisplayId;
-}
-
 export type LightingModeKind = (typeof LIGHTING_MODE_KIND)[keyof typeof LIGHTING_MODE_KIND];
 
 export interface SolidColorPayload {
@@ -75,29 +41,29 @@ export interface AmbilightPayload {
    * fallback when `lightingSmoothingPreset` is absent.
    * Range [0.05, 1.0]. 1.0 = instant; lower = smoother. Default 0.35.
    */
-  smoothingAlpha?: number;
+  smoothingAlpha?: number | null;
   /** Luminance-preserving saturation factor. Range [0.5, 2.0]. 1.0 = identity. Default 1.0. */
-  saturation?: number;
+  saturation?: number | null;
   /**
    * Unified smoothing preset (v1.4). Drives the EWMA coefficient for
    * both the USB strip and the Hue branch of the ambilight pump in a
    * single user-facing control. Takes priority over the deprecated
    * `smoothingAlpha` slider and `hueIntensityPreset` on the Rust side.
    */
-  lightingSmoothingPreset?: LightingSmoothingPreset;
+  lightingSmoothingPreset?: LightingSmoothingPreset | null;
   /**
    * @deprecated Use `lightingSmoothingPreset`. Kept so pre-v1.4 persisted
    * payloads keep deserialising on the Rust side. Will be removed in
    * v1.5 once the backend compat shim is retired.
    */
-  hueIntensityPreset?: HueIntensityPreset;
+  hueIntensityPreset?: HueIntensityPreset | null;
 }
 
 export interface LightingModeConfig {
   kind: LightingModeKind;
-  solid?: SolidColorPayload;
-  ambilight?: AmbilightPayload;
-  targets?: HueRuntimeTarget[];
+  solid?: SolidColorPayload | null;
+  ambilight?: AmbilightPayload | null;
+  targets?: HueRuntimeTarget[] | null;
   /**
    * Display the ambilight worker should sample from (v1.4 Platform GAP 2).
    * Absent ⇒ backend falls back to the OS primary display so existing
@@ -105,22 +71,22 @@ export interface LightingModeConfig {
    * stable `DisplayInfo.id` form returned by `list_displays`; a missing or
    * unplugged display id reverts to primary instead of failing the command.
    */
-  displayId?: DisplayId;
+  displayId?: DisplayId | null;
   /**
    * Per-channel color correction (v1.4 G4). Absent ⇒ backend uses
    * ColorCorrectionConfig defaults (gamma 2.2 / 6500 K / saturation 1.0).
    * Applied to USB output only — Hue sink is not affected.
    */
-  colorCorrection?: ColorCorrectionConfig;
+  colorCorrection?: ColorCorrectionConfig | null;
   /**
    * Firmware encoding profile (v1.4 G11). Absent ⇒ backend defaults to
    * LumaSyncV1. User-visible setting only — never switched silently.
    */
-  firmwareProfile?: FirmwareProfile;
+  firmwareProfile?: FirmwareProfile | null;
   /**
    * LED chip type (v1.5 G3). Absent ⇒ `ws2812b-grb`. Changes bytes-per-pixel.
    */
-  chipType?: LedChipType;
+  chipType?: LedChipType | null;
   /**
    * Host-side colour-order correction for the serial sink, relative to the
    * firmware's own order. Absent ⇒ Rust reads `ledColorOrder` off disk, then
@@ -138,7 +104,7 @@ export interface LightingModeConfig {
    * itself, which is why `normalizeLightingModeConfig` deliberately does
    * not round-trip this field.
    */
-  ledCalibration?: LedCalibrationConfig;
+  ledCalibration?: LedCalibrationConfig | null;
   /**
    * Room-aware sampling input (P3). Absent ⇒ no TV anchor, and the worker runs
    * exactly as before. Like `ledCalibration`, it is stamped onto outgoing
@@ -200,7 +166,7 @@ function normalizeLightingSmoothingPreset(
     : undefined;
 }
 
-export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload>): AmbilightPayload {
+export function normalizeAmbilightPayload(input?: Partial<AmbilightPayload> | null): AmbilightPayload {
   // Resolve the preset from either the new or the deprecated field so
   // legacy persisted payloads continue to survive normalization without
   // losing the user's selection.
@@ -308,10 +274,6 @@ export function normalizeLightingModeConfig(input?: Partial<LightingModeConfig>)
     chipType: normalizedChipType,
     colorOrder: normalizedColorOrder,
   };
-}
-
-export function resolveDefaultTargets(targets?: HueRuntimeTarget[]): HueRuntimeTarget[] {
-  return targets && targets.length > 0 ? targets : ["usb"];
 }
 
 /** Output sink a fresh install starts on. */

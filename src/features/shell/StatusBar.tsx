@@ -96,7 +96,7 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
   // Pull the modifier portion (⌥ / Alt) from the MODE_OFF definition — all
   // three mode shortcuts share the same modifier by design.
   const modeDefinition = getKeybindDefinition(KEYBIND_ACTIONS.MODE_OFF, platform);
-  const modeModifierBadge = modeDefinition.badge[0];
+  const modeModifierBadges = modeDefinition.badge.slice(0, 1);
   const modeDigitsBadge = "1-3";
   const settingsDefinition = getKeybindDefinition(KEYBIND_ACTIONS.OPEN_SETTINGS, platform);
 
@@ -124,7 +124,7 @@ export function StatusBar({ items, uiMode, lightingActive = true }: StatusBarPro
       {!isCompact && (
         <>
           <KbdHint
-            keys={[modeModifierBadge, modeDigitsBadge]}
+            keys={[...modeModifierBadges, modeDigitsBadge]}
             label={t("shell:statusBar.kbdMode")}
             ariaLabel={modeGroupAriaLabel}
           />

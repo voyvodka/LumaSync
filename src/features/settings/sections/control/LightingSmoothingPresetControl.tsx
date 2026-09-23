@@ -109,6 +109,7 @@ export function LightingSmoothingPresetControl({
       const delta = event.key === "ArrowRight" ? 1 : -1;
       const nextIdx = (idx + delta + PRESET_ORDER.length) % PRESET_ORDER.length;
       const nextPreset = PRESET_ORDER[nextIdx];
+      if (nextPreset === undefined) return;
       commit(nextPreset);
       buttonRefs.current[nextPreset]?.focus();
     },

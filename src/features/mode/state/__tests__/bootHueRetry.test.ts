@@ -12,7 +12,7 @@ vi.mock("@/features/hue/hueOnboardingApi", () => ({
   checkHueStreamReadiness: (...args: unknown[]) => checkReadinessMock(...args),
 }));
 
-import type { LightingModeConfig } from "../../model/contracts";
+import type { LightingModeConfig } from "@/shared/contracts/mode";
 import { stopHue } from "../../modeApi";
 import {
   BOOT_HUE_RETRY_GAVE_UP_NOTICE_MS,

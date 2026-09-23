@@ -61,6 +61,7 @@ export function useRoomMapHueChannels({
     setRefreshToken((n) => n + 1);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshToken is a re-run trigger; bumping it re-reads the channels
   useEffect(() => {
     if (!hueBridgeConfigured || !hueAreaId) {
       setChannelsStatus(null);

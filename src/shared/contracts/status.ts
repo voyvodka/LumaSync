@@ -32,7 +32,7 @@ function parseText(raw: string): ParsedCommandError {
   const match = CODED_TEXT.exec(message);
   if (!match) return { code: null, message, details: null };
   const details = match[2]?.trim();
-  return { code: match[1], message, details: details ? details : null };
+  return { code: match[1] ?? null, message, details: details ? details : null };
 }
 
 /** Read any rejection — a `Result<_, String>` command's bare string (by

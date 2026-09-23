@@ -20,3 +20,9 @@ export async function readStartHidden(invoker: LaunchInvoker = defaultInvoke): P
     return false;
   }
 }
+
+/** Spawns a fresh app process and exits this one. */
+export async function relaunchApp(): Promise<void> {
+  const { relaunch } = await import("@tauri-apps/plugin-process");
+  await relaunch();
+}

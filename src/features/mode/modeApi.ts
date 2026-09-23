@@ -18,7 +18,7 @@ import { parseCommandError, type CommandStatusOf } from "@/shared/contracts/stat
 // Cyclic with hueReadCache (it wraps `getHueStreamStatus` below); safe because
 // neither side calls across the cycle at module-eval time.
 import { invalidateHueStreamStatus } from "../hue/hueReadCache";
-import { normalizeLightingModeConfig, type LightingModeConfig } from "./model/contracts";
+import { normalizeLightingModeConfig, type LightingModeConfig } from "@/shared/contracts/mode";
 import { cancelBootHueRetry } from "./state/bootHueRetry";
 
 /** Normalized shape every mode-command rejection is mapped to before being thrown. */
