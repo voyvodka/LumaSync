@@ -103,11 +103,15 @@ vi.mock("react-i18next", () => ({
 
 describe("hueUnavailableSubKey", () => {
   it("only says not configured when no bridge is paired", () => {
-    expect(hueUnavailableSubKey(false, null)).toBe("lights:dock.rows.hueSubUnavailable");
-    expect(hueUnavailableSubKey(false, "credentialRejected")).toBe("lights:dock.rows.hueSubUnavailable");
-    expect(hueUnavailableSubKey(true, "credentialRejected")).toBe("lights:dock.rows.hueSubKeyRejected");
-    expect(hueUnavailableSubKey(true, "unreachable")).toBe("lights:dock.rows.hueSubUnreachable");
-    expect(hueUnavailableSubKey(true, null)).toBe("lights:dock.rows.hueSubChecking");
+    expect(hueUnavailableSubKey(false, null, true)).toBe("lights:dock.rows.hueSubUnavailable");
+    expect(hueUnavailableSubKey(false, "credentialRejected", true)).toBe("lights:dock.rows.hueSubUnavailable");
+    expect(hueUnavailableSubKey(true, "credentialRejected", true)).toBe("lights:dock.rows.hueSubKeyRejected");
+    expect(hueUnavailableSubKey(true, "unreachable", true)).toBe("lights:dock.rows.hueSubUnreachable");
+    expect(hueUnavailableSubKey(true, null, true)).toBe("lights:dock.rows.hueSubChecking");
+  });
+
+  it("does not call a bridge unpaired before boot has read the saved pairing", () => {
+    expect(hueUnavailableSubKey(false, null, false)).toBe("lights:dock.rows.hueSubChecking");
   });
 });
 
