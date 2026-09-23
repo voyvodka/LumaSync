@@ -31,6 +31,11 @@ https://keepachangelog.com/en/1.1.0/
   window about ten times a second for the Lights preview removed above, whether or not anything
   showed them. That stopped. The LED preview overlay still gets its per-LED feed, and only while
   it is open.
+- Devices → Hue Bridges: a bridge that no longer accepts the app's key shows one Re-pair button
+  instead of two. Error codes such as `AUTH_INVALID_RE_PAIR_REQUIRED` no longer fill a stat box in
+  large red text; every bridge card state now shows the code as a small line under its message,
+  where it can still be read for support. A stat box left on its own now spans the card's full
+  width instead of leaving an empty half, on WLED device cards too.
 
 ### Fixed
 

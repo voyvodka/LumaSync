@@ -318,22 +318,16 @@ export function HueBridgesCategory({
                 </div>
               ) : null}
 
-              {/* State E: Auth error repair banner — shown BEFORE data cells */}
+              {/* State E: Auth error banner — shown BEFORE data cells. Its one
+                  action, Re-pair, sits in the footer as in every other state. */}
               {hueBridgeState === "authError" ? (
-                <div className="lm-hue-repair is-error">
+                <div className="lm-hue-repair is-error" role="status" aria-live="polite" data-testid="hue-auth-error">
                   <IconInfo />
                   <div className="lm-hue-repair-tx">
                     <div className="lm-hue-repair-title">{t("hue:credential.needsRepair")}</div>
                     <div className="lm-hue-repair-sub">{t("hue:credential.repairHint")}</div>
+                    <StatusCodeDetail code={hueStatus?.code} />
                   </div>
-                  <button
-                    type="button"
-                    className="lm-hue-repair-act"
-                    onClick={() => { void pair(); }}
-                    disabled={isHuePairing} aria-busy={isHuePairing}
-                  >
-                    {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
-                  </button>
                 </div>
               ) : null}
 
@@ -390,10 +384,6 @@ export function HueBridgesCategory({
                     <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
                     <div className="lm-dcard-cell-v is-warn">{t("hue:page.pill.checking")}</div>
                   </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellError")}</div>
-                    <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{runtimeStatusReadFailure?.code ?? "—"}</div>
-                  </div>
                 </div>
               ) : hueBridgeState === "stale" ? (
                 <div className="lm-dcard-body">
@@ -422,12 +412,6 @@ export function HueBridgesCategory({
                     <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                     <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
                   </div>
-                  {hueStatus?.code ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellError")}</div>
-                      <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
-                    </div>
-                  ) : null}
                   {hueRuntimeModel.retry?.remainingAttempts !== undefined ? (
                     <div className="lm-dcard-cell">
                       <div className="lm-dcard-cell-k">{t("hue:card.cellRetries")}</div>
@@ -447,22 +431,12 @@ export function HueBridgesCategory({
                     <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
                     <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
                   </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
-                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
-                  </div>
                 </div>
-              ) : hueBridgeState === "stopPartial" ? (
+              ) : hueBridgeState === "stopPartial" && selectedArea ? (
                 <div className="lm-dcard-body">
-                  {selectedArea ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
-                      <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
-                    </div>
-                  ) : null}
                   <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
-                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
+                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
+                    <div className="lm-dcard-cell-v is-dim">{selectedArea.name}</div>
                   </div>
                 </div>
               ) : hueBridgeState === "gateBlocked" ? (
@@ -477,10 +451,6 @@ export function HueBridgesCategory({
                     <div className="lm-dcard-cell-k">{t("hue:card.cellProtocol")}</div>
                     <div className="lm-dcard-cell-v is-dim">DTLS</div>
                   </div>
-                  <div className="lm-dcard-cell">
-                    <div className="lm-dcard-cell-k">{t("hue:card.cellConfig")}</div>
-                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
-                  </div>
                 </div>
               ) : hueBridgeState === "authError" ? (
                 <div className="lm-dcard-body">
@@ -494,12 +464,6 @@ export function HueBridgesCategory({
                     <div className="lm-dcard-cell-k">{t("hue:card.cellCredential")}</div>
                     <div className="lm-dcard-cell-v is-error">{t("hue:card.cellCredentialInvalid")}</div>
                   </div>
-                  {hueStatus?.code ? (
-                    <div className="lm-dcard-cell">
-                      <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
-                      <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{hueStatus.code}</div>
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
 
@@ -663,6 +627,7 @@ export function HueBridgesCategory({
                           nextMs: hueRuntimeModel.retry.nextAttemptMs ?? "—",
                         })
                       : t("hue:runtime.reconnectingTitle")}
+                    <StatusCodeDetail code={hueStatus?.code} />
                   </span>
                 </div>
               ) : null}
@@ -670,7 +635,10 @@ export function HueBridgesCategory({
               {hueBridgeState === "statusUnknown" ? (
                 <div className="lm-hue-retry" role="status" aria-live="polite" data-testid="hue-status-unavailable">
                   <span className="lm-hue-retry-sp" aria-hidden="true" />
-                  <span className="lm-hue-retry-tx">{t("hue:runtime.statusUnavailable.body")}</span>
+                  <span className="lm-hue-retry-tx">
+                    {t("hue:runtime.statusUnavailable.body")}
+                    <StatusCodeDetail code={runtimeStatusReadFailure?.code} />
+                  </span>
                 </div>
               ) : null}
 
@@ -680,6 +648,7 @@ export function HueBridgesCategory({
                   <div className="lm-hue-repair-tx">
                     <div className="lm-hue-repair-title">{t("hue:runtime.failed.title")}</div>
                     <div className="lm-hue-repair-sub">{t(hueStreamFailureReasonKey(runtimeStatus?.code))}</div>
+                    <StatusCodeDetail code={runtimeStatus?.code} />
                   </div>
                 </div>
               ) : null}
@@ -710,6 +679,7 @@ export function HueBridgesCategory({
                       <span>{t("hue:runtime.checklist.revalidate")}</span>
                     </div>
                   ) : null}
+                  <StatusCodeDetail code={runtimeStatus?.code} />
                   <div className="lm-hue-checklist-btns">
                     <button
                       type="button"
@@ -730,6 +700,7 @@ export function HueBridgesCategory({
                   <div className="lm-hue-repair-tx">
                     <div className="lm-hue-repair-title">{t("hue:runtime.partialStop.title")}</div>
                     <div className="lm-hue-repair-sub">{t("hue:runtime.partialStop.body")}</div>
+                    <StatusCodeDetail code={runtimeStatus?.code} />
                   </div>
                 </div>
               ) : null}
@@ -916,5 +887,21 @@ export function HueBridgesCategory({
         ) : null}
       </div>
     </div>
+  );
+}
+
+interface StatusCodeDetailProps {
+  code: string | null | undefined;
+}
+
+/** The raw status code as a small caption under the message: readable for
+ *  support, never the card's headline. */
+function StatusCodeDetail({ code }: StatusCodeDetailProps) {
+  const { t } = useTranslation();
+  if (!code) return null;
+  return (
+    <span className="lm-hue-code" data-testid="hue-fault-code">
+      <span className="lm-hue-code-k">{t("hue:card.codeLabel")}</span> <code>{code}</code>
+    </span>
   );
 }

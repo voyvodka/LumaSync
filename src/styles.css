@@ -2113,6 +2113,10 @@
   background: #14171d;
   padding: 7px 10px;
 }
+/* A state with an odd cell count would otherwise leave an empty half-cell. */
+.lm-dcard-cell:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
 .lm-dcard-cell-k {
   font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
   font-size: 8.5px;
@@ -2558,24 +2562,24 @@
 }
 .lm-hue-repair.is-error .lm-hue-repair-title { color: var(--lm-red, #ef5b5b); }
 .lm-hue-repair-sub { font-size: 10.5px; color: #8a94a3; margin-top: 2px; line-height: 1.4; }
-.lm-hue-repair-act {
-  all: unset;
-  box-sizing: border-box;
+
+/* Raw status code under a card message — a technical detail, not a headline. */
+.lm-hue-code {
+  display: block;
+  margin-top: 4px;
   font-family: var(--lm-mono);
   font-size: 9px;
-  padding: 4px 8px;
-  border-radius: 5px;
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  background: rgba(255, 176, 32, 0.08);
-  color: var(--lm-amber, #ffb020);
-  cursor: pointer;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  flex-shrink: 0;
-  align-self: center;
-  transition: background 120ms ease;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--lm-ink-dim);
+  overflow-wrap: anywhere;
 }
-.lm-hue-repair-act:hover { background: rgba(255, 176, 32, 0.15); }
+.lm-hue-code-k {
+  color: var(--lm-ink-faint);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lm-hue-code code { font: inherit; }
 
 /* ── Retry progress (State H) ───────────────────────────────────────── */
 .lm-hue-retry {
