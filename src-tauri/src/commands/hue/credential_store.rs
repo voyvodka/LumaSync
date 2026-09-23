@@ -68,6 +68,11 @@ pub(crate) const KEY_HUE_CLIENT_KEY: &str = "hue-client-key";
 /// Absent means "paired before this key existed". Those credentials are
 /// treated as belonging to whoever asks, which is the behaviour they already
 /// had, and the owner is recorded the next time they are written.
+///
+/// The value is the bridge id from the bridge's certificate. Releases up to
+/// 1.5.5 wrote the bridge's IP address here instead, which a DHCP renewal
+/// invalidates; such a value is read as [`PairOwner::LegacyAddress`] and
+/// replaced by `adopt_bridge_owner` on the next authenticated contact.
 pub(crate) const KEY_HUE_BRIDGE_ID: &str = "hue-bridge-id";
 
 /// Frontend-visible status codes (mirrors `HUE_STATUS` additions in `hue.ts`).
@@ -141,8 +146,10 @@ pub trait SecretStore: Send + Sync {
 
 /// Production secret store backed by the OS-native keychain (`keyring` v4).
 #[derive(Default)]
+#[cfg_attr(test, allow(dead_code))]
 pub struct KeychainStore;
 
+#[cfg_attr(test, allow(dead_code))]
 impl KeychainStore {
     /// Construct a `KeychainStore` handle. No I/O happens until a method is
     /// called.
@@ -529,6 +536,7 @@ pub fn init_store_for_debug(app_data_dir: PathBuf) {
 /// the backend itself is missing (no D-Bus on Linux, sandbox-blocked
 /// Keychain on macOS) we degrade to `NoopStore` so the app keeps running
 /// on the legacy plaintext fallback.
+#[cfg(not(test))]
 fn platform_store() -> Box<dyn SecretStore> {
     let probe = keyring::Entry::new(KEYCHAIN_SERVICE, "__lumasync_probe__");
     match probe {
@@ -538,6 +546,14 @@ fn platform_store() -> Box<dyn SecretStore> {
             Box::new(NoopStore::new())
         }
     }
+}
+
+/// Tests drive the real transport against local bridges, and its certificate
+/// pins are written through the shared store: that must never be the
+/// developer's keychain.
+#[cfg(test)]
+fn platform_store() -> Box<dyn SecretStore> {
+    Box::new(tests::InMemoryStore::default())
 }
 
 // ---------------------------------------------------------------------------
@@ -637,11 +653,15 @@ pub fn migrate_hue_credentials_to_keychain(
 
     // Record whose pair this is. Best-effort: a store that refuses this but
     // accepted both halves leaves the pair anonymous, which is the pre-fix
-    // behaviour rather than a new failure.
-    if !bridge_id.is_empty() {
-        if let Err(err) = store.set(KEY_HUE_BRIDGE_ID, bridge_id) {
+    // behaviour rather than a new failure. With no bridge id in hand the
+    // previous pair's owner is cleared, never inherited by the new pair.
+    let recorded = super::bridge_identity::normalize_bridge_id(bridge_id)
+        .map(|owner| store.set(KEY_HUE_BRIDGE_ID, &owner));
+    if !matches!(recorded, Some(Ok(()))) {
+        if let Some(Err(err)) = recorded {
             warn!("[hue-cred] could not record the owning bridge ({err}) — pair stays unscoped");
         }
+        let _ = store.delete(KEY_HUE_BRIDGE_ID);
     }
 
     // Rollback deletes BOTH halves, and the read-back is not optional —
@@ -671,11 +691,70 @@ pub fn migrate_hue_credentials_to_keychain(
 /// - `PlaintextLegacy` — keychain miss / unavailable; using request values.
 /// - `Noop` — no backend AND no fallback values; caller must surface
 ///   `AUTH_INVALID_RE_PAIR_REQUIRED`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ResolvedHueCredentials {
     pub username: String,
     pub client_key: String,
     pub backend: CredentialBackend,
+}
+
+impl std::fmt::Debug for ResolvedHueCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedHueCredentials")
+            .field("username", &REDACTED)
+            .field("client_key", &REDACTED)
+            .field("backend", &self.backend)
+            .finish()
+    }
+}
+
+/// What a `Debug` of a key-carrying struct prints in place of the key.
+pub(crate) const REDACTED: &str = "<redacted>";
+
+/// Whose the stored pair is, as read from [`KEY_HUE_BRIDGE_ID`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PairOwner {
+    /// Nothing recorded — paired before owners existed, or moved in by the
+    /// boot migration, which has no bridge in hand.
+    Unscoped,
+    /// A bridge id, lower-case.
+    Bridge(String),
+    /// An IP address, as releases up to 1.5.5 recorded it.
+    LegacyAddress(String),
+}
+
+pub(crate) fn pair_owner(store: &dyn SecretStore) -> PairOwner {
+    let Some(value) = store.get(KEY_HUE_BRIDGE_ID).ok().flatten() else {
+        return PairOwner::Unscoped;
+    };
+    if let Some(bridge_id) = super::bridge_identity::normalize_bridge_id(&value) {
+        PairOwner::Bridge(bridge_id)
+    } else if value.parse::<std::net::Ipv4Addr>().is_ok() {
+        PairOwner::LegacyAddress(value)
+    } else {
+        PairOwner::Unscoped
+    }
+}
+
+/// Record `bridge_id` as the owner of the stored pair once that bridge has
+/// accepted `app_key`: a 2xx to a request carrying the key proves the bridge
+/// that answered issued it. Only an owner that is not yet a bridge id is
+/// replaced, and only when `app_key` is the keychain's own key.
+pub(crate) fn adopt_bridge_owner(store: &dyn SecretStore, app_key: &str, bridge_id: &str) {
+    let Some(bridge_id) = super::bridge_identity::normalize_bridge_id(bridge_id) else {
+        return;
+    };
+    if app_key.is_empty() || store.get(KEY_HUE_APP_KEY).ok().flatten().as_deref() != Some(app_key) {
+        return;
+    }
+    let previous = pair_owner(store);
+    if matches!(previous, PairOwner::Bridge(_)) {
+        return;
+    }
+    match store.set(KEY_HUE_BRIDGE_ID, &bridge_id) {
+        Ok(()) => info!("[hue-cred] pair owner recorded as bridge {bridge_id} (was {previous:?})"),
+        Err(err) => warn!("[hue-cred] could not record the pair owner ({err})"),
+    }
 }
 
 /// Resolve Hue credentials with keychain-first preference, falling back to
@@ -687,15 +766,19 @@ pub struct ResolvedHueCredentials {
 /// - `Some(creds)` from `(fallback_username, fallback_client_key)` when
 ///   keychain miss but the request carries non-empty values.
 /// - `None` only when both sources are empty (re-pair required).
+///
+/// `peer_bridge_id` is the bridge the caller knows it is talking to, or empty.
+/// A pair owned by an address (a legacy record) serves any caller: comparing
+/// addresses is what stranded the pair after a DHCP renewal.
 pub fn resolve_hue_credentials(
     store: &dyn SecretStore,
-    bridge_id: &str,
+    peer_bridge_id: &str,
     fallback_username: &str,
     fallback_client_key: &str,
 ) -> Option<ResolvedHueCredentials> {
     let kc_username = store.get(KEY_HUE_APP_KEY).ok().flatten();
     let kc_client_key = store.get(KEY_HUE_CLIENT_KEY).ok().flatten();
-    let kc_bridge = store.get(KEY_HUE_BRIDGE_ID).ok().flatten();
+    let peer = super::bridge_identity::normalize_bridge_id(peer_bridge_id);
 
     if let (Some(u), Some(k)) = (kc_username.as_ref(), kc_client_key.as_ref()) {
         if !u.is_empty() && !k.is_empty() {
@@ -703,8 +786,8 @@ pub fn resolve_hue_credentials(
             // credentials belong to a different bridge. Using them anyway is
             // what produced the spurious re-pair prompt, so fall through to
             // the request's own values instead.
-            match kc_bridge.as_deref() {
-                Some(owner) if !owner.is_empty() && !bridge_id.is_empty() && owner != bridge_id => {
+            match (pair_owner(store), peer) {
+                (PairOwner::Bridge(owner), Some(peer)) if owner != peer => {
                     debug!("[hue-cred] keychain pair belongs to another bridge — not using it");
                 }
                 _ => {
@@ -736,10 +819,19 @@ pub fn resolve_hue_credentials(
 }
 
 /// Resolved application key returned by `resolve_hue_app_key`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ResolvedHueAppKey {
     pub username: String,
     pub backend: CredentialBackend,
+}
+
+impl std::fmt::Debug for ResolvedHueAppKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedHueAppKey")
+            .field("username", &REDACTED)
+            .field("backend", &self.backend)
+            .finish()
+    }
 }
 
 /// Resolve the Hue application key alone, keychain-first.
@@ -754,6 +846,10 @@ pub struct ResolvedHueAppKey {
 ///
 /// `fallback_username` is the request-supplied value, kept for legacy installs
 /// and for platforms where `default_store()` degraded to `NoopStore`.
+///
+/// The owner check for this key is made where it is sent, not here: callers
+/// hold an address, and only the TLS handshake learns which bridge is there.
+/// `transport::*_for_key` binds the connection to the pair's owner.
 ///
 /// `#[track_caller]` so the "no key" line below names the command that asked.
 /// Seven call sites reach this through `effective_hue_app_key`, and an unpaired
@@ -1105,7 +1201,7 @@ pub(crate) mod tests {
         let store = dir.store();
 
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Migrated);
         // Never `keychain`: the frontend clears its plaintext copy on that
         // literal alone, and a release build cannot read this file.
@@ -1117,7 +1213,7 @@ pub(crate) mod tests {
 
         // Re-running the same pair is a no-op write.
         assert_eq!(
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef"),
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef"),
             MigrationOutcome::Skipped
         );
     }
@@ -1140,7 +1236,7 @@ pub(crate) mod tests {
     fn migration_writes_both_keys_to_empty_store() {
         let store = InMemoryStore::default();
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Migrated);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_OK");
         assert_eq!(outcome.backend(&store), CredentialBackend::Keychain);
@@ -1158,9 +1254,9 @@ pub(crate) mod tests {
     fn migration_idempotent_when_values_already_match() {
         let store = InMemoryStore::default();
         let _ =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Skipped);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_SKIPPED");
         assert_eq!(outcome.backend(&store), CredentialBackend::Keychain);
@@ -1169,9 +1265,9 @@ pub(crate) mod tests {
     #[test]
     fn migration_overwrites_when_values_differ() {
         let store = InMemoryStore::default();
-        let _ = migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "old-user", "0011");
+        let _ = migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "old-user", "0011");
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "new-user", "ffee");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "new-user", "ffee");
         assert_eq!(outcome, MigrationOutcome::Migrated);
         assert_eq!(
             store.get(KEY_HUE_APP_KEY).unwrap().as_deref(),
@@ -1187,11 +1283,11 @@ pub(crate) mod tests {
     fn migration_rejects_empty_values() {
         let store = InMemoryStore::default();
         assert_eq!(
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "", "deadbeef"),
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "", "deadbeef"),
             MigrationOutcome::Failed
         );
         assert_eq!(
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", ""),
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", ""),
             MigrationOutcome::Failed
         );
         assert_eq!(store.get(KEY_HUE_APP_KEY).unwrap(), None);
@@ -1203,7 +1299,7 @@ pub(crate) mod tests {
         let store = InMemoryStore::default();
         store.fail_next_set();
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
         assert_eq!(outcome.status_code(), "HUE_CREDENTIAL_MIGRATION_FAILED");
         assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
@@ -1244,7 +1340,7 @@ pub(crate) mod tests {
             calls: std::sync::atomic::AtomicUsize::new(0),
         };
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
         // Rollback: the orphan app-key entry was cleaned up.
         assert_eq!(store.inner.get(KEY_HUE_APP_KEY).unwrap(), None);
@@ -1280,7 +1376,7 @@ pub(crate) mod tests {
             inner: InMemoryStore::default(),
         };
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
         assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
         // No half-written entry survives a failed verification.
@@ -1351,15 +1447,22 @@ pub(crate) mod tests {
     /// recorded whose it was, and the selected bridge lives in a separate
     /// store. Streaming to a bridge other than the one that issued the pair
     /// sent that bridge someone else's PSK identity.
-    #[test]
-    fn resolver_refuses_a_pair_that_belongs_to_a_different_bridge() {
+    const OWNER: &str = "001788fffe000a01";
+    const OTHER_BRIDGE: &str = "001788fffe000b02";
+
+    fn scoped_pair(owner: &str) -> InMemoryStore {
         let store = InMemoryStore::default();
         store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
         store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
-        store.set(KEY_HUE_BRIDGE_ID, "192.168.1.180").unwrap();
+        store.set(KEY_HUE_BRIDGE_ID, owner).unwrap();
+        store
+    }
 
-        let resolved =
-            resolve_hue_credentials(&store, "192.168.1.55", "fb-user", "fb-key").unwrap();
+    #[test]
+    fn resolver_refuses_a_pair_that_belongs_to_a_different_bridge() {
+        let store = scoped_pair(OWNER);
+
+        let resolved = resolve_hue_credentials(&store, OTHER_BRIDGE, "fb-user", "fb-key").unwrap();
 
         assert_eq!(
             resolved.username, "fb-user",
@@ -1373,23 +1476,17 @@ pub(crate) mod tests {
     /// and draw an auth error that reads as a dead key.
     #[test]
     fn resolver_returns_none_when_the_pair_is_another_bridges_and_there_is_no_fallback() {
-        let store = InMemoryStore::default();
-        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
-        store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
-        store.set(KEY_HUE_BRIDGE_ID, "192.168.1.180").unwrap();
+        let store = scoped_pair(OWNER);
 
-        assert!(resolve_hue_credentials(&store, "192.168.1.55", "", "").is_none());
+        assert!(resolve_hue_credentials(&store, OTHER_BRIDGE, "", "").is_none());
     }
 
     #[test]
     fn resolver_uses_the_pair_for_the_bridge_that_issued_it() {
-        let store = InMemoryStore::default();
-        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
-        store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
-        store.set(KEY_HUE_BRIDGE_ID, "192.168.1.180").unwrap();
+        let store = scoped_pair(OWNER);
 
         let resolved =
-            resolve_hue_credentials(&store, "192.168.1.180", "fb-user", "fb-key").unwrap();
+            resolve_hue_credentials(&store, "001788FFFE000A01", "fb-user", "fb-key").unwrap();
 
         assert_eq!(resolved.username, "kc-user");
         assert_eq!(resolved.backend, CredentialBackend::Keychain);
@@ -1404,21 +1501,17 @@ pub(crate) mod tests {
         store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
         store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
 
-        let resolved =
-            resolve_hue_credentials(&store, "192.168.1.55", "fb-user", "fb-key").unwrap();
+        let resolved = resolve_hue_credentials(&store, OTHER_BRIDGE, "fb-user", "fb-key").unwrap();
 
         assert_eq!(resolved.username, "kc-user");
         assert_eq!(resolved.backend, CredentialBackend::Keychain);
     }
 
-    /// A caller with no bridge in hand — the legacy boot migration — must not
-    /// be locked out of a scoped pair.
+    /// A caller with no bridge in hand — the stream start — must not be
+    /// locked out of a scoped pair.
     #[test]
     fn resolver_uses_a_scoped_pair_when_the_caller_names_no_bridge() {
-        let store = InMemoryStore::default();
-        store.set(KEY_HUE_APP_KEY, "kc-user").unwrap();
-        store.set(KEY_HUE_CLIENT_KEY, "kc-key").unwrap();
-        store.set(KEY_HUE_BRIDGE_ID, "192.168.1.180").unwrap();
+        let store = scoped_pair(OWNER);
 
         let resolved = resolve_hue_credentials(&store, "", "fb-user", "fb-key").unwrap();
 
@@ -1426,17 +1519,83 @@ pub(crate) mod tests {
         assert_eq!(resolved.backend, CredentialBackend::Keychain);
     }
 
+    /// Releases up to 1.5.5 recorded the owner as an IP address. After a DHCP
+    /// renewal the bridge answers elsewhere, and comparing addresses stranded
+    /// the DTLS pair on the HTTP fallback.
+    #[test]
+    fn a_pair_owned_by_a_legacy_address_still_resolves_after_the_address_changed() {
+        let store = scoped_pair("192.168.1.180");
+        assert_eq!(
+            pair_owner(&store),
+            PairOwner::LegacyAddress("192.168.1.180".to_string())
+        );
+
+        let resolved = resolve_hue_credentials(&store, OTHER_BRIDGE, "", "").unwrap();
+
+        assert_eq!(resolved.username, "kc-user");
+        assert_eq!(resolved.backend, CredentialBackend::Keychain);
+    }
+
+    #[test]
+    fn a_legacy_address_owner_is_rewritten_to_the_bridge_that_accepted_the_key() {
+        let store = scoped_pair("192.168.1.180");
+
+        adopt_bridge_owner(&store, "kc-user", "001788FFFE000A01");
+
+        assert_eq!(pair_owner(&store), PairOwner::Bridge(OWNER.to_string()));
+    }
+
+    #[test]
+    fn an_owner_is_adopted_only_for_the_keychain_key_and_never_replaces_a_bridge_id() {
+        let store = scoped_pair("192.168.1.180");
+        adopt_bridge_owner(&store, "plaintext-user", OWNER);
+        assert_eq!(
+            pair_owner(&store),
+            PairOwner::LegacyAddress("192.168.1.180".to_string()),
+            "a key the keychain does not hold proves nothing about its pair"
+        );
+
+        let store = scoped_pair(OWNER);
+        adopt_bridge_owner(&store, "kc-user", OTHER_BRIDGE);
+        assert_eq!(pair_owner(&store), PairOwner::Bridge(OWNER.to_string()));
+    }
+
     #[test]
     fn migration_records_which_bridge_the_pair_belongs_to() {
         let store = InMemoryStore::default();
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "kc-user", "kc-key");
+            migrate_hue_credentials_to_keychain(&store, "001788FFFE000A01", "kc-user", "kc-key");
 
         assert_eq!(outcome, MigrationOutcome::Migrated);
         assert_eq!(
             store.get(KEY_HUE_BRIDGE_ID).unwrap().as_deref(),
-            Some("192.168.1.180"),
+            Some(OWNER)
         );
+    }
+
+    /// A new pair written with no bridge in hand (the boot migration) must not
+    /// inherit the previous pair's owner — that would bind the new key to a
+    /// bridge that never issued it.
+    #[test]
+    fn a_new_pair_without_a_bridge_id_drops_the_previous_owner() {
+        let store = scoped_pair(OWNER);
+
+        let outcome = migrate_hue_credentials_to_keychain(&store, "", "new-user", "new-key");
+
+        assert_eq!(outcome, MigrationOutcome::Migrated);
+        assert_eq!(pair_owner(&store), PairOwner::Unscoped);
+    }
+
+    #[test]
+    fn a_resolved_pair_does_not_print_its_keys() {
+        let store = scoped_pair(OWNER);
+        let resolved = resolve_hue_credentials(&store, "", "", "").unwrap();
+        let app_key = resolve_hue_app_key(&store, "").unwrap();
+        for printed in [format!("{resolved:?}"), format!("{app_key:?}")] {
+            assert!(!printed.contains("kc-user"), "{printed}");
+            assert!(!printed.contains("kc-key"), "{printed}");
+            assert!(printed.contains(REDACTED), "{printed}");
+        }
     }
 
     // -------------------- app-key-only resolver scenarios --------------------
@@ -1602,8 +1761,12 @@ pub(crate) mod tests {
         assert!(resolve_hue_credentials(&store, "", "", "").is_none());
         assert!(resolve_hue_app_key(&store, "").is_none());
 
-        let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "fresh-user", "fresh-key");
+        let outcome = migrate_hue_credentials_to_keychain(
+            &store,
+            "001788fffe000a01",
+            "fresh-user",
+            "fresh-key",
+        );
         assert_eq!(outcome, MigrationOutcome::Migrated);
 
         let resolved = resolve_hue_credentials(&store, "", "", "").unwrap();
@@ -1620,7 +1783,7 @@ pub(crate) mod tests {
         let store = cached_over(&backing);
 
         assert_eq!(
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-1", "key-1"),
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-1", "key-1"),
             MigrationOutcome::Migrated
         );
         assert_eq!(
@@ -1631,7 +1794,7 @@ pub(crate) mod tests {
         );
 
         assert_eq!(
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-2", "key-2"),
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-2", "key-2"),
             MigrationOutcome::Migrated
         );
         let resolved = resolve_hue_credentials(&store, "", "", "").unwrap();
@@ -1662,7 +1825,7 @@ pub(crate) mod tests {
 
         let store = CachedStore::new(Box::new(LyingBacking));
         let outcome =
-            migrate_hue_credentials_to_keychain(&store, "192.168.1.180", "user-123", "deadbeef");
+            migrate_hue_credentials_to_keychain(&store, "001788fffe000a01", "user-123", "deadbeef");
         assert_eq!(outcome, MigrationOutcome::Failed);
         assert_eq!(outcome.backend(&store), CredentialBackend::PlaintextLegacy);
     }

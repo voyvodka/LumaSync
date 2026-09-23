@@ -119,6 +119,17 @@ export const HUE_STATUS = {
   CREDENTIAL_VALID: "HUE_CREDENTIAL_VALID",
   CREDENTIAL_INVALID: "HUE_CREDENTIAL_INVALID",
   CREDENTIAL_CHECK_FAILED: "HUE_CREDENTIAL_CHECK_FAILED",
+  /**
+   * The address answered with a certificate that is not the bridge's we
+   * expect: another bridge than the one the stored key belongs to, a
+   * certificate that no longer matches the one pinned on first contact, or
+   * a self-signed one from a bridge that used to present a Signify-signed
+   * one. Nothing carrying a key was sent. Emitted by `verify_hue_bridge_ip`,
+   * `pair_hue_bridge` and `validate_hue_credentials`; the other commands
+   * keep their own failure code and carry this token in `details`.
+   * Neither offline nor a dead key: re-pairing is the way back.
+   */
+  BRIDGE_IDENTITY_MISMATCH: "HUE_BRIDGE_IDENTITY_MISMATCH",
   AREA_LIST_OK: "HUE_AREA_LIST_OK",
   AREA_LIST_EMPTY: "HUE_AREA_LIST_EMPTY",
   AREA_LIST_FAILED: "HUE_AREA_LIST_FAILED",

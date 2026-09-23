@@ -46,14 +46,18 @@ use super::retry::{
 use super::sender::signal_shutdown_complete;
 use super::sender::{
     apply_channel_placements, build_hue_sender, deactivate_with_token, fetch_area_channels,
-    fetch_lights_for_channels, hue_http_client, hue_http_client_with_timeout, is_shutdown_signaled,
-    wait_for_shutdown, HueLightFetch, HueLightMetadata, SpawnedHueSender, HUE_HTTP_TIMEOUT_MS,
+    fetch_lights_for_channels, is_shutdown_signaled, wait_for_shutdown, HueLightFetch,
+    HueLightMetadata, SpawnedHueSender,
 };
 use super::state_store::{
     acquire_hue_runtime, channels_to_info_via_owner, commit_solid_color, flush_pending_solid_color,
     make_result, queue_solid_color, status_with, HueRuntimeActionHint, HueRuntimeCommandResult,
     HueRuntimeGateEvidence, HueRuntimeOwner, HueRuntimeState, HueRuntimeStateStore,
     HueRuntimeTriggerSource, HueSolidColorSnapshot, SetHueSolidColorRequest, StartHueStreamRequest,
+};
+use super::transport::{
+    blocking_client_for_key, blocking_client_with_timeout, is_valid_bridge_addr, trust_for_app_key,
+    HUE_HTTP_TIMEOUT_MS,
 };
 
 // ---------------------------------------------------------------------------
@@ -104,6 +108,18 @@ pub async fn get_hue_area_channels(
     area_id: String,
     runtime_state: State<'_, HueRuntimeStateStore>,
 ) -> Result<HueAreaChannelListResponse, String> {
+    if !is_valid_bridge_addr(&bridge_ip) {
+        return Ok(HueAreaChannelListResponse {
+            status: area_channels_status(
+                "HUE_AREA_CHANNELS_FAILED",
+                "Could not load Hue entertainment channels for the selected area.",
+                Some(format!(
+                    "`{bridge_ip}` is not a local-network bridge address."
+                )),
+            ),
+            channels: Vec::new(),
+        });
+    }
     // Fast path: reuse channels already resolved by the running stream (brief lock, no I/O).
     if let Some(channels) = channels_to_info_via_owner(&runtime_state, &area_id) {
         return Ok(ok_or_empty(channels));
@@ -224,6 +240,10 @@ pub async fn start_hue_stream(
     // every downstream reader, including the stored `ActiveHueStream`, takes
     // the key from this one field. See docs/architecture/hue.md.
     request.username = effective_hue_app_key(&request.username);
+
+    // A stop still restoring lights leaves the runtime `Idle`; reading the
+    // area now would snapshot a half-restored state.
+    runtime_state.wait_for_stop_to_settle().await;
 
     let trigger = request
         .trigger_source
@@ -513,8 +533,12 @@ pub async fn stop_hue_stream(
 ) -> Result<HueRuntimeCommandResult, String> {
     let trigger = trigger_source.unwrap_or(HueRuntimeTriggerSource::System);
     let runtime = runtime_state.runtime_arc();
-    let stopped =
-        tokio::task::spawn_blocking(move || stop_hue_runtime(&runtime, trigger, None)).await;
+    let in_flight = Arc::clone(&runtime_state.stop_in_flight).lock_owned().await;
+    let stopped = tokio::task::spawn_blocking(move || {
+        let _in_flight = in_flight;
+        stop_hue_runtime(&runtime, trigger, None)
+    })
+    .await;
     Ok(stopped.unwrap_or_else(|_join_err| {
         error!("stop_hue_stream task panicked; reporting the runtime as it stands.");
         make_result(&acquire_hue_runtime(&runtime_state.runtime))
@@ -595,7 +619,9 @@ fn stop_hue_runtime(
     if let Some((ip, username, area_id, token)) = dtls_deactivate {
         let request_timeout =
             remaining(Duration::from_millis(HUE_HTTP_TIMEOUT_MS)).max(Duration::from_millis(100));
-        if let Ok(client) = hue_http_client_with_timeout(request_timeout) {
+        if let Ok(client) =
+            blocking_client_with_timeout(&trust_for_app_key(&username), request_timeout)
+        {
             let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
         }
     }
@@ -652,6 +678,7 @@ pub async fn restart_hue_stream(
 ) -> Result<HueRuntimeCommandResult, String> {
     // Same ordering rule as `start_hue_stream` — resolve before any reader.
     request.username = effective_hue_app_key(&request.username);
+    runtime_state.wait_for_stop_to_settle().await;
 
     let trigger = request
         .trigger_source
@@ -682,7 +709,7 @@ pub async fn restart_hue_stream(
     // Best-effort, dedupe-aware DTLS deactivation outside the lock.
     if let Some((ip, username, area_id, token)) = dtls_deactivate {
         let _ = tokio::task::spawn_blocking(move || {
-            if let Ok(client) = hue_http_client() {
+            if let Ok(client) = blocking_client_for_key(&username) {
                 let _ = deactivate_with_token(&token, &client, &ip, &username, &area_id);
             }
         })
@@ -1066,8 +1093,8 @@ mod tests {
 /// The light restore, driven through the real start pipeline and the real stop
 /// command against a local HTTPS bridge. Readiness and the keychain read are
 /// the only parts skipped: the gate result is fed in the way the commands feed
-/// it, because `is_valid_ipv4` refuses a loopback bridge and the test binary
-/// must not touch the OS keychain.
+/// it, because `validate_bridge_addr` refuses a loopback bridge and the test
+/// binary must not touch the OS keychain.
 #[cfg(test)]
 mod light_restore_flow {
     use std::sync::mpsc::sync_channel;
@@ -1507,5 +1534,133 @@ mod light_restore_flow {
 
         let ids: Vec<String> = hue.light_puts().into_iter().map(|(id, _)| id).collect();
         assert_eq!(ids, vec!["light-1", "light-2", "light-3"]);
+    }
+
+    // ── a start arriving while a stop is still restoring ─────────────────
+
+    /// Three lights, off before the stream; each restore PUT takes 150 ms to
+    /// answer and, like a real bridge, changes what the next GET reports.
+    fn slow_restoring_area() -> FakeHue {
+        let lights = [
+            ("light-1", light_json(false, 30.0, Some(367), (0.45, 0.41))),
+            ("light-2", light_json(false, 40.0, Some(300), (0.44, 0.40))),
+            ("light-3", light_json(false, 50.0, None, (0.30, 0.30))),
+        ];
+        let ids: Vec<&str> = lights.iter().map(|(id, _)| *id).collect();
+        FakeHue::start_applying_puts(&[(AREA, &ids)], &lights, |_| {
+            Reply::ok().after(Duration::from_millis(150))
+        })
+    }
+
+    /// The bridge's post-stream state: colour back, every lamp on.
+    fn lights_left_on(hue: &FakeHue) {
+        for (id, light) in [
+            ("light-1", light_json(true, 30.0, Some(367), (0.45, 0.41))),
+            ("light-2", light_json(true, 40.0, Some(300), (0.44, 0.40))),
+            ("light-3", light_json(true, 50.0, None, (0.30, 0.30))),
+        ] {
+            hue.set_light(id, light);
+        }
+    }
+
+    async fn once_the_restore_has_begun(hue: &FakeHue) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while hue.light_puts().is_empty() {
+            assert!(Instant::now() < deadline, "the stop never began restoring");
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    /// The runtime reads `Idle` for the whole restore, so a start issued
+    /// then used to snapshot the lights the restore had not reached yet —
+    /// still on — and its own stop later switched them back on.
+    #[tokio::test]
+    async fn a_start_during_a_stops_restore_snapshots_the_restored_lights() {
+        let hue = slow_restoring_area();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        lights_left_on(&hue);
+
+        let store = app.state::<HueRuntimeStateStore>();
+        let (stopped, _) = tokio::join!(stop_hue_stream(None, app.state()), async {
+            once_the_restore_has_begun(&hue).await;
+            // What `start_hue_stream` does before it reads the bridge.
+            store.wait_for_stop_to_settle().await;
+            start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        });
+
+        let snapshot: Vec<_> = ["light-1", "light-2", "light-3"]
+            .into_iter()
+            .map(|light| (light, held_light_on(&runtime, light)))
+            .collect();
+        // Ended before asserting, so a failure does not leave the second
+        // session's reconnect monitor blocking the runtime's shutdown.
+        stop_hue_stream(None, app.state()).await.unwrap();
+
+        assert_eq!(stopped.unwrap().status.code, "HUE_STREAM_STOPPED");
+        for (light, on) in snapshot {
+            assert_eq!(on, Some(false), "{light} was snapshotted mid-restore");
+        }
+    }
+
+    // Readiness refuses a loopback address, so the command under test ends at
+    // its gate without touching the bridge; only when it finishes counts. One
+    // that waited finishes after the restore has sent all three PUTs.
+
+    #[tokio::test]
+    async fn start_hue_stream_waits_for_a_stop_in_flight() {
+        let hue = slow_restoring_area();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        lights_left_on(&hue);
+
+        let (_, sent) = tokio::join!(stop_hue_stream(None, app.state()), async {
+            once_the_restore_has_begun(&hue).await;
+            start_hue_stream(request(&hue, AREA), app.state())
+                .await
+                .unwrap();
+            hue.light_puts().len()
+        });
+
+        assert_eq!(sent, 3, "the start ran inside the restore");
+    }
+
+    #[tokio::test]
+    async fn restart_hue_stream_waits_for_a_stop_in_flight() {
+        let hue = slow_restoring_area();
+        let app = app();
+        let runtime = runtime_of(&app);
+        start(&runtime, &request(&hue, AREA), BringUpKind::Start).await;
+        lights_left_on(&hue);
+
+        let (_, sent) = tokio::join!(stop_hue_stream(None, app.state()), async {
+            once_the_restore_has_begun(&hue).await;
+            restart_hue_stream(request(&hue, AREA), app.state())
+                .await
+                .unwrap();
+            hue.light_puts().len()
+        });
+
+        assert_eq!(sent, 3, "the restart ran inside the restore");
+    }
+
+    #[tokio::test]
+    async fn area_channels_refuse_an_address_off_the_local_network() {
+        let app = app();
+        // Only addresses that fail without leaving the machine, should the
+        // guard ever be dropped.
+        for address in ["127.0.0.1", "0.0.0.0", "999.1.1.1"] {
+            let response =
+                get_hue_area_channels(address.into(), String::new(), AREA.into(), app.state())
+                    .await
+                    .unwrap();
+            assert_eq!(
+                response.status.code, "HUE_AREA_CHANNELS_FAILED",
+                "{address}"
+            );
+            assert!(response.channels.is_empty());
+        }
     }
 }

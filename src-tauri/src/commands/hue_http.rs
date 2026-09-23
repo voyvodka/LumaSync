@@ -260,7 +260,9 @@ pub(crate) async fn classify_hue_response(
     let origin = ResponseOrigin::of(response.url(), response.headers());
     // Body drain must succeed-or-fail-closed: if we cannot read the body
     // we cannot prove unauthorized, so fall through to `Transient`.
-    let body = response.text().await.unwrap_or_default();
+    let body = super::hue::transport::read_body(response)
+        .await
+        .unwrap_or_default();
     Err(classify_status(status_code, &body, &origin).with_retry_after(retry_after_ms))
 }
 
@@ -279,7 +281,7 @@ pub(crate) fn classify_hue_response_blocking(
     let status_code = status.as_u16();
     let retry_after_ms = parse_retry_after_ms(response.headers());
     let origin = ResponseOrigin::of(response.url(), response.headers());
-    let body = response.text().unwrap_or_default();
+    let body = super::hue::transport::read_body_blocking(response).unwrap_or_default();
     Err(classify_status(status_code, &body, &origin).with_retry_after(retry_after_ms))
 }
 

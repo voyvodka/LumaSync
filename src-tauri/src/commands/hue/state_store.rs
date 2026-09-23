@@ -29,6 +29,7 @@ use std::time::Instant;
 use log::error;
 use serde::{Deserialize, Serialize};
 
+use super::credential_store::REDACTED;
 use super::frame::{HueAreaChannel, HueColorSender};
 use super::light_restore::HueLightRestore;
 use super::sender::{is_shutdown_signaled, DeactivateToken, ShutdownSignal};
@@ -104,7 +105,7 @@ pub struct HueRuntimeCommandResult {
 
 /// Parameters needed to start (or restart) the Hue entertainment stream for
 /// a given bridge and area.
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartHueStreamRequest {
     pub bridge_ip: String,
@@ -116,6 +117,19 @@ pub struct StartHueStreamRequest {
     /// bridge's `channel_id` — a positional array would reintroduce the ordinal
     /// this replaced. Absent ⇒ every channel keeps the bridge's position.
     pub channel_placements: Option<Vec<HueChannelPlacementOverride>>,
+}
+
+impl std::fmt::Debug for StartHueStreamRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StartHueStreamRequest")
+            .field("bridge_ip", &self.bridge_ip)
+            .field("username", &REDACTED)
+            .field("client_key", &REDACTED)
+            .field("area_id", &self.area_id)
+            .field("trigger_source", &self.trigger_source)
+            .field("channel_placements", &self.channel_placements)
+            .finish()
+    }
 }
 
 /// One channel's locally authored position. The screen region is never carried:
@@ -274,7 +288,7 @@ pub(crate) struct HueRuntimeOwner {
     pub(crate) light_restore: Option<HueLightRestore>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct HueActiveStreamContext {
     pub(crate) bridge_ip: String,
     pub(crate) username: String,
@@ -294,6 +308,21 @@ pub(crate) struct HueActiveStreamContext {
     /// callers no-op. Introduced in v1.5.2 A1.3 to fix the duplicate-PUT
     /// race that produced "phantom active streamer" 403s.
     pub(crate) deactivate_token: Arc<DeactivateToken>,
+}
+
+impl std::fmt::Debug for HueActiveStreamContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HueActiveStreamContext")
+            .field("bridge_ip", &self.bridge_ip)
+            .field("username", &REDACTED)
+            .field("area_id", &self.area_id)
+            .field("channels", &self.channels)
+            .field("color_sender", &self.color_sender)
+            .field("uses_dtls", &self.uses_dtls)
+            .field("shutdown_signal", &self.shutdown_signal)
+            .field("deactivate_token", &self.deactivate_token)
+            .finish()
+    }
 }
 
 /// Lock-free snapshot of the channels + sender needed to push color, read by
@@ -341,21 +370,38 @@ impl Default for HueRuntimeOwner {
 /// Tauri-managed handle wrapping the mutex-guarded `HueRuntimeOwner`.
 pub struct HueRuntimeStateStore {
     pub(crate) runtime: Arc<Mutex<HueRuntimeOwner>>,
+    /// Held by `stop_hue_stream` from its first lock until the light restore
+    /// has finished. The runtime reads `Idle` for all of that, so without it a
+    /// start could snapshot lights the restore had not reached yet and later
+    /// write that half-restored state back. See docs/architecture/hue.md.
+    pub(crate) stop_in_flight: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl Default for HueRuntimeStateStore {
     fn default() -> Self {
-        Self {
-            runtime: Arc::new(Mutex::new(HueRuntimeOwner::default())),
-        }
+        Self::with_runtime(HueRuntimeOwner::default())
     }
 }
 
 impl HueRuntimeStateStore {
+    pub(crate) fn with_runtime(owner: HueRuntimeOwner) -> Self {
+        Self {
+            runtime: Arc::new(Mutex::new(owner)),
+            stop_in_flight: Arc::new(tokio::sync::Mutex::new(())),
+        }
+    }
+
     /// Clone the shared runtime handle for use outside the Tauri `State<>`
     /// extractor (e.g. background tasks like the reconnect monitor).
     pub fn runtime_arc(&self) -> Arc<Mutex<HueRuntimeOwner>> {
         Arc::clone(&self.runtime)
+    }
+
+    /// Wait for a stop in flight, restore included, to finish. Starts call
+    /// this before anything reads the bridge; it does not hold anything, so a
+    /// later stop can still overtake the start it let through.
+    pub(crate) async fn wait_for_stop_to_settle(&self) {
+        drop(self.stop_in_flight.lock().await);
     }
 }
 
@@ -784,15 +830,42 @@ mod tests {
         assert!(owner.pending_solid_color.is_some());
         assert!(rx.try_recv().is_err());
     }
+
+    /// A stray `{:?}` in a log line must not print either key.
+    #[test]
+    fn key_carrying_runtime_structs_do_not_print_their_keys() {
+        let request = StartHueStreamRequest {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "secret-app-key".to_string(),
+            client_key: "secret-client-key".to_string(),
+            area_id: "area".to_string(),
+            trigger_source: None,
+            channel_placements: None,
+        };
+        let mut context = dummy_active_stream_context();
+        context.username = "secret-app-key".to_string();
+        let restore = HueLightRestore {
+            bridge_ip: "192.168.1.2".to_string(),
+            username: "secret-app-key".to_string(),
+            area_id: "area".to_string(),
+            lights: Vec::new(),
+        };
+        for printed in [
+            format!("{request:?}"),
+            format!("{context:?}"),
+            format!("{restore:?}"),
+        ] {
+            assert!(!printed.contains("secret-"), "{printed}");
+            assert!(printed.contains("192.168.1.2"), "{printed}");
+        }
+    }
     // ---------------------------------------------------------------------
     // channels_to_info_via_owner — the cache answers an identity question, so
     // every arm has to prove it matched the area it was asked about.
     // ---------------------------------------------------------------------
 
     fn store_with(owner: HueRuntimeOwner) -> HueRuntimeStateStore {
-        HueRuntimeStateStore {
-            runtime: Arc::new(Mutex::new(owner)),
-        }
+        HueRuntimeStateStore::with_runtime(owner)
     }
 
     #[test]

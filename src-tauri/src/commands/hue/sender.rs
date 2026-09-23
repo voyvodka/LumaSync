@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
-use std::sync::{Arc, Condvar, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -32,12 +32,9 @@ use super::frame::{
 };
 use super::light_restore::{parse_light_state, HueLightSnapshot};
 use super::state_store::HueChannelPlacementOverride;
-
-// ---------------------------------------------------------------------------
-// HTTP client tunables
-// ---------------------------------------------------------------------------
-
-pub(crate) const HUE_HTTP_TIMEOUT_MS: u64 = 5_000;
+use super::transport::{
+    async_client_for_key, blocking_client_for_key, read_body, read_body_blocking, send_error_text,
+};
 
 /// Minimum interval between Hue color pushes in the background sender thread.
 /// 50ms = 20 Hz max, well within CLIP v2 limits and imperceptibly fast.
@@ -190,7 +187,12 @@ fn activate_entertainment_config(
     // before this point now describes a state that no longer exists.
     invalidate_hue_area_cache();
 
-    let response = sent.map_err(|e| format!("ENTERTAINMENT_ACTIVATE_SEND_FAILED: {e}"))?;
+    let response = sent.map_err(|e| {
+        format!(
+            "ENTERTAINMENT_ACTIVATE_SEND_FAILED: {}",
+            send_error_text(&e)
+        )
+    })?;
 
     classify_hue_response_blocking(response)
         .map(|_| ())
@@ -221,11 +223,16 @@ pub(crate) fn deactivate_entertainment_config(
 
     invalidate_hue_area_cache();
 
-    let response = sent.map_err(|e| format!("ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {e}"))?;
+    let response = sent.map_err(|e| {
+        format!(
+            "ENTERTAINMENT_DEACTIVATE_SEND_FAILED: {}",
+            send_error_text(&e)
+        )
+    })?;
 
     let status = response.status();
     if !status.is_success() {
-        let body = response.text().unwrap_or_default();
+        let body = read_body_blocking(response).unwrap_or_default();
         return Err(format!(
             "ENTERTAINMENT_DEACTIVATE_FAILED: HTTP {status} — {body}"
         ));
@@ -808,46 +815,6 @@ pub(crate) fn spawn_hue_http_sender(
 }
 
 // ---------------------------------------------------------------------------
-// Reqwest client constructors (shared blocking client + per-call async client)
-// ---------------------------------------------------------------------------
-
-static HUE_BLOCKING_CLIENT: OnceLock<Arc<BlockingClient>> = OnceLock::new();
-
-pub(crate) fn hue_http_client() -> Result<BlockingClient, String> {
-    hue_http_client_with_timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
-}
-
-/// For a caller with its own deadline (the quit path), which cannot afford the
-/// default timeout on a single request.
-pub(crate) fn hue_http_client_with_timeout(timeout: Duration) -> Result<BlockingClient, String> {
-    BlockingClient::builder()
-        .timeout(timeout)
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|error| error.to_string())
-}
-
-pub(crate) fn hue_http_client_arc() -> Result<Arc<BlockingClient>, String> {
-    Ok(Arc::clone(HUE_BLOCKING_CLIENT.get_or_init(|| {
-        Arc::new(
-            BlockingClient::builder()
-                .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
-                .danger_accept_invalid_certs(true)
-                .build()
-                .expect("Failed to build Hue blocking HTTP client"),
-        )
-    })))
-}
-
-fn async_hue_http_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_millis(HUE_HTTP_TIMEOUT_MS))
-        .danger_accept_invalid_certs(true)
-        .build()
-        .map_err(|error| error.to_string())
-}
-
-// ---------------------------------------------------------------------------
 // Channel resolution from the bridge
 // ---------------------------------------------------------------------------
 
@@ -859,7 +826,7 @@ pub(crate) async fn fetch_area_channels(
     username: &str,
     area_id: &str,
 ) -> Result<Vec<HueAreaChannel>, AreaListError> {
-    let client = async_hue_http_client().map_err(AreaListError::Other)?;
+    let client = async_client_for_key(username).map_err(AreaListError::Other)?;
     let endpoint =
         format!("https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{area_id}");
     // `error_for_status` bypassed the 403 classifier, so an expired key
@@ -869,17 +836,14 @@ pub(crate) async fn fetch_area_channels(
         .header("hue-application-key", username)
         .send()
         .await
-        .map_err(|error| AreaListError::Unreachable(error.to_string()))?;
+        .map_err(|error| AreaListError::Unreachable(send_error_text(&error)))?;
     let response = classify_hue_response(response)
         .await
         .map_err(|fault| match fault {
             HueHttpFault::AuthInvalid => AreaListError::AuthInvalid,
             other => AreaListError::Other(other.to_string()),
         })?;
-    let payload = response
-        .text()
-        .await
-        .map_err(|error| AreaListError::Other(error.to_string()))?;
+    let payload = read_body(response).await.map_err(AreaListError::Other)?;
 
     let parsed: Value =
         serde_json::from_str(&payload).map_err(|error| AreaListError::Other(error.to_string()))?;
@@ -915,11 +879,11 @@ pub(crate) async fn fetch_area_channels(
             .header("hue-application-key", username)
             .send()
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| send_error_text(&error))?;
         let response = classify_hue_response(response)
             .await
             .map_err(|fault| fault.to_string())?;
-        let payload = response.text().await.map_err(|error| error.to_string())?;
+        let payload = read_body(response).await?;
         serde_json::from_str::<Value>(&payload).map_err(|error| error.to_string())
     }
 
@@ -1153,10 +1117,15 @@ pub(crate) fn build_hue_sender(
     // the plaintext shellStore fields. When the keychain holds both
     // halves we use those over the request values; this is the path
     // every v1.5+ user takes after the first successful pairing.
+    //
+    // No peer bridge id is passed: the pair's owner is enforced on the HTTPS
+    // legs that precede DTLS (the forced readiness read and the activate PUT
+    // below both go through a client bound to it), and comparing the address
+    // instead is what stranded the pair after a DHCP renewal.
     let store = super::credential_store::default_store();
     let resolved = super::credential_store::resolve_hue_credentials(
         store.as_ref(),
-        &request.bridge_ip,
+        "",
         &request.username,
         &request.client_key,
     );
@@ -1183,7 +1152,7 @@ pub(crate) fn build_hue_sender(
     let deactivate_token = DeactivateToken::new();
 
     if has_client_key {
-        match hue_http_client_arc() {
+        match blocking_client_for_key(&resolved_username) {
             Ok(client) => {
                 // Spawn DTLS attempt on a dedicated OS thread with a hard deadline.
                 // DTLS handshake can block indefinitely if the bridge ignores UDP:2100 —
@@ -1294,7 +1263,7 @@ pub(crate) fn build_hue_sender(
         }
     } else {
         info!("No clientKey provided, using HTTP fallback sender.");
-        match hue_http_client_arc() {
+        match blocking_client_for_key(&resolved_username) {
             Ok(client) => {
                 let (sender, shutdown) = spawn_hue_http_sender(
                     client,
@@ -1411,10 +1380,7 @@ pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightM
 
 /// Fetch `/clip/v2/resource/light/{light_id}` and return its `data[0]` item,
 /// reusing a caller-supplied `reqwest::Client` so an entire batch of light
-/// fetches (W1-C3a hot path) shares one TLS-configured client instead of
-/// rebuilding one per light. The client MUST carry the same
-/// `danger_accept_invalid_certs(true)` + timeout config as
-/// `async_hue_http_client` (the Hue bridge presents a self-signed cert).
+/// fetches (W1-C3a hot path) shares one client — and its pooled connection.
 ///
 /// Errors propagate as a string so the caller can decide whether to fall back
 /// to `HueGamutType::Other` (loud) or skip the clipping step (silent).
@@ -1440,11 +1406,11 @@ async fn fetch_light_item_with_client(
         .header("hue-application-key", username)
         .send()
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| send_error_text(&error))?;
     let response = classify_hue_response(response)
         .await
         .map_err(|fault| fault.to_string())?;
-    let body = response.text().await.map_err(|error| error.to_string())?;
+    let body = read_body(response).await?;
     let mut value: Value = serde_json::from_str(&body).map_err(|error| error.to_string())?;
     value
         .get_mut("data")
@@ -1518,13 +1484,11 @@ pub(crate) async fn fetch_lights_for_channels(
     channels: &[HueAreaChannel],
 ) -> HueLightFetch {
     let mut out = HueLightFetch::default();
-    // Build the HTTP client ONCE and reuse it across every light fetch, mirroring
-    // how `fetch_area_channels` threads a single client through its fan-out.
-    // Building a fresh `reqwest::Client` per light reran TLS config N times per
-    // area activation (and again on every reconnect). If the client cannot be
+    // One client across every light fetch, mirroring how `fetch_area_channels`
+    // threads a single client through its fan-out. If the client cannot be
     // built we cannot fetch any metadata — return the empty cache so the frame
     // builder treats every light as `HueGamutType::Other` (the graceful default).
-    let client = match async_hue_http_client() {
+    let client = match async_client_for_key(username) {
         Ok(client) => client,
         Err(err) => {
             warn!("light metadata HTTP client build failed: {err}; falling back to HueGamutType::Other for all lights");

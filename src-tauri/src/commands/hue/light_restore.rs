@@ -14,8 +14,10 @@ use log::{info, warn};
 use serde_json::{json, Value};
 
 use super::super::hue_http::{classify_hue_response_blocking, HueHttpFault};
-use super::sender::{hue_http_client_arc, RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
+use super::credential_store::REDACTED;
+use super::sender::{RequestPacer, HUE_HTTP_FALLBACK_MAX_REQUESTS_PER_SEC};
 use super::state_store::HueRuntimeOwner;
+use super::transport::{blocking_client_for_key, read_body_blocking, send_error_text};
 
 /// Ceiling on one interactive restore. At the ~10 req/s light budget this
 /// covers ~25 lights; a bigger area is restored as far as the budget reaches.
@@ -58,12 +60,23 @@ pub(crate) struct HueLightSnapshot {
 
 /// What one logical Hue session found before it first started streaming,
 /// keyed by bridge + area. Held in `HueRuntimeOwner::light_restore`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct HueLightRestore {
     pub(crate) bridge_ip: String,
     pub(crate) username: String,
     pub(crate) area_id: String,
     pub(crate) lights: Vec<HueLightSnapshot>,
+}
+
+impl std::fmt::Debug for HueLightRestore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HueLightRestore")
+            .field("bridge_ip", &self.bridge_ip)
+            .field("username", &REDACTED)
+            .field("area_id", &self.area_id)
+            .field("lights", &self.lights)
+            .finish()
+    }
 }
 
 impl HueLightRestore {
@@ -243,7 +256,7 @@ pub(crate) fn restore_lights(
     if total == 0 {
         return report;
     }
-    let client = match hue_http_client_arc() {
+    let client = match blocking_client_for_key(&restore.username) {
         Ok(client) => client,
         Err(err) => {
             warn!(
@@ -355,12 +368,12 @@ fn put_light_state(
         .send()
     {
         Ok(response) => response,
-        Err(err) => return PutOutcome::Unreachable(err.to_string()),
+        Err(err) => return PutOutcome::Unreachable(send_error_text(&err)),
     };
     match classify_hue_response_blocking(response) {
         Ok(response) => {
             // A 2xx can still carry per-property refusals in `errors[]`.
-            let body = response.text().unwrap_or_default();
+            let body = read_body_blocking(response).unwrap_or_default();
             let errors = serde_json::from_str::<Value>(&body)
                 .ok()
                 .and_then(|value| value.get("errors").and_then(Value::as_array).cloned())

@@ -472,6 +472,15 @@ pub fn run() {
                 ),
             }
 
+            // Bridge certificate pins are a file, not keychain items, in every
+            // build — docs/architecture/hue.md. Before any Hue command runs.
+            match app.path().app_data_dir() {
+                Ok(dir) => commands::hue::pin_store::init_pin_store(dir),
+                Err(error) => log::warn!(
+                    "[hue-tls] no app data dir — certificate pins last for this session only: {error}"
+                ),
+            }
+
             // Build tray menu
             let (menu, tray_state) = build_tray_menu(app.handle())?;
             let app_handle = app.handle().clone();
