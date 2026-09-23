@@ -500,6 +500,18 @@ pub struct LightingRuntimeState {
     runtime: Mutex<LightingRuntimeOwner>,
 }
 
+#[cfg(test)]
+impl LightingRuntimeState {
+    /// Swaps the serial write path, so an IPC test sees every write — and
+    /// every port open — a mode change would make.
+    pub(crate) fn replace_output_bridge_for_tests(&self, bridge: LedOutputBridge) {
+        self.runtime
+            .lock()
+            .expect("lighting runtime lock poisoned")
+            .output_bridge = bridge;
+    }
+}
+
 fn command_status(code: &str, message: &str, details: Option<String>) -> CommandStatus {
     CommandStatus {
         code: code.to_string(),
@@ -1965,13 +1977,16 @@ fn apply_mode_change_inner(
     let is_test = owner.preview.pending_test_pattern.is_some();
 
     // Resolve the "usb" channel once. A registered WLED sink takes priority
-    // over the raw serial-connection snapshot (see `UsbOutputPlan`); a pure
-    // serial session collapses to exactly the old `connected_port` behavior.
+    // over the serial-connection snapshot (see `UsbOutputPlan`). A serial plan
+    // needs a port that is connected now: a name alone was never admitted by
+    // `connect_serial_port`, and opening it would bypass the allowlist.
+    // See docs/architecture/device-output.md.
+    let serial_port = connected_port.filter(|_| device_connected);
     let usb_plan: Option<UsbOutputPlan> = match wled_sink {
         Some(cfg) => Some(UsbOutputPlan::Wled(cfg)),
-        None => connected_port.map(|p| UsbOutputPlan::Serial(p.to_string())),
+        None => serial_port.map(|p| UsbOutputPlan::Serial(p.to_string())),
     };
-    let usb_available = device_connected || usb_plan.is_some();
+    let usb_available = usb_plan.is_some();
 
     // USB gate: only applies when USB is a required target (per D-01).
     if normalized_next.kind != LightingModeKind::Off && needs_usb && !usb_available && !is_test {
@@ -2407,7 +2422,7 @@ fn apply_mode_change_inner(
                     owner.active_mode = normalized_next;
                     owner.preview.active_test_pattern = test_pattern;
                     owner.preview.pattern_live = pattern_live;
-                    if let Some(p) = connected_port {
+                    if let Some(p) = serial_port {
                         set_active_port(owner, p.to_string());
                     }
                     make_result(
@@ -2871,7 +2886,7 @@ pub fn start_led_test_pattern<R: Runtime>(
     let device_connected = connection_state
         .last_status
         .lock()
-        .map(|status| status.connected)
+        .map(|status| status.output_port().is_some())
         .map_err(|error| format!("LIGHTING_CONNECTION_STATE_LOCK_FAILED: {error}"))?;
     let wled_sink = sink_registry.active_wled_config();
     let hue_available = snapshot_hue_output_context(hue_runtime_state.inner())?
@@ -3784,6 +3799,45 @@ mod tests {
         let mut cleanup_trace = None;
         stop_previous(&mut owner, &mut cleanup_trace);
         wait_for_worker_count(0);
+    }
+
+    /// With nothing available, `start_led_test_pattern` sends `targets: []`,
+    /// which the legacy rule reads as "USB required" — and a test skips the USB
+    /// gate. Only the plan keeps a recorded but unconnected port from the worker.
+    #[test]
+    fn a_preview_only_test_pattern_never_writes_to_an_unconnected_port() {
+        let _guard = acquire_worker_test_guard();
+        let (mut owner, recorder) = owner_with_recording_sender();
+        owner.preview.pending_test_pattern = Some(super::TestPatternConfig {
+            kind: super::TestPatternKind::Solid { r: 255, g: 0, b: 0 },
+            brightness: 1.0,
+            speed: Default::default(),
+            display_aspect: 1.78,
+        });
+        let mut mode = ambilight_mode();
+        mode.targets = Some(Vec::new());
+
+        let result = apply_mode_change(
+            &mut owner,
+            mode,
+            false,
+            Some("/dev/cu.Bluetooth-Incoming-Port"),
+            None,
+            None,
+            Some(shared_runtime_telemetry()),
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "AMBILIGHT_MODE_STARTED");
+        thread::sleep(Duration::from_millis(200));
+        let writes = recorder.writes.lock().expect("writes lock").len();
+        let mut cleanup_trace = None;
+        stop_previous(&mut owner, &mut cleanup_trace);
+        wait_for_worker_count(0);
+
+        assert_eq!(writes, 0, "a preview-only test must not open the port");
+        assert_eq!(owner.active_port, None);
     }
 
     #[test]
@@ -4752,6 +4806,27 @@ mod lighting_mode_tests {
         );
 
         assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
+    }
+
+    /// A port name recorded while `connected` is false was never admitted by
+    /// `connect_serial_port`, so it must not become a serial plan.
+    #[test]
+    fn a_recorded_port_without_a_connection_does_not_arm_serial_output() {
+        let mut owner = owner_with_fake_sender();
+        let result = apply_mode_change(
+            &mut owner,
+            solid_with_targets(Some(vec!["usb".to_string()])),
+            false,
+            Some("/dev/cu.Bluetooth-Incoming-Port"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(result.status.code, "DEVICE_NOT_CONNECTED");
+        assert_eq!(owner.active_port, None);
     }
 
     #[test]

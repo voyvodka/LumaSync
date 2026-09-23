@@ -63,7 +63,7 @@ use commands::calibration::{
 };
 use commands::device_connection::{
     connect_serial_port, get_serial_connection_status, list_serial_ports, run_serial_health_check,
-    ActiveSinkRegistry, SerialConnectionState,
+    ActiveSinkRegistry, SerialConnectionState, SerialPortAccess,
 };
 use commands::hue::commands::{
     get_hue_area_channels, get_hue_stream_status, restart_hue_stream, set_hue_solid_color,
@@ -641,6 +641,7 @@ pub fn run() {
 
             app.manage(tray_state);
             app.manage(SerialConnectionState::default());
+            app.manage(SerialPortAccess::default());
             app.manage(ActiveSinkRegistry::default());
             app.manage(OverlayState::default());
             app.manage(LightingRuntimeState::default());

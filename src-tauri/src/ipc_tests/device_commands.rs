@@ -161,9 +161,8 @@ fn path_shaped_port_names_are_refused_without_becoming_the_status_port() {
     }
 }
 
-/// `apply_mode_change` plans USB output from the recorded port name even while
-/// `connected` is false, so a refused name left in the status would be opened
-/// and written to by the next mode change. The gate must hold instead.
+/// A refused name left in the status would be opened and written to by the
+/// next mode change. The gate must hold instead.
 #[test]
 fn refused_connect_does_not_arm_usb_output() {
     let app = mock_app(tauri::generate_handler![
