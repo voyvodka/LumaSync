@@ -22,6 +22,7 @@ import { useLightingModeOrchestrator } from "./features/mode/state/useLightingMo
 import { useHueBridgeReachability } from "./features/hue/state/useHueBridgeReachability";
 import {
   isHueSessionReconnecting,
+  isHueStreamFailed,
   useHueStreamHealth,
 } from "./features/hue/state/useHueStreamHealth";
 import { useHueSolidBootstrapSync } from "./features/hue/state/useHueSolidBootstrapSync";
@@ -161,6 +162,7 @@ function App() {
   const hueSessionActive = activeOutputTargets.includes("hue");
   const hueReconnecting = isHueSessionReconnecting(hueSessionActive, hueRuntimeState);
   const hueStreaming = hueSessionActive && !hueReconnecting;
+  const hueStreamFailed = isHueStreamFailed(hueRuntimeState);
   const hueProbe = useHueBridgeReachability(hueStartConfig, hueSessionActive);
   const hueReachable = hueProbe.reachable;
 
@@ -326,6 +328,7 @@ function App() {
     onRetryHueProbe: hueProbe.retry,
     hueStreaming,
     hueReconnecting,
+    hueStreamFailed,
     modeLockReason:
       modeGuard.reason === MODE_GUARD_REASONS.CALIBRATION_REQUIRED
         ? modeGuard.reason
@@ -373,6 +376,7 @@ function App() {
       localSink,
       hueStreaming,
       hueReconnecting,
+      hueFailed: hueStreamFailed,
       hueReachable,
       hueConfigured: hueStartConfig !== null,
       onOpenDevices: openDevicesSection,

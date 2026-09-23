@@ -189,6 +189,10 @@ export default {
       title: "Stream status unavailable",
       body: "Could not read the Hue stream's state. Checking again automatically.",
     },
+    failed: {
+      title: "Stream stopped",
+      body: "The Hue stream stopped and will not restart on its own. Start it again to resume.",
+    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Bridge rejected the position format.",
@@ -212,6 +216,7 @@ export default {
     confirmArea: "Confirm Area",
     validate: "Revalidate",
     reconnectNow: "Reconnect",
+    startAgain: "Start Again",
     retryStop: "Retry Stop",
     stopRetrying: "Stop",
     enterIp: "Verify IP",

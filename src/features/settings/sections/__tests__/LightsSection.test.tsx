@@ -163,6 +163,31 @@ describe("LightsSection", () => {
     expect(screen.queryByText("lights:dock.rows.hueSubStreaming")).not.toBeInTheDocument();
   });
 
+  // The health reconciler drops "hue" from the active targets on Failed, so
+  // the row fell through to "standby" beside the default green dot.
+  it("says the Hue stream stopped when the backend reports it Failed", () => {
+    render(
+      <LightsSection
+        mode={{ kind: "ambilight" }}
+        outputTargets={["hue"]}
+        localOutputConnected={false}
+        localSink={null}
+        hueConfigured={true}
+        hueReachable={true}
+        hueStreaming={false}
+        hueStreamFailed={true}
+        modeLockReason={null}
+        onModeChange={vi.fn()}
+        onOutputTargetsChange={vi.fn()}
+        onOpenCalibration={vi.fn()}
+      />,
+    );
+
+    const stopped = screen.getByText("lights:dock.rows.hueSubFailed");
+    expect(stopped.closest("button")).toHaveClass("is-failed");
+    expect(screen.queryByText("Bridge · standby")).not.toBeInTheDocument();
+  });
+
   it("calls onModeChange with ambilight payload when Ambilight is selected", async () => {
     const user = userEvent.setup();
     const onModeChange = vi.fn();

@@ -11,7 +11,7 @@ import {
   type HueRuntimeTarget,
 } from "@/shared/contracts/hue";
 
-import { readHueStreamStatus } from "../hueReadCache";
+import { readHueStreamStatus, subscribeHueStreamStatusInvalidation } from "../hueReadCache";
 
 /**
  * Cadence while the stream is alive. NOT a local read: `get_hue_stream_status`
@@ -54,6 +54,12 @@ export function isHueSessionReconnecting(
   runtimeState: HueRuntimeState | null,
 ): boolean {
   return sessionActive && runtimeState === HUE_RUNTIME_STATES.RECONNECTING;
+}
+
+/** The backend gave up on the Hue stream. Only ever seen while Hue is a
+ * selected output: the hook clears its state when it is not. */
+export function isHueStreamFailed(runtimeState: HueRuntimeState | null): boolean {
+  return runtimeState === HUE_RUNTIME_STATES.FAILED;
 }
 
 // Two-way Hue health reconciler. The restore direction is the fix: the poll
@@ -152,11 +158,20 @@ export function useHueStreamHealth({
       }
     };
 
+    // `Failed` holds until a start or stop, and the dead-stream cadence is slow:
+    // a held Failed must not outlive the mutation that may have ended it. Only
+    // the reading is dropped; the next poll still owns the target reconcile.
+    const unsubscribeInvalidation = subscribeHueStreamStatusInvalidation(() => {
+      if (!active) return;
+      setRuntimeState((prev) => (prev === HUE_RUNTIME_STATES.FAILED ? null : prev));
+    });
+
     void poll();
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
+      unsubscribeInvalidation();
       if (timerId !== null) {
         window.clearTimeout(timerId);
         timerId = null;

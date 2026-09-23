@@ -11,6 +11,7 @@ const healthy: StatusItemsInput = {
   localSink: { transport: "serial", id: "/dev/cu.usbserial-1420" } satisfies LocalSink,
   hueStreaming: true,
   hueReconnecting: false,
+  hueFailed: false,
   hueReachable: true,
   hueConfigured: true,
   onOpenDevices: () => {},
@@ -67,6 +68,15 @@ describe("buildStatusItems", () => {
         "HUE",
       ),
     ).toMatchObject({ state: "OFF", kind: "off" });
+  });
+
+  // The health reconciler drops "hue" from the active targets on Failed, so
+  // with a reachable bridge the chip used to fall through to a green OK.
+  it("reads a failed Hue stream as failed and links to Devices, even with the bridge reachable", () => {
+    const onOpenDevices = vi.fn();
+    const item = byLabel({ ...healthy, hueStreaming: false, hueFailed: true, onOpenDevices }, "HUE");
+    expect(item).toMatchObject({ state: "FAILED", kind: "error" });
+    expect(item.onReconnect).toBe(onOpenDevices);
   });
 
   // A bridge unreachable for hours kept "hue" in the active targets, so the

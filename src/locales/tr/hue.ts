@@ -192,6 +192,10 @@ const hue: Catalogue<typeof enHue> = {
       title: "Akış durumu okunamadı",
       body: "Hue akışının durumu okunamadı. Kendiliğinden yeniden kontrol ediliyor.",
     },
+    failed: {
+      title: "Yayın durdu",
+      body: "Hue yayını durdu ve kendiliğinden yeniden başlamayacak. Sürdürmek için yeniden başlat.",
+    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Köprü konum formatını reddetti.",
@@ -215,6 +219,7 @@ const hue: Catalogue<typeof enHue> = {
     confirmArea: "Alanı Onayla",
     validate: "Yeniden Doğrula",
     reconnectNow: "Yeniden Bağlan",
+    startAgain: "Yeniden Başlat",
     retryStop: "Durdurmayı Tekrarla",
     stopRetrying: "Durdur",
     enterIp: "IP Doğrula",

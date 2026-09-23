@@ -61,6 +61,7 @@ const lights: Catalogue<typeof enLights> = {
       hueSubStreaming: "Köprü · <b>DTLS {{hz}} Hz</b>",
       hueSubIdle: "Köprü · <b>bekleme</b>",
       hueSubReconnecting: "Köprü · <b>yeniden bağlanıyor</b>",
+      hueSubFailed: "Köprü · <b>yayın durdu</b>",
       hueSubUnavailable: "Yapılandırılmadı",
       hueSubKeyRejected: "Köprü · <b>yeniden eşleştirme gerekli</b>",
       hueSubUnreachable: "Köprü · <b>ulaşılamıyor</b>",

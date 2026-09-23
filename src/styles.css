@@ -222,6 +222,9 @@
 .lm-statusbar-value.is-off {
   color: var(--lm-ink-faint);
 }
+.lm-statusbar-value.is-error {
+  color: var(--lm-red);
+}
 
 /* FPS/latency HUD pill (G1) — 4th StatusBar chip. `is-low` lights up when
    the rolling FPS drops below the hard red threshold; the component also
@@ -308,6 +311,7 @@
   .lm-statusbar-value.is-active,
   .lm-statusbar-value.is-idle,
   .lm-statusbar-value.is-off,
+  .lm-statusbar-value.is-error,
   .lm-statusbar-value.is-low,
   .lm-statusbar-lowfps,
   .lm-statusbar-label,
@@ -3339,6 +3343,11 @@
 .lm-out-row.is-reconnecting .st {
   background: var(--lm-amber);
   box-shadow: 0 0 8px var(--lm-amber);
+}
+/* The user asked for Hue and the backend gave up on it. */
+.lm-out-row.is-failed .st {
+  background: var(--lm-red);
+  box-shadow: 0 0 8px var(--lm-red);
 }
 .lm-out-row.is-off .st {
   background: #4d5564;

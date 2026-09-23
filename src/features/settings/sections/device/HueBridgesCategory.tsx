@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
 
-import { HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
+import { HUE_RUNTIME_ACTION_HINT, HUE_RUNTIME_TRIGGER_SOURCE } from "@/shared/contracts/hue";
 import type { HueChannelPlacementOverride } from "@/shared/contracts/hue";
 import type { HueChannelPlacement, HueZone } from "@/shared/contracts/roomMap";
 import {
   deriveHueBridgeCardState,
   huePairingErrorDescriptionKey,
+  hueStreamFailureReasonKey,
 } from "@/features/hue/model/hueBridgeCardState";
 import { HUE_STREAM_MAX_HZ } from "@/features/hue/model/streamRate";
 import { buildHueRuntimeStatusCard } from "@/features/hue/model/hueRuntimeStatusCard";
@@ -118,6 +119,9 @@ export function HueBridgesCategory({
   });
 
   const pairingErrorKey = huePairingErrorDescriptionKey(hueStatus?.code);
+  // Re-pair is offered only when the runtime itself says the key was refused.
+  const streamFailedNeedsRepair =
+    hueBridgeState === "streamFailed" && hueRuntimeModel.actionHints.includes(HUE_RUNTIME_ACTION_HINT.REPAIR);
 
   const hueIsDiscoveryFailed = !isHueDiscovering && !selectedBridgeId && hueStatus?.code === "HUE_DISCOVERY_FAILED";
   const hueIsDiscoveryEmpty = !isHueDiscovering && !selectedBridgeId && hueStatus !== null && bridges.length === 0 && !hueIsDiscoveryFailed;
@@ -148,6 +152,8 @@ export function HueBridgesCategory({
               ? t("hue:bridge.unreachable")
               : hueBridgeState === "reconnecting"
               ? t("hue:runtime.reconnectingTitle")
+              : hueBridgeState === "streamFailed"
+              ? t("hue:runtime.failed.title")
               : hueBridgeState === "statusUnknown"
               ? t("hue:runtime.statusUnavailable.title")
               : hueBridgeState === "stale"
@@ -261,7 +267,7 @@ export function HueBridgesCategory({
             <div className={`lm-dcard${
               hueBridgeState === "streaming" ? " is-on" :
               hueBridgeState === "offline" ? " is-offline" :
-              hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error-state" :
+              hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" || hueBridgeState === "streamFailed" ? " is-error-state" :
               hueBridgeState === "reconnecting" || hueBridgeState === "statusUnknown" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? " is-warn-state" :
               hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" || hueBridgeState === "areaSelect" ? " is-ghost" :
               ""
@@ -276,7 +282,7 @@ export function HueBridgesCategory({
                       hueBridgeState === "streaming" ? " is-streaming" :
                       hueBridgeState === "idle" ? " is-idle" :
                       hueBridgeState === "areaSelect" ? " is-ok" :
-                      hueBridgeState === "offline" || hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error" :
+                      hueBridgeState === "offline" || hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" || hueBridgeState === "streamFailed" ? " is-error" :
                       " is-warn"
                     }`}>
                       {hueBridgeState === "streaming" ? t("hue:page.pill.streaming") :
@@ -291,7 +297,7 @@ export function HueBridgesCategory({
                        hueBridgeState === "reconnecting" ? t("hue:page.pill.reconnecting") :
                        hueBridgeState === "statusUnknown" ? t("hue:page.pill.checking") :
                        hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("hue:page.pill.awaiting") :
-                       hueBridgeState === "stopPartial" ? t("hue:page.pill.failed") :
+                       hueBridgeState === "stopPartial" || hueBridgeState === "streamFailed" ? t("hue:page.pill.failed") :
                        ""}
                     </span>
                   </div>
@@ -434,6 +440,17 @@ export function HueBridgesCategory({
                       <div className="lm-dcard-cell-v is-am">{(hueRuntimeModel.retry.nextAttemptMs / 1000).toFixed(1)} s</div>
                     </div>
                   ) : null}
+                </div>
+              ) : hueBridgeState === "streamFailed" ? (
+                <div className="lm-dcard-body">
+                  <div className="lm-dcard-cell">
+                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
+                    <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
+                  </div>
+                  <div className="lm-dcard-cell">
+                    <div className="lm-dcard-cell-k">{t("hue:card.cellFault")}</div>
+                    <div className="lm-dcard-cell-v is-error" style={{ fontSize: "9px" }}>{runtimeStatus?.code ?? "—"}</div>
+                  </div>
                 </div>
               ) : hueBridgeState === "stopPartial" ? (
                 <div className="lm-dcard-body">
@@ -657,6 +674,16 @@ export function HueBridgesCategory({
                 </div>
               ) : null}
 
+              {hueBridgeState === "streamFailed" ? (
+                <div className="lm-hue-repair is-error" role="status" aria-live="polite" data-testid="hue-stream-failed">
+                  <IconInfo />
+                  <div className="lm-hue-repair-tx">
+                    <div className="lm-hue-repair-title">{t("hue:runtime.failed.title")}</div>
+                    <div className="lm-hue-repair-sub">{t(hueStreamFailureReasonKey(runtimeStatus?.code))}</div>
+                  </div>
+                </div>
+              ) : null}
+
               {/* State N: Stale readiness */}
               {hueBridgeState === "stale" ? (
                 <div className="lm-hue-stale">
@@ -778,6 +805,22 @@ export function HueBridgesCategory({
                     </button>
                     <button type="button" className="lm-dcard-act is-danger" onClick={() => { void stopHue(HUE_RUNTIME_TRIGGER_SOURCE.DEVICE_SURFACE); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
                       {t("hue:page.stopRetrying")}
+                    </button>
+                  </>
+                ) : hueBridgeState === "streamFailed" ? (
+                  <>
+                    {streamFailedNeedsRepair ? (
+                      <button type="button" className="lm-dcard-act" onClick={() => { void pair(); }} disabled={isHuePairing} aria-busy={isHuePairing}>
+                        {isHuePairing ? t("hue:actions.pairing") : t("hue:runtime.actions.repair")}
+                      </button>
+                    ) : null}
+                    {/* Restart, not start: it re-reads readiness itself, so a stale
+                        check on this card cannot block the way back. */}
+                    <button type="button" className="lm-dcard-act" onClick={() => { void retryRuntimeTarget(runtimeTargets[0]?.target ?? "hue"); }} disabled={isRuntimeMutating} aria-busy={isRuntimeMutating}>
+                      {t("hue:page.startAgain")}
+                    </button>
+                    <button type="button" className="lm-dcard-act is-danger" onClick={() => { selectBridge(null); }}>
+                      {t("hue:page.forgotBridge")}
                     </button>
                   </>
                 ) : hueBridgeState === "stale" ? (
