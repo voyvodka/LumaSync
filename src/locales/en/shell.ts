@@ -27,7 +27,6 @@ export default {
     reconnect: {
       usbAriaLabel: "Reconnect USB device",
       hueAriaLabel: "Reconnect Hue bridge",
-      tooltip: "Open device settings",
     },
   },
   titleBar: {

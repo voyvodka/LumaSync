@@ -2,41 +2,9 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enDevice from "@/locales/en/device";
 
 const device: Catalogue<typeof enDevice> = {
-  title: "Cihaz",
-  description: "Serial portları tara, birini seç ve uygulamayı yeniden başlatmadan bağlan.",
   actions: {
-    refresh: "Yenile",
-    ready: "Cihaz taraması hazır.",
     scanning: "Portlar taranıyor...",
-    connect: "Bağlan",
-    reconnect: "Yeniden bağlan",
-    connected: "Bağlı",
     connecting: "Bağlanıyor...",
-  },
-  groups: {
-    supportedTitle: "Desteklenen kontrolcüler",
-    supportedDescription: "Mevcut allowlist ile eşleşen USB adaptörleri.",
-    otherTitle: "Diğer serial portlar",
-    otherDescription: "Manuel fallback portları. Bunları seçip Bağlan deneyebilirsin.",
-    empty: "Bu grupta henüz port yok. Tekrar taramak için Yenile'yi kullan.",
-  },
-  selection: {
-    title: "Manuel seçim",
-    description: "Auto-detect kaçırsa bile manuel port seçimi her zaman açık kalır.",
-    placeholder: "Bir serial port seç",
-    selectedHint: "Seçili port: {{port}}",
-    emptyHint: "Bağlan düğmesini etkinleştirmek için bir port seç.",
-  },
-  fields: {
-    port: "Port",
-  },
-  badges: {
-    supported: "Destekli",
-    other: "Diğer",
-    connected: "Bağlı",
-    reconnecting: "Yeniden bağlanıyor",
-    checking: "Kontrol ediliyor…",
-    error: "Hata",
   },
   port: {
     missingHint: "{{port}} artık görünmüyor. Cihazı yeniden bağla veya başka bir port seç.",
@@ -54,7 +22,6 @@ const device: Catalogue<typeof enDevice> = {
     missingBody: "Önceki seçimin artık görünmüyor. Yeni bir port seçip tekrar dene.",
     errorTitle: "Bağlantı denemesi başarısız",
     errorBody: "Bağlantı tamamlanamadı. Yenile, farklı bir port seç ve tekrar dene.",
-    nextSteps: "İpucu: Hatırlanan port yeniden görünürse otomatik olarak tekrar seçilir.",
   },
   healthCheck: {
     runAction: "Sağlık Kontrolü Çalıştır",
@@ -66,7 +33,6 @@ const device: Catalogue<typeof enDevice> = {
     failTitle: "Sağlık kontrolü başarısız",
     failBody: "Başarısız adım detayını inceleyip yenile, farklı port seç veya tekrar dene.",
     steps: {
-      title: "Adım sonuçları",
       labels: {
         PORT_VISIBLE: "Port görünürlüğü",
         PORT_SUPPORTED: "Port desteği",
@@ -126,7 +92,6 @@ const device: Catalogue<typeof enDevice> = {
     },
     actions: {
       rescan: "Yeniden Tara",
-      addDevice: "Cihaz Ekle",
     },
     usb: {
       pill: {
@@ -140,7 +105,6 @@ const device: Catalogue<typeof enDevice> = {
         latency: "Gecikme",
         na: "—",
       },
-      traffic: "Trafik",
       pairAsStrip: "+ LED Şerit Olarak Eşle",
       empty: {
         title: "USB portu bulunamadı",

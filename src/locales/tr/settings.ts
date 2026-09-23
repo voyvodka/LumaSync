@@ -22,7 +22,6 @@ const settings: Catalogue<typeof enSettings> = {
       sub: "Build · lisans",
     },
     telemetry: {
-      title: "Çalışma telemetrisi",
       sub: "Canlı akış",
     },
   },
@@ -35,8 +34,6 @@ const settings: Catalogue<typeof enSettings> = {
     license: "MIT",
   },
   nav: {
-    title: "Ayarlar",
-    navigationAria: "Ana gezinti",
     switchToCompact: "Kompakt görünüm",
     switchToFull: "Tam ayarlar",
     sections: {
@@ -45,23 +42,11 @@ const settings: Catalogue<typeof enSettings> = {
       devices: "Cihazlar",
       system: "Ayarlar",
       "room-map": "Oda",
-      control: "Kontrol",
-      calibration: "Kalibrasyon",
-      settings: "Ayarlar",
-    },
-    tabs: {
-      device: "Cihaz",
-      system: "Sistem",
-      diagnostics: "Tanılama",
     },
   },
   startupTray: {
-    title: "Başlangıç & Tepsi",
     launchAtLogin: "Girişte başlat",
     launchAtLoginDescription: "LumaSync'i oturum açtığınızda otomatik başlatın.",
-    trayInfo: "Uygulama kapatıldığında sistem tepsisinde çalışmaya devam eder.",
-    minimizeOnClose: "Kapatınca tepsiye küçült",
-    alwaysOn: "Her zaman açık",
   },
 };
 
