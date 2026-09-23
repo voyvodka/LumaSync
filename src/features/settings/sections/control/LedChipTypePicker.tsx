@@ -83,9 +83,9 @@ function ChipTile({
         gap: 6,
         padding: "12px 14px",
         borderRadius: 8,
-        border: `1px solid ${checked ? "rgba(255, 176, 32, 0.4)" : "#252b34"}`,
+        border: `1px solid ${checked ? "rgba(255, 176, 32, 0.4)" : "var(--lm-line-2)"}`,
         background: checked ? "rgba(255, 176, 32, 0.08)" : "#0a0c0f",
-        color: checked ? "var(--lm-amber, #ffb020)" : "#eaeef4",
+        color: checked ? "var(--lm-amber)" : "var(--lm-ink)",
         flex: 1,
         minWidth: 0,
       }}
@@ -95,16 +95,16 @@ function ChipTile({
           fontSize: 12.5,
           fontWeight: 600,
           letterSpacing: "-0.005em",
-          color: checked ? "var(--lm-amber, #ffb020)" : "#eaeef4",
+          color: checked ? "var(--lm-amber)" : "var(--lm-ink)",
         }}
       >
         {label}
       </div>
       <div
         style={{
-          fontFamily: "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+          fontFamily: "var(--lm-mono)",
           fontSize: 10,
-          color: "#8a94a3",
+          color: "var(--lm-ink-dim)",
           lineHeight: 1.45,
         }}
       >
@@ -113,9 +113,9 @@ function ChipTile({
       {warning && (
         <div
           style={{
-            fontFamily: "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+            fontFamily: "var(--lm-mono)",
             fontSize: 9.5,
-            color: checked ? "var(--lm-amber, #ffb020)" : "#4d5564",
+            color: checked ? "var(--lm-amber)" : "var(--lm-ink-faint)",
             letterSpacing: "0.02em",
             marginTop: 2,
           }}
@@ -127,9 +127,9 @@ function ChipTile({
       {firmwareMismatch && (
         <div
           style={{
-            fontFamily: "var(--lm-mono, \"IBM Plex Mono\", ui-monospace, monospace)",
+            fontFamily: "var(--lm-mono)",
             fontSize: 9.5,
-            color: "var(--lm-amber, #ffb020)",
+            color: "var(--lm-amber)",
             letterSpacing: "0.02em",
             marginTop: 2,
           }}

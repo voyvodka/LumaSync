@@ -449,8 +449,8 @@ export function LightsSection({
         {isSolid && (
           <div
             style={{
-              background: "#0e1014",
-              border: "1px solid #1a1e25",
+              background: "var(--lm-panel)",
+              border: "1px solid var(--lm-line)",
               borderRadius: 10,
               padding: 14,
             }}

@@ -519,10 +519,10 @@
    than a tooltip nobody opens. */
 .lm-room-dock-note {
   margin: 2px 0 6px;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 9.5px;
   line-height: 1.5;
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
 }
 
 .lm-room-dock-slider {
@@ -732,7 +732,7 @@
   box-shadow: 0 0 0 2px rgba(255, 176, 32, 0.18);
 }
 .lm-room-dock-area-state--ready .lm-room-dock-area-state-dot {
-  background: var(--lm-green, #28c76f);
+  background: var(--lm-green);
   box-shadow: 0 0 0 2px rgba(40, 199, 111, 0.18);
 }
 

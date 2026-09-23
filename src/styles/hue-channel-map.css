@@ -36,10 +36,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
   line-height: 1.5;
 }
 .lm-chmap-hint-text {
@@ -54,27 +54,27 @@
   flex-direction: column;
   gap: 4px;
   padding: 10px 12px;
-  border: 1px solid var(--lm-line, #1a1e25);
+  border: 1px solid var(--lm-line);
   border-radius: 8px;
-  background: var(--lm-panel-2, #14171d);
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  background: var(--lm-panel-2);
+  font-family: var(--lm-mono);
 }
 .lm-chmap-state-h {
   font-size: 10.5px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--lm-ink, #eaeef4);
+  color: var(--lm-ink);
 }
 .lm-chmap-state.is-empty .lm-chmap-state-h {
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
 }
 .lm-chmap-state.is-failed .lm-chmap-state-h {
-  color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber);
 }
 .lm-chmap-state-b {
   font-size: 10px;
   line-height: 1.5;
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
 }
 
 
@@ -82,20 +82,20 @@
 .lm-chmap-rows {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--lm-line, #1a1e25);
+  border-top: 1px solid var(--lm-line);
 }
 /* Dimmed with ink tokens rather than opacity, so forced-colors and the
    contrast floor still hold. */
 .lm-chmap.is-stale .lm-chmap-row-num,
 .lm-chmap.is-stale .lm-chmap-row-lights {
-  color: var(--lm-ink-faint, #4d5564);
+  color: var(--lm-ink-faint);
 }
 .lm-chmap-row {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 9px 16px;
-  border-bottom: 1px solid var(--lm-line, #1a1e25);
+  border-bottom: 1px solid var(--lm-line);
 }
 .lm-chmap-row:last-child {
   border-bottom: 0;
@@ -112,9 +112,9 @@
   max-width: 140px;
 }
 .lm-chmap-row-zone {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 9.5px;
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
   letter-spacing: 0.02em;
   min-width: 0;
   overflow: hidden;
@@ -122,14 +122,14 @@
   white-space: nowrap;
 }
 .lm-chmap-row-zone.is-none {
-  color: var(--lm-ink-faint, #4d5564);
+  color: var(--lm-ink-faint);
 }
 /* Inline link out to the surface that owns placement. */
 .lm-chmap-hint-cta {
   all: unset;
   cursor: pointer;
   margin-left: 6px;
-  color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber);
   text-decoration: underline;
   text-underline-offset: 2px;
   white-space: nowrap;
@@ -141,25 +141,25 @@
 }
 .lm-chmap-row-dot {
   width: 14px;
-  background: var(--lm-ink-faint, #4d5564);
+  background: var(--lm-ink-faint);
   height: 14px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .lm-chmap-row-num {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 10.5px;
   font-weight: 600;
-  color: var(--lm-ink, #eaeef4);
+  color: var(--lm-ink);
   letter-spacing: 0.04em;
   min-width: 26px;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 .lm-chmap-row-lights {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 9.5px;
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
   letter-spacing: 0.02em;
   min-width: 0;
   overflow: hidden;
@@ -189,7 +189,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid var(--lm-line, #1a1e25);
+  border-top: 1px solid var(--lm-line);
   background: rgba(255, 255, 255, 0.01);
 }
 /* Bridge-sync line. "Local ahead" is deliberately not an error colour: the
@@ -199,10 +199,10 @@
   align-items: baseline;
   gap: 8px;
   padding: 0 0 8px;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 10px;
   line-height: 1.5;
-  color: var(--lm-ink-dim, #8a94a3);
+  color: var(--lm-ink-dim);
 }
 .lm-chmap-sync-dot {
   width: 6px;
@@ -210,13 +210,13 @@
   border-radius: 50%;
   flex-shrink: 0;
   align-self: center;
-  background: var(--lm-ink-faint, #4d5564);
+  background: var(--lm-ink-faint);
 }
 .lm-chmap-sync-dot.is-in-sync {
-  background: var(--lm-green, #4ade80);
+  background: var(--lm-green);
 }
 .lm-chmap-sync-dot.is-local-ahead {
-  background: var(--lm-amber, #ffb020);
+  background: var(--lm-amber);
 }
 .lm-chmap-sync-tx {
   min-width: 0;
@@ -239,12 +239,12 @@
   gap: 8px 10px;
 }
 .lm-chmap-beta {
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 8.5px;
   font-weight: 500;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.1);
   border: 1px solid rgba(255, 176, 32, 0.3);
   border-radius: 999px;
@@ -262,17 +262,17 @@
   border: 1px solid transparent;
 }
 .lm-status-banner.is-ok {
-  color: var(--lm-green, #4ade80);
+  color: var(--lm-green);
   background: rgba(74, 222, 128, 0.06);
   border-color: rgba(74, 222, 128, 0.25);
 }
 .lm-status-banner.is-warn {
-  color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.07);
   border-color: rgba(255, 176, 32, 0.3);
 }
 .lm-status-banner.is-err {
-  color: var(--lm-red, #ef5b5b);
+  color: var(--lm-red);
   background: rgba(239, 91, 91, 0.07);
   border-color: rgba(239, 91, 91, 0.3);
 }
@@ -295,7 +295,7 @@
   gap: 8px;
   padding: 8px 10px;
   border-radius: 7px;
-  font-family: var(--lm-mono, "IBM Plex Mono", ui-monospace, monospace);
+  font-family: var(--lm-mono);
   font-size: 10px;
   letter-spacing: 0.02em;
   line-height: 1.5;
@@ -310,30 +310,30 @@
   margin-top: 5px;
 }
 .lm-chmap-feedback.is-ok {
-  color: var(--lm-green, #4ade80);
+  color: var(--lm-green);
   background: rgba(74, 222, 128, 0.06);
   border-color: rgba(74, 222, 128, 0.25);
 }
 .lm-chmap-feedback.is-ok::before {
-  background: var(--lm-green, #4ade80);
+  background: var(--lm-green);
   box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
 }
 .lm-chmap-feedback.is-warn {
-  color: var(--lm-amber, #ffb020);
+  color: var(--lm-amber);
   background: rgba(255, 176, 32, 0.07);
   border-color: rgba(255, 176, 32, 0.3);
 }
 .lm-chmap-feedback.is-warn::before {
-  background: var(--lm-amber, #ffb020);
+  background: var(--lm-amber);
   box-shadow: 0 0 6px rgba(255, 176, 32, 0.6);
 }
 .lm-chmap-feedback.is-err {
-  color: var(--lm-red, #ef5b5b);
+  color: var(--lm-red);
   background: rgba(239, 91, 91, 0.07);
   border-color: rgba(239, 91, 91, 0.3);
 }
 .lm-chmap-feedback.is-err::before {
-  background: var(--lm-red, #ef5b5b);
+  background: var(--lm-red);
   box-shadow: 0 0 6px rgba(239, 91, 91, 0.5);
 }
 .lm-chmap-feedback-retry {
@@ -392,9 +392,9 @@
    `border-dashed` on the element: its `border-2` utility would override a
    border-style set here. */
 .lm-room-hue-dot--ghost {
-  background: var(--lm-panel-2, #14171d);
-  border-color: var(--lm-ink-faint, #4d5564);
-  color: var(--lm-ink-dim, #8a94a3);
+  background: var(--lm-panel-2);
+  border-color: var(--lm-ink-faint);
+  color: var(--lm-ink-dim);
 }
 @media (forced-colors: active) {
   .lm-room-hue-dot--ghost {

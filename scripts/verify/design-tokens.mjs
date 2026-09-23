@@ -19,7 +19,11 @@
  * **A fallback is an explicit answer, so it passes.** `var(--lm-fill, 0%)` is a
  * property set inline at runtime; declaring it in `:root` would be wrong. The
  * fallback is how the author says "undefined here is intended", and the check
- * reads it that way rather than forcing a fake declaration.
+ * reads it that way rather than forcing a fake declaration. The same reading
+ * makes a fallback on a `:root` token a mistake, and that fails below.
+ *
+ * Also checked: no arbitrary `[var(--lm-*)]` utility where `@theme` gives the
+ * token a name, and a shrink-only baseline of raw hex literals in src/.
  *
  *   node scripts/verify/design-tokens.mjs
  */
@@ -133,10 +137,66 @@ if (THEMED.size === 0) {
   fail(`arbitrary token utilities with a named equivalent:\n       ${arbitrary.join("\n       ")}`);
 }
 
+// A fallback on a `:root` token can never be used, and it is a second copy of
+// the colour that silently drifts: `var(--lm-ink-dim, #aab1bc)` was not even
+// the token's value. Tokens scoped to a feature (`--lm-notice-tone`) or set
+// inline at runtime (`--lm-fill`) are not `:root` tokens and keep theirs.
+const TOKENS_FILE = join(ROOT, "src/styles/tokens.css");
+const rootTokens = new Set(
+  [...readFileSync(TOKENS_FILE, "utf-8").matchAll(/^\s*(--lm-[a-z0-9-]+)\s*:/gm)].map((m) => m[1]),
+);
+const FALLBACK = /var\(\s*(--lm-[a-z0-9-]+)\s*,/g;
+const redundant = [];
+for (const dir of SCANNED) {
+  for (const file of walk(join(ROOT, dir))) {
+    const source = readFileSync(file, "utf-8");
+    for (const match of source.matchAll(FALLBACK)) {
+      if (!rootTokens.has(match[1])) continue;
+      const line = source.slice(0, match.index).split("\n").length;
+      redundant.push(`${file.replace(ROOT, "")}:${line} ${match[1]}`);
+    }
+  }
+}
+if (redundant.length === 0) {
+  pass(`no fallback on any of the ${rootTokens.size} :root tokens`);
+} else {
+  fail(`fallbacks on :root tokens, which always resolve — drop them:\n       ${redundant.join("\n       ")}`);
+}
+
+// Raw hex in src/ is a ratchet: every colour that has a token should name it.
+// What remains is mostly deliberate — SVG and canvas art, zone identity data,
+// LED test-pattern swatches — so the count may only go down.
+const HEX_BASELINE_FILE = join(ROOT, "scripts/verify/hex-literal-baseline.txt");
+const hexBaseline = Number(
+  readFileSync(HEX_BASELINE_FILE, "utf-8")
+    .split("\n")
+    .filter((l) => l.trim() && !l.startsWith("#"))[0],
+);
+const HEX = /#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\b/g;
+const stripComments = (source) =>
+  source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+let hexCount = 0;
+for (const file of walk(join(ROOT, "src"))) {
+  if (file.includes("/__tests__/") || file === TOKENS_FILE) continue;
+  hexCount += (stripComments(readFileSync(file, "utf-8")).match(HEX) ?? []).length;
+}
+if (!Number.isFinite(hexBaseline)) {
+  fail(`${HEX_BASELINE_FILE.replace(ROOT, "")} holds no number`);
+} else if (hexCount > hexBaseline) {
+  fail(
+    `${hexCount} raw hex literals in src/, baseline ${hexBaseline} — use the --lm-* token ` +
+      "(or its named utility) instead of a new hex",
+  );
+} else if (hexCount < hexBaseline) {
+  pass(`${hexCount} raw hex literals in src/ — lower scripts/verify/hex-literal-baseline.txt to ${hexCount}`);
+} else {
+  pass(`${hexCount} raw hex literals in src/ (baseline ${hexBaseline})`);
+}
+
 console.log(`\n${"=".repeat(44)}`);
 if (failures === 0) {
-  console.log("✔  Design tokens verified — no reference to a token that does not exist.\n");
+  console.log("✔  Design tokens verified.\n");
   process.exit(0);
 }
-console.log(`✘  ${failures} check(s) failed — a style is silently doing nothing.\n`);
+console.log(`✘  ${failures} check(s) failed.\n`);
 process.exit(1);
