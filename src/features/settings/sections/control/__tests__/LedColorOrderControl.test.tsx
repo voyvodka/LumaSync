@@ -34,12 +34,12 @@ vi.mock("@/features/persistence/shellStore", () => ({
 const STARTED: LedTestPatternResult = {
   active: true,
   previewOnly: false,
-  status: { code: LED_TEST_STATUS.PATTERN_STARTED, message: "" },
+  status: { code: LED_TEST_STATUS.PATTERN_STARTED, message: "", details: null },
 };
 const STOPPED: LedTestPatternResult = {
   active: false,
   previewOnly: false,
-  status: { code: LED_TEST_STATUS.PATTERN_STOPPED, message: "" },
+  status: { code: LED_TEST_STATUS.PATTERN_STOPPED, message: "", details: null },
 };
 
 const start = vi.fn(async (payload: StartLedTestPatternPayload) => {
@@ -164,7 +164,7 @@ describe("LedColorOrderControl identify flow", () => {
     start.mockResolvedValueOnce({
       active: false,
       previewOnly: false,
-      status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "" },
+      status: { code: LED_TEST_STATUS.PATTERN_NO_CALIBRATION, message: "", details: null },
     });
     renderControl();
     await beginIdentify();

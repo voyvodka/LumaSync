@@ -46,6 +46,8 @@ export interface DeviceSectionProps {
 }
 
 interface RailButtonProps {
+  /** Also names the button for e2e: `device-category-<category>`. */
+  category: DeviceCategory;
   icon: React.ReactNode;
   label: string;
   /** Rendered as a badge when non-zero. */
@@ -72,10 +74,11 @@ interface RailButtonProps {
  * The badge is `aria-hidden` with its meaning on the button instead, because a
  * bare "2" read after a label is ambiguous — two of what.
  */
-function RailButton({ icon, label, count, countLabel, active, onClick }: RailButtonProps) {
+function RailButton({ category, icon, label, count, countLabel, active, onClick }: RailButtonProps) {
   return (
     <button
       type="button"
+      data-testid={`device-category-${category}`}
       className={`lm-device-cat ${active ? "is-on" : ""}`}
       aria-current={active ? "page" : undefined}
       onClick={onClick}
@@ -237,6 +240,7 @@ export function DeviceSection({
       <nav className="lm-device-rail">
         <div className="lm-device-rail-h">{t("device:page.rail.connected")}</div>
         <RailButton
+          category="usb"
           icon={<IconUsb />}
           label={t("device:page.rail.usbStrips")}
           count={supportedPortCount}
@@ -245,6 +249,7 @@ export function DeviceSection({
           onClick={() => setActiveCategory("usb")}
         />
         <RailButton
+          category="hue"
           icon={<IconHueBridgeGlyph />}
           label={t("device:page.rail.hueBridges")}
           count={selectedBridge ? 1 : 0}
@@ -253,6 +258,7 @@ export function DeviceSection({
           onClick={() => setActiveCategory("hue")}
         />
         <RailButton
+          category="wled"
           icon={<IconWledGlyph />}
           label={t("device:page.rail.wled")}
           count={activeWledIp === null ? 0 : 1}
@@ -261,6 +267,7 @@ export function DeviceSection({
           onClick={() => setActiveCategory("wled")}
         />
         <RailButton
+          category="displays"
           icon={<IconDisplayGlyph />}
           label={t("device:page.rail.displays")}
           count={displays.length}
@@ -271,6 +278,7 @@ export function DeviceSection({
 
         <div className="lm-device-rail-h">{t("device:page.rail.other")}</div>
         <RailButton
+          category="manual"
           icon={<IconPencil />}
           label={t("device:page.rail.manualEntry")}
           count={0}

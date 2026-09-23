@@ -18,6 +18,7 @@ import {
   type ScenePreset,
 } from "@/features/mode/model/scenePresets";
 import type { HueIntensityPreset, HueRuntimeTarget } from "@/shared/contracts/hue";
+import { rgbToHex } from "@/shared/lib/color";
 import { createHueZone } from "@/features/room-map/roomMapApi";
 import { roomAwareStatus } from "@/features/room-map/model/roomAware";
 import { RoomAwareIndicator } from "@/features/room-map/ui/RoomAwareIndicator";
@@ -44,6 +45,7 @@ import {
   type HueUnavailableReason,
 } from "@/features/hue/model/hueAvailability";
 import { shellStore } from "@/features/persistence/shellStore";
+import { outputAvailability } from "@/features/mode/model/outputAvailability";
 import { OnboardingBanner } from "@/shared/ui/OnboardingBanner";
 import { IconOff, IconAmbilight, IconSolid } from "@/shared/ui/icons";
 
@@ -51,6 +53,7 @@ import { SolidColorPanel } from "./control/SolidColorPanel";
 import { ColorCorrectionPanel } from "./control/ColorCorrectionPanel";
 import { FirmwareProfilePicker } from "./control/FirmwareProfilePicker";
 import { LightingSmoothingPresetControl } from "./control/LightingSmoothingPresetControl";
+import { OutputCheckingNote } from "./OutputCheckingNote";
 
 const TELEMETRY_POLL_INTERVAL_MS = 1000;
 
@@ -139,10 +142,6 @@ interface LightsSectionProps {
   onFirmwareProfileChange?: (next: FirmwareProfile) => void;
 }
 
-function toHexPair(value: number): string {
-  return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
-}
-
 /**
  * Render a keybind badge (modifier + key) for a mode button. Badge labels
  * come from the shared KEYBIND_REGISTRY so StatusBar + LightsSection stay
@@ -185,9 +184,15 @@ export function LightsSection({
   const lockState = getLightsModeLockState(modeLockReason);
   const modeSelectorDisabled = lockState.showReason || isModeTransitioning;
   // Without a reachable sink an activated mode spins up a worker with nowhere to
-  // send frames; a configured-but-offline bridge is not one, hence the two Hue terms.
-  const outputMissing = !(localOutputConnected || (hueConfigured && hueReachable));
-  const nonOffModeDisabled = modeSelectorDisabled || outputMissing;
+  // send frames; a configured-but-offline bridge is not one. One still being
+  // checked is not one yet either, but it is not "missing" — see CompactLayout.
+  const availability = outputAvailability({
+    localOutputConnected,
+    hueConfigured,
+    hueReachable,
+    hueProbeVerdict,
+  });
+  const nonOffModeDisabled = modeSelectorDisabled || availability !== "ready";
   const normalizedMode = normalizeLightingModeConfig(mode);
   const activeKind = normalizedMode.kind;
   const isOff = activeKind === LIGHTING_MODE_KIND.OFF;
@@ -196,7 +201,7 @@ export function LightsSection({
   const incomingSolid = normalizedMode.solid ?? { r: 255, g: 255, b: 255, brightness: 1 };
   const incomingAmbilight = normalizeAmbilightPayload(normalizedMode.ambilight);
 
-  const solidHex = `#${toHexPair(incomingSolid.r)}${toHexPair(incomingSolid.g)}${toHexPair(incomingSolid.b)}`;
+  const solidHex = rgbToHex(incomingSolid);
   const solidBrightnessPct = Math.round(incomingSolid.brightness * 100);
 
   // Scene selection is derived from the active SOLID color, not stored
@@ -399,7 +404,8 @@ export function LightsSection({
       <div className="lm-lights-center">
         {/* Kept separate from the calibration banner: a calibrated strip that is
             merely unplugged must not be told to go and calibrate, and vice versa. */}
-        {outputMissing && (
+        {availability === "checking" && <OutputCheckingNote />}
+        {availability === "none" && (
           <OnboardingBanner
             title={t("common:output.offline.title")}
             body={

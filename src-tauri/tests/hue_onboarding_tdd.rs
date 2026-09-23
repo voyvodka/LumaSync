@@ -14,6 +14,10 @@
 #[allow(dead_code)]
 mod hue_http;
 
+#[path = "../src/commands/status.rs"]
+#[allow(dead_code)]
+mod status;
+
 // v1.5 W2-A2 / W2-A3 stubs — `pair_hue_bridge` and `discover_hue_bridges`
 // (which we don't exercise in this TDD harness) reach into
 // `super::hue::credential_store::*` and `crate::network::mdns::*`.

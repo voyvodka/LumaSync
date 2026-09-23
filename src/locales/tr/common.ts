@@ -5,19 +5,6 @@ const common: Catalogue<typeof enCommon> = {
   title: "Genel",
   description: "Genel uygulama ayarları.",
   output: {
-    title: "Çıkış hedefleri",
-    devices: {
-      usb: "USB LED Şerit",
-      hue: "Philips Hue",
-    },
-    status: {
-      connected: "Bağlı",
-      notConnected: "Bağlı değil",
-      ready: "Hazır",
-      notConfigured: "Yapılandırılmadı",
-    },
-    noDevices: "Kullanılabilir cihaz yok",
-    noDevicesHint: "Ayarlar'dan cihazlarını bağla",
     offline: {
       title: "Ulaşılabilir çıkış yok",
       body: "Aydınlatma modlarını etkinleştirmek için bir USB LED şerit bağla veya Hue köprüsünü eşleştir.",
@@ -26,6 +13,7 @@ const common: Catalogue<typeof enCommon> = {
       retry: "Yeniden dene",
       retrying: "Kontrol ediliyor…",
     },
+    checking: "Çıkışlar kontrol ediliyor…",
   },
   mode: {
     title: "LED modu",
@@ -38,16 +26,6 @@ const common: Catalogue<typeof enCommon> = {
     colorModelRgb: "RGB",
     solidColor: "Sabit renk",
     brightness: "Parlaklık",
-    lockedReasonCalibration: "LED modunu etkinleştirmeden önce kalibrasyonu tamamlayın.",
-    openCalibration: "Kalibrasyonu aç",
-    ambilight: {
-      blackBorderTitle: "Siyah kenar algılama",
-      blackBorderDescription: "Ekran rengi örneklenirken letterbox / pillarbox siyah bantları otomatik olarak atlar.",
-      smoothingTitle: "Renk geçiş hızı",
-      smoothingDescription: "Düşük değerler daha yumuşak geçişler üretir; yüksek değerler ekran değişimlerine daha hızlı tepki verir.",
-      smoothingSlowLabel: "Yumuşak",
-      smoothingFastLabel: "Anlık",
-    },
   },
   compact: {
     sections: {

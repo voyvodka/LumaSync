@@ -17,6 +17,7 @@
 import type { LedCalibrationConfig } from "./calibration";
 import type { DisplayId } from "./display";
 import type { HueRuntimeTarget } from "./hue";
+import type { CommandStatusOf } from "./status";
 
 // ---------------------------------------------------------------------------
 // Commands (Tauri invoke targets) — Rust #[tauri::command] names must match
@@ -122,11 +123,7 @@ export interface StartLedTestPatternPayload {
 export interface LedTestPatternResult {
   active: boolean;
   previewOnly: boolean;
-  status: {
-    code: LedTestStatusCode;
-    message: string;
-    details?: string;
-  };
+  status: CommandStatusOf<LedTestStatusCode>;
 }
 
 // ---------------------------------------------------------------------------

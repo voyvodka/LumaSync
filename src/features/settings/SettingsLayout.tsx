@@ -130,6 +130,7 @@ export const SettingsLayout = memo(function SettingsLayout({
         hueReachable={hueReachable}
         hueProbeGaveUp={hueProbeGaveUp}
         hueProbeChecking={hueProbeChecking}
+        hueProbeVerdict={hueProbeVerdict}
         onRetryHueProbe={onRetryHueProbe}
         isModeTransitioning={isModeTransitioning}
         modeLockReason={modeLockReason}

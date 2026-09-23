@@ -80,7 +80,7 @@ export function useUsbConnectionStatus(
         const status = await fetchStatus();
         if (cancelled || seq !== requestSeqRef.current) return;
         setSnapshot({
-          connectedPort: status.portName ?? null,
+          connectedPort: status.connected ? (status.portName ?? null) : null,
           ready: true,
         });
       } catch (err) {

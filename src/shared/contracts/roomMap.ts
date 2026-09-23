@@ -18,6 +18,7 @@
  */
 
 import type { HueChannelPlacementOverride } from "./hue";
+import type { CommandStatusOf } from "./status";
 
 // ---------------------------------------------------------------------------
 // Room Map Commands
@@ -582,11 +583,7 @@ export function isHueZoneApplied(code: HueZoneStatusCode): boolean {
  *  mutation on success and the pre-image on a refusal — only while callers send
  *  *pre*-mutation lists. See docs/architecture/room-map.md. */
 export interface HueZoneCommandResult {
-  status: {
-    code: HueZoneStatusCode;
-    message: string;
-    details: string | null;
-  };
+  status: CommandStatusOf<HueZoneStatusCode>;
   zones: HueZone[];
   channels: HueChannelPlacement[];
 }

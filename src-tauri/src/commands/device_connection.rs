@@ -12,6 +12,7 @@ use super::led_output::{
     ColorCorrectionConfig, FirmwareProfile, LedChipType, LedOutputBridge, SerialSink,
 };
 use super::led_sink::LedSink;
+use super::status::CommandStatus;
 use super::wled_sink::WledSinkConfig;
 
 const DEFAULT_CONNECT_BAUD_RATE: u32 = 115_200;
@@ -55,14 +56,6 @@ const SUPPORTED_USB_DEVICE_ALLOWLIST: &[(u16, u16)] = &[
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CommandStatus {
-    pub code: String,
-    pub message: String,
-    pub details: Option<String>,
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UsbPortMetadata {
     pub vid: u16,
     pub pid: u16,
@@ -93,6 +86,7 @@ pub struct SerialPortListResponse {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialConnectionStatus {
+    /// The port that was opened — `Some` exactly when `connected` is true.
     pub port_name: Option<String>,
     pub connected: bool,
     pub status: CommandStatus,
@@ -380,16 +374,12 @@ pub async fn connect_serial_port(
     })
     .await
     .unwrap_or_else(|join_error| ConnectOutcome::Failed {
-        status: SerialConnectionStatus {
-            port_name: Some(port_name.clone()),
-            connected: false,
-            status: command_status(
-                "CONNECT_FAILED",
-                "Serial connect worker terminated unexpectedly.",
-                Some(join_error.to_string()),
-            ),
-            updated_at_unix_ms: now_unix_ms(),
-        },
+        status: failed_connect_status(
+            &port_name,
+            "CONNECT_FAILED",
+            "Serial connect worker terminated unexpectedly.",
+            Some(join_error.to_string()),
+        ),
         clear_sink: true,
     });
 
@@ -430,16 +420,12 @@ fn connect_serial_port_blocking(
         Ok(ports) => ports,
         Err(error) => {
             return ConnectOutcome::Failed {
-                status: SerialConnectionStatus {
-                    port_name: Some(port_name),
-                    connected: false,
-                    status: command_status(
-                        "LIST_PORTS_FAILED",
-                        "Connection check failed while reading available serial ports.",
-                        Some(error.to_string()),
-                    ),
-                    updated_at_unix_ms: now_unix_ms(),
-                },
+                status: failed_connect_status(
+                    &port_name,
+                    "LIST_PORTS_FAILED",
+                    "Connection check failed while reading available serial ports.",
+                    Some(error.to_string()),
+                ),
                 clear_sink: true,
             };
         }
@@ -453,16 +439,12 @@ fn connect_serial_port_blocking(
         Some(port) => port,
         None => {
             return ConnectOutcome::Failed {
-                status: SerialConnectionStatus {
-                    port_name: Some(port_name),
-                    connected: false,
-                    status: command_status(
-                        "PORT_NOT_FOUND",
-                        "Selected serial port is not available.",
-                        None,
-                    ),
-                    updated_at_unix_ms: now_unix_ms(),
-                },
+                status: failed_connect_status(
+                    &port_name,
+                    "PORT_NOT_FOUND",
+                    "Selected serial port is not available.",
+                    None,
+                ),
                 clear_sink: true,
             };
         }
@@ -474,35 +456,27 @@ fn connect_serial_port_blocking(
         SerialPortType::UsbPort(ref usb_info) => {
             if !is_supported_usb(usb_info.vid, usb_info.pid) {
                 return ConnectOutcome::Failed {
-                    status: SerialConnectionStatus {
-                        port_name: Some(port_name),
-                        connected: false,
-                        status: command_status(
-                            "PORT_UNSUPPORTED",
-                            "Selected USB serial adapter is not in the supported allowlist.",
-                            Some(format!(
-                                "VID={:04X}, PID={:04X}",
-                                usb_info.vid, usb_info.pid
-                            )),
-                        ),
-                        updated_at_unix_ms: now_unix_ms(),
-                    },
+                    status: failed_connect_status(
+                        &port_name,
+                        "PORT_UNSUPPORTED",
+                        "Selected USB serial adapter is not in the supported allowlist.",
+                        Some(format!(
+                            "VID={:04X}, PID={:04X}",
+                            usb_info.vid, usb_info.pid
+                        )),
+                    ),
                     clear_sink: true,
                 };
             }
         }
         SerialPortType::BluetoothPort | SerialPortType::PciPort | SerialPortType::Unknown => {
             return ConnectOutcome::Failed {
-                status: SerialConnectionStatus {
-                    port_name: Some(port_name),
-                    connected: false,
-                    status: command_status(
-                        "PORT_UNSUPPORTED",
-                        "Only USB serial adapters are supported (Bluetooth and PCI serial ports cannot drive LED strips).",
-                        None,
-                    ),
-                    updated_at_unix_ms: now_unix_ms(),
-                },
+                status: failed_connect_status(
+                    &port_name,
+                    "PORT_UNSUPPORTED",
+                    "Only USB serial adapters are supported (Bluetooth and PCI serial ports cannot drive LED strips).",
+                    None,
+                ),
                 clear_sink: true,
             };
         }
@@ -560,16 +534,12 @@ fn connect_serial_port_blocking(
             }
         }
         Err(error) => ConnectOutcome::Failed {
-            status: SerialConnectionStatus {
-                port_name: Some(port_name),
-                connected: false,
-                status: command_status(
-                    connect_error_code(&error),
-                    "Serial port connection attempt failed.",
-                    Some(error.to_string()),
-                ),
-                updated_at_unix_ms: now_unix_ms(),
-            },
+            status: failed_connect_status(
+                &port_name,
+                connect_error_code(&error),
+                "Serial port connection attempt failed.",
+                Some(error.to_string()),
+            ),
             clear_sink: true,
         },
     }
@@ -931,6 +901,29 @@ pub fn command_status(code: &str, message: &str, details: Option<String>) -> Com
         code: code.to_string(),
         message: message.to_string(),
         details,
+    }
+}
+
+/// Status for a connect that did not end with an open port. It never carries
+/// the attempted name as `port_name`: `lighting_mode.rs` plans serial output
+/// from `port_name` even while `connected` is false, so an echoed name would
+/// be opened by the next mode change — past the allowlist. See
+/// docs/architecture/device-output.md. The name goes in `details` instead.
+fn failed_connect_status(
+    attempted_port: &str,
+    code: &str,
+    message: &str,
+    details: Option<String>,
+) -> SerialConnectionStatus {
+    let details = match details {
+        Some(details) => format!("port={attempted_port:?}; {details}"),
+        None => format!("port={attempted_port:?}"),
+    };
+    SerialConnectionStatus {
+        port_name: None,
+        connected: false,
+        status: command_status(code, message, Some(details)),
+        updated_at_unix_ms: now_unix_ms(),
     }
 }
 

@@ -135,6 +135,7 @@ export function useTestPatternRunner({
           status: {
             code: LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
             message: error instanceof Error ? error.message : String(error),
+            details: null,
           },
         };
       } finally {

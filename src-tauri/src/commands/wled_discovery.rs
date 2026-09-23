@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use super::device_connection::ActiveSinkRegistry;
 use super::led_sink::LedSink;
+use super::status::CommandStatus;
 use super::wled_sink::{WledProtocol, WledSinkConfig, WledUdpSink};
 
 const WLED_HTTP_TIMEOUT: Duration = Duration::from_secs(2);
@@ -68,7 +69,7 @@ pub struct WledDeviceInfo {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledDiscoveryResponse {
-    pub status: WledCommandStatus,
+    pub status: CommandStatus,
     pub devices: Vec<WledDeviceInfo>,
 }
 
@@ -89,7 +90,7 @@ pub struct WledConnectRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledConnectResponse {
-    pub status: WledCommandStatus,
+    pub status: CommandStatus,
 }
 
 /// Request payload for `test_wled_bridge`.
@@ -112,7 +113,7 @@ pub struct WledTestRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WledTestResponse {
-    pub status: WledCommandStatus,
+    pub status: CommandStatus,
     pub send_latency_ms: Option<u64>,
     pub requested_led_count: Option<u16>,
     pub device_led_count: Option<u16>,
@@ -120,7 +121,7 @@ pub struct WledTestResponse {
 }
 
 impl WledTestResponse {
-    fn failed(status: WledCommandStatus) -> Self {
+    fn failed(status: CommandStatus) -> Self {
         Self {
             status,
             send_latency_ms: None,
@@ -148,33 +149,6 @@ pub struct WledSinkSnapshot {
 pub struct WledSinkStatusResponse {
     pub connected: bool,
     pub sink: Option<WledSinkSnapshot>,
-}
-
-/// Coded status shared by every WLED command response.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WledCommandStatus {
-    pub code: String,
-    pub message: String,
-    pub details: Option<String>,
-}
-
-impl WledCommandStatus {
-    fn ok(code: &str, message: &str) -> Self {
-        Self {
-            code: code.to_string(),
-            message: message.to_string(),
-            details: None,
-        }
-    }
-
-    fn err(code: &str, message: &str, details: Option<String>) -> Self {
-        Self {
-            code: code.to_string(),
-            message: message.to_string(),
-            details,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -265,12 +239,12 @@ fn parse_ipv4(ip: &str) -> Result<Ipv4Addr, String> {
     Ok(addr)
 }
 
-fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
+fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, CommandStatus> {
     // SECURITY: Validate the input IP address to prevent SSRF vulnerabilities.
     // parse_ipv4 rejects loopback, unspecified, multicast, and broadcast in
     // addition to non-parseable strings.
     if let Err(msg) = parse_ipv4(ip) {
-        return Err(WledCommandStatus::err(
+        return Err(CommandStatus::new(
             "WLED_INVALID_IP",
             "Invalid WLED device IP address format.",
             Some(msg),
@@ -283,7 +257,7 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
         .timeout(WLED_HTTP_TIMEOUT)
         .build()
         .map_err(|e| {
-            WledCommandStatus::err(
+            CommandStatus::new(
                 "WLED_CLIENT_BUILD_FAILED",
                 "Failed to build HTTP client.",
                 Some(e.to_string()),
@@ -292,13 +266,13 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
 
     let response = client.get(&url).send().map_err(|e| {
         if e.is_timeout() {
-            WledCommandStatus::err(
+            CommandStatus::new(
                 "WLED_DISCOVERY_TIMEOUT",
                 "WLED device did not respond within 2 seconds.",
                 Some(format!("GET {} timed out", url)),
             )
         } else {
-            WledCommandStatus::err(
+            CommandStatus::new(
                 "WLED_DISCOVERY_UNREACHABLE",
                 "Could not reach WLED device.",
                 Some(e.to_string()),
@@ -307,7 +281,7 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
     })?;
 
     if !response.status().is_success() {
-        return Err(WledCommandStatus::err(
+        return Err(CommandStatus::new(
             "WLED_PROTOCOL_MISMATCH",
             "WLED device returned an unexpected HTTP status.",
             Some(format!("HTTP {}", response.status().as_u16())),
@@ -315,7 +289,7 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
     }
 
     let info: WledInfoResponse = response.json().map_err(|e| {
-        WledCommandStatus::err(
+        CommandStatus::new(
             "WLED_PROTOCOL_MISMATCH",
             "Response from device is not valid WLED JSON.",
             Some(e.to_string()),
@@ -323,7 +297,7 @@ fn fetch_wled_info(ip: &str) -> Result<WledInfoResponse, WledCommandStatus> {
     })?;
 
     if info.leds.count == 0 {
-        return Err(WledCommandStatus::err(
+        return Err(CommandStatus::new(
             "WLED_PROTOCOL_MISMATCH",
             "WLED /json/info response is missing leds.count.",
             None,
@@ -363,7 +337,7 @@ pub async fn discover_wled_devices(request: WledDiscoveryRequest) -> WledDiscove
     tokio::task::spawn_blocking(move || discover_wled_devices_blocking(request))
         .await
         .unwrap_or_else(|join_error| WledDiscoveryResponse {
-            status: WledCommandStatus::err(
+            status: CommandStatus::new(
                 "WLED_DISCOVERY_WORKER_FAILED",
                 "WLED discovery worker terminated unexpectedly.",
                 Some(join_error.to_string()),
@@ -377,7 +351,7 @@ fn discover_wled_devices_blocking(request: WledDiscoveryRequest) -> WledDiscover
         Ok(info) => {
             let device = info_to_device(&request.ip, info);
             WledDiscoveryResponse {
-                status: WledCommandStatus::ok(
+                status: CommandStatus::ok(
                     "WLED_DISCOVERY_OK",
                     "WLED device found and info parsed.",
                 ),
@@ -403,7 +377,7 @@ pub fn connect_wled_sink(
     // Guard: led_count == 0 is not a valid strip configuration.
     if device.led_count == 0 {
         return WledConnectResponse {
-            status: WledCommandStatus::err(
+            status: CommandStatus::new(
                 "WLED_INVALID_LED_COUNT",
                 "LED count must be greater than zero.",
                 None,
@@ -415,7 +389,7 @@ pub fn connect_wled_sink(
         Ok(addr) => addr,
         Err(msg) => {
             return WledConnectResponse {
-                status: WledCommandStatus::err("WLED_INVALID_IP", &msg, None),
+                status: CommandStatus::new("WLED_INVALID_IP", &msg, None),
             }
         }
     };
@@ -433,7 +407,7 @@ pub fn connect_wled_sink(
 
     if let Err(e) = sink.start() {
         return WledConnectResponse {
-            status: WledCommandStatus::err(
+            status: CommandStatus::new(
                 "WLED_BRIDGE_UNREACHABLE",
                 "Failed to bind UDP socket for WLED sink.",
                 Some(e),
@@ -447,7 +421,7 @@ pub fn connect_wled_sink(
     sink_registry.replace_wled(Box::new(sink), config);
 
     WledConnectResponse {
-        status: WledCommandStatus::ok("WLED_CONNECT_OK", "WLED sink connected and registered."),
+        status: CommandStatus::ok("WLED_CONNECT_OK", "WLED sink connected and registered."),
     }
 }
 
@@ -492,7 +466,7 @@ pub async fn test_wled_bridge(request: WledTestRequest) -> WledTestResponse {
     tokio::task::spawn_blocking(move || test_wled_bridge_blocking(request))
         .await
         .unwrap_or_else(|join_error| {
-            WledTestResponse::failed(WledCommandStatus::err(
+            WledTestResponse::failed(CommandStatus::new(
                 "WLED_TEST_WORKER_FAILED",
                 "WLED test worker terminated unexpectedly.",
                 Some(join_error.to_string()),
@@ -510,7 +484,7 @@ fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
 
     if info.leds.count != device.led_count {
         return WledTestResponse {
-            status: WledCommandStatus::err(
+            status: CommandStatus::new(
                 "WLED_LED_COUNT_MISMATCH",
                 "Requested LED count does not match device-reported LED count.",
                 Some(format!(
@@ -528,7 +502,7 @@ fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
     let ip = match parse_ipv4(&device.ip) {
         Ok(addr) => addr,
         Err(msg) => {
-            return WledTestResponse::failed(WledCommandStatus::err("WLED_INVALID_IP", &msg, None))
+            return WledTestResponse::failed(CommandStatus::new("WLED_INVALID_IP", &msg, None))
         }
     };
 
@@ -540,7 +514,7 @@ fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
     // means the build did not report one, so it cannot contradict anything.
     if protocol == WledProtocol::Drgb && info.udpport != 0 && info.udpport != port {
         return WledTestResponse {
-            status: WledCommandStatus::err(
+            status: CommandStatus::new(
                 "WLED_REALTIME_PORT_MISMATCH",
                 "Configured realtime port is not the port this device listens on.",
                 Some(format!("configured={}, device={}", port, info.udpport)),
@@ -555,7 +529,7 @@ fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
     let mut sink = WledUdpSink::new(ip, port, device.led_count, protocol);
 
     if let Err(e) = sink.start() {
-        return WledTestResponse::failed(WledCommandStatus::err(
+        return WledTestResponse::failed(CommandStatus::new(
             "WLED_BRIDGE_UNREACHABLE",
             "Failed to bind UDP socket for test.",
             Some(e),
@@ -573,7 +547,7 @@ fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
     let _ = sink.stop();
 
     if let Err(e) = send_result {
-        return WledTestResponse::failed(WledCommandStatus::err(
+        return WledTestResponse::failed(CommandStatus::new(
             "WLED_TEST_SEND_FAILED",
             "Test frame send failed.",
             Some(e),
@@ -589,12 +563,12 @@ fn test_wled_bridge_blocking(request: WledTestRequest) -> WledTestResponse {
         .unwrap_or(false);
 
     let status = if live_confirmed {
-        WledCommandStatus::ok(
+        CommandStatus::ok(
             "WLED_TEST_LIVE_CONFIRMED",
             "Test frame sent and the device reported it is displaying a realtime source.",
         )
     } else {
-        WledCommandStatus::ok(
+        CommandStatus::ok(
             "WLED_TEST_SENT_UNCONFIRMED",
             "Device reachable and test frame written to the socket, but the device did not confirm it is displaying a realtime source.",
         )
@@ -733,25 +707,5 @@ mod tests {
         assert!(device.mac.is_none());
         assert!(device.version.is_none());
         assert!(device.name.is_none());
-    }
-
-    #[test]
-    fn wled_command_status_ok_has_no_details() {
-        use super::WledCommandStatus;
-        let s = WledCommandStatus::ok("WLED_DISCOVERY_OK", "found");
-        assert_eq!(s.code, "WLED_DISCOVERY_OK");
-        assert!(s.details.is_none());
-    }
-
-    #[test]
-    fn wled_command_status_err_carries_details() {
-        use super::WledCommandStatus;
-        let s = WledCommandStatus::err(
-            "WLED_DISCOVERY_TIMEOUT",
-            "timed out",
-            Some("2s".to_string()),
-        );
-        assert_eq!(s.code, "WLED_DISCOVERY_TIMEOUT");
-        assert_eq!(s.details, Some("2s".to_string()));
     }
 }

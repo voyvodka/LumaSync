@@ -9,6 +9,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { shellStore, type ShellState } from "@/features/persistence/shellStore";
 import { showNotification } from "@/features/platform/platformApi";
+import { parseHex, rgbToHex } from "@/shared/lib/color";
 import { HsvColorPicker } from "@/shared/ui/HsvColorPicker";
 import { IconOff, IconAmbilight, IconSolidDot } from "@/shared/ui/icons";
 import { setLightingMode, stopLighting } from "@/features/mode/modeApi";
@@ -91,22 +92,6 @@ function buildRunRequest(
     ? ({ kind, r: color.r, g: color.g, b: color.b } as LedTestPattern)
     : ({ kind } as LedTestPattern);
   return { pattern, brightness: color.brightness, speed, targets };
-}
-
-function toHexPair(value: number): string {
-  return Math.max(0, Math.min(255, Math.floor(value))).toString(16).padStart(2, "0");
-}
-function toHex(rgb: { r: number; g: number; b: number }): string {
-  return `#${toHexPair(rgb.r)}${toHexPair(rgb.g)}${toHexPair(rgb.b)}`;
-}
-function fromHex(hex: string): { r: number; g: number; b: number } {
-  const s = hex.startsWith("#") ? hex.slice(1) : hex;
-  if (!/^[0-9a-fA-F]{6}$/.test(s)) return { r: 255, g: 255, b: 255 };
-  return {
-    r: Number.parseInt(s.slice(0, 2), 16),
-    g: Number.parseInt(s.slice(2, 4), 16),
-    b: Number.parseInt(s.slice(4, 6), 16),
-  };
 }
 
 export function ControlPopupApp() {
@@ -463,7 +448,7 @@ export function ControlPopupApp() {
       ? { cls: "is-live", label: t("preview:status.live") }
       : null;
 
-  const hexColor = toHex(draft);
+  const hexColor = rgbToHex(draft);
   const brightnessPct = Math.round(draft.brightness * 100);
 
   return (
@@ -524,7 +509,10 @@ export function ControlPopupApp() {
               {showColorPicker && (
                 <HsvColorPicker
                   value={hexColor}
-                  onChange={(hex) => setColor(fromHex(hex))}
+                  onChange={(hex) => {
+                    const rgb = parseHex(hex);
+                    if (rgb) setColor(rgb);
+                  }}
                   ariaLabel={t("common:mode.solidColor")}
                   compact
                 />

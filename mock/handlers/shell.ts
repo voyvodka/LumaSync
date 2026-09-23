@@ -9,7 +9,7 @@
 
 import { CAPTURE_COMMANDS } from "../../src/shared/contracts/capture";
 import { DISPLAY_OVERLAY_COMMANDS } from "../../src/shared/contracts/display";
-import { PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
+import { LED_TEST_STATUS, PREVIEW_COMMANDS } from "../../src/shared/contracts/preview";
 import { UPDATER_COMMANDS, UPDATER_STATUS } from "../../src/shared/contracts/updater";
 import { SHELL_STORE_KEY } from "../../src/shared/contracts/shell";
 import { getWorld, mutate } from "../state";
@@ -111,11 +111,9 @@ export const shellHandlers = {
     return {
       active: true,
       previewOnly,
-      // `LedTestPatternResult.status.details` is `string | undefined`, not
-      // `string | null` like `CommandStatus` — omit rather than use `status()`.
       status: previewOnly
-        ? { code: "LED_TEST_PATTERN_PREVIEW_ONLY" as const, message: "Preview only — no connected output sink" }
-        : { code: "LED_TEST_PATTERN_STARTED" as const, message: "Started" },
+        ? status(LED_TEST_STATUS.PATTERN_PREVIEW_ONLY, "Preview only — no connected output sink")
+        : status(LED_TEST_STATUS.PATTERN_STARTED, "Started"),
     };
   },
   // `stop_led_test_pattern` re-applies the mode that ran before the test and
@@ -145,7 +143,7 @@ export const shellHandlers = {
       // — the field describes the test that just ended, not whatever mode gets
       // restored in its place.
       previewOnly: false,
-      status: { code: "LED_TEST_PATTERN_STOPPED" as const, message: "Stopped" },
+      status: status(LED_TEST_STATUS.PATTERN_STOPPED, "Stopped"),
     };
   },
 

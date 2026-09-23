@@ -1,3 +1,7 @@
+import { useCallback, useEffect, useRef } from "react";
+
+import { HUE_RUNTIME_STATES } from "@/shared/contracts/hue";
+
 import type { UseHueOnboardingResult } from "./model/onboardingTypes";
 import { deriveRuntimeTargets } from "./model/runtimeTargets";
 import { useHueAreaChannels } from "./state/useHueAreaChannels";
@@ -30,6 +34,27 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     areaId: state.selectedAreaId,
     onError: core.publishStatus,
   });
+
+  // The channel list read while lighting was on is our own placements; once the
+  // runtime is idle again, read the bridge's. See docs/architecture/hue.md.
+  const { refreshChannels } = channels;
+  const runtimeState = runtime.runtimeStatus?.state ?? null;
+  const previousRuntimeStateRef = useRef(runtimeState);
+  useEffect(() => {
+    const previous = previousRuntimeStateRef.current;
+    previousRuntimeStateRef.current = runtimeState;
+    if (runtimeState !== HUE_RUNTIME_STATES.IDLE || previous === null) return;
+    if (previous === HUE_RUNTIME_STATES.IDLE) return;
+    void refreshChannels();
+  }, [runtimeState, refreshChannels]);
+
+  // "Validate again" is where a user goes after changing the area in the Hue
+  // app, so it re-reads the channel positions along with the readiness.
+  const { revalidateArea: revalidateReadiness } = core;
+  const revalidateArea = useCallback(async () => {
+    void refreshChannels();
+    await revalidateReadiness();
+  }, [refreshChannels, revalidateReadiness]);
 
   useHueReadinessPolling({
     bridge: core.selectedBridge,
@@ -68,6 +93,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     areaChannels: channels.areaChannels,
     isLoadingChannels: channels.isLoadingChannels,
     channelsStatus: channels.channelsStatus,
+    channelsFromBridge: channels.channelsFromBridge,
     refreshChannels: channels.refreshChannels,
     discover: core.discover,
     selectBridge: core.selectBridge,
@@ -76,7 +102,7 @@ export function useHueOnboarding(): UseHueOnboardingResult {
     pair: core.pair,
     refreshAreas: core.refreshAreas,
     selectArea: core.selectArea,
-    revalidateArea: core.revalidateArea,
+    revalidateArea,
     startRuntime: runtime.startRuntime,
     retryRuntimeTarget: runtime.retryRuntimeTarget,
   };

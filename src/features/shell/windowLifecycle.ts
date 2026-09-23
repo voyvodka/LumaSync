@@ -642,6 +642,17 @@ async function animateWindowRect(
   durationMs: number,
 ): Promise<void> {
   const start = performance.now();
+  // Once per animation: a destroyed window fails every remaining frame, and a
+  // line per frame would flood the log sink at display rate.
+  let frameErrorLogged = false;
+  const logFrameError = (error: unknown) => {
+    if (frameErrorLogged) return;
+    frameErrorLogged = true;
+    console.warn(
+      "[LumaSync] window resize animation: an intermediate frame failed (further frame errors in this animation are not logged):",
+      error,
+    );
+  };
 
   while (true) {
     const now = performance.now();
@@ -661,11 +672,11 @@ async function animateWindowRect(
       ]);
       return;
     } else {
-      // Intermediate frames: fire-and-forget to avoid stuttering from IPC round-trips.
-      // We swallow potential rejections (e.g., if window is destroyed mid-animation)
-      // to avoid unhandled promise rejections.
-      win.setSize(new LogicalSize(w, h)).catch(() => {});
-      win.setPosition(new LogicalPosition(x, y)).catch(() => {});
+      // Intermediate frames: fire-and-forget to avoid stuttering from IPC
+      // round-trips. A rejection (e.g. the window destroyed mid-animation) is
+      // caught so it is not unhandled, and logged rather than swallowed.
+      win.setSize(new LogicalSize(w, h)).catch(logFrameError);
+      win.setPosition(new LogicalPosition(x, y)).catch(logFrameError);
     }
 
     // Bounded: while hidden the frames never come, and `t` is wall-clock, so

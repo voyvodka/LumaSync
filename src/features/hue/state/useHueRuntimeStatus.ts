@@ -7,7 +7,7 @@ import {
 import { shellStore } from "@/features/persistence/shellStore";
 import { restartHue, startHue } from "../../mode/modeApi";
 import { toChannelPlacements } from "../model/hueStartConfig";
-import { readHueStreamStatus } from "../hueReadCache";
+import { readHueStreamStatus, subscribeHueStreamStatusInvalidation } from "../hueReadCache";
 import type { HueBridgeSummary, HuePairingCredentials } from "../hueOnboardingApi";
 import {
   HUE_ONBOARDING_TRANSPORT_CODES as CODE,
@@ -44,6 +44,12 @@ export function useHueRuntimeStatus({
   const lastRuntimePollAtRef = useRef(0);
   const [runtimeTargets, setRuntimeTargets] = useState<HueRuntimeTargetRow[]>([]);
   const [isRuntimeMutating, setIsRuntimeMutating] = useState(false);
+  /** Our own start/restart does a forced read when it finishes; the
+   * invalidation it fires on the way must not add a second one. */
+  const isRuntimeMutatingRef = useRef(false);
+  /** Survives the effect re-running, so a start that lands while a read is in
+   * flight is not lost when that read's result changes `runtimeState`. */
+  const refreshPendingRef = useRef(false);
 
   // `force` bypasses the shared read cache. Mandatory after a mutation: a
   // cached pre-mutation status would paint the Devices tab with the state the
@@ -69,8 +75,11 @@ export function useHueRuntimeStatus({
   }, []);
 
   // Polls only while the runtime is Starting / Running / Reconnecting; the other
-  // states get the mount tick and go silent. Visibility-aware, per the convention
-  // in docs/architecture/ui-and-shell.md.
+  // states get the mount tick and go silent until a Hue start/stop/restart from
+  // any surface invalidates the status. Without that wake-up a stream started
+  // by the tray, a keybind or the boot restore while this tab was open left the
+  // card on "Ready" beside a STREAMING status bar. Visibility-aware, per the convention in
+  // docs/architecture/ui-and-shell.md.
   const runtimeState = runtimeStatus?.state ?? null;
   useEffect(() => {
     let mounted = true;
@@ -84,13 +93,34 @@ export function useHueRuntimeStatus({
       if (inFlight) return;
       if (document.visibilityState === "hidden") return;
       inFlight = true;
+      refreshPendingRef.current = false;
       lastRuntimePollAtRef.current = Date.now();
       try {
         await pollRuntimeStatus();
       } finally {
         inFlight = false;
-        scheduleNext();
+        if (mounted && refreshPendingRef.current) {
+          void tick();
+        } else {
+          scheduleNext();
+        }
       }
+    };
+
+    // Bypasses the min-interval floor: the floor collapses re-reads of a state
+    // we already hold, and an invalidation means that state just changed.
+    const refreshAfterInvalidation = () => {
+      if (!mounted) return;
+      if (isRuntimeMutatingRef.current) return;
+      if (inFlight) {
+        refreshPendingRef.current = true;
+        return;
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      void tick();
     };
 
     // `runtimeState` only ever moves because a poll returned it, so an entry tick
@@ -121,8 +151,13 @@ export function useHueRuntimeStatus({
       if (document.visibilityState === "visible") tickIfStale();
     };
 
-    tickIfStale();
+    if (refreshPendingRef.current) {
+      void tick();
+    } else {
+      tickIfStale();
+    }
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    const unsubscribeInvalidation = subscribeHueStreamStatusInvalidation(refreshAfterInvalidation);
 
     return () => {
       mounted = false;
@@ -131,6 +166,7 @@ export function useHueRuntimeStatus({
         timeoutId = null;
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      unsubscribeInvalidation();
     };
   }, [pollRuntimeStatus, runtimeState]);
 
@@ -139,6 +175,7 @@ export function useHueRuntimeStatus({
       return;
     }
 
+    isRuntimeMutatingRef.current = true;
     setIsRuntimeMutating(true);
     try {
       await startHue({
@@ -157,6 +194,7 @@ export function useHueRuntimeStatus({
       });
     } finally {
       await pollRuntimeStatus({ force: true });
+      isRuntimeMutatingRef.current = false;
       setIsRuntimeMutating(false);
     }
   }, [areaId, bridge, credentials, isRuntimeMutating, onError, pollRuntimeStatus]);
@@ -167,6 +205,7 @@ export function useHueRuntimeStatus({
         return;
       }
 
+      isRuntimeMutatingRef.current = true;
       setIsRuntimeMutating(true);
       try {
         if (bridge && credentials && areaId) {
@@ -187,6 +226,7 @@ export function useHueRuntimeStatus({
         });
       } finally {
         await pollRuntimeStatus({ force: true });
+        isRuntimeMutatingRef.current = false;
         setIsRuntimeMutating(false);
       }
     },

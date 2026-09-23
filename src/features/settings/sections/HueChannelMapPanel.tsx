@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { HueAreaChannelInfo } from "@/features/hue/hueOnboardingApi";
+import type { HueAreaChannelsRead } from "@/features/hue/model/onboardingTypes";
 import {
   CHANNEL_WRITEBACK_STATUS,
   findHueChannel,
@@ -14,16 +15,21 @@ import {
   type HueChannelPlacementOverride,
 } from "@/shared/contracts/hue";
 import { updateHueChannelPositions } from "@/features/room-map/roomMapApi";
-import { moveHueChannelToWorld } from "@/features/room-map/model/hueChannelPosition";
 import {
+  adoptBridgePlacement,
   resolveChannelPlacement,
   seedChannelPlacements,
 } from "@/features/room-map/model/hueChannelSeeding";
 import {
   HUE_SYNC_STATE,
+  bridgeSnapshot,
   deriveHueSyncState,
-  toSyncSnapshot,
+  differingChannelIds,
+  sameSnapshot,
+  snapshotAfterPush,
 } from "@/features/hue/model/hueSyncState";
+import { parseSkippedChannelIds } from "@/features/hue/model/hueWritebackResult";
+import { HueChannelMapConfirmDialog } from "./HueChannelMapConfirmDialog";
 
 interface Props {
   channels: HueAreaChannelInfo[];
@@ -31,6 +37,9 @@ interface Props {
   /** Last fetch's status code, `null` before the first answer. An empty area and
    * a bridge that never replied both arrive as an empty list. */
   channelsStatus?: string | null;
+  /** `channels` was read from the bridge with the runtime idle, so its positions
+   *  are the bridge's rather than our own placements echoed back. */
+  channelsFromBridge?: boolean;
   /** Persisted channel placements from shellStore. Falls back to bridge positionX/Y when absent. */
   placements?: HueChannelPlacement[];
   /** Called when any channel position changes. */
@@ -46,13 +55,16 @@ interface Props {
   areaId?: string;
   /** When true, the save-to-bridge button is disabled with tooltip. */
   isStreaming?: boolean;
-  /** What was last written to the bridge for this area. Absent ⇒ never pushed. */
+  /** The bridge's arrangement as last known for this area. Absent ⇒ never read
+   *  or written from here. */
   syncedPositions?: HueChannelPlacementOverride[];
-  /** Record a new snapshot after a push or a pull settles the two sides. */
+  /** Record the bridge's arrangement after a push, a pull, or a fresh read. */
   onSyncedPositionsChange?: (snapshot: HueChannelPlacementOverride[]) => void;
-  /** Re-read the bridge's list before adopting it — a list fetched while a
-   *  stream was running carries our own placements, not the bridge's. */
-  onRefreshChannels?: () => void;
+  /** Re-read the bridge's list. The pull adopts the read it resolves with — a
+   *  list fetched while a stream was running carries our own placements. */
+  onRefreshChannels?: () => Promise<HueAreaChannelsRead | null>;
+  /** The bridge rejected our key; start the existing re-pair flow. */
+  onRepair?: () => void;
   /** Placement is authored on the room map; this is the way there. */
   onNavigateToRoomMap?: () => void;
   /** Room-map Hue zones. A channel bound to one stores its position relative to
@@ -61,7 +73,24 @@ interface Props {
   zones?: readonly HueZone[];
 }
 
+type BridgeActionResult =
+  | { kind: "saved" }
+  | { kind: "savedPartial"; skippedIds: number[] }
+  | { kind: "saveFailed"; code: string }
+  | { kind: "pulled"; clampedIds: number[] }
+  | { kind: "pullFailed" };
+
 const NO_ZONES: readonly HueZone[] = [];
+
+const SAVED_DISMISS_MS = 3000;
+/** Long enough to read which channels the bridge kept. */
+const DETAIL_DISMISS_MS = 8000;
+
+/** Worth retrying as-is. The rest need a re-pair or a different area layout. */
+const RETRYABLE_WRITEBACK_CODES: ReadonlySet<string> = new Set([
+  CHANNEL_WRITEBACK_STATUS.NETWORK_ERROR,
+  CHANNEL_WRITEBACK_STATUS.SCHEMA_REJECTED,
+]);
 
 const EMPTY_STATE_KEYS = {
   empty: {
@@ -78,10 +107,15 @@ const EMPTY_STATE_KEYS = {
   },
 } as const;
 
+function channelList(ids: readonly number[]): string {
+  return ids.map((id) => `#${id}`).join(", ");
+}
+
 export function HueChannelMapPanel({
   channels,
   isLoading,
   channelsStatus,
+  channelsFromBridge = false,
   placements,
   onPositionChange,
   persistError,
@@ -92,6 +126,7 @@ export function HueChannelMapPanel({
   syncedPositions,
   onSyncedPositionsChange,
   onRefreshChannels,
+  onRepair,
   onNavigateToRoomMap,
   zones = NO_ZONES,
 }: Props) {
@@ -104,9 +139,16 @@ export function HueChannelMapPanel({
   const zonesRef = useRef<readonly HueZone[]>(zones);
   zonesRef.current = zones;
 
+  const syncedPositionsRef = useRef(syncedPositions);
+  syncedPositionsRef.current = syncedPositions;
+  const onSyncedPositionsChangeRef = useRef(onSyncedPositionsChange);
+  onSyncedPositionsChangeRef.current = onSyncedPositionsChange;
+
   const [isSaving, setIsSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState<{ ok: boolean; code?: string; message?: string } | null>(null);
-  const saveResultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isPulling, setIsPulling] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<"save" | "pull" | null>(null);
+  const [actionResult, setActionResult] = useState<BridgeActionResult | null>(null);
+  const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [channelPlacements, setChannelPlacements] = useState<HueChannelPlacement[]>(() =>
     channels.map((ch) => resolveChannelPlacement(ch, placementsRef.current, zonesRef.current)),
@@ -132,24 +174,47 @@ export function HueChannelMapPanel({
     if (needsWrite) onPositionChange(resolved);
   }, [channels, onPositionChange]);
 
+  const isStale = channelsStatus === HUE_AREA_CHANNELS_STATUS.UNREACHABLE;
+
+  // The bridge's own arrangement, when the list we hold is one. It is what the
+  // verdict compares against, and it is recorded so the verdict survives a
+  // later read that cannot be trusted (one made while lighting is on).
+  const bridgeRead = useMemo(
+    () => (channelsFromBridge && !isStale ? bridgeSnapshot(channels) : undefined),
+    [channels, channelsFromBridge, isStale],
+  );
+  useEffect(() => {
+    if (!bridgeRead || sameSnapshot(bridgeRead, syncedPositionsRef.current)) return;
+    onSyncedPositionsChangeRef.current?.(bridgeRead);
+  }, [bridgeRead]);
+
+  const bridgeArrangement = bridgeRead ?? syncedPositions;
+
   useEffect(
     () => () => {
-      if (saveResultTimerRef.current !== null) clearTimeout(saveResultTimerRef.current);
+      if (resultTimerRef.current !== null) clearTimeout(resultTimerRef.current);
     },
     [],
   );
 
-  const handleSaveToBridge = useCallback(async () => {
-    if (!bridgeIp || username === undefined || !areaId) return;
-    const confirmed = window.confirm(t("hue:channelMap.saveConfirm", { ip: bridgeIp }));
-    if (!confirmed) return;
-
-    setIsSaving(true);
-    setSaveResult(null);
-    if (saveResultTimerRef.current !== null) {
-      clearTimeout(saveResultTimerRef.current);
-      saveResultTimerRef.current = null;
+  const showResult = useCallback((result: BridgeActionResult | null, dismissAfterMs?: number) => {
+    if (resultTimerRef.current !== null) {
+      clearTimeout(resultTimerRef.current);
+      resultTimerRef.current = null;
     }
+    setActionResult(result);
+    if (result !== null && dismissAfterMs !== undefined) {
+      resultTimerRef.current = setTimeout(() => {
+        setActionResult(null);
+        resultTimerRef.current = null;
+      }, dismissAfterMs);
+    }
+  }, []);
+
+  const runSave = useCallback(async () => {
+    if (!bridgeIp || username === undefined || !areaId) return;
+    setIsSaving(true);
+    showResult(null);
 
     try {
       const response = await updateHueChannelPositions({
@@ -159,43 +224,98 @@ export function HueChannelMapPanel({
         areaId,
       });
       if (response.code === HUE_RUNTIME_STATUS.CHANNEL_POSITIONS_UPDATED) {
-        onSyncedPositionsChange?.(toSyncSnapshot(channelPlacements));
-        setSaveResult({ ok: true });
-        saveResultTimerRef.current = setTimeout(() => {
-          setSaveResult(null);
-          saveResultTimerRef.current = null;
-        }, 3000);
+        // `details` is set only when the bridge skipped something.
+        const skippedIds = parseSkippedChannelIds(response.details);
+        onSyncedPositionsChange?.(
+          snapshotAfterPush(channelPlacements, bridgeArrangement, skippedIds),
+        );
+        if (response.details) {
+          showResult({ kind: "savedPartial", skippedIds }, DETAIL_DISMISS_MS);
+        } else {
+          showResult({ kind: "saved" }, SAVED_DISMISS_MS);
+        }
+        // The bridge re-derives what it stored; read back what it actually holds.
+        void onRefreshChannels?.();
       } else {
-        setSaveResult({ ok: false, code: response.code, message: response.message });
+        showResult({ kind: "saveFailed", code: response.code });
       }
     } catch (err) {
       console.error("[LumaSync] Hue channel-position write-back failed:", err);
-      setSaveResult({
-        ok: false,
-        code: CHANNEL_WRITEBACK_STATUS.NETWORK_ERROR,
-        message: String(err),
-      });
+      showResult({ kind: "saveFailed", code: CHANNEL_WRITEBACK_STATUS.NETWORK_ERROR });
     } finally {
       setIsSaving(false);
     }
-  }, [bridgeIp, username, areaId, channelPlacements, onSyncedPositionsChange, t]);
+  }, [
+    bridgeIp,
+    username,
+    areaId,
+    channelPlacements,
+    bridgeArrangement,
+    onSyncedPositionsChange,
+    onRefreshChannels,
+    showResult,
+  ]);
 
   /** Take the bridge's arrangement. Destructive — it replaces local placement —
-   *  so unlike the push it asks first. Gated on the runtime being off for the
-   *  same reason the push is: while a stream runs, the channel list we would
-   *  adopt is the one carrying our own placements. */
-  const handlePullFromBridge = useCallback(() => {
-    if (!window.confirm(t("hue:channelMap.pullConfirm"))) return;
-    onRefreshChannels?.();
-    const adopted = channels.map((ch) => {
-      const existing = findHueChannel(channelPlacements, ch.index);
-      const base = existing ?? { channelIndex: ch.index, channelId: ch.channelId, x: 0, y: 0, z: 0 };
-      return moveHueChannelToWorld(base, zonesRef.current, ch.positionX, ch.positionY);
-    });
-    setChannelPlacements(adopted);
-    onPositionChange?.(adopted);
-    onSyncedPositionsChange?.(toSyncSnapshot(adopted));
-  }, [channels, channelPlacements, onPositionChange, onSyncedPositionsChange, onRefreshChannels, t]);
+   *  so it asks first. Gated on the runtime being off for the same reason the
+   *  push is, and adopts only a fresh read that is the bridge's own: while a
+   *  stream runs, the channel list carries our own placements. */
+  const runPull = useCallback(async () => {
+    setIsPulling(true);
+    showResult(null);
+    try {
+      const read: HueAreaChannelsRead | null = onRefreshChannels
+        ? await onRefreshChannels()
+        : { status: channelsStatus ?? "", channels, fromBridge: channelsFromBridge };
+      if (!read || !read.fromBridge || read.channels.length === 0) {
+        console.warn(
+          `[LumaSync] Hue pull skipped: no bridge-owned channel list (status ${read?.status ?? "none"})`,
+        );
+        showResult({ kind: "pullFailed" });
+        return;
+      }
+      const zonesNow = zonesRef.current;
+      const adopted = read.channels.map((ch) =>
+        adoptBridgePlacement(
+          resolveChannelPlacement(ch, placementsRef.current, zonesNow),
+          ch,
+          zonesNow,
+        ),
+      );
+      // What the room map will resolve these to, which is where a zone that
+      // cannot reach the bridge's position shows.
+      const resolved = read.channels.map((ch) => resolveChannelPlacement(ch, adopted, zonesNow));
+      const snapshot = bridgeSnapshot(read.channels);
+      setChannelPlacements(resolved);
+      onPositionChange?.(adopted);
+      onSyncedPositionsChange?.(snapshot);
+      const clampedIds = differingChannelIds(resolved, snapshot);
+      showResult(
+        { kind: "pulled", clampedIds },
+        clampedIds.length > 0 ? DETAIL_DISMISS_MS : SAVED_DISMISS_MS,
+      );
+    } catch (err) {
+      console.error("[LumaSync] Hue channel-position pull failed:", err);
+      showResult({ kind: "pullFailed" });
+    } finally {
+      setIsPulling(false);
+    }
+  }, [
+    channels,
+    channelsStatus,
+    channelsFromBridge,
+    onPositionChange,
+    onSyncedPositionsChange,
+    onRefreshChannels,
+    showResult,
+  ]);
+
+  const confirmPending = useCallback(() => {
+    const action = pendingConfirm;
+    setPendingConfirm(null);
+    if (action === "save") void runSave();
+    else if (action === "pull") void runPull();
+  }, [pendingConfirm, runSave, runPull]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -214,7 +334,9 @@ export function HueChannelMapPanel({
     </section>
   );
 
-  if (isLoading) {
+  // A re-read this panel asked for keeps the rows, the dialog and the result on
+  // screen rather than blinking to "loading".
+  if (isLoading && !isPulling && !isSaving && actionResult === null) {
     return frame(
       <div className="lm-chmap-body">
         <p className="lm-chmap-hint">{t("hue:channelMap.loading")}</p>
@@ -243,12 +365,12 @@ export function HueChannelMapPanel({
     );
   }
 
-  const isStale = channelsStatus === HUE_AREA_CHANNELS_STATUS.UNREACHABLE;
-  const syncState = deriveHueSyncState(channelPlacements, syncedPositions);
+  const syncState = deriveHueSyncState(channelPlacements, bridgeArrangement);
   // Gated on the runtime, not just on streaming: a solid-colour session also
   // holds a channel list with our placements applied.
   const bridgeBusy = isStreaming || isStale;
   const hasSaveAction = Boolean(bridgeIp && areaId) && username !== undefined;
+  const actionBusy = isSaving || isPulling;
 
   return (
     <section
@@ -332,7 +454,7 @@ export function HueChannelMapPanel({
                 ? t("hue:channelMap.sync.inSync")
                 : syncState === HUE_SYNC_STATE.LOCAL_AHEAD
                   ? t("hue:channelMap.sync.localAhead")
-                  : t("hue:channelMap.sync.neverPushed")}
+                  : t("hue:channelMap.sync.unknown")}
             </span>
           </div>
           <div className="lm-chmap-footer-row">
@@ -341,16 +463,18 @@ export function HueChannelMapPanel({
             <button
               type="button"
               className="lm-device-btn"
-              disabled={bridgeBusy || isSaving || channels.length === 0}
+              disabled={bridgeBusy || actionBusy || channels.length === 0}
+              aria-busy={isPulling}
               title={bridgeBusy ? t("hue:channelMap.saveToBridgeTooltip") : undefined}
-              onClick={handlePullFromBridge}
+              onClick={() => setPendingConfirm("pull")}
             >
               {t("hue:channelMap.pullFromBridge")}
             </button>
             <button
               type="button"
               className="lm-device-btn is-primary"
-              disabled={bridgeBusy || isSaving}
+              disabled={bridgeBusy || actionBusy}
+              aria-busy={isSaving}
               title={
                 isStale
                   ? t(EMPTY_STATE_KEYS.unreachable.heading)
@@ -358,40 +482,106 @@ export function HueChannelMapPanel({
                     ? t("hue:channelMap.saveToBridgeTooltip")
                     : undefined
               }
-              onClick={() => {
-                void handleSaveToBridge();
-              }}
+              onClick={() => setPendingConfirm("save")}
             >
               {isSaving ? t("hue:channelMap.saving") : t("hue:channelMap.saveToBridge")}
             </button>
           </div>
-          {saveResult !== null &&
-            (saveResult.ok ? (
-              <div className="lm-chmap-feedback is-ok" role="status" aria-live="polite">
-                <span>{t("hue:channelMap.savedToBridge")}</span>
-              </div>
-            ) : (
-              <div className="lm-chmap-feedback is-err" role="alert">
-                <span>
-                  {t("hue:channelMap.saveToBridgeError", {
-                    reason: saveResult.code
-                      ? t(`hue:runtime.writeback.codes.${saveResult.code}`, { defaultValue: saveResult.code })
-                      : "",
-                  })}
-                </span>
-                <button
-                  type="button"
-                  className="lm-chmap-feedback-retry"
-                  onClick={() => {
-                    void handleSaveToBridge();
-                  }}
-                >
-                  {t("hue:channelMap.saveToBridgeErrorRetry")}
-                </button>
-              </div>
-            ))}
+          {actionResult !== null && renderResult(actionResult)}
         </div>
+      )}
+
+      {pendingConfirm !== null && (
+        <HueChannelMapConfirmDialog
+          title={
+            pendingConfirm === "save"
+              ? t("hue:channelMap.saveConfirmTitle")
+              : t("hue:channelMap.pullConfirmTitle")
+          }
+          body={
+            pendingConfirm === "save"
+              ? t("hue:channelMap.saveConfirm", { ip: bridgeIp })
+              : t("hue:channelMap.pullConfirm")
+          }
+          confirmLabel={
+            pendingConfirm === "save"
+              ? t("hue:channelMap.saveToBridge")
+              : t("hue:channelMap.pullFromBridge")
+          }
+          onConfirm={confirmPending}
+          onCancel={() => setPendingConfirm(null)}
+        />
       )}
     </section>
   );
+
+  function renderResult(result: BridgeActionResult) {
+    switch (result.kind) {
+      case "saved":
+        return (
+          <div className="lm-chmap-feedback is-ok" role="status" aria-live="polite">
+            <span>{t("hue:channelMap.savedToBridge")}</span>
+          </div>
+        );
+      case "savedPartial":
+        return (
+          <div className="lm-chmap-feedback is-warn" role="status" aria-live="polite">
+            <span>
+              {result.skippedIds.length > 0
+                ? t("hue:channelMap.savedPartial", { channels: channelList(result.skippedIds) })
+                : t("hue:channelMap.savedPartialUnnamed")}
+            </span>
+          </div>
+        );
+      case "pulled":
+        return (
+          <div
+            className={`lm-chmap-feedback ${result.clampedIds.length > 0 ? "is-warn" : "is-ok"}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span>
+              {result.clampedIds.length > 0
+                ? t("hue:channelMap.pulledClamped", { channels: channelList(result.clampedIds) })
+                : t("hue:channelMap.pulled")}
+            </span>
+          </div>
+        );
+      case "pullFailed":
+        return (
+          <div className="lm-chmap-feedback is-err" role="alert">
+            <span>{t("hue:channelMap.pullFailed")}</span>
+          </div>
+        );
+      case "saveFailed": {
+        const needsRepair = result.code === HUE_RUNTIME_STATUS.AUTH_INVALID_RE_PAIR_REQUIRED;
+        return (
+          <div className="lm-chmap-feedback is-err" role="alert">
+            <span>
+              {t("hue:channelMap.saveToBridgeError", {
+                reason: t(`hue:runtime.writeback.codes.${result.code}`, {
+                  defaultValue: result.code,
+                }),
+              })}
+            </span>
+            {needsRepair && onRepair ? (
+              <button type="button" className="lm-chmap-feedback-retry" onClick={onRepair}>
+                {t("hue:runtime.actions.repair")}
+              </button>
+            ) : RETRYABLE_WRITEBACK_CODES.has(result.code) ? (
+              <button
+                type="button"
+                className="lm-chmap-feedback-retry"
+                onClick={() => {
+                  void runSave();
+                }}
+              >
+                {t("hue:channelMap.saveToBridgeErrorRetry")}
+              </button>
+            ) : null}
+          </div>
+        );
+      }
+    }
+  }
 }

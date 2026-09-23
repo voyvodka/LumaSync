@@ -1,8 +1,35 @@
 import { describe, expect, it } from "vitest";
 
+import type { HueAreaChannelInfo } from "@/shared/contracts/hue";
 import type { HueChannelPlacement } from "@/shared/contracts/roomMap";
 
-import { HUE_SYNC_STATE, deriveHueSyncState, toSyncSnapshot } from "../hueSyncState";
+import {
+  HUE_SYNC_STATE,
+  bridgeSnapshot,
+  deriveHueSyncState,
+  differingChannelIds,
+  sameSnapshot,
+  snapshotAfterPush,
+  toSyncSnapshot,
+} from "../hueSyncState";
+
+function channel(
+  channelId: number,
+  positionX: number,
+  positionY: number,
+  positionZ: number | null,
+): HueAreaChannelInfo {
+  return {
+    index: channelId,
+    channelId,
+    lightIds: [`light-${channelId}`],
+    positionX,
+    positionY,
+    positionZ,
+    lightCount: 1,
+    autoRegion: "center",
+  };
+}
 
 /** Gapped bridge ids — an ordinal standing in for one shows up immediately. */
 function placements(): HueChannelPlacement[] {
@@ -48,8 +75,18 @@ describe("toSyncSnapshot", () => {
 });
 
 describe("deriveHueSyncState", () => {
-  it("says never-pushed when nothing has been written from here", () => {
-    expect(deriveHueSyncState(placements(), undefined)).toBe(HUE_SYNC_STATE.NEVER_PUSHED);
+  it("says unknown when the bridge's arrangement was never read or written", () => {
+    expect(deriveHueSyncState(placements(), undefined)).toBe(HUE_SYNC_STATE.UNKNOWN);
+  });
+
+  it("compares against a fresh bridge read the same way as a snapshot", () => {
+    const bridge = bridgeSnapshot([
+      channel(0, -1, 0, null),
+      channel(2, 0, 0, null),
+      channel(5, 0.7, 0, null),
+    ]);
+    expect(deriveHueSyncState(placements(), bridge)).toBe(HUE_SYNC_STATE.LOCAL_AHEAD);
+    expect(differingChannelIds(placements(), bridge)).toEqual([5]);
   });
 
   it("says in-sync when the snapshot matches", () => {
@@ -157,5 +194,60 @@ describe("deriveHueSyncState", () => {
       p[1] = { ...p[1]!, x: 0.5 };
       expect(deriveHueSyncState(p, legacy)).toBe(HUE_SYNC_STATE.LOCAL_AHEAD);
     });
+  });
+});
+
+describe("bridgeSnapshot", () => {
+  it("carries the bridge's height only when it reported one", () => {
+    expect(bridgeSnapshot([channel(0, 0.168, 1, -0.524), channel(1, -0.5, 1, null)])).toEqual([
+      { channelId: 0, positionX: 0.168, positionY: 1, positionZ: -0.524 },
+      { channelId: 1, positionX: -0.5, positionY: 1 },
+    ]);
+  });
+});
+
+describe("snapshotAfterPush", () => {
+  it("records what was sent when the bridge took every channel", () => {
+    expect(snapshotAfterPush(placements(), undefined, [])).toEqual(toSyncSnapshot(placements()));
+  });
+
+  it("keeps the bridge's previous position for a channel it skipped", () => {
+    const before = bridgeSnapshot([
+      channel(0, -1, 0, null),
+      channel(2, 0, 0, null),
+      channel(5, 0.3, 0.3, null),
+    ]);
+    const sent = placements();
+    sent[2] = { ...sent[2]!, x: 0.9 };
+
+    const after = snapshotAfterPush(sent, before, [5]);
+
+    expect(after.find((s) => s.channelId === 5)).toEqual({
+      channelId: 5,
+      positionX: 0.3,
+      positionY: 0.3,
+    });
+    expect(deriveHueSyncState(sent, after)).toBe(HUE_SYNC_STATE.LOCAL_AHEAD);
+  });
+
+  it("leaves a skipped channel out rather than inventing its position", () => {
+    const after = snapshotAfterPush(placements(), undefined, [2]);
+    expect(after.map((s) => s.channelId)).toEqual([0, 5]);
+    expect(deriveHueSyncState(placements(), after)).toBe(HUE_SYNC_STATE.LOCAL_AHEAD);
+  });
+});
+
+describe("sameSnapshot", () => {
+  it("treats a height appearing as a change worth recording", () => {
+    const a = bridgeSnapshot([channel(0, 0, 0, null)]);
+    const b = bridgeSnapshot([channel(0, 0, 0, 0.2)]);
+    expect(sameSnapshot(a, b)).toBe(false);
+    expect(sameSnapshot(b, bridgeSnapshot([channel(0, 0, 0, 0.2)]))).toBe(true);
+  });
+
+  it("ignores order, and never matches an absent snapshot", () => {
+    const a = bridgeSnapshot([channel(0, 0, 0, null), channel(1, 1, 1, null)]);
+    expect(sameSnapshot(a, [...a].reverse())).toBe(true);
+    expect(sameSnapshot(a, undefined)).toBe(false);
   });
 });

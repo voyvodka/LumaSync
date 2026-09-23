@@ -1447,6 +1447,9 @@ checkWireUnion(
   "SerialCommandStatusCode",
   [
     ...[...rustSerialProduction.matchAll(/command_status\(\s*"([A-Z][A-Z0-9_]*)"/g)].map((m) => m[1]),
+    // Failed connects go through `failed_connect_status(&port, "CODE", ...)`.
+    ...[...rustSerialProduction.matchAll(/failed_connect_status\(\s*&?\w+,\s*"([A-Z][A-Z0-9_]*)"/g)]
+      .map((m) => m[1]),
     // The last `command_status` arm passes `connect_error_code(&error)`, so its
     // match arms are part of the same wire union.
     ...[...(rustSerialProduction.match(/fn connect_error_code[\s\S]*?\n\}/) ?? [""])[0]
@@ -1463,7 +1466,7 @@ checkWireUnion(
 
 checkWireUnion(
   "WledWireStatusCode",
-  [...stripComments(wledRustSource).matchAll(/WledCommandStatus::(?:ok|err)\(\s*"([A-Z][A-Z0-9_]*)"/g)]
+  [...stripComments(wledRustSource).matchAll(/CommandStatus::(?:ok|new)\(\s*"([A-Z][A-Z0-9_]*)"/g)]
     .map((m) => m[1]),
   // Mirrors the `Exclude<...>` in device.ts, which this harvest cannot read:
   // SINK_NOT_STARTED is an Err(String) prefix and LIVE_LED_COUNT_MISMATCH rides
@@ -2148,10 +2151,8 @@ console.log("\n[ Nullability parity — Rust Option ↔ TS null/optional ]");
  */
 const NULLABILITY_NAME_ALIASES = {
   HueEntertainmentArea: "HueEntertainmentAreaSummary",
-  // The four coded-status structs all mirror the one generic envelope.
+  // `commands/status.rs` — the one Rust envelope, pinned single below.
   CommandStatus: "CommandStatusOf",
-  WledCommandStatus: "CommandStatusOf",
-  HueCommandStatus: "CommandStatusOf",
   DisplayInfoPayload: "DisplayInfo",
 };
 
@@ -2196,8 +2197,8 @@ for (const file of walkRustSourceFiles(resolve(ROOT, "src-tauri/src"))) {
     /((?:#\[[^\]]*\]\s*)+)pub struct (\w+)\s*\{([\s\S]*?)\n\}/g
   )) {
     if (!/derive\([^)]*\bSerialize\b/.test(m[1])) continue;
-    // A duplicate name (two `CommandStatus` definitions) is fine: both mirror
-    // the same TS interface, so both get checked against it.
+    // A duplicate name is kept, not overwritten, so every definition is
+    // checked against the interface it mirrors.
     const existing = rustSerializableStructs.get(m[2]) ?? [];
     existing.push({ file, fields: rustFieldsWithAttrs(m[3]) });
     rustSerializableStructs.set(m[2], existing);
@@ -2253,6 +2254,31 @@ for (const [structName, defs] of rustSerializableStructs) {
   nullabilityPairs.push({ structName, tsName, defs });
 }
 
+console.log("\n[ One coded-status envelope in Rust ]");
+// Four structs used to carry `{ code, message, details }` under three names;
+// a fifth would drift on its own derives. Any Serialize struct whose fields are
+// exactly that trio must be the one `CommandStatus` in commands/status.rs.
+{
+  const ENVELOPE_FIELDS = ["code", "details", "message"].join(",");
+  const envelopeCopies = [];
+  for (const [structName, defs] of rustSerializableStructs) {
+    for (const def of defs) {
+      const names = def.fields.map((f) => f.name).sort().join(",");
+      if (names === ENVELOPE_FIELDS) envelopeCopies.push({ structName, file: def.file });
+    }
+  }
+  const canonical = envelopeCopies.filter(
+    (c) => c.structName === "CommandStatus" && c.file.endsWith("/commands/status.rs")
+  );
+  check(
+    canonical.length === 1 && envelopeCopies.length === 1,
+    "exactly one Rust coded-status struct (commands/status.rs CommandStatus)",
+    `DUPLICATE ENVELOPE: ${envelopeCopies
+      .map((c) => `${c.structName} (${c.file.replace(`${ROOT}/`, "")})`)
+      .join(", ")} — use commands::status::CommandStatus instead of a local copy`
+  );
+}
+
 console.log("\n[ Serialize structs with no contract interface (ratcheted) ]");
 const UNPAIRED_BASELINE_FILE = resolve(__dirname, "contract-unpaired-struct-baseline.txt");
 const unpairedBaseline = new Set(
@@ -2289,7 +2315,8 @@ for (const structName of unpairedBaseline) {
 const checkedPairs = nullabilityPairs.filter(
   (p) => !(p.structName in NULLABILITY_EXCLUDED_PAIRS)
 );
-const EXPECTED_NULLABILITY_PAIR_COUNT = 45;
+// 45 → 44: `WledCommandStatus` folded into the shared `CommandStatus`.
+const EXPECTED_NULLABILITY_PAIR_COUNT = 44;
 check(
   nullabilityPairs.length === EXPECTED_NULLABILITY_PAIR_COUNT,
   `harvested exactly ${EXPECTED_NULLABILITY_PAIR_COUNT} Rust↔contract struct pairs`,

@@ -2,7 +2,6 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enRoomMap from "@/locales/en/roomMap";
 
 const roomMap: Catalogue<typeof enRoomMap> = {
-  comingSoon: "Oda haritası editörü ilerleyen bir güncellemede gelecek.",
   loading: "Oda haritası yükleniyor…",
   toolbar: {
     addTv: "TV Ekle",
@@ -10,7 +9,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     addUsb: "LED Şerit Ekle",
     addImage: "Resim Ekle",
     settingsAriaLabel: "Harita Ayarları",
-    tvAlreadyPlaced: "TV zaten eklendi",
     undo: "Geri Al",
     redo: "Yinele",
   },
@@ -35,8 +33,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     },
   },
   settings: {
-    uploadBackground: "Kat planı yükle",
-    opacity: "Şeffaflık",
     showGrid: "Izgarayı göster",
     gridStrokeWidth: "Izgara kalınlığı",
     showHueZones: "Hue bölgelerini göster",
@@ -63,12 +59,8 @@ const roomMap: Catalogue<typeof enRoomMap> = {
     confirmDeriveButton: "Onayla",
     cancelDeriveButton: "Önizlemeyi İptal Et",
     addZoneButton: "+ Bölge",
-    namePlaceholder: "Bölge adı",
     deriveDisabledTooltip: "Önce haritaya bir USB şerit ve TV ekleyin",
     deriveSuccess: "Bölgeler türetildi — inceleyin ve onaylayın",
-    errNoTvAnchor: "Bölge türetmeden önce haritaya bir TV ekleyin.",
-    errNoUsbStrip: "Bölge türetmeden önce haritaya bir USB şerit ekleyin.",
-    calibrationApplyNote: "Bölge sayıları uygulandı. Kalıcı yapmak için Kalibrasyonda Kaydedin.",
   },
   hueZones: {
     title: "Hue Bölgeleri",
@@ -122,8 +114,6 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   },
   zoneProperties: {
     color: "Renk",
-    borderColor: "Kenar",
-    centerColor: "Merkez",
     swatchAriaLabel: "{{name}} rengini kullan",
   },
   objectPanel: {
@@ -141,19 +131,13 @@ const roomMap: Catalogue<typeof enRoomMap> = {
   inspector: {
     regionAriaLabel: "Seçili öğe özellikleri",
     empty: "Özelliklerini düzenlemek için bir nesne veya bölge seçin.",
-    zoneTitle: "Bölge",
-    channelsLabel: "Kanallar",
-    legacyZoneHint: "Bu bölgeye kanal eklemek/çıkarmak için tuvaldeki LED noktalarına tıklayın.",
     typeTv: "TV",
     typeFurniture: "Mobilya",
     typeUsb: "USB şerit",
     typeHue: "Hue ışık",
     typeImage: "Görsel",
     typeHueZone: "Hue bölgesi",
-    scaleX: "Genişlik",
-    scaleY: "Derinlik",
     zoneSize: "Boyut",
-    zoneEdgeLabel: "Kenar uzunluğu",
     zoneEdgeShort: "Kenar",
     zoneEdgeAriaLabel: "Bölge kenar uzunluğu (metre)",
     zoneHexShort: "Hex",

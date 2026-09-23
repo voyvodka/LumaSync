@@ -36,7 +36,6 @@ export default {
     },
     smoothing: {
       title: "Lighting responsiveness",
-      description: "How quickly lights follow screen changes — applies to both LED strips and Hue lights.",
       subtle: "Subtle",
       moderate: "Moderate",
       intense: "Intense",
@@ -45,7 +44,6 @@ export default {
   dock: {
     outputs: "Outputs",
     addAria: "Add output",
-    addTooltip: "Coming soon — multi Hue zone",
     addHueZoneTooltip: "Add a new Hue zone",
     addDisabledTooltip: "Pair a Hue bridge to add zones",
     rows: {

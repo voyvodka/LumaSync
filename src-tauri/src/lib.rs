@@ -30,6 +30,7 @@ mod commands {
     pub mod runtime_quality;
     pub mod runtime_telemetry;
     pub mod screen_capture_permission;
+    pub mod status;
     pub mod test_pattern;
     pub mod updater;
     pub mod wled_discovery;

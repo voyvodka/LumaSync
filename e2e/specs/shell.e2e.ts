@@ -7,7 +7,9 @@ import {
   attribute,
   clickTestId,
   currentUiMode,
+  drainErrors,
   exists,
+  installErrorWatcher,
   persistedUiMode,
   switchUiMode,
   waitForAppReady,
@@ -32,6 +34,7 @@ describe("app shell", () => {
     // it by luck — a machine whose stored mode was `full` failed the first three
     // and then passed on a re-run, because the last spec leaves compact behind.
     await switchUiMode("compact");
+    await installErrorWatcher();
   });
 
   it("comes up in the mode it was left in", async () => {
@@ -82,8 +85,9 @@ describe("app shell", () => {
     expect(await currentUiMode()).toBe("compact");
   });
 
-  it("routes every settings section in full mode", async () => {
+  it("routes every settings section in full mode with no error boundary or console error", async () => {
     await switchUiMode("full");
+    await drainErrors(); // clear anything the mode switch itself logged
 
     for (const section of SECTIONS) {
       await clickTestId(`section-tab-${section}`);
@@ -99,6 +103,11 @@ describe("app shell", () => {
       expect(await attribute(`[data-testid="section-tab-${section}"]`, "aria-selected")).toBe(
         "true",
       );
+      // Give anything the mount kicked off asynchronously (shellStore reads,
+      // display enumeration, Hue probes) a moment to land before judging it.
+      await browser.pause(500);
+      expect(await exists(".lm-errboundary-root")).toBe(false);
+      expect(await drainErrors()).toEqual([]);
     }
 
     await switchUiMode("compact");

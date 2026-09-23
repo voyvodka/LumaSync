@@ -2,8 +2,6 @@ import type { Catalogue } from "@/features/i18n/catalogue";
 import type enHue from "@/locales/en/hue";
 
 const hue: Catalogue<typeof enHue> = {
-  title: "Philips Hue",
-  description: "Köprü keşfi, eşleştirme ve entertainment alanı kurulumu.",
   steps: {
     discover: "Keşfet",
     pair: "Eşleştir",
@@ -11,29 +9,20 @@ const hue: Catalogue<typeof enHue> = {
     ready: "Hazır",
   },
   actions: {
-    discover: "Köprü keşfet",
     discovering: "Keşfediliyor...",
-    pair: "Köprüyü eşleştir",
     pairing: "Eşleştiriliyor...",
     refreshAreas: "Alanları yenile",
     loadingAreas: "Alanlar yükleniyor...",
     checkingReadiness: "Hazırlık kontrol ediliyor...",
     start: "Hue'yu başlat",
-    stop: "Hue'yu durdur",
   },
   bridge: {
-    placeholder: "Bir Hue köprüsü seç",
-    noBridges: "Henüz köprü bulunamadı. Keşfet'e bas veya IP gir.",
     unreachable: "Ulaşılamıyor",
-    online: "Çevrimiçi",
-    checking: "Kontrol ediliyor…",
-    networkHint: "{{name}} köprüsüne {{ip}} üzerinden ulaşılamıyor. Hue köprünüzle aynı ağda olduğunuzdan emin olun.",
   },
   manualIp: {
     title: "Manuel IP girişi",
     description: "Otomatik keşif köprünüzü bulamadıysa IP adresini elle girin.",
     placeholder: "örn. 192.168.1.50",
-    submit: "IP doğrula",
     invalid: "Göndermeden önce geçerli bir IPv4 adresi gir.",
   },
   pair: {
@@ -59,19 +48,14 @@ const hue: Catalogue<typeof enHue> = {
     },
   },
   credential: {
-    valid: "Eşleştirildi",
     needsRepair: "Yeniden eşleştirme gerekli",
-    unreachable: "Ulaşılamıyor",
-    line: "Kimlik durumu: {{state}}",
     repairHint: "Kimlik bilgileriniz süresi dolmuş. Köprü butonuna basıp tekrar eşleştirin.",
   },
   areas: {
-    title: "Entertainment alanları",
     selectLabel: "Entertainment alanı seçin",
     empty: "Entertainment alanı bulunamadı. Hue uygulamasından bir tane oluşturun.",
     channels: "{{count}} kanal",
     activeStreamer: "Aktif",
-    activeStreamerHint: "Başka bir uygulama akış yapıyor",
     conflictTitle: "Alan kullanımda",
     conflictHint: "Başka bir uygulama bu alana aktif olarak akış yapıyor. Başlamadan önce diğer akışı durdurun.",
   },
@@ -91,13 +75,20 @@ const hue: Catalogue<typeof enHue> = {
     savedToBridge: "Pozisyonlar köprüye kaydedildi.",
     saveToBridgeError: "Pozisyonlar yazılamadı: {{reason}}",
     saveToBridgeErrorRetry: "Tekrar dene",
+    saveConfirmTitle: "Pozisyonlar köprüye kaydedilsin mi?",
     saveConfirm: "Köprü üzerindeki kanal pozisyonları güncellenecek. Köprü: {{ip}}. Devam edilsin mi?",
+    savedPartial: "Kaydedildi. {{channels}} için köprü kendi konumunu korudu — gradyan ve gruplu ışıklar buradan konumlandırılamaz.",
+    savedPartialUnnamed: "Kaydedildi, ancak köprü bazı kanallar için kendi konumunu korudu.",
     pullFromBridge: "Köprüdekini al",
+    pullConfirmTitle: "Köprüdeki düzen alınsın mı?",
     pullConfirm: "Bu, senin düzenini köprüde saklı olanla değiştirir. Devam edilsin mi?",
+    pulled: "Köprüdeki düzen alındı.",
+    pulledClamped: "Köprüdeki düzen alındı. {{channels}} oda haritasındaki bölgesinin dışında kalıyor, bu yüzden bölgenin kenarında duruyor.",
+    pullFailed: "Köprüdeki düzen okunamadı. Hiçbir şey değişmedi.",
     sync: {
       inSync: "Köprüde de bu düzen var.",
-      localAhead: "Işıkların zaten buna uyuyor. Köprüde hâlâ eski düzen duruyor — Hue uygulamasının da uyması gerekiyorsa gönder.",
-      neverPushed: "Buradan köprüye hiçbir şey gönderilmedi.",
+      localAhead: "Işıkların zaten buna uyuyor. Köprüde farklı bir düzen var — Hue uygulamasının da uyması gerekiyorsa seninkini gönder.",
+      unknown: "Köprüdeki düzen henüz okunmadı.",
     },
     beta: "Beta",
     state: {
@@ -110,36 +101,15 @@ const hue: Catalogue<typeof enHue> = {
       failedBody: "Köprü beklenmeyen bir yanıt verdi. Alanı doğrulayıp tekrar dene.",
     },
   },
-  targetFailed: "{{target}} hedefi baslatılamadı, mevcut çıkış devam ediyor.",
-  readiness: {
-    pending: "Hazırlık henüz doğrulanmadı.",
-    recoveryHint: "Alan hazır değil. Yeniden doğrula veya başka bir alan seç.",
-    activeStreamer: "Başka bir uygulama bu alana zaten akış yapıyor.",
-  },
-  successSummary: "{{bridge}} üzerinde {{area}} ile başlamaya hazır ({{readiness}}).",
   wizard: {
-    locked: "Önce bir önceki adımı tamamlayın",
-    badgeReady: "Hazır",
-    badgeConnected: "Bağlı",
-    badgeUnreachable: "Ulaşılamıyor",
-    badgeInProgress: "Devam ediyor",
-    badgeNotStarted: "Başlamadı",
-    badgeSelected: "Seçildi",
-    pairInstruction: "Hue köprünüzün üzerindeki fiziksel butona basın, ardından Köprüyü eşleştir'e tıklayın.",
-    areaInstruction: "Işıklarınızla senkronize etmek istediğiniz entertainment alanını seçin.",
-    readySummary: "{{bridge}} / {{area}}",
     emptyTitle: "Hue köprüsü yapılandırılmadı",
     emptyBody: "Oda ışıklarınızı ekranınızla senkronize etmek için Philips Hue köprünüzü bağlayın. Köprünüzün açık ve aynı ağa bağlı olduğundan emin olun.",
     emptyAction: "Köprü keşfet",
-    offlineTitle: "Köprüye ulaşılamıyor",
-    offlineBody: "{{name}} ({{ip}}) şu an yanıt vermiyor. Bunun olası nedenleri:",
     offlineReasonsTitle: "Olası nedenler",
     offlineReason1: "Farklı bir Wi-Fi ağındasınız",
     offlineReason2: "Köprü kapalı veya yeniden başlatılıyor",
     offlineReason3: "Köprünün IP adresi değişmiş olabilir",
     offlineRediscover: "Yeniden keşfet",
-    offlineTryIp: "Farklı bir IP dene",
-    offlineReset: "Bu köprüyü kaldır ve baştan başla",
     pairingStep: "Eşleştirme devam ediyor",
     areaStep: "Eğlence alanı seçin",
     pairingFailed: "Eşleştirme başarısız",
@@ -160,11 +130,6 @@ const hue: Catalogue<typeof enHue> = {
     cellCredentialInvalid: "Geçersiz",
     trafficLabel: "Yayın",
     subtitleStreaming: "{{area}} · DTLS yayını",
-  },
-  summary: {
-    idle: "Bağlı, akış yok",
-    streaming: "Akış aktif",
-    error: "Akış hatası",
   },
   runtime: {
     idleTitle: "Runtime beklemede",
@@ -201,7 +166,6 @@ const hue: Catalogue<typeof enHue> = {
     retry: {
       progress: "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
     },
-    retryStatus: "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
     triggerSource: {
       mode_control: "Mode controls üzerinden tetiklendi",
       device_surface: "Device yüzeyinden tetiklendi",
@@ -210,26 +174,10 @@ const hue: Catalogue<typeof enHue> = {
     },
     checklist: {
       title: "Başlatma kontrol listesi",
-      waitCredential: "Kimlik doğrulamasının tamamlanmasını bekle.",
       revalidate: "Hazırlık stale. Başlatmadan önce yeniden doğrula.",
     },
     actions: {
-      retry: "Tekrar dene",
-      reconnect: "Yeniden bağlan",
       repair: "Yeniden eşleştir",
-      revalidate: "Yeniden doğrula",
-      adjust_area: "Alanı düzenle",
-      stopRetrying: "Yeniden denemeyi durdur",
-    },
-    targets: {
-      hue: {
-        title: "Hue hedefi",
-        retry: "Hue hedefini tekrar dene",
-      },
-      usb: {
-        title: "USB hedefi",
-        retry: "USB hedefini tekrar dene",
-      },
     },
     partialStop: {
       title: "Kısmi durdurma",
@@ -237,72 +185,16 @@ const hue: Catalogue<typeof enHue> = {
     },
     timeout: {
       title: "Durdurma zaman aşımı",
-      body: "Durdurma zaman aşımına ulaştı. Uygulamayı yeniden başlatmadan durdurmayı tekrar deneyebilirsin.",
     },
     reconnectingTitle: "Hue köprüsüne yeniden bağlanılıyor",
-    reconnectingBody: "Kalan deneme: {{remaining}} | Sonraki deneme: {{nextMs}} ms",
-    failedTitle: "Hue stream başarısız oldu",
-    failedBody: "[{{code}}] {{description}} — {{actionHint}}",
-    retryStreamAction: "Yeniden Dene",
-    stopStreamAction: "Durdur",
-    faults: {
-      "HUE-NET-01": {
-        description: "Köprüye ulaşılamıyor",
-        hint: "Ağ bağlantınızı kontrol edin",
-      },
-      "HUE-NET-02": {
-        description: "DTLS el sıkışma başarısız",
-        hint: "Stream'i yeniden başlatmayı deneyin",
-      },
-      "HUE-NET-03": {
-        description: "DTLS gönderim zaman aşımı",
-        hint: "Ağ gecikmesini ve köprü yakınlığını kontrol edin",
-      },
-      "HUE-NET-04": {
-        description: "DTLS bağlantısı beklenmedik şekilde kapandı",
-        hint: "Yeniden bağlanmayı deneyin",
-      },
-      "HUE-AUTH-01": {
-        description: "Kimlik bilgileri geçersiz",
-        hint: "Hue köprünüzü yeniden eşleştirin",
-      },
-      "HUE-AUTH-02": {
-        description: "Köprü eşleştirmesi bozulmuş",
-        hint: "Köprü düğmesine basın ve tekrar eşleştirin",
-      },
-      "HUE-AUTH-03": {
-        description: "Köprü isteği reddetti (403)",
-        hint: "Kimlik bilgilerini yenilemek için yeniden eşleştirin",
-      },
-      "HUE-STR-01": {
-        description: "Entertainment alanı bulunamadı",
-        hint: "Cihaz ayarlarından geçerli bir alan seçin",
-      },
-      "HUE-STR-02": {
-        description: "Stream kısıtlaması algılandı",
-        hint: "Yayın frekansını azaltın veya köprü yükünü kontrol edin",
-      },
-      "HUE-STR-03": {
-        description: "Paket gönderimi başarısız",
-        hint: "Ağ kararlılığını kontrol edin",
-      },
-      "HUE-STR-04": {
-        description: "Gönderici beklenmedik şekilde sonlandı",
-        hint: "Stream'i yeniden deneyin",
-      },
-      "HUE-CFG-01": {
-        description: "Entertainment alanı seçilmemiş",
-        hint: "Cihaz ayarlarından bir alan seçin",
-      },
-      "HUE-CFG-02": {
-        description: "Köprü IP adresi değişmiş",
-        hint: "Cihaz ayarlarından köprü IP'sini güncelleyin",
-      },
-    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Köprü konum formatını reddetti.",
         CHAN_WB_NETWORK_ERROR: "Köprüye ulaşılamıyor.",
+        CHAN_WB_UNRESOLVED_CHANNEL: "Bu kanalların hiçbiri buradan konumlandırılamaz — gradyan ve gruplu ışıklar köprüdeki konumunu korur.",
+        AUTH_INVALID_RE_PAIR_REQUIRED: "Köprü bu uygulamanın anahtarını artık kabul etmiyor. Köprüyü yeniden eşleştir.",
+        HUE_AREA_INVALID: "Eğlence alanı kimliği geçerli değil.",
+        HUE_IP_INVALID: "Köprü adresi geçerli değil.",
         CHAN_WB_AREA_NOT_FOUND: "Bu eğlence alanı artık köprüde yok. Alanı yeniden seçin.",
       },
     },
@@ -317,7 +209,6 @@ const hue: Catalogue<typeof enHue> = {
     changeArea: "Alan Değiştir",
     confirmArea: "Alanı Onayla",
     validate: "Yeniden Doğrula",
-    retryPair: "Tekrar Eşleştir",
     reconnectNow: "Yeniden Bağlan",
     retryStop: "Durdurmayı Tekrarla",
     stopRetrying: "Durdur",
@@ -335,7 +226,6 @@ const hue: Catalogue<typeof enHue> = {
       awaiting: "BEKLİYOR",
       paired: "EŞLEŞTİ",
       authError: "KİM. HATASI",
-      offline: "ÇEVRİMDIŞI",
       reconnecting: "YEN. BAĞLANIYOR",
       failed: "BAŞARISIZ",
       timedOut: "SÜRE DOLDU",

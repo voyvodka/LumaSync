@@ -23,7 +23,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::commands::hue_onboarding::CommandStatus;
+use crate::commands::status::CommandStatus;
 use crate::models::room_map::{HueChannelPlacement, HueZone, ZoneRelativePosition};
 
 // ---------------------------------------------------------------------------

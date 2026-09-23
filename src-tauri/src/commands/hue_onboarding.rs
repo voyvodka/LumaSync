@@ -21,16 +21,9 @@ const NO_APP_KEY_DETAILS: &str =
     "No Hue application key in the OS keychain or the request payload.";
 
 use super::hue_http::{classify_hue_response, HueHttpFault};
-
-/// Uniform coded status returned by every Hue onboarding command; never
-/// throws — callers branch on `code`.
-#[derive(Clone, Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct CommandStatus {
-    pub code: String,
-    pub message: String,
-    pub details: Option<String>,
-}
+// Every Hue onboarding command returns this and never throws — callers branch
+// on `code`.
+use super::status::CommandStatus;
 
 /// A discovered or verified Hue bridge, as surfaced to the frontend picker.
 #[derive(Clone, Serialize, Deserialize, Debug)]

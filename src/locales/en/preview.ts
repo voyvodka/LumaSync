@@ -10,7 +10,6 @@ export default {
   control: {
     close: "Close",
     closeHint: "Close the LED preview — the test pattern stops and your lighting returns to normal. Reopen it with Test & Preview in LED Setup.",
-    closed: "Preview closed",
     reopenHint: "LED preview closed. Reopen it any time with Test & Preview in LED Setup, or from the tray menu.",
     dragHint: "Drag the header to move this popup.",
   },

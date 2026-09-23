@@ -667,6 +667,47 @@
   }
 }
 
+/* Quiet stand-in for the offline banner while a paired bridge is probed
+   (compact + full Lights). */
+.lm-output-checking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--lm-line);
+  border-radius: 10px;
+  background: var(--lm-panel);
+  color: var(--lm-ink-dim);
+  font-family: var(--lm-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.lm-output-checking-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lm-amber);
+  animation: lm-pill-pulse 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lm-output-checking-dot {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .lm-output-checking {
+    border-color: CanvasText;
+    color: CanvasText;
+    background: Canvas;
+  }
+  .lm-output-checking-dot {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}
+
 /* Active mode card */
 .lm-compact-card {
   background: var(--lm-panel);

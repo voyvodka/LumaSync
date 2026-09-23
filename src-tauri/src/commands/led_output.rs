@@ -243,6 +243,11 @@ thread_local! {
     static GAMMA_LUT_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
+#[cfg(test)]
+pub(crate) fn gamma_lut_builds_on_this_thread() -> usize {
+    GAMMA_LUT_BUILDS.with(|n| n.get())
+}
+
 /// Default gamma 2.2 / 2.2 / 2.2 tables — identical to the old unified
 /// `GAMMA_LUT`, kept as a static to avoid re-computing on every frame.
 static DEFAULT_GAMMA_LUTS: std::sync::LazyLock<Arc<GammaLuts>> =
@@ -1094,9 +1099,8 @@ impl super::led_sink::LedSink for SerialSink {
     }
 
     fn send_frame(&mut self, colors: &[[u8; 3]]) -> Result<(), String> {
-        let port = match &self.port_name {
-            Some(p) => p.clone(),
-            None => return Ok(()),
+        let Some(port) = self.port_name.as_deref() else {
+            return Ok(());
         };
 
         let packet = encode_packet_for_output(
@@ -1108,7 +1112,7 @@ impl super::led_sink::LedSink for SerialSink {
         );
 
         self.bridge
-            .send_packet_to_port(&port, &packet)
+            .send_packet_to_port(port, &packet)
             .map_err(|e| e.as_reason())
     }
 
@@ -1139,10 +1143,9 @@ mod tests {
         LedColorOrder, LedOutputBridge, LedOutputError, LedPacketSender, SerialSink,
         WirePixelLayout,
     };
-    use crate::commands::device_connection::{
-        CommandStatus, SerialConnectionState, SerialConnectionStatus,
-    };
+    use crate::commands::device_connection::{SerialConnectionState, SerialConnectionStatus};
     use crate::commands::led_sink::LedSink;
+    use crate::commands::status::CommandStatus;
 
     #[derive(Default)]
     struct FakeSender {
