@@ -13,7 +13,7 @@ export interface UseRoomMapGridSettingsReturn {
 export function useRoomMapGridSettings(): UseRoomMapGridSettingsReturn {
   const [showGrid, setShowGrid] = useState(true);
   const [gridStrokeWidth, setGridStrokeWidth] = useState(0.5);
-  // W4-J #3 — visibility toggle for Hue zone bounds. Default ON so a
+  // Visibility toggle for Hue zone bounds. Default ON so a
   // newly authored zone is visible without first selecting it; user
   // can flip OFF to declutter the canvas while editing other objects.
   const [showHueZones, setShowHueZones] = useState(true);

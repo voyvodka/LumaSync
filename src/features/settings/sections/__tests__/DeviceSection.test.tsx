@@ -412,7 +412,7 @@ describe("DeviceSection hue runtime controls", () => {
 });
 
 // ---------------------------------------------------------------------------
-// A3.6 — DeviceSection persist banner visibility
+// DeviceSection persist banner visibility
 // ---------------------------------------------------------------------------
 
 describe("DeviceSection USB tab — persistError banner (A3.6)", () => {

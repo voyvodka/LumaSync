@@ -1,4 +1,4 @@
-//! Platform shell surface commands (v1.4 W3-O).
+//! Platform shell surface commands.
 //!
 //! Sibling of `commands::notifications`. Commands here expose OS shell
 //! affordances the frontend needs but that are not device-specific:

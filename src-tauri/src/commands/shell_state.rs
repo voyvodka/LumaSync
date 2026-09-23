@@ -92,6 +92,22 @@ impl PersistedShellState {
         self.read("updateChannel")
     }
 
+    /// Every image path the room map references: `imageLayers[].path` plus the
+    /// legacy `backgroundImagePath`. `None` when `roomMap.imageLayers` is not an
+    /// array, so a store without a room map never reads as "no image is used".
+    pub fn room_map_image_paths(&self) -> Option<Vec<String>> {
+        let room_map = self.0.get("roomMap")?;
+        let layers = room_map.get("imageLayers")?.as_array()?;
+        Some(
+            layers
+                .iter()
+                .filter_map(|layer| layer.get("path")?.as_str())
+                .chain(room_map.get("backgroundImagePath").and_then(Value::as_str))
+                .map(str::to_owned)
+                .collect(),
+        )
+    }
+
     /// The LED control popup's centre, in logical px.
     pub fn popup_center(&self) -> Option<(f64, f64)> {
         Some((

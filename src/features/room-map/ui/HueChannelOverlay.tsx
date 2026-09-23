@@ -33,7 +33,7 @@ interface HueChannelOverlayProps {
    *  marks nothing, because "cannot tell" is not "everything is gone". */
   liveChannelIds?: ReadonlySet<number> | null;
   /**
-   * v1.5 W1-A6 — when set, the overlay enters "Hue zone scope" mode:
+   * When set, the overlay enters "Hue zone scope" mode:
    * - Channels bound to this zone render at zone-relative coordinates
    *   resolved against the zone's center+scale.
    * - Channels NOT in the zone render greyed out and pointer-disabled.
@@ -45,7 +45,7 @@ interface HueChannelOverlayProps {
   /** Called when the user drags the zone center marker. */
   onHueZoneCenterChange?: (zoneId: string, centerX: number, centerY: number) => void;
   /**
-   * v1.5 W4-J #3 — when supplied, every zone in the array renders its
+   * When supplied, every zone in the array renders its
    * dashed bounds box on the canvas (not just the active one). Passive
    * zones render dimmer and without the center-drag handle so they
    * cannot be accidentally moved while selecting elsewhere; the active
@@ -53,7 +53,7 @@ interface HueChannelOverlayProps {
    * drag-time DOM lookup (`data-zone-bounds-id`) still resolves a
    * single element.
    *
-   * v1.5 W4-F2 manual-test (2026-04-28): this list also drives the
+   * This list also drives the
    * channel-bound zone lookup used by the drag handler and the world-
    * pos derivation, so it MUST stay populated even when the user
    * toggles the dashed-bounds visibility off. Pair this with the
@@ -349,8 +349,8 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
     dragRef.current = { ...EMPTY_DRAG };
   }, []);
 
-  // ── v1.5 W1-A6: zone bounds + center marker (rendered behind channels) ──
-  // W4-J #3: factored into a helper so we can render bounds for *any*
+  // ── Zone bounds + center marker (rendered behind channels) ──
+  // Factored into a helper so we can render bounds for *any*
   // zone (passive list) using the same projection math.
   const computeZoneBoundsBox = (zone: HueZone) => {
     const minX = clamp(zone.centerX - Math.abs(zone.scaleX), -1, 1);
@@ -385,7 +385,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
   return (
     <>
-      {/* W4-J #3 — passive zone bounds (read-only). Sits behind the
+      {/* Passive zone bounds (read-only). Sits behind the
           active zone chrome so the active dashed border stays visually
           dominant. No center marker, no drag wiring, no chip — just the
           rectangle so the user can see where each zone lives. */}
@@ -588,7 +588,7 @@ export const HueChannelOverlay = memo(function HueChannelOverlay({
 
         const isUnassignedInZoneMode = zoneAssignMode && !isAssignedToAnyZone;
 
-        // v1.5 W1-A6 — when a Hue zone is active, channels NOT bound to it
+        // When a Hue zone is active, channels NOT bound to it
         // are visually de-emphasised and pointer-disabled so the editor
         // becomes focused on the zone subset.
         const isInActiveHueZone = activeHueZone !== null && ch.zoneId === activeHueZone.id;

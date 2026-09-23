@@ -1131,7 +1131,7 @@ mod tests {
     }
 
     // ------------------------------------------------------------------
-    // select_display_index — display selection helper (Platform GAP 2)
+    // select_display_index — display selection helper
     // ------------------------------------------------------------------
 
     fn sample_candidates() -> Vec<DisplayCandidate> {

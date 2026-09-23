@@ -358,7 +358,7 @@ function installLightingBackend() {
     hueSolidSends: 0,
     hueStopsUnderWorker: 0,
   };
-  // Absent or empty targets mean USB to the backend (legacy D-10).
+  // Absent or empty targets mean USB to the backend (legacy rule).
   const targetsOf = (mode: LightingModeConfig) =>
     mode.targets && mode.targets.length > 0 ? mode.targets : ["usb"];
   setLightingModeMock.mockImplementation((payload: LightingModeConfig) => {
@@ -2103,7 +2103,7 @@ describe("App mode orchestration", () => {
           expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
         });
 
-        // The D-05 gate blocks an Ambilight transition while `savedCalibration`
+        // The calibration gate blocks an Ambilight transition while `savedCalibration`
         // is still undefined, and a blocked transition returns without changing
         // the mode — so the click must wait for bootstrap to hydrate it.
         await waitFor(() => {
@@ -2172,7 +2172,7 @@ describe("App mode orchestration", () => {
         expect(screen.getByTestId("active-mode")).toHaveTextContent("off");
       });
 
-      // The D-05 gate blocks an Ambilight transition while `savedCalibration`
+      // The calibration gate blocks an Ambilight transition while `savedCalibration`
       // is still undefined, and a blocked transition returns without changing
       // the mode — so the click must wait for bootstrap to hydrate it.
       await waitFor(() => {
@@ -2197,8 +2197,8 @@ describe("App mode orchestration", () => {
   );
 
   // ---------------------------------------------------------------------
-  // Bug H1 — Ambilight settings restore on cold start (v1.5 Wave 0
-  // Hardening). Persisted `lightingMode.ambilight` (saturation /
+  // Bug H1 — Ambilight settings restore on cold start. Persisted
+  // `lightingMode.ambilight` (saturation /
   // blackBorderDetection / smoothing-preset) MUST survive cold boot AND
   // any same-tick re-dispatch path (color-correction / firmware-profile
   // / Hue-intensity hot-reload, USB hot-plug delta-start). Pre-fix the

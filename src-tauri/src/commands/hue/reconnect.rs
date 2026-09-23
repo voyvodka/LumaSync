@@ -1,7 +1,6 @@
 //! Reconnect monitor + abort guard + active-stream-context plumbing.
 //!
-//! Carved out of the original `hue_stream_lifecycle.rs` during the v1.5 G8
-//! split. This module owns:
+//! Carved out of the original `hue_stream_lifecycle.rs`. This module owns:
 //!
 //! - `StartAbortGuard` — RAII guard that flips the runtime to `Failed` if
 //!   `start_hue_stream`/`restart_hue_stream` exit before the active-stream
@@ -18,7 +17,7 @@
 //!   the reconnect monitor to bring up a new DTLS session without going
 //!   through the public `restart_hue_stream` Tauri command.
 //!
-//! v1.5.2 A1.3 update: the historical 1 s sleep that followed the
+//! The historical 1 s sleep that followed the
 //! reconnect-path deactivation has been removed. Both root causes
 //! (missing DTLS `close_notify`, double deactivate PUT) are now fixed at
 //! the source — the sender thread emits `close_notify` before drop, and
@@ -397,7 +396,7 @@ pub(crate) fn spawn_reconnect_monitor_with(
                 owner.session_reconnect_total += 1;
 
                 if owner.state == HueRuntimeState::Failed {
-                    // Retry budget exhausted (D-02).
+                    // Retry budget exhausted.
                     info!("Reconnect monitor: retry budget exhausted, entering Failed state.");
                     return;
                 }
@@ -472,7 +471,7 @@ async fn internal_restart_stream(
     // sender thread already drained the token (close_notify cleanup path),
     // this call is a fast in-process no-op.
     //
-    // A1.3: the historical 1 s sleep that used to follow this block was a
+    // The historical 1 s sleep that used to follow this block was a
     // band-aid for the bridge "phantom active streamer" symptom caused by
     // the missing close_notify alert + double-deactivate race. Both root
     // causes are now fixed (sender emits close_notify before drop, and the
@@ -528,7 +527,7 @@ async fn internal_restart_stream(
         apply_channel_placements(&mut channels, placements);
     }
 
-    // 4b. Pre-fetch per-light archetype + gamut metadata (W1-C3a). Graceful:
+    // 4b. Pre-fetch per-light archetype + gamut metadata. Graceful:
     //     any per-light fetch failure simply omits that light from the cache
     //     so the frame builder treats it as `HueGamutType::Other` (no clip).
     let light_metadata = Arc::new(
@@ -712,7 +711,7 @@ mod tests {
         );
     }
 
-    /// A1.3: when the sender thread already drained the token (close_notify
+    /// When the sender thread already drained the token (close_notify
     /// path), the reconnect-monitor's deactivate call must observe the
     /// in-flight bit and skip the redundant PUT. This test covers the
     /// dedupe primitive contract directly — the network path is not

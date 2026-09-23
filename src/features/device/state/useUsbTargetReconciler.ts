@@ -89,7 +89,7 @@ export function useUsbTargetReconciler({
     }
 
     if (wasConnected === true && !isConnected) {
-      // USB just unplugged (D-08): drop it from the targets for this session.
+      // USB just unplugged: drop it from the targets for this session.
       if (selectedOutputTargets.includes("usb")) {
         const nextTargets = selectedOutputTargets.filter((t) => t !== "usb");
         if (nextTargets.length > 0) {

@@ -11,7 +11,7 @@ interface ObjectsTabProps {
   selectedId: string | null;
   hueZones: HueZone[];
   /**
-   * v1.5 W4-F2 manual-test (2026-04-28) — id of the currently
+   * ID of the currently
    * selected Hue zone in the room editor (mirrors `activeHueZoneId`
    * upstream). Drives the "is-on" highlight on zone headers in the
    * Objects list so the user can tell which zone the bottom inspector
@@ -20,7 +20,7 @@ interface ObjectsTabProps {
   activeHueZoneId: string | null;
   onSelect: (id: string) => void;
   /**
-   * v1.5 W4-F2 manual-test (2026-04-28) — clicking a Hue zone header
+   * Clicking a Hue zone header
    * in the Objects list selects it for the bottom inspector. Inert
    * when omitted so embeds without zone editing keep the headers
    * read-only.
@@ -92,7 +92,7 @@ export function ObjectsTab(props: ObjectsTabProps) {
         return (
           <li key={`zone-${zone.id}`}>
             {/*
-              v1.5 W4-F2 manual-test (2026-04-28): zone headers in the
+              Zone headers in the
               Objects list are now clickable — selecting one routes the
               Hue zone inspector into the bottom dock without forcing
               the user to switch to the Hue Zones tab. The header acts

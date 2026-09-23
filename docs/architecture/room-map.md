@@ -115,6 +115,25 @@ inspector. A Properties tab existed briefly and was dropped: the same inspector 
 in the split body, so the tab could only ever render a "pick something" hint. Re-adding a tab per
 object type recreates that redundancy — the inspector swaps on the active selection instead.
 
+**Background images are copied in, capped at 20 MB, and pruned only at startup.** An imported
+image is copied into `room-map-backgrounds/` in the app data dir under a UUID name, because the
+`fs:allow-read-file` capability is scoped to exactly that directory and the source may be on a
+removable disk. The canvas decodes the whole file into the webview, so `copy_background_into`
+(`src-tauri/src/commands/room_map/background.rs`) refuses anything past
+`MAX_BACKGROUND_IMAGE_BYTES` with `ROOM_MAP_BACKGROUND_TOO_LARGE`, checked from the metadata and
+again while copying, since a file can grow in between. `ROOM_MAP_BACKGROUND_MAX_MB` in the
+contract is the number the UI quotes; a Rust test holds the two equal.
+
+A deleted layer leaves its copy behind, so the startup path deletes copies that no
+`roomMap.imageLayers[].path` (or the legacy `backgroundImagePath`) names. It reads them through
+`PersistedShellState::room_map_image_paths` in `shell_state.rs`, the file's only reader, never from
+the file itself. It runs once, at startup, and never on import or delete: the editor's undo is in memory and can bring a deleted
+layer back within a session, which would then point at a file already gone. Two more rules keep it
+from deleting something live. A store without an `imageLayers` array prunes nothing — an unreadable
+or reshaped `shell-state.json` must not read as "no image is used". And a copy younger than an hour
+is spared, because a dev and a release build share the app data dir and the other may be in the
+middle of an import.
+
 ## Gotchas
 
 - **The TV anchor's `x`/`y` is the footprint's top-left corner, not its centre.** The contract says

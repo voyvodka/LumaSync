@@ -159,7 +159,7 @@ pub struct LightingModeConfig {
     pub ambilight: Option<AmbilightPayload>,
     #[serde(default)]
     pub targets: Option<Vec<String>>,
-    /// Capture display selected by the user (v1.4 Platform GAP 2).
+    /// Capture display selected by the user.
     /// Absent ⇒ the ambilight worker falls back to the OS primary
     /// display. Matched against the stable `DisplayInfoPayload.id`
     /// produced by `list_displays`; a missing or unplugged id reverts
@@ -172,17 +172,17 @@ pub struct LightingModeConfig {
     /// When absent, the worker falls back to single-zone sampling.
     #[serde(default)]
     pub led_calibration: Option<LedCalibrationConfig>,
-    /// Per-channel color correction applied in the LED encoder (v1.4 G4).
+    /// Per-channel color correction applied in the LED encoder.
     /// Absent ⇒ backend uses `ColorCorrectionConfig::default()` (gamma 2.2 / 6500 K / sat 1.0).
     /// Applies to USB output only — Hue sink is not affected.
     #[serde(default)]
     pub color_correction: Option<ColorCorrectionConfig>,
-    /// Firmware encoding profile (v1.4 G11). Absent ⇒ `FirmwareProfile::default()` (LumaSyncV1).
+    /// Firmware encoding profile. Absent ⇒ `FirmwareProfile::default()` (LumaSyncV1).
     /// Changing this is a breaking wire-format change — only done via user-visible Firmware Profile
     /// setting; never switched silently.
     #[serde(default)]
     pub firmware_profile: Option<FirmwareProfile>,
-    /// LED chip type (v1.5 G3). Absent ⇒ `LedChipType::default()` (WS2812B GRB).
+    /// LED chip type. Absent ⇒ `LedChipType::default()` (WS2812B GRB).
     /// Changes bytes-per-pixel on the wire, so it also moves the serial timing
     /// budget — see `derive_base_interval_ms_for` / `frame_wire_time_ms`.
     #[serde(default)]
@@ -1375,7 +1375,7 @@ fn resolve_quality_config(
 
 /// Resolved output for the "usb" channel — serial and WLED are alternate
 /// transports for the same logical LED-strip output, not separate targets
-/// (see `ls-led-protocols`). Whichever sink `ActiveSinkRegistry` currently
+/// (see docs/architecture/device-output.md). Whichever sink `ActiveSinkRegistry` currently
 /// holds wins; `None` falls back to `SerialConnectionState`.
 #[derive(Clone, Debug)]
 enum UsbOutputPlan {
@@ -1456,7 +1456,7 @@ fn apply_mode_change_inner(
     );
 
     // Derive target flags from the requested targets list.
-    // Empty/None targets = legacy behavior: USB is required (backward compat per D-10).
+    // Empty/None targets = legacy behavior: USB is required (backward compat).
     let requested_targets = normalized_next.targets.clone().unwrap_or_default();
     let needs_usb = requested_targets.is_empty() || requested_targets.iter().any(|t| t == "usb");
     let needs_hue = requested_targets.iter().any(|t| t == "hue");
@@ -1482,7 +1482,7 @@ fn apply_mode_change_inner(
     };
     let usb_available = usb_plan.is_some();
 
-    // USB gate: only applies when USB is a required target (per D-01).
+    // USB gate: only applies when USB is a required target.
     if normalized_next.kind != LightingModeKind::Off && needs_usb && !usb_available && !is_test {
         log::warn!(
             "[apply_mode_change] gated DEVICE_NOT_CONNECTED — kind={:?} requested_targets={:?} device_connected={device_connected}",
@@ -1498,7 +1498,7 @@ fn apply_mode_change_inner(
         );
     }
 
-    // Hue gate: when Hue target requested, Hue output context must be available (per D-03).
+    // Hue gate: when Hue target requested, Hue output context must be available.
     if normalized_next.kind != LightingModeKind::Off
         && needs_hue
         && hue_context.is_none()
@@ -2786,7 +2786,7 @@ mod tests {
     };
 
     // -----------------------------------------------------------------------
-    // SerialSendBudget — the 115 200-baud clamp (F5)
+    // SerialSendBudget — the 115 200-baud clamp
     // -----------------------------------------------------------------------
 
     #[test]
@@ -3158,7 +3158,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // resolve_quality_config — WLED-vs-serial budget divergence (D-04)
+    // resolve_quality_config — WLED-vs-serial budget divergence
     // -----------------------------------------------------------------------
 
     #[test]
@@ -3693,7 +3693,7 @@ mod tests {
     }
 
     // Originally guarded only against `target_os = "windows"`, but v1.4 added
-    // macOS SCDisplay capture and v1.5 W1-D added Linux X11 capture via xcap —
+    // macOS SCDisplay capture and v1.5 added Linux X11 capture via xcap —
     // so all three first-class targets now build a live source successfully.
     // Restrict the contract assertion to the truly-unsupported platforms (BSDs
     // / illumos) where the factory is still expected to surface the
@@ -4388,7 +4388,7 @@ mod lighting_mode_tests {
 
     #[test]
     fn none_targets_preserves_legacy_usb_gate() {
-        // targets=None, device_connected=false -> DEVICE_NOT_CONNECTED (backward compat per D-10)
+        // targets=None, device_connected=false -> DEVICE_NOT_CONNECTED (backward compat)
         let mut owner = owner_with_fake_sender();
         let result = apply_mode_change(
             &mut owner,

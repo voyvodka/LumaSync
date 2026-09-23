@@ -1,7 +1,6 @@
 //! Background sender threads that push Hue entertainment frames to the bridge.
 //!
-//! Carved out of the original `hue_stream_lifecycle.rs` during the v1.5 G8
-//! split. Two sender variants:
+//! Carved out of the original `hue_stream_lifecycle.rs`. Two sender variants:
 //!
 //! - DTLS (preferred): UDP/2100, 20 Hz cadence, keep-alive frames every 2 s
 //!   so the bridge does not auto-close after ~10 s of silence.
@@ -9,7 +8,7 @@
 //!   client key is missing or the DTLS handshake times out.
 //!
 //! The 50 ms (20 Hz) minimum interval and the keep-alive cadence are
-//! protocol-critical (`ls-hue-protocol §2.1` and §2.3) and must not drift.
+//! protocol-critical and must not drift (the floor: docs/architecture/hue.md).
 //!
 
 use std::collections::HashMap;
@@ -82,7 +81,7 @@ pub(crate) fn wait_for_shutdown(signal: &ShutdownSignal, timeout: Duration) -> b
     }
 }
 
-// Deactivate dedupe token (v1.5.2 A1.3) — coordinates three call sites that
+// Deactivate dedupe token — coordinates three call sites that
 // can race to PUT the same "stop". See docs/architecture/hue.md.
 
 /// Single-shot atomic flag that gates the entertainment-configuration
@@ -125,7 +124,7 @@ impl DeactivateToken {
 /// no-ops and return `Ok(())`. This is the only entry point any of the three
 /// shutdown call sites should use — direct calls to
 /// `deactivate_entertainment_config` bypass the dedupe and reintroduce the
-/// double-PUT race A1.3 fixed.
+/// double-PUT race the token exists to close.
 pub(crate) fn deactivate_with_token(
     token: &DeactivateToken,
     client: &BlockingClient,
@@ -205,7 +204,7 @@ fn activate_entertainment_config(
 /// Tells the bridge to exit entertainment mode. Called when stopping the stream.
 ///
 /// Prefer `deactivate_with_token` over calling this directly — direct
-/// callers bypass the v1.5.2 A1.3 dedupe primitive and risk re-introducing
+/// callers bypass the dedupe primitive and risk re-introducing
 /// the double-PUT race.
 pub(crate) fn deactivate_entertainment_config(
     client: &BlockingClient,
@@ -712,7 +711,7 @@ pub(crate) fn spawn_hue_dtls_sender(
 
     thread::spawn(move || {
         // Per-light metadata cache (gamut_type / archetype). Read by the
-        // frame builder on every send for per-bulb gamut clipping (W1-C3b).
+        // frame builder on every send for per-bulb gamut clipping.
         DtlsSendLoop {
             area_id: &area_id,
             channels: &channels,
@@ -724,7 +723,7 @@ pub(crate) fn spawn_hue_dtls_sender(
         }
         .run(&mut dtls_stream, &rx);
 
-        // A1.3: emit DTLS `close_notify` before dropping the socket so the
+        // Emit DTLS `close_notify` before dropping the socket so the
         // bridge releases its "active streamer" slot immediately. Without
         // this the Hue bridge holds the slot for ~10 s and the next start
         // (ours or another app's) sees `HUE_STREAM_NOT_READY_ACTIVE_STREAMER`.
@@ -1106,7 +1105,7 @@ pub(crate) fn build_hue_sender(
     light_metadata: Arc<HashMap<String, HueLightMetadata>>,
     packet_counter: Arc<std::sync::atomic::AtomicU32>,
 ) -> SpawnedHueSender {
-    // v1.5 W2-A2 — keychain-first credential resolution. The request
+    // Keychain-first credential resolution. The request
     // values from the Tauri command are treated as a downgrade-safe
     // fallback for legacy v1.4 users whose credentials still live in
     // the plaintext shellStore fields. When the keychain holds both
@@ -1286,12 +1285,12 @@ pub(crate) fn build_hue_sender(
 }
 
 // ---------------------------------------------------------------------------
-// Per-light archetype + gamut metadata (v1.5 W1-C1)
+// Per-light archetype + gamut metadata
 // ---------------------------------------------------------------------------
 //
 // CLIP v2 `/resource/light/{id}` exposes a `color.gamut_type` field
 // (`"A"`, `"B"`, `"C"`, or `"other"`) that we need before applying the
-// per-bulb gamut triangle clip in W1-C2. The archetype string (e.g.
+// per-bulb gamut triangle clip. The archetype string (e.g.
 // `"hue_go"`, `"sultan_bulb"`) is also surfaced for telemetry and for
 // future bulb-specific dimming curves.
 //
@@ -1375,7 +1374,7 @@ pub fn parse_light_metadata(light_id: &str, payload: &Value) -> Option<HueLightM
 
 /// Fetch `/clip/v2/resource/light/{light_id}` and return its `data[0]` item,
 /// reusing a caller-supplied `reqwest::Client` so an entire batch of light
-/// fetches (W1-C3a hot path) shares one client — and its pooled connection.
+/// fetches (the pre-stream metadata pass) shares one client — and its pooled connection.
 ///
 /// Errors propagate as a string so the caller can decide whether to fall back
 /// to `HueGamutType::Other` (loud) or skip the clipping step (silent).
@@ -1688,7 +1687,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // HTTP-fallback request budget (F1/F2)
+    // HTTP-fallback request budget
     // -----------------------------------------------------------------------
 
     /// Recording sink: timestamps every PUT so the pacing invariant can be
@@ -1815,7 +1814,7 @@ mod tests {
         });
     }
 
-    /// F1: the pre-fix loop issued one PUT per light per iteration at 20 Hz —
+    /// The pre-fix loop issued one PUT per light per iteration at 20 Hz —
     /// ~200 req/s for a ten-light area against a bridge documented to take 10.
     /// The budget must hold no matter how many lights the area carries.
     #[test]
@@ -2008,7 +2007,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Per-light metadata parser (v1.5 W1-C1)
+    // Per-light metadata parser
     // -----------------------------------------------------------------------
 
     #[test]
@@ -2080,7 +2079,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // DeactivateToken (v1.5.2 A1.3) — dedupe primitive for entertainment-config
+    // DeactivateToken — dedupe primitive for entertainment-config
     // deactivation across the sender thread, foreground stop, and reconnect monitor.
     // -----------------------------------------------------------------------
 
@@ -2252,7 +2251,7 @@ mod tests {
 
         assert!(outcome.is_ok());
         // Releasing here would reopen the concurrent-duplicate-PUT race the
-        // token exists to close (A1.3, phantom active streamer).
+        // token exists to close (the phantom active streamer).
         assert!(token.was_acquired());
         assert!(!token.try_acquire(), "later callers still no-op");
     }

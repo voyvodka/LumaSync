@@ -1,5 +1,5 @@
 /**
- * LedChipTypePicker — v1.5 G3 LED chip type selector.
+ * LedChipTypePicker — LED chip type selector.
  *
  * A 2-tile radio group that lets the user choose between WS2812B GRB
  * (3-byte, default, backward-compat) and SK6812 RGBW (4-byte with

@@ -210,7 +210,7 @@ export function useRoomMapHueZones({
           : { ...channel, zoneId: undefined, zoneRelativePosition: undefined },
       );
       // Keep Hue zones' `channelIndices` in sync — remove from old zone,
-      // add to new zone (idempotent). v1.5 W4-F2: only Hue zones live in
+      // add to new zone (idempotent). Only Hue zones live in
       // `config.zones`, so the previous `zoneType !== HUE` skip is gone.
       // A zone of another area holding the same index names a different channel.
       const channelAreaId = channel.entertainmentAreaId || entertainmentAreaId;

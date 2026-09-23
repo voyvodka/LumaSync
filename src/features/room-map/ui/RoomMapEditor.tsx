@@ -49,7 +49,11 @@ import type {
   TvAnchorPlacement,
   UsbStripPlacement,
 } from "@/shared/contracts/roomMap";
-import { replaceHueChannel } from "@/shared/contracts/roomMap";
+import {
+  replaceHueChannel,
+  ROOM_MAP_BACKGROUND_ERROR,
+  ROOM_MAP_BACKGROUND_MAX_MB,
+} from "@/shared/contracts/roomMap";
 import type { LedSegmentCounts } from "@/features/calibration/model/contracts";
 import type React from "react";
 import { useUsbConnectionStatus } from "@/features/device/useUsbConnectionStatus";
@@ -60,14 +64,14 @@ import { roomAwareStatus } from "../model/roomAware";
 interface RoomMapEditorProps {
   onZoneCountsConfirmed?: (counts: LedSegmentCounts) => void;
   /**
-   * Wave 4-B (B1) — invoked when the dock state strip's CTA prompts the
+   * Invoked when the dock state strip's CTA prompts the
    * user to finish Hue onboarding (pair bridge or pick an entertainment
    * area). The Settings shell wires this to `setActiveSection(DEVICES)`
    * so the user is dropped into the right place to recover.
    */
   onNavigateToDevices?: () => void;
   /**
-   * Wave 4-G #4 — App-level Hue reachability snapshot, forwarded into
+   * App-level Hue reachability snapshot, forwarded into
    * the dock so HueChannelInspector + Hue zone rows can mirror the
    * "Bridge offline" state alongside the existing USB connection chip
    * pattern. `undefined` keeps the dock in legacy "unknown" mode so
@@ -205,6 +209,7 @@ export function RoomMapEditor({
   const {
     handleAddImage,
     imageError,
+    imageErrorCode,
     handleUpdateImageOpacity,
     handleUpdateImageScale,
     handleUpdateImageAspectLock,
@@ -678,7 +683,7 @@ export function RoomMapEditor({
 
             {/* Hue channel dots + zone bounds — bug #53: bounds box must
                 render even when no channels exist yet so the user can
-                author a zone before the area is paired. W4-J #3: also
+                author a zone before the area is paired. Also
                 mount whenever the user has at least one Hue zone AND
                 the visibility toggle is on, so passive zones paint
                 without needing an active selection. */}
@@ -793,7 +798,7 @@ export function RoomMapEditor({
             hueAreaId={hueAreaId}
             onAssignChannelToZone={handleAssignChannelToZone}
             onNavigateToDevices={onNavigateToDevices}
-            // Wave 4-D — type-aware inspector patch hooks
+            // Type-aware inspector patch hooks
             onUpdateTvAnchor={(patch) => {
               if (!config.tvAnchor) return;
               apply({ tvAnchor: { ...config.tvAnchor, ...patch } });
@@ -845,11 +850,11 @@ export function RoomMapEditor({
               });
             }}
             onRenameImageLayer={handleRenameImage}
-            // Wave 4-E — USB connection status feed for inspectors
+            // USB connection status feed for inspectors
             usbConnectedPort={usb.connectedPort}
             usbConnectionStatus={usbConnectionStatus}
             onUsbManage={handleManageUsb}
-            // Wave 4-G #4 — Hue reachability mirror (parallel to the
+            // Hue reachability mirror (parallel to the
             // USB connection status above). Drives the channel inspector
             // chip and Hue zone row dim-state.
             hueChannelStatus={hueChannelStatus}
@@ -907,7 +912,9 @@ export function RoomMapEditor({
 
       {imageError && (
         <div role="alert" className="px-3 py-1.5 text-[11px] text-[color:var(--lm-red)]">
-          {t("roomMap:imageImportError")}
+          {imageErrorCode === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE
+            ? t("roomMap:imageTooLarge", { maxMb: ROOM_MAP_BACKGROUND_MAX_MB })
+            : t("roomMap:imageImportError")}
         </div>
       )}
 

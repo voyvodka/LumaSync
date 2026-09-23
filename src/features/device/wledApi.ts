@@ -1,5 +1,5 @@
 /**
- * wledApi — v1.5 W1-B4
+ * wledApi
  *
  * Frontend bridge for the WLED UDP sink Tauri commands defined in
  * `device.ts > DEVICE_COMMANDS`. Mirrors the existing `deviceConnectionApi`

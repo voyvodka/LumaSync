@@ -14,14 +14,13 @@ import { parseObjectId } from "./objectId";
  * Resolve the active selection from the dock's `selectedId` shape and
  * the active Hue-zone id.
  *
- * v1.5 W4-F2 manual-test (2026-04-28) — priority swap: a concrete
- * object selection wins over `activeHueZoneId` so clicking a TV /
- * furniture / strip / channel / image row in the Objects list
+ * Priority swap: a concrete object selection wins over `activeHueZoneId`
+ * so clicking a TV / furniture / strip / channel / image row in the Objects list
  * routes its inspector into the dock even when a Hue zone is the
  * current zone selection. The Hue zone inspector is reserved for
  * the case where the user picks a zone (no concrete object selected).
  *
- * Logical zones were dropped — see RFC §"Direction reversal" — so
+ * Logical zones were dropped (docs/architecture/hue.md), so
  * the dispatcher reads exclusively from `config.zones: HueZone[]`.
  */
 export type InspectorTarget =

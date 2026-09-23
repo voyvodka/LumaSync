@@ -1,5 +1,5 @@
 /**
- * WledDevicePicker — v1.5 W1-B4
+ * WledDevicePicker
  *
  * Network-LED picker rendered inside the Devices section. Mirrors the
  * USB cards/discovery flow but talks to the WLED UDP contract:

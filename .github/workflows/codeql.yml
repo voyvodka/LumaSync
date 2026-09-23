@@ -20,22 +20,38 @@ jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Rust extraction resolves the whole dependency graph through rust-analyzer,
+    # which is the slow leg; the other two finish well inside ten minutes.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript]
+        # The job name renders as `Analyze (<language>)`, and
+        # `Analyze (javascript-typescript)` is a required status context. Keep
+        # that entry spelled exactly so; the other two are not required.
+        language: [javascript-typescript, rust, actions]
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
+      # The extractor calls cargo, and rust-toolchain.toml pins a version the
+      # runner's preinstalled rustup does not carry.
+      - name: Install pinned Rust toolchain
+        if: matrix.language == 'rust'
+        run: rustup toolchain install
+
+      # `none` for all three: no build is needed to extract them, and Rust in
+      # particular would otherwise need the full Tauri system-library set.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
+          build-mode: none
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: "/language:${{ matrix.language }}"

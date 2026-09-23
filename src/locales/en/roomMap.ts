@@ -41,6 +41,7 @@ export default {
   },
   persistError: "Map could not be saved. Changes may be lost on restart.",
   imageImportError: "Image could not be added. Check the log for details.",
+  imageTooLarge: "Image is larger than {{maxMb}} MB. Choose a smaller file.",
   usbStrip: {
     ledCount: "LED count",
     online: "ONLINE",

@@ -3,7 +3,7 @@
 /// Implemented by `SerialSink` (USB serial) and by `WledUdpSink` /
 /// `CorrectedWledSink` (WLED over DDP/WARLS UDP).
 ///
-/// Design rule (from `ls-led-protocols`):
+/// Design rules (docs/architecture/device-output.md):
 ///   - One active sink per output channel.
 ///   - Hue + USB are separate channels and may run simultaneously.
 ///   - Never change the on-wire format silently; format changes are user-visible

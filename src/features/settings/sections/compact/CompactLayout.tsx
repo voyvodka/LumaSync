@@ -55,7 +55,7 @@ interface CompactLayoutProps {
   modeLockReason: ModeGuardReason | null;
   onLightingModeChange: (next: LightingModeConfig) => void;
   /**
-   * v1.5 W2 fix #40 — Compact ↔ Full feature parity for the lighting
+   * Compact ↔ Full feature parity for the lighting
    * smoothing preset. The compact ambilight card mounts the same
    * `LightingSmoothingPresetControl` the Lights section uses, and forwards
    * a chosen preset back to the parent so the running worker hot-reloads.
@@ -243,7 +243,7 @@ export function CompactLayout({
               brightnessDisabledReason={adalightLockReason}
               onCommit={handleAmbilightBrightnessCommit}
             />
-            {/* v1.5 W2 fix #40 — smoothing preset parity with full mode.
+            {/* Smoothing preset parity with full mode.
                 Reuses the same control + persistence path so the chosen
                 preset hot-reloads the worker through App.tsx without a
                 mode toggle. */}

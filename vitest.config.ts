@@ -8,7 +8,7 @@
  * Watch: bunx vitest
  */
 
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -42,5 +42,9 @@ export default defineConfig({
 
     // Timeout per test (ms) — keep fast, deterministic
     testTimeout: 10000,
+
+    // Appended to the defaults, which already vary (CI adds `github-actions`).
+    // A `--reporter` flag replaces the list and drops the ratchet with it.
+    reporters: [...configDefaults.reporters, "./scripts/verify/act-warning-ratchet.mjs"],
   },
 });

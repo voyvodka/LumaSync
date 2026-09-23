@@ -37,6 +37,9 @@ https://keepachangelog.com/en/1.1.0/
   property bar, arrow nudges and "Move to" only touch the area on screen. Before, a light with the
   same number in another area could be listed, shown or moved with it. Dragging a Hue light that
   belongs to a zone now starts from where its dot is drawn instead of jumping.
+- Room map: a background image larger than 20 MB is refused with a message that says so, rather
+  than copied into the app's data folder. Copies of background images that no room map layer uses
+  any more are deleted the next time the app starts.
 - USB strips: frames are now written to the serial port on their own thread, paced to what the
   115 200-baud link can carry, so a long strip no longer holds up screen capture while its bytes
   drain. A 164-LED strip should run at about 21 frames per second instead of about 15; 23 is what
@@ -85,6 +88,11 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- WLED: a device that answers the connection check with a redirect is now reported as not a
+  WLED device. Before, the app followed the redirect, which let anything on the local network
+  point the check at another address, including this computer.
+- Linux: the release build now starts on Ubuntu 22.04 and Debian 12. It was built against a newer
+  C library (glibc 2.39) than those systems carry; the minimum is now glibc 2.35.
 - Hue: after the stream to the bridge dropped and reconnected on its own, the lamps stayed frozen
   on their last colour while the app still said Hue was running. Ambilight now carries on to the
   reconnected stream. Stopping Hue while Ambilight was still sending to it no longer waits out a

@@ -59,7 +59,7 @@ function normalizeDisplayId(value: unknown): string | undefined {
 export function useModeRuntimeConfig(input: {
   calibration: LedCalibrationConfig | undefined;
 }): ModeRuntimeConfig {
-  // Capture display chosen by the user (v1.4 Platform GAP 2). Hydrated on
+  // Capture display chosen by the user. Hydrated on
   // bootstrap and refreshed when the calibration surface signals a change.
   const selectedDisplayIdRef = useRef<string | undefined>(undefined);
   // Unified lighting smoothing preset (v1.4). Named `hueIntensityPreset`

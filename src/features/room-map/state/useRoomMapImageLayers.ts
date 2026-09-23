@@ -1,5 +1,9 @@
 import { useCallback, useState } from "react";
-import type { RoomMapConfig } from "@/shared/contracts/roomMap";
+import {
+  ROOM_MAP_BACKGROUND_ERROR,
+  type RoomMapBackgroundErrorCode,
+  type RoomMapConfig,
+} from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
 import { copyBackgroundImage } from "../roomMapApi";
 import { pickRoomMapImage } from "../roomMapFilesApi";
@@ -17,6 +21,8 @@ export interface UseRoomMapImageLayersReturn {
   handleAddImage: () => Promise<void>;
   /** Set when the last import attempt failed; cleared when a new one starts. */
   imageError: string | null;
+  /** The coded reason for `imageError`, when the backend gave one the UI words differently. */
+  imageErrorCode: RoomMapBackgroundErrorCode | null;
   handleUpdateImageOpacity: (imageId: string, opacity: number) => void;
   handleUpdateImageScale: (imageId: string, sx: number, sy: number) => void;
   handleUpdateImageAspectLock: (imageId: string, locked: boolean) => void;
@@ -37,9 +43,11 @@ export function useRoomMapImageLayers({
   select,
 }: UseRoomMapImageLayersArgs): UseRoomMapImageLayersReturn {
   const [imageError, setImageError] = useState<string | null>(null);
+  const [imageErrorCode, setImageErrorCode] = useState<RoomMapBackgroundErrorCode | null>(null);
 
   const handleAddImage = useCallback(async () => {
     setImageError(null);
+    setImageErrorCode(null);
     try {
       const selected = await pickRoomMapImage();
       if (selected && typeof selected === "string") {
@@ -53,9 +61,10 @@ export function useRoomMapImageLayers({
         select(imageLayerObjectId(id));
       }
     } catch (err) {
-      const reason = parseCommandError(err).message;
-      console.error(`[LumaSync] Room map image import failed: ${reason}`);
-      setImageError(reason);
+      const parsed = parseCommandError(err);
+      console.error(`[LumaSync] Room map image import failed: ${parsed.message}`);
+      setImageError(parsed.message);
+      setImageErrorCode(parsed.code === ROOM_MAP_BACKGROUND_ERROR.TOO_LARGE ? parsed.code : null);
     }
   }, [apply, select]);
 
@@ -108,6 +117,7 @@ export function useRoomMapImageLayers({
   return {
     handleAddImage,
     imageError,
+    imageErrorCode,
     handleUpdateImageOpacity,
     handleUpdateImageScale,
     handleUpdateImageAspectLock,

@@ -1,7 +1,7 @@
 /**
  * HueChannelOverlay regression tests.
  *
- * Bug-driven coverage for v1.5 W1-A6 / W1-A8 zone authoring:
+ * Bug-driven coverage for zone authoring:
  *  - Bug #50: dragging the zone center moves the dashed bounds box AND
  *    every channel dot bound to the zone in lockstep (imperative DOM
  *    update during pointermove, single state commit on pointerup).

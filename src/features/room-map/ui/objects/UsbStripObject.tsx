@@ -10,7 +10,7 @@ interface UsbStripObjectProps {
   zoom?: number;
   panMode?: boolean;
   /**
-   * Wave 4-E — live connection status the canvas badge consumes.
+   * Live connection status the canvas badge consumes.
    * `connected` ⇒ green ONLINE chip beside the start handle,
    * `disconnected` ⇒ red OFFLINE chip,
    * `unknown` (default) ⇒ no chip rendered, so legacy maps stay clean
@@ -284,11 +284,11 @@ export const UsbStripObject = memo(function UsbStripObject({
         )}
       </svg>
 
-      {/* Wave 4-E + 4-G — Connection status badge + multi-strip
+      {/* Connection status badge + multi-strip
           port label anchored above the start handle. The port label
           renders whenever the strip carries a persisted `portName`
-          (W4-G contract field); the live status chip overlays the
-          existing W4-E badge palette. */}
+          (a contract field); the live status chip overlays the
+          existing badge palette. */}
       {connectionStatus !== "unknown" ? (
         <div
           className={`lm-room-usb-status-badge lm-room-usb-status-badge--${connectionStatus}`}

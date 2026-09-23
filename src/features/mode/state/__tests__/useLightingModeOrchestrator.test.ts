@@ -302,7 +302,7 @@ describe("useLightingModeOrchestrator", () => {
   });
 
   describe("capture start failures", () => {
-    // D-05 gates a USB target with no calibration before Phase 2 ever runs.
+    // The calibration gate stops a USB target with no calibration before Phase 2 ever runs.
     const savedCalibration = {
       totalLeds: 60,
     } as unknown as LightingModeOrchestratorInput["savedCalibration"];
@@ -1173,7 +1173,7 @@ describe("useLightingModeOrchestrator", () => {
       expect(setLightingModeMock.mock.calls[0][0].targets).toEqual(["usb", "hue"]);
       expect(view.result.current.activeOutputTargets).toEqual(["hue"]);
       expect(view.result.current.selectedOutputTargets).toEqual(["hue"]);
-      // D-06: the gate returns before teardown, so Hue keeps running untouched.
+      // The gate returns before teardown, so Hue keeps running untouched.
       expect(view.result.current.lightingMode.kind).toBe(LIGHTING_MODE_KIND.AMBILIGHT);
       expect(stopHueMock).not.toHaveBeenCalled();
       expect(stopLightingMock).not.toHaveBeenCalled();

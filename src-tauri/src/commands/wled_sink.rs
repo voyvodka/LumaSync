@@ -187,9 +187,9 @@ impl LedSink for WledUdpSink {
 /// Snapshot of the config needed to (re)build a `WledUdpSink`.
 ///
 /// `SerialSink` is rebuilt fresh from `port_name` on every worker/Solid-write
-/// start rather than kept alive across mode changes (see `ls-led-protocols`
-/// — sinks are cheap, mostly-stateless per-frame constructs; only the
-/// transient resource, a serial handle or a UDP socket, is short-lived).
+/// start rather than kept alive across mode changes (sinks are cheap,
+/// mostly-stateless per-frame constructs; only the transient resource, a
+/// serial handle or a UDP socket, is short-lived).
 /// `WledSinkConfig` gives the lighting runtime the same option for WLED:
 /// `ActiveSinkRegistry` stores this alongside the live sink it validated at
 /// connect time, so `lighting_mode.rs` can build a fresh `WledUdpSink` per

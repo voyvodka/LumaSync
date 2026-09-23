@@ -40,14 +40,14 @@ export const HUE_COMMANDS = {
 export type HueCommandId = (typeof HUE_COMMANDS)[keyof typeof HUE_COMMANDS];
 
 // ---------------------------------------------------------------------------
-// Hue zone authoring — canonical surface lives in `roomMap.ts` (v1.5 W4-F2)
+// Hue zone authoring — canonical surface lives in `roomMap.ts`
 // ---------------------------------------------------------------------------
 
 /**
  * Re-export of the canonical Hue zone command map from `roomMap.ts`.
  *
- * v1.5 W4-F2 rolled the W4-F generic `ZONE_COMMANDS` map back to a
- * Hue-only `HUE_ZONE_COMMANDS` after the direction reversal.
+ * A short-lived generic `ZONE_COMMANDS` map was rolled back to this
+ * Hue-only `HUE_ZONE_COMMANDS` when zones became Hue-only.
  * The map is owned by `roomMap.ts` (zones are persisted on
  * `RoomMapConfig`); the alias here keeps existing imports
  * (`LightsSection`, `RoomMapEditor`) working without source churn.
@@ -59,7 +59,7 @@ export type HueZoneCommandId = RoomMapHueZoneCommandId;
 
 /**
  * Re-export of the canonical `HueZone` interface (single source of truth
- * in `roomMap.ts`). Hue-only after the W4-F2 reversal — no longer a
+ * in `roomMap.ts`). Hue-only — no longer a
  * discriminated-union projection.
  */
 export type HueZone = RoomMapHueZone;
@@ -89,7 +89,7 @@ export const HUE_STATUS = {
   PAIRING_PENDING_LINK_BUTTON: "HUE_PAIRING_PENDING_LINK_BUTTON",
   /**
    * Catch-all pairing failure. Kept for backwards compatibility with
-   * frontends that shipped before v1.4 G7 split specific pairing
+   * frontends that shipped before the specific pairing
    * failure modes. New call sites should prefer the specific codes
    * below when the cause is known.
    */
@@ -137,7 +137,7 @@ export const HUE_STATUS = {
   STREAM_NOT_READY: "HUE_STREAM_NOT_READY",
   STREAM_READINESS_FAILED: "HUE_STREAM_READINESS_FAILED",
   // -------------------------------------------------------------------------
-  // OS keychain credential store (v1.5 W2-A1 / W2-A2)
+  // OS keychain credential store
   // -------------------------------------------------------------------------
   /**
    * The OS keychain backend is genuinely unavailable on this platform
@@ -237,7 +237,7 @@ export const HUE_RUNTIME_STATUS = {
   TRANSIENT_RETRY_EXHAUSTED: "TRANSIENT_RETRY_EXHAUSTED",
   AUTH_INVALID_CREDENTIALS: "AUTH_INVALID_CREDENTIALS",
   /**
-   * Uniform 403 re-pair signal (v1.4 G2).
+   * Uniform 403 re-pair signal.
    *
    * Any Hue CLIP v2 endpoint that returns HTTP 403 — discovery, validate,
    * start_stream, list_entertainment_areas — collapses onto this single
@@ -500,7 +500,7 @@ export type HueTransportReason =
   (typeof HUE_TRANSPORT_REASON)[keyof typeof HUE_TRANSPORT_REASON];
 
 // ---------------------------------------------------------------------------
-// Credential storage backend (v1.5 W2-A1 / W2-A2)
+// Credential storage backend
 // ---------------------------------------------------------------------------
 
 /**
@@ -511,7 +511,7 @@ export type HueTransportReason =
  *
  * - `keychain` — OS-native keychain (macOS Keychain Services / Windows
  *   Credential Manager / Linux Secret Service via libsecret + D-Bus).
- *   This is the W2-A2 happy path.
+ *   This is the happy path.
  * - `plaintext-legacy` — `shellStore.hueAppKey` / `shellStore.hueClientKey`.
  *   Used by users who paired before v1.5 and as a downgrade-safe fallback
  *   when the OS keychain is unavailable. Migration to `keychain` happens

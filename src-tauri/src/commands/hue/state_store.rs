@@ -1,7 +1,6 @@
 //! Hue runtime state store, DTOs, and the in-memory ownership model.
 //!
-//! Carved out of the original `hue_stream_lifecycle.rs` during the v1.5 G8
-//! split. This module owns:
+//! Carved out of the original `hue_stream_lifecycle.rs`. This module owns:
 //!
 //! - The wire-visible request/response/status DTOs (`StartHueStreamRequest`,
 //!   `SetHueSolidColorRequest`, `HueRuntimeStatus`,
@@ -318,7 +317,7 @@ pub(crate) struct HueActiveStreamContext {
     /// `close_notify` cleanup), the foreground `stop_hue_stream` Tauri
     /// command, and the reconnect monitor — whoever calls
     /// `try_acquire` first wins and performs the single PUT; later
-    /// callers no-op. Introduced in v1.5.2 A1.3 to fix the duplicate-PUT
+    /// callers no-op. Introduced to fix the duplicate-PUT
     /// race that produced "phantom active streamer" 403s.
     pub(crate) deactivate_token: Arc<DeactivateToken>,
 }
@@ -690,7 +689,7 @@ pub(crate) fn channels_to_info_via_owner(
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
-    //! Shared test fixtures for the v1.5 G8 split. Each submodule's
+    //! Shared test fixtures for the `commands::hue` submodules. Each one's
     //! `#[cfg(test)] mod tests` block reaches in here so the fixtures live
     //! in one place and stay in lockstep with `HueRuntimeOwner` /
     //! `HueActiveStreamContext` field changes.
@@ -1023,7 +1022,7 @@ mod tests {
 
     #[test]
     fn a_second_area_is_never_served_the_streaming_one_channels() {
-        // Bug B8: streaming area-a, the picker asks for area-b. The active-stream
+        // Streaming area-a, the picker asks for area-b. The active-stream
         // arm declines, and the persistent-sender arm used to answer anyway —
         // whose channels the frontend then persists under area-b's id.
         let store = store_with(HueRuntimeOwner {

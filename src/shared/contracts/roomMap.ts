@@ -31,6 +31,19 @@ export const ROOM_MAP_COMMANDS = {
   COPY_BACKGROUND_IMAGE: "copy_background_image",
 } as const;
 
+/** Codes `copy_background_image` rejects with, as the `"CODE: context"` prefix
+ *  of its `Err(String)`. Other failures reach the caller uncoded. */
+export const ROOM_MAP_BACKGROUND_ERROR = {
+  TOO_LARGE: "ROOM_MAP_BACKGROUND_TOO_LARGE",
+} as const;
+
+export type RoomMapBackgroundErrorCode =
+  (typeof ROOM_MAP_BACKGROUND_ERROR)[keyof typeof ROOM_MAP_BACKGROUND_ERROR];
+
+/** The import limit the UI quotes. A Rust test holds it equal to
+ *  `MAX_BACKGROUND_IMAGE_BYTES` in `room_map/background.rs`. */
+export const ROOM_MAP_BACKGROUND_MAX_MB = 20;
+
 // ---------------------------------------------------------------------------
 // Hue Channel Placement
 // ---------------------------------------------------------------------------
@@ -80,12 +93,12 @@ export interface HueChannelPlacement {
   /** Nullable because the Rust mirror puts `None` on the wire as `null`. */
   locked?: boolean | null;
   /**
-   * v1.5 W1-A1 — when present, this channel is logically grouped under the
+   * When present, this channel is logically grouped under the
    * referenced `HueZone`. Absent ⇒ legacy absolute placement.
    */
   zoneId?: string | null;
   /**
-   * v1.5 W1-A1 — zone-relative position in [-1, 1] × [-1, 1] × [-1, 1]
+   * Zone-relative position in [-1, 1] × [-1, 1] × [-1, 1]
    * coordinates. Authoritative when `zoneId` is set; ignored otherwise.
    * The world-space `x/y/z` above are derived from this via
    * `HueZone.center + HueZone.scale * zoneRelativePosition`.
@@ -168,11 +181,11 @@ export interface UsbStripPlacement {
   ledCount: number;
   locked?: boolean;
   /**
-   * Wave 4-G #6 — USB serial port the strip is bound to (e.g.
+   * USB serial port the strip is bound to (e.g.
    * `/dev/tty.usbserial-110`). Multiple `UsbStripPlacement` rows can
    * share the same `portName` so a single controller can host
    * multiple physical segments. Optional for backwards compatibility
-   * with strips authored before W4-G; consumers must treat `undefined`
+   * with strips authored before it existed; consumers must treat `undefined`
    * as "not yet linked" and surface a re-pair affordance instead of
    * blocking the user.
    */
@@ -254,7 +267,7 @@ export interface RoomGeometry {
 }
 
 // ---------------------------------------------------------------------------
-// Hue Zone (v1.5 W4-F2 — sole surviving zone kind, Hue Entertainment Area
+// Hue Zone (the sole surviving zone kind, a Hue Entertainment Area
 // spatial 3D subset). Logical / screen / LED zones intentionally NOT wired
 // into this contract; they ship later as explicit-prefix types in their own
 // modules.
@@ -318,12 +331,12 @@ export interface HueZone {
 }
 
 // ---------------------------------------------------------------------------
-// Legacy zone shapes (v1.5 W4-F2 migration shim — read-only fallbacks)
+// Legacy zone shapes (migration shim — read-only fallbacks)
 // ---------------------------------------------------------------------------
 
 /**
- * @deprecated v1.5 W4-F2 — read-only legacy migration shape. The original
- * v1.5 W1-A1 `HueZone` interface (pre-W4-F unification) had the same
+ * @deprecated Read-only legacy migration shape. The original `HueZone`
+ * interface (before the short-lived zone unification) had the same
  * structural shape as the canonical `HueZone` above. Kept under the
  * `LegacyHueZone` name so `migrateLegacyHueZone` can validate persisted
  * records during the one-shot `schemaVersion: 1 → 2` migration without
@@ -353,8 +366,8 @@ export interface LegacyHueZone {
 }
 
 /**
- * @deprecated v1.5 W4-F2 — read-only legacy migration shape. Pre-W4-F
- * USB-side region grouping. The W4-F unification briefly tried to
+ * @deprecated Read-only legacy migration shape. The older USB-side
+ * region grouping. A short-lived zone unification tried to
  * promote this into a generic `Zone & { zoneType: "logical" }`; the
  * reversal dropped the concept entirely. The interface survives only so
  * the migration shim can detect previously persisted records and DROP
@@ -370,7 +383,7 @@ export interface ZoneDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// Migration helpers (v1.5 W4-F2 — pure functions consumed by F6 shim)
+// Migration helpers (pure functions consumed by the `1 → 2` migration)
 // ---------------------------------------------------------------------------
 
 /**
@@ -393,7 +406,7 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 /**
- * Convert a `LegacyHueZone` (pre-W4-F2 persisted shape, structurally
+ * Convert a `LegacyHueZone` (the older persisted shape, structurally
  * identical to the canonical `HueZone` but typed separately so the
  * migration is anchored at compile time) into a canonical `HueZone`.
  * Pure function — safe to call in any context.
@@ -490,14 +503,13 @@ export function migrateLegacyHueZone(legacy: LegacyHueZone): HueZone | null {
 }
 
 // ---------------------------------------------------------------------------
-// Hue Zone command surface (v1.5 W4-F2 — Hue-only after the direction
-// reversal; the W4-F generic `ZONE_COMMANDS` map is replaced 1:1 by the
-// renamed Hue-only map below).
+// Hue Zone command surface (Hue-only; the short-lived generic
+// `ZONE_COMMANDS` map is replaced 1:1 by the renamed Hue-only map below).
 // ---------------------------------------------------------------------------
 
 /**
  * Authoring commands for `HueZone[]`. Backend dispatch is single-branch
- * (no `zoneType` discriminator after the W4-F2 reversal). The four
+ * (no `zoneType` discriminator). The four
  * verbs map 1:1 to the four Rust handlers under
  * `src-tauri/src/commands/room_map/hue_zone.rs`.
  */
@@ -512,18 +524,15 @@ export type HueZoneCommandId =
   (typeof HUE_ZONE_COMMANDS)[keyof typeof HUE_ZONE_COMMANDS];
 
 // ---------------------------------------------------------------------------
-// Hue Zone status codes (v1.5 W4-F2 — Hue-only after the direction reversal,
-// renamed from the W4-F generic `ZONE_*` family back to `HUE_ZONE_*`).
+// Hue Zone status codes (Hue-only, renamed from the short-lived generic
+// `ZONE_*` family back to `HUE_ZONE_*`).
 // ---------------------------------------------------------------------------
 
 /**
- * Status codes emitted by the four Hue zone authoring commands. After the
- * v1.5 W4-F2 direction reversal these codes are Hue-only — the W4-F
- * `ZONE_TYPE_INVALID` and `ZONE_CONVERSION_OK` codes (which only made
- * sense in a logical/Hue discriminated world) are gone.
- *
- * The eight surviving codes mirror the original v1.5 W1-A2 baseline. The
- * Rust constants will catch up in the paired `hue-expert` spawn.
+ * Status codes emitted by the four Hue zone authoring commands. These
+ * codes are Hue-only — the short-lived `ZONE_TYPE_INVALID` and
+ * `ZONE_CONVERSION_OK` codes (which only made sense in a logical/Hue
+ * discriminated world) are gone.
  */
 export const HUE_ZONE_STATUS_CODES = {
   /** `create_hue_zone` succeeded; the new zone id is in the payload. */
@@ -550,7 +559,7 @@ export const HUE_ZONE_STATUS_CODES = {
   HUE_ZONE_CHANNEL_NOT_IN_AREA: "HUE_ZONE_CHANNEL_NOT_IN_AREA",
   /**
    * Zone scale exceeds the room or undershoots the slider floor (per-axis
-   * `[0.05, 1.0]` clamp). See v1.5 W4-I notes — the previous uniform
+   * `[0.05, 1.0]` clamp). The previous uniform
    * aspect-ratio lock was dropped, zones are authored as physical 1:1
    * metric squares, so a non-square room deliberately writes asymmetric
    * `scaleX` / `scaleY`.
@@ -677,13 +686,12 @@ export interface ImageLayer {
  * Full room map configuration persisted via shellStore.
  * Optional fields allow partial configurations during initial setup.
  *
- * v1.5 W4-F2: `zones: HueZone[]` is the single Hue-only zone array (the
- * W4-F unified discriminator was rolled back — see RFC "Direction
- * reversal"). The legacy `hueZones?: LegacyHueZone[]` field stays on the
- * contract as a `@deprecated` read-only fallback so the F6 migration
- * shim can fold leftover plaintext-on-disk states from in-development
- * W1-A1 builds. New code paths MUST NOT write `hueZones` — write into
- * `zones[]` instead.
+ * `zones: HueZone[]` is the single Hue-only zone array (a unified
+ * discriminator was rolled back — docs/architecture/hue.md). The legacy
+ * `hueZones?: LegacyHueZone[]` field stays on the contract as a
+ * `@deprecated` read-only fallback so the `1 → 2` migration can fold
+ * leftover on-disk states from in-development builds. New code paths MUST
+ * NOT write `hueZones` — write into `zones[]` instead.
  */
 export interface RoomMapConfig {
   dimensions: RoomDimensions;
@@ -692,14 +700,14 @@ export interface RoomMapConfig {
   furniture: FurniturePlacement[];
   tvAnchor?: TvAnchorPlacement;
   /**
-   * Hue zone list (v1.5 W4-F2 — Hue-only after the direction reversal).
+   * Hue zone list (Hue-only after the direction reversal).
    * Each entry is a `HueZone`; logical / screen / LED zones are NOT
    * stored here and will land later in their own arrays.
    */
   zones: HueZone[];
   /**
-   * @deprecated v1.5 W4-F2 — read-only fallback during migration shim
-   * window. The F6 migration converts these into `zones[]: HueZone[]`
+   * @deprecated Read-only fallback during the migration shim window. The
+   * `1 → 2` migration converts these into `zones[]: HueZone[]`
    * entries and strips the field on next save. New code paths MUST NOT
    * write here.
    */

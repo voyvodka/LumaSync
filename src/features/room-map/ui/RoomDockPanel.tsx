@@ -44,7 +44,7 @@ interface RoomDockPanelProps {
   onRenameFurniture: (id: string, label: string) => void;
   onToggleLock: (id: string) => void;
 
-  // Hue zones (v1.5 W4-F2 — sole surviving zone kind, spatial 3D Hue
+  // Hue zones (the sole surviving zone kind, a spatial 3D Hue
   // Entertainment Area subset). Logical zones were dropped; the dock no
   // longer renders a Zones tab.
   hueZones?: HueZone[];
@@ -57,20 +57,20 @@ interface RoomDockPanelProps {
   /** When true, "+ Hue zone" CTA is disabled (no entertainment area paired). */
   addHueZoneDisabled?: boolean;
   addHueZoneDisabledTooltip?: string;
-  // ── Wave 4-B props ────────────────────────────────────────────────
+  // ── Hue area state + channel assignment ───────────────────────────
   /** True when a Hue bridge is paired (legacy plaintext or keychain). */
   hueBridgeConfigured?: boolean;
   /** Persisted entertainment area id; null when no area picked. */
   hueAreaId?: string | null;
   /**
-   * B2/B3 — move a single channel between zones (or detach when target is
+   * Move a single channel between zones (or detach when target is
    * `null`). Powers the row drag handle, "Unassigned" drop bucket, and the
    * inline "Move to →" popover. Inert when omitted, so the dock degrades
    * to the v1.5 read-only flow.
    */
   onAssignChannelToZone?: (channelIndex: number, targetZoneId: string | null) => void;
   /**
-   * B1 — emitted when the state strip CTA prompts the user to finish Hue
+   * Emitted when the state strip CTA prompts the user to finish Hue
    * onboarding. Inert when omitted (CTA still renders for clarity but
    * does nothing on click).
    */
@@ -199,7 +199,7 @@ export function RoomDockPanel(props: RoomDockPanelProps) {
   const renderInspector = () => {
     switch (inspectorTarget.kind) {
       case "hueZone": {
-        // v1.5 W4-F2: only Hue zones survive in `config.zones[]`. The
+        // Only Hue zones survive in `config.zones[]`. The
         // dispatcher feeds the canonical `HueZone` straight into
         // HueZoneInspector with no projection step.
         const zone = inspectorTarget.zone;

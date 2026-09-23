@@ -21,6 +21,26 @@ The last row is the one to read twice. `ci.yml` never invokes `wdio` and `releas
 maintainer machine or not at all — which is how it came to encode an assumption that had been false
 for several releases. **Treat anything it asserts as unverified until you have run it yourself.**
 
+## The act() warning ratchet
+
+React logs *"An update to X inside a test was not wrapped in act(...)"* when a component changes
+state after the test stopped waiting for it. Each one is an assertion that may have run before the
+component settled — a test that can pass against the wrong screen. `vitest.config.ts` appends
+`scripts/verify/act-warning-ratchet.mjs` to the default reporters; it counts those warnings across
+the run and fails it when the count exceeds `scripts/verify/act-warning-baseline.txt`. So CI's
+ordinary `bun run test` step enforces it with no extra run.
+
+The baseline may only go down. A count below it is printed (and annotated on GitHub), not failed:
+a partial run always sees fewer, and the step sits inside a required check where a timing-dependent
+miss must not turn a PR red. Lower the file by hand when a full run reports fewer. When it was
+introduced the count was 122, all from three files — `RoomMapEditor.test.tsx` (50),
+`LightsSection.test.tsx` (48) and `DeviceSection.test.tsx` (24) — and stable across worker counts.
+
+Two ways it goes blind: a `--reporter` flag replaces the configured list and drops the ratchet with
+it, and a test that stubs `console.error` swallows the warning before any reporter sees it.
+Under an AI coding agent, vitest detects the agent and switches to its `minimal` reporter, which
+prints no console output at all — the warnings are still counted, just not shown.
+
 ## The quietest failure CSS has
 
 A reference to an undefined custom property does not warn, does not fall back to

@@ -219,7 +219,7 @@ export function LightsSection({
     };
   }, []);
 
-  // ── Hue zone authoring (v1.5 W1-A5) ──────────────────────────────
+  // ── Hue zone authoring ──────────────────────────────
   // Track the persisted entertainment area so the dock "+" CTA is only
   // enabled when the user has finished Hue onboarding. We do not mount
   // the full useHueOnboarding state machine here; the area id alone is
@@ -333,7 +333,7 @@ export function LightsSection({
     });
   };
 
-  // v1.5 W2 fix #40 — Ambilight brightness used to live only in the
+  // Ambilight brightness used to live only in the
   // CompactLayout. Mirrored here so the full-mode Lights view exposes
   // the same control set; payload field is `ambilight.brightness`
   // (0..1 unit), surfaced as a 0..100% dial.

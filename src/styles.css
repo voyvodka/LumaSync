@@ -63,7 +63,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   TitleBar (LumaSync amber dark chrome — Phase 1 of UI Mockup Rev 07)
+   TitleBar (LumaSync amber dark chrome, UI Mockup Rev 07)
    Always dark regardless of system theme: chrome lives outside the
    light/dark body and remains visually consistent.
    ───────────────────────────────────────────────────────────────────── */
@@ -166,7 +166,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   StatusBar (LumaSync amber dark chrome — Phase 2 of UI Mockup Rev 07)
+   StatusBar (LumaSync amber dark chrome, UI Mockup Rev 07)
    Mirrors the title bar at the bottom: full width, always dark, hosts
    subsystem pills + (full mode only) keyboard hints + version pill.
    ───────────────────────────────────────────────────────────────────── */
@@ -230,7 +230,7 @@
   color: var(--lm-red);
 }
 
-/* FPS/latency HUD pill (G1) — 4th StatusBar chip. `is-low` lights up when
+/* FPS/latency HUD pill — 4th StatusBar chip. `is-low` lights up when
    the rolling FPS drops below the hard red threshold; the component also
    renders a "Low FPS" text span so the state is never expressed by color
    alone (WCAG SC 1.4.1). `is-idle` reuses the existing dim ink for the
@@ -260,7 +260,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* v1.5 W2-B1 — inline Reconnect button rendered next to an offline chip's
+/* Inline Reconnect button rendered next to an offline chip's
    value. Uses the chip's currentColor so it inherits the offline tone
    (idle = ink-faint, off = ink-faint), upgrades to amber on hover/focus,
    and collapses to system colors under forced-colors. */
@@ -470,7 +470,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Compact layout (UI Mockup Rev 07 — `10-compact.html`, Phase 3 Scope A)
+   Compact layout (UI Mockup Rev 07 — `10-compact.html`)
    Visual-only restyle of the existing compact mode. Backend wiring,
    throttling, and lighting mode contracts stay untouched — these classes
    purely re-skin Off/Ambilight/Solid cards + scene tile presets in the
@@ -1065,7 +1065,7 @@
   pointer-events: none;
 }
 
-/* v1.5 W2 fix #41 — Adalight brightness-locked notice. Mono mini-text
+/* Adalight brightness-locked notice. Mono mini-text
    slotted under the slider when the firmware profile owns brightness;
    matches the amber tone SolidColorPanel uses in the full Lights view. */
 .lm-compact-brightness-note {
@@ -1077,7 +1077,7 @@
   color: rgba(255, 176, 32, 0.78);
 }
 
-/* v1.5 W2 fix #40 — compact ambilight smoothing preset.
+/* Compact ambilight smoothing preset.
    The shared LightingSmoothingPresetControl ships with `.lm-psl.lm-psl-seg`
    styles tuned for the full Lights view; in the compact card we wrap it so
    the segmented chip strip slots flush under the brightness slider with a
@@ -1101,7 +1101,7 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Compact-mode color picker popover (v1.5 W2 fix #43).
+   Compact-mode color picker popover.
 
    Rendered through React.createPortal into document.body so the
    surrounding `.lm-compact-body { overflow: auto }` chain cannot clip
@@ -1113,7 +1113,7 @@
    windows: when the picker (hue ring + S/V square + hex + recent strip)
    is taller than the available viewport side, the popover scrolls
    inside its own clamp instead of overflowing off-screen — the original
-   bug pre-fix #43.                                                       */
+   bug before this fix.                                                       */
 .lm-compact-color-popover {
   background-color: var(--lm-panel);
   border: 1px solid var(--lm-line-2);
@@ -1215,7 +1215,7 @@
     0 0 12px rgba(255, 176, 32, 0.2);
 }
 
-/* ── Updater modal (Phase 4) ────────────────────────────────────────── */
+/* ── Updater modal ────────────────────────────────────────────────── */
 .lm-modal-scrim {
   position: fixed;
   inset: var(--lm-titlebar-h) 0 0 0;
@@ -1705,7 +1705,7 @@
   }
 }
 
-/* ── Settings page (Phase 6) ────────────────────────────────────────── */
+/* ── Settings page ────────────────────────────────────────────────── */
 .lm-settings-page {
   display: flex;
   flex-direction: column;
@@ -1978,7 +1978,7 @@
   letter-spacing: 0.1em;
 }
 
-/* ── Devices page (Phase 7) ─────────────────────────────────────────── */
+/* ── Devices page ─────────────────────────────────────────────────── */
 .lm-device-page {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -2988,7 +2988,7 @@
 .lm-hue-ip-error { font-family: var(--lm-mono); font-size: 10px; color: var(--lm-red, #ef5b5b); letter-spacing: 0.04em; }
 
 /* ── Temporary top tab strip (pre-Phase 10 titlebar migration) ──────── */
-/* ── Lights page (Phase 9) ──────────────────────────────────────────── */
+/* ── Lights page ──────────────────────────────────────────────────── */
 .lm-lights-page {
   height: 100%;
   display: grid;
@@ -4242,7 +4242,7 @@ body {
   color: var(--lm-ink-faint);
 }
 /*
- * v1.5 W4-F2 manual-test (2026-04-28): clickable Hue zone headers in
+ * Clickable Hue zone headers in
  * the Objects list. Hover lifts opacity + shows the amber selection
  * cue, `is-on` matches the `.lm-room-dock-row.is-on` treatment so a
  * selected zone in the side list visually pairs with the bottom
@@ -4480,12 +4480,12 @@ body {
 
 /* Inspector panel — sits below the list */
 .lm-room-dock-inspect {
-  /* W4-G #1 — was `flex-shrink: 0` which let the inspector push the
+  /* Was `flex-shrink: 0` which let the inspector push the
      list area into negative space when the picker + swatches + slider
      stack exceeded 50 % of the dock. `0 1 auto` lets the inspector
      shrink alongside the list, and the absolute 360 px ceiling keeps
      the inspector usable on very tall monitors where 50 % would
-     swallow the whole list. W4-I #4 — tightened vertical rhythm
+     swallow the whole list. Vertical rhythm is tightened
      (gap 8 → 6, padding 10 → 8) so the size slider, metre input,
      metric read-out and hint stack stops overlapping when the dock
      is narrow. */
@@ -4556,7 +4556,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* W4-I #4 — was 26 px, which combined with the slider thumb
+  /* Was 26 px, which combined with the slider thumb
      (12 px) and the 14 px line-height of the metric read-out caused
      the rows to stack tighter than their bounding box on narrow
      docks. 24 px keeps the same visual rhythm but trims 6 px off the
@@ -4724,7 +4724,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-B (B1) — Hue area state strip
+   Hue area state strip
    ─────────────────────────────────────────────────────────────────────
    Renders at the top of the Hue Zones tab body. Three visual variants
    (`--not-configured`, `--no-area`, `--ready`) signal the bridge state
@@ -4821,7 +4821,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-B (B2/B3) — Channel drag handle + drop target highlight
+   Channel drag handle + drop target highlight
    ─────────────────────────────────────────────────────────────────────
    The grip is always rendered (it is the discoverability anchor for
    B2). Drop targets — zone rows + the Unassigned bucket header — get
@@ -5371,7 +5371,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-D — Type-aware inspector chrome
+   Type-aware inspector chrome
    ─────────────────────────────────────────────────────────────────────
    Shared input + button styles for the per-type inspectors rendered
    inside `.lm-room-dock-inspect`. These tokens stack onto the existing
@@ -5492,9 +5492,9 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-K — HueZoneInspector single-row refactor
+   HueZoneInspector single-row refactor
    ─────────────────────────────────────────────────────────────────────
-   Replaces the W4-I four-row size cluster + AR-hint paragraph that
+   Replaces the earlier four-row size cluster + AR-hint paragraph that
    collided with the HSV picker's own hex input + recent swatches on
    the 320 px dock. The new layout:
 
@@ -5687,13 +5687,12 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-E — USB strip connection status chip
+   USB strip connection status chip
    ─────────────────────────────────────────────────────────────────────
    A small live-status badge embedded in the UsbStripInspector and the
    UsbStripObject overlay. Three variants — `connected` / `disconnected`
    / `unknown` — pair colour with a leading dot AND mono caps copy so
-   colour is never the sole signal (a11y rule from
-   `ls-design-language` §6).
+   colour is never the sole signal (an a11y rule).
    ────────────────────────────────────────────────────────────────── */
 .lm-room-dock-conn-chip {
   display: inline-flex;
@@ -5983,7 +5982,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-E — Devices section "Paired strips" sub-card
+   Devices section "Paired strips" sub-card
    ─────────────────────────────────────────────────────────────────────
    Surfaces every persisted UsbStripPlacement under the USB ports grid,
    with a live connection chip and a deep-link to open the strip in the
@@ -6054,7 +6053,7 @@ body {
   letter-spacing: 0.04em;
   color: var(--lm-ink-faint);
 }
-/* W4-J #2 — inline port editor inside a paired-strip card. Replaces
+/* Inline port editor inside a paired-strip card. Replaces
    the read-only `.lm-paired-strip-sub` line with a dropdown when the
    user clicks Change port. The select sits flush with the strip name
    above it; Save / Cancel buttons reuse the action-button row that
@@ -6111,7 +6110,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-G #5 — Room map context menu (amber Rev 07 migration)
+   Room map context menu (amber Rev 07 migration)
    ─────────────────────────────────────────────────────────────────────
    Replaces the legacy zinc/red-400 styling baked into ContextMenu.tsx
    with the same panel + line + amber-on-hover vocabulary used by the
@@ -6218,7 +6217,7 @@ body {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   Wave 4-G #6 — Multi-strip pair flow
+   Multi-strip pair flow
    ─────────────────────────────────────────────────────────────────────
    "Add LED strip" CTA + inline LED-count form for the DeviceSection's
    paired-strips sub-card, plus a port label that hovers above each
@@ -6296,7 +6295,7 @@ body {
   border-color: rgba(255, 176, 32, 0.55);
   box-shadow: var(--lm-focus-ring-soft);
 }
-/* W4-J #1 — empty-state copy inside the inline strip form. Used when
+/* Empty-state copy inside the inline strip form. Used when
    the user opens the form but there are no eligible ports (none
    detected, or every detected port is already paired). Sits in place
    of the dropdown + LED count fields and pairs with a Rescan button
@@ -6312,7 +6311,7 @@ body {
   gap: 6px;
   flex-shrink: 0;
 }
-/* W4-I #2 — port dropdown shares the form-input visual rhythm but
+/* Port dropdown shares the form-input visual rhythm but
    stretches to fit the (port name + product) label so the user can
    read the full controller identity before committing. */
 .lm-paired-strip-form-select {
@@ -6349,7 +6348,7 @@ body {
   cursor: not-allowed;
 }
 
-/* W4-I #2 — collapsible "Discover ports" utility. Sits above the
+/* Collapsible "Discover ports" utility. Sits above the
    primary paired-strips list and stays closed by default so the page
    opens on the strip roster, not the legacy discovery grid. */
 .lm-device-discover {
@@ -6429,7 +6428,7 @@ body {
 
 /* Multi-strip canvas affordance — port name floats above each strip's
    start handle so the user can tell which controller drives which run.
-   Sits 16 px above the W4-E status badge so the two never collide. */
+   Sits 16 px above the status badge so the two never collide. */
 .lm-room-usb-port-label {
   position: absolute;
   display: inline-flex;
