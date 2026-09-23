@@ -9,6 +9,7 @@ import {
 const BASE: HueBridgeCardStateInput = {
   selectedBridgeId: "bridge-1",
   runtimeStatus: null,
+  runtimeStatusUnavailable: false,
   hueStatus: null,
   credentialState: "valid",
   bridgeUnreachable: false,
@@ -164,6 +165,42 @@ describe("deriveHueBridgeCardState", () => {
 
     it("reports idle when everything is settled", () => {
       expect(deriveHueBridgeCardState(BASE)).toBe("idle");
+    });
+  });
+
+  describe("runtime status read rejected", () => {
+    it("never reports Ready for a runtime it could not read", () => {
+      expect(deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true })).toBe("statusUnknown");
+    });
+
+    it("does not let the last status it read speak for the runtime", () => {
+      for (const last of [
+        runtime({ state: "Running" }),
+        runtime({ state: "Reconnecting" }),
+        runtime({ code: "HUE_STOP_TIMEOUT_PARTIAL" }),
+      ]) {
+        expect(
+          deriveHueBridgeCardState({ ...BASE, runtimeStatus: last, runtimeStatusUnavailable: true }),
+        ).toBe("statusUnknown");
+      }
+    });
+
+    it("keeps states that come from the bridge or the credential, not the runtime", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true, bridgeUnreachable: true }),
+      ).toBe("offline");
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true, credentialState: "needs_repair" }),
+      ).toBe("authError");
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatusUnavailable: true, selectedAreaId: null }),
+      ).toBe("areaSelect");
+    });
+
+    it("still reports idle for a backend-reported Failed state", () => {
+      expect(
+        deriveHueBridgeCardState({ ...BASE, runtimeStatus: runtime({ state: "Failed", code: "HUE_STREAM_START_ABORTED" }) }),
+      ).toBe("idle");
     });
   });
 

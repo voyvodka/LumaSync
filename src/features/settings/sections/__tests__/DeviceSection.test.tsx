@@ -140,6 +140,7 @@ function createHueHookState(overrides: Record<string, unknown> = {}) {
     isReadinessStale: false,
     status: null,
     runtimeStatus: null,
+    runtimeStatusReadFailure: null,
     runtimeTargets: [],
     isRuntimeMutating: false,
     discover: vi.fn(),

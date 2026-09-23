@@ -29,11 +29,19 @@ export type HueOnboardingStatus = CommandStatusOf<
   HueOnboardingWireStatusCode | HueOnboardingTransportCode
 >;
 
-/** Same split for the runtime status: what the Devices tab holds is the wire
- * status widened by the one code minted when the status poll itself rejects. */
+/** What the Devices tab holds as the runtime status: only ever an answer the
+ * backend gave. */
 export type HueRuntimeStatusView = Omit<HueRuntimeStatus, "code"> & {
-  code: HueRuntimeWireStatusCode | typeof HUE_ONBOARDING_TRANSPORT_CODES.STREAM_STATUS_UNAVAILABLE;
+  code: HueRuntimeWireStatusCode;
 };
+
+/** A `get_hue_stream_status` invoke that rejected. Held beside the last status
+ * the backend reported, never in its place: the rejection says nothing about
+ * the runtime, and minting a `Failed` state for it read as "Ready" on the card
+ * and silenced the poll loop, which only runs while streaming. */
+export type HueRuntimeStatusReadFailure = CommandStatusOf<
+  typeof HUE_ONBOARDING_TRANSPORT_CODES.STREAM_STATUS_UNAVAILABLE
+>;
 
 /** Transport failures carry `error.message` and nothing else — never an object
  * that holds credentials. */

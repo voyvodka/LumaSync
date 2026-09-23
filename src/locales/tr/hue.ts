@@ -188,6 +188,10 @@ const hue: Catalogue<typeof enHue> = {
       title: "Durdurma zaman aşımı",
     },
     reconnectingTitle: "Hue köprüsüne yeniden bağlanılıyor",
+    statusUnavailable: {
+      title: "Akış durumu okunamadı",
+      body: "Hue akışının durumu okunamadı. Kendiliğinden yeniden kontrol ediliyor.",
+    },
     writeback: {
       codes: {
         CHAN_WB_SCHEMA_REJECTED: "Köprü konum formatını reddetti.",
@@ -231,6 +235,7 @@ const hue: Catalogue<typeof enHue> = {
       failed: "BAŞARISIZ",
       timedOut: "SÜRE DOLDU",
       wait: "BEKLEYİN",
+      checking: "KONTROL",
       discovered: "KEŞFEDİLDİ",
     },
   },

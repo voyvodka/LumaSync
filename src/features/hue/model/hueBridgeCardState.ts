@@ -27,12 +27,15 @@ export type HueBridgeCardState =
   | "authError"
   | "pairing"
   | "areaSelect"
+  | "statusUnknown"
   | "stale"
   | "idle";
 
 export interface HueBridgeCardStateInput {
   selectedBridgeId: string | null;
   runtimeStatus: HueRuntimeStatusView | null;
+  /** The latest runtime-status read rejected, so `runtimeStatus` is stale. */
+  runtimeStatusUnavailable: boolean;
   hueStatus: HueOnboardingStatus | null;
   credentialState: HueCredentialStatus;
   bridgeUnreachable: boolean;
@@ -43,7 +46,8 @@ export interface HueBridgeCardStateInput {
 
 export function deriveHueBridgeCardState({
   selectedBridgeId,
-  runtimeStatus,
+  runtimeStatus: lastRuntimeStatus,
+  runtimeStatusUnavailable,
   hueStatus,
   credentialState,
   bridgeUnreachable,
@@ -53,6 +57,9 @@ export function deriveHueBridgeCardState({
 }: HueBridgeCardStateInput): HueBridgeCardState | null {
   if (!selectedBridgeId) return null;
 
+  // A rejected status read says nothing about the runtime: neither the last
+  // status nor "Ready" may speak for it until a read lands again.
+  const runtimeStatus = runtimeStatusUnavailable ? null : lastRuntimeStatus;
   if (runtimeStatus?.code === "HUE_STOP_TIMEOUT_PARTIAL") return "stopPartial";
   if (runtimeStatus?.code === "CONFIG_NOT_READY_GATE_BLOCKED") return "gateBlocked";
   if (runtimeStatus?.state === "Running") return "streaming";
@@ -78,6 +85,7 @@ export function deriveHueBridgeCardState({
   }
   if (credentialState === "valid") {
     if (!selectedAreaId) return "areaSelect";
+    if (runtimeStatusUnavailable) return "statusUnknown";
     if (isReadinessStale) return "stale";
     return "idle";
   }

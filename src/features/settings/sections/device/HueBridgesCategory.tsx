@@ -71,6 +71,7 @@ export function HueBridgesCategory({
     credentials,
     status: hueStatus,
     runtimeStatus,
+    runtimeStatusReadFailure,
     runtimeTargets,
     isRuntimeMutating,
     areaChannels,
@@ -107,6 +108,7 @@ export function HueBridgesCategory({
   const hueBridgeState = deriveHueBridgeCardState({
     selectedBridgeId,
     runtimeStatus,
+    runtimeStatusUnavailable: runtimeStatusReadFailure !== null,
     hueStatus,
     credentialState,
     bridgeUnreachable,
@@ -146,6 +148,8 @@ export function HueBridgesCategory({
               ? t("hue:bridge.unreachable")
               : hueBridgeState === "reconnecting"
               ? t("hue:runtime.reconnectingTitle")
+              : hueBridgeState === "statusUnknown"
+              ? t("hue:runtime.statusUnavailable.title")
               : hueBridgeState === "stale"
               ? t("hue:runtime.checklist.revalidate")
               : hueBridgeState === "gateBlocked"
@@ -258,7 +262,7 @@ export function HueBridgesCategory({
               hueBridgeState === "streaming" ? " is-on" :
               hueBridgeState === "offline" ? " is-offline" :
               hueBridgeState === "authError" || hueBridgeState === "pairingFailed" || hueBridgeState === "stopPartial" ? " is-error-state" :
-              hueBridgeState === "reconnecting" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? " is-warn-state" :
+              hueBridgeState === "reconnecting" || hueBridgeState === "statusUnknown" || hueBridgeState === "stale" || hueBridgeState === "pairingTimedOut" || hueBridgeState === "pairingDeferred" ? " is-warn-state" :
               hueBridgeState === "pairing" || hueBridgeState === "pairingLinkButton" || hueBridgeState === "areaSelect" ? " is-ghost" :
               ""
             }`}>
@@ -285,6 +289,7 @@ export function HueBridgesCategory({
                        hueBridgeState === "authError" ? t("hue:page.pill.authError") :
                        hueBridgeState === "offline" ? t("hue:bridge.unreachable") :
                        hueBridgeState === "reconnecting" ? t("hue:page.pill.reconnecting") :
+                       hueBridgeState === "statusUnknown" ? t("hue:page.pill.checking") :
                        hueBridgeState === "stale" || hueBridgeState === "gateBlocked" ? t("hue:page.pill.awaiting") :
                        hueBridgeState === "stopPartial" ? t("hue:page.pill.failed") :
                        ""}
@@ -367,6 +372,21 @@ export function HueBridgesCategory({
                   <div className="lm-dcard-cell">
                     <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
                     <div className="lm-dcard-cell-v is-ok">{t("hue:page.pill.ready")}</div>
+                  </div>
+                </div>
+              ) : hueBridgeState === "statusUnknown" ? (
+                <div className="lm-dcard-body">
+                  <div className="lm-dcard-cell">
+                    <div className="lm-dcard-cell-k">{t("hue:card.cellArea")}</div>
+                    <div className="lm-dcard-cell-v is-dim">{selectedArea?.name ?? "—"}</div>
+                  </div>
+                  <div className="lm-dcard-cell">
+                    <div className="lm-dcard-cell-k">{t("hue:card.cellStatus")}</div>
+                    <div className="lm-dcard-cell-v is-warn">{t("hue:page.pill.checking")}</div>
+                  </div>
+                  <div className="lm-dcard-cell">
+                    <div className="lm-dcard-cell-k">{t("hue:card.cellError")}</div>
+                    <div className="lm-dcard-cell-v is-warn" style={{ fontSize: "9px" }}>{runtimeStatusReadFailure?.code ?? "—"}</div>
                   </div>
                 </div>
               ) : hueBridgeState === "stale" ? (
@@ -630,6 +650,13 @@ export function HueBridgesCategory({
                 </div>
               ) : null}
 
+              {hueBridgeState === "statusUnknown" ? (
+                <div className="lm-hue-retry" role="status" aria-live="polite" data-testid="hue-status-unavailable">
+                  <span className="lm-hue-retry-sp" aria-hidden="true" />
+                  <span className="lm-hue-retry-tx">{t("hue:runtime.statusUnavailable.body")}</span>
+                </div>
+              ) : null}
+
               {/* State N: Stale readiness */}
               {hueBridgeState === "stale" ? (
                 <div className="lm-hue-stale">
@@ -694,7 +721,7 @@ export function HueBridgesCategory({
                       {t("hue:page.forgotBridge")}
                     </button>
                   </>
-                ) : hueBridgeState === "idle" ? (
+                ) : hueBridgeState === "idle" || hueBridgeState === "statusUnknown" ? (
                   <>
                     <button type="button" className="lm-dcard-act" onClick={() => { void refreshAreas(); }} disabled={hueAreasDisabled} aria-busy={isLoadingAreas}>
                       {t("hue:page.changeArea")}
