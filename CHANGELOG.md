@@ -34,6 +34,10 @@ https://keepachangelog.com/en/1.1.0/
 
 ### Fixed
 
+- Opening the LED preview from the tray or from LED Setup no longer lights your Hue lamps. The
+  test pattern that starts by itself when the popup opens now goes to the LED strip (USB or WLED)
+  only. With no strip connected it shows in the overlay only, and the popup says so. Hue lights
+  join the test when you pick a pattern in the popup, as before.
 - Lights and the compact window no longer say "No reachable output" and ask you to pair a Hue
   bridge while an already paired bridge is still being checked, which happened for a second or so
   after opening the window. They now show "Checking outputs…" until the bridge answers; Ambilight
