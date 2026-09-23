@@ -116,7 +116,7 @@ const shellStateSavedListeners = new Set<ShellStateSavedListener>();
 let changeSubscription: Promise<void> | null = null;
 
 function subscribeToOtherWindowsWrites(): void {
-  if (changeSubscription) return;
+  if (changeSubscription !== null) return;
   changeSubscription = onShellStateChanged((changed) => {
     // This window's own writes were delivered when they resolved.
     if (changed.writerId === WRITER_ID) return;
