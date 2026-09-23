@@ -362,7 +362,7 @@ export function UsbStripObject({
       {/* LED count input shown when selected */}
       {selected && (
         <div
-          className="absolute z-30 flex items-center gap-1 rounded border border-amber-500 bg-zinc-900 px-1.5 py-0.5 shadow dark:bg-zinc-900"
+          className="absolute z-30 flex items-center gap-1 rounded border border-amber-500 bg-zinc-900 px-1.5 py-0.5 shadow"
           style={{
             left: midX - 48,
             top: midY - 20,

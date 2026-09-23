@@ -12,6 +12,10 @@
 
 :root {
   font-family: "IBM Plex Sans", "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+  /* Dark-only, whatever the OS says: native controls (select popups, number
+     spinners, checkboxes, scrollbars) take the dark system look. The twin
+     overlay resets this inline, since it must stay transparent. */
+  color-scheme: dark;
 
   /* ─────────────────────────────────────────────────────────────────
      LumaSync amber dark theme tokens (UI Mockup Rev 07).
@@ -3618,22 +3622,13 @@ body,
   overscroll-behavior: none;
 }
 
+/* The window's own `backgroundColor` in tauri.conf.json, so nothing between
+   the native paint and the first React frame reads as a different colour. */
 body {
   position: fixed;
   inset: 0;
-  background:
-    radial-gradient(circle at 12% 20%, rgba(148, 163, 184, 0.14), transparent 45%),
-    radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.18), transparent 52%),
-    linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background:
-      radial-gradient(circle at 12% 20%, rgba(63, 63, 70, 0.45), transparent 45%),
-      radial-gradient(circle at 88% 18%, rgba(39, 39, 42, 0.55), transparent 52%),
-      linear-gradient(180deg, #18181b 0%, #09090b 100%);
-  }
+  background: var(--lm-bg);
+  color: var(--lm-ink);
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -3651,13 +3646,7 @@ body {
    ────────────────────────────────────────────────────────────────── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
-}
-
-@media (prefers-color-scheme: dark) {
-  * {
-    scrollbar-color: rgba(82, 82, 91, 0.55) transparent;
-  }
+  scrollbar-color: rgba(82, 82, 91, 0.55) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -3672,7 +3661,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.35);
+  background-color: rgba(82, 82, 91, 0.55);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -3680,20 +3669,11 @@ body {
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(100, 116, 139, 0.55);
+  background-color: rgba(113, 113, 122, 0.75);
 }
 
 *::-webkit-scrollbar-corner {
   background: transparent;
-}
-
-@media (prefers-color-scheme: dark) {
-  *::-webkit-scrollbar-thumb {
-    background-color: rgba(82, 82, 91, 0.55);
-  }
-  *::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(113, 113, 122, 0.75);
-  }
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -3785,7 +3765,7 @@ body {
 /* Dimmed with ink tokens rather than opacity, so forced-colors and the
    contrast floor still hold. */
 .lm-chmap.is-stale .lm-chmap-row-num,
-.lm-chmap.is-stale .lm-chmap.is-stale .lm-chmap-row-lights {
+.lm-chmap.is-stale .lm-chmap-row-lights {
   color: var(--lm-ink-faint, #4d5564);
 }
 .lm-chmap-row {
@@ -4279,9 +4259,13 @@ body {
   background: rgba(255, 255, 255, 0.04);
   color: var(--lm-ink-dim);
 }
+/* The ring token is a box-shadow; as an `outline` value it is invalid and the
+   whole declaration drops. The transparent outline is what forced-colors
+   paints, since it discards box-shadow. */
 .lm-room-dock-h.is-clickable:focus-visible {
-  outline: var(--lm-focus-ring, 2px solid currentColor);
+  outline: 2px solid transparent;
   outline-offset: 1px;
+  box-shadow: var(--lm-focus-ring);
 }
 .lm-room-dock-h.is-clickable.is-on {
   background: rgba(255, 176, 32, 0.1);

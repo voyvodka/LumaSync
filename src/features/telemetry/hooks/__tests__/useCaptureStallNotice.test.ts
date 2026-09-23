@@ -95,6 +95,36 @@ describe("useCaptureStallNotice", () => {
     expect(result.current).toBeNull();
   });
 
+  it("keeps the same notice across ticks that report the same stall", async () => {
+    vi.useFakeTimers();
+    getFullTelemetrySnapshotMock.mockResolvedValue(
+      makeSnapshot({
+        lastCaptureErrorCode: "AMBILIGHT_CAPTURE_MONITOR_NOT_FOUND",
+        lastCaptureErrorAtSecs: 0,
+      }),
+    );
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useCaptureStallNotice(true);
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    const first = result.current;
+    const rendersAfterFirst = renders;
+    expect(first).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+
+    expect(getFullTelemetrySnapshotMock.mock.calls.length).toBeGreaterThan(1);
+    expect(result.current).toBe(first);
+    expect(renders).toBe(rendersAfterFirst);
+    vi.useRealTimers();
+  });
+
   it("does not poll at all when the mode is not ambilight", async () => {
     renderHook(() => useCaptureStallNotice(false));
     await flushMicrotasks();

@@ -1,6 +1,6 @@
 // useUIMode — compact/full layout mode hook. Sequential transition
 // (fade out → resize → mount + fade in), deliberately not a cross-fade —
-// see docs/architecture/ui-and-shell.md. Re-entrant calls are ignored.
+// see docs/architecture/ui-and-shell.md. A call during a transition joins it.
 
 import { useState, useCallback, useRef } from "react";
 import type { UIMode } from "@/shared/contracts/shell";
@@ -49,15 +49,19 @@ export function useUIMode() {
   const [isContentVisible, setIsContentVisible] = useState(true);
   const [isUITransitioning, setIsUITransitioning] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const transitionLockRef = useRef(false);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const currentModeRef = useRef(currentMode);
+  currentModeRef.current = currentMode;
 
-  const switchUIMode = useCallback(
-    async (nextMode: UIMode) => {
-      if (nextMode === currentMode) return;
-      if (transitionLockRef.current) return; // re-entrancy guard
-      transitionLockRef.current = true;
+  // The one owner of the window's compact/full size: every caller comes through
+  // here, and a caller arriving mid-transition awaits the running one instead of
+  // starting a second resize animation against it.
+  const switchUIMode = useCallback((nextMode: UIMode): Promise<void> => {
+    if (inFlightRef.current) return inFlightRef.current;
+    if (nextMode === currentModeRef.current) return Promise.resolve();
+
+    const run = (async () => {
       setIsUITransitioning(true);
-
       try {
         // Phase 1: fade the current layout out. Backdrop stays visible.
         setIsContentVisible(false);
@@ -70,6 +74,7 @@ export function useUIMode() {
         // Phase 3: swap the mode so the new layout mounts at the final
         // window size, wait one paint cycle to ensure it renders at
         // opacity 0, then trigger the fade-in.
+        currentModeRef.current = nextMode;
         setCurrentMode(nextMode);
         await waitForFrames(2);
         setIsContentVisible(true);
@@ -81,11 +86,12 @@ export function useUIMode() {
         // in rather than staying at opacity 0 with pointer events off.
         setIsContentVisible(true);
         setIsUITransitioning(false);
-        transitionLockRef.current = false;
+        inFlightRef.current = null;
       }
-    },
-    [currentMode],
-  );
+    })();
+    inFlightRef.current = run;
+    return run;
+  }, []);
 
   return {
     currentMode,

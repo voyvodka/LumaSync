@@ -7,6 +7,7 @@ import type { checkHueStreamReadiness, HueBridgeSummary, HuePairingCredentials }
 import { createPollBudget } from "../model/pollBudget";
 import { READINESS_BACKGROUND_REFRESH_MS, READINESS_BLOCKED_REFRESH_MS } from "../model/pollingCadence";
 import { useHuePollRestartToken } from "./huePollRestart";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface UseHueReadinessPollingInput {
   bridge: HueBridgeSummary | null;
@@ -83,7 +84,7 @@ export function useHueReadinessPolling({
         }
       } catch (error) {
         if (!mounted) return;
-        noteFailure(String(error));
+        noteFailure(parseCommandError(error).message);
       } finally {
         inFlight = false;
         if (!stopped) scheduleNext();

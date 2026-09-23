@@ -14,7 +14,7 @@ import {
   type HueBridgeSummary,
   type HuePairingCredentials,
 } from "../hueOnboardingApi";
-import { toErrorDetails } from "../model/onboardingStatusCodes";
+import { parseCommandError } from "@/shared/contracts/status";
 import type { HueAreaChannelsRead } from "../model/onboardingTypes";
 
 export type { HueAreaChannelsRead };
@@ -44,7 +44,7 @@ async function runtimeIsIdle(): Promise<boolean> {
     const reason =
       error !== null && typeof error === "object" && "message" in error
         ? String((error as { message: unknown }).message)
-        : toErrorDetails(error);
+        : parseCommandError(error).message;
     console.warn(
       `[LumaSync] Hue runtime state unreadable, not trusting the channel list as the bridge's: ${reason}`,
     );
@@ -153,7 +153,7 @@ export function useHueAreaChannels(
         setAreaChannels([]);
         setChannelsStatus(HUE_AREA_CHANNELS_STATUS.FAILED);
         setChannelsFromBridge(false);
-        console.warn(`[LumaSync] Hue area channel invoke rejected: ${toErrorDetails(error)}`);
+        console.warn(`[LumaSync] Hue area channel invoke rejected: ${parseCommandError(error).message}`);
         settle({ status: HUE_AREA_CHANNELS_STATUS.FAILED, channels: [], fromBridge: false });
       } finally {
         if (!cancelled) {

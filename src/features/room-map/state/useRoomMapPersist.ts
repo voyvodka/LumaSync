@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { shellStore } from "@/features/persistence/shellStore";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { DEFAULT_ROOM_MAP } from "@/shared/contracts/roomMap";
+import { parseCommandError } from "@/shared/contracts/status";
 
 const MAX_HISTORY = 50;
 
@@ -70,9 +71,9 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
       })
       .catch((err) => {
         if (cancelled) return;
-        const reason = err instanceof Error ? err.message : String(err);
+        const reason = parseCommandError(err).message;
         console.error(`[LumaSync] Room map load failed: ${reason}`);
-        setError(String(err));
+        setError(reason);
         setLoading(false);
       });
     return () => {
@@ -86,9 +87,9 @@ export function useRoomMapPersist(): UseRoomMapPersistReturn {
       await shellStore.save({ roomMap: next, roomMapVersion: versionRef.current });
       setError(null);
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = parseCommandError(err).message;
       console.error(`[LumaSync] Room map save failed: ${reason}`);
-      setError(String(err));
+      setError(reason);
     }
   }, []);
 

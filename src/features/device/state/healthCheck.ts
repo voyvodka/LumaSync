@@ -7,6 +7,7 @@ import type { HealthCheckResult } from "../deviceConnectionApi";
 import type { FirmwareProfileEventBus } from "../firmwareProfileEvents";
 import type { ConnectionStore } from "./connectionStore";
 import type { DeviceConnectionControllerDeps } from "./connectionTypes";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface HealthCheck {
   runHealthCheck(): Promise<void>;
@@ -101,7 +102,7 @@ export function createHealthCheck(
           variant: "error",
           code: "HEALTH_CHECK_FAILED",
           message: "Health check could not be completed.",
-          details: error instanceof Error ? error.message : String(error),
+          details: parseCommandError(error).message,
         },
       }));
     }

@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { RoomMapConfig } from "@/shared/contracts/roomMap";
 import { imageLayerObjectId } from "../model/objectId";
 import { copyBackgroundImage } from "../roomMapApi";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export interface UseRoomMapImageLayersArgs {
   config: RoomMapConfig;
@@ -46,7 +47,7 @@ export function useRoomMapImageLayers({
         setSelectedId(imageLayerObjectId(id));
       }
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = parseCommandError(err).message;
       console.error(`[LumaSync] Room map image import failed: ${reason}`);
       setImageError(reason);
     }

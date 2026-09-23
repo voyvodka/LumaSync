@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { LED_COLOR_ORDER, type LedColorOrder } from "@/shared/contracts/device";
 import { LED_TEST_STATUS, type LedTestPatternResult } from "@/shared/contracts/preview";
 import { startLedTestPattern, stopLedTestPattern } from "@/features/preview/previewApi";
+import { parseCommandError } from "@/shared/contracts/status";
 
 export type ProbeSlot = 0 | 1 | 2;
 export type ProbeColor = "r" | "g" | "b";
@@ -95,7 +96,7 @@ function startThrew(error: unknown): LedTestPatternResult {
     previewOnly: false,
     status: {
       code: LED_TEST_STATUS.PATTERN_RUNTIME_ERROR,
-      message: error instanceof Error ? error.message : String(error),
+      message: parseCommandError(error).message,
       details: null,
     },
   };

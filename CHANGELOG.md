@@ -420,6 +420,25 @@ https://keepachangelog.com/en/1.1.0/
   meantime. The port is now released the moment you switch away from it. Reconnecting the same
   port, or restarting a lighting mode on it, is untouched: that case is still kept open on
   purpose, to avoid resetting the board every time.
+- Room map: "Derive zones" measured the strip against a TV half a TV's size up and to the left of
+  where it is drawn, so LEDs could land on the wrong edge and the preview lines sat off the TV. It
+  now uses the TV where you placed it. Resizing the room no longer moves Hue lights off the map,
+  and typing in a field no longer triggers the editor's shortcuts: Backspace in the LED count
+  deleted the strip, and Cmd+Z undid the last room edit instead of the typing.
+- Pressing ⌘, (Ctrl+, on Windows and Linux) in the compact window ran two window resizes at once;
+  it now makes one smooth switch to the full window and opens System. Opening a Devices or LED
+  Setup link from a compact notice now fades between the layouts like the mode toggle does.
+- The app is dark throughout, including its own controls: drop-down lists, number fields,
+  checkboxes and scrollbars no longer turn light when the operating system is in light mode, and
+  the window behind the app no longer shows a light background. A few room-map objects that
+  picked their light-mode colors on such systems now always use the dark ones.
+- Clickable Hue zone headers in the room map show a focus ring again, and dimmed channel rows in
+  the Hue channel map dim their light names as well as their numbers.
+- Errors from lighting and Hue commands are now written to the log with the reason the app was
+  given, instead of an "unknown" error with no detail. Some error details that read "[object
+  Object]" now show the actual message.
+- The status bar and the capture-stalled notice no longer redraw the window every second while
+  nothing they show has changed.
 
 ### Added
 

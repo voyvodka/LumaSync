@@ -47,6 +47,7 @@ import { useBootHueRetry, type BootHueRetryNotice, type BootHueRetryPlan } from 
 import { useLightingModeDispatch, type LightingModeDispatcher } from "./useLightingModeDispatch";
 import { useLightingModePersistence } from "./useLightingModePersistence";
 import type { ModeRuntimeConfig } from "./useModeRuntimeConfig";
+import { parseCommandError } from "@/shared/contracts/status";
 
 /** How long the "stop failed for these targets" toast stays up. */
 const STOP_FAILED_NOTICE_MS = 5_000;
@@ -895,7 +896,7 @@ export function useLightingModeOrchestrator({
               await stopLighting();
               if (stopsUsb) targetResults.usb = { ok: true };
             } catch (error) {
-              const reason = error instanceof Error ? error.message : String(error);
+              const reason = parseCommandError(error).message;
               if (stopsUsb) targetResults.usb = { ok: false, code: "USB_STOP_FAILED", message: reason };
               // The stream is still released below; that stop waits for the sender.
               console.error("[LumaSync] stop_lighting before the Hue stop failed:", error);
@@ -916,7 +917,7 @@ export function useLightingModeOrchestrator({
                 message: hueResult.status.message,
               };
             } catch (error) {
-              const reason = error instanceof Error ? error.message : String(error);
+              const reason = parseCommandError(error).message;
               targetResults.hue = { ok: false, code: "HUE_STOP_FAILED", message: reason };
             }
           }
@@ -954,7 +955,7 @@ export function useLightingModeOrchestrator({
                 message: hueResult.status.message,
               };
             } catch (error) {
-              const reason = error instanceof Error ? error.message : String(error);
+              const reason = parseCommandError(error).message;
               targetResults.hue = { ok: false, code: "HUE_MODE_APPLY_FAILED", message: reason };
             }
           }
@@ -1053,7 +1054,7 @@ export function useLightingModeOrchestrator({
               targetResults.usb = { ok: true };
             }
           } catch (error) {
-            const reason = error instanceof Error ? error.message : String(error);
+            const reason = parseCommandError(error).message;
             applyRefused = true;
             if (runtimePlan.startTargets.includes("usb")) {
               targetResults.usb = { ok: false, code: "USB_MODE_APPLY_FAILED", message: reason };

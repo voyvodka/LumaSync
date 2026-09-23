@@ -102,7 +102,7 @@ export function DevUpdaterMenu({ onSetState }: DevUpdaterMenuProps) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-20 mt-1.5 flex w-40 flex-col gap-0.5 rounded-lg border border-amber-500/30 bg-zinc-900/95 p-1.5 shadow-xl backdrop-blur dark:border-amber-500/30"
+          className="absolute right-0 top-full z-20 mt-1.5 flex w-40 flex-col gap-0.5 rounded-lg border border-amber-500/30 bg-zinc-900/95 p-1.5 shadow-xl backdrop-blur"
         >
           <div className="px-2 pb-1 pt-1 [font-family:var(--lm-mono)] text-[8px] uppercase tracking-[0.18em] text-amber-400">
             updater preview
